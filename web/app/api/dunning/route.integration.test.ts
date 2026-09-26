@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -10,7 +9,6 @@ import test from "node:test";
  * name a dunnable receivable kind — the runner selects documents by that kind
  * and mails the counterparty, so a payable kind would dun vendors.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __dunningRouteUser: state });
 registerHooks({

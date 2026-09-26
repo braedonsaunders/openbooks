@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../../testing/stub-modules";
 import test from "node:test";
 import { PDFDocument } from "pdf-lib";
 
@@ -52,10 +52,13 @@ const routeState: RouteState = { calls: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
   routeState;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../../lib/authz": `
       const allowed = new Set(['sub-allowed'])
       export async function guardPermission(permission) {
         if (permission !== 'reports.read') {
@@ -71,10 +74,7 @@ const mockSources = new Map<string, string>([
         return null
       }
     `,
-  ],
-  [
-    "mock:tax-return",
-    `
+    "@openbooks/engine/src/tax-returns/return.ts": `
       const state = globalThis[Symbol.for('openbooks.tax-return-export-route-test')]
       export async function computeTaxReturn(orgId, formCode, from, to, adjustments, opts) {
         state.calls.push({ orgId, formCode, from, to, adjustments, opts: opts ?? null })
@@ -85,12 +85,7 @@ const mockSources = new Map<string, string>([
         }
       }
     `,
-  ],
-  [
-    // Only the official-pdf lookup may query the database; any other query
-    // proves a format under test escaped its stubbed surface.
-    "mock:db",
-    `
+    "@openbooks/engine/src/platform/db.ts": `
       const sqlText = (query) => {
         const chunks = query?.queryChunks
         if (!Array.isArray(chunks)) return ''
@@ -119,84 +114,32 @@ const mockSources = new Map<string, string>([
       export function registerRequestOrgResolver() {}
       export function currentRequestOrgResolver() { return null }
     `,
-  ],
-  [
-    "mock:business-date",
-    `
+    "@openbooks/engine/src/platform/business-date.ts": `
       export async function businessToday() { return '2026-07-31' }
       export function civilDateFromParts() { throw new Error('unexpected civil date') }
     `,
-  ],
-  [
-    "mock:intl",
-    `export async function getTranslations() { return (key) => key }`,
-  ],
-  // Formats under test (json) never render PDFs, hit the file cabinet, or
-  // build tabular exports: stub those surfaces so the test links only the
-  // scope/adjustment parsing it exercises.
-  [
-    "mock:report-pdf",
-    `
+    "next-intl/server": `export async function getTranslations() { return (key) => key }`,
+    "../../../../../../lib/report-pdf": `
       export function exportDataToCsv() { throw new Error('unexpected csv export') }
       export async function exportDataToPdf() { throw new Error('unexpected pdf export') }
       export async function exportDataToXlsx() { throw new Error('unexpected xlsx export') }
       export async function orgBranding() { throw new Error('unexpected branding') }
       export function resolveLayout() { throw new Error('unexpected layout') }
     `,
-  ],
-  [
-    "mock:tax-filing",
-    `export function taxReturnExportData() { throw new Error('unexpected tabular export') }`,
-  ],
-  [
-    "mock:facsimile",
-    `export async function renderTaxFormFacsimilePdf() { throw new Error('unexpected facsimile') }`,
-  ],
-  [
-    "mock:file-cabinet",
-    `
+    "../../../../../../lib/tax-filing": `export function taxReturnExportData() { throw new Error('unexpected tabular export') }`,
+    "../../../../../../lib/tax-form-facsimile": `export async function renderTaxFormFacsimilePdf() { throw new Error('unexpected facsimile') }`,
+    "../../../../../../lib/file-cabinet": `
       export async function getFileBlob() {
         const bytes = globalThis.__exportPdfBytes
         if (!bytes) throw new Error('unexpected file read')
         return { bytes }
       }
     `,
-  ],
-  [
-    "mock:pdf-renderer",
-    `export function rendererUnavailableResponse() { return null }`,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../../../lib/authz", "mock:authz"],
-  ["@openbooks/engine/src/tax-returns/return.ts", "mock:tax-return"],
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
-  ["next-intl/server", "mock:intl"],
-  ["../../../../../../lib/report-pdf", "mock:report-pdf"],
-  ["../../../../../../lib/tax-filing", "mock:tax-filing"],
-  ["../../../../../../lib/tax-form-facsimile", "mock:facsimile"],
-  ["../../../../../../lib/file-cabinet", "mock:file-cabinet"],
-  ["../../../../../../lib/api/pdf-renderer", "mock:pdf-renderer"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
+    "../../../../../../lib/api/pdf-renderer": `export function rendererUnavailableResponse() { return null }`,
   },
 });
 
 const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 function get(query: string): Promise<Response> {
   return GET(

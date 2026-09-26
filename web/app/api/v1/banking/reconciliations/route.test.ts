@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-banking-routes-test");
@@ -13,10 +13,13 @@ interface RouteState {
 const routeState: RouteState = { listed: [], started: [], signedOff: [], matched: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:v1",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/api/v1-request": `
       export async function withV1Request(request, label, operation) {
         try {
           const result = await operation(
@@ -46,10 +49,7 @@ const mockSources = new Map<string, string>([
         return key
       }
     `,
-  ],
-  [
-    "mock:banking",
-    `
+    "../../../../../lib/application/banking": `
       const state = globalThis[Symbol.for('openbooks.v1-banking-routes-test')]
       // The route's GET reads through this same module; see the note in the
       // v1 files route test. An omitted export breaks module instantiation,
@@ -79,29 +79,10 @@ const mockSources = new Map<string, string>([
         return { replayed: false, result: { totals: { difference: "0" } } }
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../../lib/api/v1-request", "mock:v1"],
-  ["../../../../../lib/application/banking", "mock:banking"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 test("POST /api/v1/banking/reconciliations passes body fields and the idempotency key through", async () => {
   routeState.started.length = 0;

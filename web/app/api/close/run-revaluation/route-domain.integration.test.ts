@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Revaluation boundary contract: per-subsidiary domain findings (unknown
 // period, missing spot rate) collect into problems[] with nothing posted;
 // run-level domain refusals (unconfigured control account, closed GL period)
 // fail closed with a named 422. Only systemic throws stay 500.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __revaluationDomainState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../testing/stub-modules";
 import test from "node:test";
 
 // Route-boundary regression: a self-service preference update and its audit
@@ -53,10 +53,13 @@ function sqlText(query: unknown): string {
 const ORG_ID = "00000000-0000-4000-8000-00000000a001";
 const USER_ID = "00000000-0000-4000-8000-00000000a002";
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:db",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.me-route-test')]
       const sqlText = globalThis.openbooksSqlTextMe
       const classify = (text) => text.includes('update users') ? 'user' : text.includes('insert into audit_log') ? 'audit' : null
@@ -103,38 +106,16 @@ const mockSources = new Map<string, string>([
       export const env = {}
       export function registerRequestOrgResolver() {}
     `,
-  ],
-  [
-    "mock:authz",
-    `
+    "../../../lib/authz": `
       export async function getAuthz() {
         return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["../../../lib/authz", "mock:authz"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const routeUrl = "./route.ts?me-preference-audit-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(): void {
   state.executed = [];

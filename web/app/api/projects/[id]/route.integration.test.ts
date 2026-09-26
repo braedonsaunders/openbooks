@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../testing/stub-modules'
 import test from 'node:test'
 
 const stateKey = Symbol.for('openbooks.project-detail-route-test')
@@ -29,25 +29,16 @@ const routeState: RouteState = {
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:authz',
-    `
-      const state = globalThis[Symbol.for('openbooks.project-detail-route-test')]
-      export async function guardPermission() { return state.authz }
-      export function guardSubsidiaryScope(authz, subsidiaryId) {
-        if (authz.allowedSubsidiaryIds === null) return null
-        if (subsidiaryId !== null && subsidiaryId !== undefined && authz.allowedSubsidiaryIds.has(String(subsidiaryId))) return null
-        return new Response(JSON.stringify({ error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } })
-      }
-      export function subsidiariesInScope(authz, ids) {
-        return authz.allowedSubsidiaryIds === null || ids.every((id) => id !== null && id !== undefined && authz.allowedSubsidiaryIds.has(id))
-      }
-    `,
-  ],
-  [
-    'mock:db',
-    `
+// Neither '@/lib/api/json', the money kernel, nor the decimal classifier is
+// mocked: hand doubles cannot produce the refusals the real modules enforce.
+
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.project-detail-route-test')]
       export const db = {
         execute: async (query) => {
@@ -68,10 +59,31 @@ const mockSources = new Map<string, string>([
       }
       export function withOrgTransaction(_orgId, work) { return work() }
     `,
-  ],
-  [
-    'mock:project-loader',
-    `
+    "../../../../lib/authz": `
+      const state = globalThis[Symbol.for('openbooks.project-detail-route-test')]
+      export async function guardPermission() { return state.authz }
+      export function guardSubsidiaryScope(authz, subsidiaryId) {
+        if (authz.allowedSubsidiaryIds === null) return null
+        if (subsidiaryId !== null && subsidiaryId !== undefined && authz.allowedSubsidiaryIds.has(String(subsidiaryId))) return null
+        return new Response(JSON.stringify({ error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } })
+      }
+      export function subsidiariesInScope(authz, ids) {
+        return authz.allowedSubsidiaryIds === null || ids.every((id) => id !== null && id !== undefined && authz.allowedSubsidiaryIds.has(id))
+      }
+    `,
+    "../../../../lib/custom-fields": `
+      export async function loadFieldDefs() { return [] }
+      export function validateCustomValues() { return { ok: true, cleaned: {} } }
+      export async function findUnownedCustomReferences() { return [] }
+    `,
+    "../../../../lib/features": `
+      export async function isFeatureEnabled() { return true }
+      export async function acquireFeatureGateLock() {}
+    `,
+    "../../../../lib/projects-gate": `
+      export async function guardProjectsFeature() { return null }
+    `,
+    "../_lib": `
       const state = globalThis[Symbol.for('openbooks.project-detail-route-test')]
       // Mirrors the real loader: scope is enforced inside loadProject, so an
       // out-of-scope project answers like a missing one.
@@ -82,57 +94,11 @@ const mockSources = new Map<string, string>([
         return payload
       }
     `,
-  ],
-  [
-    'mock:custom-fields',
-    `
-      export async function loadFieldDefs() { return [] }
-      export function validateCustomValues() { return { ok: true, cleaned: {} } }
-      export async function findUnownedCustomReferences() { return [] }
-    `,
-  ],
-  [
-    'mock:projects-gate',
-    `
-      export async function guardProjectsFeature() { return null }
-    `,
-  ],
-  [
-    'mock:features',
-    `
-      export async function isFeatureEnabled() { return true }
-      export async function acquireFeatureGateLock() {}
-    `,
-  ],
-])
-
-// Neither '@/lib/api/json', the money kernel, nor the decimal classifier is
-// mocked: hand doubles cannot produce the refusals the real modules enforce.
-const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['../../../../lib/authz', 'mock:authz'],
-  ['../../../../lib/custom-fields', 'mock:custom-fields'],
-  ['../../../../lib/features', 'mock:features'],
-  ['../../../../lib/projects-gate', 'mock:projects-gate'],
-  ['../_lib', 'mock:project-loader'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
   },
 })
 
 const routeUrl = new URL('./route.ts?project-detail-scope-test', import.meta.url).href
 const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const PROJECT_ID = '00000000-0000-4000-8000-000000000001'
 

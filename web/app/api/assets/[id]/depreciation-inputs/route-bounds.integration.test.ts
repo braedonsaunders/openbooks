@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -14,7 +13,6 @@ import test from "node:test";
  * columns, so nothing wider can pass them); the width test below guards
  * that closed path.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __deprInputBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });

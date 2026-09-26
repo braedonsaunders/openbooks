@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -11,7 +10,6 @@ import test from "node:test";
  * instead of failing closed with a named error and nothing written.
  * signed_on/valid_from/expires_on are date.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __mandatePatchBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });

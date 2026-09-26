@@ -1,16 +1,8 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // A server defect must never reach the user as driver text. The
 // failure map is pure (no DB, no session), but the route module drags the
-const root = pathToFileURL(process.cwd() + '/').href
-registerHooks({
-  resolve(specifier, context, next) {
-    return next(specifier, context)
-  },
-})
 
 const { toActionFailure } = await import('./action-failure')
 const { PostingError } = await import("@openbooks/engine/src/journal/posting-contracts.ts");

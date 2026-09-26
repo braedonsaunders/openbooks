@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -13,7 +12,6 @@ import test from "node:test";
  * acquired_on/in_service_on are date; acquisition_cost/salvage_value are
  * numeric(19,4).
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __assetPatchBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });

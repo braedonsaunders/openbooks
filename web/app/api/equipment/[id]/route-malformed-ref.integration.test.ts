@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Equipment PATCH validates some references (fixedAssetId/rateBookId get an
 // isUuid check) but binds subsidiaryId and chargeItemId straight into their
 // existence probes, so a malformed value escapes as a raw Postgres uuid
 // throw (HTTP 500) instead of the same 422 the unknown-id path returns.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __equipmentPatchRefState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

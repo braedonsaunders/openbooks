@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -10,7 +9,6 @@ import test from "node:test";
  * failing closed with a named error and nothing written.
  * bank_match_rules.priority is integer DEFAULT 100 NOT NULL.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __bankRulePriorityState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });

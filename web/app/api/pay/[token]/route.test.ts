@@ -9,7 +9,6 @@ import { isUuid } from "@/lib/list-params";
  * session creator throws raw provider/connection errors; the route answers
  * 500 with a generic message plus a request id and logs the detail.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const acceptanceUrl = pathToFileURL(process.cwd() + "/engine/src/payments/acceptance.ts").href;
 registerHooks({
   resolve(specifier, context, next) {

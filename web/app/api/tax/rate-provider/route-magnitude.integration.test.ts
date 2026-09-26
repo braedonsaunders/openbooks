@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Quote POST validates taxableAmount to 4dp but never bounds its magnitude,
@@ -9,7 +8,6 @@ import test from 'node:test'
 // amount or a shape-valid non-day such as February 30 sails through and dies
 // in Postgres as a raw numeric/DATE failure (HTTP 500 — the verb only maps
 // TaxRateProviderError to 422) instead of failing closed with a named 422.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string; allowed: Set<string> | null } = { orgId: '', actorId: '', allowed: null }
 Object.assign(globalThis, { __taxQuoteMagnitudeState: state })
 const engineRoot = new URL('../../../../../engine/', import.meta.url).href

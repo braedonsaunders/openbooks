@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../../testing/stub-modules'
 import test from 'node:test'
 import { NextResponse } from 'next/server'
 
@@ -39,10 +39,13 @@ function sqlText(query: unknown): string {
 }
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextFilingExport = sqlText
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:authz',
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../../lib/authz": `
       const state = globalThis[Symbol.for('openbooks.filing-export-route-test')]
       const NextResponse = globalThis.openbooksFilingExportNextResponse
       export async function guardPermission() {
@@ -58,11 +61,8 @@ const mockSources = new Map<string, string>([
         return NextResponse.json({ error: 'not found' }, { status: 404 })
       }
     `,
-  ],
-  ['mock:list-params', `export function isUuid() { return true }`],
-  [
-    'mock:db',
-    `
+    "../../../../../../lib/list-params": `export function isUuid() { return true }`,
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.filing-export-route-test')]
       const sqlText = globalThis.openbooksSqlTextFilingExport
       export const db = {
@@ -82,74 +82,34 @@ const mockSources = new Map<string, string>([
         },
       }
     `,
-  ],
-  [
-    'mock:business-date',
-    `export async function businessToday() { return '2026-08-24' }`,
-  ],
-  [
-    'mock:intl',
-    `export async function getTranslations() { return (key) => key }`,
-  ],
-  [
-    'mock:export-lib',
-    `
+    "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday() { return '2026-08-24' }`,
+    "next-intl/server": `export async function getTranslations() { return (key) => key }`,
+    "../../../../../../lib/export": `
       const NextResponse = globalThis.openbooksFilingExportNextResponse
       export function safeName(name) { return name }
       export function csvResponse(body, filename) { return new Response('CSV ' + filename + '\\n' + body) }
       export function pdfResponse() { throw new Error('unexpected pdf render') }
       export function xlsxResponse() { throw new Error('unexpected xlsx render') }
     `,
-  ],
-  [
-    'mock:tax-filing',
-    `
+    "../../../../../../lib/tax-filing": `
       const state = globalThis[Symbol.for('openbooks.filing-export-route-test')]
       export function taxReturnExportData(result) {
         state.captured = result
         return { title: 'T', dateRangeLabel: '', summary: [], groups: [] }
       }
     `,
-  ],
-  [
-    'mock:report-pdf',
-    `
+    "../../../../../../lib/report-pdf": `
       export function exportDataToCsv() { return 'csv-bytes' }
       export async function exportDataToXlsx() { throw new Error('unexpected xlsx render') }
       export async function orgBranding() { throw new Error('unexpected branding read') }
       export function resolveLayout() { throw new Error('unexpected layout') }
       export async function exportDataToPdf() { throw new Error('unexpected pdf render') }
     `,
-  ],
-])
-
-const mockUrls = new Map<string, string>([
-  ['../../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../../lib/list-params', 'mock:list-params'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
-  ['next-intl/server', 'mock:intl'],
-  ['../../../../../../lib/export', 'mock:export-lib'],
-  ['../../../../../../lib/tax-filing', 'mock:tax-filing'],
-  ['../../../../../../lib/report-pdf', 'mock:report-pdf'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
   },
 })
 
 const exportRouteUrl = './route.ts?filing-export-frozen-test'
 const { GET } = (await import(exportRouteUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const SUB = '11111111-1111-4111-8111-111111111111'
 

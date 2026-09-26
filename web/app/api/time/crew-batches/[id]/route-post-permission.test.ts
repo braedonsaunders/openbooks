@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 
 // H-CREWPOST: POST /api/time/crew-batches/[id] {action: 'post'} gated only
@@ -21,19 +21,13 @@ const crewState: CrewState = { allowPost: true, postBatchCalls: 0, postedDocumen
 const BATCH_ID = '00000000-0000-4000-8000-00000000d001'
 const CHARGE_ID = '00000000-0000-4000-8000-00000000d002'
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:feature-gates',
-    `
-      const state = globalThis[Symbol.for('openbooks.crew-batch-post-test')]
-      export async function guardFeaturePermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
-      }
-    `,
-  ],
-  [
-    'mock:authz',
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/authz": `
       const state = globalThis[Symbol.for('openbooks.crew-batch-post-test')]
       // Authorization-check double: time.manage always holds; gl.post only
       // while the posting case runs.
@@ -42,10 +36,23 @@ const mockSources = new Map<string, string>([
         return true
       }
     `,
-  ],
-  [
-    'mock:crew',
-    `
+    "../../../../../lib/feature-gates": `
+      const state = globalThis[Symbol.for('openbooks.crew-batch-post-test')]
+      export async function guardFeaturePermission() {
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+      }
+    `,
+    "@openbooks/engine/src/ledger/posting-document.ts": `
+      const state = globalThis[Symbol.for('openbooks.crew-batch-post-test')]
+      export async function postDocument(documentId) {
+        state.postedDocuments.push(documentId)
+        return 'entry-1'
+      }
+    `,
+    "@openbooks/engine/src/payments/payment-accounts.ts": `
+      export async function paymentControlDeps() { return {} }
+    `,
+    "@openbooks/engine/src/hrm/field-time/crew.ts": `
       const state = globalThis[Symbol.for('openbooks.crew-batch-post-test')]
       export async function approveBatchStage() { throw new Error('not under test') }
       export async function postBatch() {
@@ -57,56 +64,14 @@ const mockSources = new Map<string, string>([
       export async function submitBatch() { throw new Error('not under test') }
       export async function withdrawBatch() { throw new Error('not under test') }
     `,
-  ],
-  [
-    'mock:reads',
-    `
+    "@openbooks/engine/src/hrm/field-time/reads.ts": `
       export async function getBatchDetail() { return { id: '${BATCH_ID}' } }
     `,
-  ],
-  [
-    'mock:posting',
-    `
-      const state = globalThis[Symbol.for('openbooks.crew-batch-post-test')]
-      export async function postDocument(documentId) {
-        state.postedDocuments.push(documentId)
-        return 'entry-1'
-      }
-    `,
-  ],
-  [
-    'mock:payments',
-    `
-      export async function paymentControlDeps() { return {} }
-    `,
-  ],
-])
-
-const mockUrls = new Map<string, string>([
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../lib/feature-gates', 'mock:feature-gates'],
-  ['@openbooks/engine/src/ledger/posting-document.ts', 'mock:posting'],
-  ['@openbooks/engine/src/payments/payment-accounts.ts', 'mock:payments'],
-  ['@openbooks/engine/src/hrm/field-time/crew.ts', 'mock:crew'],
-  ['@openbooks/engine/src/hrm/field-time/reads.ts', 'mock:reads'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
   },
 })
 
 const routeUrl = './route.ts?crew-batch-post-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function postBatchAction(): Promise<Response> {
   return POST(

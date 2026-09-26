@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from '../../../../lib/auth'
 
@@ -13,7 +12,6 @@ import type { SessionUser } from '../../../../lib/auth'
  * GET, PATCH, actions, correct, void and DELETE. Only the session is
  * stubbed; handler, permission resolution and storage are real.
  */
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __documentReadScopeUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

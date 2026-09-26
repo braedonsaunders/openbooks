@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from '../../../lib/auth'
 
@@ -13,7 +12,6 @@ import type { SessionUser } from '../../../lib/auth'
 // Record-level denials answer exactly like not-found; the narrative PDF
 // (unfilterable free text) needs unrestricted scope. Real routes, real
 // database, real role restriction; only the session identity is scripted.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __agentScopeSession: state })
 registerHooks({ resolve(specifier, context, next) {

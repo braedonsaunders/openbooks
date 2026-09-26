@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // routeCrmAccount locked its account row with a bare FOR UPDATE over a LEFT
@@ -9,7 +8,6 @@ import test from 'node:test'
 // PATCH { route: true } died with a 500. These tests go through the HTTP
 // route: one with no address or territory at all (the nullable-side shape),
 // one proving address attribution actually assigns the matching territory.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __crmAccountRoutingState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

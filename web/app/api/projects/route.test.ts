@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../testing/stub-modules";
 import test from "node:test";
 
 // Unsaved-create contract for POST /api/projects: opening the drawer writes
@@ -54,10 +54,15 @@ function sqlText(query: unknown): string {
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksProjectsSqlText = sqlText;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:db",
-    `
+// '@/lib/api/json' is not mocked: never double the validation boundary.
+
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.projects-route-test')]
       const sqlText = globalThis.openbooksProjectsSqlText
       function respond(query) {
@@ -92,18 +97,12 @@ const mockSources = new Map<string, string>([
       }
       export async function withOrgTransaction(_orgId, work) { return work() }
     `,
-  ],
-  [
-    "mock:authz",
-    `export async function guardPermission() {
+    "../../../lib/authz": `export async function guardPermission() {
        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
      }
      export function guardSubsidiaryScope() { return undefined }
      export function subsidiariesInScope() { return true }`,
-  ],
-  [
-    "mock:gate",
-    `const state = globalThis[Symbol.for('openbooks.projects-route-test')]
+    "../../../lib/projects-gate": `const state = globalThis[Symbol.for('openbooks.projects-route-test')]
      export async function guardProjectsFeature() {
        if (state.projectGate) return null
        return new Response(JSON.stringify({ error: 'projects feature is disabled' }), {
@@ -111,58 +110,21 @@ const mockSources = new Map<string, string>([
          headers: { 'content-type': 'application/json' },
        })
      }`,
-  ],
-  [
-    "mock:features",
-    `export async function isFeatureEnabled() { return true }
+    "../../../lib/features": `export async function isFeatureEnabled() { return true }
      export async function acquireFeatureGateLock() {}`,
-  ],
-  [
-    // Empty defs: validation passes anything through cleaned, so the double
-    // is exact for the exercised inputs; the integration suite covers the
-    // real defs path against a live catalog.
-    "mock:custom-fields",
-    `export async function loadFieldDefs() { return [] }
+    "../../../lib/custom-fields": `export async function loadFieldDefs() { return [] }
      export function validateCustomValues(_defs, values) { return { ok: true, cleaned: values ?? {} } }
      export async function findUnownedCustomReferences() { return [] }`,
-  ],
-  [
-    "mock:projects-lib",
-    `export async function loadProject(id, orgId) {
+    "./_lib": `export async function loadProject(id, orgId) {
        const state = globalThis[Symbol.for('openbooks.projects-route-test')]
        if (!state.inserted || id !== state.requestKey) return null
        return { project: { id, org_id: orgId, name: state.requestBody?.name ?? '', subsidiary_id: null } }
      }`,
-  ],
-]);
-
-// '@/lib/api/json' is not mocked: never double the validation boundary.
-const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["../../../lib/authz", "mock:authz"],
-  ["../../../lib/projects-gate", "mock:gate"],
-  ["../../../lib/features", "mock:features"],
-  ["../../../lib/custom-fields", "mock:custom-fields"],
-  ["./_lib", "mock:projects-lib"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const routeUrl = "./route.ts?projects-create-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(): void {
   state.requestKey = null;

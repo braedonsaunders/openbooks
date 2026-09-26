@@ -1,32 +1,26 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:feature-gates',
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/feature-gates": `
       export async function guardFeaturePermission() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
     `,
-  ],
-  [
-    'mock:subsidiary-scope',
-    `
+    "../../subsidiary-scope": `
       export async function guardPayrollFilingData() { return null }
       export async function guardPayrollFilingRowIds() { return null }
     `,
-  ],
-  [
-    'mock:yearend',
-    `
+    "@openbooks/engine/src/payroll/yearend.ts": `
       export async function orgYearEndFilings() { return [] }
     `,
-  ],
-  [
-    'mock:registry',
-    `
+    "@openbooks/engine/src/payroll/filing-registry.ts": `
       export function yearEndFiling(country, filing) {
         return {
           label: \`\${country} \${filing}\`,
@@ -34,96 +28,71 @@ const mockSources = new Map<string, string>([
         }
       }
     `,
-  ],
-  [
-    'mock:packs',
-    `
+    "@openbooks/engine/src/payroll/packs.ts": `
       export class PayrollPackError extends Error {}
     `,
-  ],
-  [
-    'mock:payroll-error',
-    `
+    "@openbooks/engine/src/payroll/error.ts": `
       export class PayrollError extends Error {}
     `,
-  ],
-  [
-    'mock:business-date',
-    `
+    "@openbooks/engine/src/payroll/fences.ts": `
+      export class PayrollError extends Error {}
+    `,
+    "@openbooks/engine/src/payroll/run-allocation.ts": `
+      export class PayrollError extends Error {}
+    `,
+    "@openbooks/engine/src/payroll/run-calculation-evidence.ts": `
+      export class PayrollError extends Error {}
+    `,
+    "@openbooks/engine/src/payroll/run-calculation.ts": `
+      export class PayrollError extends Error {}
+    `,
+    "@openbooks/engine/src/payroll/run-calendar.ts": `
+      export class PayrollError extends Error {}
+    `,
+    "@openbooks/engine/src/payroll/run-commit.ts": `
+      export class PayrollError extends Error {}
+    `,
+    "@openbooks/engine/src/payroll/run-contracts.ts": `
+      export class PayrollError extends Error {}
+    `,
+    "@openbooks/engine/src/payroll/run-lifecycle.ts": `
+      export class PayrollError extends Error {}
+    `,
+    "@openbooks/engine/src/payroll/run-protection.ts": `
+      export class PayrollError extends Error {}
+    `,
+    "@openbooks/engine/src/payroll/run-setup.ts": `
+      export class PayrollError extends Error {}
+    `,
+    "@openbooks/engine/src/payroll/run-stub-records.ts": `
+      export class PayrollError extends Error {}
+    `,
+    "@openbooks/engine/src/payroll/scope.ts": `
+      export class PayrollError extends Error {}
+    `,
+    "@openbooks/engine/src/platform/business-date.ts": `
       export async function businessToday() { return '2026-09-19' }
     `,
-  ],
-  [
-    'mock:export',
-    `
+    "../../../../../lib/export": `
       export function pdfResponse() { return new Response('pdf') }
       export function safeName(value) { return String(value) }
     `,
-  ],
-  [
-    'mock:facsimile',
-    `
+    "../../../../../lib/payroll-slip-facsimile": `
       export function payrollSlipFacsimile() { return { result: {}, layout: {} } }
     `,
-  ],
-  [
-    'mock:tax-form',
-    `
+    "../../../../../lib/tax-form-facsimile": `
       export async function renderTaxFormFacsimilePdf() { return new Uint8Array() }
     `,
-  ],
-  [
-    'mock:branding',
-    `
+    "../../../../../lib/report-pdf": `
       export async function orgBranding() {
         return { orgName: 'ReviewOrg', baseCurrency: 'CAD', primaryColor: '#000000' }
       }
     `,
-  ],
-])
-
-const mockUrls = new Map<string, string>([
-  ['../../../../../lib/feature-gates', 'mock:feature-gates'],
-  ['../../subsidiary-scope', 'mock:subsidiary-scope'],
-  ['@openbooks/engine/src/payroll/yearend.ts', 'mock:yearend'],
-  ['@openbooks/engine/src/payroll/filing-registry.ts', 'mock:registry'],
-  ['@openbooks/engine/src/payroll/packs.ts', 'mock:packs'],
-  ['@openbooks/engine/src/payroll/error.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/fences.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/run-allocation.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/run-calculation-evidence.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/run-calculation.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/run-calendar.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/run-commit.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/run-contracts.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/run-lifecycle.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/run-protection.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/run-setup.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/run-stub-records.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/scope.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
-  ['../../../../../lib/export', 'mock:export'],
-  ['../../../../../lib/payroll-slip-facsimile', 'mock:facsimile'],
-  ['../../../../../lib/tax-form-facsimile', 'mock:tax-form'],
-  ['../../../../../lib/report-pdf', 'mock:branding'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
   },
 })
 
 const routeUrl = './route.ts?payroll-year-end-slip-test'
 const { GET } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function get(query: string): Promise<Response> {
   return GET(new Request(`http://openbooks.test/api/payroll/year-end/slip${query}`))

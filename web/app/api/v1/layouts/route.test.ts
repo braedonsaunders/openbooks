@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-layouts-route-test");
@@ -25,17 +25,17 @@ const v1Mock = `
   }
 `;
 
-const mockSources = new Map<string, string>([
-  ["mock:v1", v1Mock],
-  [
-    "mock:errors",
-    `export class ApplicationError extends Error {
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../lib/api/v1-request": v1Mock,
+    "../../../../lib/application/errors": `export class ApplicationError extends Error {
       constructor(code, message, status) { super(message); this.code = code; this.status = status }
     }`,
-  ],
-  [
-    "mock:layouts",
-    `
+    "../../../../lib/application/page-layouts": `
       const state = globalThis[Symbol.for('openbooks.v1-layouts-route-test')]
       const record = (fn) => async (context, input) => {
         state.calls.push({ fn, input })
@@ -51,28 +51,26 @@ const mockSources = new Map<string, string>([
       export const restoreLayout = record("restore")
       export const clearLayout = record("clear")
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../lib/api/v1-request", "mock:v1"],
-  ["../../../../lib/application/errors", "mock:errors"],
-  ["../../../../lib/application/page-layouts", "mock:layouts"],
-  ["../../../../../lib/api/v1-request", "mock:v1"],
-  ["../../../../../lib/application/errors", "mock:errors"],
-  ["../../../../../lib/application/page-layouts", "mock:layouts"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
+    "../../../../../lib/api/v1-request": v1Mock,
+    "../../../../../lib/application/errors": `export class ApplicationError extends Error {
+      constructor(code, message, status) { super(message); this.code = code; this.status = status }
+    }`,
+    "../../../../../lib/application/page-layouts": `
+      const state = globalThis[Symbol.for('openbooks.v1-layouts-route-test')]
+      const record = (fn) => async (context, input) => {
+        state.calls.push({ fn, input })
+        return { [fn]: true }
+      }
+      export const describeLayoutVocabulary = async (context) => { state.calls.push({ fn: "vocabulary", input: null }); return { specVersion: "1" } };
+      export const listLayouts = record("list")
+      export const describePageLayout = record("describe")
+      export const validateLayout = record("validate")
+      export const previewLayout = record("preview")
+      export const setLayout = record("set")
+      export const listLayoutHistory = record("history")
+      export const restoreLayout = record("restore")
+      export const clearLayout = record("clear")
+    `,
   },
 });
 
@@ -83,7 +81,6 @@ const validate = (await import("./validate/route.ts")) as typeof import("./valid
 const preview = (await import("./preview/route.ts")) as typeof import("./preview/route.ts");
 const history = (await import("./history/route.ts")) as typeof import("./history/route.ts");
 const restore = (await import("./restore/route.ts")) as typeof import("./restore/route.ts");
-hooks.deregister();
 
 const jsonRequest = (url: string, method: string, body?: unknown) => new Request(url, {
   method,

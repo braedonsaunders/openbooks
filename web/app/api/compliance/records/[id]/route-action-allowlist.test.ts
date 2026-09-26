@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 
 // A verify-only user holds the attestation duty (`compliance.verify`) but not
@@ -43,10 +43,13 @@ const VERIFIER_ID = '00000000-0000-4000-8000-00000000b002'
 const CREATOR_ID = '00000000-0000-4000-8000-00000000b003'
 const RECORD_ID = '00000000-0000-4000-8000-00000000b006'
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:db',
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.compliance-record-action-allowlist-test')]
       const sqlText = globalThis.openbooksSqlTextComplianceAllow
       function respond(kind, query) {
@@ -76,10 +79,7 @@ const mockSources = new Map<string, string>([
       export async function withBypassContext(_opts, work) { return work() }
       export function registerRequestOrgResolver() {}
     `,
-  ],
-  [
-    'mock:authz',
-    `
+    "@/lib/authz": `
       // Verify-only user: attestation duty without the editing duty.
       // Full org scope (allowedSubsidiaryIds null), so the subsidiary fence
       // allows every record the route checks — mirroring the real guard for
@@ -90,37 +90,14 @@ const mockSources = new Map<string, string>([
       export function can(_authz, perm) { return perm === 'compliance.verify' }
       export function guardSubsidiaryScope() { return null }
     `,
-  ],
-  [
-    'mock:compliance',
-    `
+    "@/lib/compliance": `
       export async function guardComplianceFeature() { return null }
     `,
-  ],
-])
-
-const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@/lib/authz', 'mock:authz'],
-  ['@/lib/compliance', 'mock:compliance'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
   },
 })
 
 const routeUrl = './route.ts?compliance-record-action-allowlist-test'
 const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   state.calls = []

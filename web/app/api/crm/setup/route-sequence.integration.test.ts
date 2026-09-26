@@ -2,14 +2,12 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import { NextRequest } from 'next/server'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // CRM-setup POST funneled status sequence numbers through `Number(...) || 0`
 // with no integer check, so an out-of-int32 figure or a fractional value
 // sailed through and died in Postgres as a raw integer failure (HTTP 500)
 // instead of failing closed with a named 422 and nothing written.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __crmSetupSequenceState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

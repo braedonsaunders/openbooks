@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // PATCH must enforce the same status/action allowlists POST documents. An
 // unknown mandate status silently disables direct-debit collection (only
 // 'active' mandates join payment runs); an unknown schedule action silently
 // degrades to draft behaviour so auto-submit never fires. Both must be 400.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __payOpsPatchAllowlistState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

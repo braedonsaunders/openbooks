@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../../testing/stub-modules";
 import test from "node:test";
 
 interface RouteState {
@@ -44,39 +44,13 @@ function sqlText(query: unknown): string {
   globalThis as typeof globalThis & Record<string, unknown>
 ).connectionTestSqlText = sqlText;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `
-      export function guardUnrestrictedScope(authz) { return authz.allowedSubsidiaryIds == null ? null : new Response(JSON.stringify({ error: "requires unrestricted subsidiary access" }), { status: 403 }) }
-      export async function guardPermission() {
-        return {
-          user: { orgId: "org-1", id: "user-1" },
-          permissions: new Set(["admin.setup.manage"]),
-          allowedSubsidiaryIds: null,
-        }
-      }
-    `,
-  ],
-  [
-    "mock:connection",
-    `
-      const state = globalThis[Symbol.for("openbooks.connection-test-route-test")]
-      export function buildSource() {
-        return {
-          ping: async () => {
-            state.pingCalls += 1
-            if (state.pingError) throw state.pingError
-            return state.pingResult
-          },
-          trialBalance: async () => [],
-        }
-      }
-    `,
-  ],
-  [
-    "mock:db",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for("openbooks.connection-test-route-test")]
       const sqlText = globalThis.connectionTestSqlText
       export const db = {
@@ -106,32 +80,34 @@ const mockSources = new Map<string, string>([
         },
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/sync/connection.ts", "mock:connection"],
-  ["../../../../../../lib/authz", "mock:authz"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
+    "@openbooks/engine/src/sync/connection.ts": `
+      const state = globalThis[Symbol.for("openbooks.connection-test-route-test")]
+      export function buildSource() {
+        return {
+          ping: async () => {
+            state.pingCalls += 1
+            if (state.pingError) throw state.pingError
+            return state.pingResult
+          },
+          trialBalance: async () => [],
+        }
+      }
+    `,
+    "../../../../../../lib/authz": `
+      export function guardUnrestrictedScope(authz) { return authz.allowedSubsidiaryIds == null ? null : new Response(JSON.stringify({ error: "requires unrestricted subsidiary access" }), { status: 403 }) }
+      export async function guardPermission() {
+        return {
+          user: { orgId: "org-1", id: "user-1" },
+          permissions: new Set(["admin.setup.manage"]),
+          allowedSubsidiaryIds: null,
+        }
+      }
+    `,
   },
 });
 
 const routeUrl = "./route.ts?connection-test-route-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(): void {
   routeState.pingResult = { ok: true, detail: "Connected" };

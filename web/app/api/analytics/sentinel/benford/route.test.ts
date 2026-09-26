@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
@@ -46,10 +46,13 @@ function sqlText(query: unknown): string {
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksBenfordSql = sql;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:db",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.benford-route-test')]
       const sqlText = globalThis.openbooksBenfordSqlText
       export const db = {
@@ -62,10 +65,7 @@ const mockSources = new Map<string, string>([
         },
       }
     `,
-  ],
-  [
-    "mock:authz",
-    `
+    "../../../../../lib/authz": `
       const state = globalThis[Symbol.for('openbooks.benford-route-test')]
       export async function guardPermission() {
         return {
@@ -78,10 +78,20 @@ const mockSources = new Map<string, string>([
         return authz.permissions instanceof Set && authz.permissions.has(perm)
       }
     `,
-  ],
-  [
-    "mock:subsidiaries",
-    `
+    "../authz": `
+      const state = globalThis[Symbol.for('openbooks.benford-route-test')]
+      export async function guardPermission() {
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          permissions: new Set(state.permissions),
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+        }
+      }
+      export function can(authz, perm) {
+        return authz.permissions instanceof Set && authz.permissions.has(perm)
+      }
+    `,
+    "../../../../../lib/subsidiaries": `
       const state = globalThis[Symbol.for('openbooks.benford-route-test')]
       const sqlText = globalThis.openbooksBenfordSqlText
       const sql = globalThis.openbooksBenfordSql
@@ -97,34 +107,11 @@ const mockSources = new Map<string, string>([
           : sql\` and false\`
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["../../../../../lib/authz", "mock:authz"],
-  // The shared sentinel gate reads can() through its own relative import.
-  ["../authz", "mock:authz"],
-  ["../../../../../lib/subsidiaries", "mock:subsidiaries"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const routeUrl = "./route.ts?benford-subsidiary-scope-test";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(): void {
   routeState.calls.length = 0;

@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from '../../../../lib/auth';
 
 // Briefing API contract (b06): the cached narrative is per-day-per-user,
 // generation without a configured model refuses honestly, and email needs a
 // cached copy first. Same stubbed-session harness; real scratch orgs.
-const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __b06Briefing: state });
 registerHooks({ resolve(specifier, context, next) {

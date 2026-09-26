@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Information-return POST passes threshold to the filing insert raw — never
@@ -9,7 +8,6 @@ import test from 'node:test'
 // 20-digit figure dies in Postgres as a raw storage failure (HTTP 500; the
 // verb only maps InformationReturnError to 422) instead of failing closed
 // with a named 4xx and nothing written. threshold is numeric(19,4).
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __infoReturnThresholdState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

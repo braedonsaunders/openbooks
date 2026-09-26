@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
-import { pathToFileURL } from "node:url";
 
 /**
  * F3-38 (security): Send, Remind, Void and Legal-hold refuse a read-only
@@ -29,7 +28,6 @@ const routeState: RouteState = {
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const root = pathToFileURL(process.cwd() + "/").href;
 
 const mockSources = new Map<string, string>([
   [

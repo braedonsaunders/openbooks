@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 import { NextResponse } from "next/server";
 
@@ -22,10 +22,13 @@ const routeState: RouteState = { scope: null, calls: [] };
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksTaxProvisionNextResponse = NextResponse;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/authz": `
       const state = globalThis[Symbol.for('openbooks.tax-provision-route-test')]
       export async function guardPermission(permission) {
         if (permission !== 'reports.read') {
@@ -37,10 +40,7 @@ const mockSources = new Map<string, string>([
         }
       }
     `,
-  ],
-  [
-    "mock:income-tax-provision",
-    `
+    "@openbooks/engine/src/tax-returns/income-tax-provision.ts": `
       const state = globalThis[Symbol.for('openbooks.tax-provision-route-test')]
       export async function getProvisionRun(orgId, runId, allowedSubsidiaryIds) {
         state.calls.push({ orgId, runId, allowedSubsidiaryIds })
@@ -68,33 +68,10 @@ const mockSources = new Map<string, string>([
         }
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../../lib/authz", "mock:authz"],
-  [
-    "@openbooks/engine/src/tax-returns/income-tax-provision.ts",
-    "mock:income-tax-provision",
-  ],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 const RUN_ID = "00000000-0000-4000-8000-00000000a001";
 

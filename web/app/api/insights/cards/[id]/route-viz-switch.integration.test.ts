@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import type { SessionUser } from '../../../../../lib/auth'
 
@@ -11,7 +10,6 @@ import type { SessionUser } from '../../../../../lib/auth'
 // accept that combination — a table renders every column and ignores
 // chart-only keys. A refusal here would surface as the generic
 // "Autosave failed" toast with the edit lost on reload.
-const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __insightCardVizSwitchSession: session })
 registerHooks({ resolve(specifier, context, next) {

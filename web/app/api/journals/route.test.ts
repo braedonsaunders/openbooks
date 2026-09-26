@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../testing/stub-modules";
 import test from "node:test";
 
 // Unsaved-create contract for POST /api/journals: opening the drawer writes
@@ -69,10 +69,13 @@ function sqlText(query: unknown): string {
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksJournalsSqlText = sqlText;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:db",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.journals-route-test')]
       const sqlText = globalThis.openbooksJournalsSqlText
       // The shared claim helper reads through sql.identifier, whose chunk
@@ -128,25 +131,21 @@ const mockSources = new Map<string, string>([
       export function withBypassContext(fn) { return fn() }
       export function withOrgContext(_orgId, fn) { return fn() }
     `,
-  ],
-  [
-    "mock:authz",
-    `export async function guardPermission() {
+    "../../../lib/authz": `export async function guardPermission() {
        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
      }
      export function subsidiariesInScope() { return true }`,
-  ],
-  [
-    "mock:journals-lib",
-    `const state = globalThis[Symbol.for('openbooks.journals-route-test')]
+    "../../../lib/journals": `const state = globalThis[Symbol.for('openbooks.journals-route-test')]
      export async function loadJournalDoc(id, orgId) {
        if (!state.inserted || id !== state.requestKey) return null
        return { doc: { id, org_id: orgId, kind: 'journal', document_number: 'JE-000007' }, lines: [] }
      }`,
-  ],
-  [
-    "mock:clock",
-    `export async function businessToday() { return globalThis[Symbol.for('openbooks.journals-route-test')].clockDate }
+    "./journals": `const state = globalThis[Symbol.for('openbooks.journals-route-test')]
+     export async function loadJournalDoc(id, orgId) {
+       if (!state.inserted || id !== state.requestKey) return null
+       return { doc: { id, org_id: orgId, kind: 'journal', document_number: 'JE-000007' }, lines: [] }
+     }`,
+    "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday() { return globalThis[Symbol.for('openbooks.journals-route-test')].clockDate }
      // Custom-field validation runs REAL and reads its date predicate from
      // this same module, so the double carries the real rule rather than a
      // stub that would let any string through.
@@ -156,36 +155,11 @@ const mockSources = new Map<string, string>([
        const date = new Date(Date.UTC(y, m - 1, d))
        return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d
      }`,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["../../../lib/authz", "mock:authz"],
-  ["../../../lib/journals", "mock:journals-lib"],
-  ["./journals", "mock:journals-lib"],
-  ["@openbooks/engine/src/platform/business-date.ts", "mock:clock"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    // Server-module guard: the route's transitive imports mark themselves
-    // tests neutralize it the same way.
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const routeUrl = "./route.ts?journals-create-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(): void {
   state.requestKey = null;

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
 
 interface Call {
@@ -25,10 +25,13 @@ const ROOT_ID = "00000000-0000-4000-8000-000000000001";
 const SINGLE_ID = "00000000-0000-4000-8000-000000000002";
 const OTHER_ID = "00000000-0000-4000-8000-000000000003";
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../lib/authz": `
       const state = globalThis[Symbol.for('openbooks.journal-draft-route-test')]
       export async function guardPermission() {
         return {
@@ -37,10 +40,7 @@ const mockSources = new Map<string, string>([
         }
       }
     `,
-  ],
-  [
-    "mock:journals",
-    `
+    "../../../../lib/journals": `
       const state = globalThis[Symbol.for('openbooks.journal-draft-route-test')]
       const legalIds = new Set([
         '00000000-0000-4000-8000-000000000001',
@@ -70,31 +70,11 @@ const mockSources = new Map<string, string>([
         return { id: 'draft-' + subsidiaryId, documentNumber: 'JE-0001' }
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../lib/authz", "mock:authz"],
-  ["../../../../lib/journals", "mock:journals"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const routeUrl = "./route.ts?draft-scope-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(scope: Set<string> | null): void {
   state.allowedSubsidiaryIds = scope;

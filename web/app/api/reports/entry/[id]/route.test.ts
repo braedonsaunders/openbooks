@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 import { NextResponse } from "next/server";
 
@@ -48,10 +48,13 @@ function sqlText(query: unknown): string {
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksReportsEntrySqlText = sqlText;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/authz": `
       const state = globalThis[Symbol.for('openbooks.reports-entry-route-test')]
       const NextResponse = globalThis.openbooksReportsEntryNextResponse
       function grants(permission) {
@@ -91,10 +94,47 @@ const mockSources = new Map<string, string>([
         return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
       }
     `,
-  ],
-  [
-    "mock:db",
-    `
+    "./authz": `
+      const state = globalThis[Symbol.for('openbooks.reports-entry-route-test')]
+      const NextResponse = globalThis.openbooksReportsEntryNextResponse
+      function grants(permission) {
+        // Null permissions = legacy unrestricted caller. Otherwise the role
+        // holds exactly the listed grants (plus '*' wildcard holders).
+        if (state.permissions === null) return true
+        const held = new Set(state.permissions)
+        if (held.has('*')) return true
+        if (held.has(permission)) return true
+        const [scope] = permission.split('.')
+        return held.has(scope + '.*')
+      }
+      function authz() {
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          permissions: new Set(state.permissions ?? ['*']),
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+        }
+      }
+      export async function guardPermission(permission) {
+        if (!grants(permission)) {
+          return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
+        }
+        return authz()
+      }
+      export async function getAuthz() {
+        return authz()
+      }
+      export function can(gate, permission) {
+        const held = gate.permissions
+        if (held.has('*')) return true
+        if (held.has(permission)) return true
+        const [scope] = permission.split('.')
+        return held.has(scope + '.*')
+      }
+      export function unauthorized() {
+        return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+      }
+    `,
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.reports-entry-route-test')]
       const sqlText = globalThis.openbooksReportsEntrySqlText
       const visibleLine = {
@@ -190,34 +230,11 @@ const mockSources = new Map<string, string>([
         },
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../../lib/authz", "mock:authz"],
-  // lib/payroll-confidentiality.ts reaches the same gate through a
-  // lib-relative specifier; it must resolve to the same mock.
-  ["./authz", "mock:authz"],
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined)
-      return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const routeUrl = "./route.ts?reports-entry-subsidiary-scope-test";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(allowedSubsidiaryIds: Set<string> | null, permissions: string[] | null = null, payrollLines = false): void {
   routeState.allowedSubsidiaryIds = allowedSubsidiaryIds;
@@ -317,7 +334,6 @@ test("unrestricted callers retain every journal line", async () => {
     "unrestricted callers must not receive a narrowed query",
   );
 });
-
 
 test("reports.read-only roles see one restricted payroll line per account, never employee detail", async () => {
   reset(null, ["reports.read", "gl.read"], true);

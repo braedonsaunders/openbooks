@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../testing/stub-modules'
 import test from 'node:test'
 
 type Assignment = Record<string, unknown> & { id: string }
@@ -42,10 +42,15 @@ function sqlText(query: unknown): string {
 
 ;(globalThis as typeof globalThis & { openbooksRateBookSqlText?: typeof sqlText }).openbooksRateBookSqlText = sqlText
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:db',
-    `
+// '@/lib/api/json' is not mocked: never double the validation boundary.
+
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.rate-book-assignment-route-test')]
       const sqlText = globalThis.openbooksRateBookSqlText
       const clone = (row) => ({ ...row })
@@ -124,51 +129,24 @@ const mockSources = new Map<string, string>([
         },
       }
     `,
-  ],
-  // The double's actor is unrestricted, so the scope gate below always
-  // answers null here — restricted-scope denials are proven behaviorally
-  // in route-scope.integration.test.ts against the real guard instead.
-  // (A mock: URL has no package base, so this stub stays import-free.)
-  ['mock:authz', `
-    export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null } }
-    export function can() { return true }
-    export function guardSubsidiaryScope() { return null }
-  `],
-  ['mock:features', `export async function isFeatureEnabled() { return true }`],
-  ['mock:business-date', `export async function businessToday() { return '2026-08-26' }
+    "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday() { return '2026-08-26' }
     export function isIsoCalendarDate(value) {
       if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false
       const date = new Date(value + 'T00:00:00.000Z')
       return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
-    }`],
-  ['mock:list-params', `export function isUuid(value) { return typeof value === 'string' && value.length > 0 }`],
-])
-
-// '@/lib/api/json' is not mocked: never double the validation boundary.
-const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
-  ['../../../lib/authz', 'mock:authz'],
-  ['../../../lib/features', 'mock:features'],
-  ['../../../lib/list-params', 'mock:list-params'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    }`,
+    "../../../lib/authz": `
+    export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null } }
+    export function can() { return true }
+    export function guardSubsidiaryScope() { return null }
+  `,
+    "../../../lib/features": `export async function isFeatureEnabled() { return true }`,
+    "../../../lib/list-params": `export function isUuid(value) { return typeof value === 'string' && value.length > 0 }`,
   },
 })
 
 const routeUrl = './route.ts?rate-book-assignment-transaction-test'
 const route = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const BOOK = '11111111-1111-1111-1111-111111111111'
 const CUSTOMER = '22222222-2222-2222-2222-222222222222'

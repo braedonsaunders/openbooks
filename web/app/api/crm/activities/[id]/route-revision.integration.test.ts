@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // F3-71: activity PATCH carried no revision token, so the last writer won
 // silently. The route now requires the loader-projected expectedUpdatedAt
 // (409 when missing) and compares it against the locked row (409 when
 // stale), the same contract as the opportunity route.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __activityRevisionState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

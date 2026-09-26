@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../../testing/stub-modules'
 import test from 'node:test'
 
 // H-STATEMENT: GET /api/parties/[id]/statement/send disclosed an
@@ -32,38 +32,13 @@ const PARTY_ID = '00000000-0000-4000-8000-00000000e001'
 const SUB_A = '00000000-0000-4000-8000-00000000e00a'
 const SUB_B = '00000000-0000-4000-8000-00000000e00b'
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:authz',
-    `
-      const state = globalThis[Symbol.for('openbooks.statement-send-test')]
-      export async function guardPermission(perm) {
-        if (!state.permissions.includes(perm)) {
-          return Response.json({ error: 'missing permission: ' + perm }, { status: 403 })
-        }
-        return {
-          user: { orgId: 'org-1', id: 'user-1' },
-          permissions: new Set(state.permissions),
-          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
-        }
-      }
-      export function can(authz, perm) {
-        return authz.permissions.has(perm)
-      }
-      // The canonical party rule: null scope passes; a null subsidiary is
-      // org-wide only with orgWideNull.
-      export function subsidiaryScopeAllows(scope, subsidiaryId, opts) {
-        if (scope === null || scope === undefined) return true
-        if (subsidiaryId === null || subsidiaryId === undefined || subsidiaryId === '') {
-          return (opts && opts.orgWideNull) === true
-        }
-        return scope.has(subsidiaryId)
-      }
-    `,
-  ],
-  [
-    'mock:db',
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.statement-send-test')]
       // Render static SQL text the way drizzle nests it: raw strings, static
       // text inside { value: [...] } chunks, nested fragments, and scalar
@@ -98,22 +73,15 @@ const mockSources = new Map<string, string>([
         },
       }
     `,
-  ],
-  ['mock:intl', `export async function getTranslations() { return (key) => key }`],
-  ['mock:bizdate', `export async function businessToday() { return '2026-07-15' }`],
-  [
-    'mock:email-config',
-    `
+    "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday() { return '2026-07-15' }`,
+    "@openbooks/engine/src/delivery/email-config.ts": `
       export async function insertEmailLog() { return 'log-1' }
       export async function markEmailFailed() {}
       export async function markEmailSent() {}
       export async function markEmailUncertain() {}
       export async function resolveOrgEmailTransport() { return { kind: 'test' } }
     `,
-  ],
-  [
-    'mock:emails',
-    `
+    "@openbooks/emails": `
       const state = globalThis[Symbol.for('openbooks.statement-send-test')]
       export function deriveEmailDeliveryKey() { return 'key-1' }
       export function isValidEmailAddress() { return true }
@@ -123,60 +91,52 @@ const mockSources = new Map<string, string>([
         return { kind: 'sent', providerMessageId: 'm-1' }
       }
     `,
-  ],
-  ['mock:report-filters', `export function parseReportQuery() { return { period: 'custom' } }`],
-  ['mock:periods', `export async function resolvePeriod() { return { from: '2026-07-01', to: '2026-07-31' } }`],
-  [
-    'mock:report-run',
-    `
+    "../../../../../../lib/authz": `
+      const state = globalThis[Symbol.for('openbooks.statement-send-test')]
+      export async function guardPermission(perm) {
+        if (!state.permissions.includes(perm)) {
+          return Response.json({ error: 'missing permission: ' + perm }, { status: 403 })
+        }
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          permissions: new Set(state.permissions),
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+        }
+      }
+      export function can(authz, perm) {
+        return authz.permissions.has(perm)
+      }
+      // The canonical party rule: null scope passes; a null subsidiary is
+      // org-wide only with orgWideNull.
+      export function subsidiaryScopeAllows(scope, subsidiaryId, opts) {
+        if (scope === null || scope === undefined) return true
+        if (subsidiaryId === null || subsidiaryId === undefined || subsidiaryId === '') {
+          return (opts && opts.orgWideNull) === true
+        }
+        return scope.has(subsidiaryId)
+      }
+    `,
+    "../../../../../../lib/report-filters": `export function parseReportQuery() { return { period: 'custom' } }`,
+    "../../../../../../lib/periods": `export async function resolvePeriod() { return { from: '2026-07-01', to: '2026-07-31' } }`,
+    "../../../../../../lib/report-run": `
       const state = globalThis[Symbol.for('openbooks.statement-send-test')]
       export async function resolveReport() {
         state.renderCalls += 1
         return { render: 'data', data: {} }
       }
     `,
-  ],
-  [
-    'mock:report-pdf',
-    `
+    "../../../../../../lib/report-pdf": `
       export async function exportDataToPdf() { return new Uint8Array([1, 2, 3]) }
       export async function orgBranding() { return { orgName: 'Test Org' } }
       export function resolveLayout() { return { page: {}, showSummary: false } }
     `,
-  ],
-  ['mock:export', `export function safeName(name) { return name }`],
-])
-
-const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:bizdate'],
-  ['@openbooks/engine/src/delivery/email-config.ts', 'mock:email-config'],
-  ['@openbooks/emails', 'mock:emails'],
-  ['../../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../../lib/report-filters', 'mock:report-filters'],
-  ['../../../../../../lib/periods', 'mock:periods'],
-  ['../../../../../../lib/report-run', 'mock:report-run'],
-  ['../../../../../../lib/report-pdf', 'mock:report-pdf'],
-  ['../../../../../../lib/export', 'mock:export'],
-  ['next-intl/server', 'mock:intl'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+    "../../../../../../lib/export": `export function safeName(name) { return name }`,
+    "next-intl/server": `export async function getTranslations() { return (key) => key }`,
   },
 })
 
 const routeUrl = './route.ts?statement-send-test'
 const { GET, POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(overrides: Partial<StatementState>): void {
   statementState.permissions = overrides.permissions ?? []

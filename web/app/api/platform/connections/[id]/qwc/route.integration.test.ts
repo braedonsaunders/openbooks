@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Q13: the .qwc route refuses regions the Intuit Web Connector does not
 // support (AU/NZ) by name instead of emitting a working-looking file, while
 // US/CA/UK still generate.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __qwcRegionState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

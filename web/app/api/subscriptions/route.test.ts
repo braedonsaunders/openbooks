@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../testing/stub-modules";
 import test from "node:test";
 import {
   SubscriptionError,
@@ -94,10 +94,17 @@ function sqlText(query: unknown): string {
 (globalThis as typeof globalThis & { openbooksSubscriptionSqlText?: typeof sqlText })
   .openbooksSubscriptionSqlText = sqlText;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:db",
-    `
+// Neither '@/lib/api/json' nor the money kernel is mocked: a double of
+// validation or money cannot produce the refusals the real modules
+// enforce, so it would hollow every refusal case behind it.
+
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
       const sqlText = globalThis.openbooksSubscriptionSqlText
       const response = (query) => {
@@ -133,10 +140,7 @@ const mockSources = new Map<string, string>([
         }),
       }
     `,
-  ],
-  [
-    "mock:subscription-engine",
-    `
+    "@openbooks/engine/src/billing/subscription-billing.ts": `
       const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
       export const SubscriptionError = state.SubscriptionError
       export const normalizeSubscriptionCadence = (...args) => state.normalizeSubscriptionCadence(...args)
@@ -162,10 +166,8 @@ const mockSources = new Map<string, string>([
         return { invoiceId: 'invoice-2', documentNumber: 'INV-0002', posted: false, amount: '42.0000' }
       }
     `,
-  ],
-  [
-    "mock:authz",
-    `const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
+    "@openbooks/engine/src/platform/business-date.ts": "export async function businessToday() { return '2026-08-26' }",
+    "../../../lib/authz": `const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
      export async function guardPermission() { return state.authz }
      export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {
        const allowed = authz.allowedSubsidiaryIds
@@ -183,38 +185,12 @@ const mockSources = new Map<string, string>([
          return new Response(JSON.stringify({ error: state.unrestrictedScopeRequired }), { status: 403 })
        }
      }`,
-  ],
-  ["mock:features", "export async function isFeatureEnabled() { return true }"],
-  ["mock:business-date", "export async function businessToday() { return '2026-08-26' }"],
-]);
-
-// Neither '@/lib/api/json' nor the money kernel is mocked: a double of
-// validation or money cannot produce the refusals the real modules
-// enforce, so it would hollow every refusal case behind it.
-const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/billing/subscription-billing.ts", "mock:subscription-engine"],
-  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
-  ["../../../lib/authz", "mock:authz"],
-  ["../../../lib/features", "mock:features"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
+    "../../../lib/features": "export async function isFeatureEnabled() { return true }",
   },
 });
 
 const routeUrl = "./route.ts?subscription-configuration-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(): void {
   routeState.queries.length = 0;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 
 /**
@@ -34,40 +34,34 @@ const stateKey = Symbol.for('openbooks.payroll-rates-route-test')
 const state: RouteState = { deleteAttempts: [], deleteResult: 'retired', upsertAttempts: [] }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:feature-gates',
-    `
+// Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
+// mocked: the statutory-rate refusals this file pins are exactly the kind a
+// hand double cannot produce (a passthrough canonicalDecimal accepts every
+// amount, so no over-precision refusal could ever fire here).
+
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/feature-gates": `
       export async function guardFeaturePermission() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
     `,
-  ],
-  [
-    'mock:authz',
-    `
+    "../../../../../lib/authz": `
       export async function guardRootSubsidiaryScope() { return null }
     `,
-  ],
-  [
-    'mock:list-params',
-    `
+    "../../../../../lib/list-params": `
       export function isUuid(value) {
         return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
       }
     `,
-  ],
-  [
-    'mock:payroll-error',
-    `
+    "@openbooks/engine/src/payroll/error.ts": `
       export class PayrollError extends Error {}
     `,
-  ],
-  [
-    // The real packs module re-exports the pack hierarchy rooted at
-    // PayrollError, so the mock imports the mocked root and extends it.
-    'mock:packs',
-    `
+    "@openbooks/engine/src/payroll/packs.ts": `
       import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
       export class PayrollPackError extends PayrollError {}
       export class PayrollJurisdictionError extends PayrollPackError {}
@@ -86,10 +80,7 @@ const mockSources = new Map<string, string>([
       export function payrollTaxYearCoverage() { return [] }
       export function payrollTaxYearForDate() { return { taxYear: 2026 } }
     `,
-  ],
-  [
-    'mock:statutory-rates',
-    `
+    "@openbooks/engine/src/payroll/statutory-rates.ts": `
       const state = globalThis[Symbol.for('openbooks.payroll-rates-route-test')]
       const { PayrollPackError } = await import('@openbooks/engine/src/payroll/packs.ts')
       export async function deleteStatutoryRate(orgId, actorId, id) {
@@ -104,74 +95,27 @@ const mockSources = new Map<string, string>([
         return { id: 'rate-1', values: {} }
       }
     `,
-  ],
-  [
-    'mock:db',
-    `
+    "@openbooks/engine/src/platform/db.ts": `
       export const db = { execute: async () => ({ rows: [] }) }
     `,
-  ],
-  [
-    'mock:drizzle',
-    `
+    "drizzle-orm": `
       export function sql() { return {} }
     `,
-  ],
-  [
-    'mock:filing',
-    `
+    "@openbooks/engine/src/payroll/filing.ts": `
       export async function listFilingAccounts() { return [] }
     `,
-  ],
-  [
-    'mock:readiness',
-    `
+    "@openbooks/engine/src/payroll/readiness.ts": `
       export async function installedPayrollCountries() { return ['CA'] }
       export async function payrollStatutoryRateGaps() { return [] }
     `,
-  ],
-  [
-    'mock:business-date',
-    `
+    "@openbooks/engine/src/platform/business-date.ts": `
       export function businessToday() { return '2026-09-19' }
     `,
-  ],
-])
-
-// Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
-// mocked: the statutory-rate refusals this file pins are exactly the kind a
-// hand double cannot produce (a passthrough canonicalDecimal accepts every
-// amount, so no over-precision refusal could ever fire here).
-const mockUrls = new Map<string, string>([
-  ['../../../../../lib/feature-gates', 'mock:feature-gates'],
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../lib/list-params', 'mock:list-params'],
-  ['@openbooks/engine/src/payroll/error.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/packs.ts', 'mock:packs'],
-  ['@openbooks/engine/src/payroll/statutory-rates.ts', 'mock:statutory-rates'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['drizzle-orm', 'mock:drizzle'],
-  ['@openbooks/engine/src/payroll/filing.ts', 'mock:filing'],
-  ['@openbooks/engine/src/payroll/readiness.ts', 'mock:readiness'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
   },
 })
 
 const routeUrl = './route.ts?payroll-statutory-rates-refusal-test'
 const { DELETE, PUT } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const ROW_ID = '11111111-2222-4333-8444-555555555555'
 

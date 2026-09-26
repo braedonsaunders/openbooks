@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 
 const stateKey = Symbol.for('openbooks.opportunity-contact-route-test')
@@ -107,8 +107,18 @@ const staleOpportunity = {
   next_step: null,
 }
 
-const mockSources = new Map<string, string>([
-  ['mock:db', `
+// Neither the money kernel, the decimal classifier, nor '@/lib/api/json' is
+// mocked: hand doubles cannot produce the refusals the real modules enforce
+// (the removed compareDecimal stub answered 0 for every comparison, so the
+// totals-vs-lines check behind it could never fail).
+
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
     const state = globalThis[Symbol.for('openbooks.opportunity-contact-route-test')]
     const sqlText = globalThis.openbooksSqlTextOpportunity
     const respondExecute = (query) => {
@@ -225,21 +235,11 @@ const mockSources = new Map<string, string>([
     export async function withBypassContext(_opts, work) { return work() }
     export function inDbTransaction(_work) { throw new Error('unexpected inDbTransaction') }
     export function registerRequestOrgResolver() {}
-  `],
-  ['mock:crm', `
+  `,
+    "@openbooks/engine/src/crm/crm.ts": `
     export async function promoteCrmAccount() { return { customerRoleActive: true, lifecycleApplied: true, transitioned: true } }
-  `],
-  ['mock:crm-scope', `
-    export function crmOpportunityScope() { return '' }
-    export function crmSharedScope() { return '' }
-  `],
-  // The stage gate is re-exported from the REAL engine module rather than
-  // restated here. A hand-written stub of a policy resolver would let the
-  // route keep passing this file while the rule it enforces drifted away from
-  // the one the product actually applies, which is the whole failure mode the
-  // single resolver exists to prevent. It is pure (no database), so borrowing
-  // it costs nothing.
-  ['mock:crm-math', `
+  `,
+    "@openbooks/engine/src/crm/crm-math.ts": `
     export { validateOpportunityStageTransition } from ${JSON.stringify(
       new URL('../../../../../../engine/src/crm/crm-math.ts', import.meta.url).href,
     )}
@@ -247,65 +247,35 @@ const mockSources = new Map<string, string>([
       return { lines, projectedAmount: '0.00', weightedAmount: '0.00', probability }
     }
     export function validateContributionTotal() {}
-  `],
-  ['mock:authz', `
+  `,
+    "../../../../../lib/authz": `
     export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }
-  `],
-  ['mock:feature-gates', `
+  `,
+    "../../../../../lib/feature-gates": `
     export async function guardFeaturePermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }
-  `],
-  ['mock:features', `
+  `,
+    "../../../../../lib/features": `
     export async function isFeatureEnabled() { return true }
-  `],
-  ['mock:crm-loader', `
+  `,
+    "../../../../../lib/crm": `
     const state = globalThis[Symbol.for('openbooks.opportunity-contact-route-test')]
     export async function loadOpportunity() { return state.loaded }
-  `],
-  ['mock:json', `
-    export const jsonObject = {}
-    export async function parseJsonBody(req) {
-      try { return { ok: true, data: await req.json() } }
-      catch { return { ok: false, response: new Response(JSON.stringify({ error: 'invalid JSON' }), { status: 400 }) } }
-    }
-  `],
-  ['mock:list-params', `
+  `,
+    "../../../../../lib/crm-scope": `
+    export function crmOpportunityScope() { return '' }
+    export function crmSharedScope() { return '' }
+  `,
+    "../../../../../lib/list-params": `
     export function isUuid(value) { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) }
-  `],
-])
-
-// Neither the money kernel, the decimal classifier, nor '@/lib/api/json' is
-// mocked: hand doubles cannot produce the refusals the real modules enforce
-// (the removed compareDecimal stub answered 0 for every comparison, so the
-// totals-vs-lines check behind it could never fail).
-const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/crm/crm.ts', 'mock:crm'],
-  ['@openbooks/engine/src/crm/crm-math.ts', 'mock:crm-math'],
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../lib/feature-gates', 'mock:feature-gates'],
-  ['../../../../../lib/features', 'mock:features'],
-  ['../../../../../lib/crm', 'mock:crm-loader'],
-  ['../../../../../lib/crm-scope', 'mock:crm-scope'],
-  ['../../../../../lib/list-params', 'mock:list-params'],
-  ['@/lib/list-params', 'mock:list-params'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
+  `,
+    "@/lib/list-params": `
+    export function isUuid(value) { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value) }
+  `,
   },
 })
 
 const routeUrl = './route.ts?opportunity-contact-occ-test'
 const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(lockedContactMatches: boolean[] = [true]): void {
   routeState.calls.length = 0
@@ -383,7 +353,6 @@ test('a stale concurrent PATCH loses loudly against the locked winner', async ()
     patch({ title: 'First save', expectedUpdatedAt: REVISION }),
     patch({ nextStep: 'Call buyer', expectedUpdatedAt: REVISION }),
   ])
-
 
   assert.deepEqual([first.status, second.status], [200, 409])
   assert.deepEqual(await second.json(), { error: 'This opportunity changed after you opened it; reload the opportunity and reapply your changes' })

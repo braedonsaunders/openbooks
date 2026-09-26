@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Equipment PATCH rewrote every financial and lifecycle column from a
@@ -9,7 +8,6 @@ import test from 'node:test'
 // change and the audit logged a stale before-image. PATCH now locks the
 // row first, enforces the caller's revision, writes only changed fields,
 // and audits the actual before/after rows.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __equipmentConcurrencyState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

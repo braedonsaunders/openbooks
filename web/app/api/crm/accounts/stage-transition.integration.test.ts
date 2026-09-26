@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Moving a lead to Prospect from the account drawer must persist.
 // The drawer sends the whole form, including the now-stale lead status id,
 // alongside the new stage. The stage write must survive that payload (and a
 // missing status), while genuinely unknown statuses still fail closed.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __crmStageTransitionState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

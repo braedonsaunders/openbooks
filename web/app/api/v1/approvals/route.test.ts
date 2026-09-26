@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:v1",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../lib/api/v1-request": `
       export async function withV1Request(request, label, operation) {
         try {
           const result = await operation(
@@ -34,37 +37,15 @@ const mockSources = new Map<string, string>([
         return key
       }
     `,
-  ],
-  [
-    "mock:approvals",
-    `
+    "../../../../lib/application/approvals": `
       export async function listApprovalWorklist() {
         return [{ gateId: "gate-1", status: "pending" }]
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../lib/api/v1-request", "mock:v1"],
-  ["../../../../lib/application/approvals", "mock:approvals"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const { GET } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 test("GET /api/v1/approvals returns the actor worklist", async () => {
   const response = await GET(

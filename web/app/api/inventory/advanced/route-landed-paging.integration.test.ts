@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -8,7 +7,6 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/eng
 import { receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
 import { postLandedCostVoucher, reverseLandedCostVoucher } from "@openbooks/engine/src/inventory/landed-cost.ts";
 
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __landedPagingAudit: state });
 registerHooks({

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 
 interface RouteState {
@@ -10,18 +10,18 @@ const stateKey = Symbol.for("openbooks.utilization-entries-precision-test");
 const state: RouteState = { rows: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:authz",
-    `export async function guardFeaturePermission() {
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/feature-gates": `export async function guardFeaturePermission() {
        // Unrestricted caller: subsidiary scope is covered by the DB-backed
        // scope test; here the drill must not filter.
        return { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: null }
      }`,
-  ],
-  [
-    "mock:db",
-    `const state = globalThis[Symbol.for("openbooks.utilization-entries-precision-test")]
+    "@openbooks/engine/src/platform/db.ts": `const state = globalThis[Symbol.for("openbooks.utilization-entries-precision-test")]
      export const ambientTenantOrgId = () => null
      export const withBypassContext = (fn) => fn()
      export const db = { execute: async (query) => {
@@ -36,30 +36,11 @@ const mockSources = new Map<string, string>([
        } catch { /* fall through to entry rows */ }
        return { rows: state.rows };
      } }`,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../../lib/feature-gates", "mock:authz"],
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const routeUrl = "./route.ts?utilization-entries-precision-test";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 test("utilization entries preserve exact cost-rate times hours decimals", async () => {
   state.rows = [

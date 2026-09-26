@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "@openbooks/engine/src/platform/db.ts";
@@ -16,7 +15,6 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/eng
  * restricted items.post actor mutate another entity's count, transfer, or
  * voucher.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { user: { orgId: "", id: "" }, scope: null as Set<string> | null };
 Object.assign(globalThis, { __inventoryScopeAudit: state });
 registerHooks({

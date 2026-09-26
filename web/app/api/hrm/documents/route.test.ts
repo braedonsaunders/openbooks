@@ -7,11 +7,6 @@ import test from "node:test";
 // exceeds the 1 MiB house default. The boundary itself stays REAL — mocking
 // parseJsonBody here would make the 413 assertions hollow.
 
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    return nextResolve(specifier, context);
-  },
-});
 
 const mockSources = new Map<string, string>([
   [

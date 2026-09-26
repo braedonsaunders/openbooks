@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -10,7 +9,6 @@ import { receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
 import { buildAssembly } from "@openbooks/engine/src/inventory/assembly.ts";
 import { getOnHand } from "@openbooks/engine/src/inventory/position.ts";
 
-const root = pathToFileURL(process.cwd() + "/").href;
 const state: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } = {
   user: { orgId: "", id: "" },
   allowedSubsidiaryIds: null,

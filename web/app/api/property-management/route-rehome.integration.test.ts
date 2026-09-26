@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from '../../../lib/auth';
 
@@ -19,7 +18,6 @@ import type { SessionUser } from '../../../lib/auth';
  *   engine transaction locks it answers the uniform 404 and writes nothing:
  *   the race denial must not reveal the record exists.
  */
-const root = pathToFileURL(process.cwd() + '/').href;
 const engineRoot = new URL('../../../../engine/', import.meta.url).href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __pmRehomeRace: state });

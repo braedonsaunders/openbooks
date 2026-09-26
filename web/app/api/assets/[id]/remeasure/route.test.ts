@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 
@@ -23,26 +23,26 @@ const routeState: RouteState = {
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:feature-gates',
-    `
+// Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
+// mocked: hand doubles cannot produce the refusals the real modules enforce.
+
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/feature-gates": `
       export async function guardFeaturePermission() {
         return { user: { orgId: 'org-1', id: 'user-1' } }
       }
     `,
-  ],
-  [
-    'mock:list-params',
-    `
+    "../../../../../lib/list-params": `
       export function isUuid(value) {
         return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
       }
     `,
-  ],
-  [
-    'mock:business-date',
-    `
+    "@openbooks/engine/src/platform/business-date.ts": `
       const state = globalThis[Symbol.for('openbooks.asset-remeasurement-route-test')]
       export async function businessToday(orgId) {
         state.businessTodayCalls.push(orgId)
@@ -50,44 +50,18 @@ const mockSources = new Map<string, string>([
       }
       export const isIsoCalendarDate = state.isIsoCalendarDate
     `,
-  ],
-  [
-    'mock:asset-lifecycle',
-    `
+    "@openbooks/engine/src/assets/asset-lifecycle.ts": `
       const state = globalThis[Symbol.for('openbooks.asset-remeasurement-route-test')]
       export async function remeasureAsset(orgId, assetId, options) {
         state.remeasureCalls.push({ orgId, assetId, options })
         return { remeasured: true }
       }
     `,
-  ],
-])
-
-// Neither '@/lib/api/json', the decimal classifier, nor the money kernel is
-// mocked: hand doubles cannot produce the refusals the real modules enforce.
-const mockUrls = new Map<string, string>([
-  ['../../../../../lib/feature-gates', 'mock:feature-gates'],
-  ['../../../../../lib/list-params', 'mock:list-params'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
-  ['@openbooks/engine/src/assets/asset-lifecycle.ts', 'mock:asset-lifecycle'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
   },
 })
 
 const routeUrl = './route.ts?asset-remeasurement-date-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const ASSET_ID = '00000000-0000-4000-8000-00000000a001'
 

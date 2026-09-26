@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from '@/lib/auth'
 
@@ -16,7 +15,6 @@ import type { SessionUser } from '@/lib/auth'
 // quarter's return could ever be prepared. The route now derives both from
 // the persisted (clamped) window — the same key mark-filed serializes on.
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __taxFilingPrepareUser: state })
 const virtual = (source: string) => ({

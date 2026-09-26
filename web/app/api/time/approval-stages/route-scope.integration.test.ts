@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -10,7 +9,6 @@ import test from "node:test";
  * and writes nothing; reading the chain stays open — approvers need it
  * to do their job and it discloses no per-subsidiary material.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = {
   orgId: "",
   actorId: "",

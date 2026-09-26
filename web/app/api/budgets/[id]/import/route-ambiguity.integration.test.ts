@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Spreadsheet names can repeat: period names repeat across fiscal calendars,
@@ -10,7 +9,6 @@ import test from 'node:test'
 // ambiguous folded name now refuses naming every candidate; periods resolve
 // within the budget's pinned (default) calendar only.
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string; allowed: Set<string> | null } = {
   orgId: '', actorId: '', allowed: null,
 }

@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // PATCH used to persist `is_active = (body.isActive === true)` whenever the
@@ -9,7 +8,6 @@ import test from 'node:test'
 // the requested body, not the resulting state. Every PATCH field is now
 // type-checked (422 naming the field) and the audit records the actual
 // before/after row.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __crmAccountPatchValidationState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -11,7 +10,6 @@ import test from "node:test";
  * (HTTP 500) instead of failing closed with a named error and nothing
  * written. Component quantity/unit_price are numeric(19,4).
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const engineRoot = new URL("../../../../../engine/", import.meta.url).href;
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __planVersionWidthState: state });

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -12,7 +11,6 @@ import test from "node:test";
  * closed with a named error and nothing written.
  * through_date is date NOT NULL; amount is numeric(19,4).
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state: { orgId: string; actorId: string; scope: Set<string> | null } = { orgId: "", actorId: "", scope: null };
 Object.assign(globalThis, { __lienWaiverBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });

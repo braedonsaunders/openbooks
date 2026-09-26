@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.records-route-test");
@@ -47,19 +47,19 @@ const routeState: RouteState = {
 };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:auth",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/api-auth": `
       const state = globalThis[Symbol.for('openbooks.records-route-test')]
       export async function resolveApiKeyAuth() { return state.auth }
       export async function guardApiKeyFeature() { return null }
       export async function enforceRateLimit() { return null }
     `,
-  ],
-  [
-    "mock:audit",
-    `
+    "../../../../../lib/application/api-key-audit": `
       const state = globalThis[Symbol.for('openbooks.records-route-test')]
       export async function insertApiKeyEvent(event) { state.events.push(event) }
       export function takeClaimedCommandEvidence() { return false }
@@ -74,14 +74,8 @@ const mockSources = new Map<string, string>([
         }
       }
     `,
-  ],
-  [
-    "mock:context",
-    `export function applicationContextFromApiKey(auth) { return { authz: { user: auth.user } } }`,
-  ],
-  [
-    "mock:errors",
-    `
+    "../../../../../lib/application/context": `export function applicationContextFromApiKey(auth) { return { authz: { user: auth.user } } }`,
+    "../../../../../lib/application/errors": `
       export class ApplicationError extends Error {
         constructor(code, message, status, details) {
           super(message)
@@ -91,10 +85,7 @@ const mockSources = new Map<string, string>([
         }
       }
     `,
-  ],
-  [
-    "mock:records",
-    `
+    "../../../../../lib/application/records": `
       const state = globalThis[Symbol.for('openbooks.records-route-test')]
       export async function createApplicationRecord(_context, input) {
         if (state.failWith) throw new Error(state.failWith)
@@ -103,35 +94,12 @@ const mockSources = new Map<string, string>([
       }
       export async function listRecords() { return { records: [], total: 0, page: 1, perPage: 25 } }
     `,
-  ],
-  ["mock:list-params", `export function clamp(value, min, max) { return Math.min(Math.max(value, min), max) }`],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../../lib/api-auth", "mock:auth"],
-  ["../../../../../lib/application/api-key-audit", "mock:audit"],
-  ["../../../../../lib/application/context", "mock:context"],
-  ["../../../../../lib/application/errors", "mock:errors"],
-  ["../../../../../lib/application/records", "mock:records"],
-  ["../../../../../lib/list-params", "mock:list-params"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
+    "../../../../../lib/list-params": `export function clamp(value, min, max) { return Math.min(Math.max(value, min), max) }`,
   },
 });
 
 const routeUrl = "./route.ts?records-route-audit-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(): void {
   routeState.events.length = 0;

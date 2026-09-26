@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -9,7 +8,6 @@ import test from "node:test";
  * A caller holding neither ap.pay nor ar.pay gets the same uniform 404 for
  * an existing run and a missing id — never a 403 naming the permission.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = {
   user: { orgId: "", id: "" },
   permissions: new Set<string>(),

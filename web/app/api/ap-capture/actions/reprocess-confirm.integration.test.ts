@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import type { SessionUser } from '../../../../lib/auth'
 
@@ -13,7 +12,6 @@ import type { SessionUser } from '../../../../lib/auth'
  * and records the discard count on the queue event. Uncorrected captures
  * reprocess untouched.
  */
-const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null; scope: Set<string> | null } = { user: null, scope: null }
 Object.assign(globalThis, { __captureReprocessConfirm: session, __captureEnqueued: [] })
 registerHooks({ resolve(specifier, context, next) {

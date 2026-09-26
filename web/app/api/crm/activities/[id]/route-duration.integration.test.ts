@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Activity PATCH validates durationMinutes as non-negative minutes but never
@@ -9,7 +8,6 @@ import test from 'node:test'
 // in Postgres as a raw integer failure (HTTP 500 — the verb has no catch for
 // it) instead of failing closed with a named 422 and nothing written.
 // duration_minutes is integer.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __activityDurationState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -10,7 +9,6 @@ import test from "node:test";
  * Postgres, surfacing the raw driver failure as the 422 body instead of
  * failing closed with a named error and nothing written.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { orgId: "", actorId: "" };
 Object.assign(globalThis, { __taxPoolBoundState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });

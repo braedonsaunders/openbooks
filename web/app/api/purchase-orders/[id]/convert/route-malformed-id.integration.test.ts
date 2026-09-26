@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from '../../../../../lib/auth'
 
@@ -9,7 +8,6 @@ import type { SessionUser } from '../../../../../lib/auth'
 // conversionWouldCopyInventoryKinds (which binds the raw id to a uuid
 // column) before the shared handler's own isUuid check, so with Inventory
 // off a non-uuid id died as a raw 500 instead of 404.
-const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __orderConvertMalformedSession: session })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

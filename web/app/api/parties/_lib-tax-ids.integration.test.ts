@@ -1,14 +1,8 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    return nextResolve(specifier, context)
-  },
-})
 
 const { loadParty } = await import('./_lib.ts')
 const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')

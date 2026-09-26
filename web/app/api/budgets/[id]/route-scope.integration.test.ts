@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Reinterpreting a plan against a different ledger silently reprices it: the
@@ -9,7 +8,6 @@ import test from 'node:test'
 // changes. Both now refuse with budget_scope_has_lines, and the scenario
 // trigger enforces the same rule for writers bypassing the route.
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __budgetScopeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

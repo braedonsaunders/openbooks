@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Settlement-rates shape-checks its date with a bare regex, so an impossible
 // calendar day ('2026-02-30') reaches the ::date cast and escapes as a raw
 // Postgres throw (HTTP 500) instead of a 400 field error.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __settlementRatesDateState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

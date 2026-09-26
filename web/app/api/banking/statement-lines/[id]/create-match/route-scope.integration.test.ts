@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 // H-CREWPOST sweep: POST /api/banking/statement-lines/[id]/create-match
@@ -11,7 +10,6 @@ import test from "node:test";
 // named gl.post refusal before any document, submission, or posting write;
 // a gl.post holder matches exactly as before. Only the feature gate is
 // doubled; the route, the journal service, and Postgres are real.
-const root = pathToFileURL(process.cwd() + "/").href;
 const state: { orgId: string; actorId: string; allowedSubsidiaryIds: Set<string> | null } = {
   orgId: "",
   actorId: "",

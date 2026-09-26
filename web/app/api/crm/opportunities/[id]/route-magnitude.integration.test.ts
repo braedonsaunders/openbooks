@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Opportunity PATCH validates line quantities/prices, team contributions, and
@@ -8,7 +7,6 @@ import test from 'node:test'
 // figure sails through validation and dies in Postgres as a raw numeric(19,4)
 // overflow (HTTP 500 — the verb rethrows non-domain errors) instead of failing
 // closed with a named 422. Every figure lands in a numeric(19,4) column.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __opportunityPatchMagnitudeState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

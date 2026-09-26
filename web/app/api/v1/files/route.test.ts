@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-files-route-test");
@@ -12,10 +12,13 @@ interface RouteState {
 const routeState: RouteState = { uploads: [], listed: [], claims: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:v1",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../lib/api/v1-request": `
       export async function withV1Request(request, label, operation) {
         try {
           const result = await operation(
@@ -44,10 +47,7 @@ const mockSources = new Map<string, string>([
         return key
       }
     `,
-  ],
-  [
-    "mock:files",
-    `
+    "../../../../lib/application/files": `
       const state = globalThis[Symbol.for('openbooks.v1-files-route-test')]
       // The route's GET reads through this same module. A double that omits an
       // export the route imports does not fail loudly at that call — the ES
@@ -62,10 +62,7 @@ const mockSources = new Map<string, string>([
         return { id: "file-1", name: input.filename, folderId: input.folderId, folderName: null, contentType: input.contentType, sizeBytes: 4 }
       }
     `,
-  ],
-  [
-    "mock:idempotency",
-    `
+    "../../../../lib/application/idempotency": `
       const state = globalThis[Symbol.for('openbooks.v1-files-route-test')]
       export async function executeIdempotent(args) {
         state.claims.push({ operation: args.operation, idempotencyKey: args.idempotencyKey })
@@ -73,30 +70,10 @@ const mockSources = new Map<string, string>([
         return { replayed: false, value }
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../lib/api/v1-request", "mock:v1"],
-  ["../../../../lib/application/files", "mock:files"],
-  ["../../../../lib/application/idempotency", "mock:idempotency"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 test("POST /api/v1/files uploads with the upload_file tool fields through a file.upload claim", async () => {
   routeState.uploads.length = 0;

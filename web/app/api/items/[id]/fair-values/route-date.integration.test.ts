@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Fair-value POST validates effectiveFrom/effectiveTo with a format-only
 // regex, so a shape-valid non-day such as February 30 sails through
 // validation and dies in Postgres as a raw DATE failure (HTTP 500) instead
 // of failing closed with the same 400 the junk-input path returns.
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __fairValueDateState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

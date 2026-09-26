@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 /**
@@ -10,7 +9,6 @@ import test from "node:test";
  * under another entity's project — is refused before the revocation runs,
  * and missing and hidden are indistinguishable.
  */
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { orgId: "", actorId: "", allowedSubsidiaryIds: null as ReadonlySet<string> | null };
 Object.assign(globalThis, { __complianceWaiverDeleteScopeState: state });
 const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../../testing/stub-modules'
 import test from 'node:test'
 
 // This route test runs the real restore helper and audit writer against a
@@ -47,10 +47,13 @@ function sqlText(query: unknown): string {
 }
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksSqlTextFolderRestore = sqlText
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:db',
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.folder-restore-route-test')]
       const sqlText = globalThis.openbooksSqlTextFolderRestore
       const clone = (value) => ({ ...value })
@@ -120,10 +123,7 @@ const mockSources = new Map<string, string>([
       export async function withBypassContext(_opts, work) { return work() }
       export function registerRequestOrgResolver() {}
     `,
-  ],
-  [
-    'mock:folder-route-lib',
-    `
+    "../../../lib": `
       export async function requireSession() {
         return { user: { orgId: '${ORG_ID}', id: '${ACTOR_ID}' } }
       }
@@ -132,30 +132,11 @@ const mockSources = new Map<string, string>([
         return { userId: gate.user.id, isAdmin: false, baseline: 'manager', allowedSubsidiaryIds: null }
       }
     `,
-  ],
-])
-
-const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['../../../lib', 'mock:folder-route-lib'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
   },
 })
 
 const routeUrl = './route.ts?folder-restore-route-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   routeState.folders = { [FOLDER_ID]: true, [CHILD_FOLDER_ID]: true }

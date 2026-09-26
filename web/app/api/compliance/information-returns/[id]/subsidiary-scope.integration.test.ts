@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from '@/lib/auth'
 
@@ -14,7 +13,6 @@ import type { SessionUser } from '@/lib/auth'
 // shared gate BEFORE any action, failing closed with the same 404 body the
 // list-miss and create paths use.
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __irScopeUser: state })
 const virtual = (source: string) => ({

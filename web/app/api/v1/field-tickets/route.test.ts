@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
 
 const stateKey = Symbol.for("openbooks.v1-field-tickets-route-test");
@@ -10,10 +10,13 @@ interface RouteState {
 const routeState: RouteState = { created: [], listed: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-const mockSources = new Map<string, string>([
-  [
-    "mock:v1",
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../lib/api/v1-request": `
       export async function withV1Request(request, label, operation) {
         try {
           const result = await operation(
@@ -32,20 +35,14 @@ const mockSources = new Map<string, string>([
         return key
       }
     `,
-  ],
-  [
-    "mock:records",
-    `
+    "../../../../lib/api/v1-records": `
       const state = globalThis[Symbol.for('openbooks.v1-field-tickets-route-test')]
       export async function v1ListRecords(_request, typeKey) {
         state.listed.push(typeKey)
         return Response.json({ typeKey })
       }
     `,
-  ],
-  [
-    "mock:errors",
-    `
+    "../../../../lib/application/errors": `
       export class ApplicationError extends Error {
         constructor(code, message, status, details) { super(message); this.code = code; this.status = status; this.details = details }
       }
@@ -55,41 +52,17 @@ const mockSources = new Map<string, string>([
         throw error
       }
     `,
-  ],
-  [
-    "mock:tickets",
-    `
+    "../../../../lib/application/field-tickets": `
       const state = globalThis[Symbol.for('openbooks.v1-field-tickets-route-test')]
       export async function createApplicationFieldTicket(_context, input) {
         state.created.push(input)
         return { replayed: false, result: { id: "ticket-1", documentNumber: "FT-1" } }
       }
     `,
-  ],
-]);
-
-const mockUrls = new Map<string, string>([
-  ["../../../../lib/api/v1-request", "mock:v1"],
-  ["../../../../lib/api/v1-records", "mock:records"],
-  ["../../../../lib/application/errors", "mock:errors"],
-  ["../../../../lib/application/field-tickets", "mock:tickets"],
-]);
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
-    if (mocked) return { url: mocked, shortCircuit: true };
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url);
-    if (source !== undefined) return { format: "module", source, shortCircuit: true };
-    return nextLoad(url, context);
   },
 });
 
 const { GET, POST } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 test("GET /api/v1/field-tickets lists through the field-tickets record type", async () => {
   routeState.listed = [];

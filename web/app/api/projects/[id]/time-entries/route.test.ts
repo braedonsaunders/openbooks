@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 
 /**
@@ -39,10 +39,13 @@ function sqlText(query: unknown): string {
 }
 ;(globalThis as typeof globalThis & Record<string, unknown> & { openbooksProjectTimeSqlText?: unknown }).openbooksProjectTimeSqlText = sqlText
 
-const mockSources = new Map<string, string>([
-  [
-    'mock:authz',
-    `
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../../../lib/authz": `
       const state = globalThis[Symbol.for('openbooks.project-time-detail-route-test')]
       export async function guardPermission(permission) {
         if (permission !== 'projects.read') throw new Error('unexpected permission: ' + permission)
@@ -53,16 +56,10 @@ const mockSources = new Map<string, string>([
         }
       }
     `,
-  ],
-  [
-    'mock:projects-gate',
-    `
+    "../../../../../lib/projects-gate": `
       export async function guardProjectsFeature() { return null }
     `,
-  ],
-  [
-    'mock:db',
-    `
+    "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.project-time-detail-route-test')]
       const sqlText = globalThis.openbooksProjectTimeSqlText
       export const db = {
@@ -120,30 +117,10 @@ const mockSources = new Map<string, string>([
       // where the ambient db proxy answers every query.
       export async function withOrgTransaction(_orgId, work) { return work() }
     `,
-  ],
-])
-
-const mockUrls = new Map<string, string>([
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../lib/projects-gate', 'mock:projects-gate'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-])
-
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier)
-    if (mocked) return { url: mocked, shortCircuit: true }
-    return nextResolve(specifier, context)
-  },
-  load(url, context, nextLoad) {
-    const source = mockSources.get(url)
-    if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    return nextLoad(url, context)
   },
 })
 
 const { GET } = (await import('./route.ts')) as typeof import('./route.ts')
-hooks.deregister()
 
 const ALLOWED_SUBSIDIARY = '00000000-0000-4000-8000-00000000a001'
 const DENIED_SUBSIDIARY = '00000000-0000-4000-8000-00000000b001'
