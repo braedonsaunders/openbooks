@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import { after, before, test } from 'node:test'
+import { afterEach, beforeEach, test } from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
@@ -37,7 +37,7 @@ function context(permission: string): ApplicationContext {
   }
 }
 
-before(async () => {
+beforeEach(async () => {
   org = await withBypassContext(() => createScratchOrg())
   actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId
   const statementId = randomUUID()
@@ -61,7 +61,7 @@ before(async () => {
   ))).id
 })
 
-after(async () => {
+afterEach(async () => {
   if (org) await dropScratchOrg(org.orgId)
 })
 
