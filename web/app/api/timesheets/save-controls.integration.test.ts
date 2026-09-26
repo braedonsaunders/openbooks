@@ -18,6 +18,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import('drizzle-orm')
 const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { waitForLockWaiter } = await import('@openbooks/engine/src/testing/lock-wait.ts')
 const { PUT } = await import('./route')
 
 async function fixture(requireApproval: boolean) {
@@ -259,24 +260,9 @@ test('a project save racing a Projects disable loses and stores nothing', async 
     await writer.connect()
     await writer.query('begin') // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
     await writer.query("update orgs set settings=jsonb_set(settings,'{features,projects}','false'::jsonb) where id=$1", [f.org.orgId])
-    const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid
     pending = f.save({})
     pending.catch(() => {})
-    let blocked = false
-    const deadline = Date.now() + 10000
-    while (Date.now() < deadline) {
-      await writer.query('select pg_stat_clear_snapshot()')
-      const row = (await writer.query<{ blocked: boolean }>(
-        'select exists(select 1 from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))) as blocked',
-        [pid],
-      )).rows[0]!
-      if (row.blocked) {
-        blocked = true
-        break
-      }
-      await new Promise((resolve) => setTimeout(resolve, 25))
-    }
-    assert.ok(blocked, 'the save must wait on the feature fence while the disable holds the org row')
+    await waitForLockWaiter(writer, { label: 'the timesheet save' })
     await writer.query('commit')
     const response = await pending
     assert.equal(response.status, 422, await response.clone().text())

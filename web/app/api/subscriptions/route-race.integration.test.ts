@@ -46,6 +46,7 @@ registerHooks({
 const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, createScratchUser } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { waitForLockWaiter } = await import("@openbooks/engine/src/testing/lock-wait.ts");
 const { runDueSubscriptions } = await import("@openbooks/engine/src/billing/subscription-billing.ts");
 const { POST } = await import("./route.ts");
 
@@ -320,14 +321,7 @@ test("change and bill-now refuse after a customer rehome while waiting on its ro
         ? { action, id: subscriptionId, quantity: "2" }
         : { action, id: subscriptionId });
 
-      let waiting = 0;
-      const deadline = Date.now() + 10_000;
-      while (waiting === 0 && Date.now() < deadline) {
-        waiting = (await holder.query(`select count(*)::int as n from pg_stat_activity
-          where datname = current_database() and pid <> pg_backend_pid() and wait_event_type = 'Lock'`)).rows[0].n as number;
-        if (waiting === 0) await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-      assert.ok(waiting > 0, `${action} must wait on the customer row`);
+      await waitForLockWaiter(holder, { label: `the subscription ${action}` });
       await holder.query("update parties set subsidiary_id = $1 where id = $2 and org_id = $3", [subsidiaryB, customerId, orgId]);
       await holder.query("commit");
 

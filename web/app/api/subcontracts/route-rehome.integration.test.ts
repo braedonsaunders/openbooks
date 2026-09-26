@@ -45,6 +45,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { waitForLockWaiter } = await import("@openbooks/engine/src/testing/lock-wait.ts");
 const { createSubcontract } = await import("@openbooks/engine/src/projects/subcontracts.ts");
 const { GET, POST } = await import("./route.ts");
 
@@ -170,15 +171,8 @@ test("GET detail retries a stale snapshot after a project is rehomed", async () 
     const pending = withOrgContext(org.orgId, () => GET(new Request(
       `http://openbooks.test/api/subcontracts?id=${subcontractId}`,
     ))).then((response) => { settledResponse = response; return response; });
-    let waiting = 0;
-    const deadline = Date.now() + 10_000;
-    while (waiting === 0 && Date.now() < deadline) {
-      waiting = (await holder.query(`select count(*)::int as n from pg_stat_activity
-        where datname = current_database() and pid <> pg_backend_pid() and wait_event_type = 'Lock'`)).rows[0].n as number;
-      if (waiting === 0) await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    await waitForLockWaiter(holder, { label: "the subcontract GET" });
     assert.equal(settledResponse, undefined, `GET must wait on the locked project row, got ${settledResponse?.status}: ${JSON.stringify(await settledResponse?.clone().json().catch(() => null))}`);
-    assert.ok(waiting > 0, "GET reached the locked project row");
     await holder.query("update projects set subsidiary_id = $1 where id = $2", [subsidiaryB, projectId]);
     await holder.query("commit");
     const response = await pending;
