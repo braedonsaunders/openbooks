@@ -18,8 +18,6 @@ import { z } from "zod";
  * changes nothing and is refused.
  */
 
-export const PAYLOAD_SCHEMA_VERSION_PROFILE = "1";
-
 const nonBlank = (field: string, max: number) =>
   z
     .string()
@@ -30,7 +28,7 @@ const nonBlank = (field: string, max: number) =>
 const optionalText = (field: string, max: number) =>
   z.string().trim().max(max, `${field} must be at most ${max} characters`);
 
-export const profileAddressSchema = z
+const profileAddressSchema = z
   .object({
     line1: nonBlank("address.line1", 240),
     line2: optionalText("address.line2", 240).nullable().default(null),
@@ -43,7 +41,7 @@ export const profileAddressSchema = z
   })
   .strict();
 
-export const profileEmergencyContactSchema = z
+const profileEmergencyContactSchema = z
   .object({
     name: optionalText("emergencyContact.name", 240).nullable().default(null),
     relationship: optionalText("emergencyContact.relationship", 120).nullable().default(null),

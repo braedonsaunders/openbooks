@@ -64,7 +64,7 @@ export type RemembranceGrantDecision =
  * missing input here is never scored as "not entitled": silence would erase
  * the benefit exactly the way omitting the date did.
  */
-export function decideRemembranceGrant(args: RemembranceGrantArgs): RemembranceGrantDecision {
+function decideRemembranceGrant(args: RemembranceGrantArgs): RemembranceGrantDecision {
   const {
     employeeName, workedHours, qualifyingDays, qualifyingRequired,
     businessClass, exemptBusinessClasses, businessClassRemedy,
@@ -230,55 +230,3 @@ export async function grantRemembranceAlternateDay(
   };
 }
 
-/**
- * The audited agreed-date override: the employer and employee agree a
- * different take-on day than the next-workday default, and the agreement is
- * recorded against the grant with a reason — never by editing history
- * elsewhere. Recalculations stand off the existing grant (see above), so the
- * agreement survives recompute.
- */
-export async function recordAlternateDayAgreement(
-  tx: Pick<typeof db, "execute">,
-  args: {
-    orgId: string;
-    actorId: string;
-    planId: string;
-    employeePartyId: string;
-    employeeName: string;
-    sourceHolidayKey: string;
-    sourceHolidayDate: string;
-    agreedDate: string;
-    reason: unknown;
-  },
-): Promise<void> {
-  const reasonText = typeof args.reason === "string" ? args.reason.trim() : "";
-  if (!reasonText || reasonText.length > 500) {
-    throw new PayrollError("agreeing an alternate take-on date needs a reason (up to 500 characters)");
-  }
-  if (args.agreedDate < args.sourceHolidayDate) {
-    throw new PayrollError(
-      `the agreed take-on date ${args.agreedDate} is before the holiday ${args.sourceHolidayDate} `
-      + "that earned it — the alternate day is always taken after",
-    );
-  }
-  const updated = await tx.execute(sql`
-    update entitlement_ledger
-       set take_on = ${args.agreedDate},
-           note = coalesce(note || ' | ', '')
-             || ${`Agreed take-on ${args.agreedDate}: ${reasonText}`},
-           updated_by = ${args.actorId}, updated_at = now()
-     where org_id = ${args.orgId} and plan_id = ${args.planId}
-       and employee_party_id = ${args.employeePartyId} and kind = 'bank_in'
-       and source_holiday_key = ${args.sourceHolidayKey}
-       and source_holiday_date = ${args.sourceHolidayDate}
-  `);
-  // A write that matches zero rows is a failure, not a success: no grant
-  // means there is nothing to agree a date on, and reporting one would leave
-  // an agreement no read can observe.
-  if ((updated.rowCount ?? 0) !== 1) {
-    throw new PayrollError(
-      `${args.employeeName} has no alternate-day grant for ${args.sourceHolidayDate} to agree `
-      + "a take-on date on — the grant is recorded when the run covering the holiday calculates",
-    );
-  }
-}

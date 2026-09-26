@@ -58,7 +58,7 @@ export function closeDeliveryManualEmailIntentKey(input: { orgId: string; packag
 
 let closeDeliveryQueue: Queue<CloseDeliveryJobData> | undefined
 
-export function getCloseDeliveryQueue(): Queue<CloseDeliveryJobData> {
+function getCloseDeliveryQueue(): Queue<CloseDeliveryJobData> {
   closeDeliveryQueue ??= new Queue<CloseDeliveryJobData>(CLOSE_DELIVERY_QUEUE, {
     connection: getConnection(),
     defaultJobOptions: {

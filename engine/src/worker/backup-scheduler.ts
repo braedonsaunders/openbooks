@@ -39,13 +39,6 @@ export function startBackupScheduler(): void {
   void tick();
 }
 
-export function stopBackupScheduler(): void {
-  if (timer) {
-    clearInterval(timer);
-    timer = null;
-  }
-}
-
 type DuePolicy = {
   org_id: string;
   frequency: "daily" | "weekly" | "monthly";
@@ -71,7 +64,7 @@ type BackupQueueRecovery = {
  * delivery can have only one effect. Waiting/active/delayed jobs already have
  * a live queue owner and must not be duplicated.
  */
-export async function recoverStaleQueuedBackupRun(
+async function recoverStaleQueuedBackupRun(
   run: { id: string; org_id: string },
   queue: BackupQueueRecovery = {
     getJob: async (id) => await getBackupQueue().getJob(id) as FailedBackupJob | undefined,

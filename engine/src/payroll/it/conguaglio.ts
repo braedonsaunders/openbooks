@@ -106,10 +106,10 @@ import { resolveStatutoryRates } from "../statutory-rates.ts";
 export { ItPayrollRefusal };
 
 /** The agency's own name for the settlement. */
-export const IT_CONGUAGLIO_LABEL = "Conguaglio di fine anno";
+const IT_CONGUAGLIO_LABEL = "Conguaglio di fine anno";
 
 /** Every rule the settlement prices, to the document and section. */
-export const IT_CONGUAGLIO_CITATION =
+const IT_CONGUAGLIO_CITATION =
   "art. 23 c. 3 DPR 29 settembre 1973, n. 600 (conguaglio entro il 28 febbraio "
   + "dell'anno successivo; alla data di cessazione in caso di cessazione del rapporto); "
   + "art. 11 TUIR scaglioni; artt. 12–13 TUIR detrazioni; L. 207/2024 art. 1 c. 4–7 "
@@ -118,7 +118,7 @@ export const IT_CONGUAGLIO_CITATION =
   + "D.Lgs. 360/1998 addizionale comunale";
 
 /** Tenant-declared rate slots the settlement prices through — configuration. */
-export const IT_CONGUAGLIO_TENANT_RATES = [
+const IT_CONGUAGLIO_TENANT_RATES = [
   "it_addizionale_regionale",
   "it_addizionale_comunale",
 ] as const;
@@ -128,33 +128,9 @@ export const IT_CONGUAGLIO_TENANT_RATES = [
  * plus the annual half-cent (0,005) bound the rounding drift at 0,065, so a
  * TI/somma gap within 0,10 euro proves rounding, never a spettanza shift.
  */
-export const IT_CONGUAGLIO_CREDIT_DUST_TOLERANCE = "0.10";
+const IT_CONGUAGLIO_CREDIT_DUST_TOLERANCE = "0.10";
 
 /** Trace-factor keys the settlement returns (labelled in IT_FACTOR_LABELS). */
-export const IT_CONGUAGLIO_FACTOR_KEYS = [
-  "CONG_IRPEF_ANNUAL",
-  "CONG_IRPEF_YTD",
-  "CONG_IRPEF_DELTA",
-  "CONG_ADDREG_ANNUAL",
-  "CONG_ADDREG_YTD",
-  "CONG_ADDREG_DELTA",
-  "CONG_ADDCOM_ANNUAL",
-  "CONG_ADDCOM_YTD",
-  "CONG_ADDCOM_DELTA",
-  "CONG_TI_ANNUAL",
-  "CONG_TI_PAID",
-  "CONG_SOMMA_ANNUAL",
-  "CONG_SOMMA_PAID",
-  "CONG_SUBST_RINNOVI_ANNUAL",
-  "CONG_SUBST_RINNOVI_YTD",
-  "CONG_SUBST_RINNOVI_DELTA",
-  "CONG_SUBST_TURNI_ANNUAL",
-  "CONG_SUBST_TURNI_YTD",
-  "CONG_SUBST_TURNI_DELTA",
-  "CONG_SUBST_PREMI_ANNUAL",
-  "CONG_SUBST_PREMI_YTD",
-  "CONG_SUBST_PREMI_DELTA",
-] as const;
 
 export interface ItConguaglioDeclaration {
   /** it_detrazioni on file: detrazioni apply only on declaration (art. 23). */

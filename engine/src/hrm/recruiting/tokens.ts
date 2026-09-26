@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 /**
  * Recruiting depth sessionless tokens (HR-18, 0229).
@@ -25,7 +25,7 @@ const TOKEN_DOMAIN = "hrm-recruiting-token:v1";
 
 export const BOOKING_TOKEN_TTL_MS = 14 * 24 * 3_600_000; // 14 days
 export const OFFER_TOKEN_TTL_MS = 30 * 24 * 3_600_000; // 30 days
-export const FEED_TOKEN_TTL_MS = 365 * 24 * 3_600_000; // 1 year
+const FEED_TOKEN_TTL_MS = 365 * 24 * 3_600_000; // 1 year
 
 export type RecruitingTokenPurpose = "book" | "offer" | "feed";
 
@@ -106,6 +106,3 @@ export function hashRecruitingToken(token: string): string {
 }
 
 /** Random raw token material for booking links (signed envelope aside). */
-export function randomTokenMaterial(bytes = 32): string {
-  return randomBytes(bytes).toString("base64url");
-}

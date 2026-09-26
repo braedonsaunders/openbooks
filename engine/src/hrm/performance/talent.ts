@@ -28,7 +28,6 @@ import { employerSubsidiaryScope } from "./subsidiary-scope.ts";
  */
 
 export const HRM_TALENT_KEY = "hrmSuccession" as const;
-export const HRM_CALIBRATION_READ_KEY = "hrmCalibration" as const;
 
 export type LossLevel = "low" | "medium" | "high";
 export type CandidateReadiness = "ready_now" | "one_to_two_years" | "three_plus";
@@ -391,7 +390,7 @@ export interface NineBoxDTO {
  * whose keys fall outside the declared scales count as unplaced (named
  * in the read, never silently dropped or coerced into a cell).
  */
-export function buildNineBox(args: {
+function buildNineBox(args: {
   performance: readonly string[];
   potential: readonly string[];
   placements: readonly { performanceKey: string; potentialKey: string }[];

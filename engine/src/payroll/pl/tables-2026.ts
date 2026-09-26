@@ -141,20 +141,6 @@ export const PL_PIT_POMNIEJSZENIE_2026 = {
  * płatnika w danym miesiącu składek na ubezpieczenie społeczne, o których
  * mowa w art. 26 ust. 1 pkt 2 lit. b lub pkt 2a."
  */
-export const PL_PIT_ZALICZKA_QUOTE_2026 =
-  "Zaliczki za miesiące od stycznia do grudnia wynoszą: 1) za miesiące, w których dochód podatnika "
-  + "uzyskany od początku roku od danego płatnika nie przekroczył kwoty 120 000 zł – 12 % dochodu "
-  + "uzyskanego w danym miesiącu; 2) za miesiąc, w którym dochód podatnika uzyskany od początku roku "
-  + "od danego płatnika przekroczył kwotę 120 000 zł – 12 % od tej części dochodu uzyskanego w tym "
-  + "miesiącu, która nie przekroczyła tej kwoty, i 32 % od nadwyżki ponad kwotę 120 000 zł; "
-  + "3) za miesiące następujące po miesiącu, o którym mowa w pkt 2 – 32 % dochodu uzyskanego "
-  + "w danym miesiącu od danego płatnika";
-
-export const PL_PIT_DOCHOD_QUOTE_2026 =
-  "Za dochód, o którym mowa w ust. 2 i 3, uważa się uzyskane w ciągu miesiąca przychody, "
-  + "o których mowa w ust. 1, po odliczeniu kosztów uzyskania w wysokości określonej w art. 22 "
-  + "ust. 2 pkt 1 albo 3 lub ust. 9 pkt 1–3 oraz po odliczeniu potrąconych przez płatnika w danym "
-  + "miesiącu składek na ubezpieczenie społeczne, o których mowa w art. 26 ust. 1 pkt 2 lit. b lub pkt 2a";
 
 /**
  * Art. 22 ust. 2 pkt 1: "wynoszą 250 zł miesięcznie, a za rok podatkowy
@@ -194,11 +180,6 @@ export const PL_KUP_2026 = {
  * Translation: tax bases and tax amounts round to whole złotych —
  * endings below 50 groszy are dropped, 50+ groszy round up.
  */
-export const PL_ZAOKRAGLENIE_PIT_QUOTE_2026 =
-  "Podstawy opodatkowania, kwoty podatków, odsetki za zwłokę, opłaty prolongacyjne, oprocentowanie "
-  + "nadpłat oraz wynagrodzenia przysługujące płatnikom i inkasentom zaokrągla się do pełnych złotych "
-  + "w ten sposób, że końcówki kwot wynoszące mniej niż 50 groszy pomija się, a końcówki kwot "
-  + "wynoszące 50 i więcej groszy podwyższa się do pełnych złotych, z zastrzeżeniem § 1a i 2";
 
 // ---------------------------------------------------------------------------
 // ZUS — rates (art. 22 ust. 1) and split (art. 16)
@@ -211,16 +192,6 @@ export const PL_ZAOKRAGLENIE_PIT_QUOTE_2026 =
  * podstawy wymiaru – na ubezpieczenie chorobowe; 4) od 0,40 % do 8,12 %
  * podstawy wymiaru – na ubezpieczenie wypadkowe."
  */
-export const PL_SKLADKI_STOPY_2026 = {
-  emerytalneTotal: { rate: "0.1952", quote: "19,52 % podstawy wymiaru – na ubezpieczenie emerytalne" },
-  rentoweTotal: { rate: "0.08", quote: "8,00 % podstawy wymiaru – na ubezpieczenia rentowe" },
-  choroboweTotal: { rate: "0.0245", quote: "2,45 % podstawy wymiaru – na ubezpieczenie chorobowe" },
-  wypadkoweRange: {
-    min: "0.004",
-    max: "0.0812",
-    quote: "od 0,40 % do 8,12 % podstawy wymiaru – na ubezpieczenie wypadkowe",
-  },
-} as const;
 
 /**
  * Art. 16 ust. 1 (emerytalne): workers' contributions "finansują
@@ -333,12 +304,6 @@ export const PL_ZDROWOTNA_2026: PlRate = {
   quote: "Składka na ubezpieczenie zdrowotne wynosi 9 % podstawy wymiaru składki",
 };
 
-export const PL_ZDROWOTNA_PODSTAWA_QUOTE_2026 =
-  "Podstawę wymiaru składki na ubezpieczenie zdrowotne pomniejsza się o kwoty składek na "
-  + "ubezpieczenia emerytalne, rentowe i chorobowe finansowanych przez ubezpieczonych niebędących "
-  + "płatnikami składek, potrąconych przez płatników ze środków ubezpieczonego, zgodnie z przepisami "
-  + "o systemie ubezpieczeń społecznych";
-
 // ---------------------------------------------------------------------------
 // FP / FS / FGŚP 2026 — Budget Act rates on the labour-market-act base
 // ---------------------------------------------------------------------------
@@ -403,18 +368,6 @@ export const PL_FUNDUSZE_2026 = {
  * co najmniej 55 lat w przypadku kobiet i co najmniej 60 lat
  * w przypadku mężczyzn."
  */
-export const PL_FP_PODSTAWA_QUOTE_2026 =
-  "Obowiązkowe składki na Fundusz Pracy, ustalone od kwot stanowiących podstawę wymiaru składek "
-  + "na ubezpieczenia emerytalne i rentowe bez stosowania ograniczenia, o którym mowa w art. 19 "
-  + "ust. 1 ustawy z dnia 13 października 1998 r. o systemie ubezpieczeń społecznych, wynoszących "
-  + "w przeliczeniu na okres miesiąca, co najmniej minimalne wynagrodzenie za pracę opłacają: "
-  + "1) pracodawcy oraz inne jednostki organizacyjne za: a) osoby pozostające w stosunku pracy "
-  + "lub stosunku służbowym";
-
-export const PL_FP_WIEK_QUOTE_2026 =
-  "Obowiązkowe składki na Fundusz Pracy opłaca się za osoby wymienione w art. 259 ust. 1, które "
-  + "nie osiągnęły wieku wynoszącego co najmniej 55 lat w przypadku kobiet i co najmniej 60 lat "
-  + "w przypadku mężczyzn";
 
 /**
  * Claims-protection act (Dz.U. 2026 poz. 186) art. 9b ust. 2:
@@ -425,9 +378,6 @@ export const PL_FP_WIEK_QUOTE_2026 =
  * 55/60 bar as FP/FS art. 261 in 2026 — the pack's `fgspAgeBar` flag
  * (see ./compute-statutory.ts).
  */
-export const PL_FGSP_WIEK_QUOTE_2026 =
-  "Pracodawca, o którym mowa w art. 9, nie opłaca składek na Fundusz za pracowników, którzy "
-  + "osiągnęli wiek wynoszący co najmniej 55 lat dla kobiet i co najmniej 60 lat dla mężczyzn";
 
 /**
  * Rozporządzenie RM z dnia 11 września 2025 r. (Dz.U. 2025 poz. 1242),
@@ -455,9 +405,6 @@ export const PL_MIN_WAGE_2026 = {
  * składkowy 1 kwietnia 2026 – 31 marca 2027. A pack constant would be a
  * guess: the tenant declares the rate, the pack never invents one.
  */
-export const PL_TENANT_DECLARED_QUOTE_2026 =
-  "Zasady różnicowania stopy procentowej składek na ubezpieczenie wypadkowe określają przepisy "
-  + "o ubezpieczeniu społecznym z tytułu wypadków przy pracy i chorób zawodowych";
 
 /**
  * Named refusals for the 2026 pass: everything this file transcribes but

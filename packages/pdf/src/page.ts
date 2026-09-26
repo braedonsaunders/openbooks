@@ -5,14 +5,14 @@
 import type { PdfPageSetup, PdfPaperSize } from './types'
 
 /** 1 millimetre in PostScript points (72 pt/in ÷ 25.4 mm/in). */
-export const PT_PER_MM = 72 / 25.4
+const PT_PER_MM = 72 / 25.4
 
-export function mmToPt(mm: number): number {
+function mmToPt(mm: number): number {
   return mm * PT_PER_MM
 }
 
 /** Paper dimensions in points, PORTRAIT (width × height). */
-export const PAPER_PORTRAIT_PT: Record<PdfPaperSize, { width: number; height: number }> = {
+const PAPER_PORTRAIT_PT: Record<PdfPaperSize, { width: number; height: number }> = {
   letter: { width: 612, height: 792 },
   a4: { width: 595.28, height: 841.89 },
   legal: { width: 612, height: 1008 },

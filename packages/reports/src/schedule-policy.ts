@@ -19,7 +19,7 @@ import { lastDayOfMonth, utcCivilDate } from './fiscal-calendar'
  * filter bound) carrying no internals. The next-run math keeps plain Errors
  * so exhausted searches stay generic 500s.
  */
-export class ReportScheduleValidationError extends Error {
+class ReportScheduleValidationError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'ReportScheduleValidationError'
@@ -68,18 +68,6 @@ export function computeNextRunAt(input: CadenceInput, from: Date = new Date()): 
 }
 
 /** Human description of a cadence, e.g. "Weekly on Monday at 07:00 (UTC)". */
-export function describeCadence(input: CadenceInput): string {
-  const time = `${String(input.hour).padStart(2, '0')}:${String(input.minute).padStart(2, '0')}`
-  const zone = input.timezone || 'UTC'
-  if (input.cadence === 'weekly') {
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-    return `Weekly on ${days[input.dayOfWeek ?? 1] ?? 'Monday'} at ${time} (${zone})`
-  }
-  if (input.cadence === 'monthly') {
-    return `Monthly on day ${input.dayOfMonth ?? 1} at ${time} (${zone})`
-  }
-  return `Daily at ${time} (${zone})`
-}
 
 /** Whitelist/clamp an untrusted cadence payload. Throws on nonsense. */
 export function validateCadenceInput(raw: {
@@ -223,7 +211,7 @@ function tzWeekday(d: Date, tz: string): number {
 
 // --- Recipient / filter bounds --------------------------------------------
 
-export const REPORT_SCHEDULE_LIMITS = {
+const REPORT_SCHEDULE_LIMITS = {
   nameChars: 200,
   timezoneChars: 100,
   recipientCount: 1_000,
@@ -236,7 +224,6 @@ export const REPORT_SCHEDULE_LIMITS = {
 } as const
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const UNSAFE_OBJECT_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
 
 /** Dedupe, lowercase and validate recipient email addresses. Throws on the
  *  first invalid entry so the caller can surface it verbatim. */
@@ -262,51 +249,3 @@ export function normalizeReportRecipientEmails(values: readonly string[]): strin
 }
 
 /** Bound an untrusted filters JSON object (size / depth / node count / keys). */
-export function assertBoundedReportFilters(
-  value: unknown,
-): asserts value is Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new ReportScheduleValidationError('Report filters must be a JSON object.')
-  }
-
-  let encoded: string
-  try {
-    encoded = JSON.stringify(value)
-  } catch {
-    throw new ReportScheduleValidationError('Report filters must be JSON serializable.')
-  }
-  if (encoded.length > REPORT_SCHEDULE_LIMITS.filtersChars) {
-    throw new ReportScheduleValidationError('Report filters are too large.')
-  }
-  if (new TextEncoder().encode(encoded).byteLength > REPORT_SCHEDULE_LIMITS.filtersBytes) {
-    throw new ReportScheduleValidationError('Report filters are too large.')
-  }
-
-  let nodes = 0
-  const stack: Array<{ value: unknown; depth: number }> = [{ value, depth: 0 }]
-  while (stack.length) {
-    const current = stack.pop()!
-    nodes += 1
-    if (nodes > REPORT_SCHEDULE_LIMITS.filtersNodes) {
-      throw new ReportScheduleValidationError('Report filters contain too many values.')
-    }
-    if (current.depth > REPORT_SCHEDULE_LIMITS.filtersDepth) {
-      throw new ReportScheduleValidationError('Report filters are nested too deeply.')
-    }
-    if (!current.value || typeof current.value !== 'object') continue
-
-    if (Array.isArray(current.value)) {
-      for (const entry of current.value) {
-        stack.push({ value: entry, depth: current.depth + 1 })
-      }
-      continue
-    }
-
-    for (const [key, entry] of Object.entries(current.value as Record<string, unknown>)) {
-      if (key.length > REPORT_SCHEDULE_LIMITS.filterKeyChars || UNSAFE_OBJECT_KEYS.has(key)) {
-        throw new ReportScheduleValidationError('Report filters contain an invalid key.')
-      }
-      stack.push({ value: entry, depth: current.depth + 1 })
-    }
-  }
-}

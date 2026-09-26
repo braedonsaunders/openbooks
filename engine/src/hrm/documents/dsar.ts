@@ -235,7 +235,7 @@ export async function listOwnExports(query: {
  * (gather + store + mark) with headroom, short enough that a crashed worker
  * does not stall the queue — the next drain reclaims lapsed leases.
  */
-export const DSAR_CLAIM_LEASE_SECONDS = 600;
+const DSAR_CLAIM_LEASE_SECONDS = 600;
 
 export interface ClaimedExport extends ExportRow {
   claimedBy: string;
@@ -319,7 +319,7 @@ async function claimSpecificExport(
  * build can never assemble a subject's whole data zip for a switched-off
  * feature. Existing export rows are preserved, only gated until re-enable.
  */
-export const HRM_DATA_SUBJECT_EXPORT_FEATURE_KEY = "hrmDataSubjectExport";
+const HRM_DATA_SUBJECT_EXPORT_FEATURE_KEY = "hrmDataSubjectExport";
 
 async function assertDataSubjectExportFeature(exec: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
@@ -1874,7 +1874,7 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
 /** Root-cause-first error rendering: the driver wraps Postgres errors in
  * a Failed-query shell naming the statement, so the stored error walks
  * the cause chain to the violation that actually refused the write. */
-export function describeExportError(e: unknown): string {
+function describeExportError(e: unknown): string {
   const parts: string[] = [];
   let cursor: unknown = e;
   while (cursor instanceof Error && parts.length < 5) {

@@ -1,7 +1,4 @@
-import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
 import { parseIsoDate } from "../platform/business-date.ts";
-import { unsealJson } from "../platform/secrets.ts";
 import { PaymentError } from "./payment-errors.ts";
 
 // ---------------------------------------------------------------------------
@@ -214,20 +211,6 @@ export function validateZenginSettings(raw: Partial<ZenginSettings> | null): { o
       branchName: isBlankish(s.branchName) ? "" : kanaField(s.branchName!, 15)!,
     },
   };
-}
-
-export async function loadZenginSettings(orgId: string, runId?: string) {
-  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
-    select p.originator_secrets_encrypted
-      from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
-      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
-     where p.org_id = ${orgId} and p.is_active and f.rail = 'zengin_credit'
-       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
-     order by case when r.id is not null then 0 else 1 end, p.created_at
-     limit 1
-  `));
-  return validateZenginSettings(unsealJson<Partial<ZenginSettings>>(r.rows[0]?.originator_secrets_encrypted));
 }
 
 export interface ZenginPayment {

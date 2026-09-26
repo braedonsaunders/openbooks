@@ -34,7 +34,7 @@ const BOOLEAN_VALUES: Record<string, string> = {
   false: 'false',
 }
 
-export function migrateFieldKey(sourceKey: string, fieldKey: string): string {
+function migrateFieldKey(sourceKey: string, fieldKey: string): string {
   return FIELD_ALIASES[sourceKey]?.[fieldKey] ?? fieldKey
 }
 

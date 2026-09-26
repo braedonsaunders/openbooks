@@ -5,7 +5,7 @@ import { businessTimeZone } from "../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { loadControlAccounts } from "../records/control-accounts.ts";
-import { add, cmp, isZero, mulRate, neg, sum } from "../money/money.ts";
+import { add, isZero, mulRate, neg, sum } from "../money/money.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { postEntry } from "../journal/post-entry.ts";
@@ -32,11 +32,6 @@ import { postEntry } from "../journal/post-entry.ts";
 /** Monetary account types whose foreign balances are revalued. Non-monetary
  *  accounts (fixed assets, equity, income, expense) are carried at historical
  *  rate and never revalued. */
-export const MONETARY_ACCOUNT_TYPES = [
-  "asset_bank",
-  "asset_receivable",
-  "liability_payable",
-] as const;
 
 /**
  * The monetary-item predicate (IAS 21.8/16) over an `accounts` row aliased
@@ -47,7 +42,7 @@ export const MONETARY_ACCOUNT_TYPES = [
  * check can never demand a revaluation the engine would not post (or ignore
  * one it would).
  */
-export const MONETARY_ACCOUNT_SQL = sql`case
+const MONETARY_ACCOUNT_SQL = sql`case
   when a.monetary is false then false
   when a.monetary is true then a.type not in
     ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred', 'equity')
@@ -87,7 +82,7 @@ export interface RevaluationLine {
  * arithmetic and the close readiness probe so both agree on "no revaluation
  * needed" to the last unit.
  */
-export function positionDelta(p: Pick<RevaluationPosition, "foreignBalance" | "periodEndRate" | "carryingBase">): string {
+function positionDelta(p: Pick<RevaluationPosition, "foreignBalance" | "periodEndRate" | "carryingBase">): string {
   return add(mulRate(p.foreignBalance, p.periodEndRate), neg(p.carryingBase));
 }
 
@@ -700,4 +695,3 @@ async function postRevaluationEntry(
 }
 
 /** Sort helper kept local so callers don't import money directly. */
-export const byMagnitudeDesc = (a: string, b: string) => cmp(b, a);

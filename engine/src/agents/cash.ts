@@ -26,11 +26,6 @@ import type { AgentFinding } from "./types.ts";
  * of the cockpit timeline, never a second forecast. Findings link the Banking
  * cash cockpit for review. Proposes nothing executable; never writes.
  */
-export const CASH_DETECTOR_KEYS = [
-  "cash_low_balance",
-  "cash_bill_crunch",
-  "cash_forecast_shortfall",
-] as const;
 
 const CASH_HREF = "/banking/cash";
 

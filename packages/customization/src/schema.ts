@@ -97,7 +97,7 @@ const formTabPlacementSchema = formTabPlacementBaseSchema.extend({
   subtabs: z.array(formTabPlacementBaseSchema).max(20).optional(),
 });
 
-export const formLayoutConfigSchema = z.object({
+const formLayoutConfigSchema = z.object({
   schemaVersion: z.literal(1),
   recordType: recordTypeSchema,
   header: z.object({ groups: z.array(headerGroupSchema).min(1).max(20) }),
@@ -133,7 +133,7 @@ const listColumnPlacementSchema = z.object({
   labelOverride: z.string().max(120).nullable().optional(),
 });
 
-export const listViewConfigSchema = z.object({
+const listViewConfigSchema = z.object({
   schemaVersion: z.literal(1),
   recordType: recordTypeSchema,
   columns: z.array(listColumnPlacementSchema).max(100),
@@ -310,7 +310,7 @@ export function lintFormLayout(config: FormLayoutConfig): LintIssue[] {
  * type. Range operators stay refused: text comparison of numbers is a silent
  * mis-order, and lint has no per-org def to know the kind.
  */
-export const CUSTOM_FIELD_FILTER_OPERATORS: readonly FilterOperator[] = [
+const CUSTOM_FIELD_FILTER_OPERATORS: readonly FilterOperator[] = [
   "eq",
   "ne",
   "in",

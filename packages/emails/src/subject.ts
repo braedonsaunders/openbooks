@@ -1,5 +1,5 @@
 // Transport-safe email subject normalization.
-export const EMAIL_SUBJECT_LIMITS = {
+const EMAIL_SUBJECT_LIMITS = {
   subjectChars: 998,
   subjectBytes: 998,
 } as const

@@ -52,7 +52,7 @@ export type BuiltInReportDefinition = {
  * definition below; every other governed source gets a practical rows-mode
  * definition generated from its declared columns and stable sort.
  */
-export const WORKFORCE_BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] =
+const WORKFORCE_BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] =
   HRM_REPORT_ENTITIES.filter((entity) => entity.key !== 'hrm_headcount').map((entity) => ({
     slug: `workforce-${entity.key.replace(/^hrm_/, '').replaceAll('_', '-')}`,
     name: entity.label,

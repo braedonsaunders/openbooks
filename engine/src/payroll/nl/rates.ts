@@ -210,13 +210,6 @@ export const NL_EMPLOYER_PREMIUMS_2026 = {
 } as const;
 
 /** Employer-size bounds for Aof/Whk (Tabel 9): gemiddeld premieloon "€ 43.300". */
-export const NL_EMPLOYER_SIZE_2026 = {
-  averageWage: 43300,
-  /** "Kleine werkgever: tot en met 25x gemiddeld premieloon ≤ € 1.082.500". */
-  smallMax: 1082500,
-  /** "Middelgrote werkgever: tot en met 100x ≤ € 4.330.000". */
-  mediumMax: 4330000,
-} as const;
 
 /** Zvw percentages (Tabel 12): werkgeversheffing / inhouding bijdrage. */
 export const NL_ZVW_2026 = {
@@ -245,7 +238,7 @@ export const NL_MAX_PREMIUM_WAGE_ANNUAL_2026 = "79409.00";
 /** The one transcribed year. */
 export const NL_TRANSCRIBED_YEARS_2026 = [2026] as const;
 
-export const NL_EDITION_SCAFFOLD: PayrollEditionScaffold = {
+const NL_EDITION_SCAFFOLD: PayrollEditionScaffold = {
   files: [],
   barrels: [],
   steps: [

@@ -286,7 +286,7 @@ const US_STATE_CODES: ReadonlySet<string> = new Set(US_STATES);
  * the transfer determination for those wages: enter only wages the gaining
  * state's rule lets transfer (see engine/src/payroll/us/sui-transfer.ts).
  */
-export function normalizeOpeningSuiStates(
+function normalizeOpeningSuiStates(
   input: Record<string, unknown>,
 ): OpeningSuiStateAmounts {
   const amounts: OpeningSuiStateAmounts = {};
@@ -345,7 +345,7 @@ export async function declaredAccountOpeningBaseFields(): Promise<DeclaredAccoun
     .sort((a, b) => a.country.localeCompare(b.country) || a.programKey.localeCompare(b.programKey));
 }
 
-export function normalizeOpeningAccountBases(
+function normalizeOpeningAccountBases(
   input: readonly Record<string, unknown>[],
   country: string,
   declared: readonly DeclaredAccountOpeningBaseField[],
@@ -413,8 +413,6 @@ export interface OpeningBalanceYear {
   /** Annually-capped components that need a carry-in, in code order. */
   components: OpeningComponentField[];
 }
-
-export class OpeningBalanceLockedError extends PayrollError {}
 
 const MIN_TAX_YEAR = 2000;
 const MAX_TAX_YEAR = 2100;
@@ -1412,9 +1410,6 @@ async function auditOpeningBalance(
 }
 
 /** Field descriptor by key, for callers that map an import column onto one. */
-export function openingBalanceField(key: string): OpeningBalanceField | undefined {
-  return FIELD_BY_KEY.get(key);
-}
 
 /**
  * One component's year-to-date for an employee: every committed stub line for

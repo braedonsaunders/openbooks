@@ -24,16 +24,6 @@ import { AI_CAPABILITIES, assertAutonomyAtOrBelowMax, requireCapability } from "
  * one transaction, and a write matching zero rows fails, never succeeds.
  */
 
-export const AI_FEATURE_KEYS = [
-  "hrmAiAssist",
-  "hrmExplainPay",
-  "hrmPayrollAnomalies",
-  "hrmTimeAnomalies",
-  "hrmDrafting",
-  "hrmNlReports",
-  "aiGovernanceLedger",
-] as const;
-
 function requireIds(orgId: unknown, actorId: unknown): { orgId: string; actorId: string } {
   if (typeof orgId !== "string" || orgId.length === 0) {
     throw new AiRailsError("ai_invalid_input", "orgId must be a non-empty string");
@@ -45,7 +35,7 @@ function requireIds(orgId: unknown, actorId: unknown): { orgId: string; actorId:
 }
 
 /** Engine-side feature gate: the ledger refuses while hrm itself is off. */
-export async function assertHrmOn(exec: SqlExecutor, orgId: string): Promise<void> {
+async function assertHrmOn(exec: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
     throw new AiRailsError(
       "ai_hrm_off",

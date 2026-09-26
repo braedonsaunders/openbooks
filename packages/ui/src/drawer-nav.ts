@@ -4,7 +4,7 @@
  * while `show` is false is how the first close permanently hides the panel.
  */
 
-export function normalizePathQuery(href: string): string {
+function normalizePathQuery(href: string): string {
   const url = href.startsWith('http://') || href.startsWith('https://')
     ? new URL(href)
     : new URL(href, 'https://overlay.local')

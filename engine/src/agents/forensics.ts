@@ -18,12 +18,6 @@ import type { AgentFinding } from "./types.ts";
  * surfaces only genuinely NEW items and auto-resolves cleared ones — the
  * diff needs no second state store. Proposes sentinel review; never writes.
  */
-export const FORENSICS_DETECTOR_KEYS = [
-  "forensic_weekend_postings",
-  "forensic_round_dollar",
-  "forensic_threshold_trap",
-  "forensic_duplicate_bills",
-] as const;
 
 type SpendDoc = {
   id: string;

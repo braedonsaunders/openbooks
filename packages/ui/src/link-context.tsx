@@ -51,17 +51,6 @@ export type BackLinkLike = ComponentType<BackLinkProps>
 
 const UiBackLinkContext = createContext<BackLinkLike | null>(null)
 
-/** Mount once in the app shell to upgrade every DetailHeader/PageHeader back link. */
-export function UiBackLinkProvider({
-  backLink,
-  children,
-}: {
-  backLink: BackLinkLike
-  children: ReactNode
-}) {
-  return <UiBackLinkContext.Provider value={backLink}>{children}</UiBackLinkContext.Provider>
-}
-
 /**
  * Renders the injected smart back link when one is provided, otherwise a plain
  * `← label` anchor to `href`. Safe to use in server components (it's a client

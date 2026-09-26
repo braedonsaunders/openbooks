@@ -127,7 +127,7 @@ export function escapeTemplateHtml(s: string): string {
 // `{{{raw}}}` is the explicit opt-in for values that really are trusted HTML.
 
 /** Stringify a merge value; if it looks like HTML, reduce it to plain text. */
-export function plainValue(v: unknown): string {
+function plainValue(v: unknown): string {
   const s = v == null ? '' : String(v)
   assertLength(s, TEMPLATE_RENDER_LIMITS.mergeValueChars, 'Template merge value')
   return s.includes('<') || s.includes('&') ? htmlToPlainText(s) : s
@@ -986,7 +986,7 @@ export function isAllowedPdfRequest(resourceType: string, requestUrl: string): b
 }
 
 /** True when the interceptor would continue this URL as a visual resource. */
-export function isInlinePdfResourceUrl(value: string): boolean {
+function isInlinePdfResourceUrl(value: string): boolean {
   return (
     isAllowedPdfRequest('image', value) ||
     isAllowedPdfRequest('font', value) ||
@@ -1320,7 +1320,7 @@ function rewriteTagResourceAttrs(openTag: string, tagName: string): string {
  * has nothing to retrieve when it prints a header/footer as its own document.
  * Text content is left untouched — an escaped `https://` mention is not a fetch.
  */
-export function rewriteNetworkPdfResources(html: string): string {
+function rewriteNetworkPdfResources(html: string): string {
   assertLength(html, TEMPLATE_RENDER_LIMITS.renderOutputChars, 'Sanitized template HTML')
   const out = new BoundedStringBuilder(
     TEMPLATE_RENDER_LIMITS.renderOutputChars,

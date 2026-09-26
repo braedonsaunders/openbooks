@@ -12,7 +12,7 @@ export interface CustomRecordDefinition {
 export const queryLiteral = (value: string): string => "'" + value.replaceAll("'", "''") + "'"
 export const queryIdentifier = (value: string): string => '"' + value.replaceAll('"', '""') + '"'
 
-export function customFieldColumn(field: { id: string; type: string; label?: string; validation?: { options?: { value: string }[] }; config?: { format?: string } }, source = 'r.data', prefix = 'field_'): ReportEntityColumn | null {
+function customFieldColumn(field: { id: string; type: string; label?: string; validation?: { options?: { value: string }[] }; config?: { format?: string } }, source = 'r.data', prefix = 'field_'): ReportEntityColumn | null {
   const kinds: Record<string, ReportColumnKind> = {
     text: 'text', long_text: 'text', email: 'text', url: 'text', phone: 'text',
     number: 'number', integer: 'number', decimal: 'number', currency: 'number', amount: 'number', rating: 'number', formula: 'number', money: 'number', percent: 'number', percentage: 'number',

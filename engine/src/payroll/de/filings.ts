@@ -75,7 +75,6 @@ const num = (value: unknown): string => (value == null ? "0" : String(value));
 const ROW_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The only year whose Ausdruck layout the authority has published. */
-export const LOHNSTEUERBESCHEINIGUNG_FORM_YEAR = 2026;
 
 /**
  * Refuse any year but the published Ausdruck year, by name. Rate tables and
@@ -194,12 +193,12 @@ export const LOHNSTEUERBESCHEINIGUNG_GAPS: readonly string[] = [
   "Zeile 34 (Freibetrag DBA Türkei): not modelled — verify manually if it applies.",
 ];
 
-export const LOHNSTEUERBESCHEINIGUNG_DOWNLOAD_REFUSAL =
+const LOHNSTEUERBESCHEINIGUNG_DOWNLOAD_REFUSAL =
   "the DE pack produces no ELSTER Lohnsteuerbescheinigung transmission (the EStG §41b electronic "
   + "certificate Datensatz) — the Ausdruck above is the complete employee statement; transmit the "
   + "certificate data to the Finanzamt through ELSTER directly";
 
-export const LOHNSTEUERBESCHEINIGUNG_AMENDMENT_REFUSAL =
+const LOHNSTEUERBESCHEINIGUNG_AMENDMENT_REFUSAL =
   "a wrong Lohnsteuerbescheinigung is corrected by retransmitting it flagged as amended (als geändert "
   + "gekennzeichnet, EStG §41c Satz 5 — §41b Abs. 1 gilt entsprechend) via ELSTER, which this pack does "
   + "not transmit. Correct the payroll data, re-run and commit, retransmit via ELSTER, and re-print the "

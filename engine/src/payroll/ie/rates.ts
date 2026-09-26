@@ -170,12 +170,7 @@ const PRSI_PERIOD_BANDS: IePrsiPeriodBands = {
 };
 
 /** Standard single-person figures for reference (the RPN carries the actuals). */
-export const IE_2026_SINGLE_BAND = "44000";
-export const IE_2026_SINGLE_CREDIT = "2000";
-export const IE_2026_EMPLOYEE_CREDIT = "2000";
 /** Married one-income figures for reference. */
-export const IE_2026_MARRIED_BAND = "53000";
-export const IE_2026_MARRIED_CREDIT = "4000";
 
 const RATES_2026_JAN: IeEditionRates = {
   edition: "2026-jan",

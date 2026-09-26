@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import {
-  ScopeNotFoundError,
   subsidiaryScopeAllows,
 } from "../organization/subsidiary-scope.ts";
 import { db } from "../platform/db.ts";
@@ -33,18 +32,6 @@ export function runSubjectVisible(
   subject: RunSubjectScope,
 ): boolean {
   return subsidiaryScopeAllows(allowed, subject.subjectSubsidiaryId);
-}
-
-/**
- * Direct-record read of one run: throw the uniform not-found when the
- * run's subject sits outside the caller's scope, so an out-of-scope run
- * is indistinguishable from a missing one.
- */
-export function assertRunSubjectScope(
-  allowed: ReadonlySet<string> | null,
-  subject: RunSubjectScope,
-): void {
-  if (!runSubjectVisible(allowed, subject)) throw new ScopeNotFoundError();
 }
 
 /**

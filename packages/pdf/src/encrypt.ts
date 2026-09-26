@@ -39,7 +39,7 @@ export class PdfEncryptionError extends Error {}
  * large records can raise it; it only ever shortens a hang into a refusal,
  * never extends a success.
  */
-export function qpdfTimeoutMs(): number {
+function qpdfTimeoutMs(): number {
   const fromEnv = Number(process.env.OPENBOOKS_QPDF_TIMEOUT_MS)
   if (Number.isFinite(fromEnv) && fromEnv > 0) return Math.floor(fromEnv)
   return 60_000

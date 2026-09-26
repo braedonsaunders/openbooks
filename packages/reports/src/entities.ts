@@ -29,7 +29,7 @@ export type ReportColumnKind =
 
 /** The value set for a `boolean` column. Postgres accepts these literals for a
  *  boolean comparison, so a stored `eq` rule binds without a cast. */
-export const BOOLEAN_OPTIONS = ['true', 'false'] as const
+const BOOLEAN_OPTIONS = ['true', 'false'] as const
 
 /** Every transaction kind the documents table holds — the source platform
  *  "Transaction Type" filter set. One source of truth for both the
@@ -53,7 +53,7 @@ export const TRANSACTION_KINDS = [
   'project_charge',
 ] as const
 
-export const TRANSACTION_STATUSES = ['draft', 'pending_approval', 'approved', 'posted', 'voided'] as const
+const TRANSACTION_STATUSES = ['draft', 'pending_approval', 'approved', 'posted', 'voided'] as const
 
 export type ReportEntityColumn = {
   /** Public key used in stored query plans (snake_case). */
@@ -1740,7 +1740,7 @@ export type ReportOperatorMeta = {
   applicableKinds?: ReportColumnKind[]
 }
 
-export const REPORT_OPERATORS: ReportOperatorMeta[] = [
+const REPORT_OPERATORS: ReportOperatorMeta[] = [
   { key: 'eq', label: 'equals', needsValue: 'one' },
   { key: 'neq', label: 'not equals', needsValue: 'one' },
   { key: 'in', label: 'is any of', needsValue: 'list' },

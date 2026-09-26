@@ -24,7 +24,7 @@ export type PdfPageSetup = {
   density: PdfDensity
 }
 
-export const DEFAULT_PDF_LAYOUT: PdfPageSetup = {
+const DEFAULT_PDF_LAYOUT: PdfPageSetup = {
   paperSize: 'letter',
   orientation: 'landscape',
   marginMm: 15,
@@ -46,12 +46,6 @@ export function resolvePdfPageSetup(raw: Partial<PdfPageSetup> | null | undefine
     : DEFAULT_PDF_LAYOUT.marginMm
   const density: PdfDensity = raw?.density === 'compact' ? 'compact' : 'standard'
   return { paperSize, orientation, marginMm, density }
-}
-
-export const PDF_PAPER_SIZE_LABELS: Record<PdfPaperSize, string> = {
-  letter: 'Letter',
-  a4: 'A4',
-  legal: 'Legal',
 }
 
 // --- Branding --------------------------------------------------------------

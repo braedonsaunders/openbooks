@@ -91,8 +91,6 @@ export const GB_PERSONAL_ALLOWANCE_ANNUAL = "12570";
  * (a reduced number, a K code), and the engine reads the code. These
  * constants document why high earners hold non-1257L codes.
  */
-export const GB_TAPER_START = "100000";
-export const GB_PERSONAL_ALLOWANCE_ZERO_AT = "125140";
 
 /**
  * rUK bands in TAXABLE-pay space (pay above the Personal Allowance / code

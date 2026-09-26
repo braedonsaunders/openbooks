@@ -1,7 +1,4 @@
-import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
 import { parseIsoDate } from "../platform/business-date.ts";
-import { unsealJson } from "../platform/secrets.ts";
 import { PaymentError } from "./payment-errors.ts";
 
 // ---------------------------------------------------------------------------
@@ -86,10 +83,6 @@ export function normalizeCpfCnpj(value: string): string | null {
   const d2 = mod11(body + String(d1), [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
   if (digits !== `${body}${d1}${d2}`) return null;
   return digits;
-}
-
-export function isValidCpfCnpj(value: string): boolean {
-  return normalizeCpfCnpj(value) !== null;
 }
 
 /** Segmento B G005: '1' pessoa física (CPF), '2' pessoa jurídica (CNPJ). */
@@ -182,20 +175,6 @@ export function validateCnab240BbSettings(raw: Partial<Cnab240BbSettings> | null
       versaoLayoutArquivo: s.versaoLayoutArquivo!.trim(),
     },
   };
-}
-
-export async function loadCnab240BbSettings(orgId: string, runId?: string) {
-  const r = (await db.execute<{ originator_secrets_encrypted: string | null }>(sql`
-    select p.originator_secrets_encrypted
-      from payment_bank_profiles p
-      join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
-      left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
-     where p.org_id = ${orgId} and p.is_active and f.rail = 'cnab240_bb_credit'
-       and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
-     order by case when r.id is not null then 0 else 1 end, p.created_at
-     limit 1
-  `));
-  return validateCnab240BbSettings(unsealJson<Partial<Cnab240BbSettings>>(r.rows[0]?.originator_secrets_encrypted));
 }
 
 export interface Cnab240BbPayment {

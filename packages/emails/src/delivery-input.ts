@@ -59,7 +59,7 @@ export type TransmittableEmailInput = Omit<NormalizedEmailDeliveryInput, 'attach
  * 10 MiB decoded attachment cap leaves room for base64 + MIME overhead below
  * common 20–25 MiB provider limits.
  */
-export const EMAIL_DELIVERY_LIMITS = {
+const EMAIL_DELIVERY_LIMITS = {
   recipientsPerEnqueue: 1_000,
   htmlBytes: 4 * 1024 * 1024,
   textBytes: 2 * 1024 * 1024,

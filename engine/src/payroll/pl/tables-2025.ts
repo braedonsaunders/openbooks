@@ -125,20 +125,6 @@ export const PL_PIT_POMNIEJSZENIE_2025 = {
  * płatnika w danym miesiącu składek na ubezpieczenie społeczne, o których
  * mowa w art. 26 ust. 1 pkt 2 lit. b lub pkt 2a." Verified verbatim.
  */
-export const PL_PIT_ZALICZKA_QUOTE_2025 =
-  "Zaliczki za miesiące od stycznia do grudnia wynoszą: 1) za miesiące, w których dochód podatnika "
-  + "uzyskany od początku roku od danego płatnika nie przekroczył kwoty 120 000 zł – 12 % dochodu "
-  + "uzyskanego w danym miesiącu; 2) za miesiąc, w którym dochód podatnika uzyskany od początku roku "
-  + "od danego płatnika przekroczył kwotę 120 000 zł – 12 % od tej części dochodu uzyskanego w tym "
-  + "miesiącu, która nie przekroczyła tej kwoty, i 32 % od nadwyżki ponad kwotę 120 000 zł; "
-  + "3) za miesiące następujące po miesiącu, o którym mowa w pkt 2 – 32 % dochodu uzyskanego "
-  + "w danym miesiącu od danego płatnika";
-
-export const PL_PIT_DOCHOD_QUOTE_2025 =
-  "Za dochód, o którym mowa w ust. 2 i 3, uważa się uzyskane w ciągu miesiąca przychody, "
-  + "o których mowa w ust. 1, po odliczeniu kosztów uzyskania w wysokości określonej w art. 22 "
-  + "ust. 2 pkt 1 albo 3 lub ust. 9 pkt 1–3 oraz po odliczeniu potrąconych przez płatnika w danym "
-  + "miesiącu składek na ubezpieczenie społeczne, o których mowa w art. 26 ust. 1 pkt 2 lit. b lub pkt 2a";
 
 /**
  * Art. 22 ust. 2 pkt 1 / pkt 3 (Dz.U. 2025 poz. 163): "wynoszą 250 zł
@@ -172,11 +158,6 @@ export const PL_KUP_2025 = {
  * wynoszące 50 i więcej groszy podwyższa się do pełnych złotych,
  * z zastrzeżeniem § 1a i 2." Verified verbatim.
  */
-export const PL_ZAOKRAGLENIE_PIT_QUOTE_2025 =
-  "Podstawy opodatkowania, kwoty podatków, odsetki za zwłokę, opłaty prolongacyjne, oprocentowanie "
-  + "nadpłat oraz wynagrodzenia przysługujące płatnikom i inkasentom zaokrągla się do pełnych złotych "
-  + "w ten sposób, że końcówki kwot wynoszące mniej niż 50 groszy pomija się, a końcówki kwot "
-  + "wynoszące 50 i więcej groszy podwyższa się do pełnych złotych, z zastrzeżeniem § 1a i 2";
 
 // ---------------------------------------------------------------------------
 // ZUS — rates (art. 22 ust. 1) and split (art. 16), Dz.U. 2025 poz. 350
@@ -280,12 +261,6 @@ export const PL_ZDROWOTNA_2025: PlRate = {
   quote: "Składka na ubezpieczenie zdrowotne wynosi 9 % podstawy wymiaru składki",
 };
 
-export const PL_ZDROWOTNA_PODSTAWA_QUOTE_2025 =
-  "Podstawę wymiaru składki na ubezpieczenie zdrowotne pomniejsza się o kwoty składek na "
-  + "ubezpieczenia emerytalne, rentowe i chorobowe finansowanych przez ubezpieczonych niebędących "
-  + "płatnikami składek, potrąconych przez płatników ze środków ubezpieczonego, zgodnie z przepisami "
-  + "o systemie ubezpieczeń społecznych";
-
 // ---------------------------------------------------------------------------
 // FP / FS / FGŚP 2025 — Budget Act rates on the promotion/labour-market base
 // ---------------------------------------------------------------------------
@@ -349,12 +324,6 @@ export const PL_FUNDUSZE_2025 = {
  * the same base as art. 259 ust. 1 (quote as transcribed in
  * ./tables-2026.ts). Same substance either side — one 2025 edition.
  */
-export const PL_FP_PODSTAWA_QUOTE_2025 =
-  "Obowiązkowe składki na Fundusz Pracy, ustalone od kwot stanowiących podstawę wymiaru składek "
-  + "na ubezpieczenia emerytalne i rentowe bez stosowania ograniczenia, o którym mowa w art. 19 "
-  + "ust. 1 ustawy z dnia 13 października 1998 r. o systemie ubezpieczeń społecznych, wynoszących "
-  + "w przeliczeniu na okres miesiąca, co najmniej minimalne wynagrodzenie za pracę opłacają: "
-  + "1) pracodawcy oraz inne jednostki organizacyjne za osoby pozostające w stosunku pracy";
 
 /**
  * Promotion act (Dz.U. 2025 poz. 214) art. 104b ust. 2: "Składki na
@@ -368,10 +337,6 @@ export const PL_FP_PODSTAWA_QUOTE_2025 =
  * (quote as transcribed in ./tables-2026.ts). The engine cites "art. 104b
  * ust. 2 / art. 261" for 2025 pay dates.
  */
-export const PL_FP_WIEK_QUOTE_2025 =
-  "Składki na Fundusz Pracy, o których mowa w art. 104 ust. 1, opłaca się za osoby wymienione "
-  + "w art. 104 ust. 1 pkt 1–3, które nie osiągnęły wieku wynoszącego co najmniej 55 lat dla kobiet "
-  + "i co najmniej 60 lat dla mężczyzn";
 
 /**
  * Claims-protection act (Dz.U. 2025 poz. 433) art. 9b ust. 2:
@@ -381,9 +346,6 @@ export const PL_FP_WIEK_QUOTE_2025 =
  * (single-version print). FGŚP follows the same 55/60 bar as FP/FS in
  * 2025 — the pack's `fgspAgeBar` flag (see ./compute-statutory.ts).
  */
-export const PL_FGSP_WIEK_QUOTE_2025 =
-  "Pracodawca, o którym mowa w art. 9, nie opłaca składek na Fundusz za pracowników, którzy "
-  + "osiągnęli wiek wynoszący co najmniej 55 lat dla kobiet i co najmniej 60 lat dla mężczyzn";
 
 /**
  * Rozporządzenie RM z dnia 12 września 2024 r. (Dz.U. 2024 poz. 1362),
@@ -407,9 +369,6 @@ export const PL_MIN_WAGE_2025 = {
  * o ubezpieczeniu społecznym z tytułu wypadków przy pracy i chorób
  * zawodowych." Verified verbatim — per-payer rate, tenant-declared.
  */
-export const PL_TENANT_DECLARED_QUOTE_2025 =
-  "Zasady różnicowania stopy procentowej składek na ubezpieczenie wypadkowe określają przepisy "
-  + "o ubezpieczeniu społecznym z tytułu wypadków przy pracy i chorób zawodowych";
 
 /**
  * Named refusals for the 2025 pass: everything this file transcribes but

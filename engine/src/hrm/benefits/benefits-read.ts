@@ -1,13 +1,10 @@
 import { sql } from "drizzle-orm";
 import {
-  HrmAuthorizationError,
   loadOwnEmploymentIds,
   requireAggregateBenefitsRead,
-  requireHrmBenefitsManageOnEmployment,
   requireHrmBenefitsRead,
 } from "../authorization.ts";
 import { BenefitsError } from "./errors.ts";
-import { loadBenefitPlan, loadBenefitPlanLevels } from "./plans.ts";
 import type { SqlExecutor } from "./shared.ts";
 
 /**
@@ -27,28 +24,6 @@ export interface BenefitPlanSummary {
   readonly isActive: boolean;
   readonly effectiveFrom: string;
   readonly effectiveTo: string | null;
-}
-
-export async function listBenefitPlans(exec: SqlExecutor, orgId: string): Promise<BenefitPlanSummary[]> {
-  const rows = (
-    await exec.execute<Record<string, unknown>>(sql`
-      select id, code, name, kind, currency, is_active as "isActive",
-             effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo"
-        from hrm_benefit_plans
-       where org_id = ${orgId}
-       order by code
-    `)
-  ).rows;
-  return rows.map((row) => ({
-    id: String(row.id),
-    code: String(row.code),
-    name: String(row.name),
-    kind: String(row.kind),
-    currency: String(row.currency),
-    isActive: row.isActive === true,
-    effectiveFrom: String(row.effectiveFrom).slice(0, 10),
-    effectiveTo: row.effectiveTo != null ? String(row.effectiveTo).slice(0, 10) : null,
-  }));
 }
 
 export interface EnrollmentWindowSummary {
@@ -230,61 +205,6 @@ export interface EnrollmentDetail {
 }
 
 /** One election with its plan, dependents, and evidence trail. */
-export async function getEnrollmentDetail(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  enrollmentId: string,
-): Promise<EnrollmentDetail> {
-  const enrollment = (
-    await exec.execute<Record<string, unknown>>(sql`
-      select employment_id as "employmentId", plan_id as "planId",
-             coverage_level_key as "coverageLevelKey"
-        from hrm_benefit_enrollments
-       where org_id = ${orgId} and id = ${enrollmentId}
-    `)
-  ).rows[0];
-  if (!enrollment) {
-    throw new BenefitsError("NOT_FOUND", "benefit enrollment not found in this organization — reload and retry");
-  }
-  await requireHrmBenefitsRead(exec, orgId, actorId, String(enrollment.employmentId));
-  const plan = await loadBenefitPlan(exec, orgId, String(enrollment.planId));
-  const levels = await loadBenefitPlanLevels(exec, orgId, String(enrollment.planId));
-  const key = enrollment.coverageLevelKey != null ? String(enrollment.coverageLevelKey) : null;
-  const dependents = (
-    await exec.execute<Record<string, unknown>>(sql`
-      select d.id, d.display_name as "displayName", d.relationship
-        from hrm_benefit_dependents d
-        join hrm_enrollment_dependents l
-          on l.org_id = d.org_id and l.dependent_id = d.id
-       where l.org_id = ${orgId} and l.enrollment_id = ${enrollmentId} and d.is_active
-       order by d.display_name
-    `)
-  ).rows;
-  const events = (
-    await exec.execute<Record<string, unknown>>(sql`
-      select kind, reason, recorded_at::text as "recordedAt"
-        from hrm_benefit_events
-       where org_id = ${orgId} and enrollment_id = ${enrollmentId}
-       order by recorded_at
-    `)
-  ).rows;
-  return {
-    planCode: plan.code,
-    planName: plan.name,
-    coverageLabel: key !== null ? (levels.find((level) => level.levelKey === key)?.label ?? key) : null,
-    dependents: dependents.map((row) => ({
-      id: String(row.id),
-      displayName: String(row.displayName),
-      relationship: String(row.relationship),
-    })),
-    events: events.map((row) => ({
-      kind: String(row.kind),
-      reason: String(row.reason),
-      recordedAt: String(row.recordedAt),
-    })),
-  };
-}
 
 /** The actor's own elections (self-service touch — own rows only). */
 export async function myEnrollments(
@@ -309,7 +229,7 @@ export interface PendingApproval {
   readonly effectiveFrom: string;
 }
 
-export async function listPendingApprovals(
+async function listPendingApprovals(
   exec: SqlExecutor,
   orgId: string,
   actorId: string,
@@ -390,39 +310,6 @@ export interface EmploymentBenefitsSection {
 }
 
 /** Employee drawer Benefits section: the person's elections and dependents. */
-export async function employmentBenefitsSection(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  employmentId: string,
-): Promise<EmploymentBenefitsSection> {
-  // Either grant opens the section: manage first, then read. When both
-  // fail the read refusal propagates (same scope, read-worded remedy).
-  try {
-    await requireHrmBenefitsManageOnEmployment(exec, orgId, actorId, employmentId);
-  } catch (error) {
-    if (!(error instanceof HrmAuthorizationError)) throw error;
-    await requireHrmBenefitsRead(exec, orgId, actorId, employmentId);
-  }
-  const enrollments = await listEnrollments(exec, orgId, actorId, { employmentId });
-  const dependents = (
-    await exec.execute<Record<string, unknown>>(sql`
-      select id, display_name as "displayName", relationship, is_active as "isActive"
-        from hrm_benefit_dependents
-       where org_id = ${orgId} and employment_id = ${employmentId}
-       order by display_name
-    `)
-  ).rows;
-  return {
-    enrollments,
-    dependents: dependents.map((row) => ({
-      id: String(row.id),
-      displayName: String(row.displayName),
-      relationship: String(row.relationship),
-      isActive: row.isActive === true,
-    })),
-  };
-}
 
 export interface DependentSummary {
   readonly id: string;
