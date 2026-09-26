@@ -90,7 +90,7 @@ test('app field installation rechecks a feature after a competing disable commit
   await holder.query("select set_config('app.bypass_rls','on',true)"); // 0399 gates the bypass GUC by session role: the holder connects as the privileged test login above.
   const pid=(await holder.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
   await holder.query('select pg_advisory_xact_lock(hashtextextended($1,0))',[featureGateLockKey(org.orgId)]);
-  assert.equal((await holder.query(`update orgs set settings=jsonb_set(settings,'{features}','{"projects":false}'::jsonb) where id=$1`,[org.orgId])).rowCount,1,'holder must stage the competing disable');
+  assert.equal((await withBypassContext(()=>holder.query(`update orgs set settings=jsonb_set(settings,'{features}','{"projects":false}'::jsonb) where id=$1`,[org.orgId]))).rowCount,1,'holder must stage the competing disable');
   pending=withOrgContext(org.orgId,()=>installApp(org.orgId,actor,bundle({targetTable:'projects'})));pending.catch(()=>{});
   let waiting=false;
   for(let attempt=0;attempt<100;attempt++){
