@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'
-import { existsSync, globSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, globSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { filesWithoutTests } from './verify-test-registration.mjs'
 
 const ROOT = resolve(new URL('..', import.meta.url).pathname)
 
@@ -225,6 +226,10 @@ function ownerRequest(port, request, timeoutMs) {
 }
 
 const RECEIPT_PATH = resolve(ROOT, '.local', 'fixture-lifecycle-receipt.txt')
+// One line per test file ({ file, tests, failed }), written by the receipt
+// reporter below. A stale file from an earlier run would vouch for files
+// this run never started, so runSuite removes it before the child runs.
+const REGISTRATION_RECEIPT_PATH = resolve(ROOT, '.local', 'test-file-registration.jsonl')
 
 async function startFixtureOwner(env) {
   const owner = spawn(process.execPath, [
@@ -327,8 +332,16 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
 
   mkdirSync(resolve(ROOT, '.local'), { recursive: true })
   writeFileSync(resolve(ROOT, '.local/test-selection.json'), JSON.stringify({ suite, shard: process.env.OPENBOOKS_TEST_SHARD ?? null, files }, null, 2) + '\n')
+  rmSync(REGISTRATION_RECEIPT_PATH, { force: true })
 
   const pooled = suite === 'integration'
+  // Adding any reporter replaces the default spec-to-stdout output, which
+  // the skip audit and the engineers read. When the caller forwards its own
+  // reporters (the coverage run does), only the receipt is added; otherwise
+  // the default is restored explicitly alongside it.
+  const callerOwnsReporters = forwarded.some(
+    (argument) => argument === '--test-reporter' || argument.startsWith('--test-reporter='),
+  )
   const childEnv = {
     ...process.env,
     ...envOverrides,
@@ -355,6 +368,15 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
     ...(pooled ? ['--import', './scripts/test-fixture-lifecycle.mjs'] : []),
     '--test',
     '--test-force-exit',
+    // A reporter alongside any the caller forwards. Spec and TAP name only
+    // tests, never the files that passed, so per-file registration is
+    // receipted from the event stream instead. The reporter lives in the
+    // hooks module the suite already imports into every test process; the
+    // destination file lets this suite refuse a silent file itself rather
+    // than waiting for the CI exactly-once gate to notice.
+    ...(callerOwnsReporters ? [] : ['--test-reporter', 'spec', '--test-reporter-destination', 'stdout']),
+    '--test-reporter', './scripts/test-hooks.mjs',
+    '--test-reporter-destination', REGISTRATION_RECEIPT_PATH,
     ...forwarded,
     ...(suite === 'unit' ? ['--test-timeout=180000'] : []),
     // Database files share a disposable schema and many exercise deliberate
@@ -370,13 +392,29 @@ async function runSuite(suite, forwarded, envOverrides = {}) {
       owner = await startFixtureOwner(childEnv)
       childEnv.OPENBOOKS_TEST_FIXTURE_OWNER_PORT = String(owner.port)
     }
-    const status = await runChild(args, childEnv)
+    let status = await runChild(args, childEnv)
     // Remain failed until both child execution and shutdown evidence complete.
     process.exitCode = 1
     let ownerStatus = 0
     if (owner) {
       const response = await stopFixtureOwner(owner)
       ownerStatus = response?.ok ? 0 : 1
+    }
+    // Refuse a silent file structurally: a selected file with no receipt
+    // line is a failure even when the child exits zero. A missing receipt
+    // proves nothing, so it fails closed with every file silent.
+    let silentFiles = files
+    try {
+      silentFiles = filesWithoutTests(files, readFileSync(REGISTRATION_RECEIPT_PATH, 'utf8'))
+    } catch {
+      // Fall through with every file silent.
+    }
+    if (silentFiles.length > 0) {
+      status = 1
+      process.stderr.write(
+        `test registration: ${silentFiles.length} selected file(s) registered no tests:\n` +
+          silentFiles.map((file) => `  ${file}`).join('\n') + '\n',
+      )
     }
     process.exitCode = status === 0 && ownerStatus === 0 ? 0 : 1
   } catch (error) {

@@ -6,38 +6,57 @@
  * runner reports `tests 0` with a zero exit status both when the file path
  * matches nothing (unescaped `[id]`-style segments are globs) and when the
  * file dies during load before registering anything. The shard exit code
- * cannot see either shape, so this guard scans each shard's own output for
- * the per-file marker (`✔`/`✖` followed by the file path) the spec
- * reporter prints for every file that actually ran, and refuses the list
- * of selected files that never appear.
+ * cannot see either shape, so every shard writes a registration receipt —
+ * one line per test file carrying its path and test count, emitted by the
+ * reporter in scripts/test-hooks.mjs — and this guard refuses the selected
+ * files with no receipt line. Reporter text cannot serve here: neither the
+ * spec nor the TAP reporter names the files that passed (spec prints a file
+ * path only for a file that fails to load), so a marker scan of shard output
+ * reports every healthy file missing.
  *
- *   node scripts/verify-test-registration.mjs <selection.json> <shard-log> [...]
+ *   node scripts/verify-test-registration.mjs <selection.json> <receipt> [...]
  *
- * Each pair is one shard: the test-selection.json the runner wrote plus
- * the shard's captured output (unit.txt / coverage.txt in CI).
+ * Each pair is one shard: the test-selection.json the runner wrote plus the
+ * registration receipt its reporter wrote for that shard's run.
  */
 import { readFileSync } from "node:fs";
+import { relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const FILE_MARKER = /^[✔✖] (\S+\.test\.(?:ts|tsx|mjs|js|cjs)) \(/;
+const ROOT = resolve(fileURLToPath(new URL(".", import.meta.url)), "..");
 
-export function filesWithMarkers(logText) {
+export function filesWithTests(receiptText) {
   const found = new Set();
-  for (const line of logText.split("\n")) {
-    const match = FILE_MARKER.exec(line);
-    if (match) found.add(match[1]);
+  for (const line of receiptText.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let record;
+    try {
+      record = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+    if (typeof record?.file !== "string" || record.file.length === 0) continue;
+    if (!Number.isInteger(record?.tests) || record.tests < 1) continue;
+    const absolute = resolve(ROOT, record.file);
+    const againstRoot = relative(ROOT, absolute);
+    // An entry that does not resolve under the repository cannot name a
+    // selected file; leaving it unmatched fails closed on ambiguity.
+    if (againstRoot === "" || againstRoot.startsWith("..")) continue;
+    found.add(againstRoot);
   }
   return found;
 }
 
-export function filesWithoutTests(selectionFiles, logText) {
-  const marked = filesWithMarkers(logText);
-  return selectionFiles.filter((file) => !marked.has(file));
+export function filesWithoutTests(selectionFiles, receiptText) {
+  const reported = filesWithTests(receiptText);
+  return selectionFiles.filter((file) => !reported.has(file));
 }
 
 function main(argv = process.argv.slice(2)) {
   if (argv.length === 0 || argv.length % 2 !== 0) {
     console.error(
-      "usage: node scripts/verify-test-registration.mjs <selection.json> <shard-log> [...]",
+      "usage: node scripts/verify-test-registration.mjs <selection.json> <receipt> [...]",
     );
     process.exitCode = 2;
     return;
@@ -45,16 +64,16 @@ function main(argv = process.argv.slice(2)) {
   let failed = false;
   for (let index = 0; index < argv.length; index += 2) {
     const selectionPath = argv[index];
-    const logPath = argv[index + 1];
+    const receiptPath = argv[index + 1];
     const selection = JSON.parse(readFileSync(selectionPath, "utf8"));
     const missing = filesWithoutTests(
       selection.files,
-      readFileSync(logPath, "utf8"),
+      readFileSync(receiptPath, "utf8"),
     );
     if (missing.length > 0) {
       failed = true;
       console.error(
-        `test registration: ${missing.length} selected file(s) registered no tests in ${logPath}:\n` +
+        `test registration: ${missing.length} selected file(s) registered no tests in ${receiptPath}:\n` +
           missing.map((file) => `  ${file}`).join("\n"),
       );
     }
@@ -71,4 +90,6 @@ function main(argv = process.argv.slice(2)) {
   }
 }
 
-main();
+if (resolve(process.argv[1] ?? "") === fileURLToPath(import.meta.url)) {
+  main();
+}

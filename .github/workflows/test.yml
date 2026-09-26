@@ -154,6 +154,7 @@ jobs:
           path: |
             unit.txt
             .local/test-selection.json
+            .local/test-file-registration.jsonl
 
   database:
     needs: [scope, typecheck]
@@ -347,6 +348,7 @@ jobs:
             coverage.txt
             .local/test-selection.json
             .local/fixture-lifecycle-receipt.txt
+            .local/test-file-registration.jsonl
           if-no-files-found: ignore
 
   simulation:
@@ -523,7 +525,7 @@ jobs:
           import { readFileSync, readdirSync } from 'node:fs';
           import { testManifest, shardFiles } from './scripts/test-suite.mjs';
           const manifest = testManifest();
-          for (const [suite, count, root, prefix, log] of [['integration',16,'integration-evidence','coverage','coverage.txt'], ['unit',5,'unit-evidence','unit','unit.txt']]) {
+          for (const [suite, count, root, prefix, receipt] of [['integration',16,'integration-evidence','coverage','test-file-registration.jsonl'], ['unit',5,'unit-evidence','unit','test-file-registration.jsonl']]) {
             const files = manifest[suite];
             const dirs = readdirSync(root).sort();
             assert.deepEqual(dirs, Array.from({length:count}, (_,i)=>`${prefix}-${i+1}`).sort());
@@ -534,11 +536,12 @@ jobs:
               assert.equal(selection.shard, `${i}/${count}`);
               assert.deepEqual(selection.files, shardFiles(files, `${i}/${count}`));
               actual.push(...selection.files);
-              // Per-file registration (scripts/verify-test-registration.mjs) is
-              // not asserted here yet: it looks for a per-file spec-reporter
-              // marker that the CI runner never prints for passing files, so it
-              // refused every complete run. It returns once the runner emits a
-              // per-file receipt it can read.
+              // A file reporting zero tests is a failure, not a pass: the
+              // runner exits zero both when a path matches nothing and when
+              // a file dies during load, so assert registration per file
+              // against the registration receipt (reporter text names only
+              // tests, never the files that passed).
+              execFileSync(process.execPath, ['scripts/verify-test-registration.mjs', `${root}/${prefix}-${i}/.local/test-selection.json`, `${root}/${prefix}-${i}/.local/${receipt}`], { stdio: 'inherit' });
             }
             assert.deepEqual(actual.sort(), files);
             console.log(`All ${files.length} ${suite} files completed exactly once across ${count} isolated runners.`);
