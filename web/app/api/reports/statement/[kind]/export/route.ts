@@ -5,7 +5,6 @@ import { withReportBookColumn } from '../../../../../../lib/report-book-label'
 import { reportBookSelection } from '../../../../../../lib/report-books'
 import { guardPermission } from '../../../../../../lib/authz'
 import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
-import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
 import {
   exportDataToCsv,
   exportDataToPdf,
@@ -139,7 +138,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   } catch (err) {
     const rendererRefusal = rendererUnavailableResponse(err)
     if (rendererRefusal) return rendererRefusal
-    if (err instanceof ReportCurrencyBasisError) return apiErrorResponse(err, { safeStatus: 422 })
-    return apiErrorResponse(err)
+    // Typed refusals (currency basis, a drifted saved query failing
+    // ReportQueryValidationError) answer 422 intact, like the run route;
+    // untyped faults still sanitize to a generic 500.
+    return apiErrorResponse(err, { safeStatus: 422 })
   }
 }
