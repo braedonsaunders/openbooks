@@ -1,4 +1,6 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+import { notFound, unprocessable } from "@/lib/api/responses";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -78,30 +80,33 @@ function hoursOrNull(v: unknown): string | null | 'invalid' {
 }
 
 /** GET ?employee=&week= → the week's grid rows + status. */
-export async function GET(req: Request) {
-  const gate = await guardFeaturePermission('time.read', 'timeTracking')
-  if (gate instanceof NextResponse) return gate
-  const orgId = gate.user.orgId
+export const GET = defineRoute({
+  permission: 'time.read',
+  feature: 'timeTracking',
+  scope: 'subsidiary',
+  handler: async ({ request, authz }) => {
+    const orgId = authz.user.orgId
 
-  const url = new URL(req.url)
-  const employee = url.searchParams.get('employee')
-  const weekParam = url.searchParams.get('week')
-  if (!employee || !isUuid(employee)) return bad('Invalid employee')
-  if (!weekParam || !isIsoDate(weekParam)) return bad('Invalid week')
+    const url = new URL(request.url)
+    const employee = url.searchParams.get('employee')
+    const weekParam = url.searchParams.get('week')
+    if (!employee || !isUuid(employee)) return unprocessable('Invalid employee')
+    if (!weekParam || !isIsoDate(weekParam)) return unprocessable('Invalid week')
 
-  const ownedEmployee = await pinTimesheetEmployee(orgId, employee, gate.allowedSubsidiaryIds)
-  if (!ownedEmployee) return bad('Employee not found')
-  try {
-    return await withOrgTransaction(orgId, async () => {
-      await lockScopeRow(db, orgId, 'party', ownedEmployee, gate.allowedSubsidiaryIds, 'share')
-      const payload = await loadWeek(orgId, ownedEmployee, weekStart(weekParam), gate.allowedSubsidiaryIds)
-      return NextResponse.json(payload)
-    })
-  } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    throw error
-  }
-}
+    const ownedEmployee = await pinTimesheetEmployee(orgId, employee, authz.allowedSubsidiaryIds)
+    if (!ownedEmployee) return unprocessable('Employee not found')
+    try {
+      return await withOrgTransaction(orgId, async () => {
+        await lockScopeRow(db, orgId, 'party', ownedEmployee, authz.allowedSubsidiaryIds, 'share')
+        const payload = await loadWeek(orgId, ownedEmployee, weekStart(weekParam), authz.allowedSubsidiaryIds)
+        return NextResponse.json(payload)
+      })
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) return notFound('timesheet week')
+      throw error
+    }
+  },
+})
 
 /**
  * Save the week: replace this employee+week's editable time_entries from the

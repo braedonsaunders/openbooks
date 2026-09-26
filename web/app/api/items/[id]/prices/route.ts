@@ -7,6 +7,8 @@ import { guardPermission } from '@/lib/authz'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import { defineRoute } from '@/lib/api/route'
+import { conflict, created, notFound, unprocessable } from '@/lib/api/responses'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
@@ -143,16 +145,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   })
 }
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.manage')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+export const POST = defineRoute({
+  permission: 'items.manage',
+  feature: { none: 'Item price schedules are catalog data governed by items.manage; no feature key gates them.' },
+  body: jsonObject,
+  handler: async ({ request, authz, params, body }) => {
+  const gate = authz
+  const { id } = (await params) as { id: string }
+  if (!isUuid(id)) return notFound('item price schedule', id)
   const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
-  if (!isUuid(requestId)) return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
-  const parsedBody = await parseJsonBody(request, jsonObject)
-  if (!parsedBody.ok) return parsedBody.response
-  const parsed = parseSchedule(parsedBody.data as Record<string, unknown>)
+  if (!isUuid(requestId)) return unprocessable('invalid_idempotency_key', { status: 400 })
+  const parsed = parseSchedule(body as Record<string, unknown>)
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
   try {
     const match = {
@@ -206,10 +209,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: String(row.id), action: 'insert', changes: { before: null, after: { ...match, id: requestId, org_id: gate.user.orgId } }, actorId: gate.user.id, requestId }, tx)
       return { kind: 'created' as const }
     })
-    if (outcome.kind === 'replay' && outcome.result === 'conflict') return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
-    return NextResponse.json({ id: requestId }, { status: outcome.kind === 'created' ? 201 : 200 })
+    if (outcome.kind === 'replay' && outcome.result === 'conflict') return conflict('invalid_idempotency_key')
+    if (outcome.kind === 'created') return created({ id: requestId })
+    return NextResponse.json({ id: requestId })
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof ScopeNotFoundError) return notFound('item price schedule')
     const code = (error as { code?: string }).code
     const message = error instanceof Error ? error.message : 'Pricing schedule could not be saved'
     if (code === '23P01' || message === 'An active pricing schedule already covers that scope and date range') {
@@ -219,8 +223,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: message }, { status: 409 })
     }
     return NextResponse.json({ error: message }, { status: code === '23P01' ? 409 : 400 })
-  }
-}
+    }
+  },
+})
 
 interface LockedSchedule extends Record<string, unknown> {
   id: string
