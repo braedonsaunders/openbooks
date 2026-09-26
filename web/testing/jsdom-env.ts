@@ -20,6 +20,10 @@ export async function bootJsdomEnvironment(
   );
   const globals = globalThis as Record<string, unknown>;
   const domWindow = dom.window as unknown as Record<string, unknown>;
+  // Union of the browser globals the suite's inline bootstraps copied: event
+  // constructors and element classes components reference at render (for
+  // example `CSS.escape` in selector helpers), each installed only when the
+  // test has not already provided its own.
   for (const key of [
     "window",
     "document",
@@ -27,10 +31,15 @@ export async function bootJsdomEnvironment(
     "Node",
     "Element",
     "HTMLElement",
+    "HTMLButtonElement",
+    "HTMLInputElement",
+    "HTMLSelectElement",
     "Event",
     "MouseEvent",
     "KeyboardEvent",
+    "FocusEvent",
     "CustomEvent",
+    "CSS",
     "self",
     "getComputedStyle",
   ]) {
