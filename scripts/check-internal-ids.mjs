@@ -38,16 +38,17 @@
  * - SEC-NN collides with secondary-book/section fixture shorthand
  *   (SEC-1), and RLS/DSAR prose is row-level-security / subject-access
  *   product vocabulary; only numbered RLS-/DSAR- findings are refused.
- * - web/ is covered by its own change and schema/migrations/generated is
- *   digest-pinned with its own transition mechanism, so neither root is
- *   scanned here.
+ * - web/ is covered by its own change and is not scanned here.
+ *   schema/migrations/generated IS scanned: published files change only
+ *   through the digest-transition ledger, so new wording there must arrive
+ *   with its restamp entry.
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 
 const BASELINE = 'scripts/internal-ids-baseline.json'
 const SELF = 'scripts/check-internal-ids.mjs'
-const ROOTS = ['engine/', 'schema/src', 'scripts/', 'packages/', 'docs/', 'CHANGELOG.md']
+const ROOTS = ['engine/', 'schema/src', 'scripts/', 'packages/', 'docs/', 'CHANGELOG.md', 'schema/migrations/generated']
 
 // Finding/ticket id families. Case-sensitive where product vocabulary would
 // otherwise collide (CI run, THR_EARN, SEC-1 fixtures).

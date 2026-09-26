@@ -347,8 +347,8 @@ CREATE INDEX IF NOT EXISTS crew_time_batch_events_batch
 -- purpose: grouped with the time_clock_events link they referenced
 -- worker_clock_pins, crew_time_batches and crew_time_batch_lines roughly a
 -- hundred lines before those tables exist, so bootstrap failed on a fresh
--- database with "relation public.worker_clock_pins does not exist". The
--- shard could not run a migration, so the first real execution found it.
+-- database with "relation public.worker_clock_pins does not exist". No
+-- migration run exercised this path, so the first real execution found it.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'worker_clock_pins_employee_party_id_fkey') THEN

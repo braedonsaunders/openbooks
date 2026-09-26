@@ -1,6 +1,6 @@
 -- OpenBooks forward migration 0409_payroll_occupation_class.
 --
--- I6-payroll-257: New Brunswick ESA s. 21(2) caps a route salesperson's
+-- New Brunswick ESA s. 21(2) caps a route salesperson's
 -- unworked-holiday pay, so the engine must know who IS one — and
 -- employee_roles.job_title is free text, not a statutory class. This column
 -- is the generic capture: one nullable class per employment, validated

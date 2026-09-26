@@ -960,7 +960,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0265_filing_currency_and_ship_to_snapshot.sql",
     from: "84fe8ca15877116d6f7cb221907a13c2163a1f38f13019afa85962ec80912498",
-    to: "863fb22fc97911ed8ef81a8a0808277a8069c4039b96838de94a7c8001639944",
+    to: "164e2ec9c9082c13b8877a2509605ba6316244cf88d7c3292cc1687b10f3fb82",
     strategy: "reapply",
     reason:
       "corrective revision 97609eae appends the documents ship-to "
@@ -975,7 +975,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0265_filing_currency_and_ship_to_snapshot.sql",
     from: "ae246367720744529f44d87887e154b7f2c28b92bcb3f3fdc6ac0d4d6f76de65",
-    to: "863fb22fc97911ed8ef81a8a0808277a8069c4039b96838de94a7c8001639944",
+    to: "164e2ec9c9082c13b8877a2509605ba6316244cf88d7c3292cc1687b10f3fb82",
     strategy: "reapply",
     reason:
       "corrective revision UPG-0265 (upgrade rehearsal R1): the functional_currency "
@@ -1200,7 +1200,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0334_tenant_isolation_and_posting_guards.sql",
     from: "08c69798a164afcace78fbf2b18bc196f983de7ab0d8599f62a7b8d94c99a30f",
-    to: "85e22004dcc3ea50eb5225e683c7e39de5335a65d7c004f02c4e4c0a3b55e7b7",
+    to: "36e1b42c33d508b9bf49008d75b04b07ca928ead9a520cb619e4f0c3eb8e5552",
     strategy: "restamp",
     reason:
       "comment-only header correction on an unpublished migration: the 0334 "
@@ -1214,7 +1214,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "c573c6091ee2be62e196c409db619bce6c693ef954602a84ad4261bf80d20599",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    to: "45c86c21964d3eda408afa55dee0921fe13f29b2191372d491c636cb4bab368e",
     strategy: "reapply",
     reason:
       "the published G9 revision (4be4bada) corrected the inactive-account "
@@ -1228,7 +1228,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "2063e23ba8f1d68b1dc6d59e610c17247a094ae23f0d3ab361530990cfdc8d91",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    to: "45c86c21964d3eda408afa55dee0921fe13f29b2191372d491c636cb4bab368e",
     strategy: "reapply",
     reason:
       "the published G8 revision (d0e4e0b7) added posted-document INSERT "
@@ -1240,7 +1240,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "b3738d09a836ba824febc892bac3a081cb162b9a4fafe1561edbc28a17f9a1f0",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    to: "45c86c21964d3eda408afa55dee0921fe13f29b2191372d491c636cb4bab368e",
     strategy: "reapply",
     reason:
       "unshipped 0338 migration grows by section: the G4-only body gains "
@@ -1256,7 +1256,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "3d46141b8540f29d28d1905acad92a0d3478c6b0b7297e85e2b3654783a3ffab",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    to: "45c86c21964d3eda408afa55dee0921fe13f29b2191372d491c636cb4bab368e",
     strategy: "reapply",
     reason:
       "same growth as the entry above, for databases that applied the "
@@ -1269,7 +1269,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "8a941cc3890f3159392c37dd7c94848d2fa3b7b60df9bf7684cc075fa6fa50d4",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    to: "45c86c21964d3eda408afa55dee0921fe13f29b2191372d491c636cb4bab368e",
     strategy: "reapply",
     reason:
       "same growth as the entries above, for databases that applied the "
@@ -1282,7 +1282,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "d91d0842bd8c0741eddb06ec4e16969bc216a79f0b2fc7fa3cb5a1a85aa2024e",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    to: "45c86c21964d3eda408afa55dee0921fe13f29b2191372d491c636cb4bab368e",
     strategy: "reapply",
     reason:
       "same growth as the entries above, for databases at the published "
@@ -1295,7 +1295,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "65ec1f847284c54e4ff51d8cfad926a89cfdeecc94c467d2ae83f1c9d8f1bd31",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    to: "45c86c21964d3eda408afa55dee0921fe13f29b2191372d491c636cb4bab368e",
     strategy: "reapply",
     reason:
       "same growth as the entries above, for databases at the merged "
@@ -1307,7 +1307,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "05bc89024bb2d2a614e14b7fb564d505600c7a026a648c7acac59af23b17aa6c",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    to: "45c86c21964d3eda408afa55dee0921fe13f29b2191372d491c636cb4bab368e",
     strategy: "reapply",
     reason:
       "same growth as the entries above, for databases at the branch "
@@ -1319,7 +1319,7 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
   {
     filename: "generated/0338_posting_guards_and_summary_heals.sql",
     from: "1c2ea84ecdd366d6cb9deef2067de17114e2451ba80f7edc5b210f5b4f8c3d05",
-    to: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    to: "45c86c21964d3eda408afa55dee0921fe13f29b2191372d491c636cb4bab368e",
     strategy: "reapply",
     reason:
       "same growth as the entries above, for databases at the branch "
@@ -1401,5 +1401,193 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "database recorded at the old digest holds the identical catalog and "
       + "data — only the digest moves. Restamp, not reapply: replaying the "
       + "idempotent body would rebuild identical constraints for no effect.",
+  },
+  {
+    filename: "generated/0150_applications_org_line_indexes.sql",
+    from: "3cfbdf8513040495847195eb6d8f2e2305de92e9a081d4eb6be908f45997ce12",
+    to: "48cdacf0c5e2055dcfbd93723910f954046525042500a738ec322e690761ca0c",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the header pointed at a workgroup ledger instead "
+      + "of the engine worker notes it meant. No statement changed, so a "
+      + "database recorded at the old digest holds the identical catalog and "
+      + "data — only the digest moves. Restamp, not reapply.",
+  },
+  {
+    filename: "generated/0152_ai_conversation_memory.sql",
+    from: "92a7d19515a9d645ebe423cea1e23f4fa46a2eaa42f8a13d9929179d7c70c1cd",
+    to: "815b53eba707645c2d11b2ce1bdc7b303429fd57587e01048f62f5a622de4928",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the header and the metadata catalog comment "
+      + "named the workgroup that wrote the migration. The catalog comment "
+      + "text is descriptive only — no constraint, default, or row depends "
+      + "on it — so a database recorded at the old digest holds identical "
+      + "enforced state and only the digest moves. Restamp, not reapply.",
+  },
+  {
+    filename: "generated/0166_journal_reversal_evidence_guard.sql",
+    from: "f82ea3067e74fdbdfbe1bb2a05729766fa8de2e7da69aa5c76693ee3857bec64",
+    to: "337c05dbb0d7918455c052bceac54272137308b6ccaf1955be7c5aa581f68c58",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: a branch-marker note named the workgroup and a "
+      + "tracking reference instead of the regression and the owning check. "
+      + "No statement changed, so a database recorded at the old digest "
+      + "holds the identical catalog and data — only the digest moves. "
+      + "Restamp, not reapply.",
+  },
+  {
+    filename: "generated/0231_field_time_capture.sql",
+    from: "43bc828e3e7e6506fffb9c8958a82fd4c271e4293b5419333efa153ce3318bd6",
+    to: "fe94bd13355d690a8e5370104256a2faab9bd41e2c5b151d43fbf6bd18269859",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the foreign-key grouping note named the "
+      + "workgroup instead of the product fact (no migration run exercised "
+      + "the path). No statement changed, so a database recorded at the old "
+      + "digest holds the identical catalog and data — only the digest "
+      + "moves. Restamp, not reapply.",
+  },
+  {
+    filename: "generated/0265_filing_currency_and_ship_to_snapshot.sql",
+    from: "863fb22fc97911ed8ef81a8a0808277a8069c4039b96838de94a7c8001639944",
+    to: "164e2ec9c9082c13b8877a2509605ba6316244cf88d7c3292cc1687b10f3fb82",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: two ship-to snapshot notes named the workgroup "
+      + "instead of the one-ordinal product fact. No statement changed, so a "
+      + "database recorded at the old digest holds the identical catalog and "
+      + "data — only the digest moves. Restamp, not reapply.",
+  },
+  {
+    filename: "generated/0298_item_rate_version_profile_pins.sql",
+    from: "a158db23a2e23e9aada51d8d2fa4ad2d1688343cda87b2506171ad5a5bf90e9a",
+    to: "ed29b32ed40f8b29e63c077a77e143e8726530780241eb509e76b0c00e64db9c",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the CHECK-scope note named the workgroup and "
+      + "its ordinal instead of the review and the owning migration. No "
+      + "statement changed, so a database recorded at the old digest holds "
+      + "the identical catalog and data — only the digest moves. Restamp, "
+      + "not reapply.",
+  },
+  {
+    filename: "generated/0334_tenant_isolation_and_posting_guards.sql",
+    from: "85e22004dcc3ea50eb5225e683c7e39de5335a65d7c004f02c4e4c0a3b55e7b7",
+    to: "36e1b42c33d508b9bf49008d75b04b07ca928ead9a520cb619e4f0c3eb8e5552",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the header named the audit workstream instead of "
+      + "the tenant-isolation audit it documents. No statement changed, so a "
+      + "database recorded at the old digest holds the identical catalog and "
+      + "data — only the digest moves. Restamp, not reapply.",
+  },
+  {
+    filename: "generated/0338_posting_guards_and_summary_heals.sql",
+    from: "6dea34018b40dc9f2f3095000c3e8cc80f50b5239525b457c25944145c254f8c",
+    to: "45c86c21964d3eda408afa55dee0921fe13f29b2191372d491c636cb4bab368e",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the header named the audit workstream instead of "
+      + "the tenant-isolation audit it documents. No statement changed, so a "
+      + "database recorded at the old digest holds the identical catalog and "
+      + "data — only the digest moves. Restamp, not reapply.",
+  },
+  {
+    filename: "generated/0339_depreciation_schedule_convention.sql",
+    from: "6c5283ee1836dbc5f511e408607f3f2a1fb5653f69013e54243cb95c1d4219f0",
+    to: "fb4ebc22ebe0095f0fbf5a6818af0d91b5030832bc56f47d7cea8e4dd4c5afb9",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the header named the audit workstream instead of "
+      + "the fixed-asset audit finding it documents (kept as the traceable "
+      + "reference). No statement changed, so a database recorded at the old "
+      + "digest holds the identical catalog and data — only the digest "
+      + "moves. Restamp, not reapply.",
+  },
+  {
+    filename: "generated/0393_it_addizionali_opening_balances.sql",
+    from: "faee970ed3ee4aaea16aa9ab241ac960f2ed94ce61151ab20d0bab5d843e23c2",
+    to: "b19cdbdeff703279a814f105c9956eb19179a6223b608a5ac45527bdb48d8463",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the header and the assessed-saldo catalog "
+      + "comment named the payroll work item instead of the carry-in they "
+      + "document. The catalog comment text is descriptive only — no "
+      + "constraint, default, or row depends on it — so a database recorded "
+      + "at the old digest holds identical enforced state and only the "
+      + "digest moves. Restamp, not reapply.",
+  },
+  {
+    filename: "generated/0399_rls_bypass_role_predicate.sql",
+    from: "c334192117fc5dda9254933896163b5f8900c307be355f8f3286b349c8124103",
+    to: "9cd4d9713da2e70e3f45854cb6c182192a1980e0290c921045e6d0da96566e7f",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the escalation note named the role-bypass work "
+      + "stream instead of the earlier role-bypass work it meant. No "
+      + "statement changed, so a database recorded at the old digest holds "
+      + "the identical catalog and data — only the digest moves. Restamp, "
+      + "not reapply.",
+  },
+  {
+    filename: "generated/0401_clone_authority_role_bypass.sql",
+    from: "1a1e5ce032adcd7292c5b8de6694308a05ac6321099aef0d867a725fadbbc7ca",
+    to: "493512b3fe66d23eeac33e9df1479a558fe47f3d78d6ba7a8c89fb646c1ceb5a",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the header named the role-bypass work stream "
+      + "beside the migration number, which already identifies the change. "
+      + "No statement changed, so a database recorded at the old digest "
+      + "holds the identical catalog and data — only the digest moves. "
+      + "Restamp, not reapply.",
+  },
+  {
+    filename: "generated/0403_payroll_opening_sui_wages.sql",
+    from: "fc8dddcc7d2104366ef1bfcfb73fb0026f88846913bad55c8d24779fc5f48510",
+    to: "d6dc48db1941e76b9be439ac73cc35ae9b955a0cf2c08bbcd737461f86f03e0f",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the header named the implementation work item "
+      + "instead of the state-scoped carry-in problem it documents. No "
+      + "statement changed, so a database recorded at the old digest holds "
+      + "the identical catalog and data — only the digest moves. Restamp, "
+      + "not reapply.",
+  },
+  {
+    filename: "generated/0409_payroll_occupation_class.sql",
+    from: "e812b759fbaa4756fccb403738a38b9b4f645fc23291e8f966200616eb2b276c",
+    to: "f12954770eab633934f64fafadc21950b2afe56e40b69955a72e6e019d927ead",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the header named the payroll work item beside "
+      + "the statute it transcribes, which already identifies the change. No "
+      + "statement changed, so a database recorded at the old digest holds "
+      + "the identical catalog and data — only the digest moves. Restamp, "
+      + "not reapply.",
+  },
+  {
+    filename: "generated/0412_payroll_union_dues_opening_ytd.sql",
+    from: "fc92f2359e6d2469d9804a41470d93f92bf170a0de6ca8fe86b61d4247551f51",
+    to: "ee3c69a40edbe7b492e202f815bd936a5e1ee21ce2eb600337cab2130ff1520c",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the view note named the payroll work item "
+      + "beside the current-main fact it documents. No statement changed, so "
+      + "a database recorded at the old digest holds the identical catalog "
+      + "and data — only the digest moves. Restamp, not reapply.",
+  },
+  {
+    filename: "generated/0413_ns_remembrance_alternate_day_bank.sql",
+    from: "6166142c427a536f739ac8551addbdcda267ad5a556d9e80127b641adaced7b2",
+    to: "4d4e66846db45cc398b960bb9d55e911816fd6f9c90b34f5e808c4a6140b63d3",
+    strategy: "restamp",
+    reason:
+      "comment-only cleanup: the header named the payroll work item beside "
+      + "the Remembrance Day Act it transcribes, which already identifies "
+      + "the change. No statement changed, so a database recorded at the old "
+      + "digest holds the identical catalog and data — only the digest "
+      + "moves. Restamp, not reapply.",
   },
 ];

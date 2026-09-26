@@ -3,7 +3,7 @@
 -- RELEASE BLOCKER RLS-GUC-ESCALATION: about 840 policy expressions trusted the
 -- raw app.bypass_rls GUC inline
 -- (current_setting('app.bypass_rls'::text, true) = 'on'::text). The
--- ARCH-RLS-ROLE work moved the app server to a dedicated BYPASSRLS role, but
+-- The earlier role-bypass work moved the app server to a dedicated BYPASSRLS role, but
 -- the policies never moved with it — so any SET on the runtime pool (SQL
 -- injection, the sql.execute console, any code path issuing SET) escalated
 -- across tenants. A runtime-role SET app.bypass_rls='on' exposed every org's

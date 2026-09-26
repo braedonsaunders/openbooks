@@ -21,9 +21,9 @@
 --
 -- Branch markers (-- Branch: <name>) are load-bearing: the journal-status
 -- guard suite pins every branch by name so no future rewrite can silently
--- drop one (the fleet lost the tenant lookup once). The draft -> posted
--- block is byte-identical to 0146; f2/0168 owns the source-module recheck
--- inside it.
+-- drop one (a past regression dropped the tenant lookup once). The draft
+-- -> posted block is byte-identical to 0146; the source-module recheck
+-- lives inside it.
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;

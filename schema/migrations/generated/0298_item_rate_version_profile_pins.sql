@@ -29,10 +29,10 @@
 -- PRC10 note: no adjustment-target CHECK change ships here. The target-type
 -- CHECK admits 'labor' and 'material' since the baseline (verified at
 -- 0001_baseline.sql:10477 and against the live constraint), which is the
--- only CHECK the adjustments shard reported needing — and it is already
+-- only CHECK the adjustments review reported needing — and it is already
 -- satisfied, so a restating migration would enforce nothing new. (The
 -- price-schedule revision token for the schedule-versioning fence lives with
--- that shard's own ordinal, not here.)
+-- that area's own migration, not here.)
 
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;

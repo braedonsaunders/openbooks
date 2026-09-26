@@ -1,6 +1,6 @@
 -- OpenBooks forward migration 0393_it_addizionali_opening_balances.
 --
--- I6-payroll-50 remainder: the regional/municipal addizionali saldo for year
+-- The regional/municipal addizionali saldo for year
 -- N-1 is withheld in installments during year N, but no adapter channel
 -- carries the assessed balances. The December conguaglio stamps the assessed
 -- annuals as CONG_ADDREG_ANNUAL / CONG_ADDCOM_ANNUAL stub factors, so a year
@@ -88,7 +88,7 @@ CREATE POLICY org_isolation ON public.it_addizionali_opening_balances
   );
 
 COMMENT ON TABLE public.it_addizionali_opening_balances IS
-  'IT addizionali assessed-saldo carry-in (0393, I6-payroll-50): the prior-year regional/municipal assessment per (org, employee, tax year) that the year''s saldo installments withhold. Row presence is the declaration — an explicit zero records a worker with no prior-year Italian employment. Written by the carry-in save under the employee tax-year fence; read with the December settlement factors.';
+  'IT addizionali assessed-saldo carry-in (0393): the prior-year regional/municipal assessment per (org, employee, tax year) that the year''s saldo installments withhold. Row presence is the declaration — an explicit zero records a worker with no prior-year Italian employment. Written by the carry-in save under the employee tax-year fence; read with the December settlement factors.';
 COMMENT ON COLUMN public.it_addizionali_opening_balances.regionale_saldo IS
   'Prior-year addizionale regionale assessment to withhold in this year''s installments (D.Lgs. 446/1997 art. 50: up to 11 ratei), copied from the prior provider''s final report or the year N-1 CU. Never negative: a negative assessment is a sign-flipped export, not history.';
 COMMENT ON COLUMN public.it_addizionali_opening_balances.comunale_saldo IS

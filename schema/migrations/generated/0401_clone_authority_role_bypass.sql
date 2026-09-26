@@ -1,6 +1,6 @@
 -- OpenBooks forward migration 0401_clone_authority_role_bypass.
 --
--- Migration 0376 (ARCH-RLS-ROLE) replaced GUC bypass with role bypass: the
+-- Migration 0376 replaced GUC bypass with role bypass: the
 -- application role can no longer assert the legacy bypass GUC, and
 -- maintenance work crosses tenants through a dedicated BYPASSRLS login
 -- instead. That migration did not update openbooks_clone_authority(), whose
