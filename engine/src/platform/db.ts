@@ -48,7 +48,11 @@ const bypassDatabaseUrl = env.OPENBOOKS_BYPASS_DB_URL?.trim()
 // still refuses here, and any bypass use without a bypass pool still refuses
 // by name at use time.
 const isInstaller = env.OPENBOOKS_BOOTSTRAP === "1";
-if (env.NODE_ENV === "production" && !bypassDatabaseUrl && !isInstaller) {
+// `next build` runs with NODE_ENV=production while it imports route modules to
+// collect page data, with no deployment credentials present (the container
+// image build). The refusal belongs to starting a server, not to building one.
+const isNextBuild = process.env.NEXT_PHASE === "phase-production-build";
+if (env.NODE_ENV === "production" && !bypassDatabaseUrl && !isInstaller && !isNextBuild) {
   throw new Error("[database-security] refusing production startup: OPENBOOKS_BYPASS_DB_URL must name the dedicated BYPASSRLS login");
 }
 function requireBypassDatabaseUrl(): string {
