@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import type { z } from "zod";
 import { apiErrorResponse } from "./error-response";
 import { parseJsonBody } from "./json";
-import { notFound } from "./responses";
+import { notFound, postingRefusal } from "./responses";
 
 /**
  * The one factory for API routes (`docs/design/api-routes.md`).
@@ -201,6 +201,11 @@ export function defineRoute(options: LooseOptions) {
         body: body as never,
       });
     } catch (error) {
+      // Status-less engine refusals map first; anything unrecognized keeps
+      // the unknown-error path below (rethrow: the edge request id lands in
+      // the server log, never the body).
+      const refusal = postingRefusal(error);
+      if (refusal) return refusal;
       if (!isTypedRefusal(error)) throw error;
       return apiErrorResponse(error, { request, details: refusalDetails(error) });
     }

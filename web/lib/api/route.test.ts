@@ -3,6 +3,8 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
+import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 
 const stateKey = Symbol.for("openbooks.route-factory-test");
 const state: { permission: "allow" | "deny401" | "deny403"; feature: "on" | "off"; scope: "allow" | "deny"; session: boolean; calls: string[] }
@@ -23,24 +25,23 @@ const mockSources = new Map<string, string>([
     }
     export function guardUnrestrictedScope() {
       state.calls.push('scope');
-      if (state.scope === 'deny') return NextResponse.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 });
-      return null;
+      return state.scope === 'deny' ? NextResponse.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 }) : null;
     }
     export async function guardRootSubsidiaryScope() {
       state.calls.push('scope');
-      if (state.scope === 'deny') return NextResponse.json({ error: 'not_found' }, { status: 404 });
-      return null;
+      return state.scope === 'deny' ? NextResponse.json({ error: 'not_found' }, { status: 404 }) : null;
     }
   `],
   ["mock:feature-gates", `
     const state = globalThis[Symbol.for('openbooks.route-factory-test')];
     const NextResponse = globalThis.openbooksRouteFactoryNextResponse;
-    export async function guardFeaturePermission(permission) {
-      const gate = await (await import('mock:authz')).guardPermission(permission);
-      if (gate instanceof NextResponse) return gate;
+    const gate = () => ({ user: { orgId: 'org-1', id: 'user-1' }, permissions: new Set(), allowedSubsidiaryIds: null });
+    export async function guardFeaturePermission() {
+      state.calls.push('permission');
+      if (state.permission !== 'allow') return NextResponse.json({ error: state.permission }, { status: state.permission === 'deny401' ? 401 : 403 });
       state.calls.push('feature');
       if (state.feature === 'off') return NextResponse.json({ error: 'not found' }, { status: 404 });
-      return gate;
+      return gate();
     }
   `],
 ]);
@@ -49,7 +50,6 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "@/lib/authz") return { shortCircuit: true, url: "mock:authz" };
     if (specifier === "@/lib/feature-gates") return { shortCircuit: true, url: "mock:feature-gates" };
-    if (specifier === "mock:authz") return { shortCircuit: true, url: "mock:authz" };
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -63,9 +63,7 @@ const { defineRoute } = await import("./route.ts");
 // Hooks stay registered for the factory's per-request gate import.
 
 class NamedRefusal extends Error {
-  status = 422;
-  code = "name_required";
-  remedy = "Send a name.";
+  status = 422; code = "name_required"; remedy = "Send a name.";
   constructor() { super("name_required"); this.name = "NamedRefusal"; }
 }
 
@@ -195,6 +193,21 @@ test("typed refusals become 4xx carrying code and remedy", async () => {
     code: "name_required",
     remedy: "Send a name.",
   });
+});
+
+test("engine refusals escaping handlers answer 422, conflicts 409", async () => {
+  reset();
+  const refused = defineRoute({ permission: "x", feature: { none: "test surface" }, handler: async () => { throw new PayrollError("No open pay run"); } });
+  const bad = await refused(get());
+  assert.equal(bad.status, 422);
+  assert.deepEqual(await bad.json(), { error: "No open pay run", code: "payroll_refused" });
+  const conflicted = defineRoute({ permission: "x", feature: { none: "test surface" }, handler: async () => { throw new PaymentRevisionConflictError(); } });
+  const conflict = await conflicted(get());
+  assert.equal(conflict.status, 409);
+  assert.deepEqual(await conflict.json(), { error: "this payment changed after you opened it; reload and review the latest revision", code: "payment_refused" });
+  const original = new Error("boom");
+  const throwing = defineRoute({ permission: "x", feature: { none: "test surface" }, handler: async () => { throw original; } });
+  await assert.rejects(() => throwing(get()), (cause) => cause === original);
 });
 
 test("unknown errors rethrow instead of becoming a response", async () => {
