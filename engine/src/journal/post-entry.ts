@@ -83,9 +83,9 @@ export interface PostEntryInput {
   /** Default currency for lines that omit one. */
   currency?: string | null;
   /**
-   * Exactly-once identity: stamped into custom and, under the organization
-   * posting lock, an entry already carrying it is returned instead of
-   * posting a duplicate.
+   * Exactly-once identity: stamped into custom and arbitrated by the partial
+   * unique index journal_entries_org_idempotency_key — an entry already
+   * carrying it is returned instead of posting a duplicate.
    */
   idempotencyKey?: string;
   /** Close modules to check besides the always-implied GL module. */
@@ -166,31 +166,30 @@ export async function postEntry(
     throw error;
   }
 
-  // Serialize idempotent postings at the organization aggregate root: the
-  // idempotency read below is check-then-insert with no unique index behind
-  // it, so two identical keys racing without this lock both read empty and
-  // post twice. Entry numbers need no such lock — nextFreeEntryNumber takes
-  // a fine-grained per-candidate lock precisely so other posts are not
-  // serialized — and every other guard here reads shared state, so ordinary
-  // postings take no organization lock at all. Holding it for every posting
-  // serializes unrelated periods onto one row and deadlocks concurrent
-  // multi-post flows (two first-use consolidations abort with 40P01 instead
-  // of converging on exactly one acquisition).
+  // Idempotent postings converge on the partial unique index
+  // journal_entries_org_idempotency_key (org_id, custom->>'idempotencyKey')
+  // instead of an organization row lock: the friendly read below returns an
+  // already-posted entry without touching the write path, and a key that
+  // races past the read loses the keyed insert below and reads back the
+  // winner. Entry numbers need no lock here either — allocation takes
+  // fine-grained per-candidate advisory locks (records/entry-number.ts),
+  // and every other guard here reads shared state — so unrelated posts stay
+  // parallel instead of serializing onto one row (which deadlocked
+  // concurrent multi-post flows with 40P01).
+  const entryLines = async (entryId: string): Promise<PostEntryResult["lines"]> => {
+    const rows = (await executor.execute<{ id: string; line_number: number }>(sql`
+      select id, line_number from journal_lines
+       where org_id = ${orgId} and entry_id = ${entryId}
+       order by line_number`)).rows;
+    return rows.map((row) => ({ id: row.id, lineNumber: row.line_number }));
+  };
   if (input.idempotencyKey) {
-    await executor.execute(sql`select id from orgs where id = ${orgId} for update`);
     const prior = (await executor.execute<{ id: string }>(sql`
       select id from journal_entries
        where org_id = ${orgId} and custom->>'idempotencyKey' = ${input.idempotencyKey}
        limit 1`)).rows[0];
     if (prior) {
-      const priorLines = (await executor.execute<{ id: string; line_number: number }>(sql`
-        select id, line_number from journal_lines
-         where org_id = ${orgId} and entry_id = ${prior.id}
-         order by line_number`)).rows;
-      return {
-        entryId: prior.id,
-        lines: priorLines.map((row) => ({ id: row.id, lineNumber: row.line_number })),
-      };
+      return { entryId: prior.id, lines: await entryLines(prior.id) };
     }
   }
 
@@ -307,6 +306,19 @@ export async function postEntry(
     input.idempotencyKey || input.custom
       ? { ...(input.custom ?? {}), ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}) }
       : null;
+  // With an idempotencyKey the entry insert is ON CONFLICT DO NOTHING on
+  // the partial (org_id, custom->>'idempotencyKey') index and a conflicting
+  // retry reads back the winner's entry. The DO NOTHING is load-bearing
+  // dedupe, not a dropped write: a conflict is only possible when this
+  // exact key already committed, and the follow-up read makes that entry
+  // the returned effect — every conflict is therefore observed, never
+  // swallowed. This also works on pool executors, where a savepoint-based
+  // 23505 handler cannot run (SAVEPOINT is refused outside a transaction
+  // block) and a bare 23505 catch would leave a joined caller transaction
+  // aborted.
+  const keyConflict = input.idempotencyKey
+    ? sql`on conflict (org_id, (custom->>'idempotencyKey')) where custom ? 'idempotencyKey' do nothing`
+    : sql``;
   const inserted = (await executor.execute<{ id: string }>(
     input.id
       ? sql`insert into journal_entries
@@ -317,7 +329,7 @@ export async function postEntry(
                 ${input.origin}, ${input.reversesEntryId ?? null}, ${input.sourceDocumentId ?? null},
                 ${custom === null ? "{}" : JSON.stringify(custom)}::jsonb,
                 ${input.actorId ?? null}, ${input.actorId ?? null})
-        returning id`
+        ${keyConflict} returning id`
       : sql`insert into journal_entries
           (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status,
            origin, reverses_entry_id, source_document_id, custom, created_by, updated_by)
@@ -326,11 +338,23 @@ export async function postEntry(
                 ${input.origin}, ${input.reversesEntryId ?? null}, ${input.sourceDocumentId ?? null},
                 ${custom === null ? "{}" : JSON.stringify(custom)}::jsonb,
                 ${input.actorId ?? null}, ${input.actorId ?? null})
-        returning id`,
+        ${keyConflict} returning id`,
   )).rows[0];
-  if (!inserted)
+  if (!inserted && !input.idempotencyKey)
     fail(`journal entry ${input.entryNumber} was not created`);
-  const entryId = inserted!.id;
+  if (!inserted) {
+    // A concurrent identical key won the race: return its entry rather
+    // than a second posting. The conflict above is the proof the entry
+    // exists — a zero-row read here is a failure, not a success.
+    const raced = (await executor.execute<{ id: string }>(sql`
+      select id from journal_entries
+       where org_id = ${orgId} and custom->>'idempotencyKey' = ${input.idempotencyKey}
+       limit 1`)).rows[0];
+    if (!raced)
+      fail(`journal entry ${input.entryNumber} collided on its idempotency key but the winning entry is not visible — retry the posting`);
+    return { entryId: raced.id, lines: await entryLines(raced.id) };
+  }
+  const entryId = inserted.id;
 
   // All lines of the entry in ONE multi-row INSERT statement.
   const tuples = lines.map(
