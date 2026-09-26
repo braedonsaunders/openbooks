@@ -377,6 +377,24 @@ test('type creation replays only the exact request for an idempotency key', asyn
   assert.deepEqual(await changed.json(), { error: 'invalid_idempotency_key' })
 })
 
+test('type create never echoes undecodable request bytes in a boundary refusal', async () => {
+  reset()
+  const probe = 'sanitizer-probe-7f3a-undecodable-payload'
+  const response = await POST(
+    new Request('http://openbooks.test/api/records/types', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'Idempotency-Key': '00000000-0000-4000-8000-00000000b020',
+      },
+      body: `{"name": "${probe}", "fields": [`,
+    }),
+  )
+  assert.equal(response.status, 400)
+  const text = await response.text()
+  assert.ok(!text.includes(probe), 'the 400 body must carry the fixed refusal, not the raw payload')
+})
+
 test('type create refuses a key colliding with another org without disclosing it', async () => {
   reset()
   const key = '00000000-0000-4000-8000-00000000b014'

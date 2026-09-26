@@ -344,20 +344,36 @@ test("reads", async () => {
 // A one-off check of a single file must agree with scanTree about that file.
 // A repo-relative path used to resolve against the process cwd, so the same
 // exposed file reported zero findings from any other directory — a silent
-// false clean that was once presented as proof the file was scoped.
+// false clean that was once presented as proof the file was scoped. Proved
+// against a synthetic tree, never against live-repo state: indexing the
+// (possibly empty) exposure baseline here would couple this test to whichever
+// files happen to be tracked.
 test("a repo-relative path is scanned from the repo, not the process cwd", () => {
-  const exposed = [...BASELINE_EXPOSED.keys()][0];
-  const fromRoot = scanFile(exposed);
-  assert.ok(fromRoot.length > 0, `${exposed} is in the baseline but scanned clean`);
-  const cwd = process.cwd();
-  process.chdir(tmpdir());
+  const root = tree({
+    "web/lib/rel.integration.test.ts": `import test from "node:test";
+const { reader } = await import("./reader.ts");
+test("setup", async () => {
+  const org = await createScratchOrg();
+  await reader();
+});
+`,
+  });
   try {
-    assert.deepEqual(
-      scanFile(exposed).map((finding) => `${finding.line}:${finding.call}`),
-      fromRoot.map((finding) => `${finding.line}:${finding.call}`),
-    );
+    const relative = "web/lib/rel.integration.test.ts";
+    const fromRoot = scanFile(join(root, relative), root);
+    assert.ok(fromRoot.length > 0, "the synthetic file must scan exposed");
+    const cwd = process.cwd();
+    process.chdir(tmpdir());
+    try {
+      assert.deepEqual(
+        scanFile(relative, root).map((finding) => `${finding.line}:${finding.call}`),
+        fromRoot.map((finding) => `${finding.line}:${finding.call}`),
+      );
+    } finally {
+      process.chdir(cwd);
+    }
   } finally {
-    process.chdir(cwd);
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

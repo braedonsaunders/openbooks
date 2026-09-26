@@ -11,8 +11,10 @@ const stateKey = Symbol.for('openbooks.view-export-authz-route-test')
 interface RouteState {
   granted: Set<string>
   ran: boolean
+  /** When set, the view executor throws this message instead of returning rows. */
+  explode: string | null
 }
-const state: RouteState = { granted: new Set(), ran: false }
+const state: RouteState = { granted: new Set(), ran: false, explode: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 const VIEW_ID = '00000000-0000-4000-8000-00000000c001'
@@ -56,6 +58,7 @@ const mockSources = new Map<string, string>([
         }
       }
       export async function runView() {
+        if (state.explode) throw new Error(state.explode)
         state.ran = true
         return { groups: [], rowCount: 0 }
       }
@@ -102,4 +105,21 @@ test('view export refuses a payroll plan when the caller lacks payroll.read', as
   assert.equal(response.status, 404)
   assert.deepEqual(await response.json(), { error: 'not found' })
   assert.equal(state.ran, false, 'the executor must not run after the entity gate refuses')
+})
+
+test('view export generalizes an executor failure instead of echoing it', async () => {
+  state.granted = new Set(['*'])
+  state.ran = false
+  const probe = 'sanitizer-probe-4d8b-missing-relation'
+  state.explode = `relation "report_rows" does not exist (${probe})`
+
+  const response = await GET(
+    new Request(`http://openbooks.test/api/views/${VIEW_ID}/export?format=csv`),
+    { params: Promise.resolve({ id: VIEW_ID }) },
+  )
+  state.explode = null
+
+  assert.equal(response.status, 500)
+  const body = await response.text()
+  assert.ok(!body.includes(probe), 'the 500 body must carry a request id, not the executor error text')
 })
