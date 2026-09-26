@@ -1053,6 +1053,9 @@ type OccurrenceEventRow = {
 };
 
 /** Open the scripts feature gate and seed one active scheduled script due now. */
+// The seed runs on a yearly grid so exactly one tick is ever due: with a
+// short cadence, a boundary falling inside the minute before "now" would
+// legitimately make a second tick due and double every count below.
 async function seedDueScheduledScript(orgId: string, source: string): Promise<string> {
   const scriptId = randomUUID();
   await db.execute(sql`
@@ -1063,7 +1066,7 @@ async function seedDueScheduledScript(orgId: string, source: string): Promise<st
   await db.execute(sql`
     insert into user_scripts (id, org_id, name, trigger_point, source, cron, next_run_at, timeout_ms, is_active)
     values (${scriptId}, ${orgId}, ${`Scratch cron ${scriptId.slice(0, 8)}`}, 'scheduled', ${source},
-            '*/5 * * * *', ${new Date(Date.now() - 60_000)}, 2000, true)
+            '0 0 1 1 *', ${new Date(Date.now() - 60_000)}, 2000, true)
   `);
   return scriptId;
 }
@@ -1122,7 +1125,7 @@ async function runDueScriptsInline(): Promise<void> {
 test("a malformed legacy scheduled script is durably quarantined and runs after repair", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   const invalidCron = "definitely not a cron expression";
-  const validCron = "*/5 * * * *";
+  const validCron = "0 0 1 1 *";
   try {
     const scriptId = await seedDueScheduledScript(
       org.orgId,
