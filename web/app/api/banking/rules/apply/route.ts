@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
@@ -28,8 +29,8 @@ export async function POST(req: Request) {
     )
     return NextResponse.json(result)
   } catch (e) {
-    if (e instanceof PostingError) return NextResponse.json({ error: e.message }, { status: 422 })
-    if (e instanceof JournalPostingDeniedError) return NextResponse.json({ error: e.message }, { status: 403 })
+    if (e instanceof PostingError) return apiErrorResponse(e, { safeStatus: 422 })
+    if (e instanceof JournalPostingDeniedError) return apiErrorResponse(e)
     return bankingErrorResponse(e)
   }
 }

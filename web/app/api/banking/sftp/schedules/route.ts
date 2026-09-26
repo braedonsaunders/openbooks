@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -13,6 +14,18 @@ import { randomUUID } from 'node:crypto'
 import { findSftpWatchFolderOverlap, normalizeSftpWatchFolder, sftpWatchFolderOverlapRefusal } from '@openbooks/engine/src/sftp/watch-folders.ts'
 
 export const runtime = 'nodejs'
+
+/**
+ * The watch-folder validator throws a plain Error, so the sanitizer cannot
+ * type-refuse it: carry its operator-actionable message in a named 400.
+ */
+class SftpScheduleRefusal extends Error {
+  readonly status = 400
+  constructor(message: string) {
+    super(message)
+    this.name = 'SftpScheduleRefusal'
+  }
+}
 const FORMATS = new Set(['auto', 'ofx', 'csv', 'camt053', 'bai2', 'mt940'])
 const requestId = (req: Request) => req.headers.get('x-request-id')?.trim() || randomUUID()
 
@@ -102,7 +115,7 @@ export async function POST(req: Request) {
   try {
     folder = normalizeSftpWatchFolder(String(body.folder ?? 'inbound').trim() || 'inbound')
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 400 })
+    return apiErrorResponse(new SftpScheduleRefusal(error instanceof Error ? error.message : String(error)))
   }
   // The one external account identifier this schedule accepts. Stored
   // canonical (whitespace-blind, case-blind) so the import comparison
