@@ -10,13 +10,12 @@ import { LOCALE_CODES as LOCALES } from "../i18n/config"
  * as its own raw path on the page — `inbox.filters.all` instead of "All".
  * That shipped in v0.1.0-alpha.22. inbox.json was present in all seven
  * locales with every key correctly translated, and no index imported it, so
- * the unified inbox rendered raw key paths in production. The index carries a
- * comment telling authors to add the import to every locale, which is exactly
- * the shape that fails: a hand-maintained list can only OMIT, and an omission
- * is silent.
- * So derive it. The filesystem is the source of truth for which namespaces
- * exist; the indexes must agree with it, and with each other.
+ * the unified inbox rendered raw key paths in production: a hand-maintained
+ * list can only OMIT, and an omission is silent. So the indexes are generated
+ * from the English directory. The filesystem is the source of truth for which
+ * namespaces exist; the indexes must agree with it, and with each other.
  */
+const REGENERATE = 'run node scripts/generate-locale-indexes.mjs'
 
 const MESSAGES = join(process.cwd(), 'web', 'messages')
 
@@ -40,13 +39,13 @@ test('every locale catalog file is imported by its index', () => {
     assert.deepEqual(
       unimported,
       [],
-      `${locale}: these catalogs exist but no index imports them, so every key in them renders as a raw path: ${unimported.join(', ')}`,
+      `${locale}: these catalogs exist but no index imports them, so every key in them renders as a raw path (${REGENERATE}): ${unimported.join(', ')}`,
     )
     const missingFile = imported.filter((name) => !present.includes(name))
     assert.deepEqual(
       missingFile,
       [],
-      `${locale}: the index imports catalogs that do not exist: ${missingFile.join(', ')}`,
+      `${locale}: the index imports catalogs that do not exist (${REGENERATE}): ${missingFile.join(', ')}`,
     )
   }
 })
@@ -74,7 +73,7 @@ test('the registered namespace set is identical across locales', () => {
     assert.deepEqual(
       importedBy(locale),
       reference,
-      `${locale}'s index registers a different namespace set than English`,
+      `${locale}'s index registers a different namespace set than English (${REGENERATE})`,
     )
   }
 })

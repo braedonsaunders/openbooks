@@ -15,8 +15,5 @@
     "@openbooks/emails": "*",
     "bullmq": "^5.80.2",
     "ioredis": "^5.11.1"
-  },
-  "devDependencies": {
-    "typescript": "^7.0.2"
   }
 }

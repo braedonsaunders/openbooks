@@ -50,7 +50,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const requireFromRoot = createRequire(new URL("../package.json", import.meta.url));
-const ts = requireFromRoot("typescript-eslint-typescript");
+const ts = requireFromRoot("typescript");
 
 const SELF_PATH = "scripts/check-civil-date-arithmetic.mjs";
 export const ALLOWLIST_PATH = "scripts/check-civil-date-arithmetic.allowlist.json";

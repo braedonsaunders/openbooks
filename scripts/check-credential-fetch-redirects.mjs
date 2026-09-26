@@ -41,11 +41,10 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 
-// The repository pins its own parser: devDependency alias
-// typescript-eslint-typescript -> npm:typescript@6.0.3 (the classic JS
-// compiler API). No dependency is added beyond what package.json already pins.
+// The repository's own TypeScript (the root devDependency) supplies the
+// compiler API. No dependency is added beyond what package.json already pins.
 const requireFromRoot = createRequire(new URL("../package.json", import.meta.url));
-const ts = requireFromRoot("typescript-eslint-typescript");
+const ts = requireFromRoot("typescript");
 
 const SELF_PATH = "scripts/check-credential-fetch-redirects.mjs";
 

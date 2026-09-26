@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const requireFromRoot = createRequire(new URL('../package.json', import.meta.url));
-const ts = requireFromRoot('typescript-eslint-typescript');
+const ts = requireFromRoot('typescript');
 const FILES = [
   'web/app/(app)/admin/backups/BackupManager.tsx',
   'web/app/(app)/admin/page-layouts/LayoutDrawer.tsx',

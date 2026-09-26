@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const requireFromRoot = createRequire(new URL('../package.json', import.meta.url));
-const ts = requireFromRoot('typescript-eslint-typescript');
+const ts = requireFromRoot('typescript');
 const FILES = [
   'web/app/(app)/settings/security/sections.tsx',
   'web/app/(app)/settings/security/security-panel.tsx',
