@@ -26,7 +26,7 @@ test('the admin persona follows manage grants, not role names', () => {
 })
 
 test('admin-rail tiles resolve through the persona', () => {
-  const admin = fakeAuthz(['admin.setup.manage'])
+  const admin = fakeAuthz(['admin.setup.manage', 'payroll.manage', 'flows.manage', 'hrm.employment.read'])
   const plain = fakeAuthz(['gl.read'])
   for (const id of ['admin-attention', 'workflow-errors', 'admin-calendar']) {
     assert.equal(canSeeWidget(admin, id), true, `${id} shows for the admin persona`)
