@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -89,10 +90,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           : existing.recipient_emails,
       )
     } catch (err) {
-      return NextResponse.json(
-        { error: err instanceof Error ? err.message : 'Invalid schedule' },
-        { status: 422 },
-      )
+      return apiErrorResponse(err, { safeStatus: 422 })
     }
     const active = body.active !== undefined ? body.active : existing.active
     if (active && recipients.length === 0) {

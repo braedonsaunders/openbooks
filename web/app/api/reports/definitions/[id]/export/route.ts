@@ -1,8 +1,10 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardReportEntity } from '../../../../../../lib/report-authz'
+import { ReportCurrencyBasisError } from '@/lib/reports/currency-basis'
 import { loadReportDefinition } from '../../../../../../lib/custom-reports'
 import { resolveDefinitionToExportData, streamDefinitionExport } from '../../../../../../lib/report-run'
 import { REPORT_ENTITY_MAP } from '@openbooks/reports'
@@ -78,7 +80,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       if (out.format === 'csv') return csvResponse(out.csv, filename)
       return xlsxResponse(out.xlsx, filename)
     } catch (err) {
-      return NextResponse.json({ error: err instanceof Error ? err.message : 'Report run failed' }, { status: 422 })
+      if (err instanceof ReportCurrencyBasisError) return apiErrorResponse(err, { safeStatus: 422 })
+      return apiErrorResponse(err)
     }
   }
 
@@ -86,7 +89,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   try {
     data = await resolveDefinitionToExportData(user.orgId, id, url.searchParams, { orgId: user.orgId, t, period, query: q })
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Report run failed' }, { status: 422 })
+    if (err instanceof ReportCurrencyBasisError) return apiErrorResponse(err, { safeStatus: 422 })
+    return apiErrorResponse(err)
   }
 
   if (format === 'csv') {

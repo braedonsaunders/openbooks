@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { validateOrgReportQuery } from '@/lib/custom-record-report-catalog'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { isDocumentRevisionToken } from '../../../../../lib/api/registry-data'
@@ -100,10 +101,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (denied) return denied
       queryJson = JSON.stringify(query)
     } catch (err) {
-      return NextResponse.json(
-        { error: err instanceof Error ? err.message : 'Invalid report query' },
-        { status: 422 },
-      )
+      return apiErrorResponse(err, { safeStatus: 422 })
     }
   }
 

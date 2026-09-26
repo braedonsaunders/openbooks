@@ -25,23 +25,36 @@ const MAX_MEASURES = 8
 const MAX_SORT_LEVELS = 3
 const MAX_LABEL_LEN = 80
 
+/**
+ * A custom report query the sanitizer can type-refuse: every message below
+ * is operator-actionable validation feedback (bad entity, column, operator,
+ * filter shape) carrying no internals, so routes answer it at 422 intact
+ * while unexpected faults sanitize to a generic 500.
+ */
+export class ReportQueryValidationError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ReportQueryValidationError'
+  }
+}
+
 export function validateCustomQuery(
   raw: unknown,
   entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP,
 ): ReportCustomQuery {
   if (!raw || typeof raw !== 'object') {
-    throw new Error('Custom query is required')
+    throw new ReportQueryValidationError('Custom query is required')
   }
   const q = raw as Record<string, unknown>
   if (Object.prototype.hasOwnProperty.call(q, 'sort')) {
-    throw new Error('Report queries use the ordered "sorts" array')
+    throw new ReportQueryValidationError('Report queries use the ordered "sorts" array')
   }
   const entity = String(q.entity ?? '')
   const entityMeta = Object.prototype.hasOwnProperty.call(entityMap, entity)
     ? entityMap[entity] ?? null
     : null
   if (!entityMeta) {
-    throw new Error(`Invalid entity: ${entity}`)
+    throw new ReportQueryValidationError(`Invalid entity: ${entity}`)
   }
   const validColumn = (c: unknown): c is string =>
     typeof c === 'string' && entityColumn(entityMeta, c) !== null
@@ -86,7 +99,7 @@ export function validateCustomQuery(
     : []
 
   if (mode === 'rows' && columns.length === 0) {
-    throw new Error('Pick at least one column to include')
+    throw new ReportQueryValidationError('Pick at least one column to include')
   }
   // Summarize is always valid: with no measures the query defaults to a count
   // (and with no breakouts that count is a single grand total).
@@ -131,14 +144,14 @@ export function validateCustomQuery(
   // Canonical nested filter tree.
   let ruleCount = 0
   function sanitizeGroup(g: unknown, depth: number): ReportRuleGroup {
-    if (!g || typeof g !== 'object') throw new Error('Invalid filter group')
-    if (depth > MAX_DEPTH) throw new Error('Filter tree is too deep')
+    if (!g || typeof g !== 'object') throw new ReportQueryValidationError('Invalid filter group')
+    if (depth > MAX_DEPTH) throw new ReportQueryValidationError('Filter tree is too deep')
     const o = g as Record<string, unknown>
-    if (!Array.isArray(o.rules)) throw new Error('Invalid filter group rules')
+    if (!Array.isArray(o.rules)) throw new ReportQueryValidationError('Invalid filter group rules')
     const rules: (ReportRule | ReportRuleGroup)[] = []
     for (const r of o.rules) {
-      if (!r || typeof r !== 'object') throw new Error('Invalid filter rule')
-      if (++ruleCount > MAX_RULES) throw new Error('Too many filter rules')
+      if (!r || typeof r !== 'object') throw new ReportQueryValidationError('Invalid filter rule')
+      if (++ruleCount > MAX_RULES) throw new ReportQueryValidationError('Too many filter rules')
       const ro = r as Record<string, unknown>
       if (Array.isArray(ro.rules)) {
         const sub = sanitizeGroup(ro, depth + 1)
@@ -147,9 +160,9 @@ export function validateCustomQuery(
       }
       const field = ro.field
       const op = String(ro.op ?? ro.operator ?? '')
-      if (!validColumn(field)) throw new Error(`Invalid filter field: ${String(field ?? '')}`)
+      if (!validColumn(field)) throw new ReportQueryValidationError(`Invalid filter field: ${String(field ?? '')}`)
       if (!REPORT_FILTER_OPERATORS.includes(op as never)) {
-        throw new Error(`Invalid filter operator: ${op}`)
+        throw new ReportQueryValidationError(`Invalid filter operator: ${op}`)
       }
       // An empty-valued rule would compile to nothing and run unfiltered on
       // that leg (or invert the remainder under NOT), while the studio keeps
@@ -162,7 +175,7 @@ export function validateCustomQuery(
       const rawValue = ro.value
       if (op === 'in' || op === 'not_in') {
         if (!Array.isArray(rawValue) || rawValue.length === 0) {
-          throw new Error(`Filter rule for '${String(field)}' (${op}) requires at least one value`)
+          throw new ReportQueryValidationError(`Filter rule for '${String(field)}' (${op}) requires at least one value`)
         }
         // A mixed-type array would narrow silently downstream (non-matching
         // kinds are dropped from the list), so the report would filter on a
@@ -170,24 +183,24 @@ export function validateCustomQuery(
         // operator name: one array, one scalar kind.
         const kinds = new Set(rawValue.map((v) => (typeof v === 'string' ? 'text' : typeof v === 'number' ? 'number' : 'other')))
         if (kinds.size !== 1 || kinds.has('other')) {
-          throw new Error(`Filter rule for '${String(field)}' (${op}) requires values of one type (all text or all numbers)`)
+          throw new ReportQueryValidationError(`Filter rule for '${String(field)}' (${op}) requires values of one type (all text or all numbers)`)
         }
       } else if (op === 'between_days_ago' || op === 'due_within_days') {
         if (rawValue === '') {
-          throw new Error(`Filter rule for '${String(field)}' (${op}) requires a number of days`)
+          throw new ReportQueryValidationError(`Filter rule for '${String(field)}' (${op}) requires a number of days`)
         }
         if (rawValue !== null && rawValue !== undefined && !Number.isFinite(Number(rawValue))) {
-          throw new Error(`Filter rule for '${String(field)}' (${op}) requires a number of days`)
+          throw new ReportQueryValidationError(`Filter rule for '${String(field)}' (${op}) requires a number of days`)
         }
       } else if (op === 'period_preset') {
         if (typeof rawValue !== 'string' || !rawValue) {
-          throw new Error(`Filter rule for '${String(field)}' (${op}) requires a period preset`)
+          throw new ReportQueryValidationError(`Filter rule for '${String(field)}' (${op}) requires a period preset`)
         }
       } else if (
         op === 'eq' || op === 'neq' || op === 'gte' || op === 'lte' || op === 'contains'
       ) {
         if (rawValue === null || rawValue === undefined || rawValue === '') {
-          throw new Error(`Filter rule for '${String(field)}' (${op}) requires a value`)
+          throw new ReportQueryValidationError(`Filter rule for '${String(field)}' (${op}) requires a value`)
         }
       }
       rules.push({ field, op: op as ReportRule['op'], value: sanitizeValue(ro.value) })
