@@ -1536,6 +1536,15 @@ export interface PayrollRemembranceAlternateDayRule {
   businessClassFactKey: string;
   /** Business-class values exempt from granting. */
   exemptBusinessClasses: readonly string[];
+  /**
+   * Employment jurisdictions whose statute grants this alternate day, as
+   * jurisdiction keys (e.g. "CA-NS"). The generic seed provisions the bank
+   * wherever the pack declares the grant, but the bank accrues only under
+   * these jurisdictions — readiness names it only for employees whose
+   * resolved labour jurisdiction is in scope. A second jurisdiction's grant
+   * extends this list; it is never a branch in the generic layer.
+   */
+  jurisdictions: readonly string[];
   citation: string;
 }
 

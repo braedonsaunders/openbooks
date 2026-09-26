@@ -148,7 +148,7 @@ async function seedBanks(): Promise<BankFixture> {
 
 async function seedEmployee(
   fx: { orgId: string; actorId: string; scheduleId: string; subsidiaryId: string },
-  options: { name: string; hiredOn?: string; terminatedOn?: string },
+  options: { name: string; hiredOn?: string; terminatedOn?: string; province?: string },
 ): Promise<{ employeeId: string; employmentId: string }> {
   const employeeId = randomUUID();
   await db.execute(sql`
@@ -171,7 +171,7 @@ async function seedEmployee(
                                            province, pay_basis, country, federal_claim_code,
                                            provincial_claim_code, vacation_percent, vacation_method,
                                            is_active, created_by, updated_by)
-    values (${fx.orgId}, ${employeeId}, ${employmentId}, ${fx.scheduleId}, 'ON', 'hourly', 'CA', 1, 1,
+    values (${fx.orgId}, ${employeeId}, ${employmentId}, ${fx.scheduleId}, ${options.province ?? "ON"}, 'hourly', 'CA', 1, 1,
             '4', 'accrue', true, ${fx.actorId}, ${fx.actorId})`);
   return { employeeId, employmentId };
 }
@@ -557,6 +557,9 @@ test(
   { skip: !DB },
   async () => {
     const fx = await seedBanks();
+    // A second hire under the declaring jurisdiction: Nova Scotia employment
+    // can accrue the alternate-day bank, Ontario employment never can.
+    const nancy = await seedEmployee(fx, { name: "Nancy Nova", province: "NS" });
     try {
       const documentId = await seedRun(fx);
 
@@ -570,29 +573,39 @@ test(
       // wrong, and now is the only cheap moment to say so.
       await saveOpeningBalances({
         orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
-        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000" } }],
+        rows: [
+          { employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000" } },
+          { employeePartyId: nancy.employeeId, amounts: { pensionableYtd: "84000" } },
+        ],
       });
       const warned = bankItem(await payRunReadiness(fx.orgId, documentId));
       assert.equal(warned.length, 4, `one per plan, got ${warned.map((w) => w.detail).join(", ")}`);
       for (const item of warned) {
         assert.equal(item.severity, "warning", "never a blocker — zero can be correct");
-        assert.deepEqual(item.employees.map((e) => e.name), [fx.employeeName]);
         assert.equal(item.href, "/payroll/opening-balances?section=entitlements");
       }
-      assert.deepEqual(
-        warned.map((w) => w.detail).sort(),
-        ["Banked overtime", "Benefit recoup", "Statutory alternate day", "Vacation"],
-      );
+      const warnedByPlan = new Map(warned.map((w) => [w.detail, w.employees.map((e) => e.name).sort()]));
+      const both = [fx.employeeName, "Nancy Nova"].sort();
+      assert.deepEqual(warnedByPlan.get("Vacation"), both);
+      assert.deepEqual(warnedByPlan.get("Banked overtime"), both);
+      assert.deepEqual(warnedByPlan.get("Benefit recoup"), both);
+      // The alternate-day bank accrues only under the declaring jurisdiction
+      // (CA-NS): the Ontario hire is never asked for a balance no run could grant.
+      assert.deepEqual(warnedByPlan.get("Statutory alternate day"), ["Nancy Nova"]);
 
       // Loading the carry-in settles that plan, and only that plan.
       await saveEntitlementOpenings({
         orgId: fx.orgId, actorId: fx.actorId, movementDate: "2026-07-01",
-        rows: [{ employeePartyId: fx.employeeId, amounts: { VAC: "6200" } }],
+        rows: [
+          { employeePartyId: fx.employeeId, amounts: { VAC: "6200" } },
+          { employeePartyId: nancy.employeeId, amounts: { VAC: "6200" } },
+        ],
       });
-      assert.deepEqual(
-        bankItem(await payRunReadiness(fx.orgId, documentId)).map((w) => w.detail).sort(),
-        ["Banked overtime", "Benefit recoup", "Statutory alternate day"],
-      );
+      const settledByPlan = new Map(bankItem(await payRunReadiness(fx.orgId, documentId)).map((w) => [w.detail, w.employees.map((e) => e.name).sort()]));
+      assert.equal(settledByPlan.has("Vacation"), false);
+      assert.deepEqual(settledByPlan.get("Banked overtime"), both);
+      assert.deepEqual(settledByPlan.get("Benefit recoup"), both);
+      assert.deepEqual(settledByPlan.get("Statutory alternate day"), ["Nancy Nova"]);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -624,7 +637,7 @@ test(
 
       assert.deepEqual(
         bankItem(await payRunReadiness(fx.orgId, documentId)).map((w) => w.detail).sort(),
-        ["Banked overtime", "Benefit recoup", "Statutory alternate day"],
+        ["Banked overtime", "Benefit recoup"],
         "only the plan a committed run has moved goes quiet",
       );
     } finally {
