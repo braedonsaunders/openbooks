@@ -49,7 +49,7 @@ function splitQuery(query: unknown): { text: string; values: unknown[] } {
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (
-      specifier === "../platform/db.ts" &&
+      specifier === "../../engine/src/platform/db.ts" &&
       context.parentURL?.endsWith("/field-ticket-import.ts")
     ) {
       return {

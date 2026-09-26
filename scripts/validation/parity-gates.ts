@@ -1,4 +1,4 @@
-import { fromUnits, toUnits } from "../money/money.ts";
+import { fromUnits, toUnits } from "../../engine/src/money/money.ts";
 
 /**
  * Empty-population rule for the project parity certificate.

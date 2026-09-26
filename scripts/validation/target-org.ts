@@ -11,29 +11,14 @@
  * the harness announces what it is about to touch before it touches it.
  */
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db } from "../../engine/src/platform/db.ts";
+import { retry } from "./retry.ts";
 
 export interface TargetOrg {
   id: string;
   name: string;
   envKind: string;
   isProduction: boolean;
-}
-
-async function retry<T>(fn: () => Promise<T>, n = 8): Promise<T> {
-  let last: unknown;
-  for (let i = 0; i < n; i++) {
-    try { return await fn(); } catch (e) {
-      last = e;
-      const chain: string[] = [];
-      for (let c: unknown = e; c; c = (c as { cause?: unknown })?.cause) {
-        chain.push(String((c as { message?: unknown })?.message ?? ""));
-      }
-      if (!/timeout|terminated|ECONN|ETIMEDOUT|EHOSTUNREACH|Connection/i.test(chain.join(" "))) throw e;
-      await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
-    }
-  }
-  throw last;
 }
 
 /**

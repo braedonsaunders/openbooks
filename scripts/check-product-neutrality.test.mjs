@@ -83,15 +83,6 @@ test('catalog cognate pins may quote connector-namespace keys', () => {
   assert.equal(isConnectorPath('web/messages/catalog-parity.test.ts'), true)
 })
 
-test('review-tenant fixtures may seed functional connector-branch rows', () => {
-  // scripts/review-tenant-fixtures.sql seeds connections/sync_runs rows keyed
-  // on the stable source keys the /sync UI and engine branch on (the same
-  // reason engine/src/sync and the 0045/0109 migrations hold connector scope):
-  // display copy stays vendor-neutral, only the functional keys name a system.
-  assert.equal(isConnectorPath('scripts/review-tenant-fixtures.sql'), true)
-  assert.deepEqual(auditPublicSnapshot(['scripts/review-tenant-fixtures.sql']), [])
-})
-
 test('the perf-1m seeder may seed functional connector-branch rows', () => {
   // scripts/upgrade-rehearsal/seeders/perf-1m.ts writes qbd_requests hanging
   // off a qbd connection (the stable source key the connector reads): display

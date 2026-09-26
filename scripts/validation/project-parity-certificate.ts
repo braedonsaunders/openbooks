@@ -12,7 +12,7 @@
  * Customer data is written outside the repository by default.
  *
  * Usage:
- *   npx tsx --conditions=react-server src/validation/project-parity-certificate.ts \
+ *   npx tsx --conditions=react-server scripts/validation/project-parity-certificate.ts \
  *     --org=<uuid> --allow-differences
  *
  * Optional:
@@ -40,18 +40,19 @@ import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "../platform/db.ts";
-import { isUuid } from "../platform/uuid.ts";
-import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
+import { db, withOrgContext } from "../../engine/src/platform/db.ts";
+import { isUuid } from "../../engine/src/platform/uuid.ts";
+import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../../engine/src/money/money.ts";
 import {
   emptyPopulationGate,
   evaluateCrewGate,
   isEmptyCrewPopulation,
   isEmptyPopulation,
 } from "./parity-gates.ts";
-import { sourceClient } from "../sync/source-client.ts";
-import { resolveProjectFinancials } from "../projects/financials.ts";
-import { loadProjectType } from "../projects/type.ts";
+import { sourceClient } from "../../engine/src/sync/source-client.ts";
+import { resolveProjectFinancials } from "../../engine/src/projects/financials.ts";
+import { loadProjectType } from "../../engine/src/projects/type.ts";
+import { retry } from "./retry.ts";
 
 type JsonRow = Record<string, unknown>;
 
@@ -288,48 +289,6 @@ function duplicateKeys(
     seen.add(value);
   }
   return duplicate;
-}
-
-async function retry<T>(fn: () => Promise<T>, attempts = 7): Promise<T> {
-  let last: unknown;
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    try {
-      return await fn();
-    } catch (error) {
-      last = error;
-      const messages: string[] = [];
-      const codes: string[] = [];
-      const seen = new Set<unknown>();
-      let current: unknown = error;
-      while (current && !seen.has(current)) {
-        seen.add(current);
-        messages.push(
-          current instanceof Error ? current.message : String(current),
-        );
-        if (
-          typeof current === "object" &&
-          "code" in current &&
-          typeof (current as { code?: unknown }).code === "string"
-        ) {
-          codes.push((current as { code: string }).code);
-        }
-        current =
-          typeof current === "object" && "cause" in current
-            ? (current as { cause?: unknown }).cause
-            : null;
-      }
-      if (
-        !codes.some((code) => ["40P01", "40001"].includes(code)) &&
-        !/timeout|terminated|ECONN|ETIMEDOUT|EHOSTUNREACH|Connection/i.test(
-          messages.join("\n"),
-        )
-      ) {
-        throw error;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
-    }
-  }
-  throw last;
 }
 
 async function mapConcurrent<T, R>(

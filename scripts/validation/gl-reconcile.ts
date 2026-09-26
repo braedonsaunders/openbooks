@@ -10,7 +10,7 @@
  * project detail by design) from the transaction-level detail after it. Mixing
  * those two eras is what makes a healthy tenant look catastrophic.
  *
- * Usage: npx tsx --conditions=react-server src/validation/gl-reconcile.ts [--org=UUID] [--since=YYYY-MM-DD] [--allow-empty]
+ * Usage: npx tsx --conditions=react-server scripts/validation/gl-reconcile.ts [--org=UUID] [--since=YYYY-MM-DD] [--allow-empty]
  *
  * --since may fall anywhere in a period: both sides filter on the actual
  * transaction date (source t.trandate against OpenBooks posting/document
@@ -32,8 +32,9 @@
  * --allow-empty explicitly accepts the empty population.
  */
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
-import { sourceClient } from "../sync/source-client.ts";
+import { db } from "../../engine/src/platform/db.ts";
+import { sourceClient } from "../../engine/src/sync/source-client.ts";
+import { retry } from "./retry.ts";
 import {
   alignMoneyBuckets,
   compareCountBucket,
@@ -49,7 +50,7 @@ import {
   sourcePlQuery,
   verdictsDiffer,
   type BucketVerdict,
-} from "../sync/gl-reconcile-source-queries.ts";
+} from "../../engine/src/sync/gl-reconcile-source-queries.ts";
 
 const ORG = process.argv.find((a) => a.startsWith("--org="))?.split("=")[1]
   ?? process.env.RECONCILE_ORG ?? (process.env.PROD_ORG ?? (() => { throw new Error("PROD_ORG is required"); })());
@@ -82,22 +83,6 @@ interface JobTotals extends Record<string, unknown> {
   cost: string;
   overhead: string;
   projects: number;
-}
-
-async function retry<T>(fn: () => Promise<T>, n = 8): Promise<T> {
-  let last: unknown;
-  for (let i = 0; i < n; i++) {
-    try { return await fn(); } catch (e) {
-      last = e;
-      const chain: string[] = [];
-      for (let c: unknown = e; c; c = (c as { cause?: unknown })?.cause) {
-        chain.push(String((c as { message?: unknown })?.message ?? ""));
-      }
-      if (!/timeout|terminated|ECONN|ETIMEDOUT|EHOSTUNREACH|Connection/i.test(chain.join(" "))) throw e;
-      await new Promise((r) => setTimeout(r, 2000 * (i + 1)));
-    }
-  }
-  throw last;
 }
 
 const verdicts: BucketVerdict[] = [];

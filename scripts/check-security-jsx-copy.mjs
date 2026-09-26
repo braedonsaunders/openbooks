@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Keep viewer-facing security-page copy in the locale catalogs. */
+/** Keep viewer-facing copy on the audited security and admin surfaces in the locale catalogs. */
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -10,6 +10,9 @@ const ts = requireFromRoot('typescript');
 const FILES = [
   'web/app/(app)/settings/security/sections.tsx',
   'web/app/(app)/settings/security/security-panel.tsx',
+  'web/app/(app)/admin/backups/BackupManager.tsx',
+  'web/app/(app)/admin/page-layouts/LayoutDrawer.tsx',
+  'web/app/(app)/admin/sandboxes/SandboxManager.tsx',
 ];
 
 export function findLiteralCopy(source, path = '<source>') {
@@ -37,12 +40,12 @@ export function main() {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');
   const findings = FILES.flatMap((path) => findLiteralCopy(readFileSync(join(root, path), 'utf8'), path));
   if (findings.length) {
-    console.error('FAIL: security-page viewer copy must come from the locale catalogs:');
+    console.error('FAIL: audited viewer copy must come from the locale catalogs:');
     for (const finding of findings) console.error(`  ${finding.path}:${finding.line}: ${finding.text}`);
     process.exitCode = 1;
     return;
   }
-  console.log(`PASS: no literal JSX copy in ${FILES.length} security-page files.`);
+  console.log(`PASS: no literal JSX copy in ${FILES.length} audited security and admin files.`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

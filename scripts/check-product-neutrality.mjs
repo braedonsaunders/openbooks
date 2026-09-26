@@ -105,7 +105,6 @@ const connectorPaths = [
   /^engine\/src\/worker\/migration-worker\.ts$/,
   /^engine\/src\/harness\/differential\//,
   /^integrations\//,
-  /^scripts\/verify-financial-release\.ts$/,
   /^schema\/src\/(?:extension|qbd)\.ts$/,
   /^schema\/migrations\/generated\/0045_canonical_customer_parties\.sql$/,
   /^schema\/migrations\/generated\/0109_schema_convergence_and_legacy_evidence\.sql$/,
@@ -119,12 +118,6 @@ const connectorPaths = [
   // NEW migrations must still be vendor-neutral — this list may only be
   // extended for one that has already been applied somewhere.
   /^schema\/migrations\/generated\/0246_soft_close_posting_fence\.sql$/,
-  // Review-tenant fixtures seed functional connector-branch rows: the stable
-  // source keys the /sync UI and engine branch on (the engine/src/sync entry
-  // above, and the 0045/0109 migration precedent for functional seeds).
-  // Display copy in the fixture stays vendor-neutral; only the functional
-  // keys may name a system.
-  /^scripts\/review-tenant-fixtures\.sql$/,
   // The perf-1m rehearsal seeder writes functional connector-branch rows:
   // its qbd_requests hang off a qbd connection, the stable source key the
   // connector reads. Display copy in the seeder stays vendor-neutral; only

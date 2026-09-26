@@ -16,20 +16,21 @@
  * date/hour values. Exact line attachment is a separate source-identity
  * reconciliation (`link-field-ticket-time-by-source.ts`).
  *
- * Usage: npx tsx src/validation/import-field-tickets.ts
+ * Usage: npx tsx scripts/validation/import-field-tickets.ts
  *   --org=<uuid> --headers=/path/headers.tsv --rows=/path/rows.tsv
  *   --source-system=<stable connector id>
  *   [--out=/path/report.json] [--apply --production]
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db } from "../../engine/src/platform/db.ts";
 import {
   assertImportOrgId,
   importFieldTickets,
   parseTicketTsv,
 } from "./field-ticket-import.ts";
 import { resolveTargetOrg } from "./target-org.ts";
+import { retry } from "./retry.ts";
 
 const args = new Map(
   process.argv
@@ -56,22 +57,6 @@ if (!SOURCE_SYSTEM || !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(SOURCE_SYSTEM)) {
 }
 if (!existsSync(HEADERS) || !existsSync(ROWS)) {
   throw new Error("--headers and --rows source artifacts are required");
-}
-
-async function retry<T>(fn: () => Promise<T>, attempts = 8): Promise<T> {
-  let last: unknown;
-  for (let i = 0; i < attempts; i++) {
-    try { return await fn(); } catch (e) {
-      last = e;
-      const chain: string[] = [];
-      for (let c: unknown = e; c; c = (c as { cause?: unknown })?.cause) {
-        chain.push(String((c as { message?: unknown })?.message ?? ""));
-      }
-      if (!/timeout|terminated|ECONN|ETIMEDOUT|EHOSTUNREACH|Connection/i.test(chain.join(" "))) throw e;
-      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
-    }
-  }
-  throw last;
 }
 
 interface Row { ticketId: string; empRef: string; itemRef: string; hours: { day: number; kind: string; h: number }[] }

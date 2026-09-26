@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync(
-  "engine/src/validation/project-parity-certificate.ts",
+  "scripts/validation/project-parity-certificate.ts",
   "utf8",
 );
 
@@ -40,7 +40,6 @@ test("project financial certification is effective-dated and penny exact", () =>
   assert.match(source, /source\.grossProfit == null/);
   assert.match(source, /source\.couldBeInvoiced != null/);
   assert.match(source, /source\.overhead != null/);
-  assert.match(source, /\["40P01", "40001"\]\.includes\(code\)/);
   assert.match(
     source,
     /const \{ projectType, financials \} = await retry\(async \(\) =>/,
