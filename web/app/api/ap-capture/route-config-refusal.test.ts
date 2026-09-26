@@ -93,7 +93,7 @@ test("a misconfigured endpoint surfaces its own message, never not-configured", 
 
     const response = await POST(postRequest());
 
-    assert.equal(response.status, 500);
+    assert.equal(response.status, 422);
     const body = (await response.json()) as { error?: string };
     assert.equal(body.error, "Document provider endpoint must use HTTPS");
   } finally {
