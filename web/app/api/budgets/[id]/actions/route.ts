@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "../../../../../lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -429,7 +430,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
     return NextResponse.json(result)
   } catch (error) {
-    if (error instanceof BudgetMutationError) return NextResponse.json({ error: error.message }, { status: error.status })
+    if (error instanceof BudgetMutationError) return apiErrorResponse(error)
     // A line deleted between the pre-check and the status flip still trips
     // the scenario-guard trigger: translate its raise to the same typed
     // refusal instead of a 500.

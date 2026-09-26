@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -118,7 +119,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
     return NextResponse.json(result)
   } catch (error) {
-    if (error instanceof BudgetMutationError) return NextResponse.json({ error: error.message }, { status: error.status })
+    if (error instanceof BudgetMutationError) return apiErrorResponse(error)
     const message = error instanceof Error ? `${error.message} ${String(((error)).cause ?? '')}` : String(error)
     if (message.includes('budget_scenarios_identity')) {
       return NextResponse.json({ error: 'scenario_name_already_exists' }, { status: 409 })
@@ -155,7 +156,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     })
     return NextResponse.json({ ok: true })
   } catch (error) {
-    if (error instanceof BudgetMutationError) return NextResponse.json({ error: error.message }, { status: error.status })
+    if (error instanceof BudgetMutationError) return apiErrorResponse(error)
     throw error
   }
 }
