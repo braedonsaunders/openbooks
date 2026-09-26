@@ -58,6 +58,8 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "hrm_employment_change_requests", domain: "change_requests", linkage: "direct" },
   { table: "hrm_leave_requests", domain: "leave", linkage: "direct" },
   { table: "hrm_absences", domain: "leave", linkage: "direct" },
+  { table: "entitlement_ledger", domain: "leave", linkage: "direct" },
+  { table: "entitlement_plan_limits", domain: "leave", linkage: "direct" },
   { table: "time_entries", domain: "time", linkage: "direct" },
   { table: "hrm_reviews", domain: "reviews", linkage: "direct" },
   { table: "hrm_review_answers", domain: "reviews", linkage: "transitive" },
@@ -72,6 +74,7 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "hrm_benefit_enrollments", domain: "benefits", linkage: "direct" },
   { table: "hrm_benefit_dependents", domain: "benefits", linkage: "direct" },
   { table: "hrm_documents", domain: "documents", linkage: "direct" },
+  { table: "hrm_document_signers", domain: "documents", linkage: "direct" },
   { table: "pay_stubs", domain: "payroll", linkage: "direct" },
   { table: "pay_stub_lines", domain: "payroll", linkage: "transitive" },
   { table: "hrm_allowance_payroll_inputs", domain: "payroll", linkage: "direct" },
@@ -123,29 +126,10 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   // SUBJECT DATA — gatherer pending. Each note names the subject link and
   // the required gatherer; these are tracked gaps, not silent omissions.
   {
-    table: "hrm_document_signers",
-    reason:
-      "SUBJECT DATA — gatherer pending: signature events where the subject " +
-      "signed (signer_party_id), transitive under gathered hrm_documents. " +
-      "token_hash is credential material and must stay denied when gathered.",
-  },
-  {
     table: "employee_pay_components",
     reason:
       "SUBJECT DATA — gatherer pending: the subject's pay component values " +
       "(employee_party_id/employment_id). Needs a payroll-domain gatherer.",
-  },
-  {
-    table: "entitlement_ledger",
-    reason:
-      "SUBJECT DATA — gatherer pending: leave movements " +
-      "(employee_party_id/employment_id). Needs a leave-domain gatherer.",
-  },
-  {
-    table: "entitlement_plan_limits",
-    reason:
-      "SUBJECT DATA — gatherer pending: leave balance caps (same links). " +
-      "Gather with entitlement_ledger under the leave domain.",
   },
   {
     table: "payroll_opening_balances",

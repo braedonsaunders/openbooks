@@ -47,24 +47,12 @@ async function setupHarness(): Promise<Harness> {
     `);
   }
   const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, email, is_active, custom)
-    values (${partyId}, ${org.orgId}, 'person', 'Sam Subject', 'sam@scratch.test', true, '{}'::jsonb)
-  `);
+  await db.execute(sql`insert into parties (id, org_id, kind, display_name, email, is_active, custom) values (${partyId}, ${org.orgId}, 'person', 'Sam Subject', 'sam@scratch.test', true, '{}'::jsonb)`);
   const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${org.orgId}, ${partyId}, ${org.subsidiaryId}, 1)
-  `);
-  await db.execute(sql`
-    insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at)
-    values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())
-  `);
+  await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision) values (${employmentId}, ${org.orgId}, ${partyId}, ${org.subsidiaryId}, 1)`);
+  await db.execute(sql`insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to, recorded_at) values (${org.orgId}, ${employmentId}, 1, 'active', '2020-01-01'::date, null, now())`);
   const otherPartyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${otherPartyId}, ${org.orgId}, 'person', 'Ivy Interviewer', true, '{}'::jsonb)
-  `);
+  await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom) values (${otherPartyId}, ${org.orgId}, 'person', 'Ivy Interviewer', true, '{}'::jsonb)`);
   const adminId = await createScratchUser(org.orgId, "Ada Admin", "dsar_dom_admin");
   await db.execute(sql`
     update app_roles
@@ -181,27 +169,31 @@ async function seedPartyExtras(h: Harness): Promise<void> {
 }
 
 async function seedStatement(h: Harness): Promise<string> {
-  const { org } = h;
   const statementId = randomUUID();
-  await db.execute(sql`
-    insert into hrm_comp_statements (id, org_id, employment_id, period_from, period_to, payload)
-    values (${statementId}, ${org.orgId}, ${h.employmentId}, '2026-01-01'::date, '2026-12-31'::date, '{}'::jsonb)
-  `);
+  await db.execute(sql`insert into hrm_comp_statements (id, org_id, employment_id, period_from, period_to, payload) values (${statementId}, ${h.org.orgId}, ${h.employmentId}, '2026-01-01'::date, '2026-12-31'::date, '{}'::jsonb)`);
   const { fileId } = await storeCabinetFile(db, {
-    orgId: org.orgId,
-    recordTable: "hrm_comp_statements",
-    recordId: statementId,
-    groupLabel: "HR Statements",
-    filename: "statement.pdf",
-    contentType: "application/pdf",
-    bytes: Buffer.from("%PDF-1.4 statement"),
-    createdBy: null,
-    viewerUserIds: [h.adminId],
+    orgId: h.org.orgId, recordTable: "hrm_comp_statements", recordId: statementId, groupLabel: "HR Statements",
+    filename: "statement.pdf", contentType: "application/pdf", bytes: Buffer.from("%PDF-1.4 statement"),
+    createdBy: null, viewerUserIds: [h.adminId],
   });
-  await db.execute(sql`
-    update hrm_comp_statements set file_id = ${fileId} where org_id = ${org.orgId} and id = ${statementId}
-  `);
+  await db.execute(sql`update hrm_comp_statements set file_id = ${fileId} where org_id = ${h.org.orgId} and id = ${statementId}`);
   return statementId;
+}
+
+async function seedDocumentsLeaveExtras(h: Harness): Promise<void> {
+  const docId = randomUUID();
+  await db.execute(sql`insert into hrm_documents (id, org_id, party_id, category_key, title, status) values (${docId}, ${h.org.orgId}, ${h.partyId}, 'contract', 'Offer letter', 'signed')`);
+  const { fileId } = await storeCabinetFile(db, {
+    orgId: h.org.orgId, recordTable: "hrm_documents", recordId: docId, groupLabel: "HR Documents",
+    filename: "offer.pdf", contentType: "application/pdf", bytes: Buffer.from("%PDF-1.4 offer"),
+    createdBy: null, viewerUserIds: [h.adminId],
+  });
+  await db.execute(sql`update hrm_documents set file_id = ${fileId} where org_id = ${h.org.orgId} and id = ${docId}`);
+  await db.execute(sql`insert into hrm_document_signers (org_id, document_id, ord, signer_party_id, role, token_hash, status) values (${h.org.orgId}, ${docId}, 0, ${h.partyId}, 'employee', ${randomUUID()}, 'signed')`);
+  const planId = randomUUID();
+  await db.execute(sql`insert into entitlement_plans (id, org_id, code, name) values (${planId}, ${h.org.orgId}, 'VAC', 'Vacation')`);
+  await db.execute(sql`insert into entitlement_ledger (org_id, plan_id, employee_party_id, movement_date, amount, kind) values (${h.org.orgId}, ${planId}, ${h.partyId}, '2026-01-31'::date, 8.00, 'accrual')`);
+  await db.execute(sql`insert into entitlement_plan_limits (org_id, plan_id, employee_party_id, max_balance, effective_from) values (${h.org.orgId}, ${planId}, ${h.partyId}, 40, '2026-01-01'::date)`);
 }
 
 async function seedSurvey(h: Harness): Promise<void> {
@@ -274,6 +266,7 @@ test("an export carries every new domain and the manifest names them all", { ski
     await seedPartyExtras(h);
     await seedEmploymentExtras(h);
     await seedReviewsExtras(h);
+    await seedDocumentsLeaveExtras(h);
     await seedPayrollIdentity(h);
     await seedPerformance(h);
     const prior = await requestExport({ orgId: h.org.orgId, actorId: h.adminId, partyId: h.partyId });
@@ -306,6 +299,7 @@ test("an export carries every new domain and the manifest names them all", { ski
       ["surveyInvitations", 1], ["surveyResponses", 1], ["clockEvents", 1], ["addresses", 1],
       ["contacts", 1], ["processSteps", 1], ["employeeRoles", 1], ["reportingRelationships", 1],
       ["feedback", 3], ["oneOnOnes", 1], ["oneOnOneItems", 1], ["successionPlans", 1],
+      ["documentSigners", 1], ["entitlementMovements", 1], ["entitlementPlanLimits", 1],
       ["goals", 1], ["reviews", 1], ["reviewAnswers", 1],
     ] as const) {
       assert.equal(

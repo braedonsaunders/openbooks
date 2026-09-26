@@ -583,6 +583,36 @@ const SUCCESSION_PLANS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
   "updated_by",
 ]);
 
+// Signature events on the subject's file, plus the subject's own signing
+// acts on other files (mirroring the reviews subject-or-author rule):
+// the signer identity, role and timestamps export, but token_hash stays
+// denied — it is single-use credential material for signing,
+// never subject-visible data.
+const DOCUMENT_SIGNERS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "document_id",
+  "token_hash",
+  "created_by",
+  "updated_by",
+]);
+
+// Leave-domain subject records: the subject's own entitlement movements
+// and the balance caps scoped to them. Plan definitions (provider
+// counterparty) stay excluded; only rows naming the subject gather.
+const ENTITLEMENT_LEDGER_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
+const ENTITLEMENT_LIMITS_DENIED_COLUMNS: ReadonlySet<string> = new Set([
+  "org_id",
+  "employee_party_id",
+  "created_by",
+  "updated_by",
+]);
+
 export async function buildExport(orgId: string, exportId: string, opts?: { owner?: string }): Promise<void> {
   const owner = opts?.owner ?? randomUUID();
   const claimed = await withOrgTransaction(orgId, () =>
@@ -782,6 +812,20 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
            select id from worker_employments where org_id = ${orgId} and worker_party_id = ${partyId}
          )
          order by a.on_date
+      `)).rows;
+      // The subject's own entitlement movements and the balance caps scoped
+      // to them — leave-domain subject data by direct party link.
+      payload.entitlementMovements = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("entitlement_ledger", ENTITLEMENT_LEDGER_DENIED_COLUMNS)}
+          from entitlement_ledger
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by movement_date
+      `)).rows;
+      payload.entitlementPlanLimits = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("entitlement_plan_limits", ENTITLEMENT_LIMITS_DENIED_COLUMNS)}
+          from entitlement_plan_limits
+         where org_id = ${orgId} and employee_party_id = ${partyId}
+         order by effective_from
       `)).rows;
     });
 
@@ -1000,6 +1044,19 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
         });
       }
       payload.omittedDocuments = omittedDocuments;
+      // Signature events on the subject's file, plus files the subject
+      // signed elsewhere — the ceremony around the subject's documents and
+      // the subject's own signing acts.
+      payload.documentSigners = (await db.execute<Record<string, unknown>>(sql`
+        select ${await heldDataProjection("hrm_document_signers", DOCUMENT_SIGNERS_DENIED_COLUMNS)}
+          from hrm_document_signers
+         where org_id = ${orgId}
+           and (signer_party_id = ${partyId}
+                or document_id in (
+                  select id from hrm_documents where org_id = ${orgId} and party_id = ${partyId} and status != 'deleted'
+                ))
+         order by created_at
+      `)).rows;
     });
     if (omittedDocuments.length > 0) {
       const entry = included.find((s) => s.module === "documents");
