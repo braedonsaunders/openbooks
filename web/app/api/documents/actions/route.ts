@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { and, eq, sql } from 'drizzle-orm'
@@ -278,7 +279,7 @@ export async function POST(req: Request) {
     // A refused approval routing already rolled back inside the transaction;
     // its message names the failed flow and the remedy, so it keeps it.
     if (e instanceof ApprovalRoutingError) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 })
     }
     const failure = toActionFailure(e)
     if (failure.status === 500) {
