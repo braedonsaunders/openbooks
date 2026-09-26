@@ -836,15 +836,15 @@ export async function computeFiling(args: {
   const runner = args.runner ?? db;
   const form = formDefinitionForYear(args.formType, args.taxYear);
   const threshold = args.threshold ?? form.defaultThreshold;
-  const [traces, boxByAccount] = await Promise.all([
-    loadPaymentTraces({
-      orgId: args.orgId,
-      taxYear: args.taxYear,
-      subsidiaryId: args.subsidiaryId ?? null,
-      runner,
-    }),
-    loadBoxRules(args.orgId, args.formType, runner),
-  ]);
+  // Sequential loads: recomputation owns a serializable transaction on one
+  // pg client — fanning out queues concurrent queries on that connection.
+  const traces = await loadPaymentTraces({
+    orgId: args.orgId,
+    taxYear: args.taxYear,
+    subsidiaryId: args.subsidiaryId ?? null,
+    runner,
+  });
+  const boxByAccount = await loadBoxRules(args.orgId, args.formType, runner);
   const profiles = await loadRecipientProfiles({
     orgId: args.orgId,
     partyIds: [...traces.keys()],

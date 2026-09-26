@@ -51,18 +51,18 @@ export async function resolveUserAuthz(user: SessionUser, runner: SqlExecutor = 
   if (user.isSuperAdmin) {
     return { user, permissions: denyInactiveExtensionPermissions(new Set<string>(["*"]), inactivePermissions), allowedSubsidiaryIds: null };
   }
-  const [assignments, overrides, allowedSubs] = (await Promise.all([
-    runner.execute<{ permissions: string[] }>(sql`
+  // Sequential reads: callers inside an org transaction pass its single
+  // pg client as runner, so fanning out queues concurrent queries on it.
+  const assignments = await runner.execute<{ permissions: string[] }>(sql`
       select r.permissions
         from role_assignments a
         join app_roles r on r.id = a.role_id and r.org_id = a.org_id
-       where a.user_id = ${user.id} and a.org_id = ${user.orgId}`),
-    runner.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
+       where a.user_id = ${user.id} and a.org_id = ${user.orgId}`)
+  const overrides = await runner.execute<{ permission: string; effect: "grant" | "deny" }>(sql`
       select permission, effect
         from user_permission_overrides
-       where user_id = ${user.id} and org_id = ${user.orgId}`),
-    allowedSubsidiaryIds(user.id, user.orgId),
-  ]));
+       where user_id = ${user.id} and org_id = ${user.orgId}`)
+  const allowedSubs = await allowedSubsidiaryIds(user.id, user.orgId)
   const permissions = resolveEffectivePermissions({
     additionalKnownPermissions: modulePermissions.active,
     rolePermissionSets: assignments.rows.map((r) =>

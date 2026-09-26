@@ -341,10 +341,10 @@ async function planMerge(
     survivor = firstId === survivorId ? first : second;
     duplicate = firstId === survivorId ? second : first;
   } else {
-    [survivor, duplicate] = await Promise.all([
-      loadProject(runner, orgId, survivorId),
-      loadProject(runner, orgId, duplicateId),
-    ]);
+    // Sequential reads: a transaction runner is one pg client, so loading
+    // both projects at once queues concurrent queries on that connection.
+    survivor = await loadProject(runner, orgId, survivorId);
+    duplicate = await loadProject(runner, orgId, duplicateId);
   }
   if (!survivor || !duplicate) {
     throw new ProjectMergeError("both projects must exist in this organization");

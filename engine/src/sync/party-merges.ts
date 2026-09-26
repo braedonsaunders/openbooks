@@ -683,10 +683,10 @@ async function applyMergeTx(
   if (new Set(locked.map((row) => row.id)).size !== 2) {
     throw new PartyMergeError("both parties must exist in this organization");
   }
-  const [absorbed, survivor] = await Promise.all([
-    loadParty(tx, orgId, absorbedId),
-    loadParty(tx, orgId, survivorId),
-  ]);
+  // Sequential reads: the merge runs on one transaction client, so loading
+  // both parties at once queues concurrent queries on that connection.
+  const absorbed = await loadParty(tx, orgId, absorbedId);
+  const survivor = await loadParty(tx, orgId, survivorId);
   if (!absorbed || !survivor) {
     throw new PartyMergeError("both parties must exist in this organization");
   }

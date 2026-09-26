@@ -179,27 +179,34 @@ export async function resolveAggregateLevyPriors(
     tx, orgId, country, documentId, employeePartyId, taxYear, region,
     levies, tenantValues, subsidiaryId, payDate,
   } = input;
-  return Promise.all(levies.map(async (levy) => ({
-    levy,
-    priors: {
-      employerPriorBase: await employerPriorBase(tx, {
-        orgId, country, documentId, taxYear, levy,
-        region: levy.base.scope === "region" ? region : null,
-      }),
-      employeePriorBase: levy.allowance?.kind === "per_employee_cap"
-        ? await employeePriorBase(tx, {
-          orgId, country, documentId, employeePartyId, taxYear, levy,
-        })
-        : "0",
-      tenantValues,
-      accruing: levy.allowance?.kind === "accruing_allowance"
-        ? await resolveAccruingInputs(tx, {
-          orgId, country, subsidiaryId, payDate, documentId, taxYear, levy,
+  // Sequential levies: the stub calculation runs on its transaction client,
+  // which is one pg connection — resolving every levy at once queues
+  // concurrent queries on it.
+  const resolved: ResolvedAggregateLevy[] = [];
+  for (const levy of levies) {
+    resolved.push({
+      levy,
+      priors: {
+        employerPriorBase: await employerPriorBase(tx, {
+          orgId, country, documentId, taxYear, levy,
           region: levy.base.scope === "region" ? region : null,
-        })
-        : undefined,
-    },
-  })));
+        }),
+        employeePriorBase: levy.allowance?.kind === "per_employee_cap"
+          ? await employeePriorBase(tx, {
+            orgId, country, documentId, employeePartyId, taxYear, levy,
+          })
+          : "0",
+        tenantValues,
+        accruing: levy.allowance?.kind === "accruing_allowance"
+          ? await resolveAccruingInputs(tx, {
+            orgId, country, subsidiaryId, payDate, documentId, taxYear, levy,
+            region: levy.base.scope === "region" ? region : null,
+          })
+          : undefined,
+      },
+    });
+  }
+  return resolved;
 }
 
 /**

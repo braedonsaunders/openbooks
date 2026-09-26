@@ -1162,11 +1162,12 @@ export async function runParallelComparison(
        for update`);
 
     const slots = await comparableSlots(input.orgId, tx);
-    const [prior, ours, tolerances] = await Promise.all([
-      loadPriorSide(input.orgId, input.registerId, tx, input.allowedSubsidiaryIds),
-      loadOurSide(input.orgId, input.payRunDocumentId, tx, input.allowedSubsidiaryIds),
-      parallelTolerances(input.orgId, tx),
-    ]);
+    // Sequential reads: the transaction holds a single pg client, so fanning
+    // these out queues concurrent queries on that connection instead of
+    // running them together.
+    const prior = await loadPriorSide(input.orgId, input.registerId, tx, input.allowedSubsidiaryIds);
+    const ours = await loadOurSide(input.orgId, input.payRunDocumentId, tx, input.allowedSubsidiaryIds);
+    const tolerances = await parallelTolerances(input.orgId, tx);
 
     const comparison = comparePriorPayrollPeriod({
       prior,

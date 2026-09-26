@@ -784,11 +784,11 @@ async function assertFlagReadScope(exec: SqlExecutor, orgId: string, actorId: st
   payroll: boolean;
   time: boolean;
 }> {
-  const [payrollPermission, timePermission, employmentRead] = await Promise.all([
-    actorHasPermission(exec, orgId, actorId, "payroll.manage"),
-    actorHasPermission(exec, orgId, actorId, "time.approve"),
-    actorHasPermission(exec, orgId, actorId, "hrm.employment.read"),
-  ]);
+  // Sequential checks: transaction callers pass one pg client as exec, so
+  // checking every permission at once queues concurrent queries on it.
+  const payrollPermission = await actorHasPermission(exec, orgId, actorId, "payroll.manage");
+  const timePermission = await actorHasPermission(exec, orgId, actorId, "time.approve");
+  const employmentRead = await actorHasPermission(exec, orgId, actorId, "hrm.employment.read");
   const payroll = payrollPermission && await orgFeatureEnabled(orgId, "hrmPayrollAnomalies", exec);
   const time = (timePermission || employmentRead || payrollPermission)
     && await orgFeatureEnabled(orgId, "hrmTimeAnomalies", exec);

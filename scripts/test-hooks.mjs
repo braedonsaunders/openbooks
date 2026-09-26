@@ -27,6 +27,23 @@ registerHooks({
   },
 })
 
+// A pg client that receives a second query while one is in flight only queues
+// it — the fan-out never parallelizes — and node-postgres warns today and
+// throws in pg 9. Fail the suite instead of letting the warning scroll past
+// in a log: every transaction client is one connection, so concurrent use is
+// always a defect at the call site.
+const CONCURRENT_CLIENT_QUERY = 'already executing a query'
+process.on('warning', (warning) => {
+  if (
+    warning?.name === 'DeprecationWarning' &&
+    typeof warning.message === 'string' &&
+    warning.message.includes(CONCURRENT_CLIENT_QUERY)
+  ) {
+    process.exitCode = 1
+    console.error(`[test-hooks] refusing concurrent pg client use: ${warning.message}`)
+  }
+})
+
 // Per-file registration receipt. scripts/test-suite.mjs also loads this
 // module as a test reporter (`--test-reporter ./scripts/test-hooks.mjs`)
 // so every shard accounts for its own files.
