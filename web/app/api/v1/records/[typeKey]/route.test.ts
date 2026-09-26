@@ -25,6 +25,8 @@ interface RouteState {
   };
   events: AuditEvent[];
   creates: Array<{ typeKey: string; body: Record<string, unknown>; idempotencyKey: string }>;
+  /** When set, the application writer throws this message instead of succeeding. */
+  failWith: string | null;
 }
 
 const routeState: RouteState = {
@@ -41,6 +43,7 @@ const routeState: RouteState = {
   },
   events: [],
   creates: [],
+  failWith: null,
 };
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
@@ -94,6 +97,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.records-route-test')]
       export async function createApplicationRecord(_context, input) {
+        if (state.failWith) throw new Error(state.failWith)
         state.creates.push(input)
         return { replayed: false, status: 201, result: { id: 'record-1' } }
       }
@@ -139,6 +143,7 @@ hooks.deregister();
 function reset(): void {
   routeState.events.length = 0;
   routeState.creates.length = 0;
+  routeState.failWith = null;
   routeState.auth.audit.startedAt = Date.now();
 }
 
@@ -185,4 +190,16 @@ test("malformed authenticated commands retain execution audit evidence", async (
   assert.equal(routeState.creates.length, 1);
   assert.deepEqual(routeState.events[0]?.statusCode, 201);
   assert.equal(routeState.events[0]?.error, null);
+});
+
+test("unexpected writer failures stay generic and never echo the thrown message", async () => {
+  reset();
+  const probe = "sanitizer-probe-9c1e-unique-violation";
+  routeState.failWith = `duplicate key value violates unique constraint "custom_records_pkey" (${probe})`;
+
+  const response = await post(JSON.stringify({ kind: "customer", display_name: "Acme" }), "records-route-test-3");
+
+  assert.equal(response.status, 500);
+  const body = await response.text();
+  assert.ok(!body.includes(probe), "the 500 body must stay generic instead of carrying the database error text");
 });

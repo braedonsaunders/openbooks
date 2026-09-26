@@ -585,11 +585,9 @@ const inRegions = (regions, index) => regions.some(([start, end]) => index >= st
 // fails the build); a file fixed must leave this list in the same commit
 // (a stale entry fails the build). Shrink this list only by fixing files —
 // never add an entry without a slot-probe verification behind it.
-// 2 files, 2 unscoped writes.
-export const BASELINE_EXPOSED = new Map([
-  ["web/app/(app)/admin/setup/agents/view-permission.integration.test.ts", { writes: 1, via: "view.ts -> money-server.ts -> locale.ts -> auth.ts" }],
-  ["web/lib/assistant/tools-meta.integration.test.ts", { writes: 1, via: "registry.ts -> authz.ts -> auth.ts" }],
-]);
+// 0 files, 0 unscoped writes: the last tracked exposures were wrapped in
+// withBypassContext, so the list is empty and the ratchet holds at zero.
+export const BASELINE_EXPOSED = new Map([]);
 
 
 // Extents of test/it/hook callbacks: they always run after module evaluation,

@@ -120,7 +120,7 @@ test("without the setup key the overview redirects", { skip: !DB }, async () => 
 });
 
 test('restricted setup managers cannot load organization-wide agent activity', { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     asManager(org.orgId);
     loaderState.allowedSubsidiaryIds = new Set([org.subsidiaryId]);

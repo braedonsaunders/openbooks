@@ -97,7 +97,7 @@ test('describe_capabilities answers from the live catalog for a minimal reader',
 });
 
 test('describe_capabilities groups featureless assistant and application tools by their domain', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => (createScratchOrg()));
   try {
     const authz = {
       user: userFor(org.orgId, 'domain-modules'),
