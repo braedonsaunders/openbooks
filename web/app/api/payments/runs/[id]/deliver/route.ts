@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -44,7 +45,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const res = await deliverRunToSftp(id, parsed.data.sftpServerId, user.orgId, user.id, new Date())
     return NextResponse.json({ ok: true, ...res })
   } catch (e) {
-    if (e instanceof PaymentError) return NextResponse.json({ error: e.message }, { status: 422 })
+    if (e instanceof PaymentError) return apiErrorResponse(e, { safeStatus: 422 })
     return unexpectedServerError('payments/deliver', e)
   }
 }

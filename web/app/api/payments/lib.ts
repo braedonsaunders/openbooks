@@ -1,5 +1,6 @@
 import { paymentRunScopeSql } from '@/lib/payment-run-access'
 import 'server-only'
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
@@ -21,19 +22,21 @@ export function isPaymentKind(kind: unknown): kind is PaymentKind {
 }
 
 /** Uniform error mapping: domain errors are 422, everything else 500. */
-export function paymentErrorResponse(e: unknown): NextResponse {
+export async function paymentErrorResponse(e: unknown): Promise<NextResponse> {
   // Masked-sandbox file tombstone: a computed refusal, never a 500. The
   // remedy lives in the message and must reach the operator intact.
   if (isMaskedFileContentError(e)) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 403 })
+    return apiErrorResponse(e, { safeStatus: 403 })
   }
   // Scope denials are record denials: the uniform 404, never a 500 and never
   // a message naming the hidden subsidiary.
   if (e instanceof ScopeNotFoundError) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
-  const status = e instanceof PaymentError || e instanceof PostingError ? 422 : 500
-  return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status })
+  if (e instanceof PaymentError || e instanceof PostingError) {
+    return apiErrorResponse(e, { safeStatus: 422 })
+  }
+  return apiErrorResponse(e)
 }
 
 /** Authorize a run by its actual direction, not by which page called it.
