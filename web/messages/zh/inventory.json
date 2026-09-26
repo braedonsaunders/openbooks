@@ -236,7 +236,7 @@
     }
   },
   "create": {
-    "subsidiary": "子公司",
+    "subsidiary": "所属子公司",
     "selectSubsidiary": "选择子公司…"
   }
 }

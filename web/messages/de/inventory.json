@@ -204,7 +204,7 @@
       "title": "Neue Zykluszählung",
       "submit": "Zählung eröffnen",
       "location": "Geschäftsstandort",
-      "subsidiary": "Tochtergesellschaft",
+      "subsidiary": "Zuständige Tochtergesellschaft",
       "selectLocation": "Standort wählen…",
       "selectSubsidiary": "Gesellschaft wählen…",
       "selectItem": "Artikel wählen…",
@@ -236,7 +236,7 @@
     }
   },
   "create": {
-    "subsidiary": "Tochtergesellschaft",
+    "subsidiary": "Zuständige Tochtergesellschaft",
     "selectSubsidiary": "Gesellschaft wählen…"
   }
 }
