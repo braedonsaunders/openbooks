@@ -14,7 +14,6 @@
     "@ai-sdk/google": "3.0.93",
     "@ai-sdk/openai": "3.0.85",
     "@ai-sdk/openai-compatible": "2.0.60",
-    "@aws-sdk/client-s3": "^3.1087.0",
     "@braedonsaunders/appkit-errors": "0.2.0",
     "@braedonsaunders/appkit-feedback": "0.2.1",
     "@braedonsaunders/appkit-mcp": "0.1.0",
@@ -43,6 +42,7 @@
     "@uiw/react-codemirror": "^4.25.11",
     "@xyflow/react": "^12.8.6",
     "ai": "6.0.226",
+    "drizzle-orm": "1.0.0-rc.4",
     "fflate": "^0.8.3",
     "framer-motion": "^12.42.2",
     "grapesjs": "^0.22.16",
@@ -71,7 +71,6 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@types/ssh2": "^1.15.5",
-    "tailwindcss": "^4.3.2",
-    "typescript": "^5.9.3"
+    "tailwindcss": "^4.3.2"
   }
 }

@@ -6,7 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const requireFromRoot = createRequire(new URL("../package.json", import.meta.url));
-const ts = requireFromRoot("typescript-eslint-typescript");
+const ts = requireFromRoot("typescript");
 const MONEY_FIELDS = new Set([
   "amount", "balance", "rate", "wage", "cost", "price", "debit", "credit",
   "total", "tax", "gross", "net", "revenue", "expense", "payment",

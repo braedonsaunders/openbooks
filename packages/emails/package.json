@@ -17,7 +17,6 @@
     "nodemailer": "^9.1.1"
   },
   "devDependencies": {
-    "@types/nodemailer": "^8.0.1",
-    "typescript": "^7.0.2"
+    "@types/nodemailer": "^8.0.1"
   }
 }

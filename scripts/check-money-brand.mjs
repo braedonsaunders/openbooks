@@ -20,7 +20,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const requireFromRoot = createRequire(new URL("../package.json", import.meta.url));
-const ts = requireFromRoot("typescript-eslint-typescript");
+const ts = requireFromRoot("typescript");
 const fs = requireFromRoot("node:fs");
 
 const BRAND_TYPES = new Set(["Money", "Rate", "Quantity"]);

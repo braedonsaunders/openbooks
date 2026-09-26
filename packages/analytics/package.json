@@ -22,7 +22,6 @@
     "@openbooks/engine": "*"
   },
   "peerDependencies": {
-    "@openbooks/ui": "*",
     "react": "^19.0.0"
   }
 }
