@@ -165,6 +165,40 @@ longPool.on("error", (err) => {
 });
 
 /**
+ * One PostgreSQL connection runs one statement at a time. A checked-out client
+ * is pinned to a transaction and shared by everything in its scope, so reads
+ * fanned out with Promise.all arrive while an earlier query is still running.
+ * node-postgres queues such a query itself today, warns, and refuses it from
+ * pg 9. Queue it here instead, in issue order, so the client never receives a
+ * query while one is running. Results, errors and ordering are unchanged: the
+ * statements already ran one after another. Callback and submittable (cursor,
+ * stream) calls return their handle synchronously, so they keep pg's own
+ * handling.
+ *
+ * The pool hands the same connection out again without resetting `query`, so
+ * each connection is wrapped once: the queue belongs to the connection, not to
+ * one checkout.
+ */
+const serializedClients = new WeakSet<pg.PoolClient>();
+function serializeClientQueries(client: pg.PoolClient): void {
+  if (serializedClients.has(client)) return;
+  serializedClients.add(client);
+  const query = client.query.bind(client) as (...args: unknown[]) => unknown;
+  let tail: Promise<unknown> = Promise.resolve();
+  const settle = () => undefined;
+  client.query = ((...args: unknown[]) => {
+    const first = args[0] as { submit?: unknown } | null | undefined;
+    if (typeof args[args.length - 1] === "function" || typeof first?.submit === "function") {
+      return query(...args);
+    }
+    const run = () => query(...args);
+    const result = tail.then(run, run);
+    tail = result.then(settle, settle);
+    return result;
+  }) as pg.PoolClient["query"];
+}
+
+/**
  * `pg.Pool` handles errors emitted by idle clients, but a checked-out client is
  * the caller's responsibility. A tunnel or database failover can therefore
  * emit an `error` between awaited queries and terminate Node even though the
@@ -172,6 +206,7 @@ longPool.on("error", (err) => {
  * checkout, remember that the session is poisoned, and make release discard it.
  */
 function protectCheckedOutClient(client: pg.PoolClient, label: string): pg.PoolClient {
+  serializeClientQueries(client);
   let connectionError: Error | undefined;
   let released = false;
   const originalRelease = client.release.bind(client);
