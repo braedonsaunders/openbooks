@@ -42,9 +42,18 @@ const SHA = /^[0-9a-f]{40}$/;
  * wrote. Refused here, at plan time, not mid-cell.
  */
 export const ORACLE_OVERLAY_ALLOWLIST = Object.freeze([
-  "engine/src/golden/scenario.ts",
+  "engine/src/harness/scenario.ts",
   "engine/src/platform/uuid.ts",
 ]);
+
+/**
+ * Where the candidate now keeps an oracle file whose SOURCE-tree path moved.
+ * Overlay entries name the path in the source release (the file being
+ * replaced); the candidate supplies the bytes from its own location.
+ */
+export const ORACLE_CANDIDATE_LOCATION = Object.freeze({
+  "engine/src/harness/scenario.ts": "engine/src/golden/scenario.ts",
+});
 
 function refuse(problems, message) {
   problems.push(message);

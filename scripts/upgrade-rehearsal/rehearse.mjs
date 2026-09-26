@@ -47,7 +47,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, unlinkS
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { loadConfig, validateConfig } from "./plan.mjs";
+import { ORACLE_CANDIDATE_LOCATION, loadConfig, validateConfig } from "./plan.mjs";
 import { candidateHarnessOrgIds, compareSnapshots, fingerprintColumnsOf, snapshotLedger } from "./ledger.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -234,7 +234,7 @@ async function applySourceOracleOverlay(datasetId, overlay, sourceDir) {
   const applied = [];
   try {
     for (const file of overlay.files) {
-      const from = join(CANDIDATE, file);
+      const from = join(CANDIDATE, ORACLE_CANDIDATE_LOCATION[file] ?? file);
       const to = join(sourceDir, file);
       let bytes;
       try {

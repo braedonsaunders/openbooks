@@ -99,7 +99,7 @@
       "description": "Endurance loop across a year-end and a leap day, with the adversarial probes: backdating into closed periods, posted edits, over-application, reversal symmetry, void and recreate.",
       "sourceOracleOverlay": {
         "sha": "b5ab43f1a4769411bcdfddc09534b1d7c99bf9ab",
-        "files": ["engine/src/golden/scenario.ts", "engine/src/platform/uuid.ts"],
+        "files": ["engine/src/harness/scenario.ts", "engine/src/platform/uuid.ts"],
         "reason": "The tagged tie-out oracle counts governed void pairs, so the source sim halts at day-end 2027-12-05 on a 222.22 void-probe bill before any harness phase can declare anything. The overlay carries only the fixed oracle (scenario.ts) plus the pure UUID predicate it imports (uuid.ts, no data writes); the posting kernel and migrations are untouched, so every seeded row is still the source release's own write. Removed before the source-harness phase, which then fails exactly the declared subledger-gl-tieout check."
       },
       "steps": [
