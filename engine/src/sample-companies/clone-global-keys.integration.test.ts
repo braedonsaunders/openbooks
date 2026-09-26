@@ -16,8 +16,7 @@ import {
   dropScratchOrg,
 } from "../testing/fixtures.ts";
 
-// OM-13-CLONE: the manufacturing sample-company birth must copy the
-// template's posted history end to end. The Atlas birth failed
+// OM-13-CLONE: the manufacturing sample-company birth must copy the template's posted history end to end. The Atlas birth failed
 // deterministically with PG 23505 because the clone carried globally-unique
 // operational keys verbatim (scheduler_outbox.occurrence_key first;
 // flow_runs.occurrence_key and hrm_document_signers.token_hash on the same
@@ -99,6 +98,7 @@ async function seedTemplateOrg(): Promise<string> {
         insert into hrm_document_signers (id, org_id, document_id, ord, signer_party_id, role, status, token_hash)
         values (${randomUUID()}, ${template.orgId}, ${hrmDocId}, 0, ${signerPartyId}, 'employee', 'pending', ${`atlas-sign-token-${randomUUID()}`})`),
     );
+    await withBypass(() => db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{sampleTemplate}', '{"enabled":true}'::jsonb) where id = ${template.orgId}`)); // stub stands in for a promoted template: carry its registration flag
     return template.orgId;
   } catch (error) {
     await withBypass(() => dropScratchOrg(template.orgId));
