@@ -26,6 +26,7 @@ export { SampleCompanyError, SampleCompanyPreconditionError } from "./provisioni
 export {
   SampleCompanyProvisioningError,
   sampleCompanyStageMessage,
+  sampleCompanyProvisioningBody,
   SAMPLE_COMPANY_STAGE_CODES,
 } from "./provisioning-failures.ts";
 export type { SampleCompanyProvisioningStage } from "./provisioning-failures.ts";

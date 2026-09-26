@@ -48,8 +48,7 @@ const mockSources = new Map<string, string>([
       export {
         SampleCompanyError,
         SampleCompanyProvisioningError,
-        sampleCompanyStageMessage,
-        SAMPLE_COMPANY_STAGE_CODES,
+        sampleCompanyProvisioningBody,
       } from '${failuresUrl}'
       import { runProvisioningStage } from '${failuresUrl}'
       const state = globalThis[Symbol.for('openbooks.sample-companies-route-test')]

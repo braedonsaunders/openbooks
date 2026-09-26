@@ -99,6 +99,21 @@ export class SampleCompanyProvisioningError extends SampleCompanyError {
 }
 
 /**
+ * The API body for a staged provisioning failure: the stable machine code,
+ * the stage, and the fixed operator-facing message. Safe to serialize
+ * because the message is either the fixed per-stage string or a
+ * guard-authored P0001 first line (see the module docstring) — never SQL
+ * text, constraint names, or driver detail, which stay in the server log.
+ * Lives here (not in the route) so the safety claim and the serialization
+ * that relies on it change together.
+ */
+export function sampleCompanyProvisioningBody(
+  error: SampleCompanyProvisioningError,
+): { error: string; stage: SampleCompanyProvisioningStage; message: string } {
+  return { error: error.code, stage: error.stage, message: error.message };
+}
+
+/**
  * A deterministic database refusal: Postgres raise_exception (code P0001),
  * the channel every trigger guard uses to refuse with a message that names
  * its remedy. Retrying cannot help against a deterministic guard, so the
