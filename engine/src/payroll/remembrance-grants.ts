@@ -17,7 +17,8 @@ import { sql } from "drizzle-orm";
 import { cmp } from "../money/money.ts";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
-import { NS_REMEMBRANCE_ALTERNATE_DAY } from "./canada/employment-standards.ts";
+import { countryOfJurisdiction } from "./pack-jurisdictions.ts";
+import { PAYROLL_COUNTRY_PACKS } from "./pack-registry.ts";
 import { resolveStoredEmployerFact } from "./employer-fact-store.ts";
 import {
   PayrollHolidayError,
@@ -149,8 +150,10 @@ export async function grantRemembranceAlternateDay(
     orgId, runDocumentId, employeePartyId, employeeName,
     jurisdiction, subsidiaryId, periodStart, periodEnd, plan,
   } = args;
-  if (jurisdiction !== "CA-NS") return null;
-  const rule = NS_REMEMBRANCE_ALTERNATE_DAY;
+  // The pack declares the grant and the jurisdictions its statute binds;
+  // the generic layer names no province.
+  const rule = PAYROLL_COUNTRY_PACKS[countryOfJurisdiction(jurisdiction)]?.alternateDayGrant;
+  if (!rule || !rule.jurisdictions.includes(jurisdiction)) return null;
   const statutoryDate = [periodStart.slice(0, 4), periodEnd.slice(0, 4)]
     .map((year) => `${year}-${String(rule.month).padStart(2, "0")}-${String(rule.day).padStart(2, "0")}`)
     .find((date) => date >= periodStart && date <= periodEnd) ?? null;
@@ -219,7 +222,7 @@ export async function grantRemembranceAlternateDay(
     // no stub line. The payout component prices it when the day is taken.
     componentId: null,
     note:
-      `Nova Scotia Remembrance Day alternate paid day (${rule.citation}): worked ${statutoryDate}, `
+      `Statutory alternate paid day (${rule.citation}): worked ${statutoryDate}, `
       + `take on ${decision.takeOn}`,
     sourceHolidayKey: rule.holidayKey,
     sourceHolidayDate: statutoryDate,
