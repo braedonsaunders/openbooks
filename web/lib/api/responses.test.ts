@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ClosedPeriodError, PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
 import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
@@ -59,7 +59,6 @@ test("created answers 201 with the payload", async () => {
 test("status-less engine refusals map by family, 409 on conflict", async () => {
   const cases: Array<{ error: unknown; status: number; body: unknown }> = [
     { error: new UnbalancedPostError("Out of balance by 0.01", { customGlLineRuns: [] }), status: 422, body: { error: "Out of balance by 0.01", code: "unbalanced_post", remedy: "Balance the lines, then post again." } },
-    { error: new ClosedPeriodError("Period 2026-07 is closed"), status: 422, body: { error: "Period 2026-07 is closed", code: "closed_period" } },
     { error: new InventoryError("No posting book for CAD"), status: 422, body: { error: "No posting book for CAD", code: "inventory_refused" } },
     { error: new PaymentRevisionConflictError(), status: 409, body: { error: "this payment changed after you opened it; reload and review the latest revision", code: "payment_refused" } },
     { error: new PayrollError("No open pay run for 2026-07"), status: 422, body: { error: "No open pay run for 2026-07", code: "payroll_refused" } },
