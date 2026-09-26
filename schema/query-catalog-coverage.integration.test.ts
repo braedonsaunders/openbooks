@@ -179,14 +179,12 @@ async function orgTables(): Promise<string[]> {
 }
 
 async function governedTables(): Promise<Set<string>> {
-  const def = await db.execute<{ def: string }>(sql`
-    select pg_get_functiondef(oid) as def from pg_proc
-     where proname = 'openbooks_refresh_query_catalog'`);
-  const body = def.rows[0]?.def ?? "";
-  const array = /safe_relations constant text\[\] := array\[([\s\S]*?)\n  \];/.exec(body)?.[1] ?? "";
-  const names = new Set(
-    [...array.matchAll(/'([a-z_][a-z0-9_]*)'/g)].map((match) => match[1]),
-  );
+  // The governed set lives in the registry table (0418), not in the refresh
+  // function body: module packs add rows, so parsing the body would miss
+  // every module's relations.
+  const registered = await db.execute<{ relation: string }>(sql`
+    select relation from public.openbooks_query_catalog_relations`);
+  const names = new Set(registered.rows.map((row) => row.relation));
   const views = await db.execute<{ table_name: string }>(sql`
     select table_name from information_schema.views
      where table_schema = 'openbooks_query'`);

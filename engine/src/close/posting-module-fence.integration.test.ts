@@ -21,18 +21,34 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("document_close_module matches the engine kind map", { skip: !DB }, async () => {
-  // The journal fence derives the close module from the source document kind
-  // in storage (0168); it must agree with DOCUMENT_CLOSE_MODULES exactly, or
-  // postings land under the wrong module's lock.
+  // The journal fence resolves the close module from the source document
+  // kind in storage (0418 registry table); the table must agree with
+  // DOCUMENT_CLOSE_MODULES exactly in both directions, or postings land
+  // under the wrong module's lock.
   const org = await createScratchOrg();
   try {
+    const stored = (
+      await db.execute<{ kind: string; module: string }>(
+        sql`select kind, close_module as module from public.openbooks_document_close_modules order by kind`,
+      )
+    ).rows;
+    assert.deepEqual(
+      stored,
+      [...DOCUMENT_KINDS]
+        .sort()
+        .map((kind) => ({ kind, module: closeModuleForDocument(kind) })),
+      "the close-module registry must mirror the engine kind map exactly",
+    );
+    // The function must read the table (not a stale copy of the map): a
+    // kind the table knows resolves through the function, and the table
+    // cannot carry a kind the engine rejects.
     for (const kind of DOCUMENT_KINDS) {
-      const stored = (
+      const viaFunction = (
         await db.execute<{ module: string | null }>(
           sql`select public.document_close_module(${kind}) as module`,
         )
       ).rows[0]!.module;
-      assert.equal(stored, closeModuleForDocument(kind), kind);
+      assert.equal(viaFunction, closeModuleForDocument(kind), kind);
     }
     // Deliberate asymmetry, pinned: the engine throws on unknown kinds
     // (fail closed at the app boundary) while storage resolves them to null
