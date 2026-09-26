@@ -4,7 +4,6 @@ import { useTranslations } from "next-intl";
 import { Badge, Button, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@openbooks/ui";
 import { Empty, Status } from "./workspace-ui";
 import type { DepositRow, LeaseRow, Money, ScheduleRow } from "./types";
-import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 export function RentTable({ schedules, leases, money, total }: { schedules: ScheduleRow[]; leases: LeaseRow[]; money: Money; total?: number }) {
   const t = useTranslations("entities.propertyManagement");
