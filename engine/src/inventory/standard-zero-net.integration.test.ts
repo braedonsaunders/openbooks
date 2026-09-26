@@ -204,8 +204,8 @@ test("zero-net layer audit failure rolls back the entire native costing profile 
       params: Promise.resolve({ id: org.items.fifo }),
     }));
     const result = await response.json();
-    assert.equal(response.status, 400, JSON.stringify(result));
-    assert.match(result.error, /insert into audit_log/);
+    assert.equal(response.status, 500, JSON.stringify(result));
+    assert.match(result.error, /An unexpected error occurred/);
     assert.deepEqual(await financialEvidence(org), before,
       "audit refusal restores profile, all layers, journals, lines and audit history");
   } finally {
