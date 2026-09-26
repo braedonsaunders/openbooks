@@ -500,7 +500,8 @@ export async function GET(req: Request) {
         select sin_encrypted as sealed from employee_payroll_profiles
          where org_id = ${gate.user.orgId} and employee_party_id = ${employee}
       `)).rows[0]?.sealed
-      for (const derived of drawerDeriveHook({ identifier: unsealSecret(sealed) }) ?? []) {
+      const drawerIdentifier = sealed == null ? null : unsealSecret(sealed, { orgId: gate.user.orgId, purpose: "payroll.employee.sin" });
+      for (const derived of drawerDeriveHook({ identifier: drawerIdentifier }) ?? []) {
         derivedProfileColumns[derived.column] = derived.value
       }
     }
@@ -938,7 +939,7 @@ export async function POST(req: Request) {
         sinEncrypted = null
         sinLast3 = null
       } else {
-        sinEncrypted = sealSecret(verdict.saved)
+        sinEncrypted = sealSecret(verdict.saved, { orgId, purpose: "payroll.employee.sin" })
         sinLast3 = verdict.saved.slice(-3)
       }
     }
@@ -970,7 +971,7 @@ export async function POST(req: Request) {
           select sin_encrypted as sealed from employee_payroll_profiles
            where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
         `)).rows[0]?.sealed
-        effectiveIdentifier = unsealSecret(stored)
+        effectiveIdentifier = stored == null ? null : unsealSecret(stored, { orgId, purpose: "payroll.employee.sin" })
       }
       const identifierLabel = PAYROLL_COUNTRY_PACKS[country]?.employeeIdentifier.label ?? 'identifier'
       for (const derived of deriveHook({ identifier: effectiveIdentifier }) ?? []) {

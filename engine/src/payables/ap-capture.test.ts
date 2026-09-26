@@ -750,7 +750,7 @@ test(
               endpoint,
               model: "prebuilt-invoice",
               confidenceThreshold: "0.9000",
-              keyEncrypted: sealSecret("db-proof-key"),
+              keyEncrypted: sealSecret("db-proof-key", { orgId: org.orgId, purpose: "payables.ap-capture.key" }),
             },
           })}::jsonb)
          where id = ${org.orgId}

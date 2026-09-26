@@ -7,7 +7,7 @@ process.env.OPENBOOKS_DATA_KEY ??=
   "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
 const stateKey = Symbol.for("openbooks.qbo-oauth-start-test");
-const state = { secrets: sealJson({ clientId: "qbo-client" }) };
+const state = { secrets: sealJson({ clientId: "qbo-client" }, { orgId: "org-1", purpose: "connection.secrets" }) };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
 const mockSources = new Map<string, string>([
@@ -97,7 +97,7 @@ test("QBO start mints a one-time nonce in sealed state and the CSRF cookie", asy
     new Request("https://evil.example/api/platform/connections/oauth/qbo/start?connectionId=conn-1"),
   );
   const location = new URL(res.headers.get("location") ?? "");
-  const payload = unsealJson<{ nonce?: string }>(location.searchParams.get("state"));
+  const payload = unsealJson<{ nonce?: string }>(location.searchParams.get("state")!, { orgId: "system", purpose: "connection.oauth.state" });
   assert.ok((payload?.nonce?.length ?? 0) >= 16);
   assert.equal(cookieMap(res).get(CONNECTION_OAUTH_COOKIE), payload?.nonce);
 });

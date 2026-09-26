@@ -123,7 +123,7 @@ async function nlEmployee(
                                            sin_encrypted, sin_last3)
     values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'NL', 'NL',
             'salary', true, ${fx.actorId}, ${fx.actorId},
-            ${sealSecret(bsn)}, ${bsn.slice(-3)})`);
+            ${sealSecret(bsn, { orgId: fx.orgId, purpose: "payroll.employee.sin" })}, ${bsn.slice(-3)})`);
   for (const certificate of certificates) {
     await db.execute(sql`
       insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,

@@ -130,7 +130,7 @@ async function brPayrollOrg(): Promise<Fixture> {
                                              province, pay_basis, filing_account_id, br_dependentes,
                                              sin_encrypted, is_active, created_by, updated_by)
       values (${org.orgId}, ${id}, ${employmentId}, ${scheduleId}, 'BR', 'BR',
-              'salary', ${filingAccountId}, ${dependentes}, ${sealSecret(cpf)}, true, ${actorId},
+              'salary', ${filingAccountId}, ${dependentes}, ${sealSecret(cpf, { orgId: org.orgId, purpose: "payroll.employee.sin" })}, true, ${actorId},
               ${actorId})`);
     return id;
   };

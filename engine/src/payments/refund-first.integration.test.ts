@@ -69,7 +69,7 @@ test("a refund arriving before its success parks, settles, and notes exactly onc
         (org_id, provider, display_name, is_enabled, acceptance_enabled,
          default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'stripe', 'Stripe', true, true,
-              ${org.accounts.bank}, ${sealJson({ apiKey: "sk_test_clawback", webhookSecret: secret })}, ${userId}, ${userId})`);
+              ${org.accounts.bank}, ${sealJson({ apiKey: "sk_test_clawback", webhookSecret: secret }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})`);
     const linkId = randomUUID(), linkToken = `clawback-link-${randomUUID()}`;
     const sessionId = `cs_test_clawback_${randomUUID().slice(0, 8)}`;
     const intentId = `pi_clawback_${randomUUID().slice(0, 8)}`;
@@ -77,7 +77,7 @@ test("a refund arriving before its success parks, settles, and notes exactly onc
       insert into payment_links
         (id, org_id, token_hash, token_sealed, document_id, party_id, subsidiary_id, provider,
          bank_account_id, amount, surcharge_amount, currency, created_by, updated_by)
-      values (${linkId}, ${org.orgId}, ${createHash("sha256").update(linkToken, "utf8").digest("hex")}, ${sealSecret(linkToken)}, ${invoiceId}, ${org.customerId},
+      values (${linkId}, ${org.orgId}, ${createHash("sha256").update(linkToken, "utf8").digest("hex")}, ${sealSecret(linkToken, { orgId: org.orgId, purpose: "payment.link.token" })}, ${invoiceId}, ${org.customerId},
               ${org.subsidiaryId}, 'stripe', ${org.accounts.bank}, '100', '0', 'CAD',
               ${userId}, ${userId})`);
     await db.execute(sql`
@@ -198,7 +198,7 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
         (org_id, provider, display_name, is_enabled, acceptance_enabled,
          default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'stripe', 'Stripe', true, true,
-              ${org.accounts.bank}, ${sealJson({ apiKey: "sk_test_rearm", webhookSecret: secret })}, ${userId}, ${userId})`);
+              ${org.accounts.bank}, ${sealJson({ apiKey: "sk_test_rearm", webhookSecret: secret }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})`);
     const linkId = randomUUID(), linkToken = `clawback-rearm-link-${randomUUID()}`;
     const sessionId = `cs_test_rearm_${randomUUID().slice(0, 8)}`;
     const intentId = `pi_rearm_${randomUUID().slice(0, 8)}`;
@@ -206,7 +206,7 @@ test("a post-consumption refund redelivery never re-arms its marker", { skip: !D
       insert into payment_links
         (id, org_id, token_hash, token_sealed, document_id, party_id, subsidiary_id, provider,
          bank_account_id, amount, surcharge_amount, currency, created_by, updated_by)
-      values (${linkId}, ${org.orgId}, ${createHash("sha256").update(linkToken, "utf8").digest("hex")}, ${sealSecret(linkToken)}, ${invoiceId}, ${org.customerId},
+      values (${linkId}, ${org.orgId}, ${createHash("sha256").update(linkToken, "utf8").digest("hex")}, ${sealSecret(linkToken, { orgId: org.orgId, purpose: "payment.link.token" })}, ${invoiceId}, ${org.customerId},
               ${org.subsidiaryId}, 'stripe', ${org.accounts.bank}, '100', '0', 'CAD',
               ${userId}, ${userId})`);
     await db.execute(sql`

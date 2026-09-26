@@ -200,7 +200,7 @@ export async function brInformeRows(orgId: string, taxYear: number): Promise<BrI
   const cpfByEmployee = new Map(
     profiles.rows
       .filter((row) => wanted.has(String(row.employee_party_id)))
-      .map((row) => [String(row.employee_party_id), unsealSecret(row.sin_encrypted)]),
+      .map((row) => [String(row.employee_party_id), row.sin_encrypted == null ? null : unsealSecret(row.sin_encrypted, { orgId, purpose: "payroll.employee.sin" })]),
   );
   return rows.rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),

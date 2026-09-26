@@ -44,7 +44,8 @@ export async function loadSepaSettings(orgId: string, runId?: string) {
      order by case when r.id is not null then 0 else 1 end, p.created_at
      limit 1
   `));
-  return validateSepaSettings(unsealJson<Partial<SepaSettings>>(r.rows[0]?.originator_secrets_encrypted));
+  const sealed = r.rows[0]?.originator_secrets_encrypted;
+  return validateSepaSettings(sealed == null ? null : unsealJson<Partial<SepaSettings>>(sealed, { orgId, purpose: "payment.originator.secrets" }));
 }
 
 const xmlEsc = (v: string) => v.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" }[c]!));

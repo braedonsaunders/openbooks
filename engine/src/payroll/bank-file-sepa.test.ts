@@ -365,7 +365,7 @@ async function sepaProfileOrg(secrets: Record<string, unknown>) {
                                        country, originator_secrets_encrypted, settings, is_active,
                                        created_by, updated_by)
     values (${profileId}, ${org.orgId}, 'Payroll direct deposit (SEPA)', ${bankAccountId}, ${formatId},
-            'EUR', null, ${sealJson(secrets)}, '{}'::jsonb, true, ${actorId}, ${actorId})`);
+            'EUR', null, ${sealJson(secrets, { orgId: org.orgId, purpose: "payment.originator.secrets" })}, '{}'::jsonb, true, ${actorId}, ${actorId})`);
   return { orgId: org.orgId, profileId };
 }
 

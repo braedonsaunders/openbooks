@@ -759,7 +759,7 @@ async function payrollOrg(
                                        created_by, updated_by)
     values (${profileId}, ${org.orgId}, 'Payroll direct deposit', ${accounts.bank}, ${formatId},
             ${spec.currency}, ${spec.country},
-            ${sealJson({ ...ORIGINATOR_SECRETS[rail], ...overrides })},
+            ${sealJson({ ...ORIGINATOR_SECRETS[rail], ...overrides }, { orgId: org.orgId, purpose: "payment.originator.secrets" })},
             '{}'::jsonb, true, ${actorId}, ${actorId})`);
 
   return {
@@ -818,7 +818,7 @@ async function employee(fx: Fixture, name: string, opts: {
                                        is_active, created_by, updated_by)
       values (${fx.orgId}, ${id}, 'Test Bank', ${canadian ? "CA" : "US"},
               ${canadian ? "CAD" : "USD"}, ${JSON.stringify(opts.bank)}::jsonb,
-              ${encryptAccountNumber("000123456789")}, '6789', 'approved', true,
+              ${encryptAccountNumber("000123456789", { orgId: fx.orgId })}, '6789', 'approved', true,
               ${fx.actorId}, ${fx.actorId})`);
   }
   return id;

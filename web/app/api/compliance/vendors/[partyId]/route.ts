@@ -130,7 +130,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
       if (!/^\d{9}$/.test(digits)) {
         return NextResponse.json({ error: 'a taxpayer identification number is exactly 9 digits' }, { status: 400 })
       }
-      tinEncrypted = sealSecret(digits)
+      tinEncrypted = sealSecret(digits, { orgId, purpose: "compliance.vendor.tin" })
       tinLast4 = digits.slice(-4)
     }
   }

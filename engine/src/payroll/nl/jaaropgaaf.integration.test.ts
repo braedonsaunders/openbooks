@@ -129,7 +129,7 @@ async function nlEmployee(
   if (args.bsn) {
     await db.execute(sql`
       update employee_payroll_profiles
-         set sin_encrypted = ${sealSecret(args.bsn)}, sin_last3 = ${args.bsn.slice(-3)}
+         set sin_encrypted = ${sealSecret(args.bsn, { orgId: fx.orgId, purpose: "payroll.employee.sin" })}, sin_last3 = ${args.bsn.slice(-3)}
        where org_id = ${fx.orgId} and employee_party_id = ${id}`);
   }
   for (const [key, answers] of [
@@ -342,7 +342,7 @@ test(
       // Legacy/imported profile state cannot put instructions or malformed data
       // into the mandatory BSN field on an otherwise valid jaaropgaaf.
       await db.execute(sql`
-        update employee_payroll_profiles set sin_encrypted = ${sealSecret("123456789")}
+        update employee_payroll_profiles set sin_encrypted = ${sealSecret("123456789", { orgId: fx.orgId, purpose: "payroll.employee.sin" })}
          where org_id = ${fx.orgId} and employee_party_id = ${jan.id}`);
       await assert.rejects(
         () => slipOf(jan),

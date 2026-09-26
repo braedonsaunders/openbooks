@@ -668,7 +668,7 @@ async function zenginProfileOrg(secrets: Record<string, unknown>) {
                                        country, originator_secrets_encrypted, settings, is_active,
                                        created_by, updated_by)
     values (${profileId}, ${org.orgId}, 'Payroll direct deposit (Zengin)', ${bankAccountId}, ${formats.rows[0]!.id},
-            'JPY', 'JP', ${sealJson(secrets)}, '{}'::jsonb, true, ${actorId}, ${actorId})`);
+            'JPY', 'JP', ${sealJson(secrets, { orgId: org.orgId, purpose: "payment.originator.secrets" })}, '{}'::jsonb, true, ${actorId}, ${actorId})`);
   return { orgId: org.orgId, profileId };
 }
 

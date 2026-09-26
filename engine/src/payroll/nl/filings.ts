@@ -202,7 +202,7 @@ async function bsnForSlip(orgId: string, employeePartyId: string): Promise<strin
      where prof.org_id = ${orgId} and prof.employee_party_id = ${employeePartyId}
   `));
   const sealed = rows.rows[0]?.sin_encrypted ?? null;
-  const bsn = unsealSecret(sealed);
+  const bsn = sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
   const citation = "Handboek Loonheffingen 2026, hoofdstuk 15, §15.3 requires the BSN on the statement";
   const remedy = "add or correct the BSN on the employee payroll profile before issuing";
   if (!bsn) {

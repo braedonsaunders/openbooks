@@ -102,7 +102,7 @@ function netsuiteRow(
     authKind: "token",
     status: "active",
     config,
-    secrets: secrets === null ? null : sealJson(secrets),
+    secrets: secrets === null ? null : sealJson(secrets, { orgId: "00000000-0000-4000-8000-000000000001", purpose: "connection.secrets" }),
     mirrorEnabled: false,
     mirrorSchedule: "",
     postedChangePolicy: "append_only_automatic",

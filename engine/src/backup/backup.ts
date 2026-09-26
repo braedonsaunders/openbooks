@@ -79,7 +79,9 @@ export function beginEncryptedBackup(): EncryptedBackupSink {
     encryption: BACKUP_ENCRYPTION,
     keyId: BACKUP_KEY_ID,
     nonce: nonce.toString("base64"),
-    wrappedKey: sealSecret(contentKey.toString("base64")),
+    // The envelope is org-less (it is written before any org row is read),
+    // so the wrap carries the fixed system scope like the data-key canary.
+    wrappedKey: sealSecret(contentKey.toString("base64"), { orgId: "system", purpose: "backup.manifest" }),
   });
   const trailer = new Transform({
     transform(chunk, _encoding, callback) {
@@ -369,7 +371,10 @@ export async function streamOrgBackup(orgId: string, sink: Writable): Promise<Ba
         orgId,
         createdAt: new Date().toISOString(),
         schemaSha256,
-        dataKeyCheck: sealSecret(BACKUP_DATA_KEY_CHECK_PLAINTEXT),
+        // The canary proves the deployment key, not org membership: it is
+        // sealed under the fixed system scope so restore can verify it
+        // before (and without) trusting the org id claimed inside the archive.
+        dataKeyCheck: sealSecret(BACKUP_DATA_KEY_CHECK_PLAINTEXT, { orgId: "system", purpose: "backup.data-key-check" }),
       }) + "\n",
     );
 

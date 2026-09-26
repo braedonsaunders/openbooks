@@ -30,6 +30,7 @@ export function paymentLinkTokenHash(token: string): string {
 
 export type PaymentLinkSealRow = {
   id: string;
+  orgId: string;
   token: string | null;
   token_sealed: string | null;
   token_hash: string | null;
@@ -52,17 +53,31 @@ export type PaymentLinkSealPlan =
  *   either side would hide the corruption, so the caller must refuse.
  *
  * `crypto` is injectable so tests can pin the seal without the data key; the
- * production wiring below passes the real primitives.
+ * production wiring below passes the real primitives bound to the link's own
+ * tenant (`payment.link.token`). An unsealable seal reads as a missing secret
+ * here — either way the runner below refuses the bootstrap naming the link
+ * and reissue as the remedy, never skipping the row.
  */
 export function planPaymentLinkSeal(
   row: PaymentLinkSealRow,
   crypto: {
-    seal: (plain: string) => string;
-    unseal: (sealed: string) => string | null;
+    seal: (plain: string, scope: { orgId: string }) => string;
+    unseal: (sealed: string, scope: { orgId: string }) => string | null;
     hash: (plain: string) => string;
-  } = { seal: sealSecret, unseal: unsealSecret, hash: paymentLinkTokenHash },
+  } = {
+    seal: (plain, scope) => sealSecret(plain, { orgId: scope.orgId, purpose: "payment.link.token" }),
+    unseal: (sealed, scope) => {
+      try {
+        return unsealSecret(sealed, { orgId: scope.orgId, purpose: "payment.link.token" });
+      } catch {
+        return null;
+      }
+    },
+    hash: paymentLinkTokenHash,
+  },
 ): PaymentLinkSealPlan {
-  const plain = row.token ?? (row.token_sealed === null ? null : crypto.unseal(row.token_sealed));
+  const scope = { orgId: row.orgId };
+  const plain = row.token ?? (row.token_sealed === null ? null : crypto.unseal(row.token_sealed, scope));
   if (plain === null || plain.length === 0) return { id: row.id, unrecoverable: true, reason: "missing-secret" };
   const tokenHash = crypto.hash(plain);
   if (row.token_hash !== null && row.token_hash !== tokenHash) {
@@ -71,7 +86,7 @@ export function planPaymentLinkSeal(
   return {
     id: row.id,
     tokenHash,
-    tokenSealed: row.token_sealed ?? crypto.seal(plain),
+    tokenSealed: row.token_sealed ?? crypto.seal(plain, scope),
   };
 }
 
@@ -88,7 +103,7 @@ export async function sealLegacyPaymentLinkTokens(): Promise<void> {
     // NOT "finished": any row still holding plaintext — or missing hash or
     // seal — needs this step.
     const pending = await db.execute<PaymentLinkSealRow>(sql`
-      select id, token, token_sealed, token_hash from payment_links
+      select id, org_id as "orgId", token, token_sealed, token_hash from payment_links
        where token_hash is null or token is not null or token_sealed is null
        order by id
     `);

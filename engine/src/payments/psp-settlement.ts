@@ -1639,7 +1639,7 @@ export async function savePspProviderConfig(
     { label: "clearing", id: input.defaultClearingAccountId },
   ]);
   let secrets: string | null = null;
-  if (input.apiKey) secrets = await sealJson({ apiKey: input.apiKey });
+  if (input.apiKey) secrets = await sealJson({ apiKey: input.apiKey }, { orgId, purpose: "payment.provider.secrets" });
   await db.execute(sql`
     insert into psp_provider_configs
       (org_id, provider, display_name, is_enabled, default_bank_account_id, default_fee_account_id,

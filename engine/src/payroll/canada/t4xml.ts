@@ -143,7 +143,7 @@ export async function buildT4Xml(
     const slips: (T4Slip & { sin: string })[] = [];
     for (const slip of ret.slips) {
       const sealed = sinByEmployee.get(slip.employeePartyId);
-      const sin = sealed ? unsealSecret(sealed) : null;
+      const sin = sealed ? unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" }) : null;
       // A SIN carries a Luhn check digit and a US SSN does not reliably pass
       // it: nine digits alone would transmit a mistyped or foreign identifier
       // the CRA rejects. Shared with the ROE builder (payroll-roexml.ts).

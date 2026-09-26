@@ -54,7 +54,7 @@ const priorSecret = process.env.SESSION_SECRET;
         holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
         await db.execute(sql`select id from users where id=${userId} for update`);
         await db.execute(sql`insert into auth_mfa_factors (user_id,secret_encrypted,enabled_at)
-          values (${userId},${sealSecret(secret)},now())`);
+          values (${userId},${sealSecret(secret, { orgId: userId, purpose: "auth.mfa.secret" })},now())`);
         staged();
         await hold;
       });

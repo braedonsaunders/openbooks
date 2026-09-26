@@ -778,8 +778,14 @@ type ProviderConfigRow = {
   secrets: string | null;
 };
 
-export function configSecrets(config: ProviderConfigRow): ProviderSecrets {
-  const sealed = unsealJson<{ apiKey?: string; webhookSecret?: string }>(config.secrets);
+export function configSecrets(config: ProviderConfigRow, orgId: string): ProviderSecrets {
+  const sealed =
+    config.secrets == null
+      ? null
+      : unsealJson<{ apiKey?: string; webhookSecret?: string }>(config.secrets, {
+          orgId,
+          purpose: "payment.provider.secrets",
+        });
   const settings = normalizeAcceptanceProviderSettings(config.provider, config.settings ?? {});
   return {
     apiKey: sealed?.apiKey,
@@ -1091,7 +1097,18 @@ export async function listPaymentLinks(
   // token column survives only until bootstrap's seal-and-null step and
   // covers links created between migration and that step.
   return r.rows.map(({ token_sealed, token, ...view }) => {
-    const plain = token_sealed ? unsealSecret(token_sealed) : token;
+    // A tampered token degrades only its own row. The v2 unseal throws
+    // (fail closed) where the old one returned null, so the throw is caught
+    // here and flows into the logged `unsealable` refusal below — the row
+    // still lists, but never with a collectible URL.
+    let plain: string | null = token_sealed ? null : token;
+    if (token_sealed) {
+      try {
+        plain = unsealSecret(token_sealed, { orgId, purpose: "payment.link.token" });
+      } catch {
+        plain = null;
+      }
+    }
     if (plain == null) {
       // Never emit an empty-token URL as if it were collectible: the link
       // is broken until reissued (void it and create a new link), and the
@@ -1172,7 +1189,7 @@ export async function createPaymentLink(
       insert into payment_links
         (org_id, token_hash, token_sealed, document_id, party_id, subsidiary_id, provider, bank_account_id,
          amount, surcharge_amount, currency, status, expires_on, memo, created_by, updated_by)
-      values (${orgId}, ${tokenHash}, ${sealSecret(token)}, ${doc.id}, ${doc.party_id}, ${doc.subsidiary_id}, ${input.provider}, ${bankAccountId},
+      values (${orgId}, ${tokenHash}, ${sealSecret(token, { orgId, purpose: "payment.link.token" })}, ${doc.id}, ${doc.party_id}, ${doc.subsidiary_id}, ${input.provider}, ${bankAccountId},
               ${doc.open_balance}, ${surcharge.amount}, ${doc.currency}, 'active', ${input.expiresOn ?? null},
               ${input.memo ?? null}, ${actorId}, ${actorId})
       returning id
@@ -1539,7 +1556,7 @@ export async function createCheckoutSession(
 
     const adapter = ACCEPTANCE_ADAPTERS[link.provider];
     const session = await adapter.createCheckout(
-      configSecrets(config),
+      configSecrets(config, link.orgId),
       {
         linkToken: link.token,
         description: `Invoice ${doc.rows[0].document_number}`,
@@ -1684,7 +1701,7 @@ export async function handleProviderWebhook(
   const adapter = ACCEPTANCE_ADAPTERS[provider];
   const verified: { orgId: string; events: WebhookEvent[] }[] = [];
   for (const config of configs.rows) {
-    const delivery = adapter.verifyWebhookDelivery(headers, rawBody, configSecrets(config));
+    const delivery = adapter.verifyWebhookDelivery(headers, rawBody, configSecrets(config, config.org_id));
     if (delivery.signatureValid) verified.push({ orgId: config.org_id, events: delivery.events });
   }
   if (verified.length === 0) return null;
@@ -2413,19 +2430,32 @@ export async function saveAcceptanceConfig(
             publishableKey: row.publishable_key ?? null,
             surchargeRuleId: row.surcharge_rule_id,
             settings: row.settings,
-            hasApiKey: row.secrets != null && !!unsealJson<{ apiKey?: string }>(row.secrets)?.apiKey,
+            hasApiKey:
+              row.secrets != null &&
+              !!unsealJson<{ apiKey?: string }>(row.secrets, { orgId, purpose: "payment.provider.secrets" }).apiKey,
             hasWebhookSecret:
-              row.secrets != null && !!unsealJson<{ webhookSecret?: string }>(row.secrets)?.webhookSecret,
+              row.secrets != null &&
+              !!unsealJson<{ webhookSecret?: string }>(row.secrets, { orgId, purpose: "payment.provider.secrets" })
+                .webhookSecret,
           };
     let secrets: string | null = null;
     if (input.apiKey || input.webhookSecret) {
       // Merge with any existing sealed secrets so one field can rotate alone.
-      const prior = unsealJson<{ apiKey?: string; webhookSecret?: string }>(existing?.secrets ?? null) ?? {};
-      secrets = await sealJson({
-        ...prior,
-        apiKey: input.apiKey ?? prior.apiKey,
-        webhookSecret: input.webhookSecret ?? prior.webhookSecret,
-      });
+      const prior =
+        existing?.secrets == null
+          ? {}
+          : unsealJson<{ apiKey?: string; webhookSecret?: string }>(existing.secrets, {
+              orgId,
+              purpose: "payment.provider.secrets",
+            });
+      secrets = await sealJson(
+        {
+          ...prior,
+          apiKey: input.apiKey ?? prior.apiKey,
+          webhookSecret: input.webhookSecret ?? prior.webhookSecret,
+        },
+        { orgId, purpose: "payment.provider.secrets" },
+      );
     }
     const savedRows = (await tx.execute<ConfigRow>(sql`
       insert into psp_provider_configs

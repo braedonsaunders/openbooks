@@ -189,8 +189,11 @@ export async function saveFxProviderConfig(
     const existing = await readFxProviderConfig(orgId, tx, true);
     let sealed = existing?.secrets ?? null;
     if (input.apiKey === null || input.provider !== "open_exchange_rates") sealed = null;
-    if (typeof input.apiKey === "string" && input.apiKey.trim()) sealed = sealJson({ apiKey: input.apiKey.trim() });
-    if (input.isEnabled && manifest.requiresSecret && !unsealJson<{ apiKey?: string }>(sealed)?.apiKey) {
+    if (typeof input.apiKey === "string" && input.apiKey.trim()) {
+      sealed = sealJson({ apiKey: input.apiKey.trim() }, { orgId, purpose: "fx.provider.secrets" });
+    }
+    const sealedApiKey = sealed == null ? undefined : unsealJson<{ apiKey?: string }>(sealed, { orgId, purpose: "fx.provider.secrets" }).apiKey;
+    if (input.isEnabled && manifest.requiresSecret && !sealedApiKey) {
       throw new FxProviderError("an API key is required before enabling Open Exchange Rates");
     }
     const next = input.isEnabled ? computeNextSyncAt(input.schedule, input.syncHourUtc) : null;
@@ -457,7 +460,10 @@ async function fetchProviderSnapshots(config: FxProviderConfigRow, from: string,
     url.searchParams.set("format", "csvdata");
     return parseEcbCsv(await fetchText(url));
   }
-  const apiKey = unsealJson<{ apiKey?: string }>(config.secrets)?.apiKey;
+  const apiKey =
+    config.secrets == null
+      ? undefined
+      : unsealJson<{ apiKey?: string }>(config.secrets, { orgId: config.orgId, purpose: "fx.provider.secrets" }).apiKey;
   if (!apiKey) throw new FxProviderError("Open Exchange Rates API key is missing");
   const snapshots: FxSnapshot[] = [];
   for (let date = from; date <= to; date = addDays(date, 1)) {

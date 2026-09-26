@@ -42,7 +42,7 @@ const previousSecret = process.env.SESSION_SECRET;
             values (${id},${userId},${randomBytes(32).toString("hex")},'password',${new Date(Date.now()+86_400_000)})`);
           const previousHashes = previousCodes.map(code => hashRecoveryCode(userId, normalizeRecoveryCode(code)!));
           await db.execute(sql`insert into auth_mfa_factors(user_id,secret_encrypted,recovery_code_hashes,enabled_at,setup_session_id,setup_expires_at)
-            values (${userId},${sealSecret(secret)},${JSON.stringify(previousHashes)}::jsonb,${action === "mfa_enabled" ? sql`null` : sql`now()`},
+            values (${userId},${sealSecret(secret, { orgId: userId, purpose: "auth.mfa.secret" })},${JSON.stringify(previousHashes)}::jsonb,${action === "mfa_enabled" ? sql`null` : sql`now()`},
               ${action === "mfa_enabled" ? sessionId : null},${action === "mfa_enabled" ? new Date(Date.now()+30*60_000) : null})`);
           const factorBefore = (await db.execute(sql`select * from auth_mfa_factors where user_id=${userId}`)).rows[0]!;
           const sessionsBefore = (await db.execute(sql`select * from auth_sessions where user_id=${userId} order by id`)).rows;

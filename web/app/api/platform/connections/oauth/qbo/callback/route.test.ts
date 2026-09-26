@@ -7,7 +7,7 @@ process.env.OPENBOOKS_DATA_KEY ??=
   "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 
 const stateKey = Symbol.for("openbooks.qbo-oauth-callback-test");
-const secrets = sealJson({ clientId: "qbo-client", clientSecret: "qbo-secret" });
+const secrets = sealJson({ clientId: "qbo-client", clientSecret: "qbo-secret" }, { orgId: "org-1", purpose: "connection.secrets" });
 const state = {
   connection: {
     id: "conn-1",
@@ -153,7 +153,7 @@ test("QBO callback bounce uses appBaseUrl, not the request Host", async () => {
 test("a reusable sealed org/connection pair without the cookie nonce is badstate", async () => {
   resetQbo();
   const res = await callback({
-    state: sealJson({ orgId: "org-1", connectionId: "conn-1" }),
+    state: sealJson({ orgId: "org-1", connectionId: "conn-1" }, { orgId: "system", purpose: "connection.oauth.state" }),
     cookie: "unrelated-nonce",
   });
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=badstate");

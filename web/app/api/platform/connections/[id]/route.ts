@@ -135,7 +135,9 @@ export async function PATCH(
     }
     if (body.secrets && manifest) {
       const current =
-        unsealJson<Record<string, string>>(existing.secrets) ?? {};
+        existing.secrets == null
+          ? {}
+          : unsealJson<Record<string, string>>(existing.secrets, { orgId, purpose: "connection.secrets" });
       for (const field of manifest.secretFields) {
         const value = body.secrets[field.key];
         if (value !== undefined && value !== null && String(value) !== "") {
@@ -155,7 +157,7 @@ export async function PATCH(
         }
       }
       if (credentialsChanged) {
-        updates.secrets = sealJson(current);
+        updates.secrets = sealJson(current, { orgId, purpose: "connection.secrets" });
         // Providing credentials clears the "unconfigured" state.
         if (existing.status === "unconfigured") updates.status = "active";
       }

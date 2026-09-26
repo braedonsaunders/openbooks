@@ -69,7 +69,7 @@ async function makeEmployee(
       (org_id, employee_party_id, employment_id, pay_schedule_id, country, province, pay_basis, is_active,
        sin_encrypted, sin_last3, created_by, updated_by)
     values (${orgId}, ${id}, ${employmentId}, ${scheduleId}, 'DE', ${land}, 'salary', true,
-            ${sealSecret(idNr)}, ${idNr.slice(-3)}, ${actorId}, ${actorId})`);
+            ${sealSecret(idNr, { orgId, purpose: "payroll.employee.sin" })}, ${idNr.slice(-3)}, ${actorId}, ${actorId})`);
   await db.execute(sql`
     insert into labor_cost_rates
       (org_id, employee_party_id, currency, rate, basis, annual_hours, effective_from, is_active,

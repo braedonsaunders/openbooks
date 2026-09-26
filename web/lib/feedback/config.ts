@@ -150,7 +150,9 @@ export async function isFeedbackReady(): Promise<boolean> {
 /** The decrypted token, for verifying a destination the operator just saved. */
 export async function getFeedbackToken(): Promise<string | null> {
   const raw = await readStored()
-  return raw.token ? unsealSecret(raw.token) : null
+  // Installation-wide secret on the org-less platform_settings singleton:
+  // the seal scope carries the fixed system id.
+  return raw.token ? unsealSecret(raw.token, { orgId: "system", purpose: "feedback.token" }) : null
 }
 
 /** The decrypted destination, or null when reporting is off or incomplete. */
@@ -161,7 +163,7 @@ export async function getFeedbackRuntime(): Promise<FeedbackRuntime | null> {
   const repo = typeof raw.repo === 'string' ? raw.repo.trim() : ''
   if (!OWNER_RE.test(owner)) return null
   if (!REPO_RE.test(repo) || repo === '.' || repo === '..') return null
-  const token = unsealSecret(raw.token)
+  const token = unsealSecret(raw.token, { orgId: "system", purpose: "feedback.token" })
   if (!token) return null
   return {
     owner,
@@ -194,7 +196,7 @@ export async function saveFeedbackSettings(
       repo: validated.repo || undefined,
       labels: parseFeedbackLabels(validated.labels),
       searchDuplicates: validated.searchDuplicates,
-      token: validated.token ? sealSecret(validated.token) : previous.token,
+      token: validated.token ? sealSecret(validated.token, { orgId: "system", purpose: "feedback.token" }) : previous.token,
     }
     await writeSettings({ ...settings, feedback: next }, actorId)
     return toView(next)

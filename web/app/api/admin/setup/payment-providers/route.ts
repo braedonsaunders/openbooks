@@ -450,7 +450,7 @@ export async function POST(req: Request) {
     if (!config.rows[0]) return NextResponse.json({ ok: false, detail: "provider is not configured" });
     let result: { ok: boolean; detail: string };
     try {
-      result = await testAcceptanceConnection(provider, configSecrets(config.rows[0]));
+      result = await testAcceptanceConnection(provider, configSecrets(config.rows[0], orgId));
     } catch (e) {
       result = { ok: false, detail: e instanceof Error ? e.message : String(e) };
     }

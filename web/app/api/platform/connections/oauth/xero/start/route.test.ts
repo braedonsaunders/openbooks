@@ -14,7 +14,7 @@ interface StartState {
 }
 const state: StartState = {
   source: "xero",
-  secrets: sealJson({ clientId: "xero-client" }),
+  secrets: sealJson({ clientId: "xero-client" }, { orgId: "org-1", purpose: "connection.secrets" }),
   identityError: null,
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
@@ -118,7 +118,7 @@ test("Xero start mints a one-time nonce in sealed state and the CSRF cookie", as
   const location = new URL(res.headers.get("location") ?? "");
   const sealed = location.searchParams.get("state");
   assert.ok(sealed);
-  const payload = unsealJson<{ orgId?: string; connectionId?: string; nonce?: string; exp?: number }>(sealed);
+  const payload = unsealJson<{ orgId?: string; connectionId?: string; nonce?: string; exp?: number }>(sealed, { orgId: "system", purpose: "connection.oauth.state" });
   assert.equal(payload?.orgId, "org-1");
   assert.equal(payload?.connectionId, "conn-1");
   assert.equal(typeof payload?.nonce, "string");

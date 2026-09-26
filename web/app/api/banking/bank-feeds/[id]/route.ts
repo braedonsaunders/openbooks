@@ -109,7 +109,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Only re-seal when a fresh credentials object is supplied (never on absence).
   const rotating = Boolean(body.credentials && typeof body.credentials === "object");
   if (rotating) {
-    sets.push(sql`credentials = ${sealCredentials(body.credentials as Record<string, string>)}`);
+    sets.push(sql`credentials = ${sealCredentials(authz.user.orgId, body.credentials as Record<string, string>)}`);
     sets.push(sql`status = 'pending'`);
   }
   if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });

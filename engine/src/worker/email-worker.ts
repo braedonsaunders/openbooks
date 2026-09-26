@@ -302,7 +302,7 @@ export function createEmailWorker(): Worker<EmailJobData> {
         }
         // Attachments arrive by reference and are fetched here, at send
         // time — the queue payload never carries file bytes.
-        const attachments = await loadEmailAttachments(d.attachments);
+        const attachments = await loadEmailAttachments(d.orgId, d.attachments);
         const outcome = await sendVia(transport, {
           to: d.to,
           subject: d.subject,

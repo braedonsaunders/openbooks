@@ -101,7 +101,7 @@ test("deploy-window plaintext rows are sealed AND hashed in one step", { skip: !
     assert.ok(after.tokenSealed, "display seal must be set");
     assert.equal(after.tokenHash, paymentLinkTokenHash(secret), "lookup hash must match the secret");
     assert.equal(await resolveByHash(paymentLinkTokenHash(secret)), row.id, "link must resolve by hash after sealing");
-    assert.equal(unsealSecret(after.tokenSealed), secret, "display path must recover the secret");
+    assert.equal(unsealSecret(after.tokenSealed!, { orgId: org!.orgId, purpose: "payment.link.token" }), secret, "display path must recover the secret");
   } finally {
     await removeLink(row.id);
   }
@@ -110,7 +110,7 @@ test("deploy-window plaintext rows are sealed AND hashed in one step", { skip: !
 test("rows sealed-without-hash by an older bootstrap are healed, not re-sealed", { skip: !DB }, async () => {
   // This is the state the pre-fix bootstrap left behind: sealed, nulled, unresolvable.
   const secret = `link-secret-${randomUUID()}`;
-  const sealed = sealSecret(secret);
+  const sealed = sealSecret(secret, { orgId: org!.orgId, purpose: "payment.link.token" });
   const row = await insertLink({ token: null, tokenSealed: sealed });
   try {
     await sealLegacyPaymentLinkTokens();
@@ -154,7 +154,7 @@ test("unrecoverable links refuse the bootstrap and name reissue as the remedy", 
 
 test("already-hashed rows are untouched (engine-written links)", { skip: !DB }, async () => {
   const secret = `link-secret-${randomUUID()}`;
-  const sealed = sealSecret(secret);
+  const sealed = sealSecret(secret, { orgId: org!.orgId, purpose: "payment.link.token" });
   const row = await insertLink({ token: null, tokenSealed: sealed, tokenHash: paymentLinkTokenHash(secret) });
   try {
     await sealLegacyPaymentLinkTokens();
@@ -179,7 +179,7 @@ test("upgraded-install rows (migration hash + leftover plaintext) are sealed and
     assert.ok(after.tokenSealed, "display seal must be set");
     assert.equal(after.tokenHash, paymentLinkTokenHash(secret), "verified hash must be kept");
     assert.equal(await resolveByHash(paymentLinkTokenHash(secret)), row.id, "link must resolve by hash");
-    assert.equal(unsealSecret(after.tokenSealed), secret, "display path must recover the secret");
+    assert.equal(unsealSecret(after.tokenSealed!, { orgId: org!.orgId, purpose: "payment.link.token" }), secret, "display path must recover the secret");
   } finally {
     await removeLink(row.id);
   }
@@ -204,33 +204,33 @@ test("planner prefers plaintext, keeps an existing seal, refuses empty rows", ()
     unseal: (sealed: string) => (sealed === "good-seal" ? "unsealed-secret" : null),
     hash: (plain: string) => `hash(${plain})`,
   };
-  const legacy = planPaymentLinkSeal({ id: "a", token: "plain", token_sealed: null, token_hash: null }, crypto);
+  const legacy = planPaymentLinkSeal({ id: "a", orgId: "org-1", token: "plain", token_sealed: null, token_hash: null }, crypto);
   assert.deepEqual(legacy, { id: "a", tokenHash: "hash(plain)", tokenSealed: "sealed(plain)" });
 
-  const partial = planPaymentLinkSeal({ id: "b", token: "plain", token_sealed: "existing", token_hash: null }, crypto);
+  const partial = planPaymentLinkSeal({ id: "b", orgId: "org-1", token: "plain", token_sealed: "existing", token_hash: null }, crypto);
   assert.deepEqual(partial, { id: "b", tokenHash: "hash(plain)", tokenSealed: "existing" });
 
   // The 0251-upgraded shape: hash already present and matching, plaintext
   // still present, no seal — seal it, null it, keep the verified hash.
   const upgraded = planPaymentLinkSeal(
-    { id: "b2", token: "plain", token_sealed: null, token_hash: "hash(plain)" },
+    { id: "b2", orgId: "org-1", token: "plain", token_sealed: null, token_hash: "hash(plain)" },
     crypto,
   );
   assert.deepEqual(upgraded, { id: "b2", tokenHash: "hash(plain)", tokenSealed: "sealed(plain)" });
 
-  const healed = planPaymentLinkSeal({ id: "c", token: null, token_sealed: "good-seal", token_hash: null }, crypto);
+  const healed = planPaymentLinkSeal({ id: "c", orgId: "org-1", token: null, token_sealed: "good-seal", token_hash: null }, crypto);
   assert.deepEqual(healed, { id: "c", tokenHash: "hash(unsealed-secret)", tokenSealed: "good-seal" });
 
   assert.deepEqual(
-    planPaymentLinkSeal({ id: "d", token: null, token_sealed: "bad-seal", token_hash: null }, crypto),
+    planPaymentLinkSeal({ id: "d", orgId: "org-1", token: null, token_sealed: "bad-seal", token_hash: null }, crypto),
     { id: "d", unrecoverable: true, reason: "missing-secret" },
   );
   assert.deepEqual(
-    planPaymentLinkSeal({ id: "e", token: null, token_sealed: null, token_hash: null }, crypto),
+    planPaymentLinkSeal({ id: "e", orgId: "org-1", token: null, token_sealed: null, token_hash: null }, crypto),
     { id: "e", unrecoverable: true, reason: "missing-secret" },
   );
   assert.deepEqual(
-    planPaymentLinkSeal({ id: "f", token: "plain", token_sealed: null, token_hash: "hash(other)" }, crypto),
+    planPaymentLinkSeal({ id: "f", orgId: "org-1", token: "plain", token_sealed: null, token_hash: "hash(other)" }, crypto),
     { id: "f", unrecoverable: true, reason: "hash-mismatch" },
   );
 });

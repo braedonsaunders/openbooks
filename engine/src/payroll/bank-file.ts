@@ -412,6 +412,7 @@ export type PayrollOriginatorResult =
   | { ok: false; profileName: string; missing: string[] };
 type ProfileRow = {
   id: string;
+  orgId: string;
   name: string;
   currency: string | null;
   rail: string;
@@ -452,7 +453,7 @@ export async function payrollBankProfiles(orgId: string): Promise<
 > {
   const rails = Object.values(PAYROLL_BANK_FILE_FORMATS).flatMap((spec) => spec.rails);
   const rows = (await db.execute<ProfileRow>(sql`
-    select p.id, p.name, p.currency, f.rail, p.settings, p.originator_secrets_encrypted
+    select p.id, p.org_id as "orgId", p.name, p.currency, f.rail, p.settings, p.originator_secrets_encrypted
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
      where p.org_id = ${orgId} and p.is_active and f.is_active
@@ -505,7 +506,10 @@ const FILL_ME = (value: unknown) =>
  * the AP code misdescribes the credit on the employee's statement.
  */
 function resolveCpa005(row: ProfileRow): PayrollOriginatorResult {
-  const raw = unsealJson<Partial<EftSettings>>(row.originator_secrets_encrypted) ?? {};
+  const raw =
+      row.originator_secrets_encrypted == null
+        ? {}
+        : unsealJson<Partial<EftSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
   const required: (keyof EftSettings)[] = [
     "originatorId",
     "originatorShortName",
@@ -588,7 +592,10 @@ export const NACHA_PAYROLL_ENTRY_CLASS = "PPD" as const;
 export const NACHA_PAYROLL_ENTRY_DESCRIPTION = "PAYROLL";
 
 function resolveNacha(row: ProfileRow): PayrollOriginatorResult {
-  const raw = unsealJson<Partial<NachaSettings>>(row.originator_secrets_encrypted) ?? {};
+  const raw =
+      row.originator_secrets_encrypted == null
+        ? {}
+        : unsealJson<Partial<NachaSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
   const required: (keyof NachaSettings)[] = [
     "odfiRouting",
     "immediateDestination",
@@ -643,7 +650,10 @@ function resolveNacha(row: ProfileRow): PayrollOriginatorResult {
  * (mod-97) or BIC by name rather than emitting XML the bank will reject.
  */
 function resolveSepa(row: ProfileRow): PayrollOriginatorResult {
-  const raw = unsealJson<Partial<SepaSettings>>(row.originator_secrets_encrypted) ?? {};
+  const raw =
+      row.originator_secrets_encrypted == null
+        ? {}
+        : unsealJson<Partial<SepaSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
   const checked = validateSepaSettings(raw);
   if (!checked.ok) {
     return {
@@ -680,7 +690,10 @@ function resolveSepa(row: ProfileRow): PayrollOriginatorResult {
  * emitted into a BSB field the bank would misread as another account.
  */
 function resolveCemtex(row: ProfileRow): PayrollOriginatorResult {
-  const raw = unsealJson<Partial<CemtexSettings>>(row.originator_secrets_encrypted) ?? {};
+  const raw =
+      row.originator_secrets_encrypted == null
+        ? {}
+        : unsealJson<Partial<CemtexSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
   const checked = validateCemtexSettings(raw);
   if (!checked.ok) {
     return {
@@ -720,7 +733,10 @@ function resolveCemtex(row: ProfileRow): PayrollOriginatorResult {
  * scope — the settings carry a single SUN, so it cannot be expressed.
  */
 function resolveBacs(row: ProfileRow): PayrollOriginatorResult {
-  const raw = unsealJson<Partial<BacsSettings>>(row.originator_secrets_encrypted) ?? {};
+  const raw =
+      row.originator_secrets_encrypted == null
+        ? {}
+        : unsealJson<Partial<BacsSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
   const checked = validateBacsSettings(raw);
   if (!checked.ok) {
     return {
@@ -756,7 +772,10 @@ function resolveBacs(row: ProfileRow): PayrollOriginatorResult {
  * emitted into fixed-width fields the bank would misread.
  */
 function resolveZengin(row: ProfileRow): PayrollOriginatorResult {
-  const raw = unsealJson<Partial<ZenginSettings>>(row.originator_secrets_encrypted) ?? {};
+  const raw =
+      row.originator_secrets_encrypted == null
+        ? {}
+        : unsealJson<Partial<ZenginSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
   const checked = validateZenginSettings(raw);
   if (!checked.ok) {
     return {
@@ -796,7 +815,10 @@ function resolveZengin(row: ProfileRow): PayrollOriginatorResult {
  * different layout, not a different configuration.
  */
 function resolveCnab240Bb(row: ProfileRow): PayrollOriginatorResult {
-  const raw = unsealJson<Partial<Cnab240BbSettings>>(row.originator_secrets_encrypted) ?? {};
+  const raw =
+      row.originator_secrets_encrypted == null
+        ? {}
+        : unsealJson<Partial<Cnab240BbSettings>>(row.originator_secrets_encrypted, { orgId: row.orgId, purpose: "payment.originator.secrets" });
   const checked = validateCnab240BbSettings(raw);
   if (!checked.ok) {
     return {
@@ -857,7 +879,7 @@ export async function payrollOriginatorConfig(
   paymentBankProfileId: string,
 ): Promise<PayrollOriginatorResult & { format?: PayRunBankFileFormat }> {
   const rows = (await db.execute<ProfileRow>(sql`
-    select p.id, p.name, p.currency, f.rail, p.settings, p.originator_secrets_encrypted
+    select p.id, p.org_id as "orgId", p.name, p.currency, f.rail, p.settings, p.originator_secrets_encrypted
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${paymentBankProfileId} and p.is_active and f.is_active
@@ -1236,7 +1258,7 @@ export async function loadCredits(
       bankAccountId: row.bank_account_id,
       bankAccountUpdatedAt: row.bank_account_updated_at,
     });
-    const accountNumber = decryptAccountNumber(row.account_number_encrypted);
+    const accountNumber = decryptAccountNumber(row.account_number_encrypted, { orgId });
     // Exhaustive over the union: each format states how its credits are
     // addressed, and a format with no case fails tsc at the never-binding
     // below instead of being validated as another rail's account. A switch,

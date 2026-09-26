@@ -222,7 +222,7 @@ export async function buildRl1Xml(orgId: string, taxYear: number): Promise<never
   const missingSins: string[] = [];
   for (const slip of slips) {
     const sealed = sinByEmployee.get(slip.employeePartyId);
-    const sin = sealed ? unsealSecret(sealed) : null;
+    const sin = sealed ? unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" }) : null;
     // Same Luhn gate as the T4 and ROE builders: nine digits alone would
     // carry a mistyped or foreign identifier into a statutory file.
     if (!sin || !isCanadianSin(sin)) missingSins.push(slip.employeeName);

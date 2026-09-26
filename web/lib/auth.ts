@@ -695,7 +695,9 @@ export async function completeMfaLogin(
        for update
     `));
     const factor = factorResult.rows[0];
-    const secret = factor ? unsealSecret(factor.secretEncrypted) : null;
+    const secret = factor
+      ? unsealSecret(factor.secretEncrypted, { orgId: challenge.userId, purpose: "auth.mfa.secret" })
+      : null;
     const consumed = factor && secret ? consumeMfaCredential({
       userId: challenge.userId,
       secret,
@@ -834,8 +836,12 @@ export async function beginMfaSetup(
       if (existing.setupSessionId !== currentSessionId) {
         throw new Error("MFA setup is already pending in another session; finish setup there or wait for it to expire before starting again")
       }
-      const pendingSecret = unsealSecret(existing.secretEncrypted)
-      if (!pendingSecret) throw new Error("MFA setup secret is unavailable; restart enrollment")
+      let pendingSecret: string;
+      try {
+        pendingSecret = unsealSecret(existing.secretEncrypted, { orgId: userId, purpose: "auth.mfa.secret" });
+      } catch {
+        throw new Error("MFA setup secret is unavailable; restart enrollment");
+      }
       return {
         secret: pendingSecret,
         provisioningUri: totpProvisioningUri({ secret: pendingSecret, email: reauthenticated.email }),
@@ -846,7 +852,7 @@ export async function beginMfaSetup(
     await db.execute(sql`
       insert into auth_mfa_factors
         (user_id, secret_encrypted, setup_session_id, setup_expires_at, setup_attempt_count)
-      values (${userId}, ${sealSecret(secret)}, ${currentSessionId}, ${setupExpiresAt}, 0)
+      values (${userId}, ${sealSecret(secret, { orgId: userId, purpose: "auth.mfa.secret" })}, ${currentSessionId}, ${setupExpiresAt}, 0)
       on conflict (user_id) do update
         set secret_encrypted = excluded.secret_encrypted, recovery_code_hashes = '[]'::jsonb,
             last_used_step = null, enabled_at = null,
@@ -902,7 +908,7 @@ export async function confirmMfaSetup(
       await db.execute(sql`delete from auth_mfa_factors where user_id = ${userId} and enabled_at is null`);
       return null;
     }
-    const secret = unsealSecret(factor.secretEncrypted);
+    const secret = unsealSecret(factor.secretEncrypted, { orgId: userId, purpose: "auth.mfa.secret" });
     if (!secret) return null;
     const step = verifyTotpCode(secret, suppliedCode);
     if (step === null) {
@@ -964,7 +970,9 @@ async function verifyEnabledMfaFactor(userId: string, suppliedCode: string) {
       from auth_mfa_factors where user_id = ${userId} and enabled_at is not null for update
   `));
   const factor = result.rows[0];
-  const secret = factor ? unsealSecret(factor.secretEncrypted) : null;
+  const secret = factor
+    ? unsealSecret(factor.secretEncrypted, { orgId: userId, purpose: "auth.mfa.secret" })
+    : null;
   if (!factor || !secret) return null;
   const recoveryCodeHashes = Array.isArray(factor.recoveryCodeHashes) ? factor.recoveryCodeHashes : [];
   const consumed = consumeMfaCredential({

@@ -59,7 +59,7 @@ for (const [label, fields] of cases) {
       if (label !== "create audit" && label !== "concurrent create") await db.execute(sql`
         insert into employee_payroll_profiles(org_id,employee_party_id,pay_schedule_id,country,province,pay_basis,vacation_method,
           federal_claim_code,federal_claim_amount,tax_exempt,sin_encrypted,sin_last3)
-        values (${org.orgId},${employeeId},${scheduleId},'CA','ON','salary','pay_each_period',1,'1000',true,${sealSecret("123456789")},'789')`);
+        values (${org.orgId},${employeeId},${scheduleId},'CA','ON','salary','pay_each_period',1,'1000',true,${sealSecret("123456789", { orgId: org.orgId, purpose: "payroll.employee.sin" })},'789')`);
       const before = (await db.execute(sql`select * from employee_payroll_profiles where employee_party_id=${employeeId}`)).rows[0];
       if (label === "audit failure") {
         await db.execute(sql.raw(`create function public."${trigger}"() returns trigger language plpgsql as $$

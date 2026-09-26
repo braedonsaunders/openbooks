@@ -69,13 +69,13 @@ test("a succeeded event arriving after its refund still settles instead of stran
         (org_id, provider, display_name, is_enabled, acceptance_enabled,
          default_bank_account_id, secrets, created_by, updated_by)
       values (${org.orgId}, 'gocardless', 'GoCardless', true, true,
-              ${org.accounts.bank}, ${sealJson({ webhookSecret: secret })}, ${userId}, ${userId})`);
+              ${org.accounts.bank}, ${sealJson({ webhookSecret: secret }, { orgId: org.orgId, purpose: "payment.provider.secrets" })}, ${userId}, ${userId})`);
     const linkId = randomUUID(), linkToken = `gc-order-link-${randomUUID()}`;
     await db.execute(sql`
       insert into payment_links
         (id, org_id, token_hash, token_sealed, document_id, party_id, subsidiary_id, provider,
          bank_account_id, amount, surcharge_amount, currency, created_by, updated_by)
-      values (${linkId}, ${org.orgId}, ${createHash("sha256").update(linkToken, "utf8").digest("hex")}, ${sealSecret(linkToken)}, ${invoiceId}, ${org.customerId},
+      values (${linkId}, ${org.orgId}, ${createHash("sha256").update(linkToken, "utf8").digest("hex")}, ${sealSecret(linkToken, { orgId: org.orgId, purpose: "payment.link.token" })}, ${invoiceId}, ${org.customerId},
               ${org.subsidiaryId}, 'gocardless', ${org.accounts.bank}, '100', '0', 'CAD',
               ${userId}, ${userId})`);
     await db.execute(sql`

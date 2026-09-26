@@ -79,7 +79,7 @@ async function seedSepaDebitRun(
          require_run_approval, require_file_approval, is_active, created_by, updated_by)
       values
         (${profileId}, ${org.orgId}, 'SEPA collection profile', ${org.accounts.bank},
-         ${org.subsidiaryId}, ${formatId}, 'CAD', 'DE', ${sealJson(ORIGINATOR_SECRETS)},
+         ${org.subsidiaryId}, ${formatId}, 'CAD', 'DE', ${sealJson(ORIGINATOR_SECRETS, { orgId: org.orgId, purpose: "payment.originator.secrets" })},
          false, false, true, ${actorId}, ${actorId})`);
     await db.execute(sql`
       insert into party_bank_accounts
@@ -90,7 +90,7 @@ async function seedSepaDebitRun(
       values
         (${accountId}, ${org.orgId}, ${org.customerId}, 'Customer bank',
          'DE', 'CAD', ${JSON.stringify(bank.routing)}::jsonb,
-         ${bank.account === null ? null : encryptAccountNumber(bank.account)},
+         ${bank.account === null ? null : encryptAccountNumber(bank.account, { orgId: org.orgId })},
          ${bank.account === null ? null : bank.account.slice(-4)},
          ${bank.approved ? "approved" : "pending"}, ${bank.active},
          ${bank.approved ? org.date : null}, ${bank.approved ? actorId : null},

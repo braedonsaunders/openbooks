@@ -222,7 +222,7 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const sealed = Object.keys(provided).length > 0 ? sealJson(provided) : null;
+  const sealed = Object.keys(provided).length > 0 ? sealJson(provided, { orgId, purpose: "connection.secrets" }) : null;
   // OAuth connections still need the consent flow before they can run, even
   // once their app credentials are saved — so they start "unconfigured".
   const status =

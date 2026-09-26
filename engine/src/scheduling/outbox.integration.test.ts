@@ -651,7 +651,7 @@ test(
       // refusing a truncated message.
       const queued = await getEmailQueue().getJob(expectedJobId);
       assert.ok(queued, "the accepted job is still queued");
-      const loaded = await loadEmailAttachments(queued.data.attachments);
+      const loaded = await loadEmailAttachments(org.orgId, queued.data.attachments);
       assert.deepEqual(loaded, [
         {
           filename: "renewal.pdf",

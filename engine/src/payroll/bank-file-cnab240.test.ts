@@ -723,7 +723,7 @@ async function cnabProfileOrg(secrets: Record<string, unknown>) {
                                        country, originator_secrets_encrypted, settings, is_active,
                                        created_by, updated_by)
     values (${profileId}, ${org.orgId}, 'Payroll direct deposit (CNAB 240 BB)', ${bankAccountId}, ${formatId},
-            'BRL', 'BR', ${sealJson(secrets)}, '{}'::jsonb, true, ${actorId}, ${actorId})`);
+            'BRL', 'BR', ${sealJson(secrets, { orgId: org.orgId, purpose: "payment.originator.secrets" })}, '{}'::jsonb, true, ${actorId}, ${actorId})`);
   return { orgId: org.orgId, profileId };
 }
 

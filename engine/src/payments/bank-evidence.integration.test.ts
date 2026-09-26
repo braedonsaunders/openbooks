@@ -103,7 +103,7 @@ async function seedRailRun(
        originator_secrets_encrypted, require_run_approval, require_file_approval,
        is_active, created_by, updated_by)
     values (${profileId}, ${org.orgId}, ${`Bank evidence profile ${method} ${profileId.slice(0, 8)}`}, ${org.accounts.bank},
-            ${formatId}, 'CAD', 'CA', ${sealJson(ORIGINATOR_SECRETS[method])},
+            ${formatId}, 'CAD', 'CA', ${sealJson(ORIGINATOR_SECRETS[method], { orgId: org.orgId, purpose: "payment.originator.secrets" })},
             false, false, true, ${actorId}, ${actorId})`);
   await db.execute(sql`
     insert into party_bank_accounts
@@ -113,7 +113,7 @@ async function seedRailRun(
        submitted_by, submitted_at, created_by, updated_by)
     values (${accountId}, ${org.orgId}, ${org.vendorId}, 'Vendor Bank A', 'CA', 'CAD',
             ${JSON.stringify(APPROVED_A[method].routing)}::jsonb,
-            ${encryptAccountNumber(APPROVED_A[method].account)},
+            ${encryptAccountNumber(APPROVED_A[method].account, { orgId: org.orgId })},
             ${APPROVED_A[method].account.slice(-4)},
             'approved', true, ${org.date}, ${actorId},
             ${actorId}, now(), ${actorId}, ${actorId})`);
@@ -146,7 +146,7 @@ async function applyPendingBankDetailEdit(
   await db.execute(sql`
     update party_bank_accounts set
       routing = ${JSON.stringify(b.routing)}::jsonb,
-      account_number_encrypted = ${encryptAccountNumber(b.account)},
+      account_number_encrypted = ${encryptAccountNumber(b.account, { orgId })},
       account_last_four = ${b.account.slice(-4)},
       approval_status = 'pending', is_active = false, approved_at = null, approved_by = null,
       submitted_by = ${fixture.actorId}, submitted_at = now(),
@@ -190,7 +190,7 @@ async function beginUncommittedBankEdit(
        account_number_encrypted = $2,
        approval_status = 'pending', is_active = false, approved_at = null
       where id = $3 and org_id = $4`,
-    [JSON.stringify(b.routing), encryptAccountNumber(b.account), fixture.accountId, orgId],
+    [JSON.stringify(b.routing), encryptAccountNumber(b.account, { orgId }), fixture.accountId, orgId],
   );
   const pid = Number((await client.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid);
   let released = false;

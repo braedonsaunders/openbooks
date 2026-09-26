@@ -73,7 +73,7 @@ test("UI-shaped Adyen save preserves a stored live apiBase", { skip: !DB }, asyn
     assert.equal(after.note, "keep-me");
     // The live endpoint must still resolve for checkout, not the test host.
     assert.equal(
-      configSecrets(await readConfigRow(org.orgId, "adyen")).apiBase,
+      configSecrets(await readConfigRow(org.orgId, "adyen"), org.orgId).apiBase,
       LIVE_BASE,
     );
   } finally {
@@ -184,7 +184,7 @@ test("revert path is an explicit allowlisted default endpoint", { skip: !DB }, a
     assert.equal(after.apiBase, revert);
     assert.equal(after.merchantAccount, "AcmeLive");
     assert.equal(
-      configSecrets(await readConfigRow(org.orgId, "adyen")).apiBase,
+      configSecrets(await readConfigRow(org.orgId, "adyen"), org.orgId).apiBase,
       revert,
     );
   } finally {

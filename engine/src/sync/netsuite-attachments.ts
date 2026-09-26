@@ -213,7 +213,10 @@ async function resolveContext(options: ImportOptions): Promise<{
   `));
   const connection = connectionResult.rows[0];
   if (!connection) throw new Error("tenant does not have a NetSuite connection");
-  const secret = unsealJson<Partial<NetSuiteCreds>>(connection.secrets);
+  const secret =
+    connection.secrets == null
+      ? null
+      : unsealJson<Partial<NetSuiteCreds>>(connection.secrets, { orgId, purpose: "connection.secrets" });
   if (!secret?.consumerKey || !secret.consumerSecret || !secret.tokenKey || !secret.tokenSecret) {
     throw new Error("tenant NetSuite connection is missing sealed credentials");
   }

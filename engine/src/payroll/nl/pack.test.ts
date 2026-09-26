@@ -197,7 +197,7 @@ function stubContext(
       execute: (async (query: unknown) => {
         const chunks = (query as { getSQL?: () => { queryChunks: { value?: unknown }[] } }).getSQL?.().queryChunks ?? [];
         const text = chunks.map((c) => typeof c.value === "string" ? c.value : Array.isArray(c.value) ? c.value.join("") : "").join("");
-        return text.includes("sin_encrypted") ? { rows: [{ sin_encrypted: sealSecret("123456782") }] } : { rows: [{ sv: "0" }] };
+        return text.includes("sin_encrypted") ? { rows: [{ sin_encrypted: sealSecret("123456782", { orgId: "org", purpose: "payroll.employee.sin" }) }] } : { rows: [{ sv: "0" }] };
       }),
     } as never,
     orgId: "org",

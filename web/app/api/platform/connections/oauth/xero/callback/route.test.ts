@@ -14,7 +14,7 @@ interface CallbackState {
   identityError: string | null;
   exchangeRedirectUri: string | null;
 }
-const secrets = sealJson({ clientId: "xero-client", clientSecret: "xero-secret" });
+const secrets = sealJson({ clientId: "xero-client", clientSecret: "xero-secret" }, { orgId: "org-1", purpose: "connection.secrets" });
 const state: CallbackState = {
   tenants: [
     { tenantId: "first-tenant", tenantName: "First" },
@@ -177,7 +177,7 @@ test("Xero callback bounce and redirect_uri use appBaseUrl, not the request Host
 
 test("a reusable sealed org/connection pair without the cookie nonce is badstate", async () => {
   reset();
-  const reusable = sealJson({ orgId: "org-1", connectionId: "conn-1" });
+  const reusable = sealJson({ orgId: "org-1", connectionId: "conn-1" }, { orgId: "system", purpose: "connection.oauth.state" });
   const res = await callback({ state: reusable, cookie: "unrelated-nonce" });
   assert.equal(res.headers.get("location"), "https://books.example/sync?oauth=badstate");
   assert.equal(state.updated, null);

@@ -6,6 +6,7 @@ import { generatedMigrationFiles, assertMigrationFilenameTransitionTargets, conv
 import { readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { sealLegacyPaymentLinkTokens } from "../../engine/src/payments/payment-link-seal.ts"
+import { requireDataKey } from "../../engine/src/platform/secrets.ts"
 import { sql } from "drizzle-orm"
 import { db, env, pool } from "../../engine/src/platform/db.ts"
 import { connectMigrationClient, describeBootstrapMigrationFailure, executeMigrationAttempt, executeMigrationBody, isLockNotAvailable, migrationLockConfig, migrationRetryDelayMs, migrationRunsWithoutTransaction, releaseMigrationClient, sanitizeMigrationContent } from "../bootstrap-migration-client.ts"
@@ -408,6 +409,13 @@ async function runDeferredPreflight(
  * Usage: node --import tsx scripts/bootstrap.ts --check [--json]
  */
 export async function runUpgradeCheckMain(json: boolean): Promise<number> {
+  // Fail closed before touching the database: without a valid data key no
+  // sealed credential can open, so an upgrade check must not report healthy.
+  try {
+    requireDataKey();
+  } catch (error) {
+    throw new Error(`[bootstrap] ${error instanceof Error ? error.message : String(error)}`);
+  }
   const generated = generatedMigrationFiles();
   assertMigrationFilenameTransitionTargets(generated);
   const ledgerPreexisted = await appliedMigrationsTableExists();

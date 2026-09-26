@@ -45,7 +45,13 @@ export function mintConnectionOauthState(orgId: string, connectionId: string): {
 } {
   const nonce = randomBytes(24).toString("base64url");
   const exp = Math.floor(Date.now() / 1000) + CONNECTION_OAUTH_TTL_S;
-  return { state: sealJson({ orgId, connectionId, nonce, exp }), nonce };
+  // Fixed seal scope (not the org): the state returns as an opaque query
+  // param, so the org cannot be known before unsealing. The payload's own
+  // orgId is validated after decryption, with the cookie nonce and expiry.
+  return {
+    state: sealJson({ orgId, connectionId, nonce, exp }, { orgId: "system", purpose: "connection.oauth.state" }),
+    nonce,
+  };
 }
 
 export function attachConnectionOauthCookie(response: NextResponse, nonce: string): void {
@@ -102,7 +108,16 @@ export function acceptConnectionOauthState(
   sealed: string,
   cookieNonce: string | null,
 ): ConnectionOauthState | null {
-  const st = unsealJson<Partial<ConnectionOauthState>>(sealed);
+  // The state token is minted per org but arrives as an opaque query param,
+  // so the seal scope is the fixed OAuth-state purpose: the inner orgId /
+  // connection / nonce / expiry checks below still bind it. A forged or
+  // undecryptable token bounces to badstate — the refusal for this flow.
+  let st: Partial<ConnectionOauthState>;
+  try {
+    st = unsealJson<Partial<ConnectionOauthState>>(sealed, { orgId: "system", purpose: "connection.oauth.state" });
+  } catch {
+    return null;
+  }
   if (
     !st
     || typeof st.orgId !== "string"

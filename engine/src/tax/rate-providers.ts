@@ -503,7 +503,9 @@ export async function saveTaxRateProviderConfig(
     let secretChange: TaxProviderConfigAuditState["secretChange"];
     let sealedSecrets: string | null = existing?.secrets ?? null;
     if (input.apiKey !== undefined || input.accountId !== undefined || input.licenseKey !== undefined) {
-      const prev = existing?.secrets ? ((await unsealJson(existing.secrets)) as Record<string, string>) : {};
+      const prev = existing?.secrets
+        ? ((await unsealJson(existing.secrets, { orgId, purpose: "tax.provider.secrets" })) as Record<string, string>)
+        : {};
       previousSecretKeys = Object.keys(prev).sort();
       const next: Record<string, string> = { ...prev };
       if (input.apiKey === null) delete next.apiKey;
@@ -517,7 +519,7 @@ export async function saveTaxRateProviderConfig(
         added: nextSecretKeys.filter((k) => !(k in prev)).sort(),
         removed: previousSecretKeys.filter((k) => !(k in next)).sort(),
       };
-      sealedSecrets = nextSecretKeys.length ? await sealJson(next) : null;
+      sealedSecrets = nextSecretKeys.length ? await sealJson(next, { orgId, purpose: "tax.provider.secrets" }) : null;
     }
 
     const displayName =
@@ -725,7 +727,10 @@ export function quoteFromRate(
 
 async function secretsOf(row: TaxRateProviderConfigRow): Promise<Record<string, string>> {
   if (!row.secrets) return {};
-  return (await unsealJson(row.secrets)) as Record<string, string>;
+  return (await unsealJson(row.secrets, { orgId: row.orgId, purpose: "tax.provider.secrets" })) as Record<
+    string,
+    string
+  >;
 }
 
 /**

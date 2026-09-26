@@ -158,7 +158,7 @@ test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB 
                                              provincial_claim_code, vacation_percent, vacation_method,
                                              sin_encrypted, sin_last3, is_active, created_by, updated_by)
       values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 'CA', 1, 1, '4', 'accrue',
-              ${sealSecret("046454286")}, '286', true, ${actorId}, ${actorId})`);
+              ${sealSecret("046454286", { orgId: org.orgId, purpose: "payroll.employee.sin" })}, '286', true, ${actorId}, ${actorId})`);
 
     const documentId = randomUUID();
     await db.execute(sql`

@@ -28,47 +28,47 @@ test("stored attachments carry references, never file bytes", async () => {
   // Unit processes have no object storage configured, so this exercises the
   // sealed fallback; the object-storage branch differs only in where the
   // bytes land, which the integration test covers through dispatch.
-  const stored = await storeEmailAttachments([payload("stub-bytes")]);
+  const stored = await storeEmailAttachments([payload("stub-bytes")], { orgId: "org-1" });
   assert.equal(stored.length, 1);
   const ref = stored[0]!;
   assert.ok(isEmailAttachmentRef(ref));
   assert.ok(!("content" in ref), "no file bytes may remain on the queue payload");
   assert.equal(ref.filename, "pay-stub.pdf");
 
-  const loaded = await loadEmailAttachments(stored);
+  const loaded = await loadEmailAttachments("org-1", stored);
   assert.deepEqual(loaded, [payload("stub-bytes")]);
 });
 
 test("storing validates before anything is staged", async () => {
   await assert.rejects(
-    storeEmailAttachments([{ filename: "x.pdf", content: "!!!not-base64!!!", contentType: "application/pdf" }]),
+    storeEmailAttachments([{ filename: "x.pdf", content: "!!!not-base64!!!", contentType: "application/pdf" }], { orgId: "org-1" }),
     /bounded base64/,
   );
   await assert.rejects(
-    storeEmailAttachments([{ filename: "../evil.pdf", content: "eA==", contentType: "application/pdf" }]),
+    storeEmailAttachments([{ filename: "../evil.pdf", content: "eA==", contentType: "application/pdf" }], { orgId: "org-1" }),
     /invalid filename/,
   );
   await assert.rejects(
-    storeEmailAttachments(Array.from({ length: 11 }, () => payload("x"))),
+    storeEmailAttachments(Array.from({ length: 11 }, () => payload("x")), { orgId: "org-1" }),
     /exceeds the 10-attachment limit/,
   );
-  assert.deepEqual(await storeEmailAttachments(undefined), []);
-  assert.deepEqual(await storeEmailAttachments([]), []);
+  assert.deepEqual(await storeEmailAttachments(undefined, { orgId: "org-1" }), []);
+  assert.deepEqual(await storeEmailAttachments([], { orgId: "org-1" }), []);
 });
 
 test("legacy inline payloads still drain exactly once", async () => {
-  const loaded = await loadEmailAttachments([payload("old-job-bytes")]);
+  const loaded = await loadEmailAttachments("org-1", [payload("old-job-bytes")]);
   assert.deepEqual(loaded, [payload("old-job-bytes")]);
-  assert.deepEqual(await loadEmailAttachments(undefined), []);
+  assert.deepEqual(await loadEmailAttachments("org-1", undefined), []);
 });
 
 test("an unresolvable reference refuses instead of sending a truncated message", async () => {
   await assert.rejects(
-    loadEmailAttachments([{ filename: "x.pdf", contentType: "application/pdf", sealed: "enc:v1:bogus" }]),
+    loadEmailAttachments("org-1", [{ filename: "x.pdf", contentType: "application/pdf", sealed: "enc:v1:bogus" }]),
     /cannot be unsealed/,
   );
   await assert.rejects(
-    loadEmailAttachments([{ filename: "x.pdf", sealed: "" }]),
+    loadEmailAttachments("org-1", [{ filename: "x.pdf", sealed: "" }]),
     /cannot be unsealed/,
   );
 });

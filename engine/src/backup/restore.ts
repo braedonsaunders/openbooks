@@ -25,7 +25,7 @@ import {
 } from "./format.ts";
 import { unsealSecret } from "../platform/secrets.ts";
 import {
-  unsealSecret as unsealEmailSecret,
+  unsealLegacyEmailSecret,
   validateStoredEmailConfig,
   type RawEmailConfig,
 } from "@openbooks/emails";
@@ -176,8 +176,13 @@ async function decryptBackupArchive(archivePath: string): Promise<{
       `unsupported backup key id ${JSON.stringify(envelope.keyId)}; this build restores key id ${JSON.stringify(BACKUP_KEY_ID)} — upgrade to a release that knows the archiving key`,
     );
   }
-  const unwrapped = unsealSecret(envelope.wrappedKey);
-  if (unwrapped === null) {
+  // The envelope wrap is org-less by nature, sealed under the fixed system
+  // scope. A wrong key or a tampered envelope refuses here naming the
+  // remedy (restore needs the source deployment key), before any row parses.
+  let unwrapped: string;
+  try {
+    unwrapped = unsealSecret(envelope.wrappedKey, { orgId: "system", purpose: "backup.manifest" });
+  } catch {
     throw new Error(
       "backup content-key unwrap failed: OPENBOOKS_DATA_KEY is not the source deployment key, or the envelope was tampered",
     );
@@ -304,7 +309,8 @@ export async function inspectBackupArchive(args: {
         }
         if (
           candidate.version === BACKUP_FORMAT_VERSION &&
-          (typeof candidate.dataKeyCheck !== "string" || !candidate.dataKeyCheck.startsWith("enc:v1:"))
+          (typeof candidate.dataKeyCheck !== "string" ||
+            (!candidate.dataKeyCheck.startsWith("enc:v1:") && !candidate.dataKeyCheck.startsWith("enc:v2:")))
         ) {
           throw new Error("format-v3 backup header has no valid data-key verification canary");
         }
@@ -532,8 +538,8 @@ async function validateMfaMaterial(
   orgId: string,
   validateCiphertext: boolean,
 ): Promise<void> {
-  const factors = await client.query<{ secret_encrypted: string; recovery_code_hashes: unknown }>(
-    `select factor.secret_encrypted, factor.recovery_code_hashes
+  const factors = await client.query<{ user_id: string; secret_encrypted: string; recovery_code_hashes: unknown }>(
+    `select factor.user_id, factor.secret_encrypted, factor.recovery_code_hashes
        from auth_mfa_factors factor
        join users user_row on user_row.id = factor.user_id
       where user_row.org_id = $1`,
@@ -550,19 +556,29 @@ async function validateMfaMaterial(
     }
     // Never return or log the plaintext. Successful authenticated decryption is
     // enough to prove the configured OPENBOOKS_DATA_KEY is the source key.
-    if (validateCiphertext && unsealSecret(factor.secret_encrypted) === null) {
-      throw new Error(
-        "restored MFA ciphertext is corrupt despite a valid backup data-key canary",
-      );
+    // MFA secrets are user-level, so the seal scope carries the user id.
+    if (validateCiphertext) {
+      let opens = false;
+      try {
+        unsealSecret(factor.secret_encrypted, { orgId: factor.user_id, purpose: "auth.mfa.secret" });
+        opens = true;
+      } catch {
+        opens = false;
+      }
+      if (!opens) {
+        throw new Error("restored MFA ciphertext is corrupt despite a valid backup data-key canary");
+      }
     }
   }
 }
 
 /**
- * Email-provider credentials predate OPENBOOKS_DATA_KEY and are AES-GCM sealed
- * with a key derived from SESSION_SECRET. Validate that separate recovery key
- * while the restore is still transactional; a wrong key must not leave a
- * seemingly successful organization whose outbound email is unusable.
+ * Email-provider credentials are AES-GCM sealed under OPENBOOKS_DATA_KEY
+ * (current `keySealed` shape) or, predating that, under a SESSION_SECRET
+ * derived key (`keyCiphertext`/`keyNonce`). Validate whichever recovery key
+ * the restored config needs while the restore is still transactional; a
+ * wrong key must not leave a seemingly successful organization whose
+ * outbound email is unusable.
  */
 async function validateSessionSecretEmailConfig(
   client: pg.PoolClient,
@@ -582,6 +598,25 @@ async function validateSessionSecretEmailConfig(
   } catch {
     throw new Error("restored organization email configuration is malformed");
   }
+  const sealed = (email as RawEmailConfig).keySealed;
+  if (typeof sealed === "string" && sealed.trim().length > 0) {
+    // Data-key credentials unseal through the engine v2 API — the same
+    // `{orgId, email.provider.secret}` scope the rotation script re-seals
+    // under — not the email package helper.
+    let opens = false;
+    try {
+      unsealSecret(sealed, { orgId, purpose: "email.provider.secret" });
+      opens = true;
+    } catch {
+      opens = false;
+    }
+    if (!opens) {
+      throw new Error(
+        "restored email-provider credential cannot be decrypted; OPENBOOKS_DATA_KEY must match the source deployment",
+      );
+    }
+    return "passed";
+  }
   const ciphertext = email.keyCiphertext;
   const nonce = email.keyNonce;
   const hasCiphertext = typeof ciphertext === "string" && ciphertext.trim().length > 0;
@@ -590,7 +625,7 @@ async function validateSessionSecretEmailConfig(
   if (
     !hasCiphertext ||
     !hasNonce ||
-    unsealEmailSecret({ ciphertext: ciphertext as string, nonce: nonce as string }) === null
+    unsealLegacyEmailSecret({ ciphertext: ciphertext as string, nonce: nonce as string }) === null
   ) {
     throw new Error(
       "restored email-provider credential cannot be decrypted; SESSION_SECRET must match the source deployment",
@@ -873,13 +908,25 @@ export async function restoreOrgBackup(args: {
     if (args.expectedTableCount !== undefined && args.expectedTableCount !== inspection.tables.length) {
       throw new Error(`manifest table count ${args.expectedTableCount} does not match archive ${inspection.tables.length}`);
     }
-    if (
-      inspection.header.version === BACKUP_FORMAT_VERSION &&
-      unsealSecret(inspection.header.dataKeyCheck) !== BACKUP_DATA_KEY_CHECK_PLAINTEXT
-    ) {
-      throw new Error(
-        "backup data-key verification failed; OPENBOOKS_DATA_KEY is missing, wrong, or the archive canary was tampered",
-      );
+    if (inspection.header.version === BACKUP_FORMAT_VERSION) {
+      // The canary is sealed under the fixed system scope (see backup.ts):
+      // it verifies the deployment key without trusting the org id claimed
+      // inside the archive.
+      let canary: string | null = null;
+      try {
+        const sealed = inspection.header.dataKeyCheck;
+        canary =
+          typeof sealed !== "string"
+            ? null
+            : unsealSecret(sealed, { orgId: "system", purpose: "backup.data-key-check" });
+      } catch {
+        canary = null;
+      }
+      if (canary !== BACKUP_DATA_KEY_CHECK_PLAINTEXT) {
+        throw new Error(
+          "backup data-key verification failed; OPENBOOKS_DATA_KEY is missing, wrong, or the archive canary was tampered",
+        );
+      }
     }
     const client = await pool.connect();
     let deploymentLock = false;

@@ -49,7 +49,7 @@ test("concurrent bank-profile secret rotations preserve both fields and audit th
       select originator_secrets_encrypted, name from payment_bank_profiles
        where id = ${profile.id} and org_id = ${org.orgId}
     `))).rows[0]!;
-    assert.deepEqual(unsealJson(stored.originator_secrets_encrypted), {
+    assert.deepEqual(unsealJson(stored.originator_secrets_encrypted!, { orgId: org.orgId, purpose: "payment.originator.secrets" }), {
       initial: "present",
       credentialA: "value-a",
       credentialB: "value-b",
@@ -111,7 +111,7 @@ test("CPA profile creation and secret updates refuse malformed transaction-code 
       select originator_secrets_encrypted from payment_bank_profiles
        where id = ${profile.id} and org_id = ${org.orgId}
     `))).rows[0]!;
-    assert.equal(unsealJson<{ transactionCode?: string }>(stored.originator_secrets_encrypted)?.transactionCode, "460");
+    assert.equal(stored.originator_secrets_encrypted == null ? undefined : unsealJson<{ transactionCode?: string }>(stored.originator_secrets_encrypted, { orgId: org.orgId, purpose: "payment.originator.secrets" }).transactionCode, "460");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
     if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;

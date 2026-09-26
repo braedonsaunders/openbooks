@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import ssh2 from "ssh2";
 import { db, withBypass, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { encryptAccountNumber, decryptAccountNumber } from "../payments-core/rail-settings.ts";
+import { sealSecret, unsealSecret } from "../platform/secrets.ts";
 import { startSftpServer, generateHostKey, type SessionLiveness, type SftpResolver, type SftpServerHandle } from "./server.ts";
 import { assertSftpStorageReady } from "./backend.ts";
 
@@ -15,8 +15,10 @@ import { assertSftpStorageReady } from "./backend.ts";
  * the app's AES-256-GCM data-key envelope.
  */
 
-export const encryptSecret = (plain: string) => encryptAccountNumber(plain);
-export const decryptSecret = (stored: string) => decryptAccountNumber(stored);
+export const encryptSecret = (plain: string, orgId: string) =>
+  sealSecret(plain, { orgId, purpose: "sftp.server.secret" });
+export const decryptSecret = (stored: string, orgId: string) =>
+  unsealSecret(stored, { orgId, purpose: "sftp.server.secret" });
 
 function constantTimeEqual(a: string, b: string): boolean {
   const ba = Buffer.from(a), bb = Buffer.from(b);
@@ -203,7 +205,11 @@ export const dbResolver: SftpResolver = {
     }
     if (!row.password_encrypted) return null;
     let expected: string;
-    try { expected = decryptSecret(row.password_encrypted); } catch { return null; }
+    try {
+      expected = decryptSecret(row.password_encrypted, row.orgId);
+    } catch {
+      return null;
+    }
     if (!constantTimeEqual(password, expected)) return null;
     return { ...asConfig(row), readOnlyDirs: await loadProtectedDirs(row) };
   },

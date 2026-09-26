@@ -87,7 +87,7 @@ test(
           insert into connections (org_id, source, display_name, status, config, secrets)
           values (${org.orgId}, 'netsuite', ${`NetSuite ${label}`}, 'active',
                   '{"account": "123456", "host": "https://123456.suitetalk.api.netsuite.com"}'::jsonb,
-                  ${sealJson({ consumerKey: "ck", consumerSecret: "cs", tokenKey: "tk", tokenSecret: "ts" })})`);
+                  ${sealJson({ consumerKey: "ck", consumerSecret: "cs", tokenKey: "tk", tokenSecret: "ts" }, { orgId: org.orgId, purpose: "connection.secrets" })})`);
       }
 
       const first = await importNetSuiteCrm(orgA.orgId, undefined, transport);

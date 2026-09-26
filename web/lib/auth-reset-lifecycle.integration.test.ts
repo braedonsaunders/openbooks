@@ -39,7 +39,7 @@ const priorSecret = process.env.SESSION_SECRET;
         await db.execute(sql`update orgs set env_kind='production' where id=${org.orgId}`);
         await db.execute(sql`update users set password_hash=${await auth.hashPassword(oldPassword)} where id=${userId}`);
         if (scenario === 'pending login') {
-          await db.execute(sql`insert into auth_mfa_factors (user_id,secret_encrypted,enabled_at) values (${userId},${sealSecret(secret)},now())`);
+          await db.execute(sql`insert into auth_mfa_factors (user_id,secret_encrypted,enabled_at) values (${userId},${sealSecret(secret, { orgId: userId, purpose: "auth.mfa.secret" })},now())`);
         }
         return { userId, email };
       });
