@@ -20,8 +20,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@o
 const { customerData } = await import('./customer-data.ts');
 const { paymentStats } = await import('../cash/core.ts');
 
-const DB = !!process.env.OPENBOOKS_DB_URL;
-
 async function party(orgId: string, name: string) {
   const id = randomUUID();
   await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom)
@@ -29,7 +27,7 @@ async function party(orgId: string, name: string) {
   return id;
 }
 
-test('customer-intelligence Avg DSO equals the cash DSO on a skewed book', { skip: !DB }, async () => {
+test('customer-intelligence Avg DSO equals the cash DSO on a skewed book', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypass(() => createScratchOrg());
   try {
     const actor = await withBypass(() => createScratchUser(org.orgId, 'DSO Controller', 'admin'));
@@ -72,14 +70,15 @@ test('customer-intelligence Avg DSO equals the cash DSO on a skewed book', { ski
         await pay(fast, await invoice(fast, '100', '2026-07-01'), '100', '2026-07-03');
       }
     });
+    // Planner statistics for the seeded tables: fresh tables estimate one row, nesting the DSO joins into millions of inner executions.
+    await withBypass(() => db.execute(sql`analyze documents, journal_entries, journal_lines, applications`));
 
     const { header, engine } = await withOrgContext(org.orgId, async () => {
       const data = await customerData({ from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }, org.orgId, null);
       const stats = await paymentStats('ar', '2026-07-31');
       return { header: data.kpis.avgDaysToPay, engine: stats.globalAvg };
     });
-    // Settlement-weighted truth on this fixture: (30 + 20x2) / 21 = 3.33 -> 3.
-    // The old per-customer grain read (30 + 2) / 2 = 16.
+    // Settlement-weighted truth: (30 + 20x2) / 21 = 3.33 -> 3 (the old per-customer grain read (30 + 2) / 2 = 16).
     assert.equal(engine, 3, 'engine DSO is settlement-weighted');
     assert.equal(header, engine, 'customer-intelligence Avg DSO must equal the cash DSO');
   } finally {
