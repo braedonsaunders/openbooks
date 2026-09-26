@@ -623,47 +623,47 @@
       ]
     },
     {
-      "target": "engine/src/assets/depreciation.ts",
+      "target": "engine/src/assets/depreciation-schedule-build.ts",
       "needsDb": false,
       "status": "measured",
-      "killed": 12,
-      "survived": 13,
+      "killed": 9,
+      "survived": 16,
       "timedOut": 0,
       "skipped": 0,
       "error": 0,
       "total": 25,
       "measured": 25,
-      "ratio": 0.48,
+      "ratio": 0.36,
       "topSurvivors": [
         {
-          "key": "engine/src/assets/depreciation.ts:507:boundary-shift:47:2",
-          "line": 507,
-          "operator": "boundary-shift",
-          "description": "boundary '0' -> '1'"
-        },
-        {
-          "key": "engine/src/assets/depreciation.ts:259:boundary-shift:20:1",
-          "line": 259,
+          "key": "engine/src/assets/depreciation-schedule-build.ts:200:boundary-shift:35:1",
+          "line": 200,
           "operator": "boundary-shift",
           "description": "boundary '0' -> '-1'"
         },
         {
-          "key": "engine/src/assets/depreciation.ts:273:boundary-shift:16:1",
-          "line": 273,
+          "key": "engine/src/assets/depreciation-schedule-build.ts:603:comparison-flip:52:1",
+          "line": 603,
+          "operator": "comparison-flip",
+          "description": "comparison '>' -> '>='"
+        },
+        {
+          "key": "engine/src/assets/depreciation-schedule-build.ts:431:boundary-shift:42:1",
+          "line": 431,
           "operator": "boundary-shift",
           "description": "boundary '0' -> '-1'"
         },
         {
-          "key": "engine/src/assets/depreciation.ts:529:boundary-shift:44:1",
-          "line": 529,
-          "operator": "boundary-shift",
-          "description": "boundary '0' -> '-1'"
+          "key": "engine/src/assets/depreciation-schedule-build.ts:672:comparison-flip:45:1",
+          "line": 672,
+          "operator": "comparison-flip",
+          "description": "comparison '>' -> '>='"
         },
         {
-          "key": "engine/src/assets/depreciation.ts:498:guard-negation:11:1",
-          "line": 498,
-          "operator": "guard-negation",
-          "description": "guard negated '(opening && cmp(openingAmount, \"0\") > 0 && line.periodMonth <= op)'"
+          "key": "engine/src/assets/depreciation-schedule-build.ts:281:comparison-flip:19:1",
+          "line": 281,
+          "operator": "comparison-flip",
+          "description": "comparison '!==' -> '==='"
         }
       ]
     },
