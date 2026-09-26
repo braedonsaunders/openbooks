@@ -18,6 +18,7 @@ const { sql } = await import("drizzle-orm");
 const { db, env, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { documentRevisionSql, isDocumentRevisionToken } = await import("@openbooks/engine/src/records/revision.ts");
 const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { waitForLockWaiter } = await import("@openbooks/engine/src/testing/lock-wait.ts");
 const { GET, PATCH, DELETE } = await import("../app/api/admin/flows/[id]/route");
 const { GET: LIST } = await import("../app/api/admin/flows/route");
 
@@ -62,16 +63,8 @@ for (const scenario of scenarios) {
         if (scenario === 'gate race') {
           await writer.query('select id from flows where id=$1 for key share', [id]);
           await writer.query('lock table flow_gates in share mode');
-          const pid = (await writer.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
           pending = remove({ expectedUpdatedAt: revision }); void pending.catch(() => {});
-          let blocked = false;
-          const deadline = Date.now() + 10_000;
-          while (Date.now() < deadline) {
-            const waiting = await writer.query<{ blocked: boolean }>('select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked', [pid]);
-            if (waiting.rows[0]!.blocked) { blocked = true; break; }
-            await new Promise(resolve => setTimeout(resolve, 25));
-          }
-          assert.ok(blocked);
+          await waitForLockWaiter(writer, { label: 'the flow removal' });
           await insertGate();
           await writer.query('commit');
         } else {

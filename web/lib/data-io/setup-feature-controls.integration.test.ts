@@ -6,6 +6,7 @@ const {sql}=await import('drizzle-orm');
 const {default:pg}=await import('pg');
 const {db,withOrgContext,withOrgTransaction}=await import('@openbooks/engine/src/platform/db.ts');
 const {createScratchOrg,dropScratchOrg,seedFlowActors}=await import('@openbooks/engine/src/testing/fixtures.ts');
+const {waitForLockWaiter}=await import('@openbooks/engine/src/testing/lock-wait.ts');
 const {setupResource}=await import('./setup-resources.ts');
 const {SETUP_ENTITY_BY_KEY}=await import('../setup/registry.ts');
 test('a loaded setup import refuses a subsequently disabled parent feature',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
@@ -63,15 +64,8 @@ for(const mode of ['insert','upsert'] as const){
    // 0399 gates the bypass GUC by session role, so the holder connects as the privileged test login above.
    const staged=await holder.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{\"projects\":false}'::jsonb) where id=$1",[org.orgId]);
    assert.equal(staged.rowCount,1,'concurrent holder must stage the feature disable');
-   const pid=(await holder.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
    const request=resource.write([{...body,name:'Must be refused'}],mode,{orgId:org.orgId,actorId,dryRun:false});pending=request;void request.catch(()=>{});
-   let blocked=false;const deadline=Date.now()+10000;
-   while(Date.now()<deadline){
-    await holder.query('select pg_stat_clear_snapshot()');
-    if((await holder.query<{blocked:boolean}>('select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',[pid])).rows[0]!.blocked){blocked=true;break;}
-    await new Promise(resolve=>setTimeout(resolve,25));
-   }
-   assert.ok(blocked,'import queues at the authoritative feature fence');await holder.query('commit');
+   await waitForLockWaiter(holder,{label:'the setup import write'});await holder.query('commit');
    const outcome=await request;assert.equal(outcome.failed,1);assert.equal(outcome.created,0);assert.equal(outcome.updated,0);
    assert.deepEqual((await withOrgContext(org.orgId,()=>db.execute(sql`select * from item_rate_books where org_id=${org.orgId} order by id`))).rows,before);
   }finally{await holder.query('rollback').catch(()=>{});await pending?.catch(()=>{});await holder.end();await dropScratchOrg(org.orgId);}

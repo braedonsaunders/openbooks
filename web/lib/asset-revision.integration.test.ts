@@ -8,6 +8,7 @@ import { sql } from 'drizzle-orm';
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts';
 import { db, env } from '@openbooks/engine/src/platform/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
+import { waitForLockWaiter } from '@openbooks/engine/src/testing/lock-wait.ts';
 
 async function seedAsset(org: ScratchOrg) {
   const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -82,14 +83,8 @@ test('asset revision rechecks the writer that committed while PATCH waited',{ski
   const {actorId,assetId}=await seedAsset(org);state.gate={user:{orgId:org.orgId,id:actorId},allowedSubsidiaryIds:null};const revision=await token(assetId);
   await writer.connect();connected=true;await writer.query('begin');await writer.query("select set_config('app.bypass_rls','on',true)");
   await writer.query("update fixed_assets set name='Concurrent committed editor',updated_at=updated_at+interval '1 microsecond' where id=$1",[assetId]);
-  const pid=(await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
   pending=patch(assetId,{expectedUpdatedAt:revision,name:'Stale waiting editor'});void pending.catch(()=>{});
-  let blocked=false;const deadline=Date.now()+10000;
-  while(Date.now()<deadline){
-   if((await writer.query<{blocked:boolean}>('select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',[pid])).rows[0]!.blocked){blocked=true;break;}
-   await new Promise(resolve=>setTimeout(resolve,25));
-  }
-  assert.ok(blocked);await writer.query('commit');assert.equal((await pending).status,409);
+  await waitForLockWaiter(writer,{label:'the stale waiting editor'});await writer.query('commit');assert.equal((await pending).status,409);
   assert.equal((await db.execute(sql`select name from fixed_assets where id=${assetId}`)).rows[0]!.name,'Concurrent committed editor');
  }finally{if(connected)await writer.query('rollback').catch(()=>{});if(pending)await pending.catch(()=>{});if(connected)await writer.end();state.gate=null;await dropScratchOrg(org.orgId)}
 });

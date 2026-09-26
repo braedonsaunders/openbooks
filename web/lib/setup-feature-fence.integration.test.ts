@@ -7,6 +7,7 @@ import pg from 'pg';
 import { sql } from 'drizzle-orm';
 import { db, env } from '@openbooks/engine/src/platform/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
+import { waitForLockWaiter } from '@openbooks/engine/src/testing/lock-wait.ts';
 
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
 Object.assign(globalThis, { __setupFeatureFence: state });
@@ -61,15 +62,8 @@ for(const entity of ['asset-categories','item-rate-books','pay-derived-rules'] a
     else await writer.query(`lock table ${table} in share row exclusive mode`);
     const disabled=await writer.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||jsonb_build_object($1::text,false)) where id=$2",[feature,org.orgId]);
     assert.equal(disabled.rowCount,1,'fence writer must stage the feature disable');
-    const pid=(await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
     pending=send(method,entity,{...body,name:'Write after disable'});void pending.catch(()=>{});
-    let blocked=false;const deadline=Date.now()+10000;
-    while(Date.now()<deadline){
-     await writer.query('select pg_stat_clear_snapshot()');
-     if((await writer.query<{blocked:boolean}>('select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',[pid])).rows[0]!.blocked){blocked=true;break;}
-     await new Promise(resolve=>setTimeout(resolve,25));
-    }
-    assert.ok(blocked,'request passed its initial gate and waits at a write boundary');await writer.query('commit');
+    await waitForLockWaiter(writer,{label:'the fenced write'});await writer.query('commit');
     const response=await pending;assert.equal(response.status,404,JSON.stringify(await response.json()));
     assert.deepEqual((await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows,before);
    }finally{await writer.query('rollback').catch(()=>{});await pending?.catch(()=>{});await writer.end();state.gate=null;await dropScratchOrg(org.orgId);}
@@ -116,15 +110,8 @@ for(const capability of ['equipment trigger','subsidiary scope','currency','fiel
    await writer.query(`lock table ${table} in share row exclusive mode`);
    const disabled=await writer.query("update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||jsonb_build_object($1::text,false)) where id=$2",[feature,org.orgId]);
    assert.equal(disabled.rowCount,1,'fence writer must stage the feature disable');
-   const pid=(await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
    pending=send(method,entity,body);void pending.catch(()=>{});
-   let blocked=false;const deadline=Date.now()+10000;
-   while(Date.now()<deadline){
-    await writer.query('select pg_stat_clear_snapshot()');
-    if((await writer.query<{blocked:boolean}>('select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',[pid])).rows[0]!.blocked){blocked=true;break;}
-    await new Promise(resolve=>setTimeout(resolve,25));
-   }
-   assert.ok(blocked);await writer.query('commit');const response=await pending;
+   await waitForLockWaiter(writer,{label:'the fenced write'});await writer.query('commit');const response=await pending;
    assert.equal(response.status,capability==='subsidiary scope'?400:404,JSON.stringify(await response.json()));
    assert.deepEqual((await db.execute(sql`select * from ${sql.identifier(table)} where org_id=${org.orgId} order by id`)).rows,before);
   }finally{await writer.query('rollback').catch(()=>{});await pending?.catch(()=>{});await writer.end();state.gate=null;await dropScratchOrg(org.orgId);}

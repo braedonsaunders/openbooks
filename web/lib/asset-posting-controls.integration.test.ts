@@ -8,6 +8,7 @@ import { buildSchedule, runDepreciation } from '@openbooks/engine/src/assets/dep
 import { sql } from 'drizzle-orm';
 import { db, env } from '@openbooks/engine/src/platform/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
+import { waitForLockWaiter } from '@openbooks/engine/src/testing/lock-wait.ts';
 
 async function seedAsset(org: ScratchOrg) {
   const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -105,20 +106,12 @@ for (const operation of ['dispose', 'remeasure'] as const) {
       await writer.query('begin');
       await writer.query("select set_config('app.bypass_rls','on',true)");
       await writer.query('update fixed_assets set subsidiary_id=$1 where id=$2', [outsideId,assetId]);
-      const pid = (await writer.query<{ pid:number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
       pending = (operation === 'dispose' ? dispose : remeasure)(new Request(`http://audit.local/api/assets/${assetId}/${operation}`, {
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({date:'2026-07-31',writeOff:true,newCarryingValue:'800'}),
       }), {params:Promise.resolve({id:assetId})});
       void pending.catch(() => {});
-      let blocked = false;
-      const deadline = Date.now() + 10_000;
-      while (Date.now() < deadline) {
-        const row = (await writer.query<{ blocked:boolean }>('select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',[pid])).rows[0]!;
-        if (row.blocked) { blocked = true; break; }
-        await new Promise(resolve => setTimeout(resolve,25));
-      }
-      assert.ok(blocked,'posting waits for the concurrent asset update');
+      await waitForLockWaiter(writer, { label: 'the asset posting' });
       await writer.query('commit');
       const response = await pending;
       assert.equal(response.status,422);

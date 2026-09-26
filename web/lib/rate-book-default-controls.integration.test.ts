@@ -7,6 +7,7 @@ import pg from 'pg';
 import { sql } from 'drizzle-orm';
 import { db, env, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts';
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
+import { waitForLockWaiter } from '@openbooks/engine/src/testing/lock-wait.ts';
 
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
 Object.assign(globalThis, { __rateBookDefaultControls: state });
@@ -53,14 +54,8 @@ test('rate book deletion cannot remove a concurrently promoted default', {skip:!
   assert.equal(undefaulted.rowCount,1,'concurrent writer must hold the prior-default row');
   const promoted=await writer.query('update item_rate_books set is_default=true where id=$1',[nextId]);
   assert.equal(promoted.rowCount,1,'concurrent writer must hold the promoted row');
-  const pid=(await writer.query<{pid:number}>('select pg_backend_pid() as pid')).rows[0]!.pid;
   pending=send('DELETE','item-rate-books',{id:nextId});void pending.catch(()=>{});
-  let blocked=false;const deadline=Date.now()+10000;
-  while(Date.now()<deadline){
-   if((await writer.query<{blocked:boolean}>('select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked',[pid])).rows[0]!.blocked){blocked=true;break;}
-   await new Promise(resolve=>setTimeout(resolve,25));
-  }
-  assert.ok(blocked,'deletion waits behind the concurrent promotion');await writer.query('commit');
+  await waitForLockWaiter(writer,{label:'the rate-book deletion'});await writer.query('commit');
   const response=await pending;assert.equal(response.status,409,JSON.stringify(await response.json()));
   assert.equal((await row('item_rate_books',nextId))?.is_default,true);
   assert.equal((await db.execute(sql`select id from audit_log where row_id=${nextId} and action='delete'`)).rows.length,0);
