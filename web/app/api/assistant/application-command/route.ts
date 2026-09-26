@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ApplicationError } from "../../../../lib/application/errors";
@@ -71,10 +72,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
   } catch (error) {
     if (error instanceof ApplicationError) {
-      return NextResponse.json(
-        { error: error.code, message: error.message, details: error.details },
-        { status: error.status },
-      );
+      return apiErrorResponse(error, { details: { code: error.code, details: error.details } });
     }
     console.error(`[assistant/application-command] ${definition.name} failed`, error);
     return NextResponse.json({ error: "command_failed" }, { status: 500 });

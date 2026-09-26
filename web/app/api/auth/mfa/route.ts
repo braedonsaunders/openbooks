@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from "next/server";
 import {
@@ -10,6 +11,19 @@ import {
 import { authRequestContext, hasExpectedOrigin, publicMfaSecurityFailure } from "../../../../lib/auth-policy";
 
 export const runtime = "nodejs";
+
+/**
+ * A second session's pending setup is refused by name at 409 with the
+ * remedy intact. beginMfaSetup throws it as a plain Error, which the
+ * sanitizer would otherwise genericize to a 500.
+ */
+class MfaSetupPendingRefusal extends Error {
+  readonly status = 409;
+  constructor(message: string) {
+    super(message);
+    this.name = "MfaSetupPendingRefusal";
+  }
+}
 
 export async function GET() {
   const user = await currentUser();
@@ -41,7 +55,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "MFA is already enabled" }, { status: 409 });
     }
     if (error instanceof Error && error.message.startsWith("MFA setup is already pending in another session;")) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+      return apiErrorResponse(new MfaSetupPendingRefusal(error.message));
     }
     console.error("[auth] unable to begin MFA setup:", error);
     return NextResponse.json({ error: "unable to begin MFA setup" }, { status: 500 });

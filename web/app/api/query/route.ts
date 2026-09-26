@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { runUserSql, validateUserSql } from "@openbooks/engine/src/platform/sqlapi.ts";
@@ -5,6 +6,19 @@ import { guardFeaturePermission } from "../../../lib/feature-gates";
 import { hasUnrestrictedQueryScope } from "../../../lib/query-console-access";
 
 export const runtime = "nodejs";
+
+/**
+ * Pure pre-validation failures (thrown as plain Errors by validateUserSql)
+ * are safe to echo at 400 — the sanitizer needs a named refusal to carry
+ * them instead of genericizing them to a 500.
+ */
+class UserSqlValidationRefusal extends Error {
+  readonly status = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = "UserSqlValidationRefusal";
+  }
+}
 
 export async function POST(req: Request) {
   let gate: Awaited<ReturnType<typeof guardFeaturePermission>>;
@@ -45,10 +59,7 @@ export async function POST(req: Request) {
   try {
     validateUserSql(body.sql);
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "invalid query" },
-      { status: 400 },
-    );
+    return apiErrorResponse(e instanceof Error ? new UserSqlValidationRefusal(e.message) : e);
   }
 
   try {
