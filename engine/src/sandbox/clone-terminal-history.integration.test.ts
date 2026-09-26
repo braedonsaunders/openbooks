@@ -17,6 +17,7 @@ import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-chang
 import { decideGate } from "../flows/gates.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
+import { grantPermissions, linkPerson } from "../testing/hrm-harness.ts";
 import { installEngineSeams } from "../composition/install.ts";
 
 // Gate releases and post_document run through the installed engine
@@ -38,25 +39,6 @@ installEngineSeams();
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-
-async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
-  for (const permission of permissions) {
-    await db.execute(sql`
-      insert into user_permission_overrides (org_id, user_id, permission, effect)
-      values (${orgId}, ${userId}, ${permission}, 'grant')
-      on conflict (user_id, permission) do update set effect = 'grant'
-    `);
-  }
-}
-
-async function linkPerson(orgId: string, userId: string): Promise<void> {
-  const partyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${`Person ${partyId.slice(0, 8)}`}, true, '{}'::jsonb)
-  `);
-  await db.execute(sql`update users set party_id = ${partyId} where id = ${userId} and org_id = ${orgId}`);
-}
 
 async function gateOf(requestId: string): Promise<{ id: string }> {
   const rows = (await db.execute<{ id: string }>(sql`
