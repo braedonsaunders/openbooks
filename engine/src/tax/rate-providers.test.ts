@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { dropScratchOrg } from "../testing/fixtures.ts";
+import { waitForLockWaiter } from "../testing/lock-wait.ts";
 import {
   quoteExternalTax,
   quoteFromRate,
@@ -1176,20 +1177,8 @@ test(
       );
 
       // Deterministic barrier: the save must be parked on the editor's lock
-      // before the competing edit commits (ungranted transactionid waiter).
-      let parked = false;
-      for (let waited = 0; waited < 10_000 && !parked; waited += 25) {
-        const waiting = (
-          await withBypass(() =>
-            db.execute<{ n: number }>(sql`
-              select count(*)::int as n from pg_locks where locktype = 'transactionid' and not granted
-            `),
-          )
-        ).rows[0]!.n;
-        parked = waiting > 0;
-        if (!parked) await new Promise((resolve) => setTimeout(resolve, 25));
-      }
-      assert.ok(parked, "the save must block on the concurrent editor's row lock");
+      // before the competing edit commits.
+      await waitForLockWaiter(editor, { label: "the racing save" });
 
       // The competing administrator commits a disjoint credential while the
       // save sits parked on the lock.

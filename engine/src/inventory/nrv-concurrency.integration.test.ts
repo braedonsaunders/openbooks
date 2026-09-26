@@ -5,6 +5,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
 import { db, env } from "../platform/db.ts";
 import { createScratchOrg, seedFlowActors, dropScratchOrg } from "../testing/fixtures.ts";
+import { waitForLockWaiter } from "../testing/lock-wait.ts";
 import { getOnHand } from "./position.ts";
 import { receiveInventory, issueInventory } from "./movements.ts";
 import { writeDownInventoryToNrv, reverseInventoryWritedown } from "./nrv.ts";
@@ -23,17 +24,9 @@ test("NRV serializes its layer snapshot with an in-flight receipt", { skip: !pro
     // 0399 gates the bypass GUC by session role: the writer connects as the privileged test login above.
     await receiptWriter.query("select pg_advisory_xact_lock(hashtextextended($1,0))", [`inventory:${org.items.fifo}:${org.stockLocationId}`]);
     await receiptWriter.query("select id from cost_layers where org_id=$1 and item_id=$2 for update", [org.orgId, org.items.fifo]);
-    const pid = (await receiptWriter.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
     pending = writeDownInventoryToNrv(org.orgId, actor, { itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId, date: "2026-07-16", nrvPerUnit: "6" });
     void pending.catch(() => {});
-    let blocked = false;
-    const deadline = Date.now() + 10_000;
-    while (Date.now() < deadline) {
-      const waiting = await receiptWriter.query<{ blocked: boolean }>("select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked", [pid]);
-      if (waiting.rows[0]!.blocked) { blocked = true; break; }
-      await new Promise(resolve => setTimeout(resolve, 25));
-    }
-    assert.ok(blocked, "remeasurement reaches the held inventory fence before receipt commit");
+    await waitForLockWaiter(receiptWriter, { label: "the inventory remeasurement" });
     await receiveInventory(org.orgId, actor, { ...receipt, date: "2026-07-16", tx: drizzle({ client: receiptWriter }) });
     await receiptWriter.query("commit");
     await pending;
@@ -66,20 +59,10 @@ for (const operation of ["write-down", "reversal"] as const) {
       await editor.query("begin");
       // 0399 gates the bypass GUC by session role: the editor connects as the privileged test login above.
       await editor.query("update item_inventory_profiles set adjustment_account_id=$1 where org_id=$2 and item_id=$3", [org.accounts.freight, org.orgId, org.items.fifo]);
-      const pid = (await editor.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
       pending = operation === "reversal"
         ? reverseInventoryWritedown(org.orgId, actor, { ...common, nrvPerUnit: "10" })
         : writeDownInventoryToNrv(org.orgId, actor, { ...common, nrvPerUnit: "6" });
-      let completed = false;
-      void pending.then(() => { completed = true; }, () => { completed = true; });
-      let blocked = false;
-      const deadline = Date.now() + 10_000;
-      while (!completed && Date.now() < deadline) {
-        const waiting = await editor.query<{ blocked: boolean }>("select exists(select 1 from pg_stat_activity where $1=any(pg_blocking_pids(pid))) as blocked", [pid]);
-        if (waiting.rows[0]!.blocked) { blocked = true; break; }
-        await new Promise(resolve => setTimeout(resolve, 25));
-      }
-      assert.ok(blocked, "remeasurement must wait for the profile edit before reading accounts or layers");
+      await waitForLockWaiter(editor, { label: "the inventory remeasurement" });
       await editor.query("commit");
       const result = await pending;
       const accounts = (await db.execute<{ account_id: string }>(sql`select account_id from journal_lines where org_id=${org.orgId} and entry_id=${result.entryId} and account_id<>${org.accounts.invAsset}`)).rows;

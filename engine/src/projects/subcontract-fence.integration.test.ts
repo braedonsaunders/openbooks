@@ -6,6 +6,7 @@ import pg from "pg";
 import { db, env } from "../platform/db.ts";
 import { createSubcontract, SubcontractError } from "./subcontracts.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
+import { waitForLockWaiter } from "../testing/lock-wait.ts";
 
 const subcontractInput = (orgId: string, actorId: string) => ({
   orgId,
@@ -54,24 +55,9 @@ test("createSubcontract blocked on the fence loses to a committed Subcontracts d
       "update orgs set settings=jsonb_set(settings,'{features,subcontracts}','false'::jsonb) where id=$1",
       [org.orgId],
     );
-    const pid = (await writer.query<{ pid: number }>("select pg_backend_pid() as pid")).rows[0]!.pid;
     pending = createSubcontract(subcontractInput(org.orgId, actorId));
     void pending.catch(() => {});
-    let blocked = false;
-    const deadline = Date.now() + 10000;
-    while (Date.now() < deadline) {
-      await writer.query("select pg_stat_clear_snapshot()");
-      const row = (await writer.query<{ blocked: boolean }>(
-        "select exists(select 1 from pg_stat_activity where $1::int=any(pg_blocking_pids(pid))) as blocked",
-        [pid],
-      )).rows[0]!;
-      if (row.blocked) {
-        blocked = true;
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    assert.ok(blocked, "create must wait on the feature fence while the disable holds the org row");
+    await waitForLockWaiter(writer, { label: "the subcontract" });
     await writer.query("commit");
     await assert.rejects(
       pending,
