@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -47,7 +48,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }))
   } catch (error) {
     if (error instanceof ProjectTimeDetailError) {
-      return NextResponse.json({ error: error.message }, { status: error.status })
+      return apiErrorResponse(error)
     }
     throw error
   }

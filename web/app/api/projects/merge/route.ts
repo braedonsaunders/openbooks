@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -60,7 +61,7 @@ export async function GET(req: Request) {
     );
   } catch (error) {
     if (error instanceof ProjectMergeError) {
-      return NextResponse.json({ error: error.message }, { status: 422 });
+      return apiErrorResponse(error, { safeStatus: 422 });
     }
     throw error;
   }
@@ -95,7 +96,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     if (error instanceof ProjectMergeError) {
-      return NextResponse.json({ error: error.message }, { status: 422 });
+      return apiErrorResponse(error, { safeStatus: 422 });
     }
     throw error;
   }

@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
@@ -14,12 +15,11 @@ import {
 
 export const runtime = 'nodejs'
 
-function errorResponse(error: unknown) {
+async function errorResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof ProjectWorkBreakdownError) {
-    return NextResponse.json(
-      { error: error.status === 404 ? 'not found' : error.message },
-      { status: error.status },
-    )
+    // A missing project or task reads as a bare 404: existence stays hidden.
+    if (error.status === 404) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return apiErrorResponse(error)
   }
   throw error
 }

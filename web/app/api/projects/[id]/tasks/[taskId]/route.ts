@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../../lib/authz'
@@ -53,10 +54,9 @@ export async function PATCH(
     return NextResponse.json({ task })
   } catch (error) {
     if (error instanceof ProjectWorkBreakdownError) {
-      return NextResponse.json(
-        { error: error.status === 404 ? 'not found' : error.message },
-        { status: error.status },
-      )
+      // A missing project or task reads as a bare 404: existence stays hidden.
+      if (error.status === 404) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return apiErrorResponse(error)
     }
     throw error
   }
