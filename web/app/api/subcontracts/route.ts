@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
@@ -285,7 +286,7 @@ export async function POST(request: Request) {
       parseSubcontractTransitionAction(body.transition);
     } catch (error) {
       if (error instanceof SubcontractError) {
-        return NextResponse.json({ error: error.message }, { status: 400 });
+        return apiErrorResponse(error, { safeStatus: 400 });
       }
       throw error;
     }
@@ -376,7 +377,7 @@ export async function POST(request: Request) {
           transition = parseSubcontractTransitionAction(body.transition);
         } catch (error) {
           if (error instanceof SubcontractError) {
-            return NextResponse.json({ error: error.message }, { status: 400 });
+            return apiErrorResponse(error, { safeStatus: 400 });
           }
           throw error;
         }
@@ -477,8 +478,8 @@ export async function POST(request: Request) {
     // A stale revision token is a conflict (409), not a validation refusal:
     // the record moved under the editor, so the message names the remedy
     // (reload, then re-enter) and the client can tell it apart from a 422.
-    if (error instanceof SubcontractConflictError) return NextResponse.json({ error: error.message }, { status: 409 });
-    if (error instanceof SubcontractError) return NextResponse.json({ error: error.message }, { status: 422 });
+    if (error instanceof SubcontractConflictError) return apiErrorResponse(error, { safeStatus: 409 });
+    if (error instanceof SubcontractError) return apiErrorResponse(error, { safeStatus: 422 });
     if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
     const code = (error as { code?: string }).code;
     if (code === "23505") return NextResponse.json({ error: "That number is already in use" }, { status: 409 });
