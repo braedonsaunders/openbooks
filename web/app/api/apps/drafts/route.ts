@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { applicationContextFromSession } from '@/lib/application/context'
@@ -108,10 +109,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid draft action' }, { status: 400 })
   } catch (error) {
     if (error instanceof ApplicationError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status },
-      )
+      return apiErrorResponse(error)
     throw error
   }
 }
@@ -130,10 +128,7 @@ export async function GET(request: Request) {
     )
   } catch (error) {
     if (error instanceof ApplicationError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status },
-      )
+      return apiErrorResponse(error)
     throw error
   }
 }

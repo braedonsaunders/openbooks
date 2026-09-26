@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { applicationContextFromSession } from '@/lib/application/context'
@@ -112,10 +113,7 @@ export async function GET(
     })
   } catch (error) {
     if (error instanceof ApplicationError || error instanceof AppError)
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status },
-      )
+      return apiErrorResponse(error)
     throw error
   }
 }
