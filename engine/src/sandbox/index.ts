@@ -35,11 +35,3 @@ export async function listSandboxes(productionOrgId: string): Promise<SandboxSum
 }
 
 /** Resolve the sandbox row for an org that IS a sandbox (used by org-switch). */
-export async function sandboxForOrg(orgId: string): Promise<SandboxSummary | null> {
-  const res = await db.execute<SandboxSummary & Record<string, unknown>>(sql`
-    select id, org_id as "orgId", production_org_id as "productionOrgId", name, tier, masked,
-           status, last_error as "lastError", last_refresh_at as "lastRefreshAt",
-           refresh_schedule as "refreshSchedule", storage_rows as "storageRows", created_at as "createdAt"
-      from sandboxes where org_id = ${orgId}`);
-  return res.rows[0] ?? null;
-}

@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { assertPeriodModulesOpen, CloseError, type CloseModule } from "../periods/period-policy.ts";
-import { sumMoney, type Money } from "../money/brands.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { PostingError } from "./posting-contracts.ts";
 import { assertFinalKernelBalance } from "./posting-invariants.ts";
@@ -31,7 +30,7 @@ import { findLiveReplayAuthorization } from "./replay-authorization.ts";
  * Amounts are canonical ledger strings (no floats, ever). Errors are
  * LedgerPostError (a PostingError), naming the refused value and the remedy.
  */
-export class LedgerPostError extends PostingError {
+class LedgerPostError extends PostingError {
   readonly name = "LedgerPostError";
 }
 
@@ -497,9 +496,6 @@ export async function postEntry(
 }
 
 /** Total of the entry's base amounts, for callers that settle against it. */
-export function postEntryTotal(lines: readonly { amount: Money }[]): Money {
-  return sumMoney(lines.map((line) => line.amount));
-}
 
 /**
  * The governed posted -> reversed lifecycle marker. Corrections append a
