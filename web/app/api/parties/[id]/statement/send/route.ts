@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -132,7 +133,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       generatedAt: new Date(`${stamp}T00:00:00Z`),
     }))
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'statement failed' }, { status: 422 })
+    return apiErrorResponse(e)
   }
 
   const partyName = party.display_name?.trim() || undefined
@@ -174,7 +175,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!uncertaintyRecorded) {
       await markEmailFailed(gate.user.orgId, logId, e instanceof Error ? e.message : String(e))
     }
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'send failed' }, { status: 422 })
+    return apiErrorResponse(e)
   }
   return NextResponse.json({ ok: true, to })
 }

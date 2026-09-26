@@ -116,6 +116,20 @@ async function resolveDeliveryActor(): Promise<EmailActor> {
     : { kind: 'system', reason: 'direct document delivery had no signed-in session' }
 }
 
+/**
+ * Record-email send refusals are user-actionable (the message names the
+ * remedy: pick a template, add a recipient, configure delivery) and answer
+ * 422. A named class keeps them intact through the API error sanitizer;
+ * provider/SMTP failures stay anonymous 500s.
+ */
+export class RecordPdfSendError extends Error {
+  readonly status = 422;
+  constructor(message: string) {
+    super(message);
+    this.name = "RecordPdfSendError";
+  }
+}
+
 export async function sendRecordPdfEmail(args: {
   recordType: string
   orgId: string
@@ -140,14 +154,14 @@ export async function sendRecordPdfEmail(args: {
   encrypt?: (pdf: Buffer) => Promise<Buffer>
 }): Promise<{ to: string; subject: string }> {
   const meta = PDF_RECORD_TYPE_BY_KEY[args.recordType]
-  if (!meta) throw new Error('unknown record type')
+  if (!meta) throw new RecordPdfSendError('unknown record type')
 
   // A protected payroll attachment must leave as ciphertext or not at all.
   // Enforced before any dependency work so no caller can reach the render or
   // send path for a compensation PDF without a protection pass supplied.
   const protectedPayrollRecord = isProtectedPayrollRecordType(args.recordType)
   if (protectedPayrollRecord && !args.encrypt) {
-    throw new Error('payroll compensation PDFs must be encrypted before email delivery')
+    throw new RecordPdfSendError('payroll compensation PDFs must be encrypted before email delivery')
   }
 
   const [tpl, record, transport, actor] = await Promise.all([
@@ -156,13 +170,13 @@ export async function sendRecordPdfEmail(args: {
     resolveOrgEmailTransport(args.orgId),
     resolveDeliveryActor(),
   ])
-  if (!tpl) throw new Error('no PDF template available for this record')
-  if (!record) throw new Error('record not found')
-  if (!transport) throw new Error('email delivery is not configured — set it up in Admin → Email')
+  if (!tpl) throw new RecordPdfSendError('no PDF template available for this record')
+  if (!record) throw new RecordPdfSendError('record not found')
+  if (!transport) throw new RecordPdfSendError('email delivery is not configured — set it up in Admin → Email')
 
   const v = record.values as Record<string, unknown>
   const to = (args.to?.trim() || (typeof v.party_email === 'string' ? v.party_email : '') || '').trim()
-  if (!to) throw new Error('no recipient email — add an email address to the customer or vendor first')
+  if (!to) throw new RecordPdfSendError('no recipient email — add an email address to the customer or vendor first')
 
   const orgName = (typeof v.org_name === 'string' && v.org_name) || 'OpenBooks'
   const partyName = typeof v.party_name === 'string' && v.party_name ? v.party_name : undefined

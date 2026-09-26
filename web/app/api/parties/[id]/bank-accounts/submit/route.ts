@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -169,7 +170,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ id: accountId, approvalStatus: 'pending', runId, gatesCreated: flows.gatesCreated })
   }).catch((e) => {
     if (e instanceof BankAccountSubmitError) {
-      return NextResponse.json({ error: e.message }, { status: 422 })
+      return apiErrorResponse(e, { safeStatus: 422 })
     }
     throw e
   })
