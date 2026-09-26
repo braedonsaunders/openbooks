@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -76,9 +77,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
     return NextResponse.json(result)
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Could not record depreciation evidence' },
-      { status: 422 },
-    )
+    return apiErrorResponse(error, { safeStatus: 422 })
   }
 }

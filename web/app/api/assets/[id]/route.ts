@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -8,6 +9,7 @@ import { FixedAssetEquipmentLinkConflict, refuseFixedAssetRehomeWithEquipment } 
 import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { invalidInput } from '../../../../lib/application/errors'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { isUuid } from '../../../../lib/list-params'
 import { postedAssetBasisEditRefusal, type RequestedAssetBasis } from '../../../../lib/asset-basis-guard'
@@ -559,12 +561,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   } catch (error) {
     if (error instanceof FieldRefusal) return patchFieldBad(error)
     if (error instanceof PostedBasisEditConflict) {
-      return NextResponse.json({ error: error.message }, { status: 409 })
+      return apiErrorResponse(error, { safeStatus: 409 })
     }
     if (error instanceof FixedAssetEquipmentLinkConflict) {
-      return NextResponse.json({ error: error.message }, { status: 409 })
+      return apiErrorResponse(error, { safeStatus: 409 })
     }
-    return bad(error instanceof Error ? error.message : 'Could not build depreciation schedule')
+    // The save reports a concurrent disappearance with a bare Error carrying
+    // curated text (pinned by route tests); only those travel as 422s with
+    // their message, everything named sanitizes.
+    if (error instanceof Error && error.constructor === Error) return apiErrorResponse(invalidInput(error.message))
+    return apiErrorResponse(error, { safeStatus: 422 })
   }
 
 }

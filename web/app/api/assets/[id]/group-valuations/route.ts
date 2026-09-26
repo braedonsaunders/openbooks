@@ -1,3 +1,5 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
+import { invalidInput } from '../../../../../lib/application/errors'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
@@ -80,14 +82,10 @@ export async function POST(
     );
     return NextResponse.json({ changeId }, { status: 201 });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "group valuation could not be proposed",
-      },
-      { status: 422 },
-    );
+    // proposeAssetGroupValuation signals request-state validation with bare
+    // Errors carrying curated operator text (pinned by route tests); only
+    // those travel as 422s with their message, everything named sanitizes.
+    if (error instanceof Error && error.constructor === Error) return apiErrorResponse(invalidInput(error.message))
+    return apiErrorResponse(error, { safeStatus: 422 });
   }
 }
