@@ -1,24 +1,11 @@
-// Contract test for the ownership of the database `new` hands back, run against
-// a fake psql that records every statement.
+// Contract tests for the database `new` hands back, run against a fake psql
+// that records every statement.
 //
-// The defect this pins was silent in the worst way. `build_template` transfers
-// the TEMPLATE to the runtime role, and print_env's own comment explains that
-// tests connect as that constrained role so RLS assertions are not vacuous. But
-// `CREATE DATABASE ... TEMPLATE t` assigns the copy to the role that RUNS it —
-// the superuser here — and ownership is NOT inherited from the template. So
-// every database `new` published was superuser-owned, the runtime role had no
-// CREATE on it, and the first fixture to build a scratch schema died with
-// "permission denied for database ob_<name>".
-//
-// That message names the DATABASE, so it reads like a missing GRANT on a
-// database that was somehow set up wrong, rather than the copy having the wrong
-// owner. Measured on the live container before the fix:
-//
-//   ob_integ owner=openbooks create=false
-//   openbooks_template owner=openbooks_app create=true
-//
-// The template being correct is precisely what kept this invisible: anyone who
-// checked the template found it right and stopped looking.
+// `CREATE DATABASE ... TEMPLATE t` assigns the copy to the role that RUNS it,
+// the superuser here; ownership is NOT inherited from the template. So a copy
+// created without an OWNER clause left the runtime role without CREATE on it,
+// and the first fixture to build a scratch schema died with "permission denied
+// for database ob_<name>", which reads like a missing GRANT, not a wrong owner.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -30,7 +17,7 @@ import test from "node:test";
 const execFileAsync = promisify(execFile);
 const script = resolve("scripts/testdb.sh");
 
-// The same fingerprint testdb.sh computes, so check_template_freshness agrees
+// The same fingerprint testdb.sh computes, so template_matches_checkout agrees
 // and `new` reaches the copy instead of refusing. Deriving it rather than
 // hardcoding keeps this test from going stale on every new migration.
 async function schemaFingerprint() {
@@ -64,10 +51,10 @@ case "$*" in
 esac
 `,
   );
-  const run = async (...args) => {
+  const run = async (args, env = {}) => {
     try {
       const { stdout, stderr } = await execFileAsync("bash", [script, ...args], {
-        env: { ...process.env, PATH: `${bin}:${process.env.PATH}` },
+        env: { ...process.env, OPENBOOKS_TESTDB_ALLOW_STALE: "", ...env, PATH: `${bin}:${process.env.PATH}` },
       });
       return { code: 0, stdout, stderr };
     } catch (error) {
@@ -78,44 +65,52 @@ esac
   return { run, statements, cleanup: () => rm(root, { recursive: true, force: true }) };
 }
 
-test("new hands back a database the runtime role owns, not one only the superuser can extend", async (t) => {
+test("new hands back a database owned by the runtime role the suite connects as", async (t) => {
   const h = await harness(await schemaFingerprint());
   t.after(h.cleanup);
 
-  const result = await h.run("new", "ownercheck");
+  const result = await h.run(["new", "ownercheck"]);
   assert.equal(result.code, 0, result.stderr);
 
   const creates = (await h.statements()).filter((line) => /create database/i.test(line));
   assert.equal(creates.length, 1, "exactly one database is created");
+  assert.match(creates[0], /create database ob_ownercheck template openbooks_template owner openbooks_app/);
 
-  // The property worth guarding is the OWNER, not the presence of the clause:
-  // a copy the runtime role cannot extend is unusable for any fixture that
-  // builds a scratch schema, which is most of the integration partition.
-  assert.match(
-    creates[0],
-    /create database ob_ownercheck template openbooks_template owner openbooks_app/,
-    "the copy must be owned by the runtime role the suite actually connects as",
-  );
-
-  // print_env promises a runtime-role URL; the owner above is what makes that
-  // promise usable rather than merely true.
-  assert.match(result.stdout, /OPENBOOKS_DB_URL='postgres:\/\/openbooks_app:/);
+  // The property worth guarding is that the OWNER is the role the suite
+  // CONNECTS as: a copy the runtime role cannot extend is unusable for any
+  // fixture that builds a scratch schema, and two drifting names break it again.
+  const owner = creates[0].match(/owner (\S+)/)?.[1];
+  const url = result.stdout.match(/OPENBOOKS_DB_URL='postgres:\/\/([^:]+):/)?.[1];
+  assert.equal(owner, url, "the owning role and the connecting role must be the same role");
 });
 
-test("the owner is the runtime role print_env hands out, not a second hardcoded name", async (t) => {
-  const h = await harness(await schemaFingerprint());
+// A copy of a template built from another schema produced a refusal that was
+// reported as a product defect; on a fresh template at the same commit the
+// test was green. Refuse the copy by default; under --allow-stale mark every
+// diagnostic line so no result can be read without seeing it.
+test("new refuses a template built from a different schema unless --allow-stale, which marks every line", async (t) => {
+  const h = await harness("0".repeat(64));
   t.after(h.cleanup);
 
-  const result = await h.run("new", "ownermatch");
-  assert.equal(result.code, 0, result.stderr);
+  const refused = await h.run(["new", "stalecheck"]);
+  assert.equal(refused.code, 1, `a copy of a mismatched template was handed out:\n${refused.stderr}`);
+  assert.equal(refused.stdout, "", "no exports are handed out");
+  assert.deepEqual((await h.statements()).filter((line) => /create database/i.test(line)), []);
+  assert.match(refused.stderr, /template openbooks_template: 1 migrations {3}this checkout: \d+ migrations/);
+  assert.match(refused.stderr, /your migrations are NOT in the template\. Run: scripts\/testdb\.sh reset/);
+  assert.match(refused.stderr, /OPENBOOKS_TESTDB_TEMPLATE=openbooks_template_<suffix> scripts\/testdb\.sh new/);
+  assert.match(refused.stderr, /pass --allow-stale \(or OPENBOOKS_TESTDB_ALLOW_STALE=1\)/);
 
-  const create = (await h.statements()).find((line) => /create database/i.test(line));
-  const owner = create.match(/owner (\S+)/)?.[1];
-  const url = result.stdout.match(/OPENBOOKS_DB_URL='postgres:\/\/([^:]+):/)?.[1];
-
-  // Two names drifting apart is how this breaks again: the fix is only correct
-  // while the role that OWNS the copy is the role the suite CONNECTS as.
-  assert.ok(owner, "the create statement names an owner");
-  assert.ok(url, "print_env emits a runtime URL");
-  assert.equal(owner, url, "the owning role and the connecting role must be the same role");
+  for (const [args, env] of [
+    [["new", "--allow-stale", "stalecheck"]],
+    [["new", "stalecheck", "--allow-stale"]],
+    [["new", "stalecheck"], { OPENBOOKS_TESTDB_ALLOW_STALE: "1" }],
+  ]) {
+    const allowed = await h.run(args, env);
+    assert.equal(allowed.code, 0, allowed.stderr);
+    assert.match(allowed.stdout, /^export OPENBOOKS_DB_URL='[^']+\/ob_stalecheck'$/m, "the exports stay eval-able");
+    const lines = allowed.stderr.split("\n").filter(Boolean);
+    assert.ok(lines.some((line) => /ob_stalecheck ready/.test(line)), allowed.stderr);
+    for (const line of lines) assert.match(line, /^stale-template: /);
+  }
 });
