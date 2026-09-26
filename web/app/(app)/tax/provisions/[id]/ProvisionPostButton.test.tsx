@@ -39,12 +39,6 @@ registerHooks({
         url: "data:text/javascript,export const toast={success(){},error(){},warning(){}};export function Toaster(){return null}",
       };
     }
-    if (specifier === "server-only") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export default {};",
-      };
-    }
     return next(specifier, context);
   },
 });

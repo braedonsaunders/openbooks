@@ -11,7 +11,6 @@ const state: { user: import('../../../lib/auth').SessionUser | null } = { user: 
 Object.assign(globalThis, { __hubSavedViewsState: state, React })
 registerHooks({
   resolve(s, c, next) {
-    if (s === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (s === 'next-intl/server') {
       return {
         shortCircuit: true,

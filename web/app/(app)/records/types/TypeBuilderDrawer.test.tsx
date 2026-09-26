@@ -43,10 +43,6 @@ registerHooks({
     if (specifier === '@/lib/confirm' || specifier === '@/lib/prompt') {
       return { shortCircuit: true, url: 'data:text/javascript,export async function confirmDialog(){return true}export async function promptDialog(){return null}' }
     }
-    if (specifier.startsWith('@/') && context.parentURL) {
-      const webRoot = import.meta.url.slice(0, import.meta.url.indexOf('/web/') + 5)
-      return next(new URL(`${specifier.slice(2)}.ts`, webRoot).href, context)
-    }
     return next(specifier, context)
   },
 })

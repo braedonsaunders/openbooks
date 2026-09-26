@@ -19,7 +19,6 @@ const mockGate = `export async function requireSubcontractsFeature() {}`
 
 const hooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
     if (specifier === '../../../lib/authz' && context.parentURL?.includes('/subcontracts/view.ts')) return { shortCircuit: true, url: 'mock:subcontracts-scope-authz' }
     if (specifier === '../../../lib/features' && context.parentURL?.includes('/subcontracts/view.ts')) return { shortCircuit: true, url: 'mock:subcontracts-scope-features' }
     if (specifier === '../../../lib/subcontracts-gate' && context.parentURL?.includes('/subcontracts/view.ts')) return { shortCircuit: true, url: 'mock:subcontracts-scope-gate' }

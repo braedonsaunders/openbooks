@@ -1,21 +1,12 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 // The book-selection contract behind every book-resolving report view and the
 // statement exports: only an omitted selection defaults to the primary book.
 // A stale or foreign explicit selection must never silently change the
-// accounting basis. Postgres is live; only the server-only marker is stubbed.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
+// accounting basis. Postgres is live; the server-only marker is stubbed by
+// the shared test hooks.
 const { reportBookSelection, ReportBookSelectionError } = await import('../../../lib/report-books.ts')
 const { sql } = await import('drizzle-orm')
 const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')

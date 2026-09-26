@@ -19,21 +19,6 @@ import test from "node:test";
 
 import ts from 'typescript';
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    // Platform boundary, not our own module: lets the unit partition import
-    // the book-selection contract without a Next server runtime.
-    if (specifier === 'server-only') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export default {}',
-      }
-    }
-    return nextResolve(specifier, context)
-  },
-})
-
 const { ReportBookSelectionError, reportBookSelection } = await import('../../../lib/report-books')
 
 const REPORTS_DIR = dirname(fileURLToPath(import.meta.url));
