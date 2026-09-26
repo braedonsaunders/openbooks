@@ -9,6 +9,13 @@ export interface JsdomPresetOptions {
   scrollIntoView?: boolean;
   /** Install a no-op ResizeObserver. Defaults to true. */
   resizeObserver?: boolean;
+  /**
+   * Which `Event` constructor the test realm uses. Node 24 ships a native
+   * global `Event`, so the guarded copy below keeps it by default; dropdown
+   * selection and other realm-sensitive DOM behavior needs jsdom's own, so
+   * tests that overwrote it unconditionally pass `"jsdom"`.
+   */
+  event?: "jsdom" | "native";
 }
 
 export async function bootJsdomEnvironment(
@@ -34,7 +41,6 @@ export async function bootJsdomEnvironment(
     "HTMLButtonElement",
     "HTMLInputElement",
     "HTMLSelectElement",
-    "Event",
     "MouseEvent",
     "KeyboardEvent",
     "FocusEvent",
@@ -44,6 +50,11 @@ export async function bootJsdomEnvironment(
     "getComputedStyle",
   ]) {
     if (globals[key] === undefined) globals[key] = domWindow[key];
+  }
+  if (options.event === "jsdom") {
+    globals.Event = domWindow.Event;
+  } else if (globals.Event === undefined) {
+    globals.Event = domWindow.Event;
   }
   if (options.scrollIntoView !== false) {
     const prototype = (globalThis as Record<string, unknown>).HTMLElement as
