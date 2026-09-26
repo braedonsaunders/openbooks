@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -14,6 +15,22 @@ import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../.
 import { PNL_TYPES } from '../../../../../lib/account-types'
 
 export const runtime = 'nodejs'
+
+/**
+ * The import drawer keys its duplicate-headers remedy on the
+ * `duplicate_columns` code with the parser message as `detail`, so the
+ * sanitizer must carry both: the code travels as the refusal message and
+ * the parser text rides in details.
+ */
+class DuplicateColumnsRefusal extends Error {
+  readonly status = 422
+  readonly detail: string
+  constructor(error: ImportParseError) {
+    super('duplicate_columns')
+    this.name = 'DuplicateColumnsRefusal'
+    this.detail = error.message
+  }
+}
 
 const FORMATS = ['csv', 'xlsx'] as const
 
@@ -96,7 +113,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
   } catch (error) {
     if (error instanceof ImportParseError) {
-      return NextResponse.json({ error: 'duplicate_columns', detail: error.message }, { status: 422 })
+      const refusal = new DuplicateColumnsRefusal(error)
+      return apiErrorResponse(refusal, { details: { detail: refusal.detail } })
     }
     throw error
   }
@@ -117,7 +135,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const outOfScope = await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)
   if (outOfScope.length > 0) {
     const refusal = outOfScopeScenarioError(outOfScope)
-    return NextResponse.json({ error: refusal.message }, { status: refusal.status })
+    return apiErrorResponse(refusal)
   }
 
   const [accountsResult, periodsResult, subsidiariesResult, departmentsResult, projectsResult, locationsResult, classesResult] = (await Promise.all([
@@ -398,7 +416,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
     return NextResponse.json(result)
   } catch (error) {
-    if (error instanceof BudgetMutationError) return NextResponse.json({ error: error.message }, { status: error.status })
+    if (error instanceof BudgetMutationError) return apiErrorResponse(error)
     throw error
   }
 }

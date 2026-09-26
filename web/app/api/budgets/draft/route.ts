@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -9,6 +10,20 @@ import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { BUDGET_KINDS } from '../../../../lib/budgets'
 
 export const runtime = 'nodejs'
+
+/**
+ * A missing copy-source scenario is a 404 by sentinel message. A plain
+ * Error cannot travel through the sanitizer (its constructor names no
+ * business condition), so it is carried in this named refusal, keeping the
+ * exact wire shape and status.
+ */
+class SourceNotFoundRefusal extends Error {
+  readonly status = 404
+  constructor() {
+    super('source_not_found')
+    this.name = 'SourceNotFoundRefusal'
+  }
+}
 
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('budgets.manage', 'budgets')
@@ -131,7 +146,7 @@ export async function POST(req: Request) {
     return NextResponse.json(result)
   } catch (error) {
     if (error instanceof Error && error.message === 'source_not_found') {
-      return NextResponse.json({ error: error.message }, { status: 404 })
+      return apiErrorResponse(new SourceNotFoundRefusal())
     }
     throw error
   }

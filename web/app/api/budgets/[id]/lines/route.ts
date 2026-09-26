@@ -1,3 +1,4 @@
+import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -79,7 +80,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const outOfScope = await scenarioOutOfScopeSubsidiaryNames(id, gate.user.orgId, gate.allowedSubsidiaryIds)
   if (outOfScope.length > 0) {
     const refusal = outOfScopeScenarioError(outOfScope)
-    return NextResponse.json({ error: refusal.message }, { status: refusal.status })
+    return apiErrorResponse(refusal)
   }
   try {
     return NextResponse.json(await saveBudgetCells({
@@ -90,7 +91,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       cells,
     }))
   } catch (error) {
-    if (error instanceof BudgetMutationError) return NextResponse.json({ error: error.message }, { status: error.status })
+    if (error instanceof BudgetMutationError) return apiErrorResponse(error)
     throw error
   }
 }
