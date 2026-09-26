@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import { bootJsdomEnvironment } from '../../../../../testing/jsdom-env'
 
 // BulkEditDrawer closed silently on a half-typed adjustment — Cancel,
 // the X button, Esc and the backdrop all dropped the typed component, amount
@@ -7,38 +8,15 @@ import test, { type TestContext } from 'node:test'
 // confirmDiscard pattern: a clean drawer still closes without prompting, and
 // declining keeps the drawer open with the typed work intact). Mounts the
 // real drawer under jsdom and drives the close paths with a scripted confirm.
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/payroll/runs/doc-1',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) =>
-    setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll/runs/doc-1', matchMediaMatches: false })
 
 const script = { confirmResult: false, confirmCalls: 0, closed: 0 }
 Object.assign(globalThis, { __bulkDiscard: script })
 
-const { registerHooks } = await import('node:module')
-registerHooks({
+// The confirm double stays suffix-wired: shared components import it through
+// several relative spellings plus `@/`, which one exact key cannot name.
+const { registerHooks: registerConfirmHook } = await import('node:module')
+registerConfirmHook({
   resolve(specifier, context, next) {
     if (specifier.endsWith('/lib/confirm')) {
       return {
@@ -49,8 +27,6 @@ registerHooks({
     return next(specifier, context)
   },
 })
-
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

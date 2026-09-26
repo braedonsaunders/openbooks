@@ -5,6 +5,8 @@ import test from 'node:test'
 import type { ComponentType, ReactNode } from 'react'
 import type { LeaseRow, WorkspaceOptions } from './types'
 import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
+import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
+import { stubModules } from '../../../testing/stub-modules'
 
 // lease Add-charge always 422d ('Charge tax code is invalid') and
 // failed silently on a missing toast key. The form state carries an empty
@@ -24,31 +26,17 @@ const TOAST_KEYS = [
   'propertyUpdated', 'rentBilled', 'unitAdded', 'unitDeleted', 'unitUpdated',
 ]
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/properties?lease=lease-1' })
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'MouseEvent', 'self']) {
-  if ((globalThis as Record<string, unknown>)[key] === undefined) {
-    ;(globalThis as Record<string, unknown>)[key] = domWindow[key]
-  }
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((callback: FrameRequestCallback) => setTimeout(() => callback(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({ matches: false, media: '', addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia
-}
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
+await bootJsdomEnvironment({ url: 'http://localhost/properties?lease=lease-1', matchMediaMatches: false })
 
-const { registerHooks } = await import('node:module')
-const { pathToFileURL } = await import('node:url')
-const path = await import('node:path')
-const uiEntry = pathToFileURL(path.join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === '@openbooks/ui') return { shortCircuit: true, url: uiEntry }
-    return next(specifier, context)
+const { pathToFileURL: toFileUrl } = await import('node:url')
+const worktreeUiSource = `export * from "${toFileUrl(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href}"`
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    '@openbooks/ui': worktreeUiSource,
   },
 })
 

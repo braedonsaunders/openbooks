@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { bootJsdomEnvironment } from "../../../../testing/jsdom-env";
+import { stubModules } from "../../../../testing/stub-modules";
 
 declare global {
   var __chargeToasts: { kind: string; message: string }[] | undefined;
@@ -12,54 +14,27 @@ declare global {
 // through the translated fallback) and always release the button.
 
 // jsdom first: the section reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/projects/p1",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
-if (!window.HTMLElement.prototype.scrollIntoView) {
-  window.HTMLElement.prototype.scrollIntoView = function () {};
-}
+await bootJsdomEnvironment({ url: "http://localhost:4800/projects/p1", matchMediaMatches: false });
 
-const { registerHooks } = await import("node:module");
-const { pathToFileURL } = await import("node:url");
-const worktreeUi = pathToFileURL(
-  (await import("node:path")).join(process.cwd(), "packages", "ui", "src", "index.ts"),
-).href;
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "@openbooks/ui") {
-      return { shortCircuit: true, url: worktreeUi };
-    }
-    if (specifier === "next/navigation") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export function useRouter(){return{push(){},refresh(){},replace(){}}}export function usePathname(){return '/projects/p1'}export function useSearchParams(){return new URLSearchParams()}",
-      };
-    }
-    if (specifier === "sonner") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(m){(globalThis.__chargeToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__chargeToasts??=[]).push({kind:'error',message:String(m)})},loading(){return 'tid'}};export function Toaster(){return null}",
-      };
-    }
-    return next(specifier, context);
+const { join: joinPath } = await import("node:path");
+const { pathToFileURL: toFileUrl } = await import("node:url");
+const worktreeUiSource = `export * from "${toFileUrl(joinPath(process.cwd(), "packages", "ui", "src", "index.ts")).href}"`;
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return{push(){},refresh(){},replace(){}}}" +
+      "export function usePathname(){return '/projects/p1'}" +
+      "export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "@openbooks/ui": worktreeUiSource,
+    sonner:
+      "export const toast={success(m){(globalThis.__chargeToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__chargeToasts??=[]).push({kind:'error',message:String(m)})},loading(){return 'tid'}};export function Toaster(){return null}",
   },
 });
-
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { act } = await import("react");

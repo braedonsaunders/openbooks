@@ -32,7 +32,6 @@ const mockModules = new Map<string, string>([
 ])
 const testHooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
     if (specifier === '@openbooks/engine/src/platform/db.ts') return { shortCircuit: true, url: 'mock:db' }
     if (specifier === '@openbooks/engine/src/platform/business-date.ts') return { shortCircuit: true, url: 'mock:today' }
     if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'mock:intl' }

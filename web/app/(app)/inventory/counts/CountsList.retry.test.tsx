@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
+import { stubModules } from '../../../../testing/stub-modules'
 
 // IN9: stock-count action retries duplicated counts. countAction minted a
 // new UUID per call, so a lost create response plus a retry created a SECOND
@@ -7,40 +9,7 @@ import test, { type TestContext } from 'node:test'
 // Every count action now carries one stable per-attempt key: reused on
 // retry, rotated after success or an input change.
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost:4800/inventory?inventoryView=counts',
-})
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof dom.window.requestAnimationFrame !== 'function') {
-  dom.window.requestAnimationFrame = ((cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 16)) as unknown as typeof window.requestAnimationFrame
-  dom.window.cancelAnimationFrame = ((id: number) => clearTimeout(id)) as unknown as typeof window.cancelAnimationFrame
-}
-if (globals.requestAnimationFrame === undefined) {
-  globals.requestAnimationFrame = dom.window.requestAnimationFrame
-  globals.cancelAnimationFrame = dom.window.cancelAnimationFrame
-}
-if (typeof window.matchMedia !== 'function') {
-  // Desktop viewport: the pickers render dropdowns instead of the mobile
-  // bottom sheet, so options appear as button[role="option"].
-  window.matchMedia = (() => ({
-    matches: true,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
-if (typeof (globalThis as Record<string, unknown>).ResizeObserver !== 'function') {
-  (globalThis as Record<string, unknown>).ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  }
-}
+await bootJsdomEnvironment({ url: 'http://localhost:4800/inventory?inventoryView=counts' })
 
 const COUNT_ID = 'aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa'
 const LINE_ID = 'bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb'
@@ -63,32 +32,24 @@ Object.assign(globalThis, {
     prefetch() {},
   },
 })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return globalThis.__countRetryRouter}export function usePathname(){return "/inventory"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
-    if (specifier === 'next/link') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export default function Link(p){return globalThis.React.createElement("a",{href:p.href,className:p.className},p.children)}',
-      }
-    }
-    if (specifier === 'sonner') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const toast={success(m){globalThis.__countRetryToasts.push({kind:"success",message:String(m)})},error(m){globalThis.__countRetryToasts.push({kind:"error",message:String(m)})},info(m){globalThis.__countRetryToasts.push({kind:"info",message:String(m)})}};export function Toaster(){return null}',
-      }
-    }
-    return next(specifier, context)
+stubModules({
+  navigation: {
+    source:
+      'export function useRouter(){return globalThis.__countRetryRouter}' +
+      'export function usePathname(){return "/inventory"}' +
+      'export function useSearchParams(){return new URLSearchParams()}',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link':
+      'export default function Link(p){return globalThis.React.createElement("a",{href:p.href,className:p.className},p.children)}',
+    sonner:
+      'export const toast={success(m){globalThis.__countRetryToasts.push({kind:"success",message:String(m)})},error(m){globalThis.__countRetryToasts.push({kind:"error",message:String(m)})},info(m){globalThis.__countRetryToasts.push({kind:"info",message:String(m)})}};export function Toaster(){return null}',
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

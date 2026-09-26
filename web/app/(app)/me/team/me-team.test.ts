@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // Behaviour contract for the team page (/me/team). The spec builder runs
@@ -8,15 +7,6 @@ import test from "node:test";
 // approve/decline widget exists on this page — and the tab strip rides
 // the header. Roster scoping (one level, no matrix) stays covered by
 // engine/src/hrm/self-service/scope.test.ts, which owns the team read.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { meTeamSpec } = await import("./view.ts");
 
 function specJson(data: Record<string, unknown>): string {

@@ -1,25 +1,24 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '../../../../testing/stub-modules'
 import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 import type { RemittanceGroup } from '@openbooks/engine/src/payroll/remittance.ts'
 
 const state: { error: Error | null; groups: RemittanceGroup[] | null } = { error: null, groups: [] }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for('remittances-page-test')] = state
-const stubs: Record<string, string> = {
-  'server-only': 'export {}',
-  'next-intl/server': 'export async function getTranslations(){ return key => key }',
-  '@openbooks/engine/src/platform/business-date.ts': "export async function businessToday(){ return '2026-09-13' }",
-  '../../../../lib/authz': "export async function requirePermission(){ return { user: { orgId: 'test' } } }; export function can(){ return true }",
-  '../../../../lib/feature-gates': 'export async function requireFeatureEnabled(){}',
-  '../../../../components/module-home/group-tabs': 'export async function groupTabs(){ return [] }',
-  '../../../../lib/payroll-scoped-views': "export async function scopedRemittanceSummary(){ const s=globalThis[Symbol.for('remittances-page-test')]; if(s.error)throw s.error; return s.groups }",
-  'next/navigation': "export function notFound(){ throw new Error('NEXT_HTTP_ERROR_FALLBACK;404') }",
-}
-registerHooks({
-  resolve(specifier, context, next) {
-    if (stubs[specifier]) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(stubs[specifier]) }
-    return next(specifier, context)
+stubModules({
+  navigation: {
+    source: "export function notFound(){ throw new Error('NEXT_HTTP_ERROR_FALLBACK;404') }",
+  },
+  intl: 'export async function getTranslations(){ return key => key }',
+  authz: false,
+  features: false,
+  extra: {
+    '@openbooks/engine/src/platform/business-date.ts': "export async function businessToday(){ return '2026-09-13' }",
+    '../../../../lib/authz': "export async function requirePermission(){ return { user: { orgId: 'test' } } }; export function can(){ return true }",
+    '../../../../lib/feature-gates': 'export async function requireFeatureEnabled(){}',
+    '../../../../components/module-home/group-tabs': 'export async function groupTabs(){ return [] }',
+    '../../../../lib/payroll-scoped-views': "export async function scopedRemittanceSummary(){ const s=globalThis[Symbol.for('remittances-page-test')]; if(s.error)throw s.error; return s.groups }",
   },
 })
 const { loadRemittances, remittancesSpec } = await import('./view')

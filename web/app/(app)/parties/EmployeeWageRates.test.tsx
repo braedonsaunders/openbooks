@@ -8,50 +8,27 @@
 // attempt, not toast-and-vanish).
 import assert from "node:assert/strict";
 import test from "node:test";
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
+import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __wageToasts: { kind: string; message: string }[] | undefined;
 }
 
 // jsdom first: the panel reads browser globals at render.
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
-  url: "http://localhost:4800/entities/employees",
-});
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-if (typeof window.matchMedia !== "function") {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: "",
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia;
-}
+await bootJsdomEnvironment({ url: "http://localhost:4800/entities/employees", matchMediaMatches: false });
 
-const { registerHooks } = await import("node:module");
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "next/link") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export default function Link(p){return p.children}",
-      };
-    }
-    if (specifier === "sonner") {
-      return {
-        shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(m){(globalThis.__wageToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__wageToasts??=[]).push({kind:'error',message:String(m)})},warning(m){(globalThis.__wageToasts??=[]).push({kind:'warning',message:String(m)})}};export function Toaster(){return null}",
-      };
-    }
-    return next(specifier, context);
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    "next/link": "export default function Link(p){return p.children}",
+    sonner:
+      "export const toast={success(m){(globalThis.__wageToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__wageToasts??=[]).push({kind:'error',message:String(m)})},warning(m){(globalThis.__wageToasts??=[]).push({kind:'warning',message:String(m)})}};export function Toaster(){return null}",
   },
 });
-
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");

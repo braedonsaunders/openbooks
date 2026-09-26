@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import test from "node:test";
 import { CamTable, formatCamAmount } from "./CamTable";
+import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import type { PropertyWorkspace } from "./types";
 
 type MoneyCall = {
@@ -50,14 +51,7 @@ const workspace = {
 
 const permissions = { manage: false, account: false, bill: false };
 
-const { JSDOM } = await import("jsdom");
-const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost:4800/property-management" });
-const globals = globalThis as Record<string, unknown>;
-const domWindow = dom.window as unknown as Record<string, unknown>;
-for (const key of ["window", "document", "navigator", "Node", "Element", "HTMLElement", "Event", "self"]) {
-  if (globals[key] === undefined) globals[key] = domWindow[key];
-}
-(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
+await bootJsdomEnvironment({ url: "http://localhost:4800/property-management", matchMediaMatches: false });
 const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
 

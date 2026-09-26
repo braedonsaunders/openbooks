@@ -1,23 +1,37 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import React from 'react'
+import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
+import { stubModules } from '../../../testing/stub-modules'
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useRouter(){return {refresh(){},push(){},replace(){}}}export function usePathname(){return "/me/benefits"}export function useSearchParams(){return new URLSearchParams()}',
-      }
-    }
-    if (specifier === 'next/link') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export default function Link(p){return p.children}',
-      }
-    }
-    return next(specifier, context)
+await bootJsdomEnvironment({ url: 'http://localhost/me/benefits?elect=1', matchMediaMatches: false })
+
+// The dialog reads a legacy-listener matchMedia: keep that shape on the
+// shared window (the preset installs the modern listener names only).
+const benefitWindow = window as unknown as { matchMedia?: (query: string) => unknown }
+benefitWindow.matchMedia = () => ({
+  matches: false,
+  addEventListener() {},
+  removeEventListener() {},
+  addListener() {},
+  removeListener() {},
+  dispatchEvent() {
+    return false
+  },
+})
+
+stubModules({
+  navigation: {
+    source:
+      'export function useRouter(){return {refresh(){},push(){},replace(){}}}' +
+      'export function usePathname(){return "/me/benefits"}' +
+      'export function useSearchParams(){return new URLSearchParams()}',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link': 'export default function Link(p){return p.children}',
   },
 })
 const { NextIntlClientProvider } = await import('next-intl')
@@ -54,38 +68,11 @@ const dialog = {
 } as unknown as Dialog
 
 async function renderText(): Promise<{ text: string; document: Document; unmount: () => Promise<void> }> {
-  const { JSDOM } = await import('jsdom')
-  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
-    url: 'http://localhost/me/benefits?elect=1',
-  })
-  const previous = {
-    window: (globalThis as Record<string, unknown>).window,
-    document: (globalThis as Record<string, unknown>).document,
-    navigator: (globalThis as Record<string, unknown>).navigator,
-    self: (globalThis as Record<string, unknown>).self,
-  }
-  Object.defineProperty(globalThis, 'window', { value: dom.window, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'document', { value: dom.window.document, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'self', { value: dom.window, configurable: true, writable: true })
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  const win = dom.window as unknown as { matchMedia?: (query: string) => unknown }
-  if (typeof win.matchMedia !== 'function') {
-    win.matchMedia = () => ({
-      matches: false,
-      addEventListener() {},
-      removeEventListener() {},
-      addListener() {},
-      removeListener() {},
-      dispatchEvent() {
-        return false
-      },
-    })
-  }
-  const doc = dom.window.document
   const { createRoot } = await import('react-dom/client')
   const { act } = await import('react')
-  const root = createRoot(doc.getElementById('root')!)
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages}>
@@ -94,16 +81,13 @@ async function renderText(): Promise<{ text: string; document: Document; unmount
     )
   })
   return {
-    text: doc.body.textContent ?? '',
-    document: doc as unknown as Document,
+    text: document.body.textContent ?? '',
+    document,
     unmount: async () => {
       await act(async () => {
         root.unmount()
       })
-      Object.defineProperty(globalThis, 'window', { value: previous.window, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'document', { value: previous.document, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'navigator', { value: previous.navigator, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'self', { value: previous.self, configurable: true, writable: true })
+      host.remove()
     },
   }
 }

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
+import { stubModules } from "../../../testing/stub-modules";
 
 // the dashboard tile counts the unified approval worklist
 // (Flows gates + gateless document approvals + pay runs) while the
@@ -18,30 +18,22 @@ const mockAuthz = `
   export async function requirePermission() { return state.authz }
   export function can(authz, permission) { return authz.permissions.has(permission) }
 `;
-const mockIntl = `
-  export async function getTranslations() { return (key) => key }
-`;
 const mockMoney = `
   export async function getMoneyFormatter() { return { money: String, moneyCompact: String } }
 `;
 
-registerHooks({
+stubModules({ navigation: false, authz: false, features: false });
+
+// Scoped doubles stay conditioned: the authz and money doubles answer only
+// the inbox loader's own imports, which no shared stub shape matches.
+const { registerHooks: registerScopedHooks } = await import("node:module");
+registerScopedHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
     if (specifier === "../../../lib/authz" && context.parentURL?.includes("/inbox/")) {
       return { url: "mock:approvals-union-authz", shortCircuit: true };
     }
-    if (specifier === "next-intl/server") {
-      return { url: "mock:approvals-union-intl", shortCircuit: true };
-    }
     if (specifier === "@/lib/money-server" && context.parentURL?.includes("/inbox/")) {
       return { url: "mock:approvals-union-money", shortCircuit: true };
-    }
-    if (specifier.startsWith("@/")) {
-      const webRoot = import.meta.url.slice(0, import.meta.url.indexOf("/web/") + 5);
-      return nextResolve(new URL(`${specifier.slice(2)}.ts`, webRoot).href, context);
     }
     // Worktree node_modules symlinks to the main checkout's install: pin
     // bare self-imports to this checkout (same modules a real install
@@ -61,9 +53,6 @@ registerHooks({
   load(url, context, nextLoad) {
     if (url === "mock:approvals-union-authz") {
       return { format: "module", source: mockAuthz, shortCircuit: true };
-    }
-    if (url === "mock:approvals-union-intl") {
-      return { format: "module", source: mockIntl, shortCircuit: true };
     }
     if (url === "mock:approvals-union-money") {
       return { format: "module", source: mockMoney, shortCircuit: true };

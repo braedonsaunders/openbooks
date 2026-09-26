@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { registerHooks } from 'node:module'
+import { stubModules } from '../../../../testing/stub-modules'
 
 // The feedback page rendered its settings form bare: no scroll container, no
 // page padding, no header. Its siblings (access, users, tenants, email log)
@@ -13,12 +13,13 @@ const ACTION_STUB = `
   export async function clearFeedbackTokenAction() { return { ok: false, message: 'stubbed' } }
 `
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === './actions') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,' + encodeURIComponent(ACTION_STUB) }
-    }
-    return nextResolve(specifier, context)
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    './actions': ACTION_STUB,
   },
 })
 
@@ -26,7 +27,6 @@ const React = await import('react')
 Object.assign(globalThis, { React })
 const { renderToString } = await import('react-dom/server')
 const { PlatformFeedbackClient } = await import('./PlatformFeedbackClient.tsx')
-hooks.deregister()
 
 function htmlFor(settings: {
   enabled: boolean

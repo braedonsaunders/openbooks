@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // Behaviour contract for the checklists page (/me/checklists). The spec
@@ -8,15 +7,6 @@ import test from "node:test";
 // the header. Step completion rides the shared hrm-step-complete widget
 // through the existing step endpoint — the widget contracts and the
 // steps routes own that path, not this page.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { meChecklistsSpec } = await import("./view.ts");
 
 function specJson(data: Record<string, unknown>): string {

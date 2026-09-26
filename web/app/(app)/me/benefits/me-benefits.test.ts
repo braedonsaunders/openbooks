@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // Behaviour contract for the benefits page (/me/benefits). The spec
@@ -8,15 +7,6 @@ import test from "node:test";
 // data. Row scoping to the login stays covered by
 // engine/src/hrm/self-service/scope.test.ts and the benefits workspace
 // integration tests, which own the service reads.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { meBenefitsSpec } = await import("./view.ts");
 
 function specJson(data: Record<string, unknown>): string {

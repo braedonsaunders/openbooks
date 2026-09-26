@@ -1,50 +1,47 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
+import { stubModules } from "../../../testing/stub-modules";
 
 const state = { orgId: "org", grants: new Set<string>(["items.read"]), allowed: null as Set<string> | null, subsidiaries: [] as Array<{ id: string; name: string }>, pickerSubsidiaries: [] as Array<{ id: string; name: string }> };
 Object.assign(globalThis, { __inventoryViewPermissions: state });
-const virtual = (source: string) => ({ shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(source) });
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === "server-only") return virtual("export {}");
-    if (specifier === "next-intl/server") return virtual("export async function getTranslations() { return (key) => key }");
-    if (specifier === "next/link") return virtual("export default function Link(p) { return globalThis.React.createElement('a', { href: p.href }, p.children) }");
-    if (specifier === "lucide-react") return virtual("export function Plus() { return null }");
-    if (specifier === "@openbooks/ui") return virtual("export function Button(p) { return globalThis.React.createElement('button', null, p.children) } export function PageHeader(p) { return globalThis.React.createElement('header', null, p.actions) }");
-    if (specifier === "@openbooks/engine/src/platform/db.ts") return virtual("export const db = { execute: async () => ({ rows: globalThis.__inventoryViewPermissions.subsidiaries }) }; export function ambientTenantOrgId() { return globalThis.__inventoryViewPermissions.orgId }; export async function withBypassContext(fn) { return fn() }");
-    if (specifier === "@openbooks/engine/src/inventory/stock-count-queries.ts") return virtual("export async function listStockCounts() { return { counts: [], totalCount: 0, nextCursor: null } }");
-    if (specifier === "@openbooks/engine/src/inventory/stock-count-gates.ts") return virtual("export async function isStockCountReviewRequired() { return false }");
-    if (specifier === "../../../components/entity-list-view") return virtual("export function EntityListView() { return null }");
-    if (specifier === "../../../components/page-layout") return virtual("export function ListPageLayout(p) { return globalThis.React.createElement('main', null, p.header, p.children) }");
-    if (specifier === "../../../components/module-home/ui") return virtual("export function ModuleHomeTabs() { return null }");
-    if (specifier === "../admin/setup/[entity]/SetupEntitySection") return virtual("export function SetupEntitySection() { return null }");
-    if (specifier === "./BomWorkspace") return virtual("export function BomWorkspace() { return null } export function NewBomButton() { return null }");
-    if (specifier === "./counts/CountsList") return virtual("export function CountsList(p) { globalThis.__inventoryViewPermissions.pickerSubsidiaries = p.subsidiaries; return null } export function NewCountButton() { return null }");
-    if (specifier === "./InventoryActionDrawer") return virtual("export function InventoryActionDrawer() { return null }");
-    if (specifier === "./NewMovementButton") return virtual("export function NewMovementButton() { return null }");
-    if (specifier === "./ReverseLandedVoucherAction") return virtual("export function ReverseLandedVoucherAction() { return globalThis.React.createElement('span', null, 'REVERSAL_ACTION') }");
-    if (specifier === "./movement-permissions") return virtual("export function canPostInventoryMovement(authz) { return authz.permissions.has('items.post') }");
-    if (specifier === "../../../lib/setup/registry") return virtual("export const SETUP_ENTITY_BY_KEY = new Map()");
-    if (specifier === "@braedonsaunders/appkit-viewspec") return virtual("export const page = () => ({}); export const pageHeader = () => ({}); export const ref = () => () => ({}); export const widget = () => ({}); export const widgetBlock = () => ({})");
-    if (specifier === "../../../lib/authz") return virtual(`
+stubModules({
+  navigation: false,
+  authz: false,
+  features: false,
+  extra: {
+    "../../../lib/authz": `
       export async function requirePermission() {
         const s = globalThis.__inventoryViewPermissions;
         return { user: { orgId: s.orgId, id: "actor" }, permissions: s.grants, allowedSubsidiaryIds: s.allowed };
       }
-      // Exact-match check: the cases below use concrete grants, so the
-      // production wildcard semantics change nothing about them.
       export function can(authz, perm) { return authz.permissions.has(perm) }
-    `);
-    if (specifier === "../../../lib/feature-gates") return virtual("export async function requireFeatureEnabled() { return undefined }");
-    return next(specifier, context);
+    `,
+    "../../../lib/feature-gates": "export async function requireFeatureEnabled() { return undefined }",
+    "next/link": "export default function Link(p) { return globalThis.React.createElement('a', { href: p.href }, p.children) }",
+    "lucide-react": "export function Plus() { return null }",
+    "@openbooks/ui": "export function Button(p) { return globalThis.React.createElement('button', null, p.children) } export function PageHeader(p) { return globalThis.React.createElement('header', null, p.actions) }",
+    "@openbooks/engine/src/platform/db.ts": "export const db = { execute: async () => ({ rows: globalThis.__inventoryViewPermissions.subsidiaries }) }; export function ambientTenantOrgId() { return globalThis.__inventoryViewPermissions.orgId }; export async function withBypassContext(fn) { return fn() }",
+    "@openbooks/engine/src/inventory/stock-count-queries.ts": "export async function listStockCounts() { return { counts: [], totalCount: 0, nextCursor: null } }",
+    "@openbooks/engine/src/inventory/stock-count-gates.ts": "export async function isStockCountReviewRequired() { return false }",
+    "../../../components/entity-list-view": "export function EntityListView() { return null }",
+    "../../../components/page-layout": "export function ListPageLayout(p) { return globalThis.React.createElement('main', null, p.header, p.children) }",
+    "../../../components/module-home/ui": "export function ModuleHomeTabs() { return null }",
+    "../admin/setup/[entity]/SetupEntitySection": "export function SetupEntitySection() { return null }",
+    "./BomWorkspace": "export function BomWorkspace() { return null } export function NewBomButton() { return null }",
+    "./counts/CountsList": "export function CountsList(p) { globalThis.__inventoryViewPermissions.pickerSubsidiaries = p.subsidiaries; return null } export function NewCountButton() { return null }",
+    "./InventoryActionDrawer": "export function InventoryActionDrawer() { return null }",
+    "./NewMovementButton": "export function NewMovementButton() { return null }",
+    "./ReverseLandedVoucherAction": "export function ReverseLandedVoucherAction() { return globalThis.React.createElement('span', null, 'REVERSAL_ACTION') }",
+    "./movement-permissions": "export function canPostInventoryMovement(authz) { return authz.permissions.has('items.post') }",
+    "../../../lib/setup/registry": "export const SETUP_ENTITY_BY_KEY = new Map()",
+    "@braedonsaunders/appkit-viewspec": "export const page = () => ({}); export const pageHeader = () => ({}); export const ref = () => () => ({}); export const widget = () => ({}); export const widgetBlock = () => ({})",
   },
 });
 
 const { loadInventory } = await import("./view.ts");
 
 const React = await import("react");
-Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true });
+Object.assign(globalThis, { React });
 const { renderToStaticMarkup } = await import("react-dom/server");
 const { default: InventoryPage } = await import("./page.tsx");
 

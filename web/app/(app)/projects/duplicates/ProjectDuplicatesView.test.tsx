@@ -1,40 +1,33 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
+import { stubModules } from '../../../../testing/stub-modules'
 
 declare global {
   var __duplicatesToasts: { kind: string; message: string }[] | undefined
 }
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost:4800/projects/duplicates' })
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({ matches: false, media: '', addEventListener() {}, removeEventListener() {} })) as typeof window.matchMedia
-}
-if (!window.HTMLElement.prototype.scrollIntoView) window.HTMLElement.prototype.scrollIntoView = function () {}
+await bootJsdomEnvironment({ url: 'http://localhost:4800/projects/duplicates', matchMediaMatches: false })
 
-const { registerHooks } = await import('node:module')
-const { join } = await import('node:path')
-const { pathToFileURL } = await import('node:url')
-const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === '@openbooks/ui') return { shortCircuit: true, url: worktreeUi }
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: "data:text/javascript,export function useRouter(){return{push(){},refresh(){},replace(){}}}export function usePathname(){return '/projects/duplicates'}export function useSearchParams(){return new URLSearchParams()}" }
-    }
-    if (specifier === 'sonner') {
-      return { shortCircuit: true, url: 'data:text/javascript,export const toast={success(m){(globalThis.__duplicatesToasts??=[]).push({kind:"success",message:String(m)})},error(m){(globalThis.__duplicatesToasts??=[]).push({kind:"error",message:String(m)})}}' }
-    }
-    return next(specifier, context)
+const { join: joinPath } = await import('node:path')
+const { pathToFileURL: toFileUrl } = await import('node:url')
+const worktreeUiSource = `export * from "${toFileUrl(joinPath(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href}"`
+stubModules({
+  navigation: {
+    source:
+      "export function useRouter(){return{push(){},refresh(){},replace(){}}}" +
+      "export function usePathname(){return '/projects/duplicates'}" +
+      "export function useSearchParams(){return new URLSearchParams()}",
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    '@openbooks/ui': worktreeUiSource,
+    sonner:
+      'export const toast={success(m){(globalThis.__duplicatesToasts??=[]).push({kind:"success",message:String(m)})},error(m){(globalThis.__duplicatesToasts??=[]).push({kind:"error",message:String(m)})}}',
   },
 })
-
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

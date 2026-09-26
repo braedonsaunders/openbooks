@@ -1,26 +1,25 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import React from 'react'
+import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
+import { stubModules } from '../../../../testing/stub-modules'
 
 const toastErrors: string[] = []
 const pushes: string[] = []
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'sonner') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const toast = { success(){}, error(msg){ globalThis.__surveyToastErrors.push(msg) } }',
-      }
-    }
-    if (specifier === 'next/navigation') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const useRouter = () => ({ refresh(){}, push(url){ globalThis.__surveyPushes.push(url) }, replace(){} })',
-      }
-    }
-    return next(specifier, context)
+await bootJsdomEnvironment({ url: 'http://localhost/me/surveys' })
+
+stubModules({
+  navigation: {
+    source:
+      'export const useRouter = () => ({ refresh(){}, push(url){ globalThis.__surveyPushes.push(url) }, replace(){} })',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    sonner:
+      'export const toast = { success(){}, error(msg){ globalThis.__surveyToastErrors.push(msg) } }',
   },
 })
 const { MeSurveyRespond } = await import('./sections')
@@ -33,26 +32,12 @@ const REISSUE_FAILED = 'The survey link could not be reissued — no token came 
 async function mount(reissueBody: unknown): Promise<{ clickRespond: () => void; unmount: () => Promise<void> }> {
   toastErrors.length = 0
   pushes.length = 0
-  const { JSDOM } = await import('jsdom')
-  const dom = new JSDOM('<!doctype html><html><body><div id="root"></div></body></html>', {
-    url: 'http://localhost/me/surveys',
-  })
-  const previous = {
-    window: (globalThis as Record<string, unknown>).window,
-    document: (globalThis as Record<string, unknown>).document,
-    navigator: (globalThis as Record<string, unknown>).navigator,
-    fetch: (globalThis as Record<string, unknown>).fetch,
-    self: (globalThis as Record<string, unknown>).self,
-  }
-  Object.defineProperty(globalThis, 'window', { value: dom.window, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'document', { value: dom.window.document, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'navigator', { value: dom.window.navigator, configurable: true, writable: true })
-  Object.defineProperty(globalThis, 'self', { value: dom.window, configurable: true, writable: true })
-  ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-  const doc = dom.window.document
+  const previousFetch = (globalThis as Record<string, unknown>).fetch
   const { createRoot } = await import('react-dom/client')
   const { act } = await import('react')
-  const root = createRoot(doc.getElementById('root')!)
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
   ;(globalThis as Record<string, unknown>).fetch = async () => ({
     ok: true,
     status: 200,
@@ -71,18 +56,14 @@ async function mount(reissueBody: unknown): Promise<{ clickRespond: () => void; 
   })
   return {
     clickRespond: () => {
-      const { MouseEvent: RealmMouseEvent } = dom.window as unknown as { MouseEvent: typeof globalThis.MouseEvent }
-      doc.querySelector('button')!.dispatchEvent(new RealmMouseEvent('click', { bubbles: true }))
+      host.querySelector('button')!.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     },
     unmount: async () => {
       await act(async () => {
         root.unmount()
       })
-      Object.defineProperty(globalThis, 'window', { value: previous.window, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'document', { value: previous.document, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'navigator', { value: previous.navigator, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'self', { value: previous.self, configurable: true, writable: true })
-      Object.defineProperty(globalThis, 'fetch', { value: previous.fetch, configurable: true, writable: true })
+      host.remove()
+      Object.defineProperty(globalThis, 'fetch', { value: previousFetch, configurable: true, writable: true })
     },
   }
 }

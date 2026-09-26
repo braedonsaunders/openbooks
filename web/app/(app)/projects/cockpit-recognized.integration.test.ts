@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
@@ -10,19 +9,9 @@ import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 // is_active AND posts_gl. After the primary book was deactivated the card
 // kept summing the dead book and disagreed with the run. The card now sums
 // the same shared active posting primary the run posts to.
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { loadProjectCockpit } = (await import("./_cockpit-data.ts")) as typeof import(
   "./_cockpit-data.ts"
 );
-hooks.deregister();
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import(

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import test from "node:test";
 
 // Behaviour contract for the documents and surveys pages (/me/documents,
@@ -10,15 +9,6 @@ import test from "node:test";
 // respondent anonymity stay covered by the engine documents and surveys
 // tests, which own the service shapes — these specs render what the
 // loaders carry, never more.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { meDocumentsSpec } = await import("./documents/view.ts");
 const { meSurveysSpec } = await import("./surveys/view.ts");
 

@@ -2,16 +2,17 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import React from 'react'
+import { stubModules } from '../../../../testing/stub-modules'
 
 // All module setup — including every top-level await — completes before the
 // first test registration below (canonical registration order).
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'sonner') {
-      return { shortCircuit: true, url: 'data:text/javascript,export const toast = { success(){}, error(){} }' }
-    }
-    return next(specifier, context)
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    sonner: 'export const toast = { success(){}, error(){} }',
   },
 })
 const { renderToStaticMarkup } = await import('react-dom/server')

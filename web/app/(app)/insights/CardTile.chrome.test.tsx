@@ -1,18 +1,22 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
+import { stubModules } from '../../../testing/stub-modules'
 
-registerHooks({
-  resolve(specifier, _context, next) {
-    if (specifier === 'next/link') {
-      return { shortCircuit: true, url: 'data:text/javascript,export default function Link(p){return globalThis.React.createElement("a",{href:p.href},p.children)}' }
-    }
-    return next(specifier)
+await bootJsdomEnvironment({ url: 'http://localhost:4800/insights' })
+
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link': 'export default function Link(p){return globalThis.React.createElement("a",{href:p.href},p.children)}',
   },
 })
 
 const React = await import('react')
-Object.assign(globalThis, { React, IS_REACT_ACT_ENVIRONMENT: true })
+Object.assign(globalThis, { React })
 const { renderToStaticMarkup } = await import('react-dom/server')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../messages/en')).default

@@ -2,36 +2,24 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { createTranslator } from 'next-intl'
 import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
+import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
+import { stubModules } from '../../../../testing/stub-modules'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost:4800/projects' })
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({ matches: false, media: '', addEventListener: () => undefined, removeEventListener: () => undefined })) as typeof window.matchMedia
-}
-if (!window.HTMLElement.prototype.scrollIntoView) window.HTMLElement.prototype.scrollIntoView = function () {}
+await bootJsdomEnvironment({ url: 'http://localhost:4800/projects', matchMediaMatches: false })
 
-const { registerHooks } = await import('node:module')
-const { join } = await import('node:path')
-const { pathToFileURL } = await import('node:url')
-const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === '@openbooks/ui') return { shortCircuit: true, url: worktreeUi }
-    if (specifier.startsWith('@/') && context.parentURL) {
-      const webRoot = import.meta.url.slice(0, import.meta.url.indexOf('/web/') + 5)
-      const suffix = specifier.slice(2)
-      return next(new URL(`${suffix}.tsx`, webRoot).href, context)
-    }
-    return next(specifier, context)
+const { join: joinPath } = await import('node:path')
+const { pathToFileURL: toFileUrl } = await import('node:url')
+const worktreeUiSource = `export * from "${toFileUrl(joinPath(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href}"`
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    '@openbooks/ui': worktreeUiSource,
   },
 })
 
-;(globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true
 const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')

@@ -11,13 +11,6 @@ import test from 'node:test'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === 'server-only') {
-      return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export {}' }
-    }
-    if (specifier.startsWith('@/')) {
-      const webRoot = import.meta.url.slice(0, import.meta.url.indexOf('/web/') + 5)
-      return nextResolve(new URL(`${specifier.slice(2)}.ts`, webRoot).href, context)
-    }
     if (specifier.startsWith('@openbooks/engine/')) {
       const root = import.meta.url.slice(0, import.meta.url.indexOf('/web/') + 1)
       return nextResolve(

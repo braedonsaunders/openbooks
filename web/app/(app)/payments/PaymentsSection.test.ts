@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 import type { Authz } from "@/lib/authz";
 
@@ -15,8 +14,6 @@ interface SectionState {
 }
 const sectionState: SectionState = { listProps: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = sectionState;
-
-const root = pathToFileURL(process.cwd() + "/").href;
 
 const mockSources = new Map<string, string>([
   [
@@ -89,12 +86,6 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, url: "data:text/javascript,export {}" };
-    }
-    if (specifier.startsWith("@/")) {
-      return nextResolve(root + "web/" + specifier.slice(2), context);
-    }
     if (
       specifier.endsWith("/components/record-list-view") ||
       specifier.endsWith("/components/record-list-view.tsx")

@@ -13,27 +13,31 @@
  */
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
+import { stubModules } from '../../../testing/stub-modules'
 import { sql } from 'drizzle-orm'
 import type { SessionUser } from '../../../lib/auth'
 
-const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __journalGating: session })
-registerHooks({
+stubModules({
+  navigation: {
+    source:
+      "export function redirect(url){throw new Error('REDIRECT:'+url)};" +
+      "export function notFound(){throw new Error('NOT_FOUND')}",
+  },
+  intl: "export async function getTranslations(namespace){return (key,vars)=>vars&&typeof vars.count==='number'?`${key}:${vars.count}`:key};export async function getLocale(){return 'en'}",
+  authz: false,
+  features: false,
+})
+
+// The session double stays conditioned: it answers only the authz module's
+// own `./auth` import, which no shared stub shape matches.
+const { registerHooks: registerSessionHook } = await import('node:module')
+registerSessionHook({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    if (specifier === 'next-intl/server') {
-      return { shortCircuit: true, url: "data:text/javascript,export async function getTranslations(namespace){return (key,vars)=>vars&&typeof vars.count==='number'?`${key}:${vars.count}`:key};export async function getLocale(){return 'en'}" }
-    }
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: "data:text/javascript,export function redirect(url){throw new Error('REDIRECT:'+url)};export function notFound(){throw new Error('NOT_FOUND')}" }
-    }
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__journalGating.user}' }
     }
-    if (specifier.startsWith('@/')) return next(root + 'web/' + specifier.slice(2) + '.ts', context)
     return next(specifier, context)
   },
 })

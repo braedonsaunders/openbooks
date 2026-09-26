@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-registerHooks({ resolve(specifier, context, next) { if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }; return next(specifier, context) } })
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { seedAdoption } = await import('@openbooks/engine/src/payroll/filing-test-fixtures.ts')

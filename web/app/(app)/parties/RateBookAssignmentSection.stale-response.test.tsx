@@ -1,35 +1,26 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
+import { stubModules } from '../../../testing/stub-modules'
 
-const { JSDOM } = await import('jsdom')
-const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost:4800/parties' })
-const globals = globalThis as Record<string, unknown>
-const domWindow = dom.window as unknown as Record<string, unknown>
-for (const key of ['window', 'document', 'navigator', 'Node', 'Element', 'HTMLElement', 'Event', 'self']) {
-  if (globals[key] === undefined) globals[key] = domWindow[key]
-}
-if (typeof window.matchMedia !== 'function') {
-  window.matchMedia = (() => ({
-    matches: false,
-    media: '',
-    addEventListener() {},
-    removeEventListener() {},
-  })) as typeof window.matchMedia
-}
+await bootJsdomEnvironment({ url: 'http://localhost:4800/parties', matchMediaMatches: false })
+
 Object.assign(globalThis, {
-  IS_REACT_ACT_ENVIRONMENT: true,
   __rateBookAssignmentRouter: {},
 })
 
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, _context, next) {
-    if (specifier === 'next/navigation') {
-      return { shortCircuit: true, url: 'data:text/javascript,export function usePathname(){return "/parties"};export function useSearchParams(){return new URLSearchParams()}' }
-    }
-    if (specifier === 'next/link') return { shortCircuit: true, url: 'data:text/javascript,export default function Link(p){return p.children}' }
-    if (specifier === 'sonner') return { shortCircuit: true, url: 'data:text/javascript,export const toast={success(){},error(){}}' }
-    return next(specifier, _context)
+stubModules({
+  navigation: {
+    source:
+      'export function usePathname(){return "/parties"};' +
+      'export function useSearchParams(){return new URLSearchParams()}',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link': 'export default function Link(p){return p.children}',
+    sonner: 'export const toast={success(){},error(){}}',
   },
 })
 

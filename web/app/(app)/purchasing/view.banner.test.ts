@@ -1,14 +1,27 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '../../../testing/stub-modules'
 
 const state = { canCreate: true, ordersEnabled: true, unexpected: false }
 Object.assign(globalThis, { __purchasingViewTest: state })
-registerHooks({
+stubModules({
+  navigation: {
+    source: 'export function redirect(path){throw new Error(`redirect:${path}`)}',
+  },
+  intl: 'export async function getLocale(){return "en"}export async function getTranslations(namespace){const t=(key)=>namespace==="reports"&&key==="statement.ratesBlockedTitle"?"Exchange rates are missing":namespace==="reports"&&key==="statement.ratesBlockedAction"?"Derive rates":key;t.has=()=>false;return t}',
+  authz: false,
+  features: false,
+  extra: {
+    '@/lib/money-server': 'export async function getMoneyFormatter(){return {moneyCompact:(value)=>String(value)}}',
+    '../../../lib/format': 'export function trendWeekLabel(value){return String(value)}',
+  },
+})
+
+// View-scoped doubles stay conditioned: they answer only the purchasing
+// view's own imports, which no shared stub shape matches.
+const { registerHooks: registerViewHooks } = await import('node:module')
+registerViewHooks({
   resolve(specifier, context, next) {
-    if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export {}' }
-    if (specifier === 'next/navigation') return { shortCircuit: true, url: 'data:text/javascript,export function redirect(path){throw new Error(`redirect:${path}`)}' }
-    if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'data:text/javascript,export async function getLocale(){return "en"}export async function getTranslations(namespace){const t=(key)=>namespace==="reports"&&key==="statement.ratesBlockedTitle"?"Exchange rates are missing":namespace==="reports"&&key==="statement.ratesBlockedAction"?"Derive rates":key;t.has=()=>false;return t}' }
     if (specifier === '../../../lib/authz' && context.parentURL?.endsWith('/web/app/(app)/purchasing/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function getAuthz(){return {user:{orgId:"org-1",roles:[]}}}export function can(authz,permission){return permission==="ap.create"?globalThis.__purchasingViewTest.canCreate:true}export function assertCan(){throw new Error("unexpected refusal")}' }
     if (specifier === '../../../lib/consolidation' && context.parentURL?.endsWith('/web/app/(app)/purchasing/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`
       export class MissingRatesError extends Error {}

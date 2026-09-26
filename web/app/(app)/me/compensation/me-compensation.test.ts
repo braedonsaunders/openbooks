@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
 
@@ -10,15 +9,6 @@ import { LOCALE_CODES as LOCALES } from "../../../../i18n/config"
 // and both content panels gate on the content resolver. Band placement
 // and statement reads stay covered by the engine compensation tests,
 // which own the service shapes.
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier === "server-only") {
-      return { shortCircuit: true, format: "module", url: "data:text/javascript,export {}" };
-    }
-    return nextResolve(specifier, context);
-  },
-});
-
 const { myCompSpec } = await import("./view.ts");
 
 function specJson(data: Record<string, unknown>): string {

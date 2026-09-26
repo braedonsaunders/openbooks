@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
+import { stubModules } from '../../../testing/stub-modules'
 
 // CardTile F4T2-1: the tile fetched POST /api/insights/query and called
 // res.json before checking res.ok, so a non-JSON error body escaped the
@@ -15,16 +16,13 @@ declare global {
 Object.assign(globalThis, {
   __tileQueryImpl: undefined as (() => Promise<Response>) | undefined,
 })
-const { registerHooks } = await import('node:module')
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/link') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export default function Link(p){return p.children}',
-      }
-    }
-    return next(specifier, context)
+stubModules({
+  navigation: false,
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link': 'export default function Link(p){return p.children}',
   },
 })
 

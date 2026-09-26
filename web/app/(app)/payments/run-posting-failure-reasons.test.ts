@@ -1,32 +1,31 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { stubModules } from '../../../testing/stub-modules'
 
 // a partially failed posting toasted per-instruction reasons but
 // persisted only counts, so the activity feed showed "0 sent · N failed"
 // with no reason anywhere. The engine now stores the failures list on the
 // run_posting_failed event; the feed must render it.
 
-const { registerHooks } = await import('node:module')
-registerHooks({
+stubModules({
+  navigation: {
+    source: 'export default function Stub(){return null}export function useRouter(){return null}',
+  },
+  intl: false,
+  authz: false,
+  features: false,
+  extra: {
+    'next/link': 'export default function Stub(){return null}export function useRouter(){return null}',
+    'next-intl': 'export function useTranslations(){return (k)=>k}export function useLocale(){return "en"}export function useTimeZone(){return "UTC"}export function NextIntlClientProvider(p){return p.children}',
+    sonner: 'export const toast={};export function Toaster(){return null}',
+  },
+})
+
+// The confirm double stays suffix-wired: shared components import it through
+// several relative spellings plus `@/`, which one exact key cannot name.
+const { registerHooks: registerConfirmHook } = await import('node:module')
+registerConfirmHook({
   resolve(specifier, context, next) {
-    if (specifier === 'next/navigation' || specifier === 'next/link') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export default function Stub(){return null}export function useRouter(){return null}',
-      }
-    }
-    if (specifier === 'next-intl') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export function useTranslations(){return (k)=>k}export function useLocale(){return "en"}export function useTimeZone(){return "UTC"}export function NextIntlClientProvider(p){return p.children}',
-      }
-    }
-    if (specifier === 'sonner') {
-      return {
-        shortCircuit: true,
-        url: 'data:text/javascript,export const toast={};export function Toaster(){return null}',
-      }
-    }
     if (specifier.endsWith('/lib/confirm')) {
       return {
         shortCircuit: true,
