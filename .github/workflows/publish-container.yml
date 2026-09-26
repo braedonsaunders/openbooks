@@ -174,6 +174,9 @@ jobs:
       - name: Bootstrap a clean release database
         env:
           NODE_ENV: production
+          # The installer invocation every deployment uses (compose.yaml,
+          # deploy/swarm-release.sh), so release verification exercises it.
+          OPENBOOKS_BOOTSTRAP: "1"
         run: npx tsx scripts/bootstrap.ts
       - name: Mark database as the owned ephemeral fixture
         # Scratch-org fixtures fail closed on a database that does not carry
