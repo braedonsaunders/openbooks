@@ -122,10 +122,29 @@ Corresponding test rules, because every one of the above was green somewhere:
 `engine/src` is a set of declared modules (one directory each, manifest at
 `engine/src/modules.json`, rules in `docs/design/engine-modules.md`). No file
 lives at `engine/src` root; a module imports only the modules it declares;
-declared-but-unused edges and any growth of the pinned dependency cycles are
-refused by `npm run check:engine-boundaries`. Extract internals into the same
-module as their source; put a shared constant or type LOWER rather than adding
-an upward edge.
+declared-but-unused edges and any import cycle between modules are refused by
+`npm run check:engine-boundaries`. Extract internals into the same module as
+their source; put a shared constant or type LOWER rather than adding an upward
+edge.
+
+## Code reads as a professional product
+
+This is a public SaaS codebase. Everything in the tree, including code, comments,
+test titles, migration SQL, docs and CHANGELOG, must read as professional
+product engineering to an outside reader.
+
+- Never write internal work-tracking identifiers into the tree: finding or
+  ticket ids (for example `I5-platform-23`, `AC-webui-3`, `CI4-...`), agent or
+  thread ids, or process vocabulary such as fleet, shard, wave, coordinator or
+  integrator. Those belong in commit messages and the issue tracker only.
+- A comment explains the product reason in plain language: what the code
+  guarantees and why. It does not record who found a bug, in which audit
+  pass, or under which ticket.
+- Migrations are fingerprinted once published, so a careless comment in one is
+  permanent. Keep migration comments to the schema change and its rationale.
+- Internal reports (audits, verification write-ups, defect trackers, triage
+  notes) never live in the repository. `.gitignore` excludes their usual
+  locations.
 
 ## Feature-gate hierarchy
 
