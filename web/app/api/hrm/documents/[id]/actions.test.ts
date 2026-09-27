@@ -38,6 +38,7 @@ const mockSources = new Map<string, string>([
         return { user: { id: 'user-1', orgId: 'org-1' } }
       }
       export async function isFeatureEnabled() { return true }
+      export async function subsidiaryFeatureEnabled() { return true }
     `,
   ],
   [
