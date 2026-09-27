@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withTransactionSavepoint } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { cmp, fromUnits, mul, normalizeMoney, roundDiv, toUnits } from "../money/money.ts";
+import { apportion, cmp, fromUnits, mul, normalizeMoney, roundDiv, toUnits } from "../money/money.ts";
 import { getOnHandForEntity, lockInventoryPosition, primaryBookId } from "./position.ts";
 import { InventoryError } from "./contracts.ts";
 import { inventoryOffsetAccountProblem, postInventoryEntry, stockLocationDim } from "./journal.ts";
@@ -130,21 +130,7 @@ function shareByValue(layers: { value: bigint }[], deltaUnits: bigint): bigint[]
   const weights = layers.map((l) => l.value);
   const total = weights.reduce((a, b) => a + b, 0n);
   if (total <= 0n) throw new InventoryNrvError("no remaining inventory value to remeasure");
-  const magnitude = deltaUnits < 0n ? -deltaUnits : deltaUnits;
-  const base = weights.map((w) => (magnitude * w) / total);
-  let remainder = magnitude - base.reduce((a, b) => a + b, 0n);
-  // Largest-remainder assignment, stable by index.
-  const order = weights
-    .map((w, i) => ({ i, w, frac: (magnitude * w) % total }))
-    .filter((entry) => entry.w > 0n)
-    .sort((a, b) => (b.frac > a.frac ? 1 : b.frac < a.frac ? -1 : a.i - b.i));
-  let k = 0;
-  while (remainder > 0n) {
-    base[order[k % order.length]!.i]! += 1n;
-    remainder -= 1n;
-    k++;
-  }
-  return base.map((b) => (deltaUnits < 0n ? -b : b));
+  return apportion(deltaUnits, weights);
 }
 
 /**
@@ -157,20 +143,7 @@ function shareByHeadroom(headrooms: bigint[], deltaUnits: bigint): bigint[] {
   const total = headrooms.reduce((a, b) => a + b, 0n);
   if (total <= 0n) throw new InventoryNrvError("no remaining layer headroom to remeasure");
   if (deltaUnits > total) throw new InventoryNrvError("reversal exceeds remaining layer headroom");
-
-  const shares = headrooms.map((headroom) => (deltaUnits * headroom) / total);
-  let remainder = deltaUnits - shares.reduce((a, b) => a + b, 0n);
-  const order = headrooms
-    .map((headroom, i) => ({ i, headroom, frac: (deltaUnits * headroom) % total }))
-    .filter((entry) => entry.headroom > 0n)
-    .sort((a, b) => (b.frac > a.frac ? 1 : b.frac < a.frac ? -1 : a.i - b.i));
-  let k = 0;
-  while (remainder > 0n) {
-    shares[order[k % order.length]!.i]! += 1n;
-    remainder -= 1n;
-    k++;
-  }
-  return shares;
+  return apportion(deltaUnits, headrooms);
 }
 
 async function remainingLayers(

@@ -1,4 +1,4 @@
-import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
+import { apportion, fromUnits, roundDiv, toUnits } from "../money/money.ts";
 import type {
   AllocationResidualPolicy,
   AllocationRuleTarget,
@@ -8,11 +8,11 @@ import type {
 } from "./types.ts";
 
 /**
- * Exact apportionment over bigint money (engine/src/money/money.ts, 1e4 units).
+ * Exact apportionment of ledger money across keyed allocation targets.
  *
- * Floors every target's exact share and books the whole leftover on ONE
- * absorber chosen by the residual policy, so Σ(amounts) == total by
- * construction — a cent can never be lost or invented. `amount` INCLUDES the
+ * The money kernel's `apportion` floors every target's exact share and books
+ * the whole leftover on ONE absorber chosen by the residual policy, so
+ * Σ(amounts) == total by construction — a cent can never be lost or invented. `amount` INCLUDES the
  * residual slice; `residual` memos how much of that amount came from the
  * policy (zero for every other target). Shares are informational, rounded to
  * 10 dp.
@@ -70,7 +70,7 @@ function formatShare10(weightUnits: bigint, weightTotalUnits: bigint): string {
   return `${int}.${(quanta % WEIGHT_SCALE).toString().padStart(10, "0")}`;
 }
 
-export function apportion(
+export function apportionTargets(
   total: string,
   weights: WeightedTarget[],
   residualPolicy: AllocationResidualPolicy,
@@ -145,26 +145,21 @@ export function apportion(
   // All-zero weights carry no information: split equally so the money
   // invariant still holds, and report zero shares honestly.
   const allZero = weightTotalUnits === 0n;
+  const splitWeights = parsed.map((p) => (allZero ? 1n : p.units));
   const basis = allZero ? BigInt(parsed.length) : weightTotalUnits;
-  const unitOf = (units: bigint): bigint => (allZero ? 1n : units);
-
-  const negative = totalUnits < 0n;
-  const magnitude = negative ? -totalUnits : totalUnits;
-  const floors = parsed.map((p) => (magnitude * unitOf(p.units)) / basis);
-  const flooredSum = floors.reduce((acc, f) => acc + f, 0n);
-  const leftover = magnitude - flooredSum;
+  const absorberIndex = parsed.findIndex((p) => p.key === absorberKey);
+  const amounts = apportion(totalUnits, splitWeights, { residual: { absorber: absorberIndex } });
 
   const targets: ApportionedTarget[] = parsed.map((p, index) => {
-    const floor: bigint = floors[index] ?? 0n;
-    const isAbsorber = p.key === absorberKey;
-    const units = floor + (isAbsorber ? leftover : 0n);
-    const signed = negative ? -units : units;
-    const residualUnits = isAbsorber ? (negative ? -leftover : leftover) : 0n;
+    const amount: bigint = amounts[index] ?? 0n;
+    // The absorber's memo is what it holds beyond its own exact share,
+    // floored toward zero as the kernel floors it.
+    const residualUnits = index === absorberIndex ? amount - (totalUnits * splitWeights[index]!) / basis : 0n;
     return {
       key: p.key,
       weight: p.weight,
       share: allZero ? "0.0000000000" : formatShare10(p.units, weightTotalUnits),
-      amount: fromUnits(signed),
+      amount: fromUnits(amount),
       residual: fromUnits(residualUnits),
     };
   });

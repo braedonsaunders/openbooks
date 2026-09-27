@@ -13,7 +13,7 @@
  * floats, never `Number(amount)` arithmetic.
  */
 
-import { add, cmp, fromUnits, mulPercent, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { add, apportion, cmp, fromUnits, mulPercent, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 
 /** Minimal row shape the group model reads. LineGrid rows and drawer LineRows both satisfy it. */
 export interface DistributionGroupRow {
@@ -90,50 +90,23 @@ export function isGroupLocked<Row extends DistributionGroupRow>(members: readonl
 /**
  * Share-preserving re-explode for the editable group total: children keep
  * their current proportions of the group, so Σ(next) == `total` exactly.
- * The largest-share child absorbs the rounding remainder (the kernel's
- * default `largest_share` residual policy), which keeps the operation
- * deterministic. A zero/empty group total puts the whole amount on the
- * first child (`first_target` fallback) instead of dividing by zero.
+ * The money kernel's `apportion` deals the rounding units to the largest
+ * remainders, ties in grid order, which keeps the operation deterministic;
+ * a negative child counts by its magnitude and the total's sign rides along.
+ * A zero/empty group total puts the whole amount on the first child
+ * (`first_target` fallback) instead of dividing by zero.
  */
 export function reapportionGroupTotal(amounts: readonly string[], total: string): string[] {
   if (amounts.length === 0) return []
   const totalUnits = toUnits(total)
   const weightUnits = amounts.map((raw) => {
-    const text = raw.trim() === '' ? '0' : raw
-    return toUnits(text)
+    const units = toUnits(raw.trim() === '' ? '0' : raw)
+    return units < 0n ? -units : units
   })
-  const weightTotal = weightUnits.reduce((acc, w) => acc + (w < 0n ? -w : w), 0n)
-  if (weightTotal === 0n) {
+  if (weightUnits.every((w) => w === 0n)) {
     return amounts.map((_, i) => (i === 0 ? fromUnits(totalUnits) : fromUnits(0n)))
   }
-  const sign = totalUnits < 0n ? -1n : 1n
-  const magnitude = totalUnits < 0n ? -totalUnits : totalUnits
-  // Largest remainder over magnitudes; the sign rides along afterwards so a
-  // negative group total keeps every child non-positive like its source.
-  const floors = weightUnits.map((w) => {
-    const mag = w < 0n ? -w : w
-    return (magnitude * mag) / weightTotal
-  })
-  const remainders = weightUnits.map((w, i) => {
-    const mag = w < 0n ? -w : w
-    return { i, rem: (magnitude * mag) % weightTotal, mag }
-  })
-  let placed = floors.reduce((acc, f) => acc + f, 0n)
-  let leftover = magnitude - placed
-  // Deterministic: largest fractional remainder first, ties break to the
-  // largest share, then to grid order.
-  const order = [...remainders].sort((a, b) => {
-    if (a.rem !== b.rem) return a.rem > b.rem ? -1 : 1
-    if (a.mag !== b.mag) return a.mag > b.mag ? -1 : 1
-    return a.i - b.i
-  })
-  for (const slot of order) {
-    if (leftover <= 0n) break
-    floors[slot.i] = floors[slot.i]! + 1n
-    placed += 1n
-    leftover -= 1n
-  }
-  return floors.map((f) => fromUnits(sign * f))
+  return apportion(totalUnits, weightUnits).map(fromUnits)
 }
 
 /**

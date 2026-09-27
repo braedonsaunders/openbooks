@@ -1,5 +1,5 @@
 import { PayrollError } from "./error.ts";
-import { fromUnits, roundDiv, toUnits } from "../money/money.ts";
+import { apportion, fromUnits, roundDiv, toUnits } from "../money/money.ts";
 import type { Money } from "../money/brands.ts";
 /**
  * Exact `amount ÷ divisor`, rounded ONCE to `decimalPlaces`.
@@ -41,14 +41,11 @@ export function divideMoney(amount: string, divisor: string, decimalPlaces = 4):
  * zero (a job with no hours is never paid); every share keeps the amount's
  * sign; every share is within one cent of its exact proportional target.
  *
- * Decision: this is NOT the kernel's
- * allocateLargestRemainder under another name, and cannot be a thin caller
- * of it. The kernel reconciles per-line rounded values to a rounded total
- * (ties to earlier lines); this is a weighted split of one amount (ties to
- * LATER buckets, so historical last-bucket remainders are unchanged), it
- * throws on sub-cent dust instead of parking it, and a negative weight
- * means "emit one unsplit line". Collapsing the tie-break or the dust rule
- * would move cents between jobs.
+ * The split itself is the money kernel's `apportion` over whole cents with
+ * ties to the later bucket; what this function adds is payroll's policy
+ * around it: it throws on sub-cent dust instead of parking it, and a
+ * negative weight means "emit one unsplit line". Collapsing the tie-break or
+ * the dust rule would move cents between jobs.
  *
  * `amount` must be cent-exact (both call sites pass stub money already rounded
  * with `roundMoney(..., 2)` / `mulPercent(..., 2)`); a sub-cent input throws
@@ -77,46 +74,17 @@ export function allocateProportionally<T>(
     totalWeight += units;
   }
   if (totalWeight <= 0n) return [];
-  // Integer arithmetic on 1e-4 units throughout: a cent is 100 of them.
-  // The sign is factored out so floors and remainders stay non-negative.
+  // Money units are 1e-4: a cent is 100 of them.
   const amountUnits = toUnits(amount);
   if (amountUnits % 100n !== 0n) {
     throw new PayrollError(
       `allocateProportionally needs a cent-exact amount, got ${amount}`,
     );
   }
-  const sign = amountUnits < 0n ? -1n : 1n;
-  const absUnits = sign * amountUnits;
-  const denom = totalWeight * 100n;
-  const floors: bigint[] = [];
-  const remainders: bigint[] = [];
-  let flooredCents = 0n;
-  for (const weight of weights) {
-    const numer = absUnits * weight;
-    const base = numer / denom;
-    floors.push(base);
-    remainders.push(numer - base * denom);
-    flooredCents += base;
-  }
-  const totalCents = absUnits / 100n;
-  let leftover = totalCents - flooredCents;
-  const order = floors.map((_, index) => index).sort((a, b) => {
-    const diff = remainders[b]! - remainders[a]!;
-    if (diff !== 0n) return diff > 0n ? 1 : -1;
-    return b - a;
-  });
-  const shares = [...floors];
-  for (const index of order) {
-    if (leftover <= 0n) break;
-    shares[index]! += 1n;
-    leftover -= 1n;
-  }
-  // leftover is structurally smaller than the number of positive remainders,
-  // so a zero-remainder bucket (including every zero weight) never receives a
-  // cent here.
+  const cents = apportion(amountUnits / 100n, weights, { residual: "largest_remainder_last" });
   return buckets.map((bucket, index) => ({
     // fromUnits always emits fixed 4dp: each share is canonical Money.
-    amount: fromUnits(sign * shares[index]! * 100n) as Money,
+    amount: fromUnits(cents[index]! * 100n) as Money,
     target: bucket.target,
   }));
 }

@@ -1,4 +1,3 @@
-import { apportion } from "./recognition.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
@@ -15,6 +14,7 @@ import { orgReportingFramework } from "../platform/reporting-framework.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import {
   add,
+  apportion,
   neg,
   sum,
   isZero,
@@ -743,7 +743,7 @@ export async function applyLeaseChange(
       );
       const prepaidAllocation = apportion(
         toUnits(prepaidCarrying),
-        new Array<number>(terms.periods).fill(1),
+        new Array<bigint>(terms.periods).fill(1n),
       ).map(fromUnits);
       const schedule = exemptionContinues
         ? Array.from({ length: terms.periods }, (_, i) => ({

@@ -10,7 +10,7 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { apportion, fixedPercentWeights } from "../../allocations/apportion.ts";
+import { apportionTargets, fixedPercentWeights } from "../../allocations/apportion.ts";
 import { explodeDocumentLine } from "../../allocations/entry.ts";
 import {
   postAllocationRun,
@@ -130,7 +130,7 @@ export const ALLOCATION_CONTROL_CASES: readonly ControlCase[] = [
       },
     },
     run: (): ActualOutcome => {
-      const result = apportion(
+      const result = apportionTargets(
         "100.00",
         [
           { key: "a", weight: "1" },

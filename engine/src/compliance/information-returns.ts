@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, orgContext, withOrg, withOrgContext } from "../platform/db.ts";
-import { add, cmp, fromUnits, normalizeMoney, toUnits } from "../money/money.ts";
+import { add, apportion, cmp, fromUnits, normalizeMoney, toUnits } from "../money/money.ts";
 import { canonicalDecimal, isZeroDecimal } from "../money/exact-decimal.ts";
 import type { Money } from "../money/brands.ts";
 
@@ -216,18 +216,11 @@ const CORPORATE_REPORTABLE_BOXES: ReadonlySet<string> = new Set(["misc6", "misc8
 /**
  * Split `total` across `weights` so the parts sum to exactly `total`.
  *
- * Largest-remainder: floor every share, then hand the leftover units out to the
- * biggest remainders, ties broken by position so the result is deterministic.
- * All-zero weights put everything on the first bucket rather than losing it —
- * cash that left the bank has to land somewhere.
- *
- * Decision: this stays its own splitter rather than a
- * thin caller of the kernel's allocateLargestRemainder or payroll's
- * allocateProportionally. It splits at unit (1e-4) precision while payroll
- * splits at cents with a throw-on-dust rule; it absorbs negative weights
- * and parks all-zero weight on the first bucket while payroll returns
- * "emit unsplit"; and the kernel reconciles rounded lines rather than
- * splitting by weight at all. Same family, three documented policies.
+ * The split is the money kernel's largest-remainder `apportion` at unit
+ * (1e-4) precision, ties to the earlier bucket. The policy around it is this
+ * return's own: a negative weight counts by its magnitude, and all-zero
+ * weights put everything on the first bucket rather than losing it — cash
+ * that left the bank has to land somewhere.
  */
 export function allocateProportionally(total: string, weights: readonly string[]): Money[] {
   if (weights.length === 0) return [];
@@ -241,20 +234,7 @@ export function allocateProportionally(total: string, weights: readonly string[]
   const weightSum = w.reduce((a, b) => a + b, 0n);
   if (weightSum === 0n) return weights.map((_, i) => (i === 0 ? (fromUnits(totalUnits) as Money) : ("0.0000" as Money)));
 
-  const negative = totalUnits < 0n;
-  const absTotal = negative ? -totalUnits : totalUnits;
-  const shares = w.map((weight) => (absTotal * weight) / weightSum);
-  const remainders = w.map((weight, i) => ({ i, r: (absTotal * weight) % weightSum }));
-  let allocated = shares.reduce((a, b) => a + b, 0n);
-  remainders.sort((a, b) => (b.r === a.r ? a.i - b.i : b.r > a.r ? 1 : -1));
-  let cursor = 0;
-  while (allocated < absTotal) {
-    const target = remainders[cursor % remainders.length]!.i;
-    shares[target] = shares[target]! + 1n;
-    allocated += 1n;
-    cursor += 1;
-  }
-  return shares.map((s) => fromUnits(negative ? -s : s) as Money);
+  return apportion(totalUnits, w).map((s) => fromUnits(s) as Money);
 }
 
 // ---------------------------------------------------------------------------

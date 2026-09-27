@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abs, allocateLargestRemainder, cmp, div, divRate, fitsLedgerRange, formatMoney, isZero, ledgerSideTotals, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, prorateDays, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
+import { abs, allocateLargestRemainder, apportion, cmp, div, divRate, fitsLedgerRange, formatMoney, isZero, ledgerSideTotals, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, prorateDays, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
 
 test("mul handles quantity math, zero rates and exact rounding", () => {
   assert.equal(mul("3", "12.3456"), "37.0368");
@@ -429,6 +429,21 @@ test("allocateLargestRemainder always cross-foots to the rounded total", () => {
     );
     assert.equal(allocated.length, exact.length);
   }
+});
+
+test("apportion splits exactly, mirrors credits, and places the residual as asked", () => {
+  // 1000/3 in money units: the largest remainder goes to the earlier part unless ties run last.
+  assert.deepEqual(apportion(10_000_000n, [1n, 1n, 1n]), [3_333_334n, 3_333_333n, 3_333_333n]);
+  assert.deepEqual(apportion(10_000_000n, [1n, 1n, 1n], { residual: "largest_remainder_last" }), [3_333_333n, 3_333_333n, 3_333_334n]);
+  assert.deepEqual(apportion(-10_000_000n, [1n, 1n, 1n]), [-3_333_334n, -3_333_333n, -3_333_333n]);
+  assert.deepEqual(apportion(1000n, [3n, 1n]), [750n, 250n]);
+  // Every part is its floor or floor + 1, so a zero weight never takes a unit.
+  assert.deepEqual(apportion(5n, [0n, 1n, 1n, 0n]), [0n, 3n, 2n, 0n]);
+  assert.deepEqual(apportion(10n, [1n, 1n, 1n], { residual: { absorber: 2 } }), [3n, 3n, 4n]);
+  assert.deepEqual(apportion(0n, [0n, 0n]), [0n, 0n]);
+  assert.throws(() => apportion(1n, [1n, -1n]), /weight 1 is negative/);
+  assert.throws(() => apportion(1n, [0n, 0n]), /weights sum to zero/);
+  assert.throws(() => apportion(1n, [1n], { residual: { absorber: 1 } }), /absorber 1 is not one of the 1 parts/);
 });
 
 test("the shared ledger bound holds fifteen whole digits, no more", () => {

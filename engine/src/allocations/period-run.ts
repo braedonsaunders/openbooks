@@ -5,7 +5,7 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { db, inDbTransaction, withOrgTransaction } from "../platform/db.ts";
 import { add, cmp, isZero, neg, sum } from "../money/money.ts";
-import { apportion, fixedPercentWeights } from "./apportion.ts";
+import { apportionTargets, fixedPercentWeights } from "./apportion.ts";
 import { previewPinError, sourceScopeViolation, targetPinViolation } from "../organization/allocation-scope.ts";
 import type { DriverResolveOptions } from "./drivers.ts";
 import { allocationServiceDeps } from "./service.ts";
@@ -60,7 +60,7 @@ function driverAsOf(raw: string): AllocationDriverAsOf {
  * per-target weight/share/amount/residual, journal lines) is stored on the
  * run; post and reverse never recompute, they mirror what preview stored.
  *
- * Apportionment is the canonical `./apportion.ts` (`apportion` plus
+ * Apportionment is the canonical `./apportion.ts` (`apportionTargets` plus
  * `fixedPercentWeights`): exact bigint money, floors plus a single residual
  * absorber, Σ(amounts) === total always. Likewise the driver vector resolves
  * through A2's `./drivers.ts` dispatcher by default (test doubles still plug
@@ -1076,7 +1076,7 @@ async function buildComputation(
   const residualKey = opts.version.residual_policy === "explicit_target"
     ? (opts.version.residual_target_id ?? undefined)
     : undefined;
-  const display = apportion(pool.total, targetSet.weights, opts.version.residual_policy, residualKey);
+  const display = apportionTargets(pool.total, targetSet.weights, opts.version.residual_policy, residualKey);
 
   const driverTotal = targetSet.driver
     ? targetSet.driver.vector.reduce((acc, entry) => add(acc, entry.value), "0")
@@ -1108,7 +1108,7 @@ async function buildComputation(
     }
   } else {
     for (const source of pool.sources) {
-      const split = apportion(source.amount, targetSet.weights, opts.version.residual_policy, residualKey);
+      const split = apportionTargets(source.amount, targetSet.weights, opts.version.residual_policy, residualKey);
       const creditAccount = opts.version.impact === "reclass"
         ? (opts.version.offset_account_id ?? source.accountId)
         : source.accountId;
