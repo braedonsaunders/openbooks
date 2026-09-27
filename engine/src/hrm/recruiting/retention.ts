@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { businessTimeZone } from "../../platform/business-date.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { assertUnrestrictedScope, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
