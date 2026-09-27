@@ -154,6 +154,7 @@ export async function tick(): Promise<void> {
     // work and crosses an explicit trusted boundary; the per-org idempotency
     // probe then runs inside that org's own RLS scope. Without either, the
     // contextless timer tick is denied by default and publishes nothing.
+    // bypass: scheduler-tick — organizations that opted into scheduled overhead publishing are found.
     const orgs = await withBypassContext(() =>
       db.execute<{ id: string; cadence: string | null }>(sql`
       select id, settings->'overheadRateLifecycle'->>'cadence' as cadence

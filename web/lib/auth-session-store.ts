@@ -9,6 +9,7 @@ import type { ParsedSessionToken } from "./auth-token-format";
  */
 export async function isSessionRecordActive(token: string, parsed: ParsedSessionToken): Promise<boolean> {
   const hash = createHash("sha256").update(token).digest("hex");
+  // bypass: identity-bootstrap — the request proxy checks session revocation before any organization scope exists.
   return withBypassContext(async () => {
     const result = (await db.execute<{ active: boolean }>(sql`
       select exists(

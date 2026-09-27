@@ -600,6 +600,7 @@ export async function provisionOrg(
 /** Remove abandoned phase-two attempts after a process crash. The identity
  * predicate inside wipeSimOrg is rechecked under lock for every delete pass. */
 async function reconcileIncompleteSimProvisioning(): Promise<void> {
+  // bypass: cross-org-by-design — abandoned simulation attempts are swept across every organization of the installation.
   const stale = await withBypassContext(async () => {
     const result = await db.execute<{ id: string }>(sql`
       select id

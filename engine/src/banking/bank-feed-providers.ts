@@ -691,6 +691,7 @@ async function recordSyncOutcome(
  */
 export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
   const now = Date.now();
+  // bypass: scheduler-tick — the scan finds due feed connections across every organization.
   const due = await withBypass(async () =>
     (await db.execute<{
         id: string;

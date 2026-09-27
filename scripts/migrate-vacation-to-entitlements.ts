@@ -399,6 +399,7 @@ function reportKnownDefects(): void {
 async function main(): Promise<number> {
   // Listing tenants is trusted, org-spanning maintenance; the per-org work
   // below runs inside that org's own RLS context.
+  // bypass: cross-org-by-design — the maintenance script lists every organization it migrates.
   const orgs = (await withBypassContext(() => db.execute(
     onlyOrg
       ? sql`select id, name from orgs where id = ${onlyOrg}`

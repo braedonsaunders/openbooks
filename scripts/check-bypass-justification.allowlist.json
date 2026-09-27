@@ -1,0 +1,320 @@
+[
+  {
+    "path": "engine/src/backup/stored-cli.ts",
+    "fn": "(top-level)",
+    "calls": 1,
+    "finding": "reads the one operator-named organization's row; withOrgContext(orgId) admits it under the orgs root policy."
+  },
+  {
+    "path": "engine/src/banking/bank-feed-providers.ts",
+    "fn": "recordSyncOutcome",
+    "calls": 1,
+    "finding": "writes one connection of a known organization; withOrgContext(connection.orgId) scopes it."
+  },
+  {
+    "path": "engine/src/banking/bank-feed-providers.ts",
+    "fn": "runDueBankFeeds",
+    "calls": 1,
+    "finding": "claims a scanned row whose organization the scan already returned; withOrgContext(row.orgId) scopes the claim."
+  },
+  {
+    "path": "engine/src/banking/bank-feed-providers.ts",
+    "fn": "syncBankFeedNow",
+    "calls": 1,
+    "finding": "ctx.orgId is known; the connection load belongs in withOrgContext(ctx.orgId)."
+  },
+  {
+    "path": "engine/src/banking/bank-feed-providers.ts",
+    "fn": "testBankFeedConnection",
+    "calls": 1,
+    "finding": "ctx.orgId is known and bank_feed_connections is org-isolated; the read belongs in withOrgContext(ctx.orgId)."
+  },
+  {
+    "path": "engine/src/billing/recurring.ts",
+    "fn": "runDueRecurringSchedules",
+    "calls": 3,
+    "finding": "per-schedule bookkeeping for an organization the scan already returned; withOrgContext(s.orgId) scopes it."
+  },
+  {
+    "path": "engine/src/billing/recurring.ts",
+    "fn": "runScheduleNow",
+    "calls": 2,
+    "finding": "resolves the schedule's organization from its id although the only caller passes authority.orgId. bookkeeping for a schedule whose organization is already known; withOrgContext(row.orgId) scopes it."
+  },
+  {
+    "path": "engine/src/billing/subscription-billing.ts",
+    "fn": "billSubscriptionNow",
+    "calls": 2,
+    "finding": "resolves the subscription's organization from its id instead of the caller's scope. bookkeeping for a subscription whose organization is already known; withOrgContext(orgId) scopes it."
+  },
+  {
+    "path": "engine/src/billing/subscription-billing.ts",
+    "fn": "loadSubOrgId",
+    "calls": 1,
+    "finding": "resolves a subscription's organization from its id instead of the caller's scope."
+  },
+  {
+    "path": "engine/src/billing/subscription-billing.ts",
+    "fn": "recordSubscriptionTickFailure",
+    "calls": 1,
+    "finding": "records a failure for a known organization; withOrgContext(orgId) scopes it."
+  },
+  {
+    "path": "engine/src/billing/subscription-billing.ts",
+    "fn": "runDueSubscriptions",
+    "calls": 3,
+    "finding": "per-subscription bookkeeping for an organization the scan already returned; withOrgContext(row.orgId) scopes it."
+  },
+  {
+    "path": "engine/src/flows/gates.ts",
+    "fn": "processGateTimers",
+    "calls": 3,
+    "finding": "loads a gate whose organization the scan already returned; withOrgContext(orgId) scopes it. stamps a gate whose organization the scan already returned; withOrgContext(orgId) scopes it. enqueues an escalation for an organization the scan already returned; withOrgContext(orgId) scopes it."
+  },
+  {
+    "path": "engine/src/flows/scheduled.ts",
+    "fn": "claimDueFlowOccurrences",
+    "calls": 1,
+    "finding": "claims occurrences for a flow whose organization is a parameter; withOrgContext(flow.orgId) scopes it."
+  },
+  {
+    "path": "engine/src/flows/scheduled.ts",
+    "fn": "fireScheduledOccurrence",
+    "calls": 1,
+    "finding": "loads a flow whose organization the claim carries; withOrgContext(claim.orgId) scopes it."
+  },
+  {
+    "path": "engine/src/harness/corpus-lib/provision.ts",
+    "fn": "provisionCorpusOrg",
+    "calls": 1,
+    "finding": "provisions a new organization for a harness corpus; organization provisioning is not a reason in the vocabulary."
+  },
+  {
+    "path": "engine/src/hrm/recruiting/postings.ts",
+    "fn": "resolveFeedOrg",
+    "calls": 1,
+    "finding": "the verified feed token already names the organization; withOrgContext(claims.rowId) admits its orgs row."
+  },
+  {
+    "path": "engine/src/hrm/recruiting/retention.ts",
+    "fn": "activeRetentionRuleIdsForDuty",
+    "calls": 1,
+    "finding": "orgId is a parameter and hrm_retention_rules is org-isolated; withOrgContext(orgId) scopes the read."
+  },
+  {
+    "path": "engine/src/ledger/posting-effects.ts",
+    "fn": "listFailedPostingEffects",
+    "calls": 1,
+    "finding": "orgId is a parameter and posting_effects is org-isolated; withOrgContext(orgId) scopes the read."
+  },
+  {
+    "path": "engine/src/ledger/posting-effects.ts",
+    "fn": "replayTerminalPostingEffect",
+    "calls": 1,
+    "finding": "input.orgId is known and every statement is org-filtered; withOrgTransaction(input.orgId) scopes the replay."
+  },
+  {
+    "path": "engine/src/payments/acceptance.ts",
+    "fn": "onlinePaymentsFeatureEnabled",
+    "calls": 1,
+    "finding": "orgId is a parameter; the feature read belongs in withOrgContext(orgId)."
+  },
+  {
+    "path": "engine/src/payments/payment-link-session-expiry.ts",
+    "fn": "expireStalePaymentLinkSessions",
+    "calls": 1,
+    "finding": "orgId is a parameter and every joined table is org-isolated; withOrgContext(orgId) scopes the read."
+  },
+  {
+    "path": "engine/src/payments/payment-link-session-expiry.ts",
+    "fn": "loadStripeSessionConfig",
+    "calls": 1,
+    "finding": "orgId is a parameter and psp_provider_configs is org-isolated; withOrgContext(orgId) scopes the read."
+  },
+  {
+    "path": "engine/src/platform/storage-cleanup.ts",
+    "fn": "enqueueStorageCleanupStandalone",
+    "calls": 1,
+    "finding": "the intent carries orgId and storage_cleanup_outbox is org-isolated; withOrgContext(intent.orgId) scopes the enqueue."
+  },
+  {
+    "path": "engine/src/qbd/bridge.ts",
+    "fn": "acceptWebConnectorResponse",
+    "calls": 1,
+    "finding": "the session lookup already returned the organization; withOrgTransaction(current.orgId) scopes the settlement."
+  },
+  {
+    "path": "engine/src/qbd/bridge.ts",
+    "fn": "closeWebConnectorSession",
+    "calls": 1,
+    "finding": "the session lookup already returned the organization; withOrgTransaction(current.orgId) scopes the close."
+  },
+  {
+    "path": "engine/src/qbd/bridge.ts",
+    "fn": "nextWebConnectorRequest",
+    "calls": 1,
+    "finding": "the session lookup already returned the organization; withOrgTransaction(current.orgId) scopes the claim."
+  },
+  {
+    "path": "engine/src/qbd/bridge.ts",
+    "fn": "recordConnectionError",
+    "calls": 1,
+    "finding": "the session lookup already returned the organization; withOrgTransaction(current.orgId) scopes the error record."
+  },
+  {
+    "path": "engine/src/qbd/bridge.ts",
+    "fn": "terminateConnectionSessions",
+    "calls": 1,
+    "finding": "orgId is a parameter and the qbd tables are org-isolated; withOrgTransaction(orgId) scopes the termination."
+  },
+  {
+    "path": "engine/src/qbd/bridge.ts",
+    "fn": "webConnectorLastError",
+    "calls": 1,
+    "finding": "the session lookup already returned the organization; withOrgContext(current.orgId) scopes the read."
+  },
+  {
+    "path": "engine/src/sample-companies/service.ts",
+    "fn": "clearTemplateAttempt",
+    "calls": 1,
+    "finding": "writes one known organization's row; a single-organization write is not a reason in the vocabulary."
+  },
+  {
+    "path": "engine/src/sample-companies/service.ts",
+    "fn": "deletePartialSampleOrg",
+    "calls": 1,
+    "finding": "deletes one known partial organization; single-organization teardown is not a reason in the vocabulary."
+  },
+  {
+    "path": "engine/src/sample-companies/service.ts",
+    "fn": "setSampleCompanyStage",
+    "calls": 1,
+    "finding": "writes one known organization's row; a single-organization write is not a reason in the vocabulary."
+  },
+  {
+    "path": "engine/src/sample-companies/service.ts",
+    "fn": "stampTemplateAttempt",
+    "calls": 1,
+    "finding": "writes one known organization's row; a single-organization write is not a reason in the vocabulary."
+  },
+  {
+    "path": "engine/src/sandbox/cli.ts",
+    "fn": "commandOrg",
+    "calls": 1,
+    "finding": "reads the one operator-named organization's row; withOrgContext(suppliedOrg) admits it under the orgs root policy."
+  },
+  {
+    "path": "engine/src/scheduling/outbox.ts",
+    "fn": "ensureScanOrgFailureNotice",
+    "calls": 1,
+    "finding": "orgId is a parameter and every read and write is org-filtered; withOrgContext(orgId) scopes it."
+  },
+  {
+    "path": "engine/src/scheduling/outbox.ts",
+    "fn": "replayTerminalSchedulerOutbox",
+    "calls": 1,
+    "finding": "input.orgId is known and every statement is org-filtered; withOrgTransaction(input.orgId) scopes the replay."
+  },
+  {
+    "path": "engine/src/scheduling/scheduler.ts",
+    "fn": "appendOccurrenceEvents",
+    "calls": 1,
+    "finding": "orgId is a parameter and script_runs is org-isolated; withOrgContext(orgId) scopes the append."
+  },
+  {
+    "path": "engine/src/scheduling/scheduler.ts",
+    "fn": "claimDueScriptOccurrence",
+    "calls": 2,
+    "finding": "quarantines a script whose organization the scan already returned; withOrgContext(s.orgId) scopes it. claims a script whose organization the scan already returned; withOrgContext(s.orgId) scopes the claim."
+  },
+  {
+    "path": "engine/src/scheduling/scheduler.ts",
+    "fn": "recoverLostScriptOccurrences",
+    "calls": 1,
+    "finding": "transitions an occurrence whose organization the scan already returned; withOrgContext(row.orgId) scopes it."
+  },
+  {
+    "path": "engine/src/sftp/manager.ts",
+    "fn": "bankFeedsEnabled",
+    "calls": 1,
+    "finding": "orgId is a parameter; the feature check belongs in withOrgContext(orgId)."
+  },
+  {
+    "path": "engine/src/sftp/manager.ts",
+    "fn": "loadSessionRow",
+    "calls": 1,
+    "finding": "orgId is a parameter and sftp_servers is org-isolated; withOrgContext(orgId) scopes the read."
+  },
+  {
+    "path": "engine/src/sim/world.ts",
+    "fn": "provisionOrg",
+    "calls": 2,
+    "finding": "provisions a new simulated organization; organization provisioning is not a reason in the vocabulary. writes one known organization's row; a single-organization write is not a reason in the vocabulary."
+  },
+  {
+    "path": "engine/src/worker/backup-scheduler.ts",
+    "fn": "tick",
+    "calls": 1,
+    "finding": "claims a policy whose organization the scan already returned; withOrgContext(policy.org_id) scopes the claim."
+  },
+  {
+    "path": "engine/src/worker/migration-worker.ts",
+    "fn": "reapStaleSyncRuns",
+    "calls": 1,
+    "finding": "reaps a run whose organization the scan already returned; withOrgTransaction(run.orgId) scopes it."
+  },
+  {
+    "path": "engine/src/worker/sandbox-scheduler.ts",
+    "fn": "releaseStaleSandboxClaims",
+    "calls": 1,
+    "finding": "releases a sandbox whose organization the scan already returned; withOrgContext(row.orgId) scopes it."
+  },
+  {
+    "path": "engine/src/worker/sandbox-scheduler.ts",
+    "fn": "tick",
+    "calls": 2,
+    "finding": "claims a sandbox whose organization the scan already returned; withOrgContext(s.orgId) scopes the claim. releases a sandbox whose organization the scan already returned; withOrgContext(s.orgId) scopes it."
+  },
+  {
+    "path": "scripts/upgrade-rehearsal/seeders/multi-entity.ts",
+    "fn": "main",
+    "calls": 2,
+    "finding": "a rehearsal seeder writes one organization's data plus global currencies; seeding is not a reason in the vocabulary. a rehearsal seeder writes one organization's FX rates; withOrgTransaction(orgId) scopes it."
+  },
+  {
+    "path": "scripts/upgrade-rehearsal/seeders/perf-1m.ts",
+    "fn": "main",
+    "calls": 6,
+    "finding": "a rehearsal seeder for one organization; seeding is not a reason in the vocabulary. a rehearsal seeder writes one organization's data; withMaintenanceTransaction(orgId, ...) is the timeout-free scoped boundary."
+  },
+  {
+    "path": "scripts/worker-entry.mts",
+    "fn": "withOrgClaim",
+    "calls": 1,
+    "finding": "orgId is a parameter and the pinned client only takes an advisory lock; no row is read that needs bypass."
+  },
+  {
+    "path": "web/app/api/recruiting/apply/_org.ts",
+    "fn": "applyViaPostingForOrg",
+    "calls": 1,
+    "finding": "an anonymous application resolves the posting's organization from a public posting id; no token authenticates it."
+  },
+  {
+    "path": "web/app/careers/[orgSlug]/page.tsx",
+    "fn": "CareersPage",
+    "calls": 1,
+    "finding": "the organization is already resolved; the postings read belongs in withOrgContext(org.orgId)."
+  },
+  {
+    "path": "web/lib/locale.ts",
+    "fn": "(top-level)",
+    "calls": 1,
+    "finding": "reads the viewer's active organization's time zone; withOrgContext(activeUser.orgId) admits it under the orgs root policy."
+  },
+  {
+    "path": "web/lib/recruiting-public.ts",
+    "fn": "resolveOrgBySlug",
+    "calls": 1,
+    "finding": "an anonymous careers page resolves its organization by name slug; no token authenticates the request."
+  }
+]

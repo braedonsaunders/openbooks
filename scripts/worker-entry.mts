@@ -82,6 +82,7 @@ async function orgsWithFeature(feature: string): Promise<string[]> {
       ? sql`coalesce((settings->'features'->>${key})::boolean, true)`
       : sql`coalesce((settings->'features'->>${key})::boolean, false)`,
   );
+  // bypass: scheduler-tick — the duty runner lists every organization with the feature enabled.
   const rows = await withBypassContext(() =>
     db.execute<{ id: string }>(sql`
       select id from orgs

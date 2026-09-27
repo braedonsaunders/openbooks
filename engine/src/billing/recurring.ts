@@ -248,6 +248,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
   const result: RecurringRunResult = { generated: 0, posted: 0, failed: 0, documents: [] };
   const orgBusinessDates = new Map<string, string>();
 
+  // bypass: scheduler-tick — the scan finds due recurring schedules across every organization.
   const due = await withBypass(async () => {
     return (await db.execute<{
         id: string;

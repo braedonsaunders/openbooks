@@ -141,6 +141,7 @@ export async function runAutomationTick(now: Date = new Date()): Promise<TickSum
     eventsFailed: 0,
     errors: [],
   };
+  // bypass: scheduler-tick — the tick scans enabled automations of every organization.
   await withBypassContext(async () => {
     const automations = await db.execute<{
       id: string; orgId: string; name: string; trigger: unknown; version: number; createdAt: string; lastRunAt: string | null;

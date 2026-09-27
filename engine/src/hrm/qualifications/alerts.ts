@@ -96,6 +96,7 @@ export async function listAlertEligibleOrgs(exec: SqlExecutor): Promise<string[]
  * back without touching the others.
  */
 export async function runQualificationAlertScan(now: Date): Promise<AlertScanSummary[]> {
+  // bypass: scheduler-tick — the scan lists every organization eligible for qualification alerts.
   const orgIds = await withBypassContext(() => listAlertEligibleOrgs(db));
   const summaries: AlertScanSummary[] = [];
   for (const orgId of orgIds) {

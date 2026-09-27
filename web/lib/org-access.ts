@@ -108,6 +108,7 @@ async function actingUserHolds(actingUserId: string, orgId: string, permission: 
 
 /** Every top-level production or explicitly granted preview org the member can reach. */
 export async function accessibleProductionOrgs(home: HomeUser): Promise<AccessibleOrg[]> {
+  // bypass: user-keyed-lookup — lists every organization this member can reach, across organizations.
   return withBypassContext(async () => {
     if (home.isSuperAdmin) {
       const rows = (await db.execute(sql`
@@ -167,6 +168,7 @@ export async function resolveActiveEnv(
   home: HomeUser,
   activeOrgId: string | null,
 ): Promise<ResolvedEnv | null> {
+  // bypass: identity-bootstrap — resolves which organization the caller acts in before any organization scope exists.
   return withBypassContext(async () => {
     if (!activeOrgId || activeOrgId === home.orgId) {
       const o = (await db.execute(sql`select name from orgs where id = ${home.orgId}`)) as unknown as { rows: OrgNameSqlRow[] };

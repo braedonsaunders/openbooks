@@ -156,6 +156,7 @@ async function assertCapturedSandboxReady(sandboxOrgId: string | null, productio
  * sandbox under that lock and inside the transition transaction. Deletion and
  * refresh use this same key, so a vanished sandbox cannot race review/apply. */
 async function withChangeSetSandboxLock<T>(changeSetId: string, work: () => Promise<T>): Promise<T> {
+  // bypass: cross-org-by-design — a change set links a production organization to its sandbox copy.
   const sandboxId = await withBypassContext(async () => {
     const changeSet = (await db.execute<{ org_id: string; sandbox_org_id: string | null }>(sql`
       select org_id, sandbox_org_id from change_sets where id = ${changeSetId}`)).rows[0];

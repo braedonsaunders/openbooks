@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
-import type { PoolClient } from "pg";
 import { businessToday } from "../platform/business-date.ts";
-import { db, env, pool, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { db, env, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { abs, cmp, fromUnits, toUnits } from "../money/money.ts";
 import { runUserSql } from "../platform/sqlapi.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -330,9 +329,12 @@ export interface TableIsolationProbe {
   detail: string;
 }
 
+/** The probe could not read as a non-bypassing role; reported, never passed. */
+class ProbeUnestablished extends Error {}
+
 /**
- * The base-table half of the rls-org-isolation probe, on ONE pool client in
- * this org's scope inside a READ ONLY transaction. PostgreSQL does not apply
+ * The base-table half of the rls-org-isolation probe, in ONE READ ONLY
+ * `withOrgTransaction` in this org's scope. PostgreSQL does not apply
  * RLS (FORCE included) to a superuser or BYPASSRLS login — the CI and
  * rehearsal harness logins — so reading through the pool as-is sees every
  * row and the probe would fail for the wrong reason (or, worse, a policy
@@ -342,77 +344,51 @@ export interface TableIsolationProbe {
  * rather than passing vacuously or false-positiving.
  */
 export async function probeTableIsolation(orgId: string, foreignId: string): Promise<TableIsolationProbe> {
-  const refused = (detail: string): TableIsolationProbe => ({
-    established: false,
-    tableHidden: false,
-    ownDocs: 0,
-    detail,
-  });
-  return withOrgContext(orgId, async () => {
-    let client: PoolClient | null = null;
-    try {
-      client = await pool.connect();
-      await client.query("begin read only");
-      await client.query("select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)", [
-        orgId,
-      ]);
-      const login = (
-        await client.query(
-          "select current_user as login, coalesce((select rolsuper or rolbypassrls from pg_roles where rolname = current_user), true) as bypass",
-        )
-      ).rows[0] as { login: string; bypass: boolean };
+  const readLogin = async () => (await db.execute<{ login: string; bypass: boolean }>(sql`
+    select current_user as login,
+           coalesce((select rolsuper or rolbypassrls from pg_roles where rolname = current_user), true) as bypass`)).rows[0]!;
+  try {
+    return await withOrgTransaction(orgId, async () => {
+      const login = await readLogin();
       let switchNote = "";
       if (login.bypass) {
         let role: string;
         try {
           role = runtimeProbeRole();
         } catch (error) {
-          await client.query("rollback");
-          return refused(
+          throw new ProbeUnestablished(
             `probe connection bypasses RLS as ${login.login} and ${(error instanceof Error ? error.message : String(error)).toLowerCase()}`,
           );
         }
         try {
-          await client.query(`set local role "${role}"`);
+          await db.execute(sql`set local role ${sql.identifier(role)}`);
         } catch (error) {
-          await client.query("rollback");
-          return refused(
+          throw new ProbeUnestablished(
             `probe connection bypasses RLS as ${login.login} and could not assume runtime role ${role}: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
-        const after = (
-          await client.query(
-            "select current_user as login, coalesce((select rolsuper or rolbypassrls from pg_roles where rolname = current_user), true) as bypass",
-          )
-        ).rows[0] as { login: string; bypass: boolean };
+        const after = await readLogin();
         if (after.bypass) {
-          await client.query("rollback");
-          return refused(
+          throw new ProbeUnestablished(
             `probe connection bypasses RLS and no runtime role could be assumed (still bypassing as ${after.login} after assuming ${role})`,
           );
         }
         switchNote = ` [table half assumed runtime role ${role}; harness login ${login.login} bypasses RLS]`;
       }
-      const seen = await client.query("select id from documents where id = $1", [foreignId]);
-      const own = await client.query("select count(*)::int as n from documents where org_id = $1", [orgId]);
-      await client.query("commit");
+      const seen = await db.execute(sql`select id from documents where id = ${foreignId}`);
+      const own = await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${orgId}`);
       return {
         established: true,
         tableHidden: (seen.rowCount ?? 0) === 0,
-        ownDocs: (own.rows[0] as { n: number }).n,
+        ownDocs: own.rows[0]!.n,
         detail: switchNote,
       };
-    } catch (error) {
-      try {
-        await client?.query("rollback");
-      } catch {
-        // The connection is already broken; release discards it.
-      }
-      throw error;
-    } finally {
-      client?.release();
-    }
-  });
+    }, { readOnly: true });
+  } catch (error) {
+    // Thrown out of the transaction so it rolls back, role switch and all.
+    if (!(error instanceof ProbeUnestablished)) throw error;
+    return { established: false, tableHidden: false, ownDocs: 0, detail: error.message };
+  }
 }
 
 export async function runScenario(
@@ -1098,6 +1074,7 @@ export async function runScenario(
     ? "catalog clean"
     : `catalog gaps: ${rlsCatalog.map((r) => r.tbl).join(", ")}`;
   if (rlsOk) {
+    // bypass: cross-org-by-design — the isolation probe needs a row owned by some other organization.
     const foreign = await withBypassContext(async () => {
       const r = await db.execute<{ id: string }>(sql`
         select id from documents where org_id <> ${orgId} limit 1`);

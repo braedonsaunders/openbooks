@@ -21,6 +21,7 @@ installEngineSeams();
 const argOrg = process.argv[2];
 // Default discovery is trusted, but limited to sandboxes so a bare command
 // cannot select an arbitrary production tenant. Explicit ids support rehearsal.
+// bypass: cross-org-by-design — with no id given, the harness discovers a sandbox among every organization.
 const orgId = argOrg ?? (await withBypassContext(async () =>
   (await db.execute<{ id: string }>(sql`
     select id from orgs where env_kind = 'sandbox' order by created_at, id limit 1

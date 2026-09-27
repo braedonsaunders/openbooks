@@ -1444,6 +1444,7 @@ export async function processGateTimers(
   // trusted boundary; notifying the assignee then runs inside the gate's own
   // tenant. A scheduler tick holds no request store, so without these the
   // connection layer denies by default and no reminder ever fires.
+  // bypass: scheduler-tick — due gate reminders are found across every production organization.
   const dueReminders = await withBypassContext(() =>
     db.execute<{ id: string; orgId: string }>(sql`
     select gate.id, gate.org_id as "orgId" from flow_gates gate
@@ -1517,6 +1518,7 @@ export async function processGateTimers(
   // --- Escalations -----------------------------------------------------------
   // Enqueue a durable outbox row per due gate. The runner claims that row;
   // a throw leaves status=failed + error so the next tick retries.
+  // bypass: scheduler-tick — due gate escalations are found across every production organization.
   const dueEscalations = await withBypassContext(() =>
     db.execute<{ id: string; orgId: string }>(sql`
     select gate.id, gate.org_id as "orgId" from flow_gates gate
@@ -1630,6 +1632,7 @@ async function escalateGate(gateId: string, now: Date): Promise<boolean> {
   // Called from the contextless scheduler tick with only a gate id: this probe
   // discovers WHICH tenant owns it, so it crosses a trusted boundary. Every
   // subsequent read and write happens inside that tenant's `withOrg` below.
+  // bypass: scheduler-tick — the tick holds only a gate id; this probe discovers which organization owns it.
   const pre = await withBypassContext(() => loadGate(gateId));
   if (!pre || pre.status !== "pending") return false;
 

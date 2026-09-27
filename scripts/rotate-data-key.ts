@@ -257,6 +257,7 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
     },
   ];
 
+  // bypass: cross-org-by-design — data-key rotation re-seals ciphertext of every organization.
   await withBypassContext(async () => {
     for (const target of textTargets) {
       const rows = await target.select(org);
@@ -520,6 +521,7 @@ async function main(): Promise<number> {
 if (isEntrypoint()) {
   void (async () => {
     try {
+      // bypass: cross-org-by-design — data-key rotation re-seals ciphertext of every organization.
       process.exitCode = await withBypassContext(() => main());
     } catch (error) {
       console.error(error instanceof Error ? error.message : error);

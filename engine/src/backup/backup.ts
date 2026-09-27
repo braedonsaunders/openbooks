@@ -577,6 +577,7 @@ export async function executeBackupRun(runId: string): Promise<void> {
   // A queued run names its tenant, but this worker cannot know it until the row
   // is claimed — so the claim is the ONE statement that crosses a trusted
   // boundary. Everything after it runs inside that tenant's own RLS scope.
+  // bypass: scheduler-tick — a queued run's organization is known only once the claim returns it.
   const claimed = await withBypassContext(() =>
     db.execute<{ id: string; org_id: string; kind: string; actor_id: string | null }>(sql`
     update backup_runs

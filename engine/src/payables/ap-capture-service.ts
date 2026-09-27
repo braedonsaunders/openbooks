@@ -48,6 +48,7 @@ const AP_CAPTURE_STALE_ERROR = "Extraction worker stopped before finalizing this
  */
 export async function recoverStaleApCaptureClaims(now = new Date()): Promise<number> {
   const cutoff = new Date(now.getTime() - AP_CAPTURE_STALE_CLAIM_MS);
+  // bypass: scheduler-tick — stale extraction claims are found across every organization.
   const candidates = await withBypassContext(() => db.execute<{ id: string; org_id: string; attempts: number }>(sql`
     select id, org_id, attempts from ap_capture_items
      where status = 'extracting' and updated_at < ${cutoff.toISOString()}

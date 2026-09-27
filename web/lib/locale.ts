@@ -34,6 +34,7 @@ export const resolveLocale = cache(async (): Promise<Locale> => {
   // Off-request requestUser() is null (see above), so this stays anonymous.
   const activeUser = await requestUser();
   if (activeUser) {
+    // bypass: user-keyed-lookup — the viewer's own locale preference, read outside the request's organization scope.
     const r = await withBypassContext(async () => (await db.execute(sql`
         select u.locale as user_locale, o.settings ->> 'defaultLocale' as org_default
           from users u
@@ -59,6 +60,7 @@ export const userLocalePreference = cache(async (): Promise<Locale | null> => {
   const jar = await cookies();
   const uid = (await validateSessionToken(jar.get(SESSION_COOKIE)?.value))?.userId;
   if (!uid) return null;
+  // bypass: user-keyed-lookup — the signed-in identity's locale preference, keyed by the session's user id alone.
   const r = await withBypassContext(async () => (await db.execute(
       sql`select locale from users where id = ${uid} and is_active`,
     )));

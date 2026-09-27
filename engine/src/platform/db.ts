@@ -684,6 +684,12 @@ export interface OrgTransactionOptions {
    * read-committed level, exactly as before.
    */
   isolationLevel?: "REPEATABLE READ" | "SERIALIZABLE";
+  /**
+   * READ ONLY access mode, requested up front like the isolation level. A
+   * multi-statement snapshot read sets it so any write that later creeps into
+   * the path fails loudly instead of committing inside a report.
+   */
+  readOnly?: boolean;
 }
 
 export async function withOrgTransaction<T>(
@@ -694,11 +700,14 @@ export async function withOrgTransaction<T>(
   const active = orgContext.getStore();
   if (active?.txDb && active.bypass) {
     // Reuse the pinned bypass transaction — but a requested isolation
-    // level cannot be honored mid-transaction, so refuse by name instead
-    // of silently dropping it. The outer transaction's level stands;
-    // request it there instead.
+    // level or access mode cannot be honored mid-transaction, so refuse by
+    // name instead of silently dropping it. The outer transaction's level
+    // and mode stand; request them there instead.
     if (opts.isolationLevel !== undefined) {
       throw new Error("cannot change isolation inside an active bypass transaction");
+    }
+    if (opts.readOnly !== undefined) {
+      throw new Error("cannot change access mode inside an active bypass transaction");
     }
     return fn();
   }
@@ -709,12 +718,15 @@ export async function withOrgTransaction<T>(
     if (opts.isolationLevel !== undefined) {
       throw new Error("cannot change isolation inside an active tenant transaction");
     }
+    if (opts.readOnly !== undefined) {
+      throw new Error("cannot change access mode inside an active tenant transaction");
+    }
     return fn();
   }
 
   const client = await rawConnect();
   try {
-    await client.query("begin");
+    await client.query(opts.readOnly === true ? "begin read only" : "begin");
     if (opts.isolationLevel !== undefined) {
       if (opts.isolationLevel !== "REPEATABLE READ" && opts.isolationLevel !== "SERIALIZABLE") {
         throw new Error(`unsupported tenant transaction isolation level: ${opts.isolationLevel}`);

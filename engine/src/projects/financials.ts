@@ -1,6 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/node-postgres'
-import { db, orgContext, pool } from '../platform/db.ts'
+import { db, orgContext, withOrgTransaction } from '../platform/db.ts'
 import { BUILTIN_PROJECT_TYPES, type FinancialProfile, type CostSource, type OverheadSource } from '@openbooks/schema'
 import { resolveAccountGroups } from '../records/account-groups.ts'
 import { flowTranslation, translateFlowAmount } from '../fx/translation.ts'
@@ -744,11 +743,13 @@ async function resolveProjectFinancialsInSnapshot(
  *    splitting the report across transactions. A concurrent commit during the
  *    call is absorbed by the NEXT generation, never half-into this one.
  *
- * The pinned connection is published through the tenant context's `txDb`, so
- * helper queries (account groups, subcontract commitments, rate-engine and
- * adjustment sums) resolve the org-scoped proxy automatically — org context is
- * preserved for every helper without each one re-deriving it, and an ambient
- * bypass scope can never leak into this report's reads.
+ * `withOrgTransaction` publishes the pinned connection through the tenant
+ * context's `txDb`, so helper queries (account groups, subcontract
+ * commitments, rate-engine and adjustment sums) resolve the org-scoped proxy
+ * automatically — org context is preserved for every helper without each one
+ * re-deriving it. An ambient bypass scope cannot leak into this report's
+ * reads: the snapshot is opened on the runtime pool, and inside a bypass
+ * transaction `withOrgTransaction` refuses it by name.
  */
 export async function resolveProjectFinancials(
   orgId: string,
@@ -763,32 +764,11 @@ export async function resolveProjectFinancials(
     // Reuse the caller's pinned transaction; its snapshot governs.
     return resolveProjectFinancialsInSnapshot(orgId, projectId, profile)
   }
-  const client = await pool.connect()
-  try {
-    await client.query("begin isolation level repeatable read read only")
-    // Transaction-local tenant scope: set after BEGIN so the GUCs reset on
-    // commit/rollback, and so the snapshot this transaction pins belongs to
-    // exactly this org under deny-by-default RLS.
-    await client.query(
-      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
-      [orgId],
-    )
-    const txDb = drizzle({ client })
-    const report = await orgContext.run({ orgId, bypass: false, txDb }, async () =>
-      await resolveProjectFinancialsInSnapshot(orgId, projectId, profile),
-    )
-    await client.query("commit")
-    return report
-  } catch (error) {
-    try {
-      await client.query("rollback")
-    } catch {
-      // A broken connection is discarded when released.
-    }
-    throw error
-  } finally {
-    client.release()
-  }
+  return withOrgTransaction(
+    orgId,
+    () => resolveProjectFinancialsInSnapshot(orgId, projectId, profile),
+    { isolationLevel: "REPEATABLE READ", readOnly: true },
+  )
 }
 
 /**

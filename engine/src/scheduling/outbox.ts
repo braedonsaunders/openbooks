@@ -410,6 +410,7 @@ async function ensureScanOrgFailureNotice(
 
 /** Resolve a scan's failure notices after a fully clean pass, so a later failure re-fires. */
 async function resolveScanFailureNotices(kind: string): Promise<void> {
+  // bypass: scheduler-tick — a clean pass resolves that scan's failure notices in every organization.
   await withBypassContext(() => db.execute(sql`
     update notifications set read_at = now(), updated_at = now()
      where kind = ${kind} and read_at is null
@@ -483,6 +484,7 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
     };
     for (const failure of result.orgErrors) add(failure.orgId, failure.error);
     if (result.skippedPolicies.length > 0) {
+      // bypass: scheduler-tick — the unscoped dunning run reports policies from many organizations; this finds each owner.
       const orgByPolicy = (await withBypassContext(() => db.execute<{ id: string; orgId: string }>(sql`
         select id, org_id as "orgId" from dunning_policies
          where id in (${sql.join(result.skippedPolicies.map((p) => sql`${p.policyId}::uuid`), sql`, `)})
@@ -494,6 +496,7 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
     }
     const failedLetters = result.notices.filter((notice) => notice.status === "failed");
     if (failedLetters.length > 0) {
+      // bypass: scheduler-tick — the unscoped dunning run reports letters from many organizations; this finds each owner.
       const orgByDocument = (await withBypassContext(() => db.execute<{ id: string; orgId: string }>(sql`
         select id, org_id as "orgId" from documents
          where id in (${sql.join(failedLetters.map((n) => sql`${n.documentId}::uuid`), sql`, `)})
@@ -771,6 +774,7 @@ export async function listFailedSchedulerOutbox(limit = 100): Promise<Array<{
   terminalFailedAt: Date | null;
   terminalFailedBy: string | null;
 }>> {
+  // bypass: cross-org-by-design — operator visibility over every organization's and the installation's failed outbox rows.
   const rows = await withBypassContext(() => db.execute<{
     id: string;
     orgId: string | null;

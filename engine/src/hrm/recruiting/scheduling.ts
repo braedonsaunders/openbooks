@@ -368,6 +368,7 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
   // the stored hash under bypass (the email-action route precedent;
   // same-org by construction — the hash was written by proposeSlots in the
   // interview's org), then run everything else under that org.
+  // bypass: connector-token — a candidate's booking token binds the interview but not its organization.
   const scope = await withBypassContext(async () => {
     const found = (await db.execute<{ orgId: string; expiresAt: string | null }>(sql`
       select org_id as "orgId", max(expires_at) as "expiresAt"
@@ -520,6 +521,7 @@ export async function readBookingLink(bookingToken: string): Promise<{
     );
   }
   const tokenHash = hashRecruitingToken(bookingToken);
+  // bypass: connector-token — a candidate's booking token binds the slots but not their organization.
   const rows = await withBypassContext(async () => {
     const found = (await db.execute<SlotRow & { orgId: string }>(sql`
       select org_id as "orgId", id, interview_id as "interviewId",

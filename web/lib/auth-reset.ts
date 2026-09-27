@@ -134,6 +134,7 @@ export async function deliverResetEmail(
   transport: EmailTransport,
   raw: string,
 ): Promise<boolean> {
+  // bypass: identity-bootstrap — reset delivery re-reads the recipient's token and home identity; no session exists yet.
   return withBypass(async () => {
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"password-reset-delivery:" + user.id}, 0))`);
     if (!(await isResetTokenCurrent(user.id, raw))) return false;
@@ -184,6 +185,7 @@ export async function requestPasswordReset(
   if (!email) return;
   const { networkHash, userAgentHash } = authContextHashes(context);
 
+  // bypass: identity-bootstrap — an anonymous reset request resolves the address against every organization's users.
   const delivery = await withBypass(async () => {
     // The network cap first: an anonymous prober rotating addresses must not
     // reach the user lookup at all once its window is spent.
@@ -259,6 +261,7 @@ export async function issueInviteSetPasswordLink(input: {
   const { networkHash, userAgentHash } = authContextHashes(input.context);
   // Mint first and commit: delivery re-checks currency in its own
   // transaction, which can only see this token once it is committed.
+  // bypass: identity-bootstrap — mints the invited identity's set-password credential in the global credential tables.
   const minted = await withBypass(async () => {
     // The authoritative ceiling re-check runs inside the mint transaction:
     // throwing rolls the mint back (no token, no email).
@@ -297,6 +300,7 @@ export async function completePasswordReset(
   // login for the shared KDF capacity. This read grants no reset authority:
   // the credential and active identity are rechecked under locks below.
   const hashedToken = tokenHash(rawToken);
+  // bypass: identity-bootstrap — an anonymous token holder is matched to an identity before any organization is known.
   const candidate = await withBypass(async () => (await db.execute<{ user_id: string }>(sql`
     select r.user_id from auth_password_resets r
       join users u on u.id = r.user_id and u.is_active
@@ -307,6 +311,7 @@ export async function completePasswordReset(
   // Scrypt outside the transaction — never hold a lock across the KDF.
   const newHash = await hashPassword(newPassword);
 
+  // bypass: identity-bootstrap — the reset rewrites the identity's credential and revokes its sessions atomically.
   return withBypass(async () => {
     // Keep the user → credential lock order shared by issuance and login.
     const user = (await db.execute<{ id: string }>(sql`

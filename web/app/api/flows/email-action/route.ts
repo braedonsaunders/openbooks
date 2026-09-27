@@ -91,6 +91,7 @@ async function loadGateSummary(gateId: string, orgId?: string): Promise<GateSumm
 
 /** Token bootstrap, then refuse when the org's Flows feature is off. */
 async function loadEnabledGate(gateId: string): Promise<GateSummary | null> {
+  // bypass: connector-token — a sessionless one-click link's gate is found before its organization is known.
   const gate = await withBypassContext(() => loadGateSummary(gateId))
   if (!gate) return null
   if (!(await isFeatureEnabled(gate.orgId, 'flows'))) return null

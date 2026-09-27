@@ -45,6 +45,7 @@ export async function shellEnvironments(authz: Authz): Promise<WorkspaceEnvironm
   const canManage = authz.user.isSuperAdmin || can(authz, "admin.sandboxes.manage");
   const accessible = await accessibleProductionOrgs(home);
 
+  // bypass: user-keyed-lookup — the environment switcher lists sandboxes of every organization this person can reach.
   return withBypassContext(async () => {
     const tenants: TenantGroup[] = [];
     for (const o of accessible) {

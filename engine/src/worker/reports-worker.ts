@@ -22,6 +22,7 @@ export function createReportsWorker(): Worker<ReportJobData> {
           d.runId,
           (orgId, definitionId, runId) => renderReportPdf(orgId, definitionId, { ...d.params, runId }),
         ));
+      // bypass: scheduler-tick — the delivery drain sends queued report deliveries of every organization.
       await withBypassContext(() => dispatchReportDeliveries());
       return { runId: d.runId, ...result };
     },

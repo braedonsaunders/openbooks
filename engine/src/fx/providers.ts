@@ -846,6 +846,7 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
   // trusted boundary; the sync itself then runs inside its own tenant. A
   // scheduler tick holds no request store, and without these the connection
   // layer denies by default — the scan would find nothing, silently.
+  // bypass: scheduler-tick — due FX feeds are found across every production organization.
   const due = await withBypassContext(() =>
     db.execute<FxProviderConfigRow>(sql`
     select ${CONFIG_COLS} from fx_provider_configs

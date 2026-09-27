@@ -40,6 +40,7 @@ export async function recoverUnenqueuedApCaptures(
   limit: number = DISPATCH_BATCH_LIMIT,
 ): Promise<CaptureDispatchSummary> {
   const summary: CaptureDispatchSummary = { candidates: 0, redispatched: 0, skippedDispatched: 0 };
+  // bypass: scheduler-tick — unenqueued capture items are found across every organization.
   await withBypassContext(async () => {
     const stale = (
       await db.execute<{

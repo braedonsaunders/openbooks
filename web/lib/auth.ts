@@ -198,6 +198,7 @@ export async function validateSessionToken(token: string | undefined): Promise<V
   const parsed = verifySessionTokenParts(token);
   if (!parsed) return null;
   const hash = tokenHash(token!);
+  // bypass: identity-bootstrap — a session cookie is resolved to its identity before any organization scope exists.
   return withBypassContext(async () => {
     const result = (await db.execute<ValidatedSession>(sql`
       select s.user_id as "userId", s.id as "sessionId", s.expires_at as "expiresAt",
@@ -332,6 +333,7 @@ async function recordLoginEvent(input: {
  * bucket row lock during scrypt.
  */
 async function consumeDeploymentLoginCapacity() {
+  // bypass: identity-bootstrap — the deployment-wide login bucket is charged before the identity is known.
   return withBypassContext(async () => {
     const result = (await db.execute<{ attemptCount: number; windowStartedAt: Date | string }>(sql`
       insert into auth_rate_limit_buckets as bucket
@@ -497,6 +499,7 @@ async function createLoginChallenge(input: {
 
 function maybePruneAuthData(): void {
   if (randomBytes(1)[0] !== 0) return;
+  // bypass: cross-org-by-design — retention prune of every identity's expired login events, challenges and sessions.
   void withBypassContext(async () => {
     await db.execute(sql`
       delete from auth_login_events
@@ -531,6 +534,7 @@ export async function login(
   const emailHash = loginEmailHash(email);
   const { networkHash, userAgentHash } = contextHashes(context);
 
+  // bypass: identity-bootstrap — password login resolves the address to its home identity across organizations.
   return withBypass(async () => {
     await acquireAuthLocks(emailHash, networkHash);
     const userResult = email ? (await db.execute<{ id: string; passwordHash: string }>(sql`
@@ -647,6 +651,7 @@ export async function completeMfaLogin(
   if (!challengeToken || !suppliedCode || suppliedCode.length > 64) return { kind: "invalid", retryAfter: 0 };
   const { networkHash, userAgentHash } = contextHashes(context);
 
+  // bypass: identity-bootstrap — MFA completion resolves the pending challenge to its identity before a session exists.
   return withBypass(async () => {
     // Match password/OIDC login's lock order: rate-limit locks, user, then
     // challenge/factor. A password reset locks the user before invalidating
@@ -729,6 +734,7 @@ export async function completeMfaLogin(
 }
 
 export async function getMfaStatus(userId: string): Promise<{ enabled: boolean; recoveryCodesRemaining: number }> {
+  // bypass: identity-bootstrap — MFA factors belong to the identity, not to the organization the request is scoped to.
   return withBypassContext(async () => {
     const result = (await db.execute<{ enabledAt: Date | null; recoveryCodesRemaining: number }>(sql`
       select enabled_at as "enabledAt", jsonb_array_length(recovery_code_hashes) as "recoveryCodesRemaining"
@@ -810,6 +816,7 @@ export async function beginMfaSetup(
   password: string,
   context: AuthRequestContext,
 ): Promise<{ secret: string; provisioningUri: string } | null> {
+  // bypass: identity-bootstrap — MFA enrollment writes the identity's factor, which lives outside any organization.
   return withBypass(async () => {
     const reauthenticated = await reauthenticateMfaEnrollment(
       userId,
@@ -872,6 +879,7 @@ export async function confirmMfaSetup(
   currentSessionId: string,
   suppliedCode: string,
 ): Promise<string[] | null> {
+  // bypass: identity-bootstrap — MFA confirmation locks the identity and its session, which live outside any organization.
   return withBypass(async () => {
     const user = await db.execute<{ id: string }>(sql`
       select id from users where id = ${userId} and is_active for update
@@ -1098,6 +1106,7 @@ export async function disableMfa(
   keepSessionId: string,
   context: AuthRequestContext,
 ): Promise<DisableMfaResult> {
+  // bypass: identity-bootstrap — disabling MFA changes the identity's credentials and sessions, which live outside any organization.
   return withBypass(async () => {
     const reauth = await reauthenticateMfaSecurityChange(userId, keepSessionId, password, suppliedCode, context);
     if (!reauth.ok) return reauth;
@@ -1130,6 +1139,7 @@ export async function rotateRecoveryCodes(
   suppliedCode: string,
   context: AuthRequestContext,
 ): Promise<RotateRecoveryCodesResult> {
+  // bypass: identity-bootstrap — recovery codes belong to the identity, not to the organization the request is scoped to.
   return withBypass(async () => {
     const reauth = await reauthenticateMfaSecurityChange(userId, sessionId, password, suppliedCode, context);
     if (!reauth.ok) return reauth;
@@ -1157,6 +1167,7 @@ export async function rotateRecoveryCodes(
 export async function revokeSessionToken(token: string | undefined, reason = "logout"): Promise<void> {
   const parsed = verifySessionTokenParts(token);
   if (!parsed) return;
+  // bypass: identity-bootstrap — logout revokes the cookie's session, which belongs to the identity rather than an organization.
   await withBypassContext(async () => {
     await db.execute(sql`
       update auth_sessions set revoked_at = now(), revocation_reason = ${reason}
@@ -1167,6 +1178,7 @@ export async function revokeSessionToken(token: string | undefined, reason = "lo
 }
 
 export async function listUserSessions(userId: string, currentSessionId: string) {
+  // bypass: identity-bootstrap — sessions belong to the identity, not to the organization the request is scoped to.
   return withBypassContext(async () => {
     const result = (await db.execute<{ id: string; authMethod: AuthMethod; createdAt: Date; lastSeenAt: Date; expiresAt: Date; current: boolean }>(sql`
       select id, auth_method as "authMethod", created_at as "createdAt",
@@ -1193,6 +1205,7 @@ export async function revokeUserSession(
   // One transaction (not context-only scope): the caller liveness lock and
   // the revocation must be atomic, or a session revoked after the route's
   // cookie check could still revoke other sessions.
+  // bypass: identity-bootstrap — sessions belong to the identity, not to the organization the request is scoped to.
   return withBypass(async () => {
     if (!(await lockLiveCallerSession(userId, callerSessionId))) {
       return { ok: false, reason: "caller_session_revoked" } as const;
@@ -1213,6 +1226,7 @@ export async function revokeOtherUserSessions(userId: string, keepSessionId: str
   // One transaction (not context-only scope): the keeper liveness lock and
   // the revocation must be atomic, or a session revoked after the route's
   // cookie check could still revoke every other session and report success.
+  // bypass: identity-bootstrap — sessions belong to the identity, not to the organization the request is scoped to.
   return withBypass(async () => {
     if (!(await lockLiveCallerSession(userId, keepSessionId))) {
       return { ok: false, reason: "caller_session_revoked" } as const;
@@ -1245,6 +1259,7 @@ export async function currentUser(): Promise<SessionUser | null> {
   const jar = await cookies();
   const session = await validateSessionToken(jar.get(COOKIE)?.value);
   if (!session) return null;
+  // bypass: identity-bootstrap — the session's home identity row can live in a different organization than the active one.
   const home = await withBypassContext(async () => {
     const result = (await db.execute<{ id: string; email: string; name: string; orgId: string; isSuperAdmin: boolean }>(sql`
       select id, email, name, org_id as "orgId", is_super_admin as "isSuperAdmin"
@@ -1259,6 +1274,7 @@ export async function currentUser(): Promise<SessionUser | null> {
   const activeEnvironment = (await resolveActiveEnv(homeUser, activeOrgId))
     ?? (await resolveActiveEnv(homeUser, null))!;
   setRequestOrg(activeEnvironment.orgId);
+  // bypass: identity-bootstrap — roles are resolved for the active environment before the request's organization scope is in force.
   const roles = await withBypassContext(async () => {
     const result = (await db.execute<{ key: string; name: string }>(sql`
       select r.key, r.name
@@ -1299,6 +1315,7 @@ export async function finishOidcLogin(input: {
   if (!normalizedEmail || !input.emailVerified) return { kind: "invalid", retryAfter: 0 };
   const emailHash = loginEmailHash(normalizedEmail);
   const { networkHash, userAgentHash } = contextHashes(input.context);
+  // bypass: identity-bootstrap — OIDC login resolves the issuer subject to its home identity across organizations.
   return withBypass(async () => {
     await acquireAuthLocks(emailHash, networkHash);
     const mapped = (await db.execute<{ id: string }>(sql`

@@ -86,6 +86,7 @@ export async function canAccessReportArtifact(authz: Authz, raw: unknown): Promi
  * run was minted for, still active and still attached to this org. */
 async function loadReportPrincipal(orgId: string, snapshot: ReportAuthorization): Promise<SessionUser> {
   if (snapshot?.version !== 1 || !snapshot.userId) throw new Error('Report schedule requires reauthorization')
+  // bypass: user-keyed-lookup — the principal a scheduled render runs as may have a home identity in another organization.
   const row = await withBypassContext(async () => (await db.execute<{
     id: string; email: string; name: string; org_id: string; is_super_admin: boolean
   }>(sql`
