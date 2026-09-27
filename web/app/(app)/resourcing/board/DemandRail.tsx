@@ -76,11 +76,10 @@ export function DemandRail({
     try {
       const response = await fetch(`/api/resourcing/assignments/${assignment.id}/release`, { method: 'POST' })
       if (!response.ok) {
-        const body = await response.json() as { message?: string; remedy?: string; error?: string }
-        setRefusal({ message: body.message ?? body.error ?? t('assignments.actionFailed'), remedy: body.remedy })
+        const body = await response.json().catch(() => null) as { message?: string; remedy?: string; error?: string } | null
+        setRefusal({ message: body?.message ?? body?.error ?? t('assignments.actionFailed'), remedy: body?.remedy })
         return
       }
-      await response.json()
       router.refresh()
     } catch {
       setRefusal({ message: t('assignments.actionFailed') })
