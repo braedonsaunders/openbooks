@@ -8,8 +8,8 @@ export async function generateMetadata() {
 }
 
 /**
- * The field-time setup surface — rules, kiosks, chains. Time managers
- * only, fieldTime on, 404 otherwise.
+ * The field-time setup surface — rules, kiosks, approval routing. Time
+ * managers only, fieldTime on, 404 otherwise.
  */
 export default async function FieldSetupPage({
   searchParams,

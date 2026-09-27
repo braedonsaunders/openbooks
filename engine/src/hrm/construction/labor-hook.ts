@@ -4,7 +4,7 @@ import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HrmConstructionError } from "./errors.ts";
 import { resolveWage } from "./rates.ts";
 import { scopeScore, type AppliesTo } from "./pure.ts";
-import { HRM_PREVAILING_WAGE_FEATURE } from "./shared.ts";
+import { HRM_CONSTRUCTION_FEATURE } from "./shared.ts";
 
 /**
  * Labor-costing hook (HR-13). The projects module cannot import hrm
@@ -24,7 +24,7 @@ export async function prevailingWageForTimeEntry(input: {
   projectId: string;
   workedOn: string;
 }): Promise<{ wage: string; currency: string } | null> {
-  if (!(await lockAndCheckOrgFeature(db, input.orgId, HRM_PREVAILING_WAGE_FEATURE))) return null;
+  if (!(await lockAndCheckOrgFeature(db, input.orgId, HRM_CONSTRUCTION_FEATURE))) return null;
   // Exactly one employment EFFECTIVE on the worked date answers for the
   // entry — employment rows are retained across lifecycle changes, so a
   // rehire's historical employments must not count. Terminal ('terminated')

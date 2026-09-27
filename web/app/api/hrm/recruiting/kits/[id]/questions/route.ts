@@ -11,11 +11,11 @@ export const runtime = "nodejs";
 /**
  * Kit questions: POST appends a suggested question at an explicit position,
  * optionally pinned to one of the kit's attributes (manage gate in the
- * service). 404s while hrm, hrmRecruiting, or hrmStructuredInterviews is off.
+ * service). 404s while HRM or Recruiting is off.
  */
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmStructuredInterviews",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: createQuestionBody,
   handler: async ({

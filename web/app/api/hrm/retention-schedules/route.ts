@@ -8,7 +8,7 @@ import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { saveScheduleBody } from "./bodies";
 export const GET = defineRoute({
   permission: "hrm.documents.read",
-  feature: "hrmDocumentRetention",
+  feature: "hrmDocuments",
   handler: async ({ authz: gate }) => {
     try {
       const schedules = await listSchedules({
@@ -23,7 +23,7 @@ export const GET = defineRoute({
 });
 export const POST = defineRoute({
   permission: "hrm.documents.manage",
-  feature: "hrmDocumentRetention",
+  feature: "hrmDocuments",
   body: saveScheduleBody,
   handler: async ({ request: _req, authz: gate, body }) => {
     try {

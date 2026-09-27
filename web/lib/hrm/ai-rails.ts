@@ -10,7 +10,7 @@ import { explainPayslip, type ExplainPayTrace } from '@openbooks/engine/src/hrm/
 import { listCapabilities, listDecisions, overdueReviews, type CapabilityRow, type DecisionRow } from '@openbooks/engine/src/hrm/ai/governance.ts'
 import { loadAiRailsSettings } from '@openbooks/engine/src/hrm/ai/settings.ts'
 import { actorPartyOf } from '@openbooks/engine/src/hrm/self-service/actor.ts'
-import type { Authz } from '../authz'
+import { can, type Authz } from '../authz'
 import { isFeatureEnabled } from '../features'
 import { groupTabs } from '../../components/module-home/group-tabs'
 
@@ -519,7 +519,7 @@ export interface AiDraftDrawerData {
  * Shared ?draft=<kind>:<subjectId> drawer data for the four evidence-draft
  * hosts (review form, requisition, onboarding process, offer). Returns null
  * unless the param parses to a known draft kind — an unknown kind renders
- * nothing rather than a broken drawer. The hrmDrafting gate hides the
+ * nothing rather than a broken drawer. The button gate (below) hides the
  * BUTTON; the drawer itself stays mounted so a bookmarked link degrades to
  * the service refusal inside the drawer instead of a dead page.
  */
@@ -550,9 +550,15 @@ export async function loadAiDraftDrawer(opts: {
   };
 }
 
-/** The "Draft from evidence" button label, shared by the four draft hosts. Absent while hrmDrafting is off. */
-export async function loadAiDraftButton(orgId: string): Promise<string | null> {
-  if (!(await isFeatureEnabled(orgId, 'hrmDrafting'))) return null;
+/**
+ * The "Draft from evidence" button label, shared by the four draft hosts.
+ * Drafts are assembled from HRM records, so the button rides Human
+ * resources; as an AI surface it also follows the assistant's own gate
+ * and stays absent for actors without `assistant.use`.
+ */
+export async function loadAiDraftButton(authz: Authz): Promise<string | null> {
+  if (!can(authz, 'assistant.use')) return null;
+  if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) return null;
   const t = await getTranslations('hrm');
   return t('aiDraft.button');
 }
@@ -567,9 +573,9 @@ export interface WeekFlagChip {
 /**
  * Open flags overlapping one timesheet week for the approval chips. The
  * timesheet surface addresses PARTIES while flags key EMPLOYMENTS, so the
- * party's employments resolve first. Empty while hrmTimeAnomalies is off
- * (no chips) or while the actor lacks the flag read scope — the grid
- * renders the approve flow unchanged either way.
+ * party's employments resolve first. Timesheet checks ride Time tracking,
+ * which already gates the timesheet surface. Empty while the actor lacks
+ * the flag read scope — the grid renders the approve flow unchanged.
  */
 export async function loadOpenFlagsForWeek(
   authz: Authz,
@@ -577,7 +583,6 @@ export async function loadOpenFlagsForWeek(
   weekStart: string,
   weekEnd: string,
 ): Promise<WeekFlagChip[]> {
-  if (!(await isFeatureEnabled(authz.user.orgId, 'hrmTimeAnomalies'))) return [];
   const t = await getTranslations('payroll');
   const employments = (await db.execute<{ id: string }>(sql`
     select id::text as id from worker_employments

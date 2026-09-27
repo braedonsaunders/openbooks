@@ -11,7 +11,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 /**
  * One headcount plan — costed lines with the total, approve opens
  * requisitions through the recruiting service. Renders only when
- * hrmHeadcountPlans is on and the actor holds hrm.compensation.read.
+ * Compensation is on and the actor holds hrm.compensation.read.
  */
 export default async function CompPlanPage({
   params,

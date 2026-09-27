@@ -44,13 +44,21 @@ function missingDraftPermission(authz: Authz): NextResponse | null {
  * rejected) as a new ledger row — the log is append-only, so outcomes
  * are events, never edits. Nothing here files, submits, or stores the
  * draft text anywhere except the UI field the human fills.
+ *
+ * Drafts are assembled from HRM records, so both verbs ride Human
+ * resources. Producing a draft is an AI surface and also needs the
+ * assistant grant; recording what a person did with a draft already shown
+ * does not, so the ledger never loses an outcome.
  */
 export const POST = defineRoute({
   public: "session",
   handler: async ({ request: req, authz: gate }) => {
   const denied = missingDraftPermission(gate);
   if (denied) return denied;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmDrafting"))) {
+  if (!can(gate, "assistant.use")) {
+    return NextResponse.json({ error: "missing permission: assistant.use" }, { status: 403 });
+  }
+  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
     return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, draftBody);
@@ -75,7 +83,7 @@ export const PATCH = defineRoute({
   handler: async ({ request: req, authz: gate }) => {
   const denied = missingDraftPermission(gate);
   if (denied) return denied;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmDrafting"))) {
+  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
     return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, outcomeBody);

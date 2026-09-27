@@ -12,12 +12,12 @@ export const runtime = "nodejs";
 
 /**
  * Job-board postings: GET lists (optionally per requisition), POST
- * publishes one board (manage gate in the service). 404s while hrm,
- * hrmRecruiting, or hrmJobBoards is off.
+ * publishes one board (manage gate in the service). 404s while HRM
+ * or Recruiting is off.
  */
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
-  feature: "hrmJobBoards",
+  feature: "hrmRecruiting",
   handler: async ({ request: req, authz: gate }) => {
     try {
       const requisitionId =
@@ -36,7 +36,7 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmJobBoards",
+  feature: "hrmRecruiting",
   body: publishPostingBody,
   handler: async ({ authz: gate, body: body }) => {
     try {

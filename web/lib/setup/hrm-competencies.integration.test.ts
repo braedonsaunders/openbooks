@@ -19,7 +19,7 @@ test('generic setup writes refuse competency configuration owned by scoped servi
   try {
     await withBypass(() => db.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
-        coalesce(settings->'features', '{}'::jsonb) || '{"hrm":true,"hrmCompetencies":true}'::jsonb)
+        coalesce(settings->'features', '{}'::jsonb) || '{"hrm":true,"hrmPerformance":true}'::jsonb)
        where id = ${org.orgId}`))
     const actor = { orgId: org.orgId, id: actorId, permissions: ['admin.setup.manage'] }
     for (const entityKey of ['hrm-competency-frameworks', 'hrm-competencies']) {

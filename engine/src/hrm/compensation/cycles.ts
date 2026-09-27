@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { resolveWage, laborCostingSettings, laborFxQuote } from "../../projects/labor-costing.ts";
 import { supersedeLaborCostRate } from "../../projects/labor-cost-rates.ts";
 import { add, cmp, fromUnits, mul, mulDecimal, mulRate, normalizeDecimal, roundDiv, toUnits } from "../../money/money.ts";
@@ -17,7 +18,7 @@ import {
   requireHrmCompensationApprove,
   requireHrmCompensationManage,
 } from "../authorization.ts";
-import { CompensationError } from "./errors.ts";
+import { CompensationError, MERIT_CYCLES_NEED_PAYROLL } from "./errors.ts";
 import {
   compaRatio,
   evaluateFormula,
@@ -273,6 +274,18 @@ async function recordEvent(
   await exec.execute(sql`
     insert into hrm_comp_events (org_id, cycle_id, line_id, kind, actor, reason)
     values (${orgId}, ${cycleId}, ${lineId}, ${kind}, ${actor}, ${reason})`);
+}
+
+/**
+ * Merit cycles ride Compensation and additionally need Payroll: open
+ * snapshots current pay and push writes the new rates payroll pays. Both
+ * recheck the switch inside their write transaction, so no caller — route,
+ * tool, or script — opens or pushes a round while Payroll is off.
+ */
+async function requirePayrollForMeritCycle(orgId: string): Promise<void> {
+  if (!(await lockAndCheckOrgFeature(db, orgId, "payroll"))) {
+    throw new CompensationError("REFUSED", MERIT_CYCLES_NEED_PAYROLL);
+  }
 }
 
 async function loadCycleForUpdate(orgId: string, cycleId: string): Promise<CycleRow> {
@@ -674,6 +687,7 @@ export async function openCycle(query: {
   const cycleId = requireId(query.cycleId, "cycleId");
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
+    await requirePayrollForMeritCycle(orgId);
     const cycle = await loadCycleForUpdate(orgId, cycleId);
     if (cycle.status !== "draft") {
       throw new CompensationError(
@@ -1508,6 +1522,7 @@ export async function pushCycle(query: {
   const cycleId = requireId(query.cycleId, "cycleId");
   return withOrgTransaction(orgId, async () => {
     await requireHrmCompensationManage(db, orgId, actorId);
+    await requirePayrollForMeritCycle(orgId);
     const cycle = await loadCycleForUpdate(orgId, cycleId);
     // Pushing writes wages: the anchor and every line's employer are
     // rechecked under the cycle lock before the first wage write, or an

@@ -6,14 +6,8 @@
 
 import type { ViewTabGroup } from '../../components/module-home/view-tab-match'
 
-/** The feature switch behind each recruiting depth view. The page reads it
- * to fall back to Openings; the Hiring strip reads it to hide the tab. */
-export const RECRUITING_DEPTH_FEATURE = {
-  interviews: 'hrmStructuredInterviews',
-  offers: 'hrmOfferSigning',
-  postings: 'hrmJobBoards',
-  pools: 'hrmTalentPool',
-} as const
+/** The recruiting depth views: part of Recruiting, so each rides its switch. */
+const RECRUITING_DEPTH_VIEWS = ['interviews', 'offers', 'postings', 'pools'] as const
 
 export type ViewTabDef = {
   href: string
@@ -27,14 +21,12 @@ export type ViewTabDef = {
   carry?: string[]
 }
 
-const RECRUITING_DEPTH_TABS: ViewTabDef[] = (
-  Object.entries(RECRUITING_DEPTH_FEATURE) as [keyof typeof RECRUITING_DEPTH_FEATURE, string][]
-).map(([tab, feature]) => ({
+const RECRUITING_DEPTH_TABS: ViewTabDef[] = RECRUITING_DEPTH_VIEWS.map((tab) => ({
   href: `/hrm/recruiting?tab=${tab}`,
   ns: 'hrm',
   key: `recruiting.tabs.${tab}`,
   permission: 'hrm.recruiting.read',
-  feature,
+  feature: 'hrmRecruiting',
   carry: ['status'],
 }))
 
@@ -51,7 +43,7 @@ export const HRM_VIEW_TABS: Record<'people' | 'hiring' | 'timeOff' | 'talent' | 
   // Employees: the native roster plus the people-shaped ledgers.
   people: [
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees', permission: 'parties.read' },
-    { href: '/hrm/org-chart', ns: 'hrm', key: 'home.tabs.orgChart', feature: 'hrmOrgChart' },
+    { href: '/hrm/org-chart', ns: 'hrm', key: 'home.tabs.orgChart', feature: 'hrm' },
     { href: '/hrm/processes', ns: 'hrm', key: 'home.tabs.processes', permission: 'hrm.process.read', prefix: true },
     {
       href: '/hrm/documents',
@@ -102,14 +94,14 @@ export const HRM_VIEW_TABS: Record<'people' | 'hiring' | 'timeOff' | 'talent' | 
       ns: 'hrm',
       key: 'performance.continuous.tabs.calibration',
       permission: 'hrm.performance.manage',
-      feature: 'hrmCalibration',
+      feature: 'hrmPerformance',
     },
     {
       href: '/hrm/performance?tab=talent',
       ns: 'hrm',
       key: 'performance.continuous.tabs.talent',
       permission: 'hrm.performance.manage',
-      feature: 'hrmSuccession',
+      feature: 'hrmPerformance',
     },
     {
       href: '/hrm/performance?tab=retention',
@@ -123,7 +115,7 @@ export const HRM_VIEW_TABS: Record<'people' | 'hiring' | 'timeOff' | 'talent' | 
       ns: 'hrm',
       key: 'performance.continuous.tabs.settings',
       permission: 'hrm.performance.manage',
-      feature: 'hrmFeedback',
+      feature: 'hrmPerformance',
     },
     { href: '/hrm/surveys', ns: 'hrm', key: 'home.tabs.surveys', permission: 'hrm.surveys.manage', feature: 'hrmSurveys' },
   ],
@@ -150,7 +142,7 @@ export const HRM_VIEW_TABS: Record<'people' | 'hiring' | 'timeOff' | 'talent' | 
       ns: 'hrm',
       key: 'equity.title',
       permission: 'hrm.compensation.read',
-      feature: 'hrmPayTransparency',
+      feature: 'hrmCompensation',
     },
   ],
 }

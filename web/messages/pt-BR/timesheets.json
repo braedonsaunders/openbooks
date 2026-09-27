@@ -132,7 +132,7 @@
     "flagAutoClosed": "autoencerrado",
     "flagPhoto": "foto",
     "crewTitle": "Horas da equipe",
-    "crewDescription": "Lotes do encarregado por projeto e dia — assina, aprova por etapas, lança uma vez.",
+    "crewDescription": "Lotes do encarregado por projeto e dia — assina, aprova, lança uma vez.",
     "newBatch": "Novo lote",
     "statusLabel": "Status",
     "allBatches": "Todos os lotes",
@@ -146,8 +146,7 @@
     "setupLink": "Ajustes de campo",
     "statusDraft": "Rascunho",
     "statusSubmitted": "Enviado",
-    "statusStage1": "Etapa 1 aprovada",
-    "statusStage2": "Etapa 2 aprovada",
+    "statusApproved": "Aprovado",
     "statusRejected": "Rejeitado",
     "statusPosted": "Lançado",
     "worker": "Trabalhador",
@@ -164,7 +163,7 @@
     "saveLines": "Salvar linhas",
     "signAndSubmit": "Assinar e enviar",
     "withdraw": "Devolver a rascunho",
-    "approveStage": "Aprovar etapa",
+    "approve": "Aprovar",
     "reject": "Rejeitar",
     "rejectReason": "Motivo da rejeição",
     "post": "Lançar",
@@ -196,15 +195,16 @@
     "kiosksTitle": "Quiosques",
     "noKiosks": "Nenhum quiosque registrado.",
     "retired": "Aposentado",
-    "tokenIssued": "Link do aparelho para {name} — copie agora, não será exibido de novo:", "acknowledgeToken": "Copiei este link do aparelho",
+    "tokenIssued": "Link do aparelho para {name} — copie agora, não será exibido de novo:",
+    "acknowledgeToken": "Copiei este link do aparelho",
     "kioskNamePlaceholder": "Nome do quiosque (obra ou portaria)…",
     "registerKiosk": "Registrar quiosque",
     "pinWorkerPlaceholder": "ID de parte do trabalhador…",
     "pinPlaceholder": "PIN de 4–10 dígitos",
     "setPin": "Definir PIN",
-    "stagesTitle": "Cadeias de aprovação",
-    "singleApproval": "Vale a aprovação simples.",
-    "stagesHint": "Cadeias se declaram por assunto na API — etapas 1, 2, 3 sem saltos.",
+    "approvalRoutingTitle": "Fluxo de aprovação",
+    "approvalRoutingHint": "As aprovações de folhas de ponto e de registros de horas da equipe passam pelo Flows. Crie um fluxo na semana de folha de ponto ou no registro de horas da equipe para adicionar etapas de aprovação do supervisor, do gerente de projeto ou da folha de pagamento; sem um fluxo, um aprovador de horas aprova diretamente.",
+    "approvalRoutingLink": "Abrir Flows",
     "kioskNeedPin": "Escolha o trabalhador e digite o PIN.",
     "kioskIdentified": "Identificado — bata ponto abaixo.",
     "kioskClockedIn": "Entrada registrada.",
@@ -233,18 +233,6 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "Usar minha posição",
     "locationDenied": "Posição indisponível — digite as coordenadas à mão.",
-    "saveGeofence": "Salvar cerca",
-    "subjects": {
-      "timesheetWeek": "Semana de folha de ponto",
-      "crewTimeBatch": "Registro de horas da equipe"
-    },
-    "approvers": {
-      "supervisor": "Pessoa supervisora",
-      "projectManager": "Gerente de projeto",
-      "payroll": "Folha de pagamento",
-      "role": "Função",
-      "namedRole": "Função: {role}"
-    },
-    "unknownApprovalTarget": "Destino de aprovação desconhecido"
+    "saveGeofence": "Salvar cerca"
   }
 }

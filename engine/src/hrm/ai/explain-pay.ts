@@ -76,10 +76,10 @@ type StubRow = {
 }
 
 async function assertExplainFeature(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, "hrmExplainPay"))) {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, "payroll"))) {
     throw new AiRailsError(
       "ai_feature_off",
-      "pay explanations are unavailable while hrmExplainPay is off — enable it under Company Settings → Features; existing payslips are unchanged",
+      "pay explanations are unavailable while Payroll is off — enable Payroll under Company Settings → Features; existing payslips are unchanged",
     );
   }
 }

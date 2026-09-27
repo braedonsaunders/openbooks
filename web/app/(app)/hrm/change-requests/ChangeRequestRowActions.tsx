@@ -37,9 +37,8 @@ export function ChangeRequestRowActions({
   /** Loader-resolved manage grant — the queue table renders this island
    * only inside the gated actions column. */
   canManage: boolean
-  /** HR-16 verb actions (Rescind/Correct) display gate: approve grant
-   * plus the hrmEventVerbs feature. Defaults off so older callers never
-   * gain verb buttons by omission. */
+  /** Verb actions (Rescind/Correct) display gate: the approve grant.
+   * Defaults off so older callers never gain verb buttons by omission. */
   canVerb?: boolean
 }) {
   const router = useRouter()

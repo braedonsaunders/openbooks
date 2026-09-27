@@ -14,7 +14,7 @@ import { requireFeatureEnabled } from '../feature-gates'
  * The tree and the directory resolve through the canonical engine
  * reads (loadOrgChart, loadDirectory) as of a civil date — names,
  * titles, departments, and managers only, never pay or private
- * fields. Renders when hrm and hrmOrgChart are on and the actor holds
+ * fields. Renders when hrm is on and the actor holds
  * hrm.employment.read OR hrm.self.read — a switched-off feature redirects
  * to its remedy instead.
  * The Directory sub-tab renders the same loader rows through the
@@ -35,7 +35,6 @@ export async function orgChartAuthz(): Promise<OrgChartHomeAuthz | null> {
   if (!gate) return null
   if (!can(gate, 'hrm.employment.read') && !can(gate, 'hrm.self.read')) return null
   await requireFeatureEnabled(gate.user.orgId, 'hrm')
-  await requireFeatureEnabled(gate.user.orgId, 'hrmOrgChart')
   return { orgId: gate.user.orgId, userId: gate.user.id, session: gate }
 }
 

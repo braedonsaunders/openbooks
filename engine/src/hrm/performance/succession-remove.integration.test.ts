@@ -42,7 +42,7 @@ type Harness = {
 
 async function setupSuccessionRemoveHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableHrm(org.orgId, "hrmPerformance", "hrmSuccession");
+  await enableHrm(org.orgId, "hrmPerformance");
   const hrId = await createScratchUser(org.orgId, "Succession HR", "succession_hr");
   await grant(org.orgId, hrId, ["hrm.performance.manage", "hrm.position.manage"]);
   const partyId = (await db.execute<{ id: string }>(sql`

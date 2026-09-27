@@ -16,7 +16,7 @@ import { rescindBody } from "../../../../automations/bodies";
  */
 export const POST = defineRoute({
   permission: "hrm.employment.approve",
-  feature: "hrmEventVerbs",
+  feature: "hrm",
   body: rescindBody,
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params, body }) => {

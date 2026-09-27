@@ -19,7 +19,7 @@ export const runtime = "nodejs";
  */
 export const PUT = defineRoute({
   permission: "hrm.compensation.manage",
-  feature: "hrmPayTransparency",
+  feature: "hrmCompensation",
   params: z.object({ id: z.string().min(1) }),
   body: z.object({
     action: z.enum(["fulfil", "refuse"]),

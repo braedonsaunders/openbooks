@@ -13,12 +13,12 @@ export const runtime = "nodejs";
 
 /**
  * One job-board posting: POST pause/close (manage gate in the service).
- * Closed postings stay closed. 404s while hrm, hrmRecruiting, or
- * hrmJobBoards is off.
+ * Closed postings stay closed. 404s while HRM or Recruiting is
+ * off.
  */
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmJobBoards",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: transitionPostingBody,
   handler: async ({

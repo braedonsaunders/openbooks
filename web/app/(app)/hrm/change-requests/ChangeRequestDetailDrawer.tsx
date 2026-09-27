@@ -132,8 +132,7 @@ export function ChangeRequestDetailDrawer({
   /** Loader-resolved manage grant: the lifecycle actions render
    * only with it; detail stays readable without it. */
   canManage: boolean
-  /** HR-16 verb actions (Rescind/Correct) display gate: approve grant
-   * plus the hrmEventVerbs feature. */
+  /** Verb actions (Rescind/Correct) display gate: the approve grant. */
   canVerb?: boolean
   onClose: () => void
 }) {

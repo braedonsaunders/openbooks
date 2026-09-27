@@ -202,7 +202,7 @@ function features(flags: Record<string, boolean>) {
 }
 
 test("?plan=new resolves an open plan dialog with the existing create form", async () => {
-  features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
+  features({ payroll: true });
   const data = await loadCompensationHome(MANAGER, { plan: "new" });
   assert.ok(data, "the home loader still resolves");
   assert.equal(data.planOpen, true, "?plan=new opens the plan dialog");
@@ -220,7 +220,7 @@ test("?plan=new resolves an open plan dialog with the existing create form", asy
 });
 
 test("?cycle=new resolves an open cycle dialog over the four engine kinds", async () => {
-  features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
+  features({ payroll: true });
   gap.__compDlgBaseCurrency = "USD";
   const data = await loadCompensationHome(MANAGER, { cycle: "new" });
   assert.ok(data, "the home loader still resolves");
@@ -241,7 +241,7 @@ test("?cycle=new resolves an open cycle dialog over the four engine kinds", asyn
 });
 
 test("a requested dialog without the manage grant names the grant and its remedy", async () => {
-  features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
+  features({ payroll: true });
   const plan = await loadCompensationHome(READER, { plan: "new" });
   assert.equal(plan?.planOpen, true, "the dialog still opens — a refusal, never nothing");
   assert.ok(plan?.planDialog, "the plan dialog resolves");
@@ -259,14 +259,16 @@ test("a requested dialog without the manage grant names the grant and its remedy
   assert.match(cycle?.cycleDialog?.refusal?.message ?? "", /hrm\.compensation\.manage/, "the grant is named there too");
 });
 
-test("a switched-off sub-feature names the feature with the real switch for setup managers", async () => {
-  features({ hrmMeritCycles: false, hrmHeadcountPlans: false });
+test("Payroll off names Payroll with the real switch for setup managers", async () => {
+  // Merit cycles read current pay and push new rates, so the cycle dialog
+  // needs Payroll beside Compensation.
+  features({ payroll: false });
   const cycle = await loadCompensationHome(MANAGER, { cycle: "new" });
   assert.equal(cycle?.cycleOpen, true, "the dialog still opens");
-  assert.equal(cycle?.cycleDialog?.refusal?.title, "Merit cycles is turned off", "the switchboard display name, not the key");
+  assert.equal(cycle?.cycleDialog?.refusal?.title, "Payroll is turned off", "the switchboard display name, not the key");
   assert.match(
     cycle?.cycleDialog?.refusal?.message ?? "",
-    /needs the Merit cycles feature/,
+    /needs the Payroll feature/,
     "the message names the feature with the shared feature-off copy",
   );
   assert.equal(cycle?.cycleDialog?.remedyHref, "/admin/setup/features", "setup managers get the real switch");
@@ -274,14 +276,10 @@ test("a switched-off sub-feature names the feature with the real switch for setu
     (cycle?.cycleDialog?.remedyLabel ?? "").length > 0,
     "the switch link carries prose, never a key path",
   );
-
-  const plan = await loadCompensationHome(MANAGER, { plan: "new" });
-  assert.equal(plan?.planDialog?.refusal?.title, "Headcount plans is turned off", "the plan switch is named too");
-  assert.equal(plan?.planDialog?.remedyHref, "/admin/setup/features", "and linked too");
 });
 
-test("a switched-off sub-feature without setup rights names the administrator instead", async () => {
-  features({ hrmMeritCycles: false, hrmHeadcountPlans: true });
+test("Payroll off without setup rights names the administrator instead", async () => {
+  features({ payroll: false });
   const data = await loadCompensationHome(MANAGER_NO_SETUP, { cycle: "new" });
   assert.ok(data?.cycleDialog?.refusal, "the refusal still rides along");
   assert.equal(data.cycleDialog.remedyHref, null, "no switch link for viewers who cannot toggle it");
@@ -293,7 +291,7 @@ test("a switched-off sub-feature without setup rights names the administrator in
 });
 
 test("permission refusal wins over feature-off: the switch cannot help without the grant", async () => {
-  features({ hrmMeritCycles: false, hrmHeadcountPlans: false });
+  features({ payroll: false });
   const data = await loadCompensationHome(READER, { cycle: "new" });
   assert.match(
     data?.cycleDialog?.refusal?.message ?? "",
@@ -304,7 +302,7 @@ test("permission refusal wins over feature-off: the switch cannot help without t
 });
 
 test("no dialog params means no dialog state", async () => {
-  features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
+  features({ payroll: true });
   const data = await loadCompensationHome(MANAGER, {});
   assert.equal(data?.planOpen, false, "plan stays shut");
   assert.equal(data?.cycleOpen, false, "cycle stays shut");
@@ -313,7 +311,7 @@ test("no dialog params means no dialog state", async () => {
 });
 
 test("equity ?generate=1 resolves the snapshot dialog, or its named refusal", async () => {
-  features({ hrmPayTransparency: true });
+  features({});
   const open = await loadEquity(MANAGER, { generate: "1" });
   assert.equal(open?.generateOpen, true, "?generate=1 opens the dialog");
   assert.ok(open?.generateDialog, "the dialog resolves instead of nothing");
@@ -347,7 +345,7 @@ function widgetBlocks(spec: unknown, name: string): SpecBlock[] {
 }
 
 test("both specs emit the dialog widgets gated on the loader-derived open state", async () => {
-  features({ hrmMeritCycles: true, hrmHeadcountPlans: true, hrmPayTransparency: true });
+  features({ payroll: true });
   const { compensationSpec } = await import("./view.ts");
   const { equitySpec } = await import("./equity/view.ts");
   // The open state lives in the loader data (proven above); the spec carries
@@ -411,7 +409,7 @@ function assertProse(value: unknown, label: string) {
 }
 
 test("home tables head their columns from the resolved catalog, never literals", async () => {
-  features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
+  features({ payroll: true });
   const data = await loadCompensationHome(MANAGER, {});
   assert.ok(data, "the home loader still resolves");
   assert.deepEqual(
@@ -492,7 +490,7 @@ for (const [name, load, loadedMessage, header, loadSpec, expected, specMessage] 
   ]
 >) {
   test(name, async () => {
-    features({ hrmMeritCycles: true, hrmHeadcountPlans: true });
+    features({ payroll: true });
     (gap as Record<string, unknown>).__compDlgDetail = true;
     try {
       const data = await load();

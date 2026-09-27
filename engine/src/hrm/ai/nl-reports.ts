@@ -1,11 +1,10 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { AiRailsError, nlDefinitionRefused } from "./errors.ts";
 import { logDecision } from "./governance.ts";
 
 /**
- * HRM AI rails (HR-21) natural-language reports. The model produces a
+ * Natural-language reports. The model produces a
  * REPORT DEFINITION in the report engine's own schema (ReportCustomQuery:
  * entity, mode, columns, breakouts, measures, filters, sorts, limit) —
  * never SQL. This service VALIDATES the definition strictly against the
@@ -14,6 +13,10 @@ import { logDecision } from "./governance.ts";
  * refuses invalid definitions BY NAME — never repaired silently, because
  * the shared sanitizer (validateCustomQuery) drops what it does not
  * understand, and silent drops answer a different question than asked.
+ *
+ * No module feature gates this service: it only drafts definitions over
+ * report entities the caller may already read. The surfaces that reach it
+ * follow the assistant's own gating (the `assistant.use` permission).
  */
 
 const AGG_FNS = ["count", "count_distinct", "sum", "avg", "min", "max", "latest"] as const;
@@ -226,15 +229,6 @@ export function validateNlDefinition(
   return { entity: entityKey, mode, columns: outColumns, breakouts, measures, filters, sorts, limit };
 }
 
-async function assertNlFeature(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, "hrmNlReports"))) {
-    throw new AiRailsError(
-      "ai_feature_off",
-      "natural-language reports are unavailable while hrmNlReports is off — enable it under Company Settings → Features",
-    );
-  }
-}
-
 export interface NlDraftInput {
   readonly orgId: string;
   readonly actorId: string;
@@ -259,7 +253,6 @@ export async function saveNlDraft(
   if (!question || question.trim().length === 0) {
     throw new AiRailsError("ai_invalid_input", "ask a question first — an empty question has no report");
   }
-  await assertNlFeature(exec, orgId);
   const definition = validateNlDefinition(input.candidate, input.catalog, input.callerPermissions);
   const rows = (await exec.execute<{ id: string }>(sql`
     insert into nl_report_drafts (org_id, user_id, question, definition, status)
@@ -306,7 +299,6 @@ export async function listNlDrafts(
   exec: SqlExecutor,
   input: { readonly orgId: string; readonly actorId: string },
 ): Promise<NlDraftRow[]> {
-  await assertNlFeature(exec, input.orgId);
   const rows = (await exec.execute<{ id: string; question: string; definition: NlValidatedDefinition; status: string; createdAt: string }>(sql`
     select id::text as id, question, definition, status,
            created_at::text as "createdAt"
@@ -332,7 +324,6 @@ export async function transitionNlDraft(
   exec: SqlExecutor,
   input: { readonly orgId: string; readonly actorId: string; readonly draftId: string; readonly status: "saved" | "discarded" },
 ): Promise<NlDraftRow> {
-  await assertNlFeature(exec, input.orgId);
   const rows = (await exec.execute<{ id: string; question: string; definition: NlValidatedDefinition; status: string; createdAt: string }>(sql`
     update nl_report_drafts
        set status = ${input.status}

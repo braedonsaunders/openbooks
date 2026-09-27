@@ -328,7 +328,7 @@
       "unassignHint": "明示的なnullリンクを記録します：枠は内容を保持しますが、編制を保持しません。",
       "actionLabel": "アクション",
       "actionPlaceholder": "アクションを選択",
-      "actionRequired": "この変更のHRアクションを選択してください。",
+      "actionRequired": "この変更のHRアクションと理由を選択してください。",
       "reasonCodeLabel": "理由",
       "reasonCodePlaceholder": "理由を選択",
       "rescindAction": "破棄",
@@ -1544,8 +1544,6 @@
     "empty": "まだ何もありません。",
     "emptyAction": "下の設定で構成してください。",
     "truncatedNote": "{total}件中最初の{limit}件を表示しています。",
-    "sectionOffTitle": "このセクションは無効です",
-    "sectionOffMessage": "会社設定 → 機能で該当する機能を有効にしてください。",
     "active": "有効",
     "retired": "廃止",
     "sections": {

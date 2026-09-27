@@ -1,6 +1,6 @@
 import type { FiscalContext } from "@openbooks/reports";
 import { FEATURES, featureEnabled, type FeatureState } from "@openbooks/engine/src/organization/feature-registry.ts";
-import { AI_CAPABILITIES } from "@openbooks/engine/src/hrm/ai/registry.ts";
+import { AI_CAPABILITIES, capabilityFeatureOn } from "@openbooks/engine/src/hrm/ai/registry.ts";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",
@@ -25,16 +25,16 @@ export function fiscalCalendarLine(fiscal: FiscalContext): string {
  *  module cannot have, and never claims a module is missing when it is only
  *  switched off. Shared by every model surface. */
 /**
- * HR-21: one prompt line per ENABLED AI capability, stating its autonomy.
- * The registry owns the lines; this function only selects the ones whose
- * feature switch is on. Disabled capabilities contribute nothing — the
- * tools are absent too, so a line would teach the model a capability it
- * cannot call.
+ * One prompt line per available AI capability, stating its autonomy. The
+ * registry owns the lines; this function only selects the capabilities
+ * whose owning module is on (or that have no module gate). Unavailable
+ * capabilities contribute nothing — the tools are absent too, so a line
+ * would teach the model a capability it cannot call.
  */
 export function aiRailsPromptLines(features: FeatureState): string[] {
   const lines: string[] = [];
   for (const def of AI_CAPABILITIES.values()) {
-    if (featureEnabled(features, def.featureKey)) lines.push(def.promptLine);
+    if (capabilityFeatureOn(features, def)) lines.push(def.promptLine);
   }
   return lines;
 }

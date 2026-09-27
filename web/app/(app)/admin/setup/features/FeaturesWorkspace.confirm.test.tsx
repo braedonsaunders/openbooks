@@ -67,7 +67,7 @@ async function mount() {
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <ConfirmRoot />
         <FeaturesWorkspace
-          features={['projects', 'timeTracking', 'fieldTime', 'fieldTimeGeofence'].map(
+          features={['projects', 'timeTracking', 'fieldTime'].map(
             (key, index, keys) => ({ key, category: 'operations', enabled: true, ...(index ? { parentKey: keys[index - 1] } : {}) }),
           )}
           disableStatus={{ projects: { blocked: false, impacts: [{ labelKey: 'reconciliations', count: 2 }] } }}
@@ -90,8 +90,8 @@ test('disabling a feature with impacts confirms through the house dialog, not wi
   })
   const sw = document.body.querySelector('[role="switch"]') as HTMLElement | null
   assert.ok(sw, 'the feature row offers a switch')
-  const nested = document.querySelector('[aria-label="Clock geofences"]')?.closest('.flex.items-start') as HTMLElement | null
-  assert.equal(nested?.style.paddingLeft, '64px')
+  const nested = document.querySelector('[aria-label="Field time capture"]')?.closest('.flex.items-start') as HTMLElement | null
+  assert.equal(nested?.style.paddingLeft, '40px')
   await act(async () => {
     sw.click()
     await tick()

@@ -191,7 +191,7 @@ export interface InterviewerPoolDTO {
 /**
  * Interviewer pools for the propose picker and Setup ref labels. Pools
  * are org-wide configuration (writes ride Setup CRUD); this read proves
- * the manage grant and the scheduling switch, and refuses unreadable
+ * the manage grant (which carries the Recruiting gate), and refuses unreadable
  * stored windows by pool name — Setup can never store them (write-path
  * validation), so a refusal here names data repair, never user input.
  */
@@ -204,7 +204,6 @@ export async function listInterviewerPools(query: {
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmInterviewScheduling");
     const rows = (await db.execute<{
       id: string;
       name: string;
@@ -277,7 +276,6 @@ export async function proposeSlots(query: {
   return withOrgTransaction(orgId, async () => {
     const chain = await interviewChain(db, orgId, interviewId);
     await requireHrmRecruitingManage(db, orgId, actorId, chain.requisitionId);
-    await requireDepthFeature(db, orgId, "hrmInterviewScheduling");
     const interview = (await db.execute<{ status: string }>(sql`
       select status from hrm_interviews where org_id = ${orgId} and id = ${interviewId} for update
     `)).rows[0];
@@ -387,7 +385,7 @@ export async function bookSlot(query: BookSlotQuery): Promise<SlotDTO> {
   const orgId = scope[0].orgId;
   const enqueue = query.enqueueEmail ?? enqueueRecruitingEmailJob;
   const staged = await withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmInterviewScheduling");
+    await requireDepthFeature(db, orgId);
     // The interview's own fate gates every booking: a cancel that lands
     // between the link lookup above and this transaction must still read
     // cancelled, never book a dead sitting.
@@ -544,7 +542,7 @@ export async function readBookingLink(bookingToken: string): Promise<{
   // request-org RLS scope, so the explicit org predicate alone is not
   // enough under FORCE RLS).
   return withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmInterviewScheduling");
+    await requireDepthFeature(db, orgId);
     const chain = await interviewChain(db, orgId, claims.rowId);
     return {
       interviewId: claims.rowId,
@@ -581,7 +579,7 @@ export async function listUpcomingInterviews(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmStructuredInterviews");
+    await requireDepthFeature(db, orgId);
     const { requireAggregateRecruitingRead } = await import("../authorization.ts");
     const allowed = await requireAggregateRecruitingRead(db, orgId, actorId);
     const rows = (await db.execute<{
@@ -642,7 +640,6 @@ export async function listInterviewSlots(query: {
   return withOrgTransaction(orgId, async () => {
     const chain = await interviewChain(db, orgId, interviewId);
     await requireHrmRecruitingManage(db, orgId, actorId, chain.requisitionId);
-    await requireDepthFeature(db, orgId, "hrmInterviewScheduling");
     const rows = (await db.execute<SlotRow>(sql`
       select id, interview_id as "interviewId",
              starts_at as "startsAt", ends_at as "endsAt", timezone, kind,

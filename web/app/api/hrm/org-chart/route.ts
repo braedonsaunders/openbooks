@@ -15,7 +15,7 @@ import { civilDate } from "../documents/bodies";
  * GET /api/hrm/org-chart?asOf=YYYY-MM-DD[&root=...] — the tree, or
  * ?mode=directory[&search=...] — the people list. Readable with
  * hrm.employment.read OR hrm.self.read (fenced in the service); the
- * hrmOrgChart switch gates the surface.
+ * Human resources switch gates the surface.
  */
 export const GET = defineRoute({
   public: "session",
@@ -25,9 +25,6 @@ export const GET = defineRoute({
       hr instanceof NextResponse ? await guardPermission("hrm.self.read") : hr;
     if (actor instanceof NextResponse) return actor;
     if (!(await isFeatureEnabled(actor.user.orgId, "hrm"))) {
-      return notFound("record");
-    }
-    if (!(await isFeatureEnabled(actor.user.orgId, "hrmOrgChart"))) {
       return notFound("record");
     }
     try {

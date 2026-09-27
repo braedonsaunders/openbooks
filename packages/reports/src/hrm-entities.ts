@@ -72,7 +72,6 @@ const HRM_PROCESS_STATUSES = ['open', 'completed', 'cancelled'] as const
 // HR-16 begin: automation + reason-code report entities (0226/0227).
 const AUTOMATIONS_READ_PERMISSION = 'automations.read'
 const AUTOMATIONS_FEATURE_KEY = 'automations'
-const HRM_ACTION_REASONS_FEATURE_KEY = 'hrmActionReasons'
 
 const AUTOMATION_STATUSES = ['draft', 'enabled', 'disabled', 'error'] as const
 const AUTOMATION_TRIGGER_KINDS = ['schedule', 'date_relative', 'field_change', 'event', 'document', 'manual'] as const
@@ -90,7 +89,6 @@ const HRM_PLAN_LINE_STATUSES = ['proposed', 'approved', 'rejected', 'opened', 'f
 // HR-14 begin: certification register and alert queue report entities (0225).
 const HRM_CERTIFICATIONS_READ_PERMISSION = 'hrm.certifications.read'
 const HRM_CERTIFICATIONS_FEATURE_KEY = 'hrmCertifications'
-const HRM_CERTIFICATION_ALERTS_FEATURE_KEY = 'hrmCertificationAlerts'
 
 const HRM_QUALIFICATION_STATUSES = ['valid', 'revoked', 'pending_verification'] as const
 const HRM_ALERT_CHANNELS = ['inbox', 'email'] as const
@@ -99,10 +97,9 @@ const HRM_ALERT_CHANNELS = ['inbox', 'email'] as const
 // chart report entities (0230).
 const HRM_DOCUMENTS_READ_PERMISSION = 'hrm.documents.read'
 export const HRM_DOCUMENTS_FEATURE_KEY = 'hrmDocuments'
-const HRM_DOCUMENT_RETENTION_FEATURE_KEY = 'hrmDocumentRetention'
 const HRM_SURVEYS_MANAGE_PERMISSION = 'hrm.surveys.manage'
 export const HRM_SURVEYS_FEATURE_KEY = 'hrmSurveys'
-const HRM_ORG_CHART_FEATURE_KEY = 'hrmOrgChart'
+const HRM_ORG_CHART_FEATURE_KEY = 'hrm'
 
 const HRM_DOCUMENT_STATUSES = [
   'draft', 'sent', 'viewed', 'partially_signed', 'signed', 'acknowledged', 'declined', 'voided', 'expired',
@@ -889,8 +886,8 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: 'created_at', direction: 'desc' },
   },
-  // HR-16 begin: the action/reason-code vocabulary (0227) — Setup-owned,
-  // read through the employment grant behind the hrmActionReasons switch.
+  // The action/reason-code vocabulary (0227) — Setup-owned, read through
+  // the employment grant behind the Human resources switch.
   {
     key: 'hrm_action_reasons',
     label: 'Action reasons',
@@ -906,7 +903,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     subsidiaryScope: null,
     orgColumn: 'r.org_id',
     requiredPermission: HRM_EMPLOYMENT_READ_PERMISSION,
-    featureKey: HRM_ACTION_REASONS_FEATURE_KEY,
+    featureKey: HRM_FEATURE_KEY,
     defaultPeriodField: 'created_at',
     columns: [
       { key: 'action', label: 'Action', kind: 'text', expr: 'r.action' },
@@ -1107,7 +1104,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     orgColumn: 'a.org_id',
     subsidiaryScope: { column: 'e.employer_subsidiary_id' },
     requiredPermission: HRM_CERTIFICATIONS_READ_PERMISSION,
-    featureKey: HRM_CERTIFICATION_ALERTS_FEATURE_KEY,
+    featureKey: HRM_CERTIFICATIONS_FEATURE_KEY,
     // The due day is the fact: the period picker narrows on it, so the
     // queue filtered to a window lists what comes due inside it.
     defaultPeriodField: 'due_on',
@@ -1214,7 +1211,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     subsidiaryScope: { column: 'e.employer_subsidiary_id' },
     orgColumn: 'a.org_id',
     requiredPermission: HRM_DOCUMENTS_READ_PERMISSION,
-    featureKey: HRM_DOCUMENT_RETENTION_FEATURE_KEY,
+    featureKey: HRM_DOCUMENTS_FEATURE_KEY,
     // The due day is the fact: the period picker narrows on it, so the
     // ledger filtered to a window lists what came due inside it.
     defaultPeriodField: 'due_on',
@@ -1328,11 +1325,11 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'employee', direction: 'asc' },
   },
   // HR-19 end
-  // HR-17 begin: continuous-performance entities (0228). 1:1s, feedback,
-  // calibration entries and talent reviews read through the HR grant
+  // Continuous-performance entities (0228). 1:1s, feedback, calibration
+  // entries and talent reviews read through the HR grant
   // (hrm.performance.read) with the report engine's run-path gate — the
-  // same reader-grant pattern as hrm_reviews — each behind its own
-  // sub-feature switch. Feedback applies the service's visibility scope:
+  // same reader-grant pattern as hrm_reviews — behind the Performance
+  // switch. Feedback applies the service's visibility scope:
   // only HR runners reach this entity, and retracted originals plus
   // retraction rows never read (the read hides both, exactly like the
   // service). Talent and succession rows are HR-only by the same gate.
@@ -1351,7 +1348,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     orgColumn: 'o.org_id',
     subsidiaryScope: { column: 'r.employer_subsidiary_id' },
     requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
-    featureKey: 'hrmOneOnOnes',
+    featureKey: 'hrmPerformance',
     defaultPeriodField: 'scheduled_at',
     columns: [
       { key: 'scheduled_at', label: 'Scheduled', kind: 'date', expr: 'o.scheduled_at' },
@@ -1384,7 +1381,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     orgColumn: 'f.org_id',
     subsidiaryScope: { column: 'e.employer_subsidiary_id' },
     requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
-    featureKey: 'hrmFeedback',
+    featureKey: 'hrmPerformance',
     defaultPeriodField: 'recorded_at',
     columns: [
       { key: 'recorded_at', label: 'Recorded', kind: 'date', expr: 'f.recorded_at' },
@@ -1411,7 +1408,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     orgColumn: 'e.org_id',
     subsidiaryScope: { column: 'emp.employer_subsidiary_id' },
     requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
-    featureKey: 'hrmCalibration',
+    featureKey: 'hrmPerformance',
     defaultPeriodField: 'decided_at',
     columns: [
       { key: 'session', label: 'Session', kind: 'text', expr: 's.name' },
@@ -1438,7 +1435,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     orgColumn: 't.org_id',
     subsidiaryScope: { column: 'e.employer_subsidiary_id' },
     requiredPermission: HRM_PERFORMANCE_READ_PERMISSION,
-    featureKey: 'hrmSuccession',
+    featureKey: 'hrmPerformance',
     defaultPeriodField: 'reviewed_at',
     columns: [
       { key: 'reviewed_at', label: 'Reviewed', kind: 'date', expr: 't.reviewed_at' },
@@ -1452,7 +1449,6 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: 'reviewed_at', direction: 'desc' },
   },
-  // HR-17 end
   // HR-18 begin: recruiting-depth report entities (0229). Scorecards read
   // interview-level aggregates with no author columns at all — the report
   // executor carries no reader identity, so "aggregate only for
@@ -1493,7 +1489,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // The opening's employer is the legal-entity boundary, as above.
     subsidiaryScope: { column: 'r.employer_subsidiary_id' },
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
-    featureKey: 'hrmStructuredInterviews',
+    featureKey: 'hrmRecruiting',
     defaultPeriodField: null,
     columns: [
       { key: 'requisition', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
@@ -1525,7 +1521,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // The opening's employer is the legal-entity boundary, as above.
     subsidiaryScope: { column: 'r.employer_subsidiary_id' },
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
-    featureKey: 'hrmInterviewScheduling',
+    featureKey: 'hrmRecruiting',
     defaultPeriodField: 'starts_at',
     columns: [
       { key: 'requisition', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
@@ -1554,7 +1550,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // The opening's employer is the legal-entity boundary, as above.
     subsidiaryScope: { column: 'r.employer_subsidiary_id' },
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
-    featureKey: 'hrmOfferSigning',
+    featureKey: 'hrmRecruiting',
     defaultPeriodField: null,
     columns: [
       { key: 'candidate', label: 'Candidate', kind: 'text', expr: 'c.display_name' },
@@ -1593,7 +1589,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // The opening's employer is the legal-entity boundary, as above.
     subsidiaryScope: { column: 'r.employer_subsidiary_id' },
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
-    featureKey: 'hrmJobBoards',
+    featureKey: 'hrmRecruiting',
     defaultPeriodField: null,
     columns: [
       { key: 'requisition', label: 'Requisition', kind: 'text', expr: 'r.requisition_number' },
@@ -1620,7 +1616,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // admin-held grant), like the other configuration-faced entities.
     subsidiaryScope: null,
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
-    featureKey: 'hrmCandidateRetention',
+    featureKey: 'hrmRecruiting',
     defaultPeriodField: 'ran_at',
     columns: [
       { key: 'rule', label: 'Rule', kind: 'text', expr: 'u.name' },
@@ -1647,7 +1643,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     // candidate-faced aggregates above.
     subsidiaryScope: null,
     requiredPermission: HRM_RECRUITING_READ_PERMISSION,
-    featureKey: 'hrmTalentPool',
+    featureKey: 'hrmRecruiting',
     defaultPeriodField: null,
     columns: [
       { key: 'pool', label: 'Pool', kind: 'text', expr: 'p.name' },
@@ -1676,7 +1672,7 @@ export const HRM_REPORT_ENTITIES: ReportEntity[] = [
     orgColumn: 'f.org_id',
     subsidiaryScope: { column: 'e.employer_subsidiary_id' },
     requiredPermission: 'payroll.manage',
-    featureKey: 'hrmPayrollAnomalies',
+    featureKey: 'payroll',
     // The period the flag was computed for is the fact: the period picker
     // narrows on it, so the queue filtered to a window lists what blocks
     // finalizing inside it.

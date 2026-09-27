@@ -22,8 +22,8 @@ import { loadMeDocumentsHome, meDocumentsAuthz } from '../../../../lib/hrm/me-do
 /**
  * Me documents: the person's own documents with inline sign and
  * acknowledge plus their subject-access exports with an
- * export-my-data request (while hrmDataSubjectExport is on). Renders
- * when hrm and hrmDocuments are on — the loader 404s otherwise.
+ * export-my-data request. Renders when hrm and hrmDocuments are on —
+ * the loader 404s otherwise.
  */
 
 const f = field

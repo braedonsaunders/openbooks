@@ -30,7 +30,6 @@ import {
   nineBoxForCycle,
 } from '@openbooks/engine/src/hrm/performance/talent.ts'
 import type { Authz } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
 import { translateTalentCode } from './talent-labels.ts'
 
 /**
@@ -194,17 +193,16 @@ export async function loadContinuousTab(
   const t = await getTranslations('hrm')
   const retryLabel = (await getTranslations('common'))('actions.retry')
   const rawTab = typeof sp.tab === 'string' ? sp.tab : null
-  const calibrationOn = await isFeatureEnabled(authz.user.orgId, 'hrmCalibration')
-  const successionOn = await isFeatureEnabled(authz.user.orgId, 'hrmSuccession')
-  const feedbackOn = await isFeatureEnabled(authz.user.orgId, 'hrmFeedback')
-  const showCalibration = canManage && calibrationOn
-  const showTalent = canManage && successionOn
+  // The page already requires Performance, which carries calibration,
+  // talent reviews and feedback: only the grants decide these tabs.
+  const showCalibration = canManage
+  const showTalent = canManage
   // Settings and Retention are tabs of their own. They used to render as
   // extra sections BELOW the cycles table: a naked "Feedback settings"
   // select with a Save button, then unboxed retention statistics, stacked
   // under a list. Three unrelated things down one page, none of them
   // reachable on its own.
-  const showSettings = canManage && feedbackOn
+  const showSettings = canManage
   const showRetention = canRetain
   const tab: ContinuousTab =
     rawTab === 'calibration' && showCalibration ? 'calibration'

@@ -103,7 +103,7 @@ function enrollmentWindow(orgId: string, actorId: string, employerSubsidiaryId: 
 // --- construction ------------------------------------------------------------
 
 const CONSTRUCTION = {
-  features: ["hrmCertifiedPayroll", "hrmWorkersCompClasses", "hrmApprenticeRatios", "hrmPerDiem"],
+  features: ["hrmConstructionCompliance"],
   permissions: ["hrm.construction.read", "hrm.construction.manage"],
 };
 const FROZEN = JSON.stringify({ rendered: { filename: "cert.txt", contentType: "text/plain", body: "frozen" } });
@@ -186,7 +186,7 @@ async function respondents(w: { orgId: string; subA: string; subB: string }) {
 // --- crew time -----------------------------------------------------------------
 
 const CREW = {
-  features: ["projects", "timeTracking", "fieldTime", "fieldTimeCrewEntry"],
+  features: ["projects", "timeTracking", "fieldTime"],
   subB: { currency: "USD", country: "US" },
   actors: { foremanA: { scope: "A", link: "Foreman A" }, foremanB: { scope: "B", link: "Foreman B" } },
 } as const;
@@ -203,7 +203,7 @@ const FIELD_TIME = {
 async function crewSite(w: ScopeWorld<"foremanA" | "foremanB">) {
   const orgId = w.orgId;
   const [foremanA, foremanB, worker, projectA, projectB] = [w.party.foremanA, w.party.foremanB, randomUUID(), randomUUID(), randomUUID()];
-  await setFeatures(orgId, { fieldTimeEquipment: false });
+  await setFeatures(orgId, { equipment: false });
   await db.execute(sql`update orgs set settings = jsonb_set(settings, '{fieldTime}', ${JSON.stringify(FIELD_TIME)}::jsonb) where id = ${orgId}`);
   for (const [partyId, subsidiaryId] of [[foremanA, w.subA], [foremanB, w.subB]]) {
     await db.execute(sql`update parties set subsidiary_id = ${subsidiaryId} where org_id = ${orgId} and id = ${partyId}`);

@@ -101,7 +101,7 @@ export interface CompPlanRow {
 
 /**
  * A computed dialog refusal travels as data with the dialog that requested
- * it: a missing manage grant or a switched-off sub-feature renders a NAMED
+ * it: a missing manage grant or a switched-off prerequisite renders a NAMED
  * refusal with its remedy inside the open dialog — never an empty drawer,
  * never a silent close. Null when the dialog may render its form.
  */
@@ -219,13 +219,6 @@ export interface CompHomeData {
    */
   refusal: { title: string; message: string } | null
   /**
-   * Pay-equity header button gate: the equity surface 404s unless
-   * hrmPayTransparency is on (the default is off), so the button renders
-   * only while the feature is on. The read grant is already held by every
-   * home viewer.
-   */
-  canViewEquity: boolean
-  /**
    * The compensation settings form payload (gap threshold, burden rate,
    * FTE rounding, comparison attribute, response days). Present only for
    * unrestricted compensation managers — the PUT endpoint requires
@@ -283,14 +276,15 @@ export async function loadCompensationHome(
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
   const today = await businessToday(orgId)
   const canManage = can(authz, 'hrm.compensation.manage')
-  const meritOn = await isFeatureEnabled(orgId, 'hrmMeritCycles')
-  const plansOn = await isFeatureEnabled(orgId, 'hrmHeadcountPlans')
+  // Merit cycles ride Compensation (this page's gate) and additionally
+  // need Payroll: a round reads current pay and pushes new rates.
+  const meritOn = await isFeatureEnabled(orgId, 'payroll')
   const canRunCycles = canManage && meritOn
   const [bands, levels, cycles, plans] = await Promise.all([
     listPayBands({ orgId, actorId: authz.user.id, asOf: today }),
     listJobLevels({ orgId, actorId: authz.user.id }),
     (meritOn ? listCycles({ orgId, actorId: authz.user.id }) : []),
-    (plansOn ? listPlans({ orgId, actorId: authz.user.id }) : []),
+    listPlans({ orgId, actorId: authz.user.id }),
   ])
   const levelById = new Map(levels.map((l) => [l.id, l]))
   // Headcount per band scope: employments whose position level the band
@@ -346,20 +340,15 @@ export async function loadCompensationHome(
   // propagate — never an empty tile.
   let jointFlags: number | null = 0
   let gapRefusal: CompHomeData['refusal'] = null
-  // The pay-equity surface (header button and gap snapshot) resolves only
-  // while the feature is on — the equity loader 404s without it.
-  const payTransparencyOn = await isFeatureEnabled(orgId, 'hrmPayTransparency')
-  if (payTransparencyOn) {
-    try {
-      const snapshot = await latestGapSnapshot({ orgId, actorId: authz.user.id })
-      jointFlags = snapshot?.categories.filter((c) => c.jointAssessmentDue).length ?? 0
-    } catch (error) {
-      if (error instanceof CompensationError || error instanceof HrmAuthorizationError) {
-        gapRefusal = { title: t('compensation.title'), message: error.message }
-        jointFlags = null
-      } else {
-        throw error
-      }
+  try {
+    const snapshot = await latestGapSnapshot({ orgId, actorId: authz.user.id })
+    jointFlags = snapshot?.categories.filter((c) => c.jointAssessmentDue).length ?? 0
+  } catch (error) {
+    if (error instanceof CompensationError || error instanceof HrmAuthorizationError) {
+      gapRefusal = { title: t('compensation.title'), message: error.message }
+      jointFlags = null
+    } else {
+      throw error
     }
   }
   const tiles: CompStatTile[] = [
@@ -388,7 +377,7 @@ export async function loadCompensationHome(
   // propose/detail trio. A requested dialog ALWAYS resolves — with its form
   // when every prerequisite holds, with a NAMED refusal (and its remedy)
   // otherwise. Permission gates match the header buttons (canRunCycles for
-  // cycles, canManage for plans); the sub-feature switches ride alongside.
+  // cycles, canManage for plans); the cycle dialog also names Payroll.
   // The gate-explanation copy is shared with the feature-required and
   // access-denied pages (shell.routeState), and the feature display names
   // with the Features switchboard (admin.features) — no second source.
@@ -410,7 +399,7 @@ export async function loadCompensationHome(
       title: g('deniedTitle'),
       message: `${g('deniedDescription', { permission: 'hrm.compensation.manage' })} ${g('askAdministrator')}`,
     })
-    const featureRefusal = (featureKey: 'hrmMeritCycles' | 'hrmHeadcountPlans'): CompDialogRefusal => {
+    const featureRefusal = (featureKey: 'payroll'): CompDialogRefusal => {
       const nameKey = `features.${featureKey}.title`
       const name = adminT.has(nameKey) ? adminT(nameKey) : featureKey
       return {
@@ -428,7 +417,7 @@ export async function loadCompensationHome(
       // Permission first: without the grant the switch cannot help. The
       // Features link rides only the feature-off refusal (a person is the
       // remedy for a missing grant, never a link).
-      const refusal = !canManage ? manageRefusal() : !meritOn ? featureRefusal('hrmMeritCycles') : null
+      const refusal = !canManage ? manageRefusal() : !meritOn ? featureRefusal('payroll') : null
       const featureOff = canManage && !meritOn
       cycleDialog = {
         open: true,
@@ -452,8 +441,6 @@ export async function loadCompensationHome(
       }
     }
     if (planOpen) {
-      const refusal = !canManage ? manageRefusal() : !plansOn ? featureRefusal('hrmHeadcountPlans') : null
-      const featureOff = canManage && !plansOn
       planDialog = {
         open: true,
         closeHref: dialogCloseHref,
@@ -464,9 +451,9 @@ export async function loadCompensationHome(
         failed: t('compensation.drawer.failed'),
         submit: t('compensation.drawer.submit'),
         cancel: t('compensation.drawer.cancel'),
-        refusal,
-        remedyHref: featureOff ? featureRemedy.remedyHref : null,
-        remedyLabel: featureOff ? featureRemedy.remedyLabel : null,
+        refusal: canManage ? null : manageRefusal(),
+        remedyHref: null,
+        remedyLabel: null,
       }
     }
   }
@@ -520,7 +507,6 @@ export async function loadCompensationHome(
     // drawers from namespaced keys — one URL opens exactly one drawer.
     setupParams: setupSectionParams(sp, ['family', 'level', 'band']),
     refusal: gapRefusal,
-    canViewEquity: payTransparencyOn,
     settings: await loadCompensationSettingsBlock(orgId, canManage && authz.allowedSubsidiaryIds === null, t),
   }
 }
@@ -694,7 +680,10 @@ export async function loadCompCycleDetail(
   sp: Record<string, string | undefined>,
 ): Promise<CompCycleDetailData | null> {
   if (!can(authz, 'hrm.compensation.read')) return null
-  await requireFeatureEnabled(authz.user.orgId, 'hrmMeritCycles')
+  // Merit cycles ride Compensation and additionally need Payroll; the
+  // feature-required page names whichever is off.
+  await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
+  await requireFeatureEnabled(authz.user.orgId, 'payroll')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
   let cycle: Awaited<ReturnType<typeof getCycle>>
@@ -914,7 +903,7 @@ export async function loadHeadcountPlanDetail(
   planId: string,
 ): Promise<CompPlanDetailData | null> {
   if (!can(authz, 'hrm.compensation.read')) return null
-  await requireFeatureEnabled(authz.user.orgId, 'hrmHeadcountPlans')
+  await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
   const plans = await listPlans({ orgId, actorId: authz.user.id })
@@ -1014,7 +1003,7 @@ export async function loadEquity(
   sp: Record<string, string | string[] | undefined> = {},
 ): Promise<EquityData | null> {
   if (!can(authz, 'hrm.compensation.read')) return null
-  await requireFeatureEnabled(authz.user.orgId, 'hrmPayTransparency')
+  await requireFeatureEnabled(authz.user.orgId, 'hrmCompensation')
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
   const canManage = can(authz, 'hrm.compensation.manage')

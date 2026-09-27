@@ -3,17 +3,17 @@ import { z } from "zod";
 import { db, withOrg } from "../platform/db.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { HRM_ACTIONS } from "@openbooks/schema/src/hrm-automations.ts";
+import { hrmFeatureOn } from "./services.ts";
 
 /**
- * HR-16 action/reason codes — the Setup-owned vocabulary behind
- * hrm_action_reasons (0227). Reasons are cheap and every enterprise
- * suite has them: the feature defaults ON.
- *
- * When hrmActionReasons is on, the change-request service REQUIRES both
- * action and reason_code on submit and validates the code against this
- * table (active rows only); when off, submit ignores them. A code that
- * requires_comment refuses a blank submission reason — the audit needs
- * the sentence.
+ * Action/reason codes — the Setup-owned vocabulary behind
+ * hrm_action_reasons. They ride Human resources with no switch of their
+ * own: declaring codes is the configuration. While the org has at least
+ * one active code, change-request submit REQUIRES both action and
+ * reason_code and validates the code against this table (active rows
+ * only); with no active code declared, classification is optional and
+ * submit ignores it. A code that requires_comment refuses a blank
+ * submission reason — the audit needs the sentence.
  */
 
 export class ActionReasonError extends Error {}
@@ -114,19 +114,36 @@ export async function upsertActionReason(input: {
 }
 
 /**
- * Submit-time validation: when the feature is on, both action and
- * reason_code are REQUIRED and the code must be an active row for that
- * action; a requires_comment code needs a non-blank reason. When the
- * feature is off, everything is ignored (never a refusal).
+ * Whether change-request submit must be classified: Human resources is on
+ * and the org has declared at least one active reason code. Read from the
+ * database on every call, so the rule holds for any caller, never only
+ * where a UI asked.
+ */
+export async function actionReasonsRequired(orgId: string): Promise<boolean> {
+  if (!(await hrmFeatureOn(orgId, "hrm"))) return false;
+  return withOrg(orgId, async () => {
+    const rows = await db.execute<{ one: number }>(sql`
+      select 1 as one from hrm_action_reasons
+       where org_id = ${orgId} and is_active
+       limit 1
+    `);
+    return rows.rows.length > 0;
+  });
+}
+
+/**
+ * Submit-time validation: while actionReasonsRequired holds, both action
+ * and reason_code are REQUIRED and the code must be an active row for that
+ * action; a requires_comment code needs a non-blank reason. Otherwise the
+ * classification is optional and ignored here (never a refusal).
  */
 export async function validateSubmitActionReason(input: {
   orgId: string;
-  featureOn: boolean;
   action?: string | null;
   reasonCode?: string | null;
   reason?: string | null;
 }): Promise<void> {
-  if (!input.featureOn) return;
+  if (!(await actionReasonsRequired(input.orgId))) return;
   if (!input.action || !input.reasonCode) {
     throw new ActionReasonError(
       "this org requires an action and a reason code on every change request — pick both in the propose-change dialog and submit again",
@@ -137,12 +154,14 @@ export async function validateSubmitActionReason(input: {
       `unknown HR action '${input.action}' — pick one the reason-code setup declares`,
     );
   }
-  const rows = await db.execute<{ requiresComment: boolean }>(sql`
-    select requires_comment as "requiresComment" from hrm_action_reasons
-     where org_id = ${input.orgId} and action = ${input.action}
-       and reason_code = ${input.reasonCode} and is_active
-     limit 1
-  `);
+  const rows = await withOrg(input.orgId, () =>
+    db.execute<{ requiresComment: boolean }>(sql`
+      select requires_comment as "requiresComment" from hrm_action_reasons
+       where org_id = ${input.orgId} and action = ${input.action}
+         and reason_code = ${input.reasonCode} and is_active
+       limit 1
+    `),
+  );
   if (rows.rows.length === 0) {
     throw new ActionReasonError(
       `reason code '${input.reasonCode}' is not active for action '${input.action}' — pick an active code in the propose-change dialog`,

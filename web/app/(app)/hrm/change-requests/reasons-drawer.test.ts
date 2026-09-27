@@ -11,7 +11,7 @@ import test from "node:test";
 // UI, and change-request submit (correctly) refuses a missing
 // action/reason.
 //
-// The seams below stub I/O only (feature switches, group tabs, engine
+// The seams below stub I/O only (the page's feature gate, group tabs, engine
 // list reads, the departments lookup, translations backed by the REAL
 // en catalog). Grants ride a fabricated Authz through the stubbed `can`
 // permission logic itself is proven by the existing scope DB tests,
@@ -77,11 +77,7 @@ registerHooks({
         url:
           "data:text/javascript," +
           encodeURIComponent(
-            `export async function isFeatureEnabled(orgId, key) {
-              const flags = globalThis.__reasonsFeatures;
-              if (flags && key in flags) return flags[key];
-              return true;
-            }
+            `export async function isFeatureEnabled() { return true; }
             export async function requireFeatureEnabled() {}`,
           ),
       };
@@ -120,8 +116,6 @@ registerHooks({
 
 const { loadChangeRequestQueue } = await import("../../../../lib/hrm/change-requests.ts");
 
-const gap = globalThis as Record<string, unknown>;
-
 function authzWith(permissions: string[]) {
   return {
     user: { orgId: "org-reasons", id: "actor-reasons" },
@@ -132,12 +126,7 @@ function authzWith(permissions: string[]) {
 
 const HR_ADMIN = authzWith(["hrm.employment.read", "hrm.employment.manage"]);
 
-function features(flags: Record<string, boolean>) {
-  gap.__reasonsFeatures = flags;
-}
-
 test("?reasons=1&row=new forwards row into the embedded setup section", async () => {
-  features({ hrmActionReasons: true });
   const data = await loadChangeRequestQueue(HR_ADMIN, {
     status: "submitted",
     reasons: "1",
@@ -159,7 +148,6 @@ test("?reasons=1&row=new forwards row into the embedded setup section", async ()
 });
 
 test("?reasons=1&row=<id> forwards the edit row the same way", async () => {
-  features({ hrmActionReasons: true });
   const data = await loadChangeRequestQueue(HR_ADMIN, { reasons: "1", row: "some-uuid" });
   assert.equal(data.showReasons, true, "the reasons section renders");
   assert.equal(
@@ -170,7 +158,6 @@ test("?reasons=1&row=<id> forwards the edit row the same way", async () => {
 });
 
 test("the queue spec hands the forwarded params to the setup-section widget", async () => {
-  features({ hrmActionReasons: true });
   const { changeRequestQueueSpec } = await import("./view.ts");
   const data = await loadChangeRequestQueue(HR_ADMIN, { reasons: "1", row: "new" });
   const spec = changeRequestQueueSpec(data);

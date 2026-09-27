@@ -16,7 +16,7 @@ export class AiRailsError extends Error {
 export function unknownCapability(key: string): AiRailsError {
   return new AiRailsError(
     "ai_unknown_capability",
-    `unknown AI capability "${key}": enable it on Company Settings → Features and review it on /admin/ai before use`,
+    `unknown AI capability "${key}": it is not in the capability registry — pick a registered capability on /admin/ai`,
   );
 }
 

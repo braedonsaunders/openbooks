@@ -7,12 +7,13 @@ import {
 import { actionReasonRouteBody } from "../../automations/bodies";
 import { automationErrorResponse } from "../../automations/_lib";
 /**
- * Action/reason codes (Setup-owned vocabulary). When hrmActionReasons is
- * off the route 404s and submit ignores classification entirely.
+ * Action/reason codes (Setup-owned vocabulary), riding Human resources.
+ * Declaring an active code is what makes change-request classification
+ * required; with none declared, submit treats it as optional.
  */
 export const GET = defineRoute({
   permission: "hrm.employment.read",
-  feature: "hrmActionReasons",
+  feature: "hrm",
   handler: async ({ request: req, authz: gate }) => {
     const url = new URL(req.url);
     const action = url.searchParams.get("action");
@@ -30,7 +31,7 @@ export const GET = defineRoute({
 });
 export const POST = defineRoute({
   permission: "hrm.employment.manage",
-  feature: "hrmActionReasons",
+  feature: "hrm",
   body: actionReasonRouteBody,
   handler: async ({ request: _req, authz: gate, body }) => {
     try {

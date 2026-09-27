@@ -22,9 +22,9 @@ function fieldTime(error: unknown) {
 
 /** GET → batch list (?status=&projectId=). Time readers and foremen both land here. */
 async function legacyGET(req: Request) {
-  const read = await guardFeaturePermission('time.read', 'fieldTimeCrewEntry')
+  const read = await guardFeaturePermission('time.read', 'fieldTime')
   const gate = read instanceof NextResponse
-    ? await guardFeaturePermission('time.crew.enter', 'fieldTimeCrewEntry')
+    ? await guardFeaturePermission('time.crew.enter', 'fieldTime')
     : read
   if (gate instanceof NextResponse) return gate
   const url = new URL(req.url)
@@ -80,7 +80,7 @@ export const GET = defineRoute({
 });
 
 export const POST = defineRoute({
-  permission: 'time.crew.enter', feature: 'fieldTimeCrewEntry',
+  permission: 'time.crew.enter', feature: 'fieldTime',
 
   handler: ({ request, authz }) => legacyPOST(request, authz),
 });

@@ -18,8 +18,8 @@ export const createChangeRequestBody = z.object({
 export const patchChangeRequestBody = z.object({ payload: changeRequestPayloadShape });
 export const submitChangeRequestBody = z.object({
   reason: z.string().trim().min(1).max(500).optional(),
-  // Action/reason classification: required on submit only
-  // while the hrmActionReasons feature is on; ignored when off.
+  // Action/reason classification: required on submit once the org
+  // declares an active reason code; optional while none is declared.
   action: z.string().trim().min(1).max(60).optional(),
   reasonCode: z.string().trim().min(1).max(120).optional(),
 });

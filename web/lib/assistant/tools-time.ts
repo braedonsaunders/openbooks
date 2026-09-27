@@ -589,21 +589,21 @@ const timeClockStatus: AssistantToolDef = {
 };
 
 const crewBatchesSchema = z.object({
-  status: z.enum(["draft", "submitted", "approved_stage_1", "approved_stage_2", "rejected", "posted"]).optional().describe("Batch status segment"),
+  status: z.enum(["draft", "submitted", "approved", "rejected", "posted"]).optional().describe("Batch status segment"),
   projectId: uuidInput.optional().describe("One project; omit for all projects"),
 });
 
 const crewBatches: AssistantToolDef = {
   name: "crew_batches",
   description:
-    "Foreman crew batches per project per day with approval-stage status, hours and headcount. Entries post only through the crew service. Read-only.",
+    "Foreman crew batches per project per day with approval status, hours and headcount. Entries post only through the crew service. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["time.read"] },
-  feature: "fieldTimeCrewEntry",
+  feature: "fieldTime",
   inputSchema: crewBatchesSchema,
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "fieldTimeCrewEntry"))) {
-      return { ok: false, error: "fieldTimeCrewEntry_feature_disabled" };
+    if (!(await isFeatureEnabled(authz.user.orgId, "fieldTime"))) {
+      return { ok: false, error: FIELD_TIME_FEATURE_ERROR };
     }
     const a = raw as z.infer<typeof crewBatchesSchema>;
     const { listCrewBatches } = await import("@openbooks/engine/src/hrm/field-time/reads.ts");

@@ -132,7 +132,7 @@
     "flagAutoClosed": "自動終了",
     "flagPhoto": "写真あり",
     "crewTitle": "班の工数",
-    "crewDescription": "プロジェクト×日ごとの職長バッチ — 署名し、段階承認を経て一度だけ計上。",
+    "crewDescription": "プロジェクト×日ごとの職長バッチ — 署名し、承認を経て一度だけ計上。",
     "newBatch": "新規バッチ",
     "statusLabel": "ステータス",
     "allBatches": "すべてのバッチ",
@@ -146,8 +146,7 @@
     "setupLink": "現場設定",
     "statusDraft": "下書き",
     "statusSubmitted": "提出済み",
-    "statusStage1": "段階1承認済み",
-    "statusStage2": "段階2承認済み",
+    "statusApproved": "承認済み",
     "statusRejected": "差戻し",
     "statusPosted": "計上済み",
     "worker": "作業員",
@@ -164,7 +163,7 @@
     "saveLines": "行を保存",
     "signAndSubmit": "署名して提出",
     "withdraw": "下書きに戻す",
-    "approveStage": "段階を承認",
+    "approve": "承認",
     "reject": "差戻し",
     "rejectReason": "差戻し理由",
     "post": "計上",
@@ -196,15 +195,16 @@
     "kiosksTitle": "キオスク端末",
     "noKiosks": "登録済みキオスクはありません。",
     "retired": "廃止済み",
-    "tokenIssued": "{name}の端末リンク — 今コピーしてください。再表示はできません:", "acknowledgeToken": "この端末リンクをコピーしました",
+    "tokenIssued": "{name}の端末リンク — 今コピーしてください。再表示はできません:",
+    "acknowledgeToken": "この端末リンクをコピーしました",
     "kioskNamePlaceholder": "キオスク名（現場やゲート）…",
     "registerKiosk": "キオスクを登録",
     "pinWorkerPlaceholder": "作業員のパーティID…",
     "pinPlaceholder": "4〜10桁のPIN",
     "setPin": "PINを設定",
-    "stagesTitle": "承認チェーン",
-    "singleApproval": "単独承認が適用されます。",
-    "stagesHint": "チェーンは対象ごとに承認段階APIで宣言 — 1, 2, 3と連番で。",
+    "approvalRoutingTitle": "承認ルート",
+    "approvalRoutingHint": "タイムシートとチーム時間記録の承認は Flows で処理されます。上長、プロジェクトマネージャー、給与担当の承認ステップを追加するには、タイムシート週またはチーム時間記録にフローを作成してください。フローがない場合は、時間の承認者が直接承認します。",
+    "approvalRoutingLink": "Flows を開く",
     "kioskNeedPin": "作業員を選んでPINを入力してください。",
     "kioskIdentified": "確認しました — 下で打刻してください。",
     "kioskClockedIn": "出勤を記録しました。",
@@ -233,18 +233,6 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "現在地を使う",
     "locationDenied": "位置を取得できません — 座標を手入力してください。",
-    "saveGeofence": "ジオフェンスを保存",
-    "subjects": {
-      "timesheetWeek": "タイムシート週",
-      "crewTimeBatch": "チーム時間記録"
-    },
-    "approvers": {
-      "supervisor": "上司",
-      "projectManager": "プロジェクトマネージャー",
-      "payroll": "給与",
-      "role": "ロール",
-      "namedRole": "役割: {role}"
-    },
-    "unknownApprovalTarget": "不明な承認対象"
+    "saveGeofence": "ジオフェンスを保存"
   }
 }

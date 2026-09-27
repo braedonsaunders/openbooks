@@ -698,7 +698,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
               : null
           : null
       const firstText = full.answers.find((a) => a.answerKind === 'text' || a.answerKind === 'rating_and_text')
-      const draftLabel = draftKind && firstText ? await loadAiDraftButton(authz.user.orgId) : null
+      const draftLabel = draftKind && firstText ? await loadAiDraftButton(authz) : null
       const reviewHref = performanceHref(preservedParams, { status: rawStatus, cycle: full.review.cycleId, review: full.review.id })
       if (review && draftKind && firstText && draftLabel) {
         review.draft = {

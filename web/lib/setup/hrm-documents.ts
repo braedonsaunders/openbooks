@@ -63,7 +63,7 @@ export const RETENTION_SCHEDULES_ENTITY: SetupEntity = {
   key: 'hrm-retention-schedules',
   table: 'hrm_retention_schedules',
   groupKey: 'workforce',
-  featureKey: 'hrmDocumentRetention',
+  featureKey: 'hrmDocuments',
   rehomed: true,
   rehomedTo: '/hrm/documents',
   iconKey: 'archive',

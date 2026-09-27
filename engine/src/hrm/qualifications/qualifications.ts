@@ -12,7 +12,6 @@ import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
 import { HrmQualificationError } from "./errors.ts";
 import {
-  HRM_CERTIFICATIONS_FEATURE,
   assertQualificationsFeature,
   projectDerivedStatus,
   requireDate,
@@ -321,7 +320,7 @@ export async function recordQualification(
     // The grant plus the allowed employer set, resolved on this same
     // runner so the check and the write below are atomic.
     await requireAggregateCertificationsManage(tx, orgId, actorId);
-    await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
+    await assertQualificationsFeature(tx, orgId, "Qualifications");
     await assertEmploymentInScope(tx, orgId, actorId, employmentId);
     const type = await loadTypeRow(tx, orgId, typeId);
     if (!type) {
@@ -408,7 +407,7 @@ export async function verifyQualification(
   const qualificationId = requireId(input.qualificationId, "qualificationId");
   return runInCallerTransaction(exec, async (tx) => {
     await requireAggregateCertificationsManage(tx, orgId, actorId);
-    await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
+    await assertQualificationsFeature(tx, orgId, "Qualifications");
     const current = await loadLedgerRowForScopedMutation(tx, orgId, actorId, qualificationId);
     if (!current) {
       throw new HrmQualificationError(
@@ -472,7 +471,7 @@ export async function renewQualification(
   const issuedOn = requireDate(input.issuedOn, "issuedOn");
   return runInCallerTransaction(exec, async (tx) => {
     await requireAggregateCertificationsManage(tx, orgId, actorId);
-    await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
+    await assertQualificationsFeature(tx, orgId, "Qualifications");
     const current = await loadLedgerRowForScopedMutation(tx, orgId, actorId, qualificationId);
     if (!current) {
       throw new HrmQualificationError(
@@ -526,7 +525,7 @@ export async function revokeQualification(
   const reason = requireText(input.reason, "reason");
   return runInCallerTransaction(exec, async (tx) => {
     await requireAggregateCertificationsManage(tx, orgId, actorId);
-    await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
+    await assertQualificationsFeature(tx, orgId, "Qualifications");
     const current = await loadLedgerRowForScopedMutation(tx, orgId, actorId, qualificationId);
     if (!current) {
       throw new HrmQualificationError(
@@ -573,7 +572,7 @@ export async function attachEvidence(
   const qualificationId = requireId(input.qualificationId, "qualificationId");
   const fileId = requireId(input.fileId, "fileId");
   return runInCallerTransaction(exec, async (tx) => {
-    await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
+    await assertQualificationsFeature(tx, orgId, "Qualifications");
     const current = await loadLedgerRowForScopedMutation(tx, orgId, actorId, qualificationId, "filter");
     if (!current) {
       throw new HrmQualificationError(
@@ -636,7 +635,7 @@ export async function listQualifications(
 ): Promise<WorkerQualification[]> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
-  await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
+  await assertQualificationsFeature(exec, orgId, "Qualifications");
   let employmentIds: string[] | null = null;
   // The HR audience's allowed employer set (null = unrestricted); undefined
   // on the self/team path, which stays structurally scoped as before.
@@ -738,7 +737,7 @@ export async function loadQualification(
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const qualificationId = requireId(input.qualificationId, "qualificationId");
-  await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
+  await assertQualificationsFeature(exec, orgId, "Qualifications");
   const current = await loadLedgerRow(exec, orgId, qualificationId);
   if (!current) return null;
   try {
@@ -762,7 +761,7 @@ export async function listQualificationEvents(
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const qualificationId = requireId(input.qualificationId, "qualificationId");
-  await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualifications");
+  await assertQualificationsFeature(exec, orgId, "Qualifications");
   try {
     const hrScope = await requireAggregateCertificationsRead(exec, orgId, actorId);
     // The HR audience proves the row's employer inside the allowed set —

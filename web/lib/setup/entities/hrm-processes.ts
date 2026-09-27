@@ -271,15 +271,15 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
       { key: 'required', kind: 'boolean' },
     ],
   },
-  // HR-17 begin: competency frameworks (0228) — the org's reusable skill
-  // vocabulary with ranked levels. Setup-owned; deactivation preserves
-  // history. Hidden while hrmCompetencies is off.
+  // Competency frameworks (0228) — the org's reusable skill vocabulary
+  // with ranked levels. Setup-owned; deactivation preserves history.
+  // Hidden while Performance is off.
   {
     key: 'hrm-competency-frameworks',
     table: 'hrm_competency_frameworks',
     actorCols: true,
     groupKey: 'workforce',
-    featureKey: 'hrmCompetencies',
+    featureKey: 'hrmPerformance',
     iconKey: 'award',
     orgScoped: true,
     orderBy: 'name',
@@ -299,7 +299,7 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     table: 'hrm_competencies',
     actorCols: true,
     groupKey: 'workforce',
-    featureKey: 'hrmCompetencies',
+    featureKey: 'hrmPerformance',
     iconKey: 'award',
     orgScoped: true,
     orderBy: 'position',
@@ -318,5 +318,4 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
       { key: 'category', kind: 'text' },
     ],
   },
-  // HR-17 end
 ]

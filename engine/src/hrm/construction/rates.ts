@@ -10,7 +10,6 @@ import { recordFinding } from "./findings.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { applyReciprocity, scopeScore, type AppliesTo, type Reciprocity } from "./pure.ts";
 import {
-  HRM_PREVAILING_WAGE_FEATURE,
   assertConstructionFeature,
   assertEmploymentInScope,
   assertProjectInScope,
@@ -210,7 +209,7 @@ export async function listSchedules(
   orgId: string,
   actorId: string,
 ): Promise<readonly RateSchedule[]> {
-  await assertConstructionFeature(exec, orgId, HRM_PREVAILING_WAGE_FEATURE, "Rate schedules");
+  await assertConstructionFeature(exec, orgId, "Rate schedules");
   requireId(actorId, "actorId");
   // Schedule rates ARE pay data: a B-targeted schedule's lines never
   // reach an A-scoped reader. Org-wide (unanchored) schedules are shared
@@ -302,7 +301,7 @@ export async function createSchedule(
   // authoritative — the shared claim is one transaction per action), so
   // the target check and the insert below are atomic.
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_PREVAILING_WAGE_FEATURE, "Rate schedules");
+    await assertConstructionFeature(exec, orgId, "Rate schedules");
     // The declared target is the creation's legal-entity claim: a B
     // subsidiary or B project reads exactly like a fabricated id, and an
     // org-wide target needs unrestricted scope.
@@ -349,7 +348,7 @@ export async function updateScheduleScope(
   const appliesTo = input.appliesTo ?? {};
   assertAppliesTo(appliesTo);
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_PREVAILING_WAGE_FEATURE, "Rate schedules");
+    await assertConstructionFeature(exec, orgId, "Rate schedules");
     const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
     // The locked row's CURRENT target is rechecked first (a B schedule
     // refuses as not-found), then the NEW target validates like a
@@ -506,7 +505,7 @@ export async function addScheduleLine(
   if (currency.length !== 3) throw new HrmConstructionError("Currency must be a 3-letter ISO code.");
   const effectiveFrom = requireDate(input.effectiveFrom, "effectiveFrom");
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_PREVAILING_WAGE_FEATURE, "Rate schedules");
+    await assertConstructionFeature(exec, orgId, "Rate schedules");
     // The parent schedule's CURRENT target governs the line: lines price
     // the schedule's employees, so a B-targeted (or org-wide) schedule
     // refuses a restricted actor before the line is even validated.
@@ -561,7 +560,7 @@ export async function resolveWage(
   const actorId = requireId(input.actorId, "actorId");
   const employmentId = requireId(input.employmentId, "employmentId");
   const workedOn = requireDate(input.workedOn, "workedOn");
-  await assertConstructionFeature(exec, orgId, HRM_PREVAILING_WAGE_FEATURE, "Prevailing-wage resolution");
+  await assertConstructionFeature(exec, orgId, "Prevailing-wage resolution");
   // No grant gate: the approval-time hook resolves through here with an
   // approver who may hold no construction grant. The subsidiary lens
   // still fences unconditionally — B's priced wage never resolves for an

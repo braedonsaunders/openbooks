@@ -123,7 +123,6 @@ export async function listRetentionRules(query: {
   return withOrgTransaction(orgId, async () => {
     // Rules are shared configuration: any recruiting reader lists them.
     await requireHrmRecruitingReadOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmCandidateRetention");
     const rows = (await db.execute<RuleRow>(sql`
       select id, name, region_scope as "regionScope", basis,
              retain_months as "retainMonths", action,
@@ -177,7 +176,6 @@ export async function createRetentionRule(query: {
     // unrestricted-scope assertion.
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
-    await requireDepthFeature(db, orgId, "hrmCandidateRetention");
     try {
       const row = (await db.execute<RuleRow>(sql`
         insert into hrm_retention_rules
@@ -243,7 +241,6 @@ export async function recordConsent(query: {
   }
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmCandidateRetention");
     // Consent is a candidate-wide grant with legal effect: recording it for
     // a stranger manufactures permission over their data. Ownership first —
     // unknown and out-of-scope refuse identically.
@@ -296,7 +293,6 @@ export async function withdrawConsent(query: {
   const candidateId = requireId(query.candidateId, "candidateId");
   await withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmCandidateRetention");
     // Withdrawing a stranger's consent answers whether the row exists and
     // rewrites their privacy posture: ownership first, uniform denial.
     await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
@@ -391,7 +387,7 @@ export async function evaluateRetentionRule(
   const removeFile = options.removeFile ?? deleteCabinetFile;
   const pendingEmails: { readonly data: RecruitingEmailData; readonly jobId: string }[] = [];
   const run = await withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmCandidateRetention");
+    await requireDepthFeature(db, orgId);
     // Authority first: a user run needs the manage grant plus the runner's
     // employer scope (null = unrestricted). The system tick runs as system
     // instead — a manual run by a scoped runner is a scoped run, never an
@@ -666,7 +662,6 @@ export async function listCandidateConsents(query: {
   const candidateId = requireId(query.candidateId, "candidateId");
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmCandidateRetention");
     // Consent rows are privacy posture: listing a stranger's grants and
     // expiries is the same leak as recording them. Ownership first.
     await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
@@ -695,7 +690,6 @@ export async function listRetentionRuns(query: {
   return withOrgTransaction(orgId, async () => {
     // The run ledger is evidence any recruiting reader may audit.
     await requireHrmRecruitingReadOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmCandidateRetention");
     const rows = (await db.execute<RetentionRunDTO>(sql`
       select id, rule_id as "ruleId", ran_at as "ranAt",
              candidates_anonymized as "candidatesAnonymized",

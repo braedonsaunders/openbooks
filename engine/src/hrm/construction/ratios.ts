@@ -7,7 +7,6 @@ import { recordFinding } from "./findings.ts";
 import { evaluateRatio, scopeScore, type AppliesTo, type ScopeTarget } from "./pure.ts";
 import { lockScheduleScopeForWrite } from "./rates.ts";
 import {
-  HRM_APPRENTICE_RATIO_FEATURE,
   assertConstructionFeature,
   assertProjectInScope,
   requireDate,
@@ -67,7 +66,7 @@ export async function createRatioRule(
   }
   const effectiveFrom = requireDate(input.effectiveFrom, "effectiveFrom");
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_APPRENTICE_RATIO_FEATURE, "Apprentice ratio rules");
+    await assertConstructionFeature(exec, orgId, "Apprentice ratio rules");
     // The rule prices its schedule's hours: the parent schedule's
     // CURRENT target governs — a rule on B's schedule (or an org-wide
     // one) refuses a restricted actor before anything is validated.
@@ -138,7 +137,7 @@ export async function checkDay(
   const projectId = requireId(input.projectId, "projectId");
   const workedOn = requireDate(input.workedOn, "workedOn");
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_APPRENTICE_RATIO_FEATURE, "Apprentice ratio checks");
+    await assertConstructionFeature(exec, orgId, "Apprentice ratio checks");
     // The check aggregates one project's employments AND writes breach
     // findings: the project must sit inside the lens first, or an
     // A-scoped actor checks (and flags) B's day.

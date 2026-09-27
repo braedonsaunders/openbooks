@@ -25,8 +25,7 @@ export const POST = defineRoute({
   handler: async ({ authz: authz, body: body }) => {
     if (
       !(await isFeatureEnabled(authz.user.orgId, "hrm")) ||
-      !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||
-      !(await isFeatureEnabled(authz.user.orgId, "hrmCompetencies"))
+      !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance"))
     ) {
       return notFound("record");
     }

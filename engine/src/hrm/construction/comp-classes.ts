@@ -10,7 +10,6 @@ import { recordFinding } from "./findings.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { compRuleMatches, pickCompRule, type CompMatch, type CompTarget } from "./pure.ts";
 import {
-  HRM_WORKERS_COMP_FEATURE,
   assertConstructionFeature,
   assertEmploymentInScope,
   assertProjectInScope,
@@ -39,7 +38,7 @@ export interface CompClass {
 }
 
 export async function listCompClasses(exec: SqlExecutor, orgId: string, actorId: string): Promise<readonly CompClass[]> {
-  await assertConstructionFeature(exec, orgId, HRM_WORKERS_COMP_FEATURE, "Comp classes");
+  await assertConstructionFeature(exec, orgId, "Comp classes");
   requireId(actorId, "actorId");
   await requireHrmConstructionRead(exec, orgId, actorId);
   const rows = (
@@ -81,7 +80,7 @@ export async function createCompClass(
   }
   const effectiveFrom = requireDate(input.effectiveFrom, "effectiveFrom");
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_WORKERS_COMP_FEATURE, "Comp classes");
+    await assertConstructionFeature(exec, orgId, "Comp classes");
     // Premium classes price every entity's exposure: org-wide config
     // needs unrestricted scope (named 403).
     await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
@@ -123,7 +122,7 @@ export async function listCompRules(
   orgId: string,
   actorId: string,
 ): Promise<readonly CompRule[]> {
-  await assertConstructionFeature(exec, orgId, HRM_WORKERS_COMP_FEATURE, "Comp classes");
+  await assertConstructionFeature(exec, orgId, "Comp classes");
   requireId(actorId, "actorId");
   await requireHrmConstructionRead(exec, orgId, actorId);
   return activeRules(exec, orgId);
@@ -146,7 +145,7 @@ export async function createCompRule(
   assertCompMatch(input.match);
   const compClassId = requireId(input.compClassId, "compClassId");
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_WORKERS_COMP_FEATURE, "Comp classes");
+    await assertConstructionFeature(exec, orgId, "Comp classes");
     // Rules price org-wide exposure: org-wide config needs unrestricted
     // scope — except a rule naming a project, which is project-scoped
     // config and needs scope over that project instead.
@@ -235,7 +234,7 @@ export async function classify(
 ): Promise<CompClass> {
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
-  await assertConstructionFeature(exec, orgId, HRM_WORKERS_COMP_FEATURE, "Comp-class resolution");
+  await assertConstructionFeature(exec, orgId, "Comp-class resolution");
   // No grant gate (costing resolution runs for actors holding no
   // construction grant), but named anchors still fence by the actor's
   // subsidiary lens: B's project or employment reads exactly like a
@@ -299,7 +298,7 @@ export async function dailySplit(
   const actorId = requireId(input.actorId, "actorId");
   const projectId = requireId(input.projectId, "projectId");
   const workedOn = requireDate(input.workedOn, "workedOn");
-  await assertConstructionFeature(exec, orgId, HRM_WORKERS_COMP_FEATURE, "Comp-class resolution");
+  await assertConstructionFeature(exec, orgId, "Comp-class resolution");
   // The split exposes per-employment hours: the project must sit inside
   // the reader's lens — a B project reads exactly like a missing one.
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");

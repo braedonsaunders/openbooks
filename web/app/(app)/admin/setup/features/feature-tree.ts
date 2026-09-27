@@ -147,10 +147,10 @@ export function buildFeatureTree(
 
   // Walk to the TOP-LEVEL ancestor, not just the immediate parent. The
   // switchboard has two visual levels, but the registry nests deeper than
-  // that — projects > timeTracking > fieldTime > fieldTimeGeofence, and every
-  // HRM sub-feature under its module. Attaching only direct children of a
-  // top-level row silently dropped 36 features off the page entirely, so an
-  // org could never switch them on. Depth is carried so the row can indent.
+  // that — projects > timeTracking > fieldTime, and every HRM module under
+  // Human resources. Attaching only direct children of a top-level row
+  // would silently drop the deeper rows off the page entirely, so an org
+  // could never switch them on. Depth is carried so the row can indent.
   const ancestry = (row: FeatureTreeRow): { root: FeatureTreeRow; depth: number } => {
     let current = row
     let depth = 0

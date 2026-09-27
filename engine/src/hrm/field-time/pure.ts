@@ -1,6 +1,6 @@
 /**
  * HR-20 pure field-time math: rounding, break subtraction, geofence
- * containment, clock sequencing, stage validation, equipment tolerance.
+ * containment, clock sequencing, equipment tolerance.
  *
  * Pure on purpose — no database, no clock — so the unit partition owns
  * every rule and the services only wire rows through them.
@@ -525,71 +525,6 @@ export function validateClockSequence(
       }
       return;
   }
-}
-
-export interface ApprovalStage {
-  order: number;
-  approverKind: "supervisor" | "project_manager" | "payroll" | "role";
-  roleKey?: string | null;
-}
-
-/** Validate a multi-stage chain: dense orders from 1, known kinds, role named. */
-export function validateStages(raw: unknown): ApprovalStage[] {
-  if (!Array.isArray(raw) || raw.length === 0) {
-    throw new FieldTimeError(
-      "invalid_stages",
-      "The approval chain needs at least one stage — add a stage in Timesheets setup or turn multi-stage approval off",
-    );
-  }
-  if (raw.length > 5) {
-    throw new FieldTimeError(
-      "invalid_stages",
-      "The approval chain holds at most five stages — remove stages in Timesheets setup",
-    );
-  }
-  const stages = raw.map((s, i) => {
-    const rec = s as Record<string, unknown>;
-    const order = rec.order;
-    const approverKind = rec.approverKind;
-    if (typeof order !== "number" || !Number.isInteger(order) || order < 1) {
-      throw new FieldTimeError(
-        "invalid_stages",
-        `Stage ${i + 1} needs a positive integer order — fix the chain in Timesheets setup`,
-      );
-    }
-    if (
-      approverKind !== "supervisor" &&
-      approverKind !== "project_manager" &&
-      approverKind !== "payroll" &&
-      approverKind !== "role"
-    ) {
-      throw new FieldTimeError(
-        "invalid_stages",
-        `Stage ${i + 1} names an unknown approver — use supervisor, project_manager, payroll or role in Timesheets setup`,
-      );
-    }
-    if (approverKind === "role" && (typeof rec.roleKey !== "string" || rec.roleKey.trim() === "")) {
-      throw new FieldTimeError(
-        "invalid_stages",
-        `Stage ${i + 1} approves by role but names none — set the role key in Timesheets setup`,
-      );
-    }
-    return {
-      order,
-      approverKind: approverKind as ApprovalStage["approverKind"],
-      roleKey: (rec.roleKey as string | null) ?? null,
-    };
-  });
-  const orders = stages.map((s) => s.order).sort((a, b) => a - b);
-  for (let i = 0; i < orders.length; i++) {
-    if (orders[i] !== i + 1) {
-      throw new FieldTimeError(
-        "invalid_stages",
-        "Stage orders must run 1, 2, 3 without gaps — renumber the chain in Timesheets setup",
-      );
-    }
-  }
-  return stages.sort((a, b) => a.order - b.order);
 }
 
 /** Equipment hours must fit inside the entry plus the org's tolerance. */

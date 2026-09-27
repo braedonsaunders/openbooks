@@ -11,13 +11,11 @@ import { requireActorId, requireId, requireOrgId, requireReason, isUniqueViolati
 import { firstStage, loadPipelineTemplate } from "./pipeline.ts";
 import { createCandidate, isRetentionErasedCandidate, loadCandidate, type CandidateDTO } from "./candidates.ts";
 import { candidateApplicationCount, candidateInScopeRequisitionIds } from "./candidate-scope.ts";
-// HR-18 begin: disposition sync for posting-sourced applications (0229).
-// Static edge applications→postings only; postings reaches back dynamically,
-// so the module graph stays acyclic. recordDispositionForApplication is a
-// strict no-op unless the application is posting-sourced and hrmJobBoards
-// is on — HR-6 paths are byte-identical with the feature off.
+// Disposition sync for posting-sourced applications. Static edge
+// applications→postings only; postings reaches back dynamically, so the
+// module graph stays acyclic. recordDispositionForApplication is a strict
+// no-op unless the application is posting-sourced.
 import { recordDispositionForApplication } from "./postings.ts";
-// HR-18 end
 
 /**
  * Canonical recruiting application service (HR-6, 0195): one candidacy per

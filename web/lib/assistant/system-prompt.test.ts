@@ -181,26 +181,15 @@ test("assistant credential fetches refuse a cross-origin redirect without leakin
 });
 
 describe("aiRailsPromptLines", () => {
-  // HR-21: the prompt gains one line per ENABLED capability stating its
-  // autonomy; disabled capabilities contribute nothing (their tools are
-  // absent too). The realistic red is a state where only the parent
-  // hrmAiAssist is on but the child hrmDrafting is off: the child line
-  // must not leak.
-  it("emits the drafting line when hrm, hrmAiAssist and hrmDrafting are on", async () => {
+  // The prompt gains one line per available capability stating its
+  // autonomy. A capability rides the module that owns its data; one with
+  // no module gate (natural-language reports) follows the assistant alone.
+  it("follows the owning module, and always carries ungated capabilities", async () => {
     const { aiRailsPromptLines } = await import("./system-prompt.ts");
-    const lines = aiRailsPromptLines({ hrm: true, hrmAiAssist: true, hrmDrafting: true });
-    assert.ok(lines.some((line) => /hrmDrafting \(draft\)/.test(line)), `drafting line missing in ${JSON.stringify(lines)}`);
-  });
-
-  it("omits the drafting line when the chain is on but the child is off", async () => {
-    const { aiRailsPromptLines } = await import("./system-prompt.ts");
-    const lines = aiRailsPromptLines({ hrm: true, hrmAiAssist: true, hrmDrafting: false });
-    assert.ok(lines.every((line) => !line.startsWith("hrmDrafting ")), `drafting line leaked in ${JSON.stringify(lines)}`);
-  });
-
-  it("omits the drafting line when the hrm root gate is off", async () => {
-    const { aiRailsPromptLines } = await import("./system-prompt.ts");
-    const lines = aiRailsPromptLines({ hrm: false, hrmAiAssist: true, hrmDrafting: true });
-    assert.ok(lines.every((line) => !line.startsWith("hrmDrafting ")), `drafting line leaked in ${JSON.stringify(lines)}`);
+    const on = aiRailsPromptLines({ hrm: true });
+    assert.ok(on.some((line) => /^hrmDrafting \(draft\)/.test(line)), `drafting line missing in ${JSON.stringify(on)}`);
+    const off = aiRailsPromptLines({ hrm: false });
+    assert.ok(off.every((line) => !line.startsWith("hrmDrafting ")), `drafting line leaked in ${JSON.stringify(off)}`);
+    assert.ok(off.some((line) => line.startsWith("hrmNlReports ")), `ungated line missing in ${JSON.stringify(off)}`);
   });
 });

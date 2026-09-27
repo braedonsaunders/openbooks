@@ -173,8 +173,8 @@ export function WeeklyGrid({
   // HR-20: field flag chips over the week's clock pairs — geo/photo/
   // auto-close. Coordinates stay out; the drawer shows flags only.
   fieldFlags?: { entryId: string; workedOn: string; hours: string; geoCheck: string | null; autoClosed: boolean; hasPhoto: boolean }[]
-  /** HR-21: open anomaly flags overlapping this week. Empty while
-   *  hrmTimeAnomalies is off — the grid renders unchanged. */
+  /** Open anomaly flags overlapping this week. Empty when none are visible
+   *  to the actor — the grid renders unchanged. */
   anomalyFlags?: { kind: string; kindLabel: string; severity: string; explanation: string }[]
 }) {
   const t = useTranslations('timesheets')

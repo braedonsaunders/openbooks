@@ -22,9 +22,8 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { type ReportCustomQuery } from '@openbooks/reports'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
 import { hiddenReportEntityKeys, hiddenReportStatementKinds } from '../../../../lib/report-authz'
-import { isFeatureEnabled } from '../../../../lib/features'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import type { NlAskLabels } from './NlAskPanel'
 
@@ -84,7 +83,8 @@ export interface CustomReportsData {
   sort: string
   dir: string
   canCreate: boolean
-  /** HR-21 Ask box labels: null while hrmNlReports is off hides the panel. */
+  /** Ask box labels. The box hands off to the assistant, so it follows the
+   *  assistant's gate: null (no panel) without `assistant.use`. */
   nlAsk: NlAskLabels | null
 }
 
@@ -227,7 +227,7 @@ export async function loadCustomReports(
     sort: params.sort,
     dir: params.dir,
     canCreate,
-    nlAsk: (await isFeatureEnabled(authz.user.orgId, 'hrmNlReports'))
+    nlAsk: can(authz, 'assistant.use')
       ? {
           title: t('nl.title'),
           description: t('nl.description'),
@@ -278,8 +278,8 @@ export function customReportsSpec(data: CustomReportsData): PageSpec {
       ]),
     ],
     body: [
-      // HR-21 Ask box: the island renders nothing while hrmNlReports is
-      // off (nlAsk null), so no `when` gate is needed.
+      // Ask box: the island renders nothing without assistant access
+      // (nlAsk null), so no `when` gate is needed.
       widgetBlock('reports-nl-ask', { ask: data.nlAsk, canCreate: data.canCreate }),
       {
         ...widgetBlock('empty-state', {

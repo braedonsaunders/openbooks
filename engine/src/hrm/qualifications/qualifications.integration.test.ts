@@ -65,7 +65,7 @@ import { loadMaskingPolicies, seedDefaultMaskingPolicies } from "../../sandbox/m
 
 
 
-const QUALIFICATIONS_FEATURES = ["hrm", "projects", "projectScheduling", "equipment", "hrmCertifications", "hrmDispatchGating", "hrmEquipmentQualifications", "hrmCertificationAlerts"] as const;
+const QUALIFICATIONS_FEATURES = ["hrm", "projects", "projectScheduling", "equipment", "hrmCertifications"] as const;
 
 const QUALIFICATIONS_SPEC = {
   features: QUALIFICATIONS_FEATURES,
@@ -704,15 +704,16 @@ test("dispatch gate: feature-off never calls the gate, resourceless rows pass th
     await setRequirement(db, {
       orgId: h.org.orgId, actorId: h.adminId, subjectKind: "project", subjectId: projectId, typeId, severity: "block",
     });
-    await disableFeature(h.org.orgId, "hrmDispatchGating");
-    // The double throws if consulted: with the feature off the
-    // assignment path must not call the gate at all.
+    // Dispatch gating applies on the scheduling board: with Project
+    // Scheduling off the double throws if consulted, proving the
+    // assignment path never calls the gate.
+    await disableFeature(h.org.orgId, "projectScheduling");
     const result = await gateScheduleAssignment(db, {
       orgId: h.org.orgId,
       actorId: h.adminId,
       resourceId,
       gate: async () => {
-        throw new Error("gate consulted while hrmDispatchGating is off");
+        throw new Error("gate consulted while dispatch gating is off");
       },
     });
     assert.equal(result.gated, false);
@@ -950,7 +951,7 @@ test("grants, self scope, masking seed and the second-org floor", { skip: !DB },
     await disableFeature(h.org.orgId, "hrmCertifications");
     await assert.rejects(
       listQualifications(db, { orgId: h.org.orgId, actorId: h.adminId }),
-      /while the hrmCertifications feature is off/,
+      /while Certifications and licenses is off/,
     );
     await enableFeatures(h.org.orgId, QUALIFICATIONS_FEATURES);
     // License numbers mask in sandbox clones like candidate PII.

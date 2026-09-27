@@ -24,3 +24,10 @@ export class CompensationError extends Error {
 export function mathRefusal(message: string): CompensationError {
   return new CompensationError("REFUSED", message);
 }
+
+/**
+ * The refusal every merit-cycle surface gives while Payroll is off: a round
+ * reads current pay at open and pushes new rates through Payroll.
+ */
+export const MERIT_CYCLES_NEED_PAYROLL =
+  "Payroll is off — merit cycles read current pay and push new rates through Payroll; turn Payroll on in Company Settings → Features first";

@@ -31,8 +31,8 @@ export const PATCH = defineRoute({
     return NextResponse.json({ error: "missing permission: one of payroll.manage, time.approve, hrm.employment.read" }, { status: 403 });
   }
   if (
-    !(await isFeatureEnabled(gate.user.orgId, "hrmPayrollAnomalies")) &&
-    !(await isFeatureEnabled(gate.user.orgId, "hrmTimeAnomalies"))
+    !(await isFeatureEnabled(gate.user.orgId, "payroll")) &&
+    !(await isFeatureEnabled(gate.user.orgId, "timeTracking"))
   ) {
     return notFound("record");
   }

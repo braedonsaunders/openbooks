@@ -52,7 +52,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 type Harness = { org: ScratchOrg; adminId: string };
 
 const AUTOMATIONS_SPEC = {
-  features: ["hrm", "automations", "hrmActionReasons", "hrmEventVerbs"],
+  features: ["hrm", "automations"],
   users: [
     {
       key: "adminId",
@@ -410,35 +410,39 @@ test("feature-off: triggers must not fire", { skip: !DB }, async () => {
   }, { bypass: true });
 });
 
-test("action reasons: required when on, ignored when off, comment enforced", { skip: !DB }, async () => {
+test("action reasons: required once an active code is declared, comment enforced", { skip: !DB }, async () => {
   await withHarness(setupAutomationsHarness, async (h) => {
-    await upsertActionReason({
+    // No code declared: classification is optional, never a refusal.
+    await validateSubmitActionReason({ orgId: h.org.orgId });
+    const code = {
       orgId: h.org.orgId,
       actorId: h.adminId,
       action: "transfer",
       reasonCode: "VOL-DEPT",
       label: "Voluntary department move",
       requiresComment: true,
-    });
-    // Missing both while on: refusal naming the remedy.
+    };
+    await upsertActionReason(code);
+    // Missing both once a code is active: refusal naming the remedy.
     await assert.rejects(
-      validateSubmitActionReason({ orgId: h.org.orgId, featureOn: true }),
+      validateSubmitActionReason({ orgId: h.org.orgId }),
       (e: unknown) => e instanceof ActionReasonError && /requires an action/.test((e as Error).message),
     );
     // Unknown code: refusal.
     await assert.rejects(
-      validateSubmitActionReason({ orgId: h.org.orgId, featureOn: true, action: "transfer", reasonCode: "NOPE", reason: "x" }),
+      validateSubmitActionReason({ orgId: h.org.orgId, action: "transfer", reasonCode: "NOPE", reason: "x" }),
       (e: unknown) => e instanceof ActionReasonError && /not active/.test((e as Error).message),
     );
     // Requires-comment code without a reason: refusal.
     await assert.rejects(
-      validateSubmitActionReason({ orgId: h.org.orgId, featureOn: true, action: "transfer", reasonCode: "VOL-DEPT", reason: "  " }),
+      validateSubmitActionReason({ orgId: h.org.orgId, action: "transfer", reasonCode: "VOL-DEPT", reason: "  " }),
       (e: unknown) => e instanceof ActionReasonError && /requires a written explanation/.test((e as Error).message),
     );
     // Valid: passes.
-    await validateSubmitActionReason({ orgId: h.org.orgId, featureOn: true, action: "transfer", reasonCode: "VOL-DEPT", reason: "team move" });
-    // Feature off: everything ignored, never a refusal.
-    await validateSubmitActionReason({ orgId: h.org.orgId, featureOn: false });
+    await validateSubmitActionReason({ orgId: h.org.orgId, action: "transfer", reasonCode: "VOL-DEPT", reason: "team move" });
+    // The only code deactivated: optional again.
+    await upsertActionReason({ ...code, isActive: false });
+    await validateSubmitActionReason({ orgId: h.org.orgId });
   }, { bypass: true });
 });
 

@@ -14,7 +14,7 @@ import { createCalibrationSessionBody } from "./bodies";
  */
 export const GET = defineRoute({
   permission: "hrm.performance.read",
-  feature: "hrmCalibration",
+  feature: "hrmPerformance",
   handler: async ({ request: req, authz }) => {
     const cycleId = new URL(req.url).searchParams.get("cycleId");
     if (cycleId !== null && !isUuid(cycleId)) {
@@ -37,7 +37,7 @@ export const GET = defineRoute({
 });
 export const POST = defineRoute({
   permission: "hrm.performance.manage",
-  feature: "hrmCalibration",
+  feature: "hrmPerformance",
   body: createCalibrationSessionBody,
   handler: async ({ request: _req, authz, body }) => {
     try {

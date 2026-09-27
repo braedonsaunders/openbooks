@@ -21,7 +21,7 @@ export const ACTION_REASONS_ENTITY: SetupEntity = {
   key: 'hrm-action-reasons',
   table: 'hrm_action_reasons',
   groupKey: 'workforce',
-  featureKey: 'hrmActionReasons',
+  featureKey: 'hrm',
   rehomed: true,
   rehomedTo: '/hrm/change-requests?reasons=1',
   iconKey: 'tag',

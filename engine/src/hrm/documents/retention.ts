@@ -46,12 +46,6 @@ async function assertDocumentsFeature(exec: SqlExecutor, orgId: string): Promise
       "retention is unavailable while the hrmDocuments feature is off — enable it under Company Settings → Features",
     );
   }
-  if (!(await lockAndCheckOrgFeature(exec, orgId, "hrmDocumentRetention"))) {
-    throw new HrmDocumentsError(
-      "REFUSED",
-      "retention is unavailable while the hrmDocumentRetention feature is off — enable it under Company Settings → Features",
-    );
-  }
 }
 
 export interface RetentionScheduleDTO {

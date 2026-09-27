@@ -10,12 +10,12 @@ export const runtime = "nodejs";
 
 /**
  * Kit attributes: POST appends a rated attribute at an explicit position
- * (manage gate in the service). 404s while hrm, hrmRecruiting, or
- * hrmStructuredInterviews is off.
+ * (manage gate in the service). 404s while HRM or Recruiting is
+ * off.
  */
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmStructuredInterviews",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: createAttributeBody,
   handler: async ({

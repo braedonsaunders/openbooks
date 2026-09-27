@@ -19,7 +19,7 @@ import { z } from "zod";
  */
 export const POST = defineRoute({
   permission: "hrm.performance.manage",
-  feature: "hrmCompetencies",
+  feature: "hrmPerformance",
   body: z.union([addCompetencyLevelBody, createCompetencyBody]),
   handler: async ({ request: _req, authz, body }) => {
     const raw: unknown = body;

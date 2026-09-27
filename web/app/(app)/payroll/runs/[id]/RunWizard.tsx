@@ -83,9 +83,9 @@ export function RunWizard(props: {
    * status; never a second switch, flag, or permission-only check.
    */
   approval: PayRunApprovalState
-  /** HR-21: open block-severity anomaly flags overlapping this run's
-   *  period. The commit button stays off while nonzero; the commit route
-   *  refuses regardless. Zero while hrmPayrollAnomalies is off. */
+  /** Open block-severity anomaly flags overlapping this run's period. The
+   *  commit button stays off while nonzero; the commit route refuses
+   *  regardless. */
   anomalyBlocks: number
   /**
    * Active, non-elimination entities visible to the caller — the target

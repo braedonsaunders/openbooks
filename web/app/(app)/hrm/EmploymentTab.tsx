@@ -171,8 +171,7 @@ export function EmploymentTab({
   canReadExits?: boolean
   /** hrm.performance.manage — HR records and corrects the exit. */
   canRecordExit?: boolean
-  /** HR-16 verb actions (Rescind/Correct) display gate: approve grant
-   * plus the hrmEventVerbs feature. */
+  /** Verb actions (Rescind/Correct) display gate: the approve grant. */
   canVerb?: boolean
   departmentOptions?: { value: string; label: string }[]
 }) {

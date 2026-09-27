@@ -186,12 +186,18 @@ async function assertScanScope(exec: SqlExecutor, orgId: string, actorId: string
   );
 }
 
+/** Timesheet checks ride Time tracking; payroll checks ride Payroll. */
+function anomalyFeatureKey(timeOnly: boolean): "timeTracking" | "payroll" {
+  return timeOnly ? "timeTracking" : "payroll";
+}
+
 async function assertAnomalyFeature(exec: SqlExecutor, orgId: string, timeOnly: boolean): Promise<void> {
-  const key = timeOnly ? "hrmTimeAnomalies" : "hrmPayrollAnomalies";
-  if (!(await lockAndCheckOrgFeature(exec, orgId, key))) {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, anomalyFeatureKey(timeOnly)))) {
     throw new AiRailsError(
       "ai_feature_off",
-      `payroll checks are unavailable while ${key} is off — enable it under Company Settings → Features`,
+      timeOnly
+        ? "timesheet checks are unavailable while Time tracking is off — enable Time tracking under Company Settings → Features"
+        : "payroll checks are unavailable while Payroll is off — enable Payroll under Company Settings → Features",
     );
   }
 }
@@ -789,9 +795,9 @@ async function assertFlagReadScope(exec: SqlExecutor, orgId: string, actorId: st
   const payrollPermission = await actorHasPermission(exec, orgId, actorId, "payroll.manage");
   const timePermission = await actorHasPermission(exec, orgId, actorId, "time.approve");
   const employmentRead = await actorHasPermission(exec, orgId, actorId, "hrm.employment.read");
-  const payroll = payrollPermission && await orgFeatureEnabled(orgId, "hrmPayrollAnomalies", exec);
+  const payroll = payrollPermission && await orgFeatureEnabled(orgId, anomalyFeatureKey(false), exec);
   const time = (timePermission || employmentRead || payrollPermission)
-    && await orgFeatureEnabled(orgId, "hrmTimeAnomalies", exec);
+    && await orgFeatureEnabled(orgId, anomalyFeatureKey(true), exec);
   if (payroll || time) return { payroll, time };
   throw new AiRailsError(
     "ai_forbidden",
@@ -916,9 +922,7 @@ export async function transitionFlag(
     ? (await actorHasPermission(exec, orgId, actorId, "time.approve")
       || await actorHasPermission(exec, orgId, actorId, "payroll.manage"))
     : await actorHasPermission(exec, orgId, actorId, "payroll.manage");
-  const featureOn = await lockAndCheckOrgFeature(
-    exec, orgId, isTimeFlag ? "hrmTimeAnomalies" : "hrmPayrollAnomalies",
-  );
+  const featureOn = await lockAndCheckOrgFeature(exec, orgId, anomalyFeatureKey(isTimeFlag));
   if (!authorized || !featureOn) {
     throw new AiRailsError("ai_forbidden", "this anomaly flag is outside your enabled payroll or time authority");
   }

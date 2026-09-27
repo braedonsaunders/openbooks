@@ -14,9 +14,7 @@ async function enableFieldTime(orgId: string): Promise<void> {
   await db.execute(sql`
     update orgs set settings = coalesce(settings, '{}'::jsonb)
       || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb)
-      || '{"projects": true, "timeTracking": true, "fieldTime": true, "fieldTimeGeofence": true,
-             "fieldTimePhoto": false, "fieldTimeKiosk": true, "fieldTimeCrewEntry": true,
-             "fieldTimeEquipment": true, "fieldTimeMultiStageApproval": true, "equipment": true}'::jsonb)
+      || '{"projects": true, "timeTracking": true, "fieldTime": true, "equipment": true}'::jsonb)
      where id = ${orgId}`);
   await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{fieldTime}',
@@ -52,7 +50,7 @@ async function batchStatus(batchId: string): Promise<string | undefined> {
   return rows[0]?.status;
 }
 
-test("gate approval of a crew batch advances its stage; rejection returns it", { skip: !DB }, async () => {
+test("gate approval of a crew batch approves it; rejection returns it", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     await enableFieldTime(org.orgId);
@@ -65,8 +63,8 @@ test("gate approval of a crew batch advances its stage; rejection returns it", {
     await withOrg(org.orgId, async () => {
       await releaseCrewTimeBatchApproval(org.orgId, actor, approvedId, "approved", null);
     });
-    // No declared chain: single approval completes at approved_stage_2.
-    assert.equal(await batchStatus(approvedId), "approved_stage_2");
+    // One release approves the batch: Flows already resolved every gate.
+    assert.equal(await batchStatus(approvedId), "approved");
 
     const rejectedId = await seedSubmittedBatch(org.orgId, org.subsidiaryId, actor);
     await withOrg(org.orgId, async () => {

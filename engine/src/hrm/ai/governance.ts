@@ -9,15 +9,14 @@ import {
 } from "../../organization/subsidiary-scope.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { featureEnabled, type FeatureState } from "../../organization/feature-registry.ts";
-import { HRM_FEATURE_KEY } from "../employment-read.ts";
+import type { FeatureState } from "../../organization/feature-registry.ts";
 import { HrmAuthorizationError, loadApprovalPerson, requireHrmSelfRead } from "../authorization.ts";
 import { AiRailsError } from "./errors.ts";
 import { inputGuards } from "../input-guards.ts";
-import { AI_CAPABILITIES, assertAutonomyAtOrBelowMax, requireCapability } from "./registry.ts";
+import { AI_CAPABILITIES, assertAutonomyAtOrBelowMax, capabilityFeatureOn, requireCapability } from "./registry.ts";
 
 /**
- * HRM AI rails (HR-21) governance: the capability mirror sync, the
+ * AI governance: the capability mirror sync, the
  * decision-log writer every tool MUST call, autonomy edits (down only),
  * and the review-cadence nudge source.
  *
@@ -31,12 +30,16 @@ function requireIds(orgId: unknown, actorId: unknown): { orgId: string; actorId:
   return { orgId: requireOrgId(orgId), actorId: requireActorId(actorId) };
 }
 
-/** Engine-side feature gate: the ledger refuses while hrm itself is off. */
-async function assertHrmOn(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
+/**
+ * Engine-side feature gate: the mirror sync refuses while the AI governance
+ * ledger is off. The ledger is platform governance — AI capabilities ride
+ * the modules that own their data, so the sync never depends on HRM.
+ */
+async function assertLedgerOn(exec: SqlExecutor, orgId: string): Promise<void> {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, "aiGovernanceLedger"))) {
     throw new AiRailsError(
-      "ai_hrm_off",
-      "AI rails are unavailable while the hrm feature is off — enable it under Company Settings → Features; existing data is preserved",
+      "ai_feature_off",
+      "the AI governance ledger is off — enable AI governance ledger under Company Settings → Features; existing data is preserved",
     );
   }
 }
@@ -126,10 +129,11 @@ async function orgFeatureState(exec: SqlExecutor, orgId: string): Promise<Featur
 
 function withSwitchboardStatus(rows: CapabilityRow[], features: FeatureState): CapabilityRow[] {
   return rows.map((row) => {
-    const featureKey = AI_CAPABILITIES.get(row.key)?.featureKey ?? row.key;
-    // Features is the sole switchboard. The legacy enabled column remains
-    // stored for schema compatibility, but is never an authority or mirror.
-    return { ...row, enabled: featureEnabled(features, featureKey) };
+    const def = AI_CAPABILITIES.get(row.key);
+    // Features is the sole switchboard: a capability is on while the module
+    // owning its data is. The stored enabled column is never an authority.
+    // A row whose key left the code registry reads as off.
+    return { ...row, enabled: def ? capabilityFeatureOn(features, def) : false };
   });
 }
 
@@ -144,7 +148,7 @@ export async function syncCapabilities(
   actorId: string,
 ): Promise<string[]> {
   requireIds(orgId, actorId);
-  await assertHrmOn(exec, orgId);
+  await assertLedgerOn(exec, orgId);
   const seeded: string[] = [];
   for (const def of AI_CAPABILITIES.values()) {
     const rows = (await exec.execute<{ id: string }>(sql`
@@ -231,7 +235,7 @@ export async function updateCapability(
       `AI capability "${input.key}" is not registered for this organization — sync it from the code registry on /admin/ai first`,
     );
   }
-  row.enabled = featureEnabled(await orgFeatureState(exec, orgId), def.featureKey);
+  row.enabled = capabilityFeatureOn(await orgFeatureState(exec, orgId), def);
   await logDecision(exec, {
     orgId,
     actorId,

@@ -35,8 +35,8 @@ import { businessTimeZone, formatInZone, formatTimeInZone } from '@openbooks/eng
  * Me 1:1s — upcoming and past conversations with the agenda drawer
  * (talking points, action items with done toggles, the private notes
  * area, and the "carry forward" chip), plus open feedback requests with
- * the fulfil form. Renders only when hrm, hrmPerformance and hrmOneOnOnes
- * are on; rows stay loader-resolved through the governed services, and
+ * the fulfil form. Renders only when hrm and hrmPerformance are on; rows
+ * stay loader-resolved through the governed services, and
  * private items arrive already filtered to their author.
  */
 
@@ -217,7 +217,6 @@ export async function loadMeOneOnOnesPage(
   if (!authz) notFound()
   await requireFeatureEnabled(authz.user.orgId, 'hrm')
   await requireFeatureEnabled(authz.user.orgId, 'hrmPerformance')
-  await requireFeatureEnabled(authz.user.orgId, 'hrmOneOnOnes')
   const t = await getTranslations('hrm')
   const tabs = await meTabs(authz, '/me/one-on-ones')
 

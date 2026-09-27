@@ -65,13 +65,11 @@ const HRM_KEYS = [
   'hrm_retention_runs',
   'hrm_pool_members',
   // HR-18 end
-  // HR-21 begin: anomaly flags ride the payroll manager grant with the
-  // anomalies switch; the ledger and the capability mirror ride the
-  // setup grant with the ledger switch.
+  // Anomaly flags ride the payroll manager grant with Payroll; the ledger
+  // and the capability mirror ride the setup grant with the ledger switch.
   'payroll_anomaly_flags',
   'ai_decisions',
   'ai_capabilities',
-  // HR-21 end
 ] as const
 
 const HRM_PERMISSIONS: Record<(typeof HRM_KEYS)[number], string> = {
@@ -152,14 +150,14 @@ test('workforce entities are registered on the shared catalog exactly once', () 
 })
 
 test('workforce entities refuse without their gate and their own read permission', () => {
-  // HR-16 begin: recipe entities ride the automations switch, the reason
-  // vocabulary rides hrmActionReasons, everything else rides hrm.
+  // Recipe entities ride the automations switch; the reason vocabulary
+  // and everything else ride hrm.
   const HRM_FEATURES: Record<(typeof HRM_KEYS)[number], string> = {
     hrm_headcount: 'hrm', hrm_employment_history: 'hrm', hrm_change_requests: 'hrm',
     hrm_positions: 'hrm', hrm_processes: 'hrm', hrm_leave_absences: 'hrm',
     hrm_requisitions: 'hrm', hrm_applications: 'hrm', hrm_benefit_enrollments: 'hrm',
     hrm_reviews: 'hrm', hrm_goals: 'hrm', hrm_turnover: 'hrm',
-    automations: 'automations', automation_runs: 'automations', hrm_action_reasons: 'hrmActionReasons',
+    automations: 'automations', automation_runs: 'automations', hrm_action_reasons: 'hrm',
     // HR-13: construction entities ride the construction switch, not the bare hrm one.
     hrm_rate_schedule_lines: 'hrmConstructionCompliance', hrm_per_diem_entries: 'hrmConstructionCompliance',
     hrm_comp_class_split: 'hrmConstructionCompliance', hrm_certified_runs: 'hrmConstructionCompliance',
@@ -167,65 +165,51 @@ test('workforce entities refuse without their gate and their own read permission
     // HR-12: compensation entities ride the compensation switch.
     hrm_pay_bands: 'hrmCompensation', hrm_comp_cycle_lines: 'hrmCompensation',
     hrm_headcount_plan_lines: 'hrmCompensation', hrm_pay_gap_snapshots: 'hrmCompensation',
-    // HR-14 begin: the register rides hrmCertifications, the alert queue
-    // rides hrmCertificationAlerts.
+    // The register and the alert queue ride Certifications and licenses.
     hrm_qualifications: 'hrmCertifications',
-    hrm_qualification_alerts: 'hrmCertificationAlerts',
-    // HR-14 end
-    // HR-19 begin: documents and signers ride hrmDocuments, the ledger
-    // rides hrmDocumentRetention, results ride hrmSurveys, the chart
-    // rides hrmOrgChart.
+    hrm_qualification_alerts: 'hrmCertifications',
+    // Documents, signers and the retention ledger ride HR documents,
+    // results ride Surveys, the chart rides the HRM module itself.
     hrm_documents: 'hrmDocuments',
     hrm_document_signers: 'hrmDocuments',
-    hrm_retention_actions: 'hrmDocumentRetention',
+    hrm_retention_actions: 'hrmDocuments',
     hrm_survey_results: 'hrmSurveys',
-    hrm_org_chart: 'hrmOrgChart',
-    // HR-19 end
-    // HR-18 begin: depth entities ride their own sub-switches.
-    hrm_scorecards: 'hrmStructuredInterviews', hrm_interview_slots: 'hrmInterviewScheduling',
-    hrm_offers: 'hrmOfferSigning', hrm_postings: 'hrmJobBoards',
-    hrm_retention_runs: 'hrmCandidateRetention', hrm_pool_members: 'hrmTalentPool',
-    // HR-18 end
-    // HR-21 begin: flags ride the anomalies switch, the ledger and its
-    // mirror ride the ledger switch.
-    payroll_anomaly_flags: 'hrmPayrollAnomalies',
+    hrm_org_chart: 'hrm',
+    // Recruiting depth entities ride the Recruiting module.
+    hrm_scorecards: 'hrmRecruiting', hrm_interview_slots: 'hrmRecruiting',
+    hrm_offers: 'hrmRecruiting', hrm_postings: 'hrmRecruiting',
+    hrm_retention_runs: 'hrmRecruiting', hrm_pool_members: 'hrmRecruiting',
+    // Payroll check flags ride Payroll; the AI ledger and its mirror ride
+    // the ledger switch.
+    payroll_anomaly_flags: 'payroll',
     ai_decisions: 'aiGovernanceLedger',
     ai_capabilities: 'aiGovernanceLedger',
-    // HR-21 end
     // HR-14 begin: pre-existing red on the stacked base — the HR-12
     // compensation entities were never added to this switch map, so the
     // exact pin above compared against undefined. They ride
     // hrmCompensation, matching their declarations.
     // HR-14 end
-    // HR-17: continuous-performance entities ride their own sub-switches.
-    hrm_one_on_ones: 'hrmOneOnOnes', hrm_feedback: 'hrmFeedback',
-    hrm_calibration_entries: 'hrmCalibration', hrm_talent_reviews: 'hrmSuccession',
+    // Continuous-performance entities ride the Performance switch.
+    hrm_one_on_ones: 'hrmPerformance', hrm_feedback: 'hrmPerformance',
+    hrm_calibration_entries: 'hrmPerformance', hrm_talent_reviews: 'hrmPerformance',
   }
   for (const key of HRM_KEYS) {
     const entity = REPORT_ENTITY_MAP[key]!
     assert.equal(entity.requiredPermission, HRM_PERMISSIONS[key], key)
     assert.equal(entity.featureKey, HRM_FEATURES[key], key)
     // HR-12 begin: compensation entities gate on the hrmCompensation switch.
-    // HR-14 begin: the register rides hrmCertifications, the alert queue
-    // rides hrmCertificationAlerts. Exact key matches: the old
-    // startsWith('hrm_comp_') swept hrm_comp_class_split (construction)
-    // into compensation, and the trailing 'hrm' default contradicted the
-    // HR-13/HR-16 switches in HRM_FEATURES — both pre-existing failures,
-    // repaired here. Anything not classified here defers to that area's
+    // Exact key matches: the old startsWith('hrm_comp_') swept
+    // hrm_comp_class_split (construction) into compensation, and a
+    // trailing 'hrm' default contradicted the module switches in
+    // HRM_FEATURES. Anything not classified here defers to that area's
     // declared switch (pinned exactly above).
     const expectedFeature =
       key === 'hrm_pay_bands' || key === 'hrm_comp_cycle_lines' || key === 'hrm_headcount_plan_lines' || key === 'hrm_pay_gap_snapshots'
         ? 'hrmCompensation'
-        : key === 'hrm_qualifications'
-          ? 'hrmCertifications'
-          : key === 'hrm_qualification_alerts'
-            ? 'hrmCertificationAlerts'
-            : HRM_FEATURES[key]
+        : HRM_FEATURES[key]
     assert.equal(entity.featureKey, expectedFeature, key)
     // HR-12 end
-    // HR-14 end
   }
-  // HR-16 end
 })
 
 test('workforce entities scope to one org and one legal-entity boundary', () => {

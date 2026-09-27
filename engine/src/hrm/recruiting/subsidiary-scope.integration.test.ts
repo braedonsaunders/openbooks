@@ -102,7 +102,7 @@ const offerTerms = (employerSubsidiaryId: string) => ({
 scopeMatrix([
   scopeRow({
     name: "the postings list shows a scoped reader only in-scope openings",
-    features: ["hrmRecruiting", "hrmJobBoards"],
+    features: ["hrmRecruiting"],
     permissions: PERMISSIONS,
     seed: async (w) => {
       const reqA = await openReq(w, w.subA, "A role");
@@ -119,7 +119,7 @@ scopeMatrix([
   }),
   scopeRow({
     name: "shared recruiting configuration needs unrestricted scope to write",
-    features: ["hrmRecruiting", "hrmStructuredInterviews", "hrmOfferSigning", "hrmCandidateRetention"],
+    features: ["hrmRecruiting"],
     permissions: PERMISSIONS,
     write: async (w) => {
       const writes = (actorId: string) => ({
@@ -138,7 +138,7 @@ scopeMatrix([
   }),
   scopeRow({
     name: "consent record, withdraw and list need ownership of the candidate",
-    features: ["hrmRecruiting", "hrmCandidateRetention"],
+    features: ["hrmRecruiting"],
     permissions: PERMISSIONS,
     seed: async (w) => {
       const seeded = await pipeline(w);
@@ -218,7 +218,7 @@ scopeMatrix([
   }),
   scopeRow({
     name: "a scoped retention run anonymizes only in-scope candidates",
-    features: ["hrmRecruiting", "hrmCandidateRetention"],
+    features: ["hrmRecruiting"],
     permissions: PERMISSIONS,
     write: async (w) => {
       const orgId = w.orgId;
@@ -241,7 +241,7 @@ scopeMatrix([
   }),
   scopeRow({
     name: "running a retention rule needs the manage grant unless the system job runs it",
-    features: ["hrmRecruiting", "hrmCandidateRetention"],
+    features: ["hrmRecruiting"],
     permissions: PERMISSIONS,
     actors: { admin: { scope: "all" }, reader: READER },
     write: async (w) => {
@@ -253,7 +253,7 @@ scopeMatrix([
   }),
   scopeRow({
     name: "a scoped reader sees candidate PII only through in-scope requisitions",
-    features: ["hrmRecruiting", "hrmTalentPool"],
+    features: ["hrmRecruiting"],
     permissions: PERMISSIONS,
     seed: (w) => pipeline(w, { phones: true }),
     read: async (w, { candA, candB }) => {
@@ -282,7 +282,7 @@ scopeMatrix([
   }),
   scopeRow({
     name: "a pool-shared candidate renders identity-only to scoped readers",
-    features: ["hrmRecruiting", "hrmTalentPool"],
+    features: ["hrmRecruiting"],
     permissions: PERMISSIONS,
     read: async (w) => {
       const reqB = await openReq(w, w.subB, "B role");
@@ -298,7 +298,7 @@ scopeMatrix([
   }),
   scopeRow({
     name: "pool members and rediscovery list only owned candidates",
-    features: ["hrmRecruiting", "hrmTalentPool"],
+    features: ["hrmRecruiting"],
     permissions: PERMISSIONS,
     seed: pooled,
     read: async (w, { pool, candA, candB, reqA }) => {
@@ -312,7 +312,7 @@ scopeMatrix([
   }),
   scopeRow({
     name: "pool add, remove and tag need ownership of the candidate",
-    features: ["hrmRecruiting", "hrmTalentPool"],
+    features: ["hrmRecruiting"],
     permissions: PERMISSIONS,
     seed: pooled,
     write: async (w, { pool, candA, candB }) => {
@@ -330,7 +330,7 @@ scopeMatrix([
   }),
   scopeRow({
     name: "readers list shared recruiting configuration and history",
-    features: ["hrmRecruiting", "hrmTalentPool", "hrmStructuredInterviews", "hrmCandidateRetention", "hrmOfferSigning", "hrmJobBoards"],
+    features: ["hrmRecruiting"],
     permissions: PERMISSIONS,
     actors: { admin: { scope: "all" }, reader: READER },
     read: async (w) => {
@@ -357,7 +357,7 @@ scopeMatrix([
   }),
   scopeRow({
     name: "requisition-bound reads open under the read grant with scope",
-    features: ["hrmRecruiting", "hrmTalentPool", "hrmStructuredInterviews", "hrmOfferSigning"],
+    features: ["hrmRecruiting"],
     permissions: PERMISSIONS,
     actors: { admin: { scope: "all" }, scoped: { scope: "A" }, reader: READER },
     read: async (w) => {
@@ -387,7 +387,7 @@ scopeMatrix([
   }),
   scopeRow({
     name: "the scorecard summary projects counts without panel names to readers",
-    features: ["hrmRecruiting", "hrmStructuredInterviews"],
+    features: ["hrmRecruiting"],
     permissions: PERMISSIONS,
     actors: { admin: { scope: "all" }, reader: READER },
     read: async (w) => {

@@ -328,7 +328,7 @@
       "unassignHint": "Registra um vínculo nulo explícito: o espaço mantém seu conteúdo, mas não ocupa quadro.",
       "actionLabel": "Ação",
       "actionPlaceholder": "Selecione uma ação",
-      "actionRequired": "Escolha a ação de RH desta alteração.",
+      "actionRequired": "Escolha a ação de RH e o motivo desta alteração.",
       "reasonCodeLabel": "Motivo",
       "reasonCodePlaceholder": "Selecione um motivo",
       "rescindAction": "Rescindir",
@@ -1544,8 +1544,6 @@
     "empty": "Nada aqui ainda.",
     "emptyAction": "Configure em Ajustes abaixo.",
     "truncatedNote": "Exibindo as primeiras {limit} de {total} linhas.",
-    "sectionOffTitle": "Esta seção está desativada",
-    "sectionOffMessage": "Ative o recurso correspondente em Configurações da empresa → Recursos.",
     "active": "Ativo",
     "retired": "Aposentado",
     "sections": {

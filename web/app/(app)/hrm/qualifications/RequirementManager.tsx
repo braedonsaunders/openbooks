@@ -30,7 +30,8 @@ export interface RequirementManagerProps {
     searchHint: string
     searchFailed: string
     more: string
-    subjects: Record<SubjectKind, string>
+    /** Offered subject kinds; a kind without a label is not offered. */
+    subjects: Partial<Record<SubjectKind, string>>
   }
 }
 
@@ -147,7 +148,7 @@ export function QualificationRequirementManager({ today, types, labels }: Requir
         <div>
           <Label htmlFor="qualification-requirement-kind">{labels.subjectKind}</Label>
           <Select id="qualification-requirement-kind" value={kind} disabled={busy} onChange={(event) => changeKind(event.target.value)}>
-            {KINDS.map((value) => <option key={value} value={value}>{labels.subjects[value]}</option>)}
+            {KINDS.filter((value) => labels.subjects[value] !== undefined).map((value) => <option key={value} value={value}>{labels.subjects[value]}</option>)}
           </Select>
         </div>
         <div>

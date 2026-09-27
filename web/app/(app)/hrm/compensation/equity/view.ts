@@ -24,7 +24,7 @@ import { compensationAuthz, loadEquity } from '../../../../../lib/hrm/compensati
  * metrics as tiles and the per-category table with the joint-assessment
  * flag; the generate action opens the snapshot dialog. Export rides the
  * report engine (hrm_pay_gap_snapshots). Renders only when
- * hrmPayTransparency is on and the actor holds hrm.compensation.read.
+ * Compensation is on and the actor holds hrm.compensation.read.
  */
 
 const f = item

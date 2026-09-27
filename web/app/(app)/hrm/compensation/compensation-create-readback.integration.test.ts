@@ -82,12 +82,12 @@ const { loadCompensationHome } = await import("../../../../lib/hrm/compensation"
 test("the dialogs' create payloads persist and appear in the home registers", async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    // hrmMeritCycles additionally requires payroll (feature-registry
-    // requiresAll) — the enforced dependency, not test scaffolding.
+    // Merit cycles additionally need Payroll — the enforced dependency,
+    // not test scaffolding.
     await withBypassContext(() =>
       db.execute(sql`
         update orgs
-           set settings = coalesce(settings, '{}'::jsonb) || '{"features": {"hrm": true, "payroll": true, "hrmCompensation": true, "hrmMeritCycles": true, "hrmHeadcountPlans": true}}'::jsonb
+           set settings = coalesce(settings, '{}'::jsonb) || '{"features": {"hrm": true, "payroll": true, "hrmCompensation": true}}'::jsonb
          where id = ${org.orgId}`),
     );
     const actor = await withBypassContext(() => createScratchUser(org.orgId, "Compensation creator", "comp_creator"));

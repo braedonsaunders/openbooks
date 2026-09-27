@@ -14,12 +14,12 @@ export const runtime = "nodejs";
 /**
  * Interview slots: GET lists the interview's slots, POST proposes a batch
  * from declared availability windows and mints the candidate self-booking
- * link (manage gate in the service). 404s while hrm, hrmRecruiting, or
- * hrmInterviewScheduling is off.
+ * link (manage gate in the service). 404s while HRM or Recruiting is
+ * off.
  */
 export const GET = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmInterviewScheduling",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const { id } = routeParams;
@@ -38,7 +38,7 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmInterviewScheduling",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: proposeSlotsBody,
   handler: async ({

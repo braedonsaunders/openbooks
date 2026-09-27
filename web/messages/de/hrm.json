@@ -328,7 +328,7 @@
       "unassignHint": "Bucht eine explizite Null-Verknüpfung: Der Slot behält seinen Inhalt, besetzt aber keinen Bestand.",
       "actionLabel": "Aktion",
       "actionPlaceholder": "Aktion wählen",
-      "actionRequired": "Wählen Sie die HR-Aktion dieser Änderung.",
+      "actionRequired": "Wählen Sie die HR-Aktion und den Grund dieser Änderung.",
       "reasonCodeLabel": "Grund",
       "reasonCodePlaceholder": "Grund wählen",
       "rescindAction": "Zurücknehmen",
@@ -1544,8 +1544,6 @@
     "empty": "Noch nichts vorhanden.",
     "emptyAction": "Unten unter Setup konfigurieren.",
     "truncatedNote": "Die ersten {limit} von {total} Zeilen werden angezeigt.",
-    "sectionOffTitle": "Dieser Bereich ist ausgeschaltet",
-    "sectionOffMessage": "Aktivieren Sie die zugehörige Funktion unter Unternehmenseinstellungen → Funktionen.",
     "active": "Aktiv",
     "retired": "Archiviert",
     "sections": {

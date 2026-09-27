@@ -9,8 +9,8 @@ export async function generateMetadata() {
 
 /**
  * Pay equity — the latest frozen gap snapshot with per-category gaps
- * and joint-assessment flags. Renders only when hrmPayTransparency is
- * on and the actor holds hrm.compensation.read.
+ * and joint-assessment flags. Renders only when Compensation is on and
+ * the actor holds hrm.compensation.read.
  */
 export default async function EquityPage({
   searchParams,

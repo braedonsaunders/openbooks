@@ -8,13 +8,16 @@
  * Own leg: my drafts (created_by = me, status draft) through
  * listChangeRequests, which already applies the kind-aware read gate.
  * Acts through submitChangeRequest — the submit route's service, which
- * needs a reason, so the submit action collects one.
+ * needs a reason, so the submit action collects one. The draft's stored
+ * action and reason code pass the same classification check the submit
+ * route runs, so the inbox is never a way around declared reason codes.
  */
 
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { decideGate, delegateGate } from "../../flows/gates.ts";
 import { worklistApprovals } from "../../flows/approval-worklist.ts";
-import { listChangeRequests, submitChangeRequest } from "../../hrm/change-requests.ts";
+import { validateSubmitActionReason } from "../../automations/action-reasons.ts";
+import { getChangeRequest, listChangeRequests, submitChangeRequest } from "../../hrm/change-requests.ts";
 import { db } from "../../platform/db.ts";
 import { parseDelegationReason } from "../delegation.ts";
 import { hrmOn, toWorklistScope } from "../guard.ts";
@@ -89,10 +92,18 @@ export const hrmChangeRequestAdapter: InboxAdapter = {
     }
     if (sourceId.startsWith("own:")) {
       if (actionKey === "submit") {
+        const requestId = sourceId.slice("own:".length);
+        const draft = await getChangeRequest({ orgId: ctx.orgId, actorId: ctx.actorId, requestId });
+        await validateSubmitActionReason({
+          orgId: ctx.orgId,
+          action: draft.action,
+          reasonCode: draft.reasonCode,
+          reason,
+        });
         await submitChangeRequest({
           orgId: ctx.orgId,
           actorId: ctx.actorId,
-          requestId: sourceId.slice("own:".length),
+          requestId,
           reason: reason ?? "",
         });
         return;

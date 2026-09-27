@@ -43,8 +43,8 @@ const EMPTY_LINE: CrewLine = {
 /**
  * The foreman workspace: inline-editable crew rows (tab order runs down
  * each column across rows), copy-yesterday, sign-and-submit with the
- * signature dialog, and the stage actions. On the phone the rows render
- * as worker cards. Locked batches render read-only with the stage strip.
+ * signature dialog, and the approval actions. On the phone the rows render
+ * as worker cards. Locked batches render read-only with their status.
  */
 export function CrewWorkspace({
   batchId,
@@ -283,24 +283,28 @@ export function CrewWorkspace({
       ) : (
         <div className="flex flex-wrap gap-2">
           {status === 'submitted' ? (
-            <Button variant="outline" disabled={busy} onClick={() => act('withdraw').then((ok) => ok && window.location.reload())}>
-              {t('field.withdraw')}
+            <>
+              <Button variant="outline" disabled={busy} onClick={() => act('withdraw').then((ok) => ok && window.location.reload())}>
+                {t('field.withdraw')}
+              </Button>
+              <Button disabled={busy} onClick={() => act('approve').then((ok) => ok && window.location.reload())}>
+                {t('field.approve')}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={busy || !reason.trim()}
+                onClick={() => act('reject', { reason: reason.trim() }).then((ok) => ok && window.location.reload())}
+              >
+                {t('field.reject')}
+              </Button>
+              <Input value={reason} onChange={(event) => setReason(event.target.value)} placeholder={t('field.rejectReason')} className="max-w-xs" />
+            </>
+          ) : null}
+          {status === 'approved' ? (
+            <Button disabled={busy} onClick={() => act('post').then((ok) => ok && window.location.reload())}>
+              {t('field.post')}
             </Button>
           ) : null}
-          <Button disabled={busy} onClick={() => act('approve').then((ok) => ok && window.location.reload())}>
-            {t('field.approveStage')}
-          </Button>
-          <Button
-            variant="outline"
-            disabled={busy || !reason.trim()}
-            onClick={() => act('reject', { reason: reason.trim() }).then((ok) => ok && window.location.reload())}
-          >
-            {t('field.reject')}
-          </Button>
-          <Input value={reason} onChange={(event) => setReason(event.target.value)} placeholder={t('field.rejectReason')} className="max-w-xs" />
-          <Button disabled={busy} onClick={() => act('post').then((ok) => ok && window.location.reload())}>
-            {t('field.post')}
-          </Button>
         </div>
       )}
 

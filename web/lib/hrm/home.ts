@@ -671,7 +671,9 @@ export async function loadHrmHome(authz: Authz): Promise<HrmHomeData> {
       },
     })
   }
-  if (await isFeatureEnabled(orgId, 'hrmOrgChart')) {
+  // The org chart rides Human resources, which this home already requires;
+  // only its read grants decide the entry.
+  if (can(authz, 'hrm.employment.read') || can(authz, 'hrm.self.read')) {
     directory.push({
       href: '/hrm/org-chart',
       label: t('home.tabs.orgChart'),

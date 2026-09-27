@@ -5,7 +5,6 @@ import {
   AiRailsError,
   autonomyRaiseRefused,
   finalizeBlockedRefusal,
-  unknownCapability,
 } from "./errors.ts";
 import { digest } from "./governance.ts";
 import {
@@ -50,8 +49,7 @@ test("autonomy ladder orders read_only below act_with_confirmation", () => {
 
 test("unknown capability refuses with the remedy", () => {
   assert.throws(() => requireCapability("hrmTimeTravel"), (e: unknown) =>
-    e instanceof AiRailsError && /Company Settings → Features/.test(e.message));
-  assert.match(unknownCapability("x").message, /\/admin\/ai/);
+    e instanceof AiRailsError && e.code === "ai_unknown_capability" && /\/admin\/ai/.test(e.message));
 });
 
 test("autonomy may move down but never above the code maximum", () => {
@@ -177,7 +175,7 @@ test("drafting writes nowhere except ai_decisions", async () => {
         return { rows: [{ restriction: null }] };
       }
       if (text.includes("from orgs")) {
-        return { rows: [{ features: { hrm: true, hrmAiAssist: true, hrmDrafting: true } }] };
+        return { rows: [{ features: { hrm: true } }] };
       }
       if (text.includes("from users")) return { rows: [{ isSuperAdmin: false, isActive: true }] };
       if (text.includes("app_role") || text.includes("role.permissions")) {

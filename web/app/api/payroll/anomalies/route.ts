@@ -32,8 +32,8 @@ export const GET = defineRoute({
     return NextResponse.json({ error: "missing permission: one of payroll.manage, time.approve, hrm.employment.read" }, { status: 403 });
   }
   if (
-    !(await isFeatureEnabled(gate.user.orgId, "hrmPayrollAnomalies")) &&
-    !(await isFeatureEnabled(gate.user.orgId, "hrmTimeAnomalies"))
+    !(await isFeatureEnabled(gate.user.orgId, "payroll")) &&
+    !(await isFeatureEnabled(gate.user.orgId, "timeTracking"))
   ) {
     return notFound("record");
   }
@@ -63,11 +63,9 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: "payroll.manage",
-  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  // Payroll checks are part of Payroll.
+  feature: "payroll",
   handler: async ({ request: req, authz: gate }) => {
-    if (!(await isFeatureEnabled(gate.user.orgId, "hrmPayrollAnomalies"))) {
-      return notFound("record");
-    }
     const parsedBody = await parseJsonBody(req, scanBody);
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data;

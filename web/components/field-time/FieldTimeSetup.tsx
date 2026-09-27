@@ -2,9 +2,9 @@
 
 import { useCallback, useState } from 'react'
 import { useTranslations } from 'next-intl'
+import Link from 'next/link'
 import { Button, Input, Select } from '@openbooks/ui'
 import { Field } from '@/components/field'
-import { enumLabel } from '@/lib/enum-label'
 
 export interface FieldTimeRuleSettings {
   roundingIncrement: number | null
@@ -27,24 +27,16 @@ export interface KioskRow {
   lastSeenAt: string | null
 }
 
-export interface StageChain {
-  subject: string
-  stages: Array<{ order: number; approverKind: string; roleKey?: string | null }> | null
-}
-
-type ApprovalSubject = 'timesheet_week' | 'crew_time_batch'
-type ApprovalKind = 'supervisor' | 'project_manager' | 'payroll' | 'role'
-
 /**
  * The field-time setup surface: declared rounding/break/auto-close/
  * signature/tolerance/photo rules, kiosk devices with token issue and
- * revoke plus worker PINs, and the multi-stage chains. Every rule is
- * required — the service refuses without them rather than guessing.
+ * revoke plus worker PINs, and where approval routing lives (Flows).
+ * Every rule is required — the service refuses without them rather than
+ * guessing.
  */
 export function FieldTimeSetup({
   initialSettings,
   kiosks,
-  chains,
   kioskLinkBase,
   // Optional for direct renders (which stay fully editable, as before);
   // the widget adapter resolves a missing flag to false, so only an
@@ -54,32 +46,21 @@ export function FieldTimeSetup({
 }: {
   initialSettings: FieldTimeRuleSettings
   kiosks: KioskRow[]
-  chains: StageChain[]
   kioskLinkBase: string
   /**
    * Loader-resolved from the kiosks API's own authority (time.kiosk.manage
-   * plus the fieldTimeKiosk feature): without it the kiosk section hides
+   * plus the fieldTime feature): without it the kiosk section hides
    * instead of offering register/revoke calls that would only 403.
    */
   canManageKiosks?: boolean
   /**
-   * Loader-resolved from subsidiary scope: the settings and chain PUTs
-   * need unrestricted scope, so a restricted manager reads the policy
+   * Loader-resolved from subsidiary scope: the settings PUT needs
+   * unrestricted scope, so a restricted manager reads the policy
    * with disabled forms instead of failing saves.
    */
   canEditPolicy?: boolean
 }) {
   const t = useTranslations('timesheets')
-  const approvalSubjects = {
-    timesheet_week: t('field.subjects.timesheetWeek'),
-    crew_time_batch: t('field.subjects.crewTimeBatch'),
-  } satisfies Record<ApprovalSubject, string>
-  const approverKinds = {
-    supervisor: t('field.approvers.supervisor'),
-    project_manager: t('field.approvers.projectManager'),
-    payroll: t('field.approvers.payroll'),
-    role: t('field.approvers.role'),
-  } satisfies Record<ApprovalKind, string>
   const [settings, setSettings] = useState<FieldTimeRuleSettings>(initialSettings)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -274,18 +255,11 @@ export function FieldTimeSetup({
       ) : null}
 
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-        <h2 className="text-base font-semibold">{t('field.stagesTitle')}</h2>
-        {chains.map((chain) => (
-          <div key={chain.subject} className="rounded-lg border border-slate-100 p-3 dark:border-slate-800">
-            <p className="font-medium">{enumLabel(chain.subject, approvalSubjects, t('field.unknownApprovalTarget'))}</p>
-            <p className="text-sm text-slate-500">
-              {chain.stages && chain.stages.length > 0
-                ? chain.stages.map((stage) => `${stage.order}. ${enumLabel(stage.approverKind, approverKinds, t('field.unknownApprovalTarget'))}${stage.roleKey ? ` (${t('field.approvers.namedRole', { role: stage.roleKey })})` : ''}`).join(' → ')
-                : t('field.singleApproval')}
-            </p>
-          </div>
-        ))}
-        <p className="text-xs text-slate-500">{t('field.stagesHint')}</p>
+        <h2 className="text-base font-semibold">{t('field.approvalRoutingTitle')}</h2>
+        <p className="text-sm text-slate-500">{t('field.approvalRoutingHint')}</p>
+        <Link href="/flows" className="text-sm font-medium text-teal-700 hover:underline dark:text-teal-400">
+          {t('field.approvalRoutingLink')}
+        </Link>
       </section>
 
       {error ? (

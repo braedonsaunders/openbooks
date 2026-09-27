@@ -56,17 +56,15 @@ export async function resolveDashboardDefault(authz: Authz): Promise<DashboardDe
   // approval grant, admin by manage grants — what the actor holds, never
   // their role name. Gated tiles join only when their source is live.
   const orgId = authz.user.orgId
-  const [persona, payroll, hrm, celebrations, nudges, announcements, quals] = await Promise.all([
+  const [persona, payroll, hrm, announcements, quals] = await Promise.all([
     resolvePersona(authz),
     isFeatureEnabled(orgId, 'payroll'),
     isFeatureEnabled(orgId, 'hrm'),
-    isFeatureEnabled(orgId, 'hrmCelebrations'),
-    isFeatureEnabled(orgId, 'hrmManagerNudges'),
     isFeatureEnabled(orgId, 'homeAnnouncements'),
     qualificationSourceAvailable(),
   ])
   return {
-    layout: personaDefaultLayout(persona, { payroll, hrm, celebrations, nudges, announcements, quals }),
+    layout: personaDefaultLayout(persona, { payroll, hrm, announcements, quals }),
     sourceKey: `persona:${persona}`,
   }
 }

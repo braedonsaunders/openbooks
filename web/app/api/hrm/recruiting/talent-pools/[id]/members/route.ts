@@ -25,11 +25,11 @@ const memberActionBody = z.union([
 
 /**
  * Pool members: GET lists, POST adds / removes / tags (manage gates in the
- * service). 404s while hrm, hrmRecruiting, or hrmTalentPool is off.
+ * service). 404s while HRM or Recruiting is off.
  */
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
-  feature: "hrmTalentPool",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const { id } = routeParams;
@@ -48,7 +48,7 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmTalentPool",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: memberActionBody,
   handler: async ({

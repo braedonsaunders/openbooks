@@ -5,10 +5,7 @@
  */
 export { HrmQualificationError } from "./errors.ts";
 export {
-  HRM_CERTIFICATION_ALERTS_FEATURE,
   HRM_CERTIFICATIONS_FEATURE,
-  HRM_DISPATCH_GATING_FEATURE,
-  HRM_EQUIPMENT_QUALIFICATIONS_FEATURE,
   monthsBetween,
   projectDerivedStatus,
   type DerivedQualificationStatus,

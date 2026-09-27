@@ -24,7 +24,7 @@ import {
  */
 
 const PERMISSIONS = ["hrm.documents.read", "hrm.documents.manage"];
-const DOCS = { permissions: PERMISSIONS, subB: { currency: "USD", country: "US" }, features: ["hrmDocuments", "hrmDocumentRetention"] };
+const DOCS = { permissions: PERMISSIONS, subB: { currency: "USD", country: "US" }, features: ["hrmDocuments"] };
 const UNRESTRICTED = /requires unrestricted subsidiary access/;
 const SCHEDULE = { categoryKey: "contract", retainYears: 7, fromEvent: "completion", action: "anonymize" } as const;
 const TODAY = "2026-09-21";
@@ -79,7 +79,6 @@ scopeMatrix([
   scopeRow({
     name: "data-subject exports queue, list and download only for in-scope subjects",
     ...DOCS,
-    features: ["hrmDocuments", "hrmDataSubjectExport"],
     seed: async (w) => ({ a: await seedPerson(w.orgId, w.subA, "Amy Alpha"), b: await seedPerson(w.orgId, w.subB, "Ben Beta") }),
     write: async (w, { a, b }) => {
       const orgId = w.orgId;

@@ -3,7 +3,7 @@ import test from 'node:test'
 import { personaDefaultLayout, type PersonaLayoutFlags } from './_persona-layout'
 
 /**
- * HR-15 persona default layouts: three compositions chosen by what the
+ * Persona default layouts: three compositions chosen by what the
  * actor holds. Gated tiles join only when their source is live — turning a
  * feature off removes its widget, never data.
  */
@@ -11,8 +11,6 @@ import { personaDefaultLayout, type PersonaLayoutFlags } from './_persona-layout
 const ALL_ON: PersonaLayoutFlags = {
   payroll: true,
   hrm: true,
-  celebrations: true,
-  nudges: true,
   announcements: true,
   quals: true,
 }
@@ -20,8 +18,6 @@ const ALL_ON: PersonaLayoutFlags = {
 const ALL_OFF: PersonaLayoutFlags = {
   payroll: false,
   hrm: false,
-  celebrations: false,
-  nudges: false,
   announcements: false,
   quals: false,
 }
@@ -58,8 +54,8 @@ test('an admin adds the rail on top of both columns', () => {
 
 test('feature-off removes the optional widgets, never the core', () => {
   const off = ids('admin', ALL_OFF)
-  assert.ok(!off.includes('celebrations-list'), 'hrmCelebrations off hides celebrations')
-  assert.ok(!off.includes('team-nudges'), 'hrmManagerNudges off hides nudges')
+  assert.ok(!off.includes('celebrations-list'), 'no hrm means no celebrations')
+  assert.ok(!off.includes('team-nudges'), 'no hrm means no manager nudges')
   assert.ok(!off.includes('announcements-card'), 'homeAnnouncements off hides announcements')
   assert.ok(!off.includes('team-quals'), 'no HR-14 table means no qualifications tile')
   assert.ok(!off.includes('pay-tile'), 'no payroll means no pay tile')

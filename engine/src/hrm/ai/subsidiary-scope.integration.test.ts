@@ -10,7 +10,7 @@ import { explainPay } from "./explain-pay.ts";
 import { logDecision, markDecision } from "./governance.ts";
 
 /**
- * HRM AI assistance under a legal-entity lens. Pay explanations, evidence
+ * AI capabilities over HRM and payroll records under a legal-entity lens. Pay explanations, evidence
  * drafts and decision marks reach only subjects inside the actor's allowed
  * employers; an out-of-scope subject refuses like an unknown one (or, for a
  * draft, with the remedy), and a refusal writes no decision row.
@@ -61,7 +61,7 @@ const MANAGER = { scope: "direct", permissions: ["hrm.performance.manage"], link
 scopeMatrix([
   scopeRow({
     name: "explaining pay needs the employment inside the actor's legal-entity scope",
-    features: ["payroll", "hrmAiAssist", "hrmExplainPay"],
+    features: ["payroll"],
     actors: {
       payrollA: { scope: "A", permissions: ["payroll.manage"] },
       hrA: { scope: "A", permissions: ["hrm.employment.read"] },
@@ -85,8 +85,6 @@ scopeMatrix([
   }),
   scopeRow({
     name: "a restricted HR drafts manager reviews only inside their legal-entity scope",
-    // Drafting sits under the AI-assist parent gate; with it off the gate answers feature-off before any scope check.
-    features: ["hrmAiAssist", "hrmDrafting"],
     actors: {
       worker: SELF,
       manager: MANAGER,

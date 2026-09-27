@@ -26,7 +26,7 @@ import { loadDirectory, loadOrgChart } from "./org-chart.ts";
 
 
 const ORG_CHART_SPEC = {
-  features: ["hrm", "hrmOrgChart"],
+  features: ["hrm"],
   users: [
     { key: "readerId", name: "Reader", handle: "reader_self", permissions: ["hrm.employment.read"] },
   ],
@@ -203,13 +203,11 @@ test("directory pages continue past 200 rows and report the scoped total", { ski
 test("chart and directory are fenced by employer scope and the self-service team", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    for (const feature of ["hrm", "hrmOrgChart"]) {
-      await db.execute(sql`
-        update orgs
-           set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${feature}}`}::text[], 'true'::jsonb, true)
-         where id = ${org.orgId}
-      `);
-    }
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrm}', 'true'::jsonb, true)
+       where id = ${org.orgId}
+    `);
     // Second legal entity under the single root.
     const subB = randomUUID();
     await db.execute(sql`

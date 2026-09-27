@@ -14,11 +14,11 @@ export const runtime = "nodejs";
 /**
  * Offer signing desk: POST send-link emails the sessionless signing link,
  * POST void pulls an unsigned letter (manage gate in the service). 404s
- * while hrm, hrmRecruiting, or hrmOfferSigning is off.
+ * while HRM or Recruiting is off.
  */
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmOfferSigning",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: offerSigningBody,
   handler: async ({

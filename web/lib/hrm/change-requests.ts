@@ -9,7 +9,6 @@ import {
 } from '@openbooks/engine/src/hrm/change-requests.ts'
 import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
 import { can, type Authz } from '../authz'
-import { isFeatureEnabled } from '../features'
 import { setupSectionParams } from '../list-params'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { resolveQueueStatus, segmentOfServiceStatus, QUEUE_SEGMENTS } from './queue-status'
@@ -123,10 +122,9 @@ export interface ChangeRequestQueueData {
   emptyDescription: string
   canManage: boolean
   /**
-   * HR-16 verb actions (Rescind/Correct) display gate: the rescind route
-   * 404s unless hrmEventVerbs is on and requires hrm.employment.approve,
-   * so the buttons render only for approvers while the feature is on —
-   * never as dead buttons that can only refuse.
+   * Verb actions (Rescind/Correct) display gate: the rescind route
+   * requires hrm.employment.approve, so the buttons render only for
+   * approvers — never as dead buttons that can only refuse.
    */
   canVerb: boolean
   departmentOptions: { value: string; label: string }[]
@@ -361,10 +359,11 @@ export async function loadChangeRequestQueue(
   const orgId = authz.user.orgId
   const t = await getTranslations('hrm')
   const canManage = can(authz, 'hrm.employment.manage')
-  const canVerb = can(authz, 'hrm.employment.approve') && (await isFeatureEnabled(orgId, 'hrmEventVerbs'))
-  // HR-16: reason codes configure where changes are proposed; the button
-  // and section render only while the feature is on and the viewer manages.
-  const reasonsOn = canManage && (await isFeatureEnabled(orgId, 'hrmActionReasons'))
+  // Verbs and reason codes ride Human resources, which the page gate
+  // already holds: only the grants decide. Reason codes configure where
+  // changes are proposed, so the button and section render for managers.
+  const canVerb = can(authz, 'hrm.employment.approve')
+  const reasonsOn = canManage
 
   const rawStatus = typeof sp.status === 'string' ? sp.status : undefined
   const dialogRequestId = typeof sp.request === 'string' && sp.request !== '' ? sp.request : null

@@ -18,7 +18,7 @@ const removeCandidateBody = z.object({
  */
 export const POST = defineRoute({
   permission: "hrm.performance.manage",
-  feature: "hrmSuccession",
+  feature: "hrmPerformance",
   body: addSuccessionCandidateBody,
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz, params, body }) => {
@@ -40,7 +40,7 @@ export const POST = defineRoute({
 });
 export const PATCH = defineRoute({
   permission: "hrm.performance.manage",
-  feature: "hrmSuccession",
+  feature: "hrmPerformance",
   body: removeCandidateBody,
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz, params, body }) => {

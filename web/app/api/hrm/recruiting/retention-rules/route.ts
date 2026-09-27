@@ -12,12 +12,12 @@ export const runtime = "nodejs";
 
 /**
  * Retention-rule collection: GET lists rules, POST creates one (manage
- * gate in the service). 404s while hrm, hrmRecruiting, or
- * hrmCandidateRetention is off.
+ * gate in the service). 404s while HRM or Recruiting is
+ * off.
  */
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
-  feature: "hrmCandidateRetention",
+  feature: "hrmRecruiting",
   handler: async ({ request: req, authz: gate }) => {
     try {
       const includeInactive =
@@ -36,7 +36,7 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmCandidateRetention",
+  feature: "hrmRecruiting",
   body: createRetentionRuleBody,
   handler: async ({ authz: gate, body: body }) => {
     try {

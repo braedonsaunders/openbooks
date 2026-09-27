@@ -12,12 +12,12 @@ export const runtime = "nodejs";
 
 /**
  * Interview-kit collection: GET lists kits, POST creates one (manage gate
- * in the service). 404s while hrm, hrmRecruiting, or hrmStructuredInterviews
- * is off — the Setup surface hides with the same switch.
+ * in the service). 404s while HRM or Recruiting is off — the Setup
+ * surface hides with the same switch.
  */
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
-  feature: "hrmStructuredInterviews",
+  feature: "hrmRecruiting",
   handler: async ({ request: req, authz: gate }) => {
     try {
       const includeInactive =
@@ -36,7 +36,7 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmStructuredInterviews",
+  feature: "hrmRecruiting",
   body: createKitBody,
   handler: async ({ authz: gate, body: body }) => {
     try {

@@ -11,7 +11,7 @@ import { JOB_FAMILIES_ENTITY, JOB_LEVELS_ENTITY, PAY_BANDS_ENTITY } from '../hrm
 import { CONSTRUCTION_CLASSIFICATIONS_ENTITY, CONSTRUCTION_COMP_CLASSES_ENTITY, CONSTRUCTION_PER_DIEM_POLICIES_ENTITY, CONSTRUCTION_RATE_SCHEDULES_ENTITY, CONSTRUCTION_RATIO_RULES_ENTITY } from '../hrm-construction'
 import { QUALIFICATION_SETTINGS_ENTITY, QUALIFICATION_TYPES_ENTITY } from '../hrm-qualifications'
 import { AI_RAILS_SETTINGS_ENTITY } from '../hrm-ai-rails'
-import { PROJECT_GEOFENCES_ENTITY, TIME_APPROVAL_STAGES_ENTITY, TIME_KIOSKS_ENTITY } from '../field-time'
+import { PROJECT_GEOFENCES_ENTITY, TIME_KIOSKS_ENTITY } from '../field-time'
 
 export const WORKFORCE_ENTITIES: SetupEntity[] = [
   // --- Workforce -----------------------------------------------------------
@@ -164,13 +164,10 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
   QUALIFICATION_TYPES_ENTITY,
   QUALIFICATION_SETTINGS_ENTITY,
   // HR-14 end
-  // HR-20 begin: project geofences, kiosk devices and approval-stage
-  // chains. Declared in ./field-time.ts; rehomed onto the project page
-  // and the Timesheets setup surface.
+  // Project geofences and kiosk devices. Declared in ./field-time.ts;
+  // rehomed onto the project page and the Timesheets setup surface.
   PROJECT_GEOFENCES_ENTITY,
   TIME_KIOSKS_ENTITY,
-  TIME_APPROVAL_STAGES_ENTITY,
-  // HR-20 end
   // HR-21 begin: AI rails thresholds, cohort, bias terms and review
   // cadence. Declared in ./hrm-ai-rails.ts; rehomed onto /admin/ai.
   AI_RAILS_SETTINGS_ENTITY,

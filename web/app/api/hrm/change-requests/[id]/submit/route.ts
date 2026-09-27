@@ -2,7 +2,6 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { submitChangeRequest } from "@openbooks/engine/src/hrm/change-requests.ts";
-import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
 import { changeRequestErrorResponse } from "../../_lib";
 import { submitChangeRequestBody } from "../../bodies";
@@ -20,8 +19,9 @@ export const POST = defineRoute({
         { status: 400 },
       );
     try {
-      // When hrmActionReasons is on, submit requires both action and
-      // an active reason code; when off, classification is ignored entirely.
+      // Once the org declares an active reason code, submit requires both
+      // action and an active code; with none declared, classification is
+      // optional. The validator reads that from the database itself.
       const { validateSubmitActionReason } =
         await import("@openbooks/engine/src/automations/action-reasons.ts");
       const { automationErrorResponse } =
@@ -29,10 +29,6 @@ export const POST = defineRoute({
       try {
         await validateSubmitActionReason({
           orgId: gate.user.orgId,
-          featureOn: await isFeatureEnabled(
-            gate.user.orgId,
-            "hrmActionReasons",
-          ),
           ...(body.action ? { action: body.action } : {}),
           ...(body.reasonCode ? { reasonCode: body.reasonCode } : {}),
           ...(body.reason ? { reason: body.reason } : {}),

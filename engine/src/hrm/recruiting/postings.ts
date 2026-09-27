@@ -11,7 +11,7 @@ import { featureEnabled } from "../../organization/feature-registry.ts";
 import { createRecruitingToken, verifyRecruitingToken } from "./tokens.ts";
 
 /**
- * Canonical job-board service (HR-18, 0229): publishing + disposition sync.
+ * Canonical job-board service: publishing + disposition sync.
  *
  * - publishPosting / pausePosting / closePosting walk one posting's
  *   lifecycle per (requisition, board_key) and append a posting event in
@@ -21,11 +21,10 @@ import { createRecruitingToken, verifyRecruitingToken } from "./tokens.ts";
  *   connectors behind sync connections.
  * - recordDispositionForApplication is called by the application
  *   transitions (stage moves, rejects, withdraws, hires): when the
- *   application came through a posting (source_posting_id) and hrmJobBoards
- *   is on, it appends a disposition_sent event carrying the board
- *   contract payload (stage, rejection reason code) and enqueues the
- *   connector job. Otherwise it is a strict no-op — HR-6 behavior is
- *   byte-identical with the feature off. The connector interface is
+ *   application came through a posting (source_posting_id), it appends a
+ *   disposition_sent event carrying the board contract payload (stage,
+ *   rejection reason code) and enqueues the connector job. Direct
+ *   applications are a strict no-op. The connector interface is
  *   declared here; the internal + feed boards implement it as no-ops that
  *   log (a named vendor connector is a sync-connections concern, not
  *   built here).
@@ -175,7 +174,6 @@ export async function listPostings(query: {
     // posting's requisition — a scoped reader lists only their entities'
     // postings, never the whole org board.
     const allowed = await requireAggregateRecruitingRead(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmJobBoards");
     const rows = (await db.execute<PostingRow>(sql`
       select p.id, p.requisition_id as "requisitionId", p.board_key as "boardKey",
              p.external_ref as "externalRef", p.status,
@@ -210,7 +208,6 @@ export async function publishPosting(query: {
   const boardKey = requireBoardKey(query.boardKey);
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManage(db, orgId, actorId, requisitionId);
-    await requireDepthFeature(db, orgId, "hrmJobBoards");
     const requisition = (await db.execute<{ status: string }>(sql`
       select status from hrm_requisitions where org_id = ${orgId} and id = ${requisitionId}
     `)).rows[0];
@@ -285,7 +282,6 @@ async function transitionPosting(
       throw new RecruitingError("NOT_FOUND", "posting is not visible in this organization — it may belong to another org");
     }
     await requireHrmRecruitingManage(db, orgId, actorId, current.requisitionId);
-    await requireDepthFeature(db, orgId, "hrmJobBoards");
     if (current.status === "closed") {
       throw new RecruitingError("REFUSED", "this posting is already closed — closed postings stay closed; publish a fresh posting for a new run");
     }
@@ -317,9 +313,9 @@ export async function closePosting(query: { orgId: string; actorId: string; post
 /**
  * Disposition sync (called by application transitions, same transaction).
  * Appends a disposition_sent event with the board-contract payload and
- * enqueues the connector job when the application is posting-sourced and
- * hrmJobBoards is on. Strict no-op otherwise — HR-6 paths with the
- * feature off (or direct applications) write nothing extra.
+ * enqueues the connector job when the application is posting-sourced.
+ * Strict no-op for direct applications. Every caller already holds the
+ * Recruiting gate, so there is no feature check here.
  */
 export async function recordDispositionForApplication(
   exec: SqlExecutor,
@@ -341,11 +337,6 @@ export async function recordDispositionForApplication(
       from hrm_applications where org_id = ${args.orgId} and id = ${args.applicationId}
   `)).rows[0];
   if (!app?.sourcePostingId) return;
-  const state = (await exec.execute<{ features: Record<string, boolean> | null }>(sql`
-    select settings->'features' as features from orgs where id = ${args.orgId}
-  `)).rows[0]?.features;
-  const { featureEnabled } = await import("../../organization/feature-registry.ts");
-  if (!featureEnabled(state ?? {}, "hrmJobBoards")) return;
   const posting = (await exec.execute<{ boardKey: string }>(sql`
     select board_key as "boardKey" from hrm_job_postings
      where org_id = ${args.orgId} and id = ${app.sourcePostingId}
@@ -399,9 +390,9 @@ export async function resolveFeedOrg(feedToken: string): Promise<string> {
     return found ?? null;
   });
   if (!row) throw new RecruitingError("NOT_FOUND", "this feed's organization no longer exists");
-  // The feed is the generic job board — serving it while
-  // hrmJobBoards (or its hrmRecruiting parent) is off bypasses the switch.
-  await withOrgTransaction(row.orgId, () => requireDepthFeature(db, row.orgId, "hrmJobBoards"));
+  // The feed is the generic job board — serving it while Recruiting (or
+  // its HRM parent) is off bypasses the switch.
+  await withOrgTransaction(row.orgId, () => requireDepthFeature(db, row.orgId));
   return row.orgId;
 }
 
@@ -415,7 +406,7 @@ export async function listFeedPostings(orgId: string): Promise<
   // the org above; the read runs inside it.
   return withOrgTransaction(orgId, async () => {
     // Same gate for direct service callers bypassing the token.
-    await requireDepthFeature(db, orgId, "hrmJobBoards");
+    await requireDepthFeature(db, orgId);
     const rows = (await db.execute<{
       postingId: string;
       requisitionNumber: string;
@@ -453,7 +444,7 @@ export interface ApplyViaPostingQuery {
 /**
  * The one thing an anonymous applicant is ever told when the application
  * does not land. Every reason -- the posting is closed, the requisition
- * is filled, the board feature is off, this candidate already applied --
+ * is filled, Recruiting is off, this candidate already applied --
  * collapses into this sentence on purpose. A refusal that distinguishes
  * "already applied" from "closed" turns a guessable email address into a
  * query against the applicant-tracking system.
@@ -474,13 +465,13 @@ export async function applyViaPosting(
   const phone =
     query.phone == null || String(query.phone).trim().length === 0 ? null : String(query.phone).trim();
   return withOrgTransaction(orgId, async () => {
-    // The career PAGE 404s when the job board is off; this write is a
+    // The career PAGE 404s when Recruiting is off; this write is a
     // separate door and used to stay open behind it. An operator who
-    // switches the board off is entitled to believe nobody can apply.
+    // switches Recruiting off is entitled to believe nobody can apply.
     // The refusal is the generic one: an anonymous caller learns nothing
     // about which features this organization runs.
     const features = await loadFeatureState(db, orgId);
-    if (!featureEnabled(features, "hrmRecruiting") || !featureEnabled(features, "hrmJobBoards")) {
+    if (!featureEnabled(features, "hrmRecruiting")) {
       throw new RecruitingError("REFUSED", NOT_ACCEPTING);
     }
     if (email !== null) {
@@ -657,7 +648,6 @@ export async function listPostingEvents(query: {
     } catch {
       await requireHrmRecruitingRead(db, orgId, actorId, posting.requisitionId);
     }
-    await requireDepthFeature(db, orgId, "hrmJobBoards");
     const rows = (await db.execute<{ id: string; kind: string; recordedAt: string }>(sql`
       select id, kind, recorded_at as "recordedAt" from hrm_posting_events
        where org_id = ${orgId} and posting_id = ${postingId}

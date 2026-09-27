@@ -86,10 +86,10 @@ export function flagBiasTerms(text: string, terms: readonly string[]): BiasFlag[
 }
 
 async function assertDraftFeature(exec: SqlExecutor, orgId: string): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, "hrmDrafting"))) {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, "hrm"))) {
     throw new AiRailsError(
       "ai_feature_off",
-      "drafting is unavailable while hrmDrafting is off — enable it under Company Settings → Features",
+      "drafting is unavailable while Human resources is off — enable Human resources under Company Settings → Features",
     );
   }
 }

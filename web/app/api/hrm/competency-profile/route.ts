@@ -13,7 +13,7 @@ import { performanceErrorResponse } from "../review-cycles/_lib";
  */
 export const GET = defineRoute({
   public: "session",
-  feature: "hrmCompetencies",
+  feature: "hrmPerformance",
   handler: async ({ request: req, authz }) => {
     const employmentId = new URL(req.url).searchParams.get("employmentId");
     if (!employmentId || !isUuid(employmentId)) {

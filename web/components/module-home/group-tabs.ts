@@ -122,9 +122,7 @@ const TAB_FEATURE: Record<string, string> = {
   '/banking/cash': 'banking',
   '/payroll': 'payroll',
   '/payroll/runs': 'payroll',
-  // HR-21 begin: the Checks tab hides while hrmPayrollAnomalies is off.
-  '/payroll/anomalies': 'hrmPayrollAnomalies',
-  // HR-21 end
+  '/payroll/anomalies': 'payroll',
   '/payroll/remittances': 'payroll',
   '/payroll/separations': 'payroll',
   '/payroll/year-end': 'payroll',

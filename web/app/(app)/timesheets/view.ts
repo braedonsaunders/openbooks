@@ -112,7 +112,7 @@ export async function loadTimesheets(
   // fails in this file; the registry spreads the rest through untouched.
   // (`fieldDefs` keeps the native `as never`: server defs and client defs
   // are the same object at runtime.)
-  // HR-20: field flags for the drawer — geo/photo/auto-close chips over
+  // Field flags for the drawer — geo/photo/auto-close chips over
   // the week's clock pairs. Coordinates stay out; the drawer shows flags.
   // No .catch here: a failed flags query must fail the page, not quietly
   // render a drawer with no chips — that swallow hid a hard 42803 SQL
@@ -122,9 +122,9 @@ export async function loadTimesheets(
     fieldTimeOnEarly && openEmployeeId && openWeek
       ? await approvalFlags(orgId, { weekStart: openWeek, employeePartyId: openEmployeeId })
       : []
-  // HR-21: open anomaly flags overlapping this week ride into the grid
-  // as approval chips. Empty while hrmTimeAnomalies is off or the actor
-  // lacks the flag read scope — the grid renders unchanged either way.
+  // Open anomaly flags overlapping this week ride into the grid as
+  // approval chips. Empty while the actor lacks the flag read scope — the
+  // grid renders unchanged.
   let anomalyFlags: WeekFlagChip[] = []
   if (openEmployeeId && openWeek) {
     const weekEnd = new Date(`${openWeek}T00:00:00Z`)
@@ -150,7 +150,6 @@ export async function loadTimesheets(
       : null
 
   const fieldTimeOn = fieldTimeOnEarly
-  const crewEntryOn = fieldTimeOn && (await isFeatureEnabled(orgId, 'fieldTimeCrewEntry'))
 
   return {
     title: t('list.title'),
@@ -160,7 +159,7 @@ export async function loadTimesheets(
     newButton: { href: newHref, label: t('list.newButton') },
     showClockLink: fieldTimeOn && can(authz, 'time.clock'),
     clockButton: { href: '/time/clock', label: t('field.clockTab') },
-    showCrewLink: crewEntryOn && (can(authz, 'time.crew.enter') || can(authz, 'time.read')),
+    showCrewLink: fieldTimeOn && (can(authz, 'time.crew.enter') || can(authz, 'time.read')),
     crewButton: { href: '/time/crew', label: t('field.crewTab') },
     drawer: gridProps
       ? {

@@ -11,9 +11,10 @@ import {
   RECRUITING_RETENTION_RULES_ENTITY,
 } from './hrm-recruiting'
 
-// HR-18 recruiting-depth Setup (0229): six registry entities, four rehomed
-// onto /hrm/recruiting and two nested under their kit. Pure registry-shape
-// assertions — the write-path refusals are proved against the DB suite.
+// Recruiting-depth Setup: six registry entities, four rehomed onto
+// /hrm/recruiting and two nested under their kit, all hidden with the
+// Recruiting module. Pure registry-shape assertions — the write-path
+// refusals are proved against the DB suite.
 
 const ENTITIES = [
   RECRUITING_KITS_ENTITY,
@@ -38,21 +39,8 @@ test('recruiting-depth entities register under their documented tables', () => {
   )
   for (const entity of ENTITIES) {
     assert.equal(SETUP_ENTITY_BY_KEY.get(entity.key), entity, `${entity.key} resolves from the registry`)
+    assert.equal(entity.featureKey, 'hrmRecruiting', `${entity.key} hides while Recruiting is off`)
   }
-})
-
-test('recruiting-depth entities ride the sub-feature switches', () => {
-  assert.deepEqual(
-    ENTITIES.map((entity) => [entity.key, entity.featureKey] as const),
-    [
-      ['hrm-interview-kits', 'hrmStructuredInterviews'],
-      ['hrm-kit-attributes', 'hrmStructuredInterviews'],
-      ['hrm-kit-questions', 'hrmStructuredInterviews'],
-      ['hrm-interviewer-pools', 'hrmInterviewScheduling'],
-      ['hrm-offer-templates', 'hrmOfferSigning'],
-      ['hrm-retention-rules', 'hrmCandidateRetention'],
-    ],
-  )
 })
 
 test('recruiting-depth top-level entities rehome to Recruiting, children nest', () => {

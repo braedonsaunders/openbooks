@@ -13,7 +13,7 @@ import {
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError } from "./errors.ts";
 import { inputGuards } from "../input-guards.ts";
-import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
+import { HRM_PERFORMANCE_KEY } from "./one-on-ones.ts";
 
 /**
  * Governed HRM continuous feedback (0228, HR-17): praise, feedback,
@@ -42,8 +42,6 @@ import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
  *
  * Do not touch packages/payroll. Existing refusal classes are untouched.
  */
-
-export const HRM_FEEDBACK_KEY = "hrmFeedback" as const;
 
 export type PublicPraiseBy = "anyone" | "managers_and_hr";
 
@@ -138,8 +136,7 @@ const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALI
  */
 export async function feedbackFeatureEnabled(db: SqlExecutor, orgId: string): Promise<boolean> {
   if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) return false;
-  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_CONTINUOUS_KEY))) return false;
-  return lockAndCheckOrgFeature(db, orgId, HRM_FEEDBACK_KEY);
+  return lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_KEY);
 }
 
 async function assertFeedbackFeature(db: SqlExecutor, orgId: string): Promise<void> {
@@ -153,15 +150,9 @@ async function assertFeedbackFeature(db: SqlExecutor, orgId: string): Promise<vo
       "hrm feature is disabled: enable it on Company Settings → Features before writing feedback",
     );
   }
-  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_CONTINUOUS_KEY))) {
-    throw new HrmPerformanceError(
-      "FEATURE_OFF",
-      "hrmPerformance feature is disabled: enable it on Company Settings → Features before writing feedback",
-    );
-  }
   throw new HrmPerformanceError(
     "FEATURE_OFF",
-    "hrmFeedback feature is disabled: enable it on Company Settings → Features before writing feedback",
+    "hrmPerformance feature is disabled: enable it on Company Settings → Features before writing feedback",
   );
 }
 

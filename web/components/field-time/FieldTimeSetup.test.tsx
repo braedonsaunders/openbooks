@@ -70,7 +70,6 @@ test("filling every visible rule sends the complete rule set", async () => {
               photoRequired: false,
             }}
             kiosks={[]}
-            chains={[{ subject: "timesheet_week", stages: [{ order: 1, approverKind: "supervisor" }, { order: 2, approverKind: "role", roleKey: "field_manager" }] }, { subject: "future_subject", stages: [{ order: 1, approverKind: "future_approver" }] }]}
             kioskLinkBase="/kiosk"
           />
         </NextIntlClientProvider>,
@@ -95,7 +94,7 @@ test("filling every visible rule sends the complete rule set", async () => {
       option.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
       await tick();
     });
-    assert.ok(buttons().some((b) => b.textContent?.includes(msg("rounding15"))) && host.textContent?.includes("Timesheet week") && host.textContent.includes("Supervisor") && host.textContent.includes("Role: field_manager") && host.textContent.includes("Unknown approval target"), "the picked rule and localized approval target labels must render");
+    assert.ok(buttons().some((b) => b.textContent?.includes(msg("rounding15"))), "the picked rule must render");
 
     // Break, auto-close, tolerance: type into the inputs behind their
     // ghost placeholders.

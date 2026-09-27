@@ -10,7 +10,7 @@ import {
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
 import {
-  enableDepth,
+  enableFeatures,
   grant,
   linkPerson,
   mkEmployment,
@@ -48,16 +48,9 @@ type Harness = {
   interviewerPartyId: string;
 };
 
-const SCHEDULING_DEPTH_KEYS = [
-  "hrm",
-  "hrmRecruiting",
-  "hrmStructuredInterviews",
-  "hrmInterviewScheduling",
-];
-
 async function setupSchedulingHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableDepth(org.orgId, SCHEDULING_DEPTH_KEYS);
+  await enableFeatures(org.orgId, ["hrm", "hrmRecruiting"]);
   const recruiterId = await createScratchUser(org.orgId, "Scheduling Recruiter", "scheduling_recruiter");
   const interviewerId = await createScratchUser(org.orgId, "Scheduling Interviewer", "scheduling_interviewer");
   await grant(org.orgId, recruiterId, ["hrm.recruiting.read", "hrm.recruiting.manage"]);
@@ -180,13 +173,13 @@ test("booking a cancelled interview is refused by name even when the link resolv
     await dropScratchOrg(h.org.orgId);
   }
 });
-test("public booking tokens refuse after interview scheduling is disabled", async () => {
+test("public booking tokens refuse after Recruiting is disabled", async () => {
   const h = await setupSchedulingHarness();
   try {
     const { token, slotId } = await seedProposed(h);
     await db.execute(sql`
       update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmInterviewScheduling}', 'false'::jsonb, true)
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmRecruiting}', 'false'::jsonb, true)
        where id = ${h.org.orgId}
     `);
     for (const result of [
@@ -200,7 +193,7 @@ test("public booking tokens refuse after interview scheduling is disabled", asyn
     ]) {
       const error = recruitingError(result);
       assert.equal(error.code, "REFUSED");
-      assert.match(error.message, /Interview scheduling is off/);
+      assert.match(error.message, /Recruiting is off/);
     }
   } finally {
     await dropScratchOrg(h.org.orgId);

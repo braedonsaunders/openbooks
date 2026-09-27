@@ -54,7 +54,7 @@ test("a subsidiary-restricted HR actor cannot change org-wide feedback policy", 
   try {
     await withBypassContext(() => db.execute(sql`
       update orgs set settings = coalesce(settings, '{}'::jsonb) || ${JSON.stringify({
-        features: { hrm: true, hrmPerformance: true, hrmFeedback: true },
+        features: { hrm: true, hrmPerformance: true },
         hrm_feedback: { public_praise_by: "anyone" },
       })}::jsonb where id = ${org.orgId}`));
     const read = await GET(new Request("http://feedback.test/api/hrm/feedback/settings"));

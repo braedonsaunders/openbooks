@@ -15,9 +15,9 @@ export const GET = defineRoute({
     const actor =
       hr instanceof NextResponse ? await guardPermission("hrm.self.read") : hr;
     if (actor instanceof NextResponse) return actor;
-    // The sibling routes gate; this one did not, so a ready export stayed
-    // downloadable with hrmDataSubjectExport (or hrm itself) switched off —
-    // and this is the route that hands over a subject's whole data zip.
+    // Gate like the sibling routes: a ready export must not stay
+    // downloadable with HR documents (or HRM itself) switched off — this
+    // is the route that hands over a subject's whole data zip.
     const gate = await gateExports(actor.user.orgId);
     if (gate) return gate;
     try {

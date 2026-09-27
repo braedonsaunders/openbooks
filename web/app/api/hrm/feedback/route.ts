@@ -16,8 +16,7 @@ export const runtime = "nodejs";
 async function gated(orgId: string): Promise<boolean> {
   return (
     (await isFeatureEnabled(orgId, "hrm")) &&
-    (await isFeatureEnabled(orgId, "hrmPerformance")) &&
-    (await isFeatureEnabled(orgId, "hrmFeedback"))
+    (await isFeatureEnabled(orgId, "hrmPerformance"))
   );
 }
 

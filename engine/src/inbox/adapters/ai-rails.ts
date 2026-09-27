@@ -53,7 +53,7 @@ const KIND_LABELS: Record<string, string> = {
 export const payrollAnomalyBlockAdapter: InboxAdapter = {
   kind: "payroll_anomaly_block",
   async list(ctx: InboxListContext): Promise<InboxItem[]> {
-    if (!(await lockAndCheckOrgFeature(db, ctx.orgId, "hrmPayrollAnomalies"))) return [];
+    if (!(await lockAndCheckOrgFeature(db, ctx.orgId, "payroll"))) return [];
     if (!(await tableLanded("payroll_anomaly_flags"))) return [];
     if (!(await actorHasPermission(db, ctx.orgId, ctx.actorId, "payroll.manage"))) return [];
     // The checks queue owns the read (and its legal-entity lens): the

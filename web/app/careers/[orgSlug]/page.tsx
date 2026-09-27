@@ -29,7 +29,6 @@ export default async function CareersPage({
   const org = await resolveOrgBySlug(decodeURIComponent(orgSlug))
   if (!org) notFound()
   if (!(await isFeatureEnabled(org.orgId, 'hrmRecruiting'))) notFound()
-  if (!(await isFeatureEnabled(org.orgId, 'hrmJobBoards'))) notFound()
 
   const postings = await withOrgContext(org.orgId, async () => {
     const rows = (

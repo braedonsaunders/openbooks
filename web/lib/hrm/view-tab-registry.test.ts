@@ -70,6 +70,14 @@ test("a viewer is offered only the tabs their grants and switches open", () => {
   assert.equal(strip("/hrm/positions", positionsOnly), null, "one view is not a strip: no Openings without the recruiting grant");
   assert.equal(strip("/hrm/performance", positionsOnly), null, "Cycles alone is not a strip");
 
-  const hiring = forViewer(["hrm.position.read", "hrm.recruiting.read"], ["hrmRecruiting", "hrmOfferSigning"]);
-  assert.deepEqual(strip("/hrm/positions", hiring)?.hrefs, ["/hrm/positions", "/hrm/recruiting", "/hrm/recruiting?tab=offers"]);
+  const hiring = forViewer(["hrm.position.read", "hrm.recruiting.read"], ["hrmRecruiting"]);
+  assert.deepEqual(strip("/hrm/positions", hiring)?.hrefs, [
+    "/hrm/positions",
+    "/hrm/recruiting",
+    "/hrm/recruiting?tab=interviews",
+    "/hrm/recruiting?tab=offers",
+    "/hrm/recruiting?tab=postings",
+    "/hrm/recruiting?tab=pools",
+  ]);
+  assert.equal(strip("/hrm/positions", forViewer(["hrm.position.read", "hrm.recruiting.read"], [])), null, "Recruiting off: no recruiting views");
 });

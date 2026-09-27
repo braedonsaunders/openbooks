@@ -132,7 +132,7 @@
     "flagAutoClosed": "auto-closed",
     "flagPhoto": "photo",
     "crewTitle": "Crew time",
-    "crewDescription": "Foreman batches per project per day — sign, approve through the stages, post once.",
+    "crewDescription": "Foreman batches per project per day — sign, approve, post once.",
     "newBatch": "New batch",
     "statusLabel": "Status",
     "allBatches": "All batches",
@@ -146,8 +146,7 @@
     "setupLink": "Field-time setup",
     "statusDraft": "Draft",
     "statusSubmitted": "Submitted",
-    "statusStage1": "Stage 1 approved",
-    "statusStage2": "Stage 2 approved",
+    "statusApproved": "Approved",
     "statusRejected": "Rejected",
     "statusPosted": "Posted",
     "worker": "Worker",
@@ -164,7 +163,7 @@
     "saveLines": "Save lines",
     "signAndSubmit": "Sign and submit",
     "withdraw": "Withdraw to draft",
-    "approveStage": "Approve stage",
+    "approve": "Approve",
     "reject": "Reject",
     "rejectReason": "Rejection reason",
     "post": "Post",
@@ -196,15 +195,16 @@
     "kiosksTitle": "Kiosk devices",
     "noKiosks": "No kiosks registered yet.",
     "retired": "Retired",
-    "tokenIssued": "Device link for {name} — copy it now, it cannot be shown again:", "acknowledgeToken": "I copied this device link",
+    "tokenIssued": "Device link for {name} — copy it now, it cannot be shown again:",
+    "acknowledgeToken": "I copied this device link",
     "kioskNamePlaceholder": "Kiosk name (site or gate)…",
     "registerKiosk": "Register kiosk",
     "pinWorkerPlaceholder": "Worker party id…",
     "pinPlaceholder": "4–10 digit PIN",
     "setPin": "Set PIN",
-    "stagesTitle": "Approval chains",
-    "singleApproval": "Single approval stands.",
-    "stagesHint": "Chains are declared per subject through the approval-stages API — stages run 1, 2, 3 without gaps.",
+    "approvalRoutingTitle": "Approval routing",
+    "approvalRoutingHint": "Timesheet and crew batch approvals run through Flows. Author a flow on the timesheet week or crew time batch record to add supervisor, project manager or payroll approval steps; without a flow, a time approver approves directly.",
+    "approvalRoutingLink": "Open Flows",
     "kioskNeedPin": "Choose the worker and enter the PIN.",
     "kioskIdentified": "Identified — clock in or out below.",
     "kioskClockedIn": "Clocked in.",
@@ -233,18 +233,6 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "Use my location",
     "locationDenied": "Location is unavailable — enter coordinates by hand.",
-    "saveGeofence": "Save geofence",
-    "subjects": {
-      "timesheetWeek": "Timesheet week",
-      "crewTimeBatch": "Crew time batch"
-    },
-    "approvers": {
-      "supervisor": "Supervisor",
-      "projectManager": "Project manager",
-      "payroll": "Payroll",
-      "role": "Role",
-      "namedRole": "Role: {role}"
-    },
-    "unknownApprovalTarget": "Unknown approval target"
+    "saveGeofence": "Save geofence"
   }
 }

@@ -19,7 +19,7 @@ import { createPlanLineBody } from "../../compensation/bodies";
  */
 export const POST = defineRoute({
   permission: "hrm.compensation.manage",
-  feature: "hrmHeadcountPlans",
+  feature: "hrmCompensation",
   body: z
     .object({ action: z.enum(["line", "submit", "approve", "close"]) })
     .and(createPlanLineBody.partial()),

@@ -274,41 +274,21 @@ export async function requireHrmCompensationManageOnEmployment(
  * subject or submitter.
  */
 
-export type RecruitingFeatureKey =
-  | "hrmRecruiting"
-  | "hrmStructuredInterviews"
-  | "hrmInterviewScheduling"
-  | "hrmOfferSigning"
-  | "hrmJobBoards"
-  | "hrmCandidateRetention"
-  | "hrmTalentPool";
-
-const RECRUITING_FEATURE_LABEL: Record<RecruitingFeatureKey, string> = {
-  hrmRecruiting: "Recruiting",
-  hrmStructuredInterviews: "Structured interviews",
-  hrmInterviewScheduling: "Interview scheduling",
-  hrmOfferSigning: "Offer signing",
-  hrmJobBoards: "Job boards",
-  hrmCandidateRetention: "Candidate retention",
-  hrmTalentPool: "Talent pool",
-};
-
 /**
- * The service-boundary gate for recruiting capabilities. featureEnabled
- * resolves the registry's full dependency chain, so a child capability can
- * never survive a disabled Recruiting or HRM parent.
+ * The service-boundary gate for recruiting. featureEnabled resolves the
+ * registry's full dependency chain, so Recruiting can never survive a
+ * disabled HRM parent.
  */
 export async function requireRecruitingFeature(
   exec: SqlExecutor,
   orgId: string,
-  key: RecruitingFeatureKey = "hrmRecruiting",
 ): Promise<void> {
   const row = (await exec.execute<{ features: Record<string, boolean> | null }>(sql`
     select settings->'features' as features from orgs where id = ${orgId}
   `)).rows[0];
-  if (!featureEnabled(row?.features ?? {}, key)) {
+  if (!featureEnabled(row?.features ?? {}, "hrmRecruiting")) {
     throw new HrmAuthorizationError(
-      `${RECRUITING_FEATURE_LABEL[key]} is off — turn it on in Company Settings → Features before using this surface; nothing was written`,
+      "Recruiting is off — turn it on in Company Settings → Features before using this surface; nothing was written",
     );
   }
 }

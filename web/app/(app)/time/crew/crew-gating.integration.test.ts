@@ -69,7 +69,7 @@ async function enableCrewEntry(orgId: string): Promise<void> {
   await db.execute(sql`
     update orgs set settings = coalesce(settings, '{}'::jsonb)
       || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb)
-      || '{"projects": true, "timeTracking": true, "fieldTime": true, "fieldTimeCrewEntry": true}'::jsonb)
+      || '{"projects": true, "timeTracking": true, "fieldTime": true}'::jsonb)
      where id = ${orgId}`)
 }
 
