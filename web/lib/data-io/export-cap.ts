@@ -3,7 +3,23 @@
  * for resource-core re-export this module, so it must not pull in db,
  * authz, or any other mockable surface.
  */
-export const MAX_EXPORT_ROWS = 50_000
+const DEFAULT_MAX_EXPORT_ROWS = 50_000
+
+function configuredTestLimit(): number {
+  const raw = process.env.NODE_ENV === 'test' ? process.env.OPENBOOKS_TEST_EXPORT_ROW_LIMIT : undefined
+  if (raw === undefined) return DEFAULT_MAX_EXPORT_ROWS
+  if (!/^[1-9]\d*$/.test(raw)) {
+    throw new Error('OPENBOOKS_TEST_EXPORT_ROW_LIMIT must be a positive whole number')
+  }
+  const limit = Number(raw)
+  if (!Number.isSafeInteger(limit) || limit > DEFAULT_MAX_EXPORT_ROWS) {
+    throw new Error(`OPENBOOKS_TEST_EXPORT_ROW_LIMIT must be between 1 and ${DEFAULT_MAX_EXPORT_ROWS}`)
+  }
+  return limit
+}
+
+/** Production exports always use the fixed limit; tests may exercise its boundary cheaply. */
+export const MAX_EXPORT_ROWS = configuredTestLimit()
 
 /**
  * Invariant: an export that would exceed the cap is refused and nothing is
@@ -20,7 +36,7 @@ export const MAX_EXPORT_ROWS = 50_000
 export class ExportRowLimitError extends Error {
   readonly code = 'EXPORT_ROW_LIMIT_EXCEEDED'
   readonly resourceLabel: string
-  readonly limit = MAX_EXPORT_ROWS
+  readonly limit: number
   constructor(resourceLabel: string) {
     super(
       `Export refused: "${resourceLabel}" has more than ${MAX_EXPORT_ROWS.toLocaleString('en-US')} rows, so the complete file cannot be produced and nothing was exported. ` +
@@ -28,6 +44,7 @@ export class ExportRowLimitError extends Error {
     )
     this.name = 'ExportRowLimitError'
     this.resourceLabel = resourceLabel
+    this.limit = MAX_EXPORT_ROWS
   }
 }
 

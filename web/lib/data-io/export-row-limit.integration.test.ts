@@ -2,10 +2,11 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
-// Boundary proof for the silent export cap: exactly 50,000 parties export
-// completely; 50,001 refuses by name instead of streaming a truncated file.
+// Boundary proof for the export cap at a small test-only limit: rows export
+// completely at the cap, and the next row refuses by name instead of truncating.
 // Synthetic scratch orgs only; probe rows are bulk-deleted before teardown so
 // the drop stays fast, then the fixture removes the org.
+process.env.OPENBOOKS_TEST_EXPORT_ROW_LIMIT = '500'
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
@@ -41,10 +42,7 @@ async function deleteProbeParties(orgId: string, tag: string): Promise<void> {
 }
 
 test(
-  'exactly 50,000 parties export completely (no false positive at the cap)',
-  // Bulk boundary by definition: a 50k-row insert plus full export shaping
-  // measured ~50s under load against the 60s runner default, so this case
-  // carries its own justified budget instead of flaking near the ceiling.
+  `exactly ${MAX_EXPORT_ROWS.toLocaleString('en-US')} parties export completely (no false positive at the cap)`,
   { skip: !env.OPENBOOKS_DB_URL, timeout: 180_000 },
   async () => {
     const org = await withBypass(() => createScratchOrg())
@@ -67,8 +65,7 @@ test(
 )
 
 test(
-  '50,001 parties refuse by name instead of exporting a truncated file',
-  // Same bulk-boundary budget as the exact-cap case above.
+  `${(MAX_EXPORT_ROWS + 1).toLocaleString('en-US')} parties refuse by name instead of exporting a truncated file`,
   { skip: !env.OPENBOOKS_DB_URL, timeout: 180_000 },
   async () => {
     const org = await withBypass(() => createScratchOrg())
@@ -84,6 +81,8 @@ test(
             'EXPORT_ROW_LIMIT_EXCEEDED',
           )
           assert.match((error as Error).message, /cannot be narrowed/)
+          assert.match((error as Error).message, /500 rows/)
+          assert.equal((error as InstanceType<typeof ExportRowLimitError>).limit, MAX_EXPORT_ROWS)
           return true
         },
       )
