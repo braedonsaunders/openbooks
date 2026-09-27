@@ -103,15 +103,13 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/dc.ts";
 
 /** Every period FR-230 prints percentage-method tables for (Table 1 + pp. 10–11). */
@@ -205,12 +203,7 @@ export const DC_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function dcRatesForPayDate(payDate: string): DcYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = DC_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(DC_WITHHOLDING, year);
-  }
-  return rates;
+  return DC_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /**
@@ -260,29 +253,23 @@ export function dcScaledBrackets(
   }));
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = dcRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for District of Columbia withholding: ${P}`);
-  }
+function compute(
+  input: UsStateWithholdingInput,
+  rates: DcYearRates,
+  context: StateEngineContext<DcYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
   // FR-230 prints percentage-method tables for the eight DC_PERIODS (Table 1
   // plus the pp. 10–11 tables). Any other P has no published table to look
   // up, and a scaled one would not be the published table.
-  const period = payPeriodFor(P);
-  if (period === null || !DC_PERIODS.includes(period)) {
-    refuseUnprintedPeriod(DC_WITHHOLDING, P);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const period = context.requirePrintedPeriod(P, DC_PERIODS, [260, 365]);
+  const { factors, trace } = context;
 
   // FR-230 p. 5: a servicemember spouse whose wages are exempt under federal
   // law "may file a D-4 with their employer to claim exemption from
   // withholding". That is the only D-4 exemption the booklet names.
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("DC_EXEMPT", 1n);
-    return { state: "DC", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "DC_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   if (input.basis === "nonresident") {
     const d4a = input.certificateFor?.(DC_NONRESIDENT_CERTIFICATE.key);
@@ -388,6 +375,12 @@ export const DC_FACTOR_LABELS: Readonly<Record<string, string>> = {
   DC_D4A_NONRESIDENT: "DC Form D-4A nonresident exemption in effect",
 };
 
+const DC_STATE_ENGINE = defineStateEngine({
+  state: { state: "DC", label: "District of Columbia income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(DC_EDITIONS_BY_YEAR), DC_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const DC_WITHHOLDING: UsStateWithholdingEngine = {
   state: "DC",
   label: "District of Columbia income tax",
@@ -397,7 +390,7 @@ export const DC_WITHHOLDING: UsStateWithholdingEngine = {
   // FR-230 Table 1 plus the pp. 10–11 percentage tables: weekly, biweekly,
   // semimonthly, monthly, quarterly, semiannual, annual, and daily.
   printedPeriods: DC_PERIODS,
-  compute,
+  compute: DC_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

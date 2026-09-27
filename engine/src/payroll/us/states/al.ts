@@ -26,13 +26,13 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  refuseUntranscribedYear,
   requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/al.ts";
 
 export type AlExemption = "0" | "S" | "MS" | "M" | "H";
@@ -66,12 +66,7 @@ export const AL_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function alRatesForPayDate(payDate: string): AlYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = AL_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(AL_WITHHOLDING, year);
-  }
-  return rates;
+  return AL_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /** "less $X for each $step increment or part thereof of GI above the first ceiling." */
@@ -185,14 +180,13 @@ export function alApprovedSeverance(
   return period;
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = alRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Alabama withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: AlYearRates,
+  context: StateEngineContext<AlYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
   const militarySpouseCertificate = input.supportingCertificates?.us_al_a4_ms;
   if (militarySpouseCertificate?.onFile) {
@@ -322,6 +316,12 @@ export const AL_FACTOR_LABELS: Readonly<Record<string, string>> = {
   AL_WITHHELD: "Alabama tax withheld this period",
 };
 
+const AL_STATE_ENGINE = defineStateEngine({
+  state: { state: "AL", label: "Alabama income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(AL_EDITIONS_BY_YEAR), AL_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const AL_WITHHOLDING: UsStateWithholdingEngine = {
   state: "AL",
   label: "Alabama income tax",
@@ -331,7 +331,7 @@ export const AL_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: AL_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute,
+  compute: AL_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

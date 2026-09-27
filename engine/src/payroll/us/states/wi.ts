@@ -38,12 +38,12 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
-  refuseUntranscribedYear,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/wi.ts";
 
 export type WiSchedule = "single" | "married";
@@ -118,12 +118,7 @@ export const WI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function wiRatesForPayDate(payDate: string): WiYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = WI_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(WI_WITHHOLDING, year);
-  }
-  return rates;
+  return WI_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /**
@@ -166,14 +161,13 @@ export function wiAnnualTax(net: bigint, rates: WiYearRates): bigint {
   return 0n;
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = wiRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Wisconsin withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: WiYearRates,
+  context: StateEngineContext<WiYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
   const militarySpouseCertificate = input.supportingCertificates?.us_wi_w221;
   if (militarySpouseCertificate?.onFile) {
@@ -191,13 +185,10 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     };
   }
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    return {
-      state: "WI", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
-      statutoryTax: D(0n), additionalWithholding: D(0n),
-      factors: { WI_EXEMPT: "1" },
-    };
-  }
+  const exempt = context.exemptResult({
+    factorKey: "WI_EXEMPT", statutoryTax: true, additionalWithholding: true,
+  });
+  if (exempt) return exempt;
 
   const withholdingAgreement = input.supportingCertificates?.us_wi_wt4a;
   if (withholdingAgreement?.onFile) {
@@ -344,6 +335,12 @@ export const WI_FACTOR_LABELS: Readonly<Record<string, string>> = {
   WI_CATCHUP: "Wisconsin catch-up withholding on the previously-unwithheld base",
 };
 
+const WI_STATE_ENGINE = defineStateEngine({
+  state: { state: "WI", label: "Wisconsin income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(WI_EDITIONS_BY_YEAR), WI_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const WI_WITHHOLDING: UsStateWithholdingEngine = {
   state: "WI",
   label: "Wisconsin income tax",
@@ -352,7 +349,7 @@ export const WI_WITHHOLDING: UsStateWithholdingEngine = {
   editions: WI_TAX_YEAR_EDITIONS,
   printedPeriods: null,
   supportingCertificateKeys: ["us_wi_w221", "us_wi_wt4a"],
-  compute,
+  compute: WI_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

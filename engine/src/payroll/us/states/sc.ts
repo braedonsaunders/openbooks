@@ -24,13 +24,13 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  refuseUntranscribedYear,
   requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/sc.ts";
 
 export interface ScYearRates {
@@ -80,12 +80,7 @@ export const SC_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function scRatesForPayDate(payDate: string): ScYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = SC_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(SC_WITHHOLDING, year);
-  }
-  return rates;
+  return SC_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 export function scStandardDeduction(annualWages: bigint, allowances: number, rates: ScYearRates): bigint {
@@ -104,19 +99,16 @@ export function scAnnualTax(taxable: bigint, rates: ScYearRates): bigint {
   return U(rates.thirdAdd) + mulRateCents(taxable - U(rates.secondBracketTo), rates.thirdRate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = scRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for South Carolina withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: ScYearRates,
+  context: StateEngineContext<ScYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("SC_EXEMPT", 1n);
-    return { state: "SC", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "SC_EXEMPT", factorFormat: "decimal", statutoryTax: true, additionalWithholding: true });
+  if (exempt) return exempt;
 
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
   let wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -172,6 +164,12 @@ export const SC_FACTOR_LABELS: Readonly<Record<string, string>> = {
   SC_WITHHELD: "South Carolina tax withheld this period",
 };
 
+const SC_STATE_ENGINE = defineStateEngine({
+  state: { state: "SC", label: "South Carolina income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(SC_EDITIONS_BY_YEAR), SC_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const SC_WITHHOLDING: UsStateWithholdingEngine = {
   state: "SC",
   label: "South Carolina income tax",
@@ -179,7 +177,7 @@ export const SC_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: SC_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute,
+  compute: SC_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

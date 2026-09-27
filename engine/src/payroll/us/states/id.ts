@@ -30,12 +30,10 @@ import {
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 import {
   evaluateUsNonresidentThreshold,
-  payPeriodFor,
   roundUsFinalWithholding,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   requireUsSourceWages,
   requireUsWageAllocation,
   type UsNonresidentThresholdRule,
@@ -126,10 +124,12 @@ export const ID_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function idRatesForPayDate(payDate: string): IdYearRates {
-  const year = Number(payDate.slice(0, 4));
-  if (year !== ID_RATES_2026_07_23.year || ID_RATES_2026_07_23.status !== "published") {
-    refuseUntranscribedYear(ID_WITHHOLDING, year);
-  }
+  const rates = ID_STATE_ENGINE.ratesForPayDate(payDate);
+  requireIdEditionEffective(payDate);
+  return rates;
+}
+
+function requireIdEditionEffective(payDate: string): void {
   if (payDate < ID_SUNSET_EDITION_FROM) {
     throw new PayrollError(
       `Idaho income tax withholding for pay dates before ${ID_SUNSET_EDITION_FROM} is not loaded — `
@@ -140,7 +140,6 @@ export function idRatesForPayDate(payDate: string): IdYearRates {
       + "their use going forward from issuance, and no operative date before that is established.",
     );
   }
-  return ID_RATES_2026_07_23;
 }
 
 export function idRoundToDollar(units: bigint): bigint {
@@ -158,20 +157,18 @@ export function idPeriodTax(wages: bigint, period: IdPeriod, married: boolean, r
   return idRoundToDollar(mulRateCents(excess, rates.rate));
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = idRatesForPayDate(input.payDate);
-  const period = payPeriodFor(input.periodsPerYear);
-  if (!period || !ID_PERIODS.includes(period) || (period === "daily" && input.periodsPerYear !== 260)) {
-    refuseUnprintedPeriod(ID_WITHHOLDING, input.periodsPerYear);
-  }
+function compute(
+  input: UsStateWithholdingInput,
+  rates: IdYearRates,
+  context: StateEngineContext<IdYearRates>,
+): UsStateWithholdingResult {
+  requireIdEditionEffective(input.payDate);
+  const period = context.requirePrintedPeriod(input.periodsPerYear, ID_PERIODS, 260);
   const published = period as IdPeriod;
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("ID_EXEMPT", 1n);
-    return { state: "ID", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "ID_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as IdFilingStatus;
   const married = idUsesMarriedTable(status);
@@ -251,6 +248,12 @@ export const ID_FACTOR_LABELS: Readonly<Record<string, string>> = {
   ID_WITHHELD: "Idaho tax withheld this period",
 };
 
+const ID_STATE_ENGINE = defineStateEngine({
+  state: { state: "ID", label: "Idaho income tax", printedPeriods: ID_PERIODS },
+  editions: pairStateRateEditions([ID_RATES_2026_07_23], ID_TAX_YEAR_EDITIONS),
+  compute,
+});
+
 export const ID_WITHHOLDING: UsStateWithholdingEngine = {
   state: "ID",
   label: "Idaho income tax",
@@ -259,7 +262,7 @@ export const ID_WITHHOLDING: UsStateWithholdingEngine = {
   editions: ID_TAX_YEAR_EDITIONS,
   printedPeriods: ID_PERIODS,
   finalRounding: "nearest_dollar",
-  compute,
+  compute: ID_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

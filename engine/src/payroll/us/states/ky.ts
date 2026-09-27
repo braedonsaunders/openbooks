@@ -40,12 +40,12 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  refuseUntranscribedYear,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ky.ts";
 
 export interface KyYearRates {
@@ -81,27 +81,19 @@ export const KY_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function kyRatesForPayDate(payDate: string): KyYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = KY_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(KY_WITHHOLDING, year);
-  }
-  return rates;
+  return KY_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = kyRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Kentucky withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: KyYearRates,
+  context: StateEngineContext<KyYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("KY_EXEMPT", 1n);
-    return { state: "KY", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "KY_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   // 42A003 does not print a separate supplemental-wage rule. The period's
   // wages — regular plus any supplemental paid with them — are annualized
@@ -152,6 +144,12 @@ export const KY_FACTOR_LABELS: Readonly<Record<string, string>> = {
   LOU_TAX: "Louisville occupational tax this period",
 };
 
+const KY_STATE_ENGINE = defineStateEngine({
+  state: { state: "KY", label: "Kentucky income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(KY_EDITIONS_BY_YEAR), KY_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const KY_WITHHOLDING: UsStateWithholdingEngine = {
   state: "KY",
   label: "Kentucky income tax",
@@ -159,7 +157,7 @@ export const KY_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: KY_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute,
+  compute: KY_STATE_ENGINE.compute,
 };
 
 // ---------------------------------------------------------------------------
@@ -238,7 +236,11 @@ export function louisvilleRateFor(
  * allocation, else the period's wages — a missing allocation never silently
  * narrows the base, it keeps the full period the auditor's scenario prices.
  */
-function computeLouisville(input: UsStateWithholdingInput): UsStateWithholdingResult {
+function computeLouisville(
+  input: UsStateWithholdingInput,
+  rates: KyYearRates,
+  context: StateEngineContext<KyYearRates>,
+): UsStateWithholdingResult {
   const { rate, effectiveFrom } = louisvilleRateFor(input.payDate, input.basis);
   let base = U(input.wages) + U(input.supplemental ?? "0");
   if (input.basis === "nonresident") {
@@ -265,20 +267,26 @@ function computeLouisville(input: UsStateWithholdingInput): UsStateWithholdingRe
     }
   }
   const tax = mulRateCents(base, rate);
+  const { factors, trace } = context;
+  factors.LOU_BASIS = input.basis;
+  factors.LOU_RATE = rate;
+  factors.LOU_RATE_EFFECTIVE = effectiveFrom;
+  trace("LOU_BASE", base);
+  trace("LOU_TAX", tax);
   return {
     state: "KY-LOU",
-    year: Number(input.payDate.slice(0, 4)),
+    year: rates.year,
     tax: D(tax),
     taxSupplemental: D(0n),
-    factors: {
-      LOU_BASIS: input.basis,
-      LOU_RATE: rate,
-      LOU_RATE_EFFECTIVE: effectiveFrom,
-      LOU_BASE: D(base),
-      LOU_TAX: D(tax),
-    },
+    factors,
   };
 }
+
+const LOUISVILLE_STATE_ENGINE = defineStateEngine({
+  state: { state: "KY-LOU", label: "Louisville Metro occupational license tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(KY_EDITIONS_BY_YEAR), LOUISVILLE_TAX_YEAR_EDITIONS),
+  compute: computeLouisville,
+});
 
 export const LOUISVILLE_WITHHOLDING: UsStateWithholdingEngine = {
   state: "KY-LOU",
@@ -287,7 +295,7 @@ export const LOUISVILLE_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: LOUISVILLE_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute: computeLouisville,
+  compute: LOUISVILLE_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

@@ -29,10 +29,7 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  payPeriodFor,
   roundUsFinalWithholding,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   requireUsSourceWages,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
@@ -40,6 +37,7 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/mo.ts";
 const DOLLAR = 10_000n;
 
@@ -113,12 +111,7 @@ export const MO_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function moRatesForPayDate(payDate: string): MoYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = MO_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(MO_WITHHOLDING, year);
-  }
-  return rates;
+  return MO_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 export function moRoundToDollar(units: bigint): bigint {
@@ -144,20 +137,17 @@ export function moAnnualTax(taxable: bigint, rates: MoYearRates): bigint {
   return U(chosen.base) + mulRateCents(taxable - U(chosen.over), chosen.rate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = moRatesForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: MoYearRates,
+  context: StateEngineContext<MoYearRates>,
+): UsStateWithholdingResult {
   const P = input.periodsPerYear;
-  const period = payPeriodFor(P);
-  if (!period || !MO_PERIODS.includes(period) || (period === "daily" && P !== 260)) {
-    refuseUnprintedPeriod(MO_WITHHOLDING, P);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const period = context.requirePrintedPeriod(P, MO_PERIODS, 260);
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("MO_EXEMPT", 1n);
-    return { state: "MO", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "MO_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   const reducedWithholding = certificateAmount(input.certificate, "reduced_withholding_per_period");
   if (reducedWithholding != null) {
@@ -212,6 +202,12 @@ export const MO_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MO_WITHHELD: "Missouri tax withheld this period",
 };
 
+const MO_STATE_ENGINE = defineStateEngine({
+  state: { state: "MO", label: "Missouri income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(MO_EDITIONS_BY_YEAR), MO_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const MO_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MO",
   label: "Missouri income tax",
@@ -220,7 +216,7 @@ export const MO_WITHHOLDING: UsStateWithholdingEngine = {
   editions: MO_TAX_YEAR_EDITIONS,
   printedPeriods: MO_PERIODS,
   finalRounding: "nearest_dollar",
-  compute,
+  compute: MO_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

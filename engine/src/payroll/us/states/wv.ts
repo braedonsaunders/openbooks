@@ -37,12 +37,10 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import { roundDiv } from "../../../money/money.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   evaluateUsNonresidentThreshold,
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   requireUsSourceWages,
   requireUsWageAllocation,
   type UsNonresidentThresholdRule,
@@ -271,23 +269,11 @@ export const WV_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function wvRatesForPayDate(payDate: string): WvYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = WV_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(WV_WITHHOLDING, year);
-  }
-  return rates;
+  return WV_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 function wvPeriodFor(periodsPerYear: number): WvPeriod {
-  const period = payPeriodFor(periodsPerYear);
-  // The daily table is 260-calibrated ($29 = $7,500 ÷ 260), so a 365-day
-  // daily payroll has no printed table — refused like the KS/MO daily guards
-  // refuse theirs.
-  if (period == null || !WV_PERIODS.includes(period) || (period === "daily" && periodsPerYear !== 260)) {
-    refuseUnprintedPeriod(WV_WITHHOLDING, periodsPerYear);
-  }
-  return period as WvPeriod;
+  return WV_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, WV_PERIODS, 260) as WvPeriod;
 }
 
 const DOLLAR = 10_000n;
@@ -341,8 +327,11 @@ export function wvPercentageMethod(input: {
   return { tax, factors };
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = wvRatesForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: WvYearRates,
+  context: StateEngineContext<WvYearRates>,
+): UsStateWithholdingResult {
 
   const militarySpouseCertificate = input.supportingCertificates?.us_wv_it104nr;
   if (militarySpouseCertificate?.onFile) {
@@ -380,11 +369,10 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     && reciprocalStates.includes(reciprocalResidence ?? "")
     && wagesOnly
   ) {
-    return {
-      state: "WV", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
-      statutoryTax: D(0n), additionalWithholding: D(0n),
-      factors: { WV_EXEMPT: "1" },
-    };
+    const exempt = context.exemptResult({
+      factorKey: "WV_EXEMPT", statutoryTax: true, additionalWithholding: true,
+    });
+    if (exempt) return exempt;
   }
 
   // Nonresident Armed Forces pay (WV Code §11-21-71; TSD 381) and qualifying
@@ -605,6 +593,12 @@ export const WV_FACTOR_LABELS: Readonly<Record<string, string>> = {
   WV_RECIPROCAL_EXEMPTION_NOT_APPLIED: "West Virginia reciprocal exemption not applied",
 };
 
+const WV_STATE_ENGINE = defineStateEngine({
+  state: { state: "WV", label: "West Virginia income tax", printedPeriods: WV_PERIODS },
+  editions: pairStateRateEditions(Object.values(WV_EDITIONS_BY_YEAR), WV_TAX_YEAR_EDITIONS),
+  compute,
+});
+
 export const WV_WITHHOLDING: UsStateWithholdingEngine = {
   state: "WV",
   label: "West Virginia income tax",
@@ -613,7 +607,7 @@ export const WV_WITHHOLDING: UsStateWithholdingEngine = {
   editions: WV_TAX_YEAR_EDITIONS,
   printedPeriods: WV_PERIODS,
   supportingCertificateKeys: ["us_wv_it104nr", WV_MOBILE_KEY, "us_wv_military_pay"],
-  compute,
+  compute: WV_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

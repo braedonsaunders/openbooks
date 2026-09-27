@@ -54,13 +54,13 @@ import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-de
 import { certificateAmount, certificateCount, certificateFlag } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import {
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
+  type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/mi.ts";
 
 export interface MiYearRates {
@@ -115,18 +115,11 @@ export const MI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function miRatesForPayDate(payDate: string): MiYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = MI_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(MI_WITHHOLDING, year);
-  }
-  return rates;
+  return MI_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 function periodsGuard(periodsPerYear: number): void {
-  if (!Number.isInteger(periodsPerYear) || periodsPerYear < 1 || periodsPerYear > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Michigan withholding: ${periodsPerYear}`);
-  }
+  MI_STATE_ENGINE.requirePeriodsPerYear(periodsPerYear);
 }
 
 // ---------------------------------------------------------------------------
@@ -147,19 +140,20 @@ function periodsGuard(periodsPerYear: number): void {
  * $23.08, both of them the annual figure rounded half-up to the cent, which is
  * what `divIntCents` does. Recorded as corroboration, not as a citation.
  */
-function computeMi(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = miRatesForPayDate(input.payDate);
+function computeMi(
+  input: UsStateWithholdingInput,
+  rates: MiYearRates,
+  context: StateEngineContext<MiYearRates>,
+): UsStateWithholdingResult {
   periodsGuard(input.periodsPerYear);
-  const factors: Record<string, string> = {};
+  const { factors } = context;
 
   // MI-W4 line 8 — the employee claims exemption from withholding. Line 8b's
   // reciprocal-state case is NOT read here: reciprocity is resolved upstream,
   // which removes the Michigan levy from the plan entirely, so there is no
   // second and divergent copy of that rule in this engine.
-  if (certificateFlag(input.certificate, "exempt")) {
-    factors.MI_EXEMPT = "1";
-    return { state: "MI", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "MI_EXEMPT" });
+  if (exempt) return exempt;
 
   // MI-W4 line 6. "If you fail or refuse to file the form, your employer must
   // withhold Michigan income tax from your wages without allowance for any
@@ -216,6 +210,12 @@ export const MI_FACTOR_LABELS: Readonly<Record<string, string>> = {
   DETROIT_OTHER_CITY_CREDITS: "Detroit other-city credits vs the full rate",
 };
 
+const MI_STATE_ENGINE = defineStateEngine({
+  state: { state: "MI", label: "Michigan income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(MI_EDITIONS_BY_YEAR), MI_TAX_YEAR_EDITIONS),
+  compute: computeMi,
+});
+
 export const MI_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MI",
   label: "Michigan income tax",
@@ -225,7 +225,7 @@ export const MI_WITHHOLDING: UsStateWithholdingEngine = {
   // A flat rate on the period's compensation less an annual allowance divided
   // by the periods: any frequency computes.
   printedPeriods: null,
-  compute: computeMi,
+  compute: MI_STATE_ENGINE.compute,
 };
 
 // ---------------------------------------------------------------------------
@@ -274,11 +274,10 @@ export const MI_CITY_RATE_SOURCE =
  * exemption every day of the year.
  */
 export function miDetroitExemptionPerPeriod(payDate: string, periodsPerYear: number): string {
-  const rates = miRatesForPayDate(payDate);
+  const rates = DETROIT_STATE_ENGINE.ratesForPayDate(payDate);
+  DETROIT_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, DETROIT_PERIODS, 365);
   const printed = rates.detroit.printedExemption[periodsPerYear];
-  if (printed == null) {
-    refuseUnprintedPeriod(DETROIT_WITHHOLDING, periodsPerYear);
-  }
+  if (printed == null) throw new PayrollError(`Detroit withholding has no printed exemption for ${periodsPerYear} periods`);
   return printed;
 }
 
@@ -379,27 +378,31 @@ export function miCityWithholding(input: {
   return { tax: D(tax + supplemental), factors };
 }
 
-function computeDetroit(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = miRatesForPayDate(input.payDate);
+function computeDetroit(
+  input: UsStateWithholdingInput,
+  rates: MiYearRates,
+  context: StateEngineContext<MiYearRates>,
+): UsStateWithholdingResult {
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 0;
   const fullRate = rates.detroit.residentRate;
   const otherCities = input.basis === "resident" ? input.detroitOtherCities ?? [] : [];
   const perPeriod = miDetroitExemptionPerPeriod(input.payDate, input.periodsPerYear);
 
-  const factors: Record<string, string> = {
+  const factors = context.factors;
+  Object.assign(factors, {
     DETROIT_BASIS: input.basis,
     DETROIT_RATE: fullRate,
     DETROIT_EXEMPTION_PER_PERIOD: perPeriod,
-  };
+  });
   const totalAllowance = U(perPeriod) * BigInt(Math.max(exemptions, 0));
   const supplemental = mulRateCents(U(input.supplemental ?? "0"), fullRate);
   if (otherCities.length === 0) {
     const rate = input.basis === "resident" ? fullRate : rates.detroit.nonresidentRate;
     factors.DETROIT_RATE = rate;
     const taxable = max0(U(input.wages) - totalAllowance);
-    factors.DETROIT_TAXABLE = D(taxable);
+    context.trace("DETROIT_TAXABLE", taxable);
     const tax = mulRateCents(taxable, rate);
-    factors.DETROIT_TAX = D(tax + supplemental);
+    context.trace("DETROIT_TAX", tax + supplemental);
     return {
       state: "MI-DETROIT",
       year: rates.year,
@@ -463,9 +466,9 @@ function computeDetroit(input: UsStateWithholdingInput): UsStateWithholdingResul
     tax += mulRateCents(taxable, slice.rate);
     credit += mulRateCents(taxable, fullRate) - mulRateCents(taxable, slice.rate);
   }
-  factors.DETROIT_TAXABLE = D(max0(totalWages - totalAllowance));
-  factors.DETROIT_OTHER_CITY_CREDITS = D(credit);
-  factors.DETROIT_TAX = D(tax + supplemental);
+  context.trace("DETROIT_TAXABLE", max0(totalWages - totalAllowance));
+  context.trace("DETROIT_OTHER_CITY_CREDITS", credit);
+  context.trace("DETROIT_TAX", tax + supplemental);
   return {
     state: "MI-DETROIT",
     year: rates.year,
@@ -474,6 +477,16 @@ function computeDetroit(input: UsStateWithholdingInput): UsStateWithholdingResul
     factors,
   };
 }
+
+const DETROIT_PERIODS: readonly UsStatePayPeriod[] = [
+  "weekly", "biweekly", "semimonthly", "monthly", "daily",
+];
+
+const DETROIT_STATE_ENGINE = defineStateEngine({
+  state: { state: "MI-DETROIT", label: "City of Detroit income tax", printedPeriods: DETROIT_PERIODS },
+  editions: pairStateRateEditions(Object.values(MI_EDITIONS_BY_YEAR), MI_TAX_YEAR_EDITIONS),
+  compute: computeDetroit,
+});
 
 export const DETROIT_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MI-DETROIT",
@@ -486,6 +499,6 @@ export const DETROIT_WITHHOLDING: UsStateWithholdingEngine = {
   certificateKey: "us_mi_5527",
   ratesModule: RATES_MODULE,
   editions: MI_TAX_YEAR_EDITIONS,
-  printedPeriods: ["weekly", "biweekly", "semimonthly", "monthly", "daily"],
-  compute: computeDetroit,
+  printedPeriods: DETROIT_PERIODS,
+  compute: DETROIT_STATE_ENGINE.compute,
 };

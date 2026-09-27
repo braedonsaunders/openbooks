@@ -80,8 +80,9 @@ import { certificateAmount, certificateCount } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  payPeriodFor,
-  refuseUntranscribedYear,
+  defineStateEngine, pairStateRateEditions, type StateEngineContext,
+} from "./state-engine.ts";
+import {
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -547,6 +548,33 @@ export const OH_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "OH",
 }];
 
+interface OhYearRates {
+  year: number;
+  status: "published" | "draft";
+}
+
+const OH_RATES_2025: OhYearRates = { year: 2025, status: "published" };
+const OH_RATES_2026: OhYearRates = { year: 2026, status: "published" };
+// The October 2025 tables cover late-2025 payroll dates without declaring a
+// separate tax-year pack; keep that lookup internal to the calculator.
+const OH_PAYROLL_EDITION_2025: PayrollTaxYearEdition = {
+  year: 2025,
+  label: OH_EDITION_2025_10.label,
+  effectiveFrom: OH_EDITION_2025_10.effectiveFrom,
+  citation: OH_EDITION_2025_10.citation,
+  status: "published",
+  region: "OH",
+};
+
+const OH_STATE_ENGINE = defineStateEngine({
+  state: { state: "OH", label: "Ohio income tax", printedPeriods: null },
+  editions: pairStateRateEditions(
+    [OH_RATES_2025, OH_RATES_2026],
+    [OH_PAYROLL_EDITION_2025, ...OH_TAX_YEAR_EDITIONS],
+  ),
+  compute: computeOh,
+});
+
 /**
  * How far the transcription reaches, as DATES rather than years.
  *
@@ -567,7 +595,7 @@ const OH_TRANSCRIBED_THROUGH = "2026-12-31";
  */
 export function ohEditionFor(periodEnd: string): OhEdition {
   if (periodEnd > OH_TRANSCRIBED_THROUGH) {
-    refuseUntranscribedYear(OH_WITHHOLDING, Number(periodEnd.slice(0, 4)));
+    OH_STATE_ENGINE.ratesForPayDate(`${periodEnd.slice(0, 4)}-01-01`);
   }
   const edition = OH_EDITIONS.find((candidate) =>
     periodEnd >= candidate.effectiveFrom
@@ -608,12 +636,6 @@ function requirePeriodEnd(input: UsStateWithholdingInput): string {
 // The state income tax
 // ---------------------------------------------------------------------------
 
-function periodsGuard(periodsPerYear: number): void {
-  if (!Number.isInteger(periodsPerYear) || periodsPerYear < 1 || periodsPerYear > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Ohio withholding: ${periodsPerYear}`);
-  }
-}
-
 /**
  * The optional computer formula — the method Ohio writes for payroll systems.
  *
@@ -631,16 +653,18 @@ export function ohOptionalComputerFormula(input: {
   /** Gross wages for the period. */
   wages: string;
   exemptions: number;
-}): { tax: string; factors: Record<string, string> } {
+}, context?: StateEngineContext<OhYearRates>): { tax: string; factors: Record<string, string> } {
   const edition = ohEditionFor(input.periodEnd);
-  periodsGuard(input.periodsPerYear);
-  const factors: Record<string, string> = { OH_EDITION: edition.effectiveFrom };
+  OH_STATE_ENGINE.requirePeriodsPerYear(input.periodsPerYear);
+  const factors = context?.factors ?? {};
+  const trace = context?.trace ?? ((key: string, value: bigint) => { factors[key] = D(value); });
+  factors.OH_EDITION = edition.effectiveFrom;
 
   const annualWages = U(input.wages) * BigInt(input.periodsPerYear);
   const exemption = U(edition.exemptionPerYear) * BigInt(Math.max(input.exemptions, 0));
   const taxable = max0(annualWages - exemption);
-  factors.OH_ANNUAL_EXEMPTION = D(exemption);
-  factors.OH_TAXABLE_WAGE = D(taxable);
+  trace("OH_ANNUAL_EXEMPTION", exemption);
+  trace("OH_TAXABLE_WAGE", taxable);
 
   const band = edition.formula.find((candidate) =>
     candidate.upTo == null || taxable <= U(candidate.upTo));
@@ -651,9 +675,9 @@ export function ohOptionalComputerFormula(input: {
   }
   factors.OH_BAND_RATE = band.rate;
   const annualTax = U(band.base) + mulRateCents(taxable - U(band.over), band.rate);
-  factors.OH_ANNUAL_TAX = D(annualTax);
+  trace("OH_ANNUAL_TAX", annualTax);
   const tax = divIntCents(annualTax, input.periodsPerYear);
-  factors.OH_TAX = D(tax);
+  trace("OH_TAX", tax);
   return { tax: D(tax), factors };
 }
 
@@ -672,8 +696,8 @@ export function ohPercentageMethod(input: {
   exemptions: number;
 }): string {
   const edition = ohEditionFor(input.periodEnd);
-  const period = payPeriodFor(input.periodsPerYear);
-  if (period == null || !OH_PRINTED_PERIODS.includes(period)) {
+  const period = OH_STATE_ENGINE.printedPeriod(input.periodsPerYear, OH_PRINTED_PERIODS);
+  if (period == null) {
     throw new PayrollError(
       `Ohio prints percentage-method tables for ${OH_PRINTED_PERIODS.join(", ")} payroll periods, `
       + `and this payroll runs ${input.periodsPerYear} periods a year. Use the optional computer `
@@ -689,7 +713,11 @@ export function ohPercentageMethod(input: {
   return D(U(row.base) + mulRateCents(taxable - U(row.over), row.rate));
 }
 
-function computeOh(input: UsStateWithholdingInput): UsStateWithholdingResult {
+function computeOh(
+  input: UsStateWithholdingInput,
+  rates: OhYearRates,
+  context: StateEngineContext<OhYearRates>,
+): UsStateWithholdingResult {
   const periodEnd = requirePeriodEnd(input);
   // Year gate: throws for periods past the transcribed tables even though the
   // optional computer formula below annualizes without edition data.
@@ -711,7 +739,7 @@ function computeOh(input: UsStateWithholdingInput): UsStateWithholdingResult {
     periodsPerYear: input.periodsPerYear,
     wages: D(wages),
     exemptions,
-  });
+  }, context);
 
   // Form IT 4 line 5 — "Additional Ohio income tax withholding per pay period".
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
@@ -719,7 +747,7 @@ function computeOh(input: UsStateWithholdingInput): UsStateWithholdingResult {
     state: "OH",
     // The TAX year is the year of payment, even where the period that earned it
     // — and therefore the table set — belongs to the year before.
-    year: Number(input.payDate.slice(0, 4)),
+    year: rates.year,
     tax: D(U(tax) + extra),
     taxSupplemental: D(0n),
     factors,
@@ -753,7 +781,7 @@ export const OH_WITHHOLDING: UsStateWithholdingEngine = {
   editions: OH_TAX_YEAR_EDITIONS,
   // The optional computer formula annualizes, so any frequency computes.
   printedPeriods: null,
-  compute: computeOh,
+  compute: OH_STATE_ENGINE.compute,
 };
 
 // ---------------------------------------------------------------------------
@@ -782,7 +810,7 @@ export function ohSchoolDistrictWithholding(input: {
   district: OhSchoolDistrict;
 }): { tax: string; factors: Record<string, string> } {
   const edition = ohEditionFor(input.periodEnd);
-  periodsGuard(input.periodsPerYear);
+  OH_STATE_ENGINE.requirePeriodsPerYear(input.periodsPerYear);
   const factors: Record<string, string> = {
     OH_SD_CODE: input.district.code,
     OH_SD_BASE: input.district.base,

@@ -25,15 +25,13 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ri.ts";
 
 export type RiPeriod =
@@ -166,12 +164,7 @@ export const RI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function riRatesForPayDate(payDate: string): RiYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = RI_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(RI_WITHHOLDING, year);
-  }
-  return rates;
+  return RI_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 export function riPeriodTax(taxable: bigint, period: RiPeriod): bigint {
@@ -184,19 +177,16 @@ export function riPeriodTax(taxable: bigint, period: RiPeriod): bigint {
   return U(chosen.base) + mulRateCents(taxable - U(chosen.over), chosen.rate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = riRatesForPayDate(input.payDate);
-  const period = payPeriodFor(input.periodsPerYear);
-  if (!period || !RI_PERIODS.includes(period) || (period === "daily" && input.periodsPerYear !== 260)) {
-    refuseUnprintedPeriod(RI_WITHHOLDING, input.periodsPerYear);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: RiYearRates,
+  context: StateEngineContext<RiYearRates>,
+): UsStateWithholdingResult {
+  const period = context.requirePrintedPeriod(input.periodsPerYear, RI_PERIODS, 260);
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("RI_EXEMPT", 1n);
-    return { state: "RI", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "RI_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   const table = RI_TABLES_2026[period];
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
@@ -237,6 +227,12 @@ export const RI_FACTOR_LABELS: Readonly<Record<string, string>> = {
   RI_WITHHELD: "Rhode Island tax withheld this period",
 };
 
+const RI_STATE_ENGINE = defineStateEngine({
+  state: { state: "RI", label: "Rhode Island income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(RI_EDITIONS_BY_YEAR), RI_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const RI_WITHHOLDING: UsStateWithholdingEngine = {
   state: "RI",
   label: "Rhode Island income tax",
@@ -244,7 +240,7 @@ export const RI_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: RI_TAX_YEAR_EDITIONS,
   printedPeriods: RI_PERIODS,
-  compute,
+  compute: RI_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

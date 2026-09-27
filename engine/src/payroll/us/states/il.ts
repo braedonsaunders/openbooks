@@ -41,12 +41,12 @@ import {
 } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import {
-  refuseUntranscribedYear,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/il.ts";
 
 export interface IlYearRates {
@@ -107,22 +107,16 @@ export const IL_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function ilRatesForPayDate(payDate: string): IlYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = IL_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(IL_WITHHOLDING, year);
-  }
-  return rates;
+  return IL_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = ilRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Illinois withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: IlYearRates,
+  context: StateEngineContext<IlYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
   const wages = U(input.wages) + U(input.supplemental ?? "0");
 
@@ -137,9 +131,9 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // that federal claim, disregard the IL-W-4 and withhold with no allowances.
   const disregardCertificate = certificateFlag(input.certificate, "exempt")
     && input.federalWithholdingExempt !== true;
-  if (certificateFlag(input.certificate, "exempt") && !disregardCertificate) {
-    trace("IL_EXEMPT", 1n);
-    return { state: "IL", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+  if (!disregardCertificate) {
+    const exempt = context.exemptResult({ factorKey: "IL_EXEMPT", factorFormat: "decimal" });
+    if (exempt) return exempt;
   }
 
   // Step 2. IL-W-4 Line 1 and Line 2 allowances.
@@ -207,6 +201,12 @@ export const IL_FACTOR_LABELS: Readonly<Record<string, string>> = {
   IL_WITHHELD: "Illinois tax withheld this period",
 };
 
+const IL_STATE_ENGINE = defineStateEngine({
+  state: { state: "IL", label: "Illinois income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(IL_EDITIONS_BY_YEAR), IL_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const IL_WITHHOLDING: UsStateWithholdingEngine = {
   state: "IL",
   label: "Illinois income tax",
@@ -216,5 +216,5 @@ export const IL_WITHHOLDING: UsStateWithholdingEngine = {
   // The automated payroll method is a formula with the pay periods as a
   // divisor, so any frequency computes.
   printedPeriods: null,
-  compute,
+  compute: IL_STATE_ENGINE.compute,
 };

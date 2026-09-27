@@ -29,10 +29,7 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  payPeriodFor,
   roundUsFinalWithholding,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   requireUsSourceWages,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
@@ -40,6 +37,7 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/mt.ts";
 const DOLLAR = 10_000n;
 
@@ -193,12 +191,7 @@ export const MT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function mtRatesForPayDate(payDate: string): MtYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = MT_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(MT_WITHHOLDING, year);
-  }
-  return rates;
+  return MT_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 export function mtRoundToDollar(units: bigint): bigint {
@@ -223,20 +216,17 @@ export function mtPeriodTax(gross: bigint, period: MtPeriod, status: MtFilingSta
   return U(chosen.A) + mulRateCents(max0(gross - U(chosen.C)), chosen.B);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = mtRatesForPayDate(input.payDate);
-  const period = payPeriodFor(input.periodsPerYear);
-  if (!period || !MT_PERIODS.includes(period) || (period === "daily" && input.periodsPerYear !== 260)) {
-    refuseUnprintedPeriod(MT_WITHHOLDING, input.periodsPerYear);
-  }
+function compute(
+  input: UsStateWithholdingInput,
+  rates: MtYearRates,
+  context: StateEngineContext<MtYearRates>,
+): UsStateWithholdingResult {
+  const period = context.requirePrintedPeriod(input.periodsPerYear, MT_PERIODS, 260);
   const published = period as MtPeriod;
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("MT_EXEMPT", 1n);
-    return { state: "MT", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "MT_EXEMPT", factorFormat: "decimal" });
+    if (exempt) return exempt;
 
   const specifiedWithholding = certificateAmount(input.certificate, "specified_withholding_per_period");
   if (specifiedWithholding != null) {
@@ -284,6 +274,12 @@ export const MT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MT_WITHHELD: "Montana tax withheld this period",
 };
 
+const MT_STATE_ENGINE = defineStateEngine({
+  state: { state: "MT", label: "Montana income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(MT_EDITIONS_BY_YEAR), MT_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const MT_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MT",
   label: "Montana income tax",
@@ -292,7 +288,7 @@ export const MT_WITHHOLDING: UsStateWithholdingEngine = {
   editions: MT_TAX_YEAR_EDITIONS,
   printedPeriods: MT_PERIODS,
   finalRounding: "ceiling_dollar",
-  compute,
+  compute: MT_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

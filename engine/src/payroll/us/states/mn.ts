@@ -33,7 +33,6 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   evaluateUsNonresidentThreshold,
-  refuseUntranscribedYear,
   requireUsSourceWages,
   requireUsWageAllocation,
   type UsNonresidentThresholdRule,
@@ -42,6 +41,7 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/mn.ts";
 
 /**
@@ -135,12 +135,7 @@ export const MN_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function mnRatesForPayDate(payDate: string): MnYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = MN_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(MN_WITHHOLDING, year);
-  }
-  return rates;
+  return MN_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /**
@@ -188,21 +183,18 @@ export function mnSupplementalFlat(payDate: string, supplemental: string): strin
   return D(mulRateCents(U(supplemental), rates.supplementalRate));
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = mnRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Minnesota withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: MnYearRates,
+  context: StateEngineContext<MnYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    return {
-      state: "MN", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n),
-      factors: { MN_EXEMPT: "1" },
-    };
-  }
+  const exempt = context.exemptResult({
+    factorKey: "MN_EXEMPT", statutoryTax: true, additionalWithholding: true,
+  });
+  if (exempt) return exempt;
 
   const schedule = mnScheduleFor(certificateChoice(input.certificate, "marital_status"));
   factors.MN_SCHEDULE = schedule;
@@ -284,6 +276,12 @@ export const MN_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MN_NONRESIDENT_UNDER_15300: "Minnesota nonresident under-$15,300 expected-pay exception",
 };
 
+const MN_STATE_ENGINE = defineStateEngine({
+  state: { state: "MN", label: "Minnesota income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(MN_EDITIONS_BY_YEAR), MN_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const MN_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MN",
   label: "Minnesota income tax",
@@ -291,7 +289,7 @@ export const MN_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: MN_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute,
+  compute: MN_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

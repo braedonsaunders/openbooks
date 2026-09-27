@@ -87,15 +87,13 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/nm.ts";
 
 /** FYI-104's three columns: (a) SINGLE, (b) MARRIED, (c) HEAD of HOUSEHOLD. */
@@ -482,23 +480,14 @@ export const NM_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function nmRatesForPayDate(payDate: string): NmYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = NM_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(NM_WITHHOLDING, year);
-  }
-  return rates;
+  return NM_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 function nmPeriodFor(periodsPerYear: number): NmPeriod {
-  const period = payPeriodFor(periodsPerYear);
   // The daily tables are 260-calibrated (single $61.90 = $16,100 ÷ 260), so
   // a 365-day daily payroll has no printed table — refused like the KS/MO
   // daily guards refuse theirs.
-  if (period == null || (period === "daily" && periodsPerYear !== 260)) {
-    refuseUnprintedPeriod(NM_WITHHOLDING, periodsPerYear);
-  }
-  return period as NmPeriod;
+  return NM_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, NM_PERIODS, 260) as NmPeriod;
 }
 
 /**
@@ -557,18 +546,18 @@ export function nmSupplementalFlat(
   return D(mulRateCents(U(supplemental), rates.supplementalRate));
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = nmRatesForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: NmYearRates,
+  context: StateEngineContext<NmYearRates>,
+): UsStateWithholdingResult {
   const period = nmPeriodFor(input.periodsPerYear);
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const { factors, trace } = context;
 
   // Step 4(c) on the 2020-or-later federal W-4, which FYI-104 p. 2 names as
   // the exempt-income path (tribal-land and active-duty military wages).
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("NM_EXEMPT", 1n);
-    return { state: "NM", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "NM_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   const status = nmScheduleFor({
     filingStatus: certificateChoice(input.certificate, "filing_status"),
@@ -645,6 +634,12 @@ export const NM_FACTOR_LABELS: Readonly<Record<string, string>> = {
   NM_WITHHELD: "New Mexico tax withheld this period",
 };
 
+const NM_STATE_ENGINE = defineStateEngine({
+  state: { state: "NM", label: "New Mexico withholding tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(NM_EDITIONS_BY_YEAR), NM_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const NM_WITHHOLDING: UsStateWithholdingEngine = {
   state: "NM",
   label: "New Mexico withholding tax",
@@ -654,7 +649,7 @@ export const NM_WITHHOLDING: UsStateWithholdingEngine = {
   // FYI-104 prints all eight Tables 1–8, so any standard frequency has a
   // real table.
   printedPeriods: NM_PERIODS,
-  compute,
+  compute: NM_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

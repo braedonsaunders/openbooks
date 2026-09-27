@@ -55,13 +55,13 @@ import { PayrollError } from "../../error.ts";
 import { D, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import {
-  refuseUntranscribedYear,
   requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/pa.ts";
 
 /**
@@ -128,21 +128,19 @@ export const PA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function paRatesForPayDate(payDate: string): PaYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = PA_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(PA_WITHHOLDING, year);
-  }
-  return rates;
+  return PA_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 // ---------------------------------------------------------------------------
 // Pennsylvania personal income tax
 // ---------------------------------------------------------------------------
 
-function computePa(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = paRatesForPayDate(input.payDate);
-  const factors: Record<string, string> = {};
+function computePa(
+  input: UsStateWithholdingInput,
+  rates: PaYearRates,
+  context: StateEngineContext<PaYearRates>,
+): UsStateWithholdingResult {
+  const { factors } = context;
 
   // REV-415: "If an employee receives supplemental or other compensation, an
   // employer must determine the tax to withhold by ADDING the supplemental or
@@ -205,6 +203,12 @@ export const PA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   PA_LST_EXEMPT: "LST exemption in effect",
 };
 
+const PA_STATE_ENGINE = defineStateEngine({
+  state: { state: "PA", label: "Pennsylvania personal income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(PA_EDITIONS_BY_YEAR), PA_TAX_YEAR_EDITIONS),
+  compute: computePa,
+});
+
 export const PA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "PA",
   label: "Pennsylvania personal income tax",
@@ -213,7 +217,7 @@ export const PA_WITHHOLDING: UsStateWithholdingEngine = {
   editions: PA_TAX_YEAR_EDITIONS,
   // A flat rate on the period's compensation computes at any frequency.
   printedPeriods: null,
-  compute: computePa,
+  compute: PA_STATE_ENGINE.compute,
 };
 
 // ---------------------------------------------------------------------------
@@ -260,8 +264,11 @@ export function philadelphiaRateFor(
  * rate for taxpayers with PA tax forgiveness is a REFUND the taxpayer claims,
  * not a withholding change, and is deliberately not applied here.
  */
-function computePhiladelphia(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = paRatesForPayDate(input.payDate);
+function computePhiladelphia(
+  input: UsStateWithholdingInput,
+  rates: PaYearRates,
+  context: StateEngineContext<PaYearRates>,
+): UsStateWithholdingResult {
   const { rate, effectiveFrom } = philadelphiaRateFor(input.payDate, input.basis);
   let compensation = U(input.wages) + U(input.supplemental ?? "0");
   let allocation = "1";
@@ -281,21 +288,27 @@ function computePhiladelphia(input: UsStateWithholdingInput): UsStateWithholding
     }
   }
   const tax = mulRateCents(compensation, rate);
+  const { factors, trace } = context;
+  factors.PHILA_BASIS = input.basis;
+  factors.PHILA_RATE = rate;
+  factors.PHILA_RATE_EFFECTIVE = effectiveFrom;
+  factors.PHILA_WORK_ALLOCATION = allocation;
+  trace("PHILA_TAXABLE_WAGES", compensation);
+  trace("PHILA_TAX", tax);
   return {
     state: "PA-PHILA",
     year: rates.year,
     tax: D(tax),
     taxSupplemental: D(0n),
-    factors: {
-      PHILA_BASIS: input.basis,
-      PHILA_RATE: rate,
-      PHILA_RATE_EFFECTIVE: effectiveFrom,
-      PHILA_WORK_ALLOCATION: allocation,
-      PHILA_TAXABLE_WAGES: D(compensation),
-      PHILA_TAX: D(tax),
-    },
+    factors,
   };
 }
+
+const PHILADELPHIA_STATE_ENGINE = defineStateEngine({
+  state: { state: "PA-PHILA", label: "Philadelphia wage tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(PA_EDITIONS_BY_YEAR), PA_TAX_YEAR_EDITIONS),
+  compute: computePhiladelphia,
+});
 
 export const PHILADELPHIA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "PA-PHILA",
@@ -304,7 +317,7 @@ export const PHILADELPHIA_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: PA_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute: computePhiladelphia,
+  compute: PHILADELPHIA_STATE_ENGINE.compute,
 };
 
 // ---------------------------------------------------------------------------

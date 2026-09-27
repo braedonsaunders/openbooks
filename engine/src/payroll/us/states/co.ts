@@ -38,10 +38,8 @@ import {
 import { PayrollError } from "../../error.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext, US_STATE_PAY_PERIODS } from "./state-engine.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -99,21 +97,17 @@ export const CO_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function coRatesForPayDate(payDate: string): CoYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = CO_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(CO_WITHHOLDING, year);
-  }
-  return rates;
+  return CO_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = coRatesForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: CoYearRates,
+  context: StateEngineContext<CoYearRates>,
+): UsStateWithholdingResult {
   const P = input.periodsPerYear;
-  const period = payPeriodFor(P);
-  if (period == null || (period === "daily" && P !== 260)) {
-    refuseUnprintedPeriod(CO_WITHHOLDING, P);
-  }
+  context.requirePrintedPeriod(P, US_STATE_PAY_PERIODS, 260);
+  const { factors, trace } = context;
   const militarySpouseCertificate = input.supportingCertificates?.us_co_dr1059;
   if (militarySpouseCertificate?.onFile) {
     requireMilitarySpouseEligibility(militarySpouseCertificate, "Colorado", [
@@ -182,9 +176,6 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
       factors: {},
     };
   }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
-
   // Federal carrier preemptions exclude qualifying pay from NONRESIDENT
   // Colorado wages only: 49 USC 11502 (rail) and 14503 (motor) exempt
   // regularly assigned multistate carrier pay outright. (Air-carrier pay
@@ -273,6 +264,12 @@ export const CO_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CO_WITHHELD: "Colorado tax withheld this period",
 };
 
+const CO_STATE_ENGINE = defineStateEngine({
+  state: { state: "CO", label: "Colorado income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(CO_EDITIONS_BY_YEAR), CO_TAX_YEAR_EDITIONS),
+  compute,
+});
+
 export const CO_WITHHOLDING: UsStateWithholdingEngine = {
   state: "CO",
   label: "Colorado income tax",
@@ -281,7 +278,7 @@ export const CO_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: CO_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute,
+  compute: CO_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

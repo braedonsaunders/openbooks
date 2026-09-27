@@ -28,13 +28,13 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  refuseUntranscribedYear,
   requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/de.ts";
 const DE_W4NR_KEY = "us_de_w4nr";
 
@@ -76,12 +76,7 @@ export const DE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function deRatesForPayDate(payDate: string): DeYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = DE_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(DE_WITHHOLDING, year);
-  }
-  return rates;
+  return DE_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /**
@@ -117,8 +112,11 @@ export function deAnnualTax(taxable: bigint): bigint {
   throw new PayrollError("Delaware tax computation table is incomplete");
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = deRatesForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: DeYearRates,
+  context: StateEngineContext<DeYearRates>,
+): UsStateWithholdingResult {
   // Employer's Guide Section 16 (Form W-4NR): a nonresident's withholding is
   // the annualized-method tax on total wages prorated to the Delaware share
   // of work days. Without the filed day count there is nothing to prorate.
@@ -138,18 +136,12 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     proration = { deDays, totalDays };
   }
 
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Delaware withholding: ${P}`);
-  }
+  const P = context.requirePeriodsPerYear();
   const annualP = deAnnualPeriods(P, rates.dailyPeriods);
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("DE_EXEMPT", 1n);
-    return { state: "DE", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "DE_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   const statusRaw = certificateChoice(input.certificate, "filing_status");
   const status: DeFilingStatus =
@@ -226,6 +218,12 @@ export const DE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   WILM_TAX: "Wilmington city wage tax",
 };
 
+const DE_STATE_ENGINE = defineStateEngine({
+  state: { state: "DE", label: "Delaware income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(DE_EDITIONS_BY_YEAR), DE_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const DE_WITHHOLDING: UsStateWithholdingEngine = {
   state: "DE",
   label: "Delaware income tax",
@@ -234,7 +232,7 @@ export const DE_WITHHOLDING: UsStateWithholdingEngine = {
   editions: DE_TAX_YEAR_EDITIONS,
   printedPeriods: null,
   supportingCertificateKeys: [DE_W4NR_KEY],
-  compute,
+  compute: DE_STATE_ENGINE.compute,
 };
 
 // ---------------------------------------------------------------------------
@@ -254,6 +252,12 @@ const WILMINGTON_RATES_2026: readonly {
   resident: "0.0125",
   nonresident: "0.0125",
 }];
+
+const WILMINGTON_STATE_ENGINE = defineStateEngine({
+  state: { state: "DE-WILM", label: "Wilmington city wage tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(DE_EDITIONS_BY_YEAR), DE_TAX_YEAR_EDITIONS),
+  compute: computeWilmington,
+});
 
 export function wilmingtonRateFor(
   payDate: string,
@@ -279,8 +283,11 @@ export function wilmingtonRateFor(
  * exemption, allowance or floor. A nonresident calculation without the
  * city-share allocation refuses by name rather than pricing total wages.
  */
-function computeWilmington(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = deRatesForPayDate(input.payDate);
+function computeWilmington(
+  input: UsStateWithholdingInput,
+  rates: DeYearRates,
+  context: StateEngineContext<DeYearRates>,
+): UsStateWithholdingResult {
   const { rate, effectiveFrom } = wilmingtonRateFor(input.payDate, input.basis);
   let compensation = U(input.wages) + U(input.supplemental ?? "0");
   let allocation = "1";
@@ -301,19 +308,19 @@ function computeWilmington(input: UsStateWithholdingInput): UsStateWithholdingRe
     }
   }
   const tax = mulRateCents(compensation, rate);
+  const { factors, trace } = context;
+  factors.WILM_BASIS = input.basis;
+  factors.WILM_RATE = rate;
+  factors.WILM_RATE_EFFECTIVE = effectiveFrom;
+  factors.WILM_WORK_ALLOCATION = allocation;
+  trace("WILM_TAXABLE_WAGES", compensation);
+  trace("WILM_TAX", tax);
   return {
     state: "DE-WILM",
     year: rates.year,
     tax: D(tax),
     taxSupplemental: D(0n),
-    factors: {
-      WILM_BASIS: input.basis,
-      WILM_RATE: rate,
-      WILM_RATE_EFFECTIVE: effectiveFrom,
-      WILM_WORK_ALLOCATION: allocation,
-      WILM_TAXABLE_WAGES: D(compensation),
-      WILM_TAX: D(tax),
-    },
+    factors,
   };
 }
 
@@ -324,7 +331,7 @@ export const WILMINGTON_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: DE_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute: computeWilmington,
+  compute: WILMINGTON_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

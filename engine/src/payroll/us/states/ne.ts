@@ -32,9 +32,6 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   requireUsWageAllocation,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
@@ -42,6 +39,7 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ne.ts";
 const NE_9N_KEY = "us_ne_9n";
 
@@ -116,12 +114,7 @@ export const NE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function neRatesForPayDate(payDate: string): NeYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = NE_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(NE_WITHHOLDING, year);
-  }
-  return rates;
+  return NE_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 export function neAnnualTax(taxable: bigint, married: boolean, rates: NeYearRates): bigint {
@@ -134,15 +127,14 @@ export function neAnnualTax(taxable: bigint, married: boolean, rates: NeYearRate
   return U(chosen.base) + mulRateCents(taxable - U(chosen.over), chosen.rate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = neRatesForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: NeYearRates,
+  context: StateEngineContext<NeYearRates>,
+): UsStateWithholdingResult {
   const P = input.periodsPerYear;
-  const period = payPeriodFor(P);
-  if (!period || !NE_PERIODS.includes(period) || (period === "daily" && P !== 260)) {
-    refuseUnprintedPeriod(NE_WITHHOLDING, P);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const period = context.requirePrintedPeriod(P, NE_PERIODS, 260);
+  const { factors, trace } = context;
 
   if (input.employerEmployeeCount == null) {
     throw new PayrollError(
@@ -170,8 +162,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const married = status === "married";
   const allowances = certificateCount(input.certificate, "allowances") ?? 0;
   const wages = U(input.wages) + U(input.supplemental ?? "0");
-  const exempt = certificateFlag(input.certificate, "exempt");
-  if (exempt) trace("NE_EXEMPT", 1n);
+  const exempt = context.isExempt({ factorKey: "NE_EXEMPT", factorFormat: "decimal" });
   const annualWages = wages * BigInt(P);
   trace("NE_ANNUAL_WAGES", annualWages);
 
@@ -262,6 +253,12 @@ export const NE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   NE_WITHHELD: "Nebraska tax withheld this period",
 };
 
+const NE_STATE_ENGINE = defineStateEngine({
+  state: { state: "NE", label: "Nebraska income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(NE_EDITIONS_BY_YEAR), NE_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const NE_WITHHOLDING: UsStateWithholdingEngine = {
   state: "NE",
   label: "Nebraska income tax",
@@ -273,7 +270,7 @@ export const NE_WITHHOLDING: UsStateWithholdingEngine = {
   taxableWageBases: {
     income: "state:US:NE:income", nonPeriodic: "state:US:NE:nonPeriodic",
   },
-  compute,
+  compute: NE_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

@@ -41,16 +41,14 @@
 import { PayrollError } from "../../error.ts";
 import { D, max0, rate6, U } from "../../../money/payroll-decimal.ts";
 import {
-  certificateChoice, certificateFlag, type PayrollCertificate,
+  certificateChoice, type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import { roundDiv } from "../../../money/money.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   requireUsSourceWages,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
@@ -203,8 +201,6 @@ export const UT_EDITION_2026: UtEdition = {
 
 export const UT_EDITIONS: readonly UtEdition[] = [UT_EDITION_2025, UT_EDITION_2026];
 
-const UT_LOADED_YEARS = new Set([2026]);
-
 export const UT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   year: 2026,
   label: "Publication 14 (Rev. 4/25 through May 31; Rev. 4/26 from June 1)",
@@ -213,6 +209,20 @@ export const UT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   status: "published",
   region: "UT",
 }];
+
+interface UtYearRates {
+  year: number;
+  status: "published" | "draft";
+  editions: readonly UtEdition[];
+}
+
+const UT_RATES: UtYearRates = { year: 2026, status: "published", editions: UT_EDITIONS };
+
+const UT_STATE_ENGINE = defineStateEngine({
+  state: { state: "UT", label: "Utah income tax", printedPeriods: UT_PERIODS },
+  editions: pairStateRateEditions([UT_RATES], UT_TAX_YEAR_EDITIONS),
+  compute,
+});
 
 const DOLLAR = 10_000n;
 const RATE6 = 1_000_000n;
@@ -223,9 +233,8 @@ export function utMulRateDollars(units: bigint, rate: string): bigint {
 }
 
 export function utEditionForPeriodStart(periodStart: string): UtEdition {
-  const year = Number(periodStart.slice(0, 4));
-  if (!UT_LOADED_YEARS.has(year)) refuseUntranscribedYear(UT_WITHHOLDING, year);
-  const edition = UT_EDITIONS.find((candidate) =>
+  const rates = UT_STATE_ENGINE.ratesForPayDate(periodStart);
+  const edition = rates.editions.find((candidate) =>
     periodStart >= candidate.effectiveFrom
     && (candidate.effectiveTo == null || periodStart < candidate.effectiveTo));
   if (!edition) {
@@ -250,14 +259,10 @@ function requirePeriodStart(input: UsStateWithholdingInput): string {
 }
 
 function utPeriodFor(periodsPerYear: number): UtPeriod {
-  const period = payPeriodFor(periodsPerYear);
   // The daily schedule is 260-calibrated (single $36 = $9,348 ÷ 260), so a
   // 365-day daily payroll has no printed schedule — refused like the KS/MO
   // daily guards refuse theirs.
-  if (period == null || !UT_PERIODS.includes(period) || (period === "daily" && periodsPerYear !== 260)) {
-    refuseUnprintedPeriod(UT_WITHHOLDING, periodsPerYear);
-  }
-  return period as UtPeriod;
+  return UT_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, UT_PERIODS, 260) as UtPeriod;
 }
 
 /**
@@ -272,24 +277,32 @@ export function utScheduleFor(filingStatus: string | null): UtSchedule {
   return filingStatus === "married" ? "married" : "single";
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
+function compute(
+  input: UsStateWithholdingInput,
+  rates: UtYearRates,
+  context: StateEngineContext<UtYearRates>,
+): UsStateWithholdingResult {
   const periodStart = requirePeriodStart(input);
-  const edition = utEditionForPeriodStart(periodStart);
+  const edition = rates.editions.find((candidate) =>
+    periodStart >= candidate.effectiveFrom
+    && (candidate.effectiveTo == null || periodStart < candidate.effectiveTo));
+  if (!edition) {
+    throw new PayrollError(
+      `no Utah withholding edition is loaded for a payroll period beginning ${periodStart} — `
+      + RATES_MODULE,
+    );
+  }
   const period = utPeriodFor(input.periodsPerYear);
-  const factors: Record<string, string> = {
-    UT_EDITION: edition.effectiveFrom,
-    UT_RATE: edition.rate,
-  };
+  const { factors, trace } = context;
+  factors.UT_EDITION = edition.effectiveFrom;
+  factors.UT_RATE = edition.rate;
 
   // Pub 14: write "Utah Only - Exempt, Interstate Transportation" or
   // "Utah Only - Exempt, Military Spouse" under W-4 box 4c.
-  if (certificateFlag(input.certificate, "exempt")) {
-    factors.UT_EXEMPT = "1";
-    return {
-      state: "UT", year: edition.year, tax: D(0n), taxSupplemental: D(0n), factors,
-      statutoryTax: D(0n), additionalWithholding: D(0n),
-    };
-  }
+  const exempt = context.exemptResult({
+    factorKey: "UT_EXEMPT", statutoryTax: true, additionalWithholding: true,
+  });
+  if (exempt) return exempt;
 
   const schedule = utScheduleFor(certificateChoice(input.certificate, "filing_status"));
   const values = edition.schedules[period][schedule];
@@ -303,37 +316,37 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const wages = input.basis === "nonresident"
     ? U(requireUsSourceWages(input.wageAllocations, "UT", null))
     : grossWages;
-  factors.UT_WAGES = D(wages);
-  if (input.basis === "nonresident") factors.UT_SOURCE_WAGES = D(wages);
+  trace("UT_WAGES", wages);
+  if (input.basis === "nonresident") trace("UT_SOURCE_WAGES", wages);
 
   // Line 2.
   const line2 = utMulRateDollars(wages, edition.rate);
-  factors.UT_LINE2 = D(line2);
+  trace("UT_LINE2", line2);
 
   // Line 3.
   const base = U(values.baseAllowance);
-  factors.UT_BASE_ALLOWANCE = D(base);
+  trace("UT_BASE_ALLOWANCE", base);
 
   // Line 4.
   const line4 = max0(wages - U(values.threshold));
-  factors.UT_LINE4 = D(line4);
+  trace("UT_LINE4", line4);
   factors.UT_THRESHOLD = values.threshold;
 
   // Line 5.
   const line5 = utMulRateDollars(line4, edition.phaseoutRate);
-  factors.UT_LINE5 = D(line5);
+  trace("UT_LINE5", line5);
 
   // Line 6.
   const line6 = max0(base - line5);
-  factors.UT_LINE6 = D(line6);
+  trace("UT_LINE6", line6);
 
   // Line 7.
   const tax = max0(line2 - line6);
-  factors.UT_TAX = D(tax);
+  trace("UT_TAX", tax);
 
   return {
     state: "UT",
-    year: edition.year,
+    year: rates.year,
     tax: D(tax),
     statutoryTax: D(tax),
     additionalWithholding: D(0n),
@@ -375,7 +388,7 @@ export const UT_WITHHOLDING: UsStateWithholdingEngine = {
   // Pub 14 does not print is refused rather than scaled — the weekly $180
   // threshold times 13/52 is not the quarterly $2,337.
   printedPeriods: UT_PERIODS,
-  compute,
+  compute: UT_STATE_ENGINE.compute,
 };
 
 // ===========================================================================
