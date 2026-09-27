@@ -671,8 +671,16 @@ export async function startWorkOrder(tx: SqlExecutor, orgId: string, actorId: st
 
 async function postedEntries(tx: SqlExecutor, orgId: string, order: WorkOrderRow) {
   return (await tx.execute<{ entry_number: string }>(sql`
-    select entry_number from journal_entries where org_id=${orgId} and origin='manufacturing'
-      and custom->>'work_order_number'=${order.number} order by entry_number`)).rows;
+    select entry.entry_number from journal_entries entry
+     where entry.org_id=${orgId} and entry.origin='manufacturing'
+       and entry.status='posted' and entry.reverses_entry_id is null
+       and entry.custom->>'work_order_number'=${order.number}
+       and not exists (
+         select 1 from journal_entries reversal
+          where reversal.org_id=entry.org_id and reversal.reverses_entry_id=entry.id
+            and reversal.status in ('posted','reversed')
+       )
+     order by entry.entry_number`)).rows;
 }
 
 async function descendants(tx: SqlExecutor, orgId: string, id: string) {
