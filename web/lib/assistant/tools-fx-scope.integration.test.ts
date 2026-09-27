@@ -5,6 +5,7 @@ import type { SessionUser } from '../auth';
 
 const { sql } = await import('drizzle-orm');
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
+const { markEntryReversed, postEntry } = await import('@openbooks/engine/src/journal/post-entry.ts');
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { executeAssistantTool } = await import('./registry');
 const { applicationTool, executeApplicationTool } = await import('../application/tool-catalog.ts');
@@ -188,6 +189,42 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
       }) as { result: { posted: unknown[] } };
       assert.deepEqual(second.result.posted, []);
 
+      // A separate controlled reversal pair proves the listing keeps an
+      // original entry after its status changes to reversed.
+      const sourcePeriod = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
+        select starts_on::text, ends_on::text from accounting_periods where org_id = ${org.orgId} and id = ${periodId}`)).rows[0]!;
+      const reversalPeriod = (await db.execute<{ id: string; starts_on: string }>(sql`
+        select id, starts_on::text from accounting_periods
+         where org_id = ${org.orgId} and starts_on > ${sourcePeriod.ends_on}::date
+         order by starts_on limit 1`)).rows[0]!;
+      const bookId = (await db.execute<{ id: string }>(sql`
+        select id from accounting_books where org_id = ${org.orgId} and is_primary`)).rows[0]!.id;
+      const reversedEntryNumber = `FXREVAL-STATUS-${randomUUID().slice(0, 8)}`;
+      await db.transaction(async (tx) => {
+        const original = await postEntry(tx, {
+          orgId: org.orgId, bookId, subsidiaryId: org.subsidiaryId,
+          entryNumber: reversedEntryNumber, postingDate: sourcePeriod.ends_on, periodId,
+          memo: 'FX status filter reversal fixture', origin: 'fx_revaluation', actorId: actors.adminId,
+          currency: 'CAD', closeModules: ['gl'], auditAction: 'insert', requestId: 'fx_revaluation',
+          lines: [
+            { accountId: org.accounts.bank, amount: '1', currency: 'CAD', txnAmount: '1', fxRate: '1' },
+            { accountId: org.accounts.revenue, amount: '-1', currency: 'CAD', txnAmount: '-1', fxRate: '1' },
+          ],
+        });
+        await postEntry(tx, {
+          orgId: org.orgId, bookId, subsidiaryId: org.subsidiaryId,
+          entryNumber: `${reversedEntryNumber}-R`, postingDate: reversalPeriod.starts_on,
+          periodId: reversalPeriod.id, memo: 'FX status filter reversal fixture mirror',
+          origin: 'fx_revaluation', reversesEntryId: original.entryId, actorId: actors.adminId,
+          currency: 'CAD', closeModules: ['gl'], auditAction: 'insert', requestId: 'fx_revaluation',
+          lines: [
+            { accountId: org.accounts.bank, amount: '-1', currency: 'CAD', txnAmount: '-1', fxRate: '1' },
+            { accountId: org.accounts.revenue, amount: '1', currency: 'CAD', txnAmount: '1', fxRate: '1' },
+          ],
+        });
+        await markEntryReversed(tx, { orgId: org.orgId, entryId: original.entryId, actorId: actors.adminId });
+      });
+
       const revals = await executeAssistantTool(reader, 'list_fx_revaluations', { periodId });
       assert.ok(revals.ok, JSON.stringify(revals));
       const revalData = revals.data as {
@@ -195,16 +232,15 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
       };
       // The period filter keeps the adjustment; its next-period mirror lives
       // in 2026-08 and resolves through the mirror link.
-      assert.equal(revalData.total, 1);
+      assert.equal(revalData.total, 2);
       const adjustment = revalData.items.find((i) => !i.entryNumber.endsWith('-R'));
       assert.ok(adjustment, 'adjustment entry present');
       assert.ok(adjustment.mirrorEntryNumber?.endsWith('-R'), 'adjustment links its mirror');
-      const originalStatus = await db.execute<{ status: string }>(sql`
-        select status from journal_entries where org_id = ${org.orgId} and entry_number = ${adjustment.entryNumber}`)
-      assert.equal(originalStatus.rows[0]?.status, 'reversed', 'the mirror reverses the original adjustment')
+      assert.ok(revalData.items.some((item) => item.entryNumber === reversedEntryNumber && item.mirrorEntryNumber === `${reversedEntryNumber}-R`),
+        'reversed original and its mirror remain listed');
       const unfiltered = await executeAssistantTool(reader, 'list_fx_revaluations', {});
       assert.ok(unfiltered.ok, JSON.stringify(unfiltered));
-      assert.equal((unfiltered.data as { total: number }).total, 2);
+      assert.equal((unfiltered.data as { total: number }).total, 4);
 
       const view = await executeAssistantTool(reader, 'get_consolidation_view', { periodId });
       assert.ok(view.ok, JSON.stringify(view));
