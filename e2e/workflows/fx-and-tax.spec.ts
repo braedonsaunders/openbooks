@@ -1,5 +1,6 @@
 import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test';
 import { authedContext, dismissSetupWizard } from '../auth';
+import { acceptConfirm } from './support/accept-confirm';
 import { withIdempotencyKey } from "./idempotency";
 
 /**
@@ -1038,11 +1039,9 @@ async function windowTax(page: Page, seed: TaxSeed, from: string, to: string, co
 
       // Owner attestation (with the mandated 10+ character statement) and
       // the period lock live on the Lock stage, both through the UI. The lock
-      // confirms via window.confirm, which Playwright must accept or nothing
-      // happens.
+      // uses the shared confirmation dialog before the period lock is sent.
       await page.goto(`/close?run=${runId}&stage=lock`);
       await dismissSetupWizard(page);
-      page.on('dialog', (dialog) => void dialog.accept());
       // Scoped to main: Next.js holds the RSC flight payload for the last
       // refresh in a hidden div outside main, and its parsed copy of this
       // same textarea transiently double-matches a page-level id selector
@@ -1065,7 +1064,10 @@ async function windowTax(page: Page, seed: TaxSeed, from: string, to: string, co
         const locked = page.waitForResponse(
           (r) => r.url().endsWith(`/api/close/runs/${runId}`) && r.request().method() === 'POST',
         );
-        await page.getByRole('button', { name: 'Lock period', exact: true }).click();
+        await Promise.all([
+          acceptConfirm(page),
+          page.getByRole('button', { name: 'Lock period', exact: true }).click(),
+        ]);
         const res = await locked;
         expect(res.status(), await res.text()).toBe(200);
       }
