@@ -3,6 +3,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import {
   addCalendarDays, businessToday, calendarQuarterBounds, weekStartsEndingOn,
 } from '@openbooks/engine/src/platform/business-date.ts'
+import { isoDateOf } from '@openbooks/engine/src/platform/civil-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { add, cmp, mulDecimal } from '@openbooks/engine/src/money/money.ts'
 import { flowRates, translateFlows } from '../fx-presentation'
@@ -315,7 +316,7 @@ export async function customersHome(
     cur.openInvoices += 1
     openInvoices += 1
     arOutstanding = add(arOutstanding, item.remaining)
-    const due = item.dueDate?.toISOString().slice(0, 10) ?? null
+    const due = item.dueDate ? isoDateOf(item.dueDate) : null
     if (due && due < today) {
       cur.overdue = add(cur.overdue, item.remaining)
       arOverdue = add(arOverdue, item.remaining)
