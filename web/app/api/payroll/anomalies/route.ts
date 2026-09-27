@@ -1,9 +1,10 @@
+import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { listFlags, runAnomalyScan } from "@openbooks/engine/src/hrm/ai/anomalies.ts";
-import { aiRailsErrorResponse, requireAnyPerm } from "../../../../lib/ai-rails";
-import { guardPermission } from "../../../../lib/authz";
+import { aiRailsErrorResponse } from "../../../../lib/ai-rails";
+import { can } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { notFound } from "@/lib/api/responses";
 
@@ -24,9 +25,12 @@ const scanBody = z.object({
  * Block severity refuses the pay-run finalize while open; warn never
  * blocks. The client checks res.ok before parsing.
  */
-export async function GET(req: Request) {
-  const gate = await requireAnyPerm(["payroll.manage", "time.approve", "hrm.employment.read"]);
-  if (gate instanceof NextResponse) return gate;
+export const GET = defineRoute({
+  public: "session",
+  handler: async ({ request: req, authz: gate }) => {
+  if (!(["payroll.manage", "time.approve", "hrm.employment.read"] as const).some((permission) => can(gate, permission))) {
+    return NextResponse.json({ error: "missing permission: one of payroll.manage, time.approve, hrm.employment.read" }, { status: 403 });
+  }
   if (
     !(await isFeatureEnabled(gate.user.orgId, "hrmPayrollAnomalies")) &&
     !(await isFeatureEnabled(gate.user.orgId, "hrmTimeAnomalies"))
@@ -54,36 +58,40 @@ export async function GET(req: Request) {
   } catch (e) {
     return aiRailsErrorResponse(e);
   }
-}
+  },
+})
 
-export async function POST(req: Request) {
-  const gate = await guardPermission("payroll.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmPayrollAnomalies"))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, scanBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    if (body.action === "compute_baselines") {
-      const { computeAnomalyBaselines } = await import("@openbooks/engine/src/hrm/ai/anomalies.ts");
-      const result = await computeAnomalyBaselines({
+export const POST = defineRoute({
+  permission: "payroll.manage",
+  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  handler: async ({ request: req, authz: gate }) => {
+    if (!(await isFeatureEnabled(gate.user.orgId, "hrmPayrollAnomalies"))) {
+      return notFound("record");
+    }
+    const parsedBody = await parseJsonBody(req, scanBody);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data;
+    try {
+      if (body.action === "compute_baselines") {
+        const { computeAnomalyBaselines } = await import("@openbooks/engine/src/hrm/ai/anomalies.ts");
+        const result = await computeAnomalyBaselines({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          windowPeriods: body.windowPeriods,
+        });
+        return NextResponse.json({ baselines: result });
+      }
+      const summary = await runAnomalyScan({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
-        windowPeriods: body.windowPeriods,
+        periodFrom: body.periodFrom,
+        periodTo: body.periodTo,
+        options: body.timeOnly === true ? { timeOnly: true } : undefined,
       });
-      return NextResponse.json({ baselines: result });
+      return NextResponse.json({ summary });
+    } catch (e) {
+      return aiRailsErrorResponse(e);
     }
-    const summary = await runAnomalyScan({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      periodFrom: body.periodFrom,
-      periodTo: body.periodTo,
-      options: body.timeOnly === true ? { timeOnly: true } : undefined,
-    });
-    return NextResponse.json({ summary });
-  } catch (e) {
-    return aiRailsErrorResponse(e);
-  }
-}
+
+  },
+})

@@ -1,7 +1,8 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { runEndpointScript } from '@openbooks/engine/src/scripting/scripting.ts'
-import { guardFeaturePermission } from '@/lib/feature-gates'
+import type { Authz } from '@/lib/authz'
 
 export const runtime = 'nodejs'
 
@@ -31,18 +32,10 @@ function refuseNonPost() {
  * handle() also refuses any non-POST before auth or runEndpointScript. POST
  * remains origin-checked.
  */
-async function handle(req: Request, slug: string) {
-  if (req.method !== 'POST') return refuseNonPost()
-  const gate = await guardFeaturePermission('scripts.execute', 'scripts')
-  if (gate instanceof NextResponse) return gate
-  const user = gate.user
-
+async function handle(req: Request, slug: string, user: Authz['user'], body: Record<string, unknown>) {
   const url = new URL(req.url)
   const query: Record<string, string> = {}
   url.searchParams.forEach((v, k) => (query[k] = v))
-  const parsedBody = await parseJsonBody(req, jsonObject)
-  if (!parsedBody.ok) return parsedBody.response
-  const body = parsedBody.data
 
   const outcome = await runEndpointScript(
     slug,
@@ -59,11 +52,17 @@ async function handle(req: Request, slug: string) {
 }
 
 /** 405 names POST. Next.js maps HEAD onto GET, so neither executes the script. */
-export async function GET() {
-  return refuseNonPost()
-}
+const endpointBody = z.record(z.string(), z.unknown())
 
-export async function POST(req: Request, { params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params
-  return handle(req, slug)
-}
+export const GET = defineRoute({
+  public: 'session',
+  handler: () => refuseNonPost(),
+})
+
+export const POST = defineRoute({
+  permission: 'scripts.execute',
+  feature: 'scripts',
+  params: z.object({ slug: z.string() }),
+  body: endpointBody,
+  handler: ({ request, params, authz, body }) => handle(request, params.slug, authz.user, body),
+})

@@ -1,9 +1,9 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from "next/server";
+import { z } from 'zod'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
@@ -41,15 +41,19 @@ const DASHBOARD_FEATURE: Partial<Record<string, string>> = {
  * tolerant of legacy stored settings, not to silently rewrite what an admin
  * asked to save. READ stays tolerant: mergeConfig still clamps legacy blobs.
  */
-async function gateDashboard(permission: string, dashboard: string) {
-  const gate = await guardPermission(permission);
-  if (gate instanceof NextResponse) return gate;
+async function dashboardFeatureRefusal(orgId: string, dashboard: string) {
   const featureKey = DASHBOARD_FEATURE[dashboard];
-  if (featureKey && !(await isFeatureEnabled(gate.user.orgId, featureKey))) {
+  if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
     return notFound("record");
   }
-  return gate;
+  return null;
 }
+
+const dashboardParams = z.object({ dashboard: z.string() })
+const dashboardBody = z.looseObject({
+  expectedRevision: z.unknown().optional(),
+  values: z.unknown().optional(),
+})
 
 /** Sibling OCC token for a dashboard's overrides (never inside the blob). */
 function revisionKey(dashboard: string): string {
@@ -190,10 +194,14 @@ function cleanDashboardOverrides(dashboard: AnalyticsDashboard, raw: unknown): A
   return out;
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ dashboard: string }> }) {
-  const { dashboard } = await params;
-  const gate = await gateDashboard("reports.read", dashboard);
-  if (gate instanceof NextResponse) return gate;
+export const GET = defineRoute({
+  permission: 'reports.read',
+  feature: { none: 'Dashboard access is governed by reports.read; utilization settings additionally require timeTracking.' },
+  params: dashboardParams,
+  handler: async ({ params, authz: gate }) => {
+  const { dashboard } = params;
+  const featureRefusal = await dashboardFeatureRefusal(gate.user.orgId, dashboard)
+  if (featureRefusal) return featureRefusal
   const spec = ANALYTICS_CONFIG[dashboard as AnalyticsDashboard];
   if (!spec) return NextResponse.json({ error: "unknown dashboard" }, { status: 404 });
 
@@ -208,21 +216,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ dashboa
     fields: spec.fields,
     revision: Number(r.rows[0]?.rev ?? 0),
   });
-}
+  },
+})
 
-export async function PUT(req: Request, { params }: { params: Promise<{ dashboard: string }> }) {
-  const { dashboard } = await params;
-  const gate = await gateDashboard("admin.setup.manage", dashboard);
-  if (gate instanceof NextResponse) return gate;
-  const scopeDenied = guardUnrestrictedScope(gate)
-  if (scopeDenied) return scopeDenied
+export const PUT = defineRoute({
+  permission: 'admin.setup.manage',
+  feature: { none: 'Dashboard access is governed by admin.setup.manage; utilization settings additionally require timeTracking.' },
+  scope: 'unrestricted',
+  params: dashboardParams,
+  body: dashboardBody,
+  handler: async ({ params, authz: gate, body }) => {
+  const { dashboard } = params;
+  const featureRefusal = await dashboardFeatureRefusal(gate.user.orgId, dashboard)
+  if (featureRefusal) return featureRefusal
   const spec = ANALYTICS_CONFIG[dashboard as AnalyticsDashboard];
   if (!spec) return NextResponse.json({ error: "unknown dashboard" }, { status: 404 });
-
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { expectedRevision?: unknown; values?: unknown } | null;
-  if (!body || typeof body !== "object") return NextResponse.json({ error: "object body required" }, { status: 400 });
 
   const expectedRevision = parseRevision(body.expectedRevision);
   if (expectedRevision === null) {
@@ -305,4 +313,5 @@ export async function PUT(req: Request, { params }: { params: Promise<{ dashboar
     );
   }
   return NextResponse.json({ ok: true, values: cleaned, revision: outcome.revision });
-}
+  },
+})

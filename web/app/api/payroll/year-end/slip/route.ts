@@ -1,11 +1,11 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
+import { defineRoute } from '@/lib/api/route'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { yearEndFiling } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { PayrollPackError } from '@openbooks/engine/src/payroll/packs.ts'
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { orgYearEndFilings } from '@openbooks/engine/src/payroll/yearend.ts'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { rendererUnavailableResponse } from '../../../../../lib/api/pdf-renderer'
 import { payrollYearRefusal } from '../../../../../lib/payroll-year'
 import { pdfResponse, safeName } from '../../../../../lib/export'
@@ -29,9 +29,10 @@ export const dynamic = 'force-dynamic'
  * refusal (no pay schedule, unknown year caps) is a 422 in the builder's own
  * words, an unknown country/filing pair is a 404 naming what IS declared.
  */
-export async function GET(req: Request) {
-  const gate = await guardFeaturePermission('payroll.read', 'payroll')
-  if (gate instanceof NextResponse) return gate
+export const GET = defineRoute({
+  permission: 'payroll.read',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
   const url = new URL(req.url)
   const yearRaw = url.searchParams.get('year')
   const yearRefusal = payrollYearRefusal(yearRaw)
@@ -83,4 +84,5 @@ export async function GET(req: Request) {
     if (rendererRefusal) return rendererRefusal
     throw e
   }
-}
+  },
+})

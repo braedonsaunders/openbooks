@@ -170,11 +170,11 @@ const mockDb = `
 stubModules({
   navigation: false,
   intl: false,
-  authz: false,
+  authz: true,
   features: false,
   extra: {
     "@openbooks/engine/src/platform/db.ts": mockDb,
-    "../../../lib/feature-gates": `const state = globalThis[Symbol.for('openbooks.equipment-create-route-test')]
+    "@/lib/feature-gates": `const state = globalThis[Symbol.for('openbooks.equipment-create-route-test')]
      export async function guardFeaturePermission() {
        return {
          user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
@@ -271,8 +271,8 @@ test("reusing a key for a changed request is a named conflict", async () => {
   const conflict = await post(KEY_A, { ...baseBody(), name: "Dozer 1" });
   assert.equal(conflict.status, 409);
   assert.equal(
-    ((await conflict.json()) as { error: string }).error,
-    "invalid_idempotency_key",
+    ((await conflict.json()) as { code: string }).code,
+    "idempotency_key_conflict",
   );
   assert.equal(state.units.length, 1);
 });
@@ -283,8 +283,8 @@ test("a key already owned by another organization never leaks that row", async (
   const res = await post(KEY_A, baseBody());
   assert.equal(res.status, 409);
   assert.equal(
-    ((await res.json()) as { error: string }).error,
-    "invalid_idempotency_key",
+    ((await res.json()) as { code: string }).code,
+    "idempotency_key_conflict",
   );
   assert.ok(!state.units.some((row) => row.org_id === ORG_ID));
   assert.equal(state.audits.length, 0);

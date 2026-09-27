@@ -1,3 +1,4 @@
+import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -19,73 +20,76 @@ export const dynamic = 'force-dynamic'
  * read. Pay-bank balances are compensation data, so the whole surface is gated
  * on payroll.read behind the payroll feature.
  */
-export async function GET(req: Request) {
-  const gate = await guardFeaturePermission('payroll.read', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const orgId = gate.user.orgId
-  const employee = new URL(req.url).searchParams.get('employee')
-  if (!employee || !isUuid(employee)) {
-    return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
-  }
+export const GET = defineRoute({
+  permission: 'payroll.read',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const orgId = gate.user.orgId
+    const employee = new URL(req.url).searchParams.get('employee')
+    if (!employee || !isUuid(employee)) {
+      return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
+    }
 
-  // The scope check and every protected read run in one tenant transaction
-  // with the party row locked: a concurrent rehome must take a row lock on
-  // parties, so it blocks until this read commits instead of landing between
-  // a stale scope check and the balance queries.
-  return withOrgTransaction(orgId, async () => {
-    // Money balances are denominated in the employee's legal entity's functional
-    // currency (the same currency their wage and pay run carry).
-    const currencyRes = (await db.execute<{ currency: string | null; subsidiaryId: string | null }>(sql`
-      select coalesce(s.base_currency, o.base_currency) as currency,
-             p.subsidiary_id as "subsidiaryId"
-        from parties p
-        join orgs o on o.id = p.org_id
-        left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
-       where p.org_id = ${orgId} and p.id = ${employee}
-       for share of p
-    `))
-    const employeeRow = currencyRes.rows[0]
-    if (!employeeRow) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, employeeRow.subsidiaryId)
-    if (denied) return denied
-    const currency = employeeRow.currency ?? 'CAD'
+    // The scope check and every protected read run in one tenant transaction
+    // with the party row locked: a concurrent rehome must take a row lock on
+    // parties, so it blocks until this read commits instead of landing between
+    // a stale scope check and the balance queries.
+    return withOrgTransaction(orgId, async () => {
+      // Money balances are denominated in the employee's legal entity's functional
+      // currency (the same currency their wage and pay run carry).
+      const currencyRes = (await db.execute<{ currency: string | null; subsidiaryId: string | null }>(sql`
+        select coalesce(s.base_currency, o.base_currency) as currency,
+               p.subsidiary_id as "subsidiaryId"
+          from parties p
+          join orgs o on o.id = p.org_id
+          left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
+         where p.org_id = ${orgId} and p.id = ${employee}
+         for share of p
+      `))
+      const employeeRow = currencyRes.rows[0]
+      if (!employeeRow) return notFound("record")
+      const denied = guardSubsidiaryScope(gate, employeeRow.subsidiaryId)
+      if (denied) return denied
+      const currency = employeeRow.currency ?? 'CAD'
 
-    const balances = await entitlementBalances(orgId, employee, undefined, { executor: db })
-    // The movements behind those balances — the append-only evidence trail, most
-    // recent first, tied back to the pay run that produced each one.
-    const movements = (await db.execute(sql`
-      select l.id, l.plan_id, pl.code as plan_code, pl.name as plan_name, pl.unit,
-             l.movement_date, l.amount, l.hours, l.kind, l.note,
-             l.source_holiday_key, l.source_holiday_date::text, l.take_on::text,
-             d.document_number as run_number, l.pay_run_document_id
-        from entitlement_ledger l
-        join entitlement_plans pl on pl.id = l.plan_id and pl.org_id = l.org_id
-        left join documents d on d.id = l.pay_run_document_id and d.org_id = l.org_id
-       where l.org_id = ${orgId} and l.employee_party_id = ${employee}
-       order by l.movement_date desc, l.created_at desc
-       limit 200
-    `))
+      const balances = await entitlementBalances(orgId, employee, undefined, { executor: db })
+      // The movements behind those balances — the append-only evidence trail, most
+      // recent first, tied back to the pay run that produced each one.
+      const movements = (await db.execute(sql`
+        select l.id, l.plan_id, pl.code as plan_code, pl.name as plan_name, pl.unit,
+               l.movement_date, l.amount, l.hours, l.kind, l.note,
+               l.source_holiday_key, l.source_holiday_date::text, l.take_on::text,
+               d.document_number as run_number, l.pay_run_document_id
+          from entitlement_ledger l
+          join entitlement_plans pl on pl.id = l.plan_id and pl.org_id = l.org_id
+          left join documents d on d.id = l.pay_run_document_id and d.org_id = l.org_id
+         where l.org_id = ${orgId} and l.employee_party_id = ${employee}
+         order by l.movement_date desc, l.created_at desc
+         limit 200
+      `))
 
-    return NextResponse.json({
-    currency,
-    balances: balances.map((b) => ({
-      planId: b.plan.id,
-      planCode: b.plan.code,
-      planName: b.plan.name,
-      unit: b.plan.unit,
-      direction: b.plan.direction,
-      balance: b.balance,
-      balanceMoney: b.balanceMoney,
-      balanceHours: b.balanceHours,
-      wage: b.wage,
-      maxBalance: b.limit?.maxBalance ?? null,
-      notifyBalance: b.limit?.notifyBalance ?? null,
-      limitScope: b.limit?.scope ?? null,
-      overLimit: b.overLimit,
-      nearLimit: b.nearLimit,
-      lastMovementDate: b.lastMovementDate,
-    })),
-    movements: movements.rows,
+      return NextResponse.json({
+      currency,
+      balances: balances.map((b) => ({
+        planId: b.plan.id,
+        planCode: b.plan.code,
+        planName: b.plan.name,
+        unit: b.plan.unit,
+        direction: b.plan.direction,
+        balance: b.balance,
+        balanceMoney: b.balanceMoney,
+        balanceHours: b.balanceHours,
+        wage: b.wage,
+        maxBalance: b.limit?.maxBalance ?? null,
+        notifyBalance: b.limit?.notifyBalance ?? null,
+        limitScope: b.limit?.scope ?? null,
+        overLimit: b.overLimit,
+        nearLimit: b.nearLimit,
+        lastMovementDate: b.lastMovementDate,
+      })),
+      movements: movements.rows,
+      })
     })
-  })
-}
+
+  },
+})

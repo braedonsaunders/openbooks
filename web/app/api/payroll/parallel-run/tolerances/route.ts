@@ -1,5 +1,7 @@
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
@@ -12,6 +14,14 @@ import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
+
+const requestBodySchema = z.looseObject({
+  "kind": z.unknown().optional(),
+  "reason": z.unknown().optional(),
+  "slot": z.unknown().optional(),
+  "tolerance": z.unknown().optional(),
+})
+
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -38,13 +48,16 @@ function guardToleranceScope(gate: Parameters<typeof guardSubsidiaryScope>[0]): 
  * `reason` is required by the service, not by this route, so the API and the
  * screen cannot disagree about it.
  */
-export async function GET() {
-  const gate = await guardFeaturePermission('payroll.read', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const denied = guardToleranceScope(gate)
-  if (denied) return denied
-  return NextResponse.json({ tolerances: await parallelTolerances(gate.user.orgId) })
-}
+export const GET = defineRoute({
+  permission: 'payroll.read',
+  feature: 'payroll',
+  handler: async ({ authz: gate }) => {
+    const denied = guardToleranceScope(gate)
+    if (denied) return denied
+    return NextResponse.json({ tolerances: await parallelTolerances(gate.user.orgId) })
+
+  },
+})
 
 interface ToleranceBody {
   kind?: unknown
@@ -53,70 +66,76 @@ interface ToleranceBody {
   reason?: unknown
 }
 
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('payroll.manage', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const denied = guardToleranceScope(gate)
-  if (denied) return denied
+export const POST = defineRoute({
+  permission: 'payroll.manage',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const denied = guardToleranceScope(gate)
+    if (denied) return denied
 
-  let body: ToleranceBody
-  try {
-    const parsedBody = await parseJsonBody(req, jsonObject);
-    if (!parsedBody.ok) return parsedBody.response;
-    body = (parsedBody.data) as ToleranceBody
-  } catch {
-    return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
-  }
-  if (typeof body.kind !== 'string' || !KINDS.has(body.kind)) {
-    return NextResponse.json({ error: 'kind must be a component kind or "total"' }, { status: 422 })
-  }
-  if (typeof body.slot !== 'string' || !body.slot.trim()) {
-    return NextResponse.json({ error: 'slot is required' }, { status: 422 })
-  }
-  if (typeof body.reason !== 'string' || !body.reason.trim()) {
-    return NextResponse.json({ error: 'reason must be a nonblank string' }, { status: 422 })
-  }
-
-  const toleranceRaw = canonicalDecimal(body.tolerance ?? '0', 4)
-  if (toleranceRaw === null) {
-    return NextResponse.json({ error: moneyRefusal('Tolerance', body.tolerance ?? '0') }, { status: 422 })
-  }
-  let tolerance: string
-  try {
-    tolerance = normalizeMoney(toleranceRaw)
-  } catch {
-    return NextResponse.json({ error: 'Tolerance is out of range for the ledger' }, { status: 422 })
-  }
-
-  try {
-    await saveParallelTolerance({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      kind: body.kind as ToleranceKind,
-      slot: body.slot.trim(),
-      tolerance,
-      reason: body.reason.trim(),
-    })
-  } catch (error) {
-    if (error instanceof PayrollError) {
-      return apiErrorResponse(error, { safeStatus: 422 })
+    let body: ToleranceBody
+    try {
+      const parsedBody = await parseJsonBody(req, requestBodySchema);
+      if (!parsedBody.ok) return parsedBody.response;
+      body = (parsedBody.data) as ToleranceBody
+    } catch {
+      return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
     }
-    throw error
-  }
-  return NextResponse.json({ tolerances: await parallelTolerances(gate.user.orgId) })
-}
+    if (typeof body.kind !== 'string' || !KINDS.has(body.kind)) {
+      return NextResponse.json({ error: 'kind must be a component kind or "total"' }, { status: 422 })
+    }
+    if (typeof body.slot !== 'string' || !body.slot.trim()) {
+      return NextResponse.json({ error: 'slot is required' }, { status: 422 })
+    }
+    if (typeof body.reason !== 'string' || !body.reason.trim()) {
+      return NextResponse.json({ error: 'reason must be a nonblank string' }, { status: 422 })
+    }
 
-export async function DELETE(req: Request) {
-  const gate = await guardFeaturePermission('payroll.manage', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const denied = guardToleranceScope(gate)
-  if (denied) return denied
-  const params = new URL(req.url).searchParams
-  const kind = params.get('kind')
-  const slot = params.get('slot')
-  if (!kind || !KINDS.has(kind) || !slot) {
-    return NextResponse.json({ error: 'kind and slot are required' }, { status: 422 })
-  }
-  await deleteParallelTolerance(gate.user.orgId, kind as ToleranceKind, slot, gate.user.id)
-  return NextResponse.json({ tolerances: await parallelTolerances(gate.user.orgId) })
-}
+    const toleranceRaw = canonicalDecimal(body.tolerance ?? '0', 4)
+    if (toleranceRaw === null) {
+      return NextResponse.json({ error: moneyRefusal('Tolerance', body.tolerance ?? '0') }, { status: 422 })
+    }
+    let tolerance: string
+    try {
+      tolerance = normalizeMoney(toleranceRaw)
+    } catch {
+      return NextResponse.json({ error: 'Tolerance is out of range for the ledger' }, { status: 422 })
+    }
+
+    try {
+      await saveParallelTolerance({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        kind: body.kind as ToleranceKind,
+        slot: body.slot.trim(),
+        tolerance,
+        reason: body.reason.trim(),
+      })
+    } catch (error) {
+      if (error instanceof PayrollError) {
+        return apiErrorResponse(error, { safeStatus: 422 })
+      }
+      throw error
+    }
+    return NextResponse.json({ tolerances: await parallelTolerances(gate.user.orgId) })
+
+  },
+})
+
+export const DELETE = defineRoute({
+  permission: 'payroll.manage',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const denied = guardToleranceScope(gate)
+    if (denied) return denied
+    const params = new URL(req.url).searchParams
+    const kind = params.get('kind')
+    const slot = params.get('slot')
+    if (!kind || !KINDS.has(kind) || !slot) {
+      return NextResponse.json({ error: 'kind and slot are required' }, { status: 422 })
+    }
+    await deleteParallelTolerance(gate.user.orgId, kind as ToleranceKind, slot, gate.user.id)
+    return NextResponse.json({ tolerances: await parallelTolerances(gate.user.orgId) })
+
+  },
+})

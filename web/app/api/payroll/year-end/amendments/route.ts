@@ -1,5 +1,7 @@
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -17,6 +19,19 @@ import {
   guardPayrollFilingData,
   guardPayrollFilingRowIds,
 } from '../../subsidiary-scope'
+
+const requestBodySchema = z.looseObject({
+  "confirmedAmendment": z.unknown().optional(),
+  "confirmedCancellation": z.unknown().optional(),
+  "country": z.unknown().optional(),
+  "filing": z.unknown().optional(),
+  "note": z.unknown().optional(),
+  "reason": z.unknown().optional(),
+  "revision": z.unknown().optional(),
+  "rowIds": z.unknown().optional(),
+  "year": z.unknown().optional(),
+})
+
 
 export const dynamic = 'force-dynamic'
 
@@ -37,196 +52,202 @@ export const dynamic = 'force-dynamic'
  * Reading the history is wage data (payroll.read). Issuing a filing is an act
  * with a statutory consequence, so it takes payroll.run.
  */
-export async function GET(req: Request) {
-  const gate = await guardFeaturePermission('payroll.read', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const url = new URL(req.url)
-  const yearRaw = url.searchParams.get('year')
-  const yearRefusal = payrollYearRefusal(yearRaw)
-  if (yearRefusal !== null) {
-    return NextResponse.json({ error: yearRefusal }, { status: 422 })
-  }
-  const year = Number(yearRaw)
-  const country = url.searchParams.get('country') ?? ''
-  const filing = url.searchParams.get('filing') ?? ''
-  const rows = (await db.execute<{ rowId: string }>(sql`
-    select distinct ss.row_id as "rowId"
-      from payroll_filing_submissions s
-      join payroll_filing_submission_slips ss
-        on ss.submission_id = s.id and ss.org_id = s.org_id
-     where s.org_id = ${gate.user.orgId}
-       and s.country = ${country} and s.filing_key = ${filing} and s.tax_year = ${year}
-  `)).rows
-  const denied = await guardPayrollFilingRowIds(gate, country, filing, rows.map((row) => row.rowId), year)
-  if (denied) return denied
-  // The CURRENT population is guarded on every read, not just when nothing
-  // was ever filed: the lifecycle below returns every newly unfiled row's
-  // label, id and status, so guarding only stored rows would show a
-  // restricted reader the new slip identities of entities outside their
-  // scope. Deny-by-default, like the year-end page itself.
-  const section = (await orgYearEndFilings(gate.user.orgId, year))
-    .find((candidate) => candidate.country === country && candidate.key === filing)
-  if (section) {
-    const populationDenied = await guardPayrollFilingData(gate, country, filing, section.data, year)
-    if (populationDenied) return populationDenied
-  }
-  // The in-service authorization: the lifecycle authorizes the ids it
-  // actually returns, inside its own build — a row committed after the
-  // pre-guard above is denied here, before the response renders it.
-  const authorizeRowIds = async (rowIds: readonly string[]): Promise<void> => {
-    const denied = await guardPayrollFilingRowIds(gate, country, filing, [...rowIds], year)
-    if (denied) throw new FilingScopeDenied(denied)
-  }
-  try {
-    const lifecycle = await filingLifecycle(
-      gate.user.orgId,
-      country,
-      filing,
-      year,
-      gate.allowedSubsidiaryIds ?? undefined,
-      authorizeRowIds,
-    )
-    return NextResponse.json({
-      ...lifecycle,
-      // The reported SNAPSHOT never leaves the server: it carries keyed
-      // fingerprints of confidential identifiers (a SIN, an SSN), and the
-      // browser only ever needs to know THAT a field changed. The per-row
-      // delta below already says that, with the values redacted.
-      submissions: lifecycle.submissions.map((submission) => ({
-        id: submission.id,
-        revision: submission.revision,
-        revisionNumber: submission.revisionNumber,
-        supersedesId: submission.supersedesId,
-        issuedAt: submission.issuedAt,
-        note: submission.note,
-        slipCount: submission.slipCount,
-        artifact: submission.artifact,
-        slips: submission.slips.map((slip) => ({
-          rowId: slip.rowId,
-          label: slip.label,
-          revision: slip.revision,
-        })),
-      })),
-    })
-  } catch (e) {
-    if (e instanceof FilingScopeDenied) return e.response
-    if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 })
-    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
-    throw e
-  }
-}
-
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('payroll.run', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    country?: string
-    filing?: string
-    year?: number
-    revision?: string
-    rowIds?: string[]
-    note?: string
-    reason?: string
-    confirmedAmendment?: boolean
-    confirmedCancellation?: boolean
-  } | null
-  if (!body) return NextResponse.json({ error: 'a JSON body is required' }, { status: 422 })
-  const yearRefusal = payrollYearRefusal(body.year)
-  if (yearRefusal !== null) {
-    return NextResponse.json({ error: yearRefusal }, { status: 422 })
-  }
-  const year = Number(body.year)
-  const revision = body.revision ?? ''
-  if (revision !== 'original' && revision !== 'amended' && revision !== 'cancelled') {
-    return NextResponse.json(
-      { error: 'revision must be original, amended or cancelled' },
-      { status: 422 },
-    )
-  }
-  if (revision === 'amended' && body.confirmedAmendment !== true) {
-    return NextResponse.json(
-      { error: 'amendment must be explicitly confirmed after reviewing its preview' },
-      { status: 422 },
-    )
-  }
-  if (revision === 'cancelled') {
-    if (body.confirmedCancellation !== true) {
-      return NextResponse.json(
-        { error: 'cancellation must be explicitly confirmed' },
-        { status: 422 },
-      )
+export const GET = defineRoute({
+  permission: 'payroll.read',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const url = new URL(req.url)
+    const yearRaw = url.searchParams.get('year')
+    const yearRefusal = payrollYearRefusal(yearRaw)
+    if (yearRefusal !== null) {
+      return NextResponse.json({ error: yearRefusal }, { status: 422 })
     }
-    if (typeof body.reason !== 'string' || body.reason.trim() === '') {
-      return NextResponse.json(
-        { error: 'a nonblank cancellation reason is required' },
-        { status: 422 },
-      )
-    }
-  }
-  const country = body.country ?? ''
-  const filing = body.filing ?? ''
-  // An original covers the WHOLE population by definition — the service
-  // ignores rowIds for it — so a caller-supplied list (empty, partial, or
-  // anything else) can never narrow this guard. Guarding only the list while
-  // persisting the population let a restricted actor issue the org-wide
-  // filing by passing []. A correction persists exactly its named rows, so
-  // the list IS its population and is guarded as such.
-  if (revision === 'original' || !Array.isArray(body.rowIds)) {
+    const year = Number(yearRaw)
+    const country = url.searchParams.get('country') ?? ''
+    const filing = url.searchParams.get('filing') ?? ''
+    const rows = (await db.execute<{ rowId: string }>(sql`
+      select distinct ss.row_id as "rowId"
+        from payroll_filing_submissions s
+        join payroll_filing_submission_slips ss
+          on ss.submission_id = s.id and ss.org_id = s.org_id
+       where s.org_id = ${gate.user.orgId}
+         and s.country = ${country} and s.filing_key = ${filing} and s.tax_year = ${year}
+    `)).rows
+    const denied = await guardPayrollFilingRowIds(gate, country, filing, rows.map((row) => row.rowId), year)
+    if (denied) return denied
+    // The CURRENT population is guarded on every read, not just when nothing
+    // was ever filed: the lifecycle below returns every newly unfiled row's
+    // label, id and status, so guarding only stored rows would show a
+    // restricted reader the new slip identities of entities outside their
+    // scope. Deny-by-default, like the year-end page itself.
     const section = (await orgYearEndFilings(gate.user.orgId, year))
       .find((candidate) => candidate.country === country && candidate.key === filing)
     if (section) {
-      const denied = await guardPayrollFilingData(gate, country, filing, section.data, year)
+      const populationDenied = await guardPayrollFilingData(gate, country, filing, section.data, year)
+      if (populationDenied) return populationDenied
+    }
+    // The in-service authorization: the lifecycle authorizes the ids it
+    // actually returns, inside its own build — a row committed after the
+    // pre-guard above is denied here, before the response renders it.
+    const authorizeRowIds = async (rowIds: readonly string[]): Promise<void> => {
+      const denied = await guardPayrollFilingRowIds(gate, country, filing, [...rowIds], year)
+      if (denied) throw new FilingScopeDenied(denied)
+    }
+    try {
+      const lifecycle = await filingLifecycle(
+        gate.user.orgId,
+        country,
+        filing,
+        year,
+        gate.allowedSubsidiaryIds ?? undefined,
+        authorizeRowIds,
+      )
+      return NextResponse.json({
+        ...lifecycle,
+        // The reported SNAPSHOT never leaves the server: it carries keyed
+        // fingerprints of confidential identifiers (a SIN, an SSN), and the
+        // browser only ever needs to know THAT a field changed. The per-row
+        // delta below already says that, with the values redacted.
+        submissions: lifecycle.submissions.map((submission) => ({
+          id: submission.id,
+          revision: submission.revision,
+          revisionNumber: submission.revisionNumber,
+          supersedesId: submission.supersedesId,
+          issuedAt: submission.issuedAt,
+          note: submission.note,
+          slipCount: submission.slipCount,
+          artifact: submission.artifact,
+          slips: submission.slips.map((slip) => ({
+            rowId: slip.rowId,
+            label: slip.label,
+            revision: slip.revision,
+          })),
+        })),
+      })
+    } catch (e) {
+      if (e instanceof FilingScopeDenied) return e.response
+      if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 })
+      if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
+      throw e
+    }
+
+  },
+})
+
+export const POST = defineRoute({
+  permission: 'payroll.run',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = (parsedBody.data) as {
+      country?: string
+      filing?: string
+      year?: number
+      revision?: string
+      rowIds?: string[]
+      note?: string
+      reason?: string
+      confirmedAmendment?: boolean
+      confirmedCancellation?: boolean
+    } | null
+    if (!body) return NextResponse.json({ error: 'a JSON body is required' }, { status: 422 })
+    const yearRefusal = payrollYearRefusal(body.year)
+    if (yearRefusal !== null) {
+      return NextResponse.json({ error: yearRefusal }, { status: 422 })
+    }
+    const year = Number(body.year)
+    const revision = body.revision ?? ''
+    if (revision !== 'original' && revision !== 'amended' && revision !== 'cancelled') {
+      return NextResponse.json(
+        { error: 'revision must be original, amended or cancelled' },
+        { status: 422 },
+      )
+    }
+    if (revision === 'amended' && body.confirmedAmendment !== true) {
+      return NextResponse.json(
+        { error: 'amendment must be explicitly confirmed after reviewing its preview' },
+        { status: 422 },
+      )
+    }
+    if (revision === 'cancelled') {
+      if (body.confirmedCancellation !== true) {
+        return NextResponse.json(
+          { error: 'cancellation must be explicitly confirmed' },
+          { status: 422 },
+        )
+      }
+      if (typeof body.reason !== 'string' || body.reason.trim() === '') {
+        return NextResponse.json(
+          { error: 'a nonblank cancellation reason is required' },
+          { status: 422 },
+        )
+      }
+    }
+    const country = body.country ?? ''
+    const filing = body.filing ?? ''
+    // An original covers the WHOLE population by definition — the service
+    // ignores rowIds for it — so a caller-supplied list (empty, partial, or
+    // anything else) can never narrow this guard. Guarding only the list while
+    // persisting the population let a restricted actor issue the org-wide
+    // filing by passing []. A correction persists exactly its named rows, so
+    // the list IS its population and is guarded as such.
+    if (revision === 'original' || !Array.isArray(body.rowIds)) {
+      const section = (await orgYearEndFilings(gate.user.orgId, year))
+        .find((candidate) => candidate.country === country && candidate.key === filing)
+      if (section) {
+        const denied = await guardPayrollFilingData(gate, country, filing, section.data, year)
+        if (denied) return denied
+      }
+    } else {
+      const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds.map(String), year)
       if (denied) return denied
     }
-  } else {
-    const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds.map(String), year)
-    if (denied) return denied
-  }
-  // The in-service authorization: the issue authorizes the ids it actually
-  // persists, inside its own transaction — a row committed after the
-  // pre-guard above is denied here, before the file, the slips, or the
-  // submission exist. The denial carries the guard's own response.
-  const authorizeRowIds = async (rowIds: readonly string[]): Promise<void> => {
-    const denied = await guardPayrollFilingRowIds(gate, country, filing, [...rowIds], year)
-    if (denied) throw new FilingScopeDenied(denied)
-  }
-  try {
-    const issueInput = {
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      country,
-      filingKey: filing,
-      taxYear: year,
-      revision: revision as 'original' | 'amended' | 'cancelled',
-      rowIds: Array.isArray(body.rowIds) ? body.rowIds.map(String) : undefined,
-      scope: gate.allowedSubsidiaryIds ?? undefined,
-      authorizeRowIds,
-      // A cancellation's explanation is its audit evidence. Keep it in the
-      // existing filing note column so history readers show the same reason
-      // that was confirmed at the destructive boundary.
-      note: revision === 'cancelled' ? body.reason!.trim() : body.note?.trim() || null,
-      ...(revision === 'cancelled' ? { reason: body.reason!.trim() } : {}),
+    // The in-service authorization: the issue authorizes the ids it actually
+    // persists, inside its own transaction — a row committed after the
+    // pre-guard above is denied here, before the file, the slips, or the
+    // submission exist. The denial carries the guard's own response.
+    const authorizeRowIds = async (rowIds: readonly string[]): Promise<void> => {
+      const denied = await guardPayrollFilingRowIds(gate, country, filing, [...rowIds], year)
+      if (denied) throw new FilingScopeDenied(denied)
     }
-    const result = await recordFilingIssue(issueInput)
-    return NextResponse.json({
-      submission: {
-        id: result.submission.id,
-        revision: result.submission.revision,
-        revisionNumber: result.submission.revisionNumber,
-        issuedAt: result.submission.issuedAt,
-        slipCount: result.submission.slipCount,
-        artifact: result.submission.artifact,
-      },
-      // Why no file accompanies the issue, in the pack's own words. An issue
-      // with no artifact is legitimate — but never silent.
-      fileRefusal: result.fileRefusal,
-    })
-  } catch (e) {
-    if (e instanceof FilingScopeDenied) return e.response
-    if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 })
-    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
-    throw e
-  }
-}
+    try {
+      const issueInput = {
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        country,
+        filingKey: filing,
+        taxYear: year,
+        revision: revision as 'original' | 'amended' | 'cancelled',
+        rowIds: Array.isArray(body.rowIds) ? body.rowIds.map(String) : undefined,
+        scope: gate.allowedSubsidiaryIds ?? undefined,
+        authorizeRowIds,
+        // A cancellation's explanation is its audit evidence. Keep it in the
+        // existing filing note column so history readers show the same reason
+        // that was confirmed at the destructive boundary.
+        note: revision === 'cancelled' ? body.reason!.trim() : body.note?.trim() || null,
+        ...(revision === 'cancelled' ? { reason: body.reason!.trim() } : {}),
+      }
+      const result = await recordFilingIssue(issueInput)
+      return NextResponse.json({
+        submission: {
+          id: result.submission.id,
+          revision: result.submission.revision,
+          revisionNumber: result.submission.revisionNumber,
+          issuedAt: result.submission.issuedAt,
+          slipCount: result.submission.slipCount,
+          artifact: result.submission.artifact,
+        },
+        // Why no file accompanies the issue, in the pack's own words. An issue
+        // with no artifact is legitimate — but never silent.
+        fileRefusal: result.fileRefusal,
+      })
+    } catch (e) {
+      if (e instanceof FilingScopeDenied) return e.response
+      if (e instanceof PayrollPackError) return apiErrorResponse(e, { safeStatus: 404 })
+      if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
+      throw e
+    }
+
+  },
+})

@@ -1,3 +1,5 @@
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -26,31 +28,36 @@ function apCaptureSubsidiaryScope(allowed: ReadonlySet<string> | null) {
              ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}`
 }
 
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('ap.create')
-  if (gate instanceof NextResponse) return gate
-  try {
-    const { id } = await params
-    // The engine binds the id into a uuid column without validating it; a
-    // malformed id must 404 here instead of escaping as a cast-error 500.
-    if (!isUuid(id)) return notFound("record")
-    const visible = (await db.execute<{ id: string }>(sql`
-      select ci.id
-        from ap_capture_items ci
-        left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
-        left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
-       where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
-       ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
-    `))
-    if (!visible.rows[0]) return NextResponse.json({ error: 'Capture item not found' }, { status: 422 })
-    return NextResponse.json(await materializeCapture({
-      orgId: gate.user.orgId,
-      captureItemId: id,
-      actorId: gate.user.id,
-      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-    }))
-  } catch (error) {
-    if (error instanceof CaptureMaterializationError) return apiErrorResponse(error)
-    throw error
-  }
-}
+export const POST = defineRoute({
+  permission: 'ap.create',
+  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: _request, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    try {
+      const { id } = await params
+      // The engine binds the id into a uuid column without validating it; a
+      // malformed id must 404 here instead of escaping as a cast-error 500.
+      if (!isUuid(id)) return notFound("record")
+      const visible = (await db.execute<{ id: string }>(sql`
+        select ci.id
+          from ap_capture_items ci
+          left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+          left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+         where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
+         ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
+      `))
+      if (!visible.rows[0]) return NextResponse.json({ error: 'Capture item not found' }, { status: 422 })
+      return NextResponse.json(await materializeCapture({
+        orgId: gate.user.orgId,
+        captureItemId: id,
+        actorId: gate.user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      }))
+    } catch (error) {
+      if (error instanceof CaptureMaterializationError) return apiErrorResponse(error)
+      throw error
+    }
+
+  },
+})

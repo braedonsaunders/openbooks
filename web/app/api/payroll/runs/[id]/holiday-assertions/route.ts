@@ -1,6 +1,8 @@
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import { parseJsonBody } from '@/lib/api/json'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
@@ -22,6 +24,17 @@ import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.looseObject({
+  "absentWithoutConsent": z.unknown().optional(),
+  "employeePartyId": z.unknown().optional(),
+  "entitlementEvidenceComplete": z.unknown().optional(),
+  "holidayDate": z.unknown().optional(),
+  "holidayKey": z.unknown().optional(),
+  "occupationClass": z.unknown().optional(),
+  "paidOnCommission": z.unknown().optional(),
+})
+
 
 
 export const dynamic = 'force-dynamic'
@@ -92,259 +105,269 @@ async function loadRoster(orgId: string, payScheduleId: string): Promise<RosterE
   }))
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('payroll.read', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const run = await loadRun(gate.user.orgId, id)
-  if (!run) return notFound("record")
-  const denied = guardSubsidiaryScope(gate, run.subsidiaryId)
-  if (denied) return denied
+export const GET = defineRoute({
+  permission: 'payroll.read',
+  feature: 'payroll',
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    const run = await loadRun(gate.user.orgId, id)
+    if (!run) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, run.subsidiaryId)
+    if (denied) return denied
 
-  try {
-    return await db.transaction(async (tx) => {
-      const roster = await loadRoster(gate.user.orgId, run.payScheduleId)
-      const employeeIds = roster.map((employee) => employee.employeePartyId)
-      const stored = await loadStoredHolidayFacts(tx, {
-        orgId: gate.user.orgId, documentId: id, employeePartyIds: employeeIds,
-      })
-      const demanding = new Map<string, (DemandingHoliday & {
-        evidencedDayCount?: number; attestedDayCount?: number;
-      })[]>()
-      for (const employee of roster) {
-        const holidays = await demandingHolidays(tx, {
-          orgId: gate.user.orgId,
-          country: employee.country, province: employee.province,
-          labourJurisdiction: employee.labourJurisdiction,
-          employeeName: employee.name,
-          periodStart: run.periodStart, periodEnd: run.periodEnd,
+    try {
+      return await db.transaction(async (tx) => {
+        const roster = await loadRoster(gate.user.orgId, run.payScheduleId)
+        const employeeIds = roster.map((employee) => employee.employeePartyId)
+        const stored = await loadStoredHolidayFacts(tx, {
+          orgId: gate.user.orgId, documentId: id, employeePartyIds: employeeIds,
         })
-        // Sequential assessments: this transaction holds one pg client, so
-        // evidencing every holiday at once queues concurrent queries on it.
-        const assessed: (DemandingHoliday & {
+        const demanding = new Map<string, (DemandingHoliday & {
           evidencedDayCount?: number; attestedDayCount?: number;
-        })[] = []
-        for (const holiday of holidays) {
-          assessed.push({
-            ...holiday,
-            evidencedDayCount: holiday.needsEntitlementDayAssessment
-              ? await evidencedEntitledPayDays(tx, {
-                  orgId: gate.user.orgId, employeePartyId: employee.employeePartyId,
-                  employeeName: employee.name, excludeDocumentId: id,
-                  jurisdiction: holiday.jurisdiction, holidayDate: holiday.date,
-                })
-              : undefined,
-            attestedDayCount: stored.entitledDays.get(employee.employeePartyId)
-              ?.get(`${holiday.key}|${holiday.date}`),
+        })[]>()
+        for (const employee of roster) {
+          const holidays = await demandingHolidays(tx, {
+            orgId: gate.user.orgId,
+            country: employee.country, province: employee.province,
+            labourJurisdiction: employee.labourJurisdiction,
+            employeeName: employee.name,
+            periodStart: run.periodStart, periodEnd: run.periodEnd,
           })
-        }
-        demanding.set(employee.employeePartyId, assessed)
-      }
-      const suggested = mergeHolidayEligibility(undefined, stored, demanding)
-      // The day counts are server-owned audit facts. The client may answer only
-      // the two public booleans; calculation reloads the audited count itself.
-      for (const facts of Object.values(suggested)) delete facts.entitledDayAttestations
-      return NextResponse.json({
-        employees: roster.map((employee) => {
-          const perEmployee = stored.assertions.get(employee.employeePartyId) ?? new Map<string, boolean>()
-          // The classes the employee's own jurisdiction recognises — the run
-          // answers whatever the packs declare there, never a list in this file.
-          const jurisdiction = jurisdictionKey(employee.country, employee.province, employee.labourJurisdiction)
-          return {
-            employeePartyId: employee.employeePartyId,
-            name: employee.name,
-            paidOnCommission: stored.commissions.get(employee.employeePartyId) ?? null,
-            occupationClass: employee.occupationClass,
-            occupationClasses: holidayOccupationClassesOf(jurisdiction).map((entry) => ({
-              classKey: entry.classKey,
-              label: entry.label,
-              citation: entry.citation,
-            })),
-            assertions: [...perEmployee.entries()].map(([occurrence, absentWithoutConsent]) => {
-              const separator = occurrence.lastIndexOf('|')
-              return {
-                holidayKey: occurrence.slice(0, separator),
-                holidayDate: occurrence.slice(separator + 1),
-                absentWithoutConsent,
-              }
-            }),
-            demanding: demanding.get(employee.employeePartyId) ?? [],
+          // Sequential assessments: this transaction holds one pg client, so
+          // evidencing every holiday at once queues concurrent queries on it.
+          const assessed: (DemandingHoliday & {
+            evidencedDayCount?: number; attestedDayCount?: number;
+          })[] = []
+          for (const holiday of holidays) {
+            assessed.push({
+              ...holiday,
+              evidencedDayCount: holiday.needsEntitlementDayAssessment
+                ? await evidencedEntitledPayDays(tx, {
+                    orgId: gate.user.orgId, employeePartyId: employee.employeePartyId,
+                    employeeName: employee.name, excludeDocumentId: id,
+                    jurisdiction: holiday.jurisdiction, holidayDate: holiday.date,
+                  })
+                : undefined,
+              attestedDayCount: stored.entitledDays.get(employee.employeePartyId)
+                ?.get(`${holiday.key}|${holiday.date}`),
+            })
           }
-        }),
-        suggested,
+          demanding.set(employee.employeePartyId, assessed)
+        }
+        const suggested = mergeHolidayEligibility(undefined, stored, demanding)
+        // The day counts are server-owned audit facts. The client may answer only
+        // the two public booleans; calculation reloads the audited count itself.
+        for (const facts of Object.values(suggested)) delete facts.entitledDayAttestations
+        return NextResponse.json({
+          employees: roster.map((employee) => {
+            const perEmployee = stored.assertions.get(employee.employeePartyId) ?? new Map<string, boolean>()
+            // The classes the employee's own jurisdiction recognises — the run
+            // answers whatever the packs declare there, never a list in this file.
+            const jurisdiction = jurisdictionKey(employee.country, employee.province, employee.labourJurisdiction)
+            return {
+              employeePartyId: employee.employeePartyId,
+              name: employee.name,
+              paidOnCommission: stored.commissions.get(employee.employeePartyId) ?? null,
+              occupationClass: employee.occupationClass,
+              occupationClasses: holidayOccupationClassesOf(jurisdiction).map((entry) => ({
+                classKey: entry.classKey,
+                label: entry.label,
+                citation: entry.citation,
+              })),
+              assertions: [...perEmployee.entries()].map(([occurrence, absentWithoutConsent]) => {
+                const separator = occurrence.lastIndexOf('|')
+                return {
+                  holidayKey: occurrence.slice(0, separator),
+                  holidayDate: occurrence.slice(separator + 1),
+                  absentWithoutConsent,
+                }
+              }),
+              demanding: demanding.get(employee.employeePartyId) ?? [],
+            }
+          }),
+          suggested,
+        })
       })
-    })
-  } catch (error) {
-    if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 })
-    throw error
-  }
-}
+    } catch (error) {
+      if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 })
+      throw error
+    }
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('payroll.run', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const run = await loadRun(gate.user.orgId, id)
-  if (!run) return notFound("record")
-  const denied = guardSubsidiaryScope(gate, run.subsidiaryId)
-  if (denied) return denied
-  if (run.runStatus !== 'draft' && run.runStatus !== 'calculated') {
-    return NextResponse.json({ error: 'assertions can only be filed on an uncommitted run' }, { status: 422 })
-  }
-  // Through the shared boundary like every other mutation route, so the
-  // financial-boundary guard holds: a route that parses its own body is a
-  // route whose validation nobody can audit centrally.
-  const parsedBody = await parseJsonBody(req, jsonObject)
-  if (!parsedBody.ok) return parsedBody.response
-  const body = parsedBody.data as {
-    employeePartyId?: unknown; paidOnCommission?: unknown; occupationClass?: unknown;
-    holidayKey?: unknown; holidayDate?: unknown; absentWithoutConsent?: unknown;
-    entitlementEvidenceComplete?: unknown;
-  }
-  const { employeePartyId, paidOnCommission, occupationClass } = body
-  if (typeof employeePartyId !== 'string' || !isUuid(employeePartyId)) {
-    return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
-  }
-  const answersCommission = paidOnCommission !== undefined
-  if (answersCommission && typeof paidOnCommission !== 'boolean') {
-    return NextResponse.json({ error: 'invalid commission-pay status' }, { status: 422 })
-  }
-  // The standing occupation-class answer, filed on the profile like the
-  // commission status. The shape is checked here; the pack vocabulary is
-  // checked against the employee's own country once the roster identifies
-  // them below — storing a key no rule reads would answer nothing and the
-  // engine would keep refusing.
-  const answersOccupationClass = occupationClass !== undefined
-  if (answersOccupationClass && typeof occupationClass !== 'string') {
-    return NextResponse.json({ error: 'invalid occupation class' }, { status: 422 })
-  }
-  const { holidayKey, holidayDate, absentWithoutConsent } = body
-  const answersAbsence = absentWithoutConsent !== undefined
-  if (answersAbsence && typeof absentWithoutConsent !== 'boolean') {
-    return NextResponse.json({ error: 'invalid absence assertion' }, { status: 422 })
-  }
-  const answersEntitlement = body.entitlementEvidenceComplete !== undefined
-  if (answersEntitlement && body.entitlementEvidenceComplete !== true) {
-    return NextResponse.json({ error: 'entitlement evidence must be explicitly confirmed complete' }, { status: 422 })
-  }
-  if (answersEntitlement && (answersCommission || answersAbsence || answersOccupationClass)) {
-    return NextResponse.json({ error: 'file the entitlement-day assessment separately for its holiday' }, { status: 422 })
-  }
-  if (!answersCommission && !answersAbsence && !answersEntitlement && !answersOccupationClass) {
-    return NextResponse.json({ error: 'nothing to file' }, { status: 422 })
-  }
-  // An explicit holiday identity must be well-formed; an omitted one is
-  // resolved below, and only when the run leaves no room for doubt.
-  if (holidayKey !== undefined && (typeof holidayKey !== 'string' || holidayKey.trim().length === 0)) {
-    return NextResponse.json({ error: 'invalid holiday' }, { status: 422 })
-  }
-  if (holidayDate !== undefined && (typeof holidayDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(holidayDate))) {
-    return NextResponse.json({ error: 'invalid holiday' }, { status: 422 })
-  }
+  },
+})
 
-  try {
-    return await withOrgTransaction(gate.user.orgId, async () => {
-      // The employee must be on this run's roster: unknown ids are refused
-      // rather than silently unattested.
-      const roster = await loadRoster(gate.user.orgId, run.payScheduleId)
-      const employee = roster.find((entry) => entry.employeePartyId === employeePartyId)
-      if (!employee) return NextResponse.json({ error: 'employee is not on this run' }, { status: 422 })
-      const employeeDenied = guardSubsidiaryScope(gate, employee.subsidiaryId)
-      if (employeeDenied) return employeeDenied
-      // The pack vocabulary is the employee's own country's — the same closed
-      // set the profiles API validates against, never a list in this file.
-      if (answersOccupationClass) {
-        const allowed = occupationCapValues(employee.country)
-        if (!allowed.includes(occupationClass as string)) {
-          return NextResponse.json({ error: `Statutory occupation class must be one of ${allowed.join(', ')}` }, { status: 422 })
+export const POST = defineRoute({
+  permission: 'payroll.run',
+  feature: 'payroll',
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: req, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    const run = await loadRun(gate.user.orgId, id)
+    if (!run) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, run.subsidiaryId)
+    if (denied) return denied
+    if (run.runStatus !== 'draft' && run.runStatus !== 'calculated') {
+      return NextResponse.json({ error: 'assertions can only be filed on an uncommitted run' }, { status: 422 })
+    }
+    // Through the shared boundary like every other mutation route, so the
+    // financial-boundary guard holds: a route that parses its own body is a
+    // route whose validation nobody can audit centrally.
+    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.data as {
+      employeePartyId?: unknown; paidOnCommission?: unknown; occupationClass?: unknown;
+      holidayKey?: unknown; holidayDate?: unknown; absentWithoutConsent?: unknown;
+      entitlementEvidenceComplete?: unknown;
+    }
+    const { employeePartyId, paidOnCommission, occupationClass } = body
+    if (typeof employeePartyId !== 'string' || !isUuid(employeePartyId)) {
+      return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
+    }
+    const answersCommission = paidOnCommission !== undefined
+    if (answersCommission && typeof paidOnCommission !== 'boolean') {
+      return NextResponse.json({ error: 'invalid commission-pay status' }, { status: 422 })
+    }
+    // The standing occupation-class answer, filed on the profile like the
+    // commission status. The shape is checked here; the pack vocabulary is
+    // checked against the employee's own country once the roster identifies
+    // them below — storing a key no rule reads would answer nothing and the
+    // engine would keep refusing.
+    const answersOccupationClass = occupationClass !== undefined
+    if (answersOccupationClass && typeof occupationClass !== 'string') {
+      return NextResponse.json({ error: 'invalid occupation class' }, { status: 422 })
+    }
+    const { holidayKey, holidayDate, absentWithoutConsent } = body
+    const answersAbsence = absentWithoutConsent !== undefined
+    if (answersAbsence && typeof absentWithoutConsent !== 'boolean') {
+      return NextResponse.json({ error: 'invalid absence assertion' }, { status: 422 })
+    }
+    const answersEntitlement = body.entitlementEvidenceComplete !== undefined
+    if (answersEntitlement && body.entitlementEvidenceComplete !== true) {
+      return NextResponse.json({ error: 'entitlement evidence must be explicitly confirmed complete' }, { status: 422 })
+    }
+    if (answersEntitlement && (answersCommission || answersAbsence || answersOccupationClass)) {
+      return NextResponse.json({ error: 'file the entitlement-day assessment separately for its holiday' }, { status: 422 })
+    }
+    if (!answersCommission && !answersAbsence && !answersEntitlement && !answersOccupationClass) {
+      return NextResponse.json({ error: 'nothing to file' }, { status: 422 })
+    }
+    // An explicit holiday identity must be well-formed; an omitted one is
+    // resolved below, and only when the run leaves no room for doubt.
+    if (holidayKey !== undefined && (typeof holidayKey !== 'string' || holidayKey.trim().length === 0)) {
+      return NextResponse.json({ error: 'invalid holiday' }, { status: 422 })
+    }
+    if (holidayDate !== undefined && (typeof holidayDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(holidayDate))) {
+      return NextResponse.json({ error: 'invalid holiday' }, { status: 422 })
+    }
+
+    try {
+      return await withOrgTransaction(gate.user.orgId, async () => {
+        // The employee must be on this run's roster: unknown ids are refused
+        // rather than silently unattested.
+        const roster = await loadRoster(gate.user.orgId, run.payScheduleId)
+        const employee = roster.find((entry) => entry.employeePartyId === employeePartyId)
+        if (!employee) return NextResponse.json({ error: 'employee is not on this run' }, { status: 422 })
+        const employeeDenied = guardSubsidiaryScope(gate, employee.subsidiaryId)
+        if (employeeDenied) return employeeDenied
+        // The pack vocabulary is the employee's own country's — the same closed
+        // set the profiles API validates against, never a list in this file.
+        if (answersOccupationClass) {
+          const allowed = occupationCapValues(employee.country)
+          if (!allowed.includes(occupationClass as string)) {
+            return NextResponse.json({ error: `Statutory occupation class must be one of ${allowed.join(', ')}` }, { status: 422 })
+          }
         }
-      }
 
-      if (answersEntitlement) {
-        const candidates = (await demandingHolidays(db, {
-          orgId: gate.user.orgId,
-          country: employee.country, province: employee.province,
-          labourJurisdiction: employee.labourJurisdiction,
-          employeeName: employee.name,
-          periodStart: run.periodStart, periodEnd: run.periodEnd,
-        })).filter((holiday) => holiday.needsEntitlementDayAssessment)
-        const target = candidates.find((holiday) => holiday.key === holidayKey && holiday.date === holidayDate)
-        if (!target) return NextResponse.json({ error: 'no entitlement-day holiday matches' }, { status: 422 })
-        const evidencedDayCount = await recordEntitledDaysAttestation(db, {
-          orgId: gate.user.orgId, documentId: id,
-          employeePartyId, employeeName: employee.name, actorId: gate.user.id,
-          holidayKey: target.key, holidayDate: target.date, jurisdiction: target.jurisdiction,
-        })
-        return NextResponse.json({ ok: true, filed: {
-          holidayKey: target.key, holidayDate: target.date, evidencedDayCount,
-        } })
-      }
-
-      // Resolve every requested answer before any write. Returning a 422 from
-      // this callback commits the transaction, so a later validation refusal
-      // must never follow a successful commission-profile update.
-      let target: DemandingHoliday | null = null
-      if (answersAbsence) {
-        const candidates = (await demandingHolidays(db, {
-          orgId: gate.user.orgId,
-          country: employee.country, province: employee.province,
-          labourJurisdiction: employee.labourJurisdiction,
-          employeeName: employee.name,
-          periodStart: run.periodStart, periodEnd: run.periodEnd,
-        })).filter((holiday) => holiday.needsAbsenceAssertion)
-        if (holidayKey !== undefined || holidayDate !== undefined) {
-          // An explicitly named holiday must be one of the run's demanding
-          // occurrences — filing against any other day would answer a
-          // question the statute never asked.
-          target = candidates.find((holiday) =>
-            holiday.key === holidayKey && holiday.date === holidayDate) ?? null
-          if (!target) return NextResponse.json({ error: 'no demanding holiday matches' }, { status: 422 })
-        } else if (candidates.length === 1) {
-          target = candidates[0]!
-        } else {
-          return NextResponse.json(
-            { error: candidates.length === 0 ? 'no holiday in this run demands the assertion' : 'specify which holiday' },
-            { status: 422 },
-          )
+        if (answersEntitlement) {
+          const candidates = (await demandingHolidays(db, {
+            orgId: gate.user.orgId,
+            country: employee.country, province: employee.province,
+            labourJurisdiction: employee.labourJurisdiction,
+            employeeName: employee.name,
+            periodStart: run.periodStart, periodEnd: run.periodEnd,
+          })).filter((holiday) => holiday.needsEntitlementDayAssessment)
+          const target = candidates.find((holiday) => holiday.key === holidayKey && holiday.date === holidayDate)
+          if (!target) return NextResponse.json({ error: 'no entitlement-day holiday matches' }, { status: 422 })
+          const evidencedDayCount = await recordEntitledDaysAttestation(db, {
+            orgId: gate.user.orgId, documentId: id,
+            employeePartyId, employeeName: employee.name, actorId: gate.user.id,
+            holidayKey: target.key, holidayDate: target.date, jurisdiction: target.jurisdiction,
+          })
+          return NextResponse.json({ ok: true, filed: {
+            holidayKey: target.key, holidayDate: target.date, evidencedDayCount,
+          } })
         }
-      }
 
-      if (answersCommission) {
-        const updated = await db.execute<{ employee_party_id: string }>(sql`
-          update employee_payroll_profiles
-             set paid_on_commission = ${paidOnCommission as boolean},
-                 updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
-                 updated_by = ${gate.user.id}
-           where org_id = ${gate.user.orgId} and employee_party_id = ${employeePartyId}
-           returning employee_party_id`)
-        if (updated.rows.length !== 1) throw new PayrollError('employee payroll profile was not updated — reload the run and retry')
-      }
+        // Resolve every requested answer before any write. Returning a 422 from
+        // this callback commits the transaction, so a later validation refusal
+        // must never follow a successful commission-profile update.
+        let target: DemandingHoliday | null = null
+        if (answersAbsence) {
+          const candidates = (await demandingHolidays(db, {
+            orgId: gate.user.orgId,
+            country: employee.country, province: employee.province,
+            labourJurisdiction: employee.labourJurisdiction,
+            employeeName: employee.name,
+            periodStart: run.periodStart, periodEnd: run.periodEnd,
+          })).filter((holiday) => holiday.needsAbsenceAssertion)
+          if (holidayKey !== undefined || holidayDate !== undefined) {
+            // An explicitly named holiday must be one of the run's demanding
+            // occurrences — filing against any other day would answer a
+            // question the statute never asked.
+            target = candidates.find((holiday) =>
+              holiday.key === holidayKey && holiday.date === holidayDate) ?? null
+            if (!target) return NextResponse.json({ error: 'no demanding holiday matches' }, { status: 422 })
+          } else if (candidates.length === 1) {
+            target = candidates[0]!
+          } else {
+            return NextResponse.json(
+              { error: candidates.length === 0 ? 'no holiday in this run demands the assertion' : 'specify which holiday' },
+              { status: 422 },
+            )
+          }
+        }
 
-      if (answersOccupationClass) {
-        const updated = await db.execute<{ employee_party_id: string }>(sql`
-          update employee_payroll_profiles
-             set statutory_occupation_class = ${occupationClass as string},
-                 updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
-                 updated_by = ${gate.user.id}
-           where org_id = ${gate.user.orgId} and employee_party_id = ${employeePartyId}
-           returning employee_party_id`)
-        if (updated.rows.length !== 1) throw new PayrollError('employee payroll profile was not updated — reload the run and retry')
-      }
+        if (answersCommission) {
+          const updated = await db.execute<{ employee_party_id: string }>(sql`
+            update employee_payroll_profiles
+               set paid_on_commission = ${paidOnCommission as boolean},
+                   updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
+                   updated_by = ${gate.user.id}
+             where org_id = ${gate.user.orgId} and employee_party_id = ${employeePartyId}
+             returning employee_party_id`)
+          if (updated.rows.length !== 1) throw new PayrollError('employee payroll profile was not updated — reload the run and retry')
+        }
 
-      const filed = target
-        ? await recordHolidayAssertion(db, {
-          orgId: gate.user.orgId, documentId: id, employeePartyId,
-          holidayKey: target.key, holidayDate: target.date,
-          absentWithoutConsent: absentWithoutConsent as boolean,
-          actorId: gate.user.id,
-        })
-        : null
-      return NextResponse.json({ ok: true, filed })
-    })
-  } catch (error) {
-    if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 })
-    throw error
-  }
-}
+        if (answersOccupationClass) {
+          const updated = await db.execute<{ employee_party_id: string }>(sql`
+            update employee_payroll_profiles
+               set statutory_occupation_class = ${occupationClass as string},
+                   updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
+                   updated_by = ${gate.user.id}
+             where org_id = ${gate.user.orgId} and employee_party_id = ${employeePartyId}
+             returning employee_party_id`)
+          if (updated.rows.length !== 1) throw new PayrollError('employee payroll profile was not updated — reload the run and retry')
+        }
+
+        const filed = target
+          ? await recordHolidayAssertion(db, {
+            orgId: gate.user.orgId, documentId: id, employeePartyId,
+            holidayKey: target.key, holidayDate: target.date,
+            absentWithoutConsent: absentWithoutConsent as boolean,
+            actorId: gate.user.id,
+          })
+          : null
+        return NextResponse.json({ ok: true, filed })
+      })
+    } catch (error) {
+      if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 })
+      throw error
+    }
+
+  },
+})

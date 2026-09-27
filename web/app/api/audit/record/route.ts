@@ -1,3 +1,4 @@
+import { defineRoute } from '@/lib/api/route'
 import { type NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -17,133 +18,135 @@ function documentReadPermission(kind: string): string {
   return 'ap.read'
 }
 
-export async function GET(request: NextRequest) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+export const GET = defineRoute({
+  public: 'session',
+  handler: async ({ request: request }) => {
 
-  const table = request.nextUrl.searchParams.get('table')
-  const recordId = request.nextUrl.searchParams.get('id')
-  if ((table !== 'documents' && table !== 'parties' && table !== 'item_rate_versions') || !recordId || !isUuid(recordId)) {
-    return NextResponse.json({ error: 'invalid record' }, { status: 400 })
-  }
-
-  // Permission before existence (canonical shape 4 in
-  // engine/src/organization/subsidiary-scope.ts): a caller holding none of
-  // the table family's permissions learns nothing — an existing record and a
-  // missing id answer the same uniform 404, never a 403 naming the needed
-  // permission. The kind is unknown before the lookup, so the family gate
-  // admits every document-read permission here; the kind check below narrows
-  // it, still as a uniform 404.
-  const family = table === 'parties'
-    ? ['parties.read']
-    : table === 'item_rate_versions'
-      ? ['admin.setup.manage']
-      : ['ar.read', 'ap.read', 'gl.read', 'expenses.read']
-  try {
-    assertAnyPermission((permission) => can(authz, permission), family)
-  } catch (error) {
-    if (error instanceof ScopeNotFoundError) return notFound("record")
-    throw error
-  }
-
-  // Existence, kind, and creator metadata are disclosures too: resolve the
-  // record's subsidiary alongside org scope and gate BEFORE anything is
-  // returned. Documents follow the documents-list rule (null fails closed);
-  // parties follow the party-list rule (null-subsidiary rows are org-wide).
-  const record = table === 'documents'
-    ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
-        select org_id, kind, created_at, created_by, updated_at, updated_by,
-               subsidiary_id as "subsidiaryId"
-          from documents where id = ${recordId} and org_id = ${authz.user.orgId}`))
-    : table === 'parties' ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
-        select org_id, 'party' as kind, created_at, created_by, updated_at, updated_by,
-               subsidiary_id as "subsidiaryId"
-          from parties where id = ${recordId} and org_id = ${authz.user.orgId}`))
-    : (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId?: string | null }>(sql`
-        select org_id, 'labor_rate_card' as kind, created_at, created_by, updated_at, updated_by
-          from item_rate_versions where id = ${recordId} and org_id = ${authz.user.orgId}`))
-  const metadata = record.rows[0]
-  if (!metadata) return notFound("record")
-  if (table === 'item_rate_versions') {
-    // Rate-card versions carry no subsidiary_id of their own: their
-    // subsidiary lineage lives in labor_rate_version_scopes, so the shared
-    // record gate above cannot see it. A version naming only another
-    // subsidiary prices none of this caller's work, so its history is that
-    // subsidiary's material and stays hidden behind the same uniform 404.
-    // Versions with no subsidiary rows price every subsidiary and stay
-    // visible to restricted callers, exactly as the pricing engine treats
-    // them (web/lib/item-rates.ts versionScopePredicate).
-    const allowed = authz.allowedSubsidiaryIds
-    if (allowed !== null) {
-      const scopeRows = await db.execute<{ subsidiaryId: string | null }>(sql`
-        select s.scope_value_id as "subsidiaryId"
-          from labor_rate_version_scopes s
-         where s.org_id = ${authz.user.orgId} and s.version_id = ${recordId}
-           and s.scope_type = 'subsidiary'`)
-      const named = scopeRows.rows
-        .map((row) => row.subsidiaryId)
-        .filter((id): id is string => id !== null)
-      if (named.length > 0 && !named.some((id) => allowed.has(id))) {
-        return notFound("record")
-      }
+    const table = new URL(request.url).searchParams.get('table')
+    const recordId = new URL(request.url).searchParams.get('id')
+    if ((table !== 'documents' && table !== 'parties' && table !== 'item_rate_versions') || !recordId || !isUuid(recordId)) {
+      return NextResponse.json({ error: 'invalid record' }, { status: 400 })
     }
-  } else {
-    const denied = guardSubsidiaryScope(authz, metadata.subsidiaryId ?? null,
-      table === 'parties' ? { orgWideNull: true } : {})
-    if (denied) return denied
-  }
-  const permission = table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
-  // Wrong-kind callers learn nothing either: the kind-specific permission
-  // fails closed with the same uniform 404, so an ar.read-only caller cannot
-  // distinguish an existing AP bill from a missing id (and symmetrically).
-  if (!can(authz, permission)) return notFound("record")
 
-  const q = request.nextUrl.searchParams.get('q')?.trim().slice(0, 120) ?? ''
-  const requestedAction = request.nextUrl.searchParams.get('action') ?? ''
-  const action = (ACTIONS as readonly string[]).includes(requestedAction) ? requestedAction : ''
-  const page = Math.max(1, Number.parseInt(request.nextUrl.searchParams.get('page') ?? '1', 10) || 1)
-  const perPage = 15
+    // Permission before existence (canonical shape 4 in
+    // engine/src/organization/subsidiary-scope.ts): a caller holding none of
+    // the table family's permissions learns nothing — an existing record and a
+    // missing id answer the same uniform 404, never a 403 naming the needed
+    // permission. The kind is unknown before the lookup, so the family gate
+    // admits every document-read permission here; the kind check below narrows
+    // it, still as a uniform 404.
+    const family = table === 'parties'
+      ? ['parties.read']
+      : table === 'item_rate_versions'
+        ? ['admin.setup.manage']
+        : ['ar.read', 'ap.read', 'gl.read', 'expenses.read']
+    try {
+      assertAnyPermission((permission) => can(authz, permission), family)
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) return notFound("record")
+      throw error
+    }
 
-  const events = sql`
-    select a.id::text as id, a.action, a.changes, a.actor_id, a.at, a.request_id
-      from audit_log a
-     where a.org_id = ${authz.user.orgId} and a.table_name = ${table} and a.row_id = ${recordId}
-    union all
-    select ${`${recordId}:created`} as id, 'insert' as action,
-           jsonb_build_object('source', 'record_metadata', 'event', 'record_created') as changes,
-           ${metadata.created_by}::uuid as actor_id, ${metadata.created_at}::timestamptz as at,
-           null::text as request_id
-     where not exists (
-       select 1 from audit_log a
-        where a.org_id = ${authz.user.orgId} and a.table_name = ${table}
-          and a.row_id = ${recordId} and a.action = 'insert'
-     )
-  `
-  const filters = sql`
-    ${action ? sql`and e.action = ${action}` : sql``}
-    ${q ? sql`and (e.action ilike ${`%${q}%`} or coalesce(u.name, '') ilike ${`%${q}%`} or e.changes::text ilike ${`%${q}%`})` : sql``}
-  `
+    // Existence, kind, and creator metadata are disclosures too: resolve the
+    // record's subsidiary alongside org scope and gate BEFORE anything is
+    // returned. Documents follow the documents-list rule (null fails closed);
+    // parties follow the party-list rule (null-subsidiary rows are org-wide).
+    const record = table === 'documents'
+      ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
+          select org_id, kind, created_at, created_by, updated_at, updated_by,
+                 subsidiary_id as "subsidiaryId"
+            from documents where id = ${recordId} and org_id = ${authz.user.orgId}`))
+      : table === 'parties' ? (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId: string | null }>(sql`
+          select org_id, 'party' as kind, created_at, created_by, updated_at, updated_by,
+                 subsidiary_id as "subsidiaryId"
+            from parties where id = ${recordId} and org_id = ${authz.user.orgId}`))
+      : (await db.execute<{ org_id: string; kind: string; created_at: Date; created_by: string | null; updated_at: Date; updated_by: string | null; subsidiaryId?: string | null }>(sql`
+          select org_id, 'labor_rate_card' as kind, created_at, created_by, updated_at, updated_by
+            from item_rate_versions where id = ${recordId} and org_id = ${authz.user.orgId}`))
+    const metadata = record.rows[0]
+    if (!metadata) return notFound("record")
+    if (table === 'item_rate_versions') {
+      // Rate-card versions carry no subsidiary_id of their own: their
+      // subsidiary lineage lives in labor_rate_version_scopes, so the shared
+      // record gate above cannot see it. A version naming only another
+      // subsidiary prices none of this caller's work, so its history is that
+      // subsidiary's material and stays hidden behind the same uniform 404.
+      // Versions with no subsidiary rows price every subsidiary and stay
+      // visible to restricted callers, exactly as the pricing engine treats
+      // them (web/lib/item-rates.ts versionScopePredicate).
+      const allowed = authz.allowedSubsidiaryIds
+      if (allowed !== null) {
+        const scopeRows = await db.execute<{ subsidiaryId: string | null }>(sql`
+          select s.scope_value_id as "subsidiaryId"
+            from labor_rate_version_scopes s
+           where s.org_id = ${authz.user.orgId} and s.version_id = ${recordId}
+             and s.scope_type = 'subsidiary'`)
+        const named = scopeRows.rows
+          .map((row) => row.subsidiaryId)
+          .filter((id): id is string => id !== null)
+        if (named.length > 0 && !named.some((id) => allowed.has(id))) {
+          return notFound("record")
+        }
+      }
+    } else {
+      const denied = guardSubsidiaryScope(authz, metadata.subsidiaryId ?? null,
+        table === 'parties' ? { orgWideNull: true } : {})
+      if (denied) return denied
+    }
+    const permission = table === 'parties' ? 'parties.read' : table === 'item_rate_versions' ? 'admin.setup.manage' : documentReadPermission(String(metadata.kind))
+    // Wrong-kind callers learn nothing either: the kind-specific permission
+    // fails closed with the same uniform 404, so an ar.read-only caller cannot
+    // distinguish an existing AP bill from a missing id (and symmetrically).
+    if (!can(authz, permission)) return notFound("record")
 
-  const [rows, count] = await Promise.all([
-    (db.execute(sql`
-      with events as (${events})
-      select e.id, e.action, e.changes, e.at, e.request_id, u.name as actor_name
-        from events e left join users u on u.id = e.actor_id
-       where true ${filters}
-       order by e.at desc, e.id desc
-       limit ${perPage} offset ${(page - 1) * perPage}`)),
-    (db.execute(sql`
-      with events as (${events})
-      select count(*) as n from events e left join users u on u.id = e.actor_id
-       where true ${filters}`)),
-  ])
+    const q = new URL(request.url).searchParams.get('q')?.trim().slice(0, 120) ?? ''
+    const requestedAction = new URL(request.url).searchParams.get('action') ?? ''
+    const action = (ACTIONS as readonly string[]).includes(requestedAction) ? requestedAction : ''
+    const page = Math.max(1, Number.parseInt(new URL(request.url).searchParams.get('page') ?? '1', 10) || 1)
+    const perPage = 15
 
-  return NextResponse.json({
-    rows: rows.rows,
-    total: Number(count.rows[0]?.n ?? 0),
-    page,
-    perPage,
-    actions: ACTIONS,
-    recordType: String(metadata.kind),
-  })
-}
+    const events = sql`
+      select a.id::text as id, a.action, a.changes, a.actor_id, a.at, a.request_id
+        from audit_log a
+       where a.org_id = ${authz.user.orgId} and a.table_name = ${table} and a.row_id = ${recordId}
+      union all
+      select ${`${recordId}:created`} as id, 'insert' as action,
+             jsonb_build_object('source', 'record_metadata', 'event', 'record_created') as changes,
+             ${metadata.created_by}::uuid as actor_id, ${metadata.created_at}::timestamptz as at,
+             null::text as request_id
+       where not exists (
+         select 1 from audit_log a
+          where a.org_id = ${authz.user.orgId} and a.table_name = ${table}
+            and a.row_id = ${recordId} and a.action = 'insert'
+       )
+    `
+    const filters = sql`
+      ${action ? sql`and e.action = ${action}` : sql``}
+      ${q ? sql`and (e.action ilike ${`%${q}%`} or coalesce(u.name, '') ilike ${`%${q}%`} or e.changes::text ilike ${`%${q}%`})` : sql``}
+    `
+
+    const [rows, count] = await Promise.all([
+      (db.execute(sql`
+        with events as (${events})
+        select e.id, e.action, e.changes, e.at, e.request_id, u.name as actor_name
+          from events e left join users u on u.id = e.actor_id
+         where true ${filters}
+         order by e.at desc, e.id desc
+         limit ${perPage} offset ${(page - 1) * perPage}`)),
+      (db.execute(sql`
+        with events as (${events})
+        select count(*) as n from events e left join users u on u.id = e.actor_id
+         where true ${filters}`)),
+    ])
+
+    return NextResponse.json({
+      rows: rows.rows,
+      total: Number(count.rows[0]?.n ?? 0),
+      page,
+      perPage,
+      actions: ACTIONS,
+      recordType: String(metadata.kind),
+    })
+
+  },
+})

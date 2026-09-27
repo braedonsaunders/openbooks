@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { orgYearEndFilings } from '@openbooks/engine/src/payroll/yearend.ts'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { defineRoute } from '@/lib/api/route'
 import { payrollYearRefusal } from '../../../../lib/payroll-year'
 import { guardPayrollYearEndFilings } from '../subsidiary-scope'
+import { z } from 'zod'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,9 +13,10 @@ export const dynamic = 'force-dynamic'
  * the year-end page renders, so API consumers and the screen can never
  * disagree about what filings exist. Wage data — payroll.read only.
  */
-export async function GET(req: Request) {
-  const gate = await guardFeaturePermission('payroll.read', 'payroll')
-  if (gate instanceof NextResponse) return gate
+export const GET = defineRoute({
+  permission: 'payroll.read',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
   const url = new URL(req.url)
   const yearRaw = url.searchParams.get('year')
   const yearRefusal = payrollYearRefusal(yearRaw)
@@ -37,4 +39,5 @@ export async function GET(req: Request) {
       downloadRefusal: filing.downloadRefusal,
     })),
   })
-}
+  },
+})

@@ -1,7 +1,9 @@
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll/scope.ts";
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -14,6 +16,16 @@ import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../../lib/aut
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.looseObject({
+  "employeePartyIds": z.unknown().optional(),
+  "payDate": z.unknown().optional(),
+  "payScheduleId": z.unknown().optional(),
+  "periodEnd": z.unknown().optional(),
+  "periodStart": z.unknown().optional(),
+  "runType": z.unknown().optional(),
+})
+
 
 
 export const dynamic = 'force-dynamic'
@@ -31,119 +43,125 @@ export const dynamic = 'force-dynamic'
  *         document actions route.
  */
 
-export async function GET() {
-  const gate = await guardFeaturePermission('payroll.read', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const runs = (await db.execute<Record<string, unknown>>(sql`
-    select r.document_id, d.document_number, d.status as document_status, d.currency,
-           r.pay_schedule_id, s.name as schedule_name,
-           r.period_start::text as period_start, r.period_end::text as period_end,
-           r.pay_date::text as pay_date, r.tax_year, r.run_status,
-           r.gross_total, r.net_total, r.employer_cost_total, r.employee_count
-      from pay_runs r
-      join documents d on d.id = r.document_id and d.org_id = r.org_id
-      left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
-     where r.org_id = ${gate.user.orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}
-       ${payrollRunPopulationScopeFilter(gate.user.orgId, sql`r.document_id`, gate.allowedSubsidiaryIds)}
-     order by r.pay_date desc, d.document_number desc`))
-  return NextResponse.json({ runs: runs.rows })
-}
+export const GET = defineRoute({
+  permission: 'payroll.read',
+  feature: 'payroll',
+  handler: async ({ authz: gate }) => {
+    const runs = (await db.execute<Record<string, unknown>>(sql`
+      select r.document_id, d.document_number, d.status as document_status, d.currency,
+             r.pay_schedule_id, s.name as schedule_name,
+             r.period_start::text as period_start, r.period_end::text as period_end,
+             r.pay_date::text as pay_date, r.tax_year, r.run_status,
+             r.gross_total, r.net_total, r.employer_cost_total, r.employee_count
+        from pay_runs r
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+        left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
+       where r.org_id = ${gate.user.orgId}${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}
+         ${payrollRunPopulationScopeFilter(gate.user.orgId, sql`r.document_id`, gate.allowedSubsidiaryIds)}
+       order by r.pay_date desc, d.document_number desc`))
+    return NextResponse.json({ runs: runs.rows })
 
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('payroll.run', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data
-  const payScheduleId = typeof body?.payScheduleId === 'string' ? body.payScheduleId : ''
-  if (!isUuid(payScheduleId)) return NextResponse.json({ error: 'payScheduleId required' }, { status: 422 })
-  for (const key of ['periodStart', 'periodEnd', 'payDate'] as const) {
-    if (body?.[key] != null && !isIsoCalendarDate(body[key])) {
-      return NextResponse.json({ error: `invalid ${key} (YYYY-MM-DD)` }, { status: 422 })
-    }
-  }
-  const requestedRunType = body?.runType ?? 'regular'
-  if (typeof requestedRunType !== 'string' || !['regular', 'bonus', 'termination'].includes(requestedRunType)) {
-    return NextResponse.json({ error: 'invalid runType' }, { status: 422 })
-  }
-  const runType: PayRunType = requestedRunType === 'bonus' || requestedRunType === 'termination' ? requestedRunType : 'regular'
-  const periodStart = typeof body?.periodStart === 'string' ? body.periodStart : undefined
-  const periodEnd = typeof body?.periodEnd === 'string' ? body.periodEnd : undefined
-  const payDate = typeof body?.payDate === 'string' ? body.payDate : undefined
-  // A final pay run pays out and clears every accrued bank, so it must name
-  // the employees it pays; the engine refuses an unscoped one outright.
-  if (body.employeePartyIds != null && !Array.isArray(body.employeePartyIds)) {
-    return NextResponse.json({ error: 'invalid employeePartyIds' }, { status: 422 })
-  }
-  const employeePartyIds: string[] = Array.isArray(body.employeePartyIds)
-    ? body.employeePartyIds.map((id: unknown) => String(id))
-    : []
-  if (employeePartyIds.some((id) => !isUuid(id))) {
-    return NextResponse.json({ error: 'invalid employeePartyIds' }, { status: 422 })
-  }
-  if (runType === 'termination' && employeePartyIds.length === 0) {
-    return NextResponse.json(
-      { error: 'a final pay run must name the employees it pays' },
-      { status: 422 },
-    )
-  }
-  // A run belongs to the schedule's legal entity. Resolve that entity before
-  // entering createPayRun so a restricted caller cannot mint another
-  // subsidiary's run (a termination run can clear every accrued bank). An
-  // org-wide schedule follows the engine's root-subsidiary convention. Missing
-  // schedules, roots, and out-of-scope entities all fail closed with the same
-  // not-found response and therefore disclose no payroll metadata.
-  if (gate.allowedSubsidiaryIds) {
-    const schedule = (await db.execute<{ subsidiaryId: string | null }>(sql`
-      select subsidiary_id as "subsidiaryId"
-        from pay_schedules
-       where org_id = ${gate.user.orgId} and id = ${payScheduleId} and is_active`)).rows[0]
-    const runSubsidiaryId = schedule?.subsidiaryId
-      ?? (schedule
-        ? (await db.execute<{ id: string }>(sql`
-            select id
-              from subsidiaries
-             where org_id = ${gate.user.orgId} and parent_id is null and is_active
-             order by created_at
-             limit 1`)).rows[0]?.id ?? null
-        : null)
-    const denied = guardSubsidiaryScope(gate, runSubsidiaryId)
-    if (denied) return denied
+  },
+})
 
-    // Termination (and any explicitly named run) also carries employee
-    // payroll data. Parties with no subsidiary are org-wide shared identities,
-    // matching the party-list semantics; unknown ids fail closed because the
-    // number of visible rows must equal the number requested.
-    const namedEmployees = [...new Set(employeePartyIds)]
-    if (namedEmployees.length > 0) {
-      const people = await db.execute<{ subsidiaryId: string | null }>(sql`
-        select subsidiary_id as "subsidiaryId"
-          from parties
-         where org_id = ${gate.user.orgId}
-           and id = any(${`{${namedEmployees.join(',')}}`}::uuid[])`)
-      const visible = people.rows.filter((person) =>
-        subsidiaryScopeAllows(gate.allowedSubsidiaryIds, person.subsidiaryId, { orgWideNull: true }))
-      if (visible.length !== namedEmployees.length) {
-        return notFound("record")
+export const POST = defineRoute({
+  permission: 'payroll.run',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data
+    const payScheduleId = typeof body?.payScheduleId === 'string' ? body.payScheduleId : ''
+    if (!isUuid(payScheduleId)) return NextResponse.json({ error: 'payScheduleId required' }, { status: 422 })
+    for (const key of ['periodStart', 'periodEnd', 'payDate'] as const) {
+      if (body?.[key] != null && !isIsoCalendarDate(body[key])) {
+        return NextResponse.json({ error: `invalid ${key} (YYYY-MM-DD)` }, { status: 422 })
       }
     }
-  }
-  try {
-    const result = await createPayRun({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      payScheduleId,
-      periodStart,
-      periodEnd,
-      payDate,
-      runType,
-      employeePartyIds,
-      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-    })
-    return NextResponse.json({ ok: true, ...result })
-  } catch (e) {
-    if (e instanceof ScopeNotFoundError) return notFound("record")
-    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
-    throw e
-  }
-}
+    const requestedRunType = body?.runType ?? 'regular'
+    if (typeof requestedRunType !== 'string' || !['regular', 'bonus', 'termination'].includes(requestedRunType)) {
+      return NextResponse.json({ error: 'invalid runType' }, { status: 422 })
+    }
+    const runType: PayRunType = requestedRunType === 'bonus' || requestedRunType === 'termination' ? requestedRunType : 'regular'
+    const periodStart = typeof body?.periodStart === 'string' ? body.periodStart : undefined
+    const periodEnd = typeof body?.periodEnd === 'string' ? body.periodEnd : undefined
+    const payDate = typeof body?.payDate === 'string' ? body.payDate : undefined
+    // A final pay run pays out and clears every accrued bank, so it must name
+    // the employees it pays; the engine refuses an unscoped one outright.
+    if (body.employeePartyIds != null && !Array.isArray(body.employeePartyIds)) {
+      return NextResponse.json({ error: 'invalid employeePartyIds' }, { status: 422 })
+    }
+    const employeePartyIds: string[] = Array.isArray(body.employeePartyIds)
+      ? body.employeePartyIds.map((id: unknown) => String(id))
+      : []
+    if (employeePartyIds.some((id) => !isUuid(id))) {
+      return NextResponse.json({ error: 'invalid employeePartyIds' }, { status: 422 })
+    }
+    if (runType === 'termination' && employeePartyIds.length === 0) {
+      return NextResponse.json(
+        { error: 'a final pay run must name the employees it pays' },
+        { status: 422 },
+      )
+    }
+    // A run belongs to the schedule's legal entity. Resolve that entity before
+    // entering createPayRun so a restricted caller cannot mint another
+    // subsidiary's run (a termination run can clear every accrued bank). An
+    // org-wide schedule follows the engine's root-subsidiary convention. Missing
+    // schedules, roots, and out-of-scope entities all fail closed with the same
+    // not-found response and therefore disclose no payroll metadata.
+    if (gate.allowedSubsidiaryIds) {
+      const schedule = (await db.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId"
+          from pay_schedules
+         where org_id = ${gate.user.orgId} and id = ${payScheduleId} and is_active`)).rows[0]
+      const runSubsidiaryId = schedule?.subsidiaryId
+        ?? (schedule
+          ? (await db.execute<{ id: string }>(sql`
+              select id
+                from subsidiaries
+               where org_id = ${gate.user.orgId} and parent_id is null and is_active
+               order by created_at
+               limit 1`)).rows[0]?.id ?? null
+          : null)
+      const denied = guardSubsidiaryScope(gate, runSubsidiaryId)
+      if (denied) return denied
+
+      // Termination (and any explicitly named run) also carries employee
+      // payroll data. Parties with no subsidiary are org-wide shared identities,
+      // matching the party-list semantics; unknown ids fail closed because the
+      // number of visible rows must equal the number requested.
+      const namedEmployees = [...new Set(employeePartyIds)]
+      if (namedEmployees.length > 0) {
+        const people = await db.execute<{ subsidiaryId: string | null }>(sql`
+          select subsidiary_id as "subsidiaryId"
+            from parties
+           where org_id = ${gate.user.orgId}
+             and id = any(${`{${namedEmployees.join(',')}}`}::uuid[])`)
+        const visible = people.rows.filter((person) =>
+          subsidiaryScopeAllows(gate.allowedSubsidiaryIds, person.subsidiaryId, { orgWideNull: true }))
+        if (visible.length !== namedEmployees.length) {
+          return notFound("record")
+        }
+      }
+    }
+    try {
+      const result = await createPayRun({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        payScheduleId,
+        periodStart,
+        periodEnd,
+        payDate,
+        runType,
+        employeePartyIds,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
+      return NextResponse.json({ ok: true, ...result })
+    } catch (e) {
+      if (e instanceof ScopeNotFoundError) return notFound("record")
+      if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
+      throw e
+    }
+
+  },
+})

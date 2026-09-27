@@ -1,3 +1,4 @@
+import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { createHash } from 'node:crypto'
 import { basename } from 'node:path'
@@ -36,127 +37,130 @@ function safeFilename(value: string): string {
   return basename(value).replace(/[\u0000-\u001f\u007f]/g, '').slice(0, 240) || 'document'
 }
 
-export async function POST(request: Request) {
-  const gate = await guardPermission('ap.create')
-  if (gate instanceof NextResponse) return gate
-  // Only "not configured" (null) maps to capture_not_configured: endpoint
-  // validation refusals and unseal failures throw, and collapsing them into
-  // the 409 sent operators to reconfigure a correctly configured endpoint.
-  let captureConfig: DocumentCaptureRuntimeConfig | null
-  try {
-    captureConfig = await getDocumentCaptureRuntimeConfig(gate.user.orgId)
-  } catch (error) {
-    return apiErrorResponse(
-      new CaptureConfigRefusal(error instanceof Error ? error.message : 'capture_config_failed'),
-    )
-  }
-  if (!captureConfig) return NextResponse.json({ error: 'capture_not_configured' }, { status: 409 })
-  const form = await request.formData()
-  const files = form.getAll('files').filter((value): value is File => value instanceof File)
-  if (files.length === 0) return NextResponse.json({ error: 'no_files' }, { status: 400 })
-  if (files.length > MAX_FILES) return NextResponse.json({ error: 'too_many_files', limit: MAX_FILES }, { status: 422 })
-  const prepared: Array<{ file: File; bytes: Buffer; filename: string; hash: string }> = []
-  let batchBytes = 0
-  for (const file of files) {
-    if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'unsupported_type', filename: file.name }, { status: 422 })
-    if (file.size <= 0 || file.size > MAX_BYTES) return NextResponse.json({ error: 'invalid_size', filename: file.name }, { status: 422 })
-    batchBytes += file.size
-    if (batchBytes > MAX_BATCH_BYTES) return NextResponse.json({ error: 'batch_too_large' }, { status: 422 })
-    const bytes = Buffer.from(await file.arrayBuffer())
-    if (!captureContentMatchesMime(bytes, file.type)) return NextResponse.json({ error: 'content_type_mismatch', filename: file.name }, { status: 422 })
-    prepared.push({ file, bytes, filename: safeFilename(file.name), hash: createHash('sha256').update(bytes).digest('hex') })
-  }
-  const folderId = await ensureApCaptureRoot(gate.user.orgId, gate.user.id)
-  const created: string[] = []
-  const results: Array<{ filename: string; id?: string; status: 'uploaded' | 'failed'; error?: string }> = []
-  for (const upload of prepared) {
-    let storedId: string | null = null
-    let captureItemId: string | null = null
+export const POST = defineRoute({
+  permission: 'ap.create',
+  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  handler: async ({ request: request, authz: gate }) => {
+    // Only "not configured" (null) maps to capture_not_configured: endpoint
+    // validation refusals and unseal failures throw, and collapsing them into
+    // the 409 sent operators to reconfigure a correctly configured endpoint.
+    let captureConfig: DocumentCaptureRuntimeConfig | null
     try {
-      const stored = await createFile({
-        orgId: gate.user.orgId,
-        folderId,
-        filename: upload.filename,
-        contentType: upload.file.type,
-        bytes: upload.bytes,
-        createdBy: gate.user.id,
-      })
-      storedId = stored.id
-      captureItemId = await db.transaction(async (tx) => {
-        const inserted = (await tx.execute<{ id: string }>(sql`
-          insert into ap_capture_items (org_id, file_id, status, source, original_filename,
-                                        content_hash, created_by, updated_by)
-          values (${gate.user.orgId}, ${stored.id}, 'queued', 'upload', ${upload.filename},
-                  ${upload.hash}, ${gate.user.id}, ${gate.user.id})
-          returning id
-        `))
-        const id = inserted.rows[0]!.id
-        await tx.execute(sql`
-          insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
-          values (${gate.user.orgId}, ${id}, 'uploaded',
-                  ${JSON.stringify({ filename: upload.filename, sizeBytes: upload.bytes.length })}::jsonb,
-                  ${gate.user.id})
-        `)
-        return id
-      })
-      created.push(captureItemId!)
-    } catch {
-      // deleteFile only marks the file inactive, so
-      // the committed S3 blobs would strand. Record durable cleanup intents
-      // for every staged version, then keep the existing failure handling.
-      if (storedId) {
-        try {
-          const staged = (await db.execute<{ id: string }>(sql`
-            select fv.id from file_versions fv
-            join files fi on fi.id = fv.file_id and fi.org_id = ${gate.user.orgId}
-            where fv.file_id = ${storedId} and fv.storage_kind = 's3'
-          `)).rows
-          for (const version of staged) {
-            await enqueueStorageCleanupStandalone({
-              orgId: gate.user.orgId,
-              objectKey: fileCabinetObjectKey(version.id),
-              ownerKind: 'file_version',
-              ownerId: storedId,
-            })
-          }
-        } catch {
-          // Intent recording is best-effort on this path; the upload_failed
-          // result below is the evidence that must survive.
-        }
-        await deleteFile(gate.user.orgId, storedId).catch(() => false)
-      }
-      results.push({ filename: upload.filename, status: 'failed', error: 'upload_failed' })
-      continue
-    }
-    const committedId = captureItemId!
-    try {
-      // Capture the uploader's scope in the job: the worker acts as this
-      // actor when it auto-materializes, and must not inherit an
-      // unrestricted default there.
-      await enqueueApCapture({
-        orgId: gate.user.orgId,
-        captureItemId: committedId,
-        actorId: gate.user.id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds === null ? null : [...gate.allowedSubsidiaryIds],
-      })
+      captureConfig = await getDocumentCaptureRuntimeConfig(gate.user.orgId)
     } catch (error) {
-      const message = error instanceof Error ? error.message.slice(0, 300) : 'queue_unavailable'
-      try {
-        await db.execute(sql`
-          update ap_capture_items set status = 'failed', last_error = ${message}, updated_at = now()
-           where id = ${committedId} and org_id = ${gate.user.orgId}
-        `)
-        results.push({ filename: upload.filename, id: committedId, status: 'failed', error: 'processing_failed' })
-      } catch {
-        // The item is committed and its id must remain observable even when
-        // recording the queue refusal also fails; reporting this file as a
-        // plain request failure would make a client retry create a duplicate.
-        results.push({ filename: upload.filename, id: committedId, status: 'failed', error: 'processing_failed' })
-      }
-      continue
+      return apiErrorResponse(
+        new CaptureConfigRefusal(error instanceof Error ? error.message : 'capture_config_failed'),
+      )
     }
-    results.push({ filename: upload.filename, id: committedId, status: 'uploaded' })
-  }
-  const failed = results.some((result) => result.status === 'failed')
-  return NextResponse.json({ ids: created, results }, { status: failed ? 207 : 201 })
-}
+    if (!captureConfig) return NextResponse.json({ error: 'capture_not_configured' }, { status: 409 })
+    const form = await request.formData()
+    const files = form.getAll('files').filter((value): value is File => value instanceof File)
+    if (files.length === 0) return NextResponse.json({ error: 'no_files' }, { status: 400 })
+    if (files.length > MAX_FILES) return NextResponse.json({ error: 'too_many_files', limit: MAX_FILES }, { status: 422 })
+    const prepared: Array<{ file: File; bytes: Buffer; filename: string; hash: string }> = []
+    let batchBytes = 0
+    for (const file of files) {
+      if (!ALLOWED.has(file.type)) return NextResponse.json({ error: 'unsupported_type', filename: file.name }, { status: 422 })
+      if (file.size <= 0 || file.size > MAX_BYTES) return NextResponse.json({ error: 'invalid_size', filename: file.name }, { status: 422 })
+      batchBytes += file.size
+      if (batchBytes > MAX_BATCH_BYTES) return NextResponse.json({ error: 'batch_too_large' }, { status: 422 })
+      const bytes = Buffer.from(await file.arrayBuffer())
+      if (!captureContentMatchesMime(bytes, file.type)) return NextResponse.json({ error: 'content_type_mismatch', filename: file.name }, { status: 422 })
+      prepared.push({ file, bytes, filename: safeFilename(file.name), hash: createHash('sha256').update(bytes).digest('hex') })
+    }
+    const folderId = await ensureApCaptureRoot(gate.user.orgId, gate.user.id)
+    const created: string[] = []
+    const results: Array<{ filename: string; id?: string; status: 'uploaded' | 'failed'; error?: string }> = []
+    for (const upload of prepared) {
+      let storedId: string | null = null
+      let captureItemId: string | null = null
+      try {
+        const stored = await createFile({
+          orgId: gate.user.orgId,
+          folderId,
+          filename: upload.filename,
+          contentType: upload.file.type,
+          bytes: upload.bytes,
+          createdBy: gate.user.id,
+        })
+        storedId = stored.id
+        captureItemId = await db.transaction(async (tx) => {
+          const inserted = (await tx.execute<{ id: string }>(sql`
+            insert into ap_capture_items (org_id, file_id, status, source, original_filename,
+                                          content_hash, created_by, updated_by)
+            values (${gate.user.orgId}, ${stored.id}, 'queued', 'upload', ${upload.filename},
+                    ${upload.hash}, ${gate.user.id}, ${gate.user.id})
+            returning id
+          `))
+          const id = inserted.rows[0]!.id
+          await tx.execute(sql`
+            insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
+            values (${gate.user.orgId}, ${id}, 'uploaded',
+                    ${JSON.stringify({ filename: upload.filename, sizeBytes: upload.bytes.length })}::jsonb,
+                    ${gate.user.id})
+          `)
+          return id
+        })
+        created.push(captureItemId!)
+      } catch {
+        // deleteFile only marks the file inactive, so
+        // the committed S3 blobs would strand. Record durable cleanup intents
+        // for every staged version, then keep the existing failure handling.
+        if (storedId) {
+          try {
+            const staged = (await db.execute<{ id: string }>(sql`
+              select fv.id from file_versions fv
+              join files fi on fi.id = fv.file_id and fi.org_id = ${gate.user.orgId}
+              where fv.file_id = ${storedId} and fv.storage_kind = 's3'
+            `)).rows
+            for (const version of staged) {
+              await enqueueStorageCleanupStandalone({
+                orgId: gate.user.orgId,
+                objectKey: fileCabinetObjectKey(version.id),
+                ownerKind: 'file_version',
+                ownerId: storedId,
+              })
+            }
+          } catch {
+            // Intent recording is best-effort on this path; the upload_failed
+            // result below is the evidence that must survive.
+          }
+          await deleteFile(gate.user.orgId, storedId).catch(() => false)
+        }
+        results.push({ filename: upload.filename, status: 'failed', error: 'upload_failed' })
+        continue
+      }
+      const committedId = captureItemId!
+      try {
+        // Capture the uploader's scope in the job: the worker acts as this
+        // actor when it auto-materializes, and must not inherit an
+        // unrestricted default there.
+        await enqueueApCapture({
+          orgId: gate.user.orgId,
+          captureItemId: committedId,
+          actorId: gate.user.id,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds === null ? null : [...gate.allowedSubsidiaryIds],
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message.slice(0, 300) : 'queue_unavailable'
+        try {
+          await db.execute(sql`
+            update ap_capture_items set status = 'failed', last_error = ${message}, updated_at = now()
+             where id = ${committedId} and org_id = ${gate.user.orgId}
+          `)
+          results.push({ filename: upload.filename, id: committedId, status: 'failed', error: 'processing_failed' })
+        } catch {
+          // The item is committed and its id must remain observable even when
+          // recording the queue refusal also fails; reporting this file as a
+          // plain request failure would make a client retry create a duplicate.
+          results.push({ filename: upload.filename, id: committedId, status: 'failed', error: 'processing_failed' })
+        }
+        continue
+      }
+      results.push({ filename: upload.filename, id: committedId, status: 'uploaded' })
+    }
+    const failed = results.some((result) => result.status === 'failed')
+    return NextResponse.json({ ids: created, results }, { status: failed ? 207 : 201 })
+
+  },
+})

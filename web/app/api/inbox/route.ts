@@ -1,3 +1,4 @@
+import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { countInbox, listInbox, type InboxKind, type InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
@@ -25,52 +26,54 @@ const FILTERS = ["all", "approvals", "my_tasks", "signatures", "notices", "overd
  * multi-kind reads bound each leg). Malformed windows 400 — they never
  * widen into an unbounded read by accident.
  */
-export async function GET(req: Request) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "not authenticated" }, { status: 401 });
-  const sp = new URL(req.url).searchParams;
-  const filter = pickString(sp.get("filter") ?? undefined) ?? "all";
-  if (!(FILTERS as readonly string[]).includes(filter)) {
-    return NextResponse.json({ error: "unknown filter — list one of all, approvals, my_tasks, signatures, notices, overdue" }, { status: 400 });
-  }
-  const page = parsePage(sp.get("limit"), sp.get("offset"));
-  if (page instanceof NextResponse) return page;
-  const ctx = await inboxContext(authz);
-  try {
-    if (sp.get("count") === "1") {
-      // A failing notice source names itself in notices while the healthy
-      // legs still count — the badge renders a degraded state
-      // beside the partial count instead of a silently low number.
-      const notices: InboxSourceNotice[] = [];
-      const [union, unread] = await Promise.all([
-        maySeeUnion(authz)
-          ? approvalWorklistPageForAuthz(authz, { limit: 1, offset: 0 }).then((page) => page.total)
-          : Promise.resolve(0),
-        countInbox(ctx, { kinds: ["notification"], notices }),
-      ]);
-      if (notices.length > 0) {
-        return NextResponse.json({
-          count: union + unread,
-          partial: true,
-          notices: toInboxNoticeViews(notices),
-        });
-      }
-      return NextResponse.json({ count: union + unread });
+export const GET = defineRoute({
+  public: 'session',
+  handler: async ({ request: req }) => {
+    const sp = new URL(req.url).searchParams;
+    const filter = pickString(sp.get("filter") ?? undefined) ?? "all";
+    if (!(FILTERS as readonly string[]).includes(filter)) {
+      return NextResponse.json({ error: "unknown filter — list one of all, approvals, my_tasks, signatures, notices, overdue" }, { status: 400 });
     }
-    const kinds: InboxKind[] | undefined =
-      filter === "all" || filter === "overdue" ? undefined : INBOX_FILTER_KINDS[filter];
-    // One failing source names itself in notices while the healthy legs
-    // still list — the page renders them beside the surviving rows.
-    const notices: InboxSourceNotice[] = [];
-    const items = await listInbox(ctx, { ...(kinds ? { kinds } : {}), ...(page ? { page } : {}), notices });
-    return NextResponse.json({
-      items: filter === "overdue" ? items.filter((i) => i.priority === "overdue") : items,
-      notices: toInboxNoticeViews(notices),
-    });
-  } catch (error) {
-    return apiErrorResponse(error);
-  }
-}
+    const page = parsePage(sp.get("limit"), sp.get("offset"));
+    if (page instanceof NextResponse) return page;
+    const ctx = await inboxContext(authz);
+    try {
+      if (sp.get("count") === "1") {
+        // A failing notice source names itself in notices while the healthy
+        // legs still count — the badge renders a degraded state
+        // beside the partial count instead of a silently low number.
+        const notices: InboxSourceNotice[] = [];
+        const [union, unread] = await Promise.all([
+          maySeeUnion(authz)
+            ? approvalWorklistPageForAuthz(authz, { limit: 1, offset: 0 }).then((page) => page.total)
+            : Promise.resolve(0),
+          countInbox(ctx, { kinds: ["notification"], notices }),
+        ]);
+        if (notices.length > 0) {
+          return NextResponse.json({
+            count: union + unread,
+            partial: true,
+            notices: toInboxNoticeViews(notices),
+          });
+        }
+        return NextResponse.json({ count: union + unread });
+      }
+      const kinds: InboxKind[] | undefined =
+        filter === "all" || filter === "overdue" ? undefined : INBOX_FILTER_KINDS[filter];
+      // One failing source names itself in notices while the healthy legs
+      // still list — the page renders them beside the surviving rows.
+      const notices: InboxSourceNotice[] = [];
+      const items = await listInbox(ctx, { ...(kinds ? { kinds } : {}), ...(page ? { page } : {}), notices });
+      return NextResponse.json({
+        items: filter === "overdue" ? items.filter((i) => i.priority === "overdue") : items,
+        notices: toInboxNoticeViews(notices),
+      });
+    } catch (error) {
+      return apiErrorResponse(error);
+    }
+
+  },
+})
 
 /** Parse an explicit read window: absent means the full working list. */
 function parsePage(limitRaw: string | null, offsetRaw: string | null): { limit?: number; offset?: number } | null | NextResponse {

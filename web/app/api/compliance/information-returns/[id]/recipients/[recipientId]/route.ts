@@ -1,5 +1,7 @@
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import {
   InformationReturnError,
@@ -10,6 +12,14 @@ import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.looseObject({
+  "adjustmentReason": z.unknown().optional(),
+  "adjustments": z.unknown().optional(),
+  "exclusionReason": z.unknown().optional(),
+  "status": z.unknown().optional(),
+})
+
 
 
 export const runtime = 'nodejs'
@@ -26,48 +36,50 @@ export const runtime = 'nodejs'
  * a finalize either commits before the freeze or is refused after it, and can
  * never land on a frozen filing.
  */
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string; recipientId: string }> },
-) {
-  const gate = await guardPermission('compliance.manage')
-  if (gate instanceof NextResponse) return gate
-  const blocked = await guardComplianceFeature(gate.user.orgId)
-  if (blocked) return blocked
-  const { orgId, id: actorId } = gate.user
-  const { id, recipientId } = await params
-  if (!isUuid(id) || !isUuid(recipientId)) return notFound("record")
-  // Entity isolation before the body is even parsed (same 404 as a missing filing).
-  const filingScope = await loadInformationReturnFilingScope(orgId, id)
-  if (!filingScope) return notFound("record")
-  const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
-  if (scopeDenied) return scopeDenied
+export const PATCH = defineRoute({
+  permission: 'compliance.manage',
+  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  params: z.object({ "id": z.string(), "recipientId": z.string() }),
+  handler: async ({ request: req, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const blocked = await guardComplianceFeature(gate.user.orgId)
+    if (blocked) return blocked
+    const { orgId, id: actorId } = gate.user
+    const { id, recipientId } = await params
+    if (!isUuid(id) || !isUuid(recipientId)) return notFound("record")
+    // Entity isolation before the body is even parsed (same 404 as a missing filing).
+    const filingScope = await loadInformationReturnFilingScope(orgId, id)
+    if (!filingScope) return notFound("record")
+    const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
+    if (scopeDenied) return scopeDenied
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    adjustments?: Record<string, string>
-    adjustmentReason?: string | null
-    status?: 'included' | 'excluded'
-    exclusionReason?: string | null
-  }
-
-  try {
-    await updateFilingRecipient({
-      orgId,
-      filingId: id,
-      recipientId,
-      actorId,
-      adjustments: body.adjustments,
-      adjustmentReason: body.adjustmentReason ?? null,
-      status: body.status,
-      exclusionReason: body.exclusionReason ?? null,
-    })
-    return NextResponse.json({ id: recipientId })
-  } catch (e) {
-    if (e instanceof InformationReturnError) {
-      return apiErrorResponse(e)
+    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = (parsedBody.data) as {
+      adjustments?: Record<string, string>
+      adjustmentReason?: string | null
+      status?: 'included' | 'excluded'
+      exclusionReason?: string | null
     }
-    return complianceWriteFailure(e)
-  }
-}
+
+    try {
+      await updateFilingRecipient({
+        orgId,
+        filingId: id,
+        recipientId,
+        actorId,
+        adjustments: body.adjustments,
+        adjustmentReason: body.adjustmentReason ?? null,
+        status: body.status,
+        exclusionReason: body.exclusionReason ?? null,
+      })
+      return NextResponse.json({ id: recipientId })
+    } catch (e) {
+      if (e instanceof InformationReturnError) {
+        return apiErrorResponse(e)
+      }
+      return complianceWriteFailure(e)
+    }
+
+  },
+})

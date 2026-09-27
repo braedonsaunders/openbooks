@@ -1,5 +1,7 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from '@/lib/api/route'
+import { notFound } from '@/lib/api/responses'
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -8,8 +10,7 @@ import {
   ScopeNotFoundError,
   withScopeSnapshot,
 } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { can, guardPermission, guardSubsidiaryScope, type Authz } from '../../../lib/authz'
-import { isFeatureEnabled } from '../../../lib/features'
+import { can, guardSubsidiaryScope, type Authz } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -25,6 +26,17 @@ type AssignmentInput = {
   isActive?: unknown
 }
 
+const assignmentBody = z.looseObject({
+  id: z.unknown().optional(),
+  rateBookId: z.unknown().optional(),
+  customerId: z.unknown().optional(),
+  projectId: z.unknown().optional(),
+  effectiveFrom: z.unknown().optional(),
+  effectiveTo: z.unknown().optional(),
+  dateBasis: z.unknown().optional(),
+  isActive: z.unknown().optional(),
+})
+
 function dateValue(value: unknown): string | null | undefined {
   if (value === undefined) return undefined
   if (value === null || value === '') return null
@@ -35,30 +47,16 @@ function dateValue(value: unknown): string | null | undefined {
   return isIsoCalendarDate(text) ? text : undefined
 }
 
-async function projectGate(permission: 'projects.read' | 'projects.manage') {
-  const gate = await guardPermission(permission)
-  if (gate instanceof NextResponse) return gate
-  if (!(await isFeatureEnabled(gate.user.orgId, 'projects'))) {
-    return NextResponse.json({ errorCode: 'notFound' }, { status: 404 })
-  }
-  // Only an explicit null is unrestricted — an absent scope fails closed.
-  // Nullish coalescing would collapse null into the empty set, so the
-  // undefined check is explicit.
-  if (gate.allowedSubsidiaryIds === undefined) {
-    return { ...gate, allowedSubsidiaryIds: new Set<string>() }
-  }
-  return gate
-}
-
 /** Uniform not-found for record-level scope denials on this surface. */
 function scopeNotFound() {
-  return NextResponse.json({ errorCode: 'notFound' }, { status: 404 })
+  return notFound('rate book assignment')
 }
 
 /** Labor Pricing assignments embedded on customer and project records. */
-export async function GET(req: Request) {
-  const gate = await projectGate('projects.read')
-  if (gate instanceof NextResponse) return gate
+export const GET = defineRoute({
+  permission: 'projects.read',
+  feature: 'projects',
+  handler: async ({ request: req, authz: gate }) => {
   const { orgId } = gate.user
   const url = new URL(req.url)
   const customerId = url.searchParams.get('customerId')
@@ -149,8 +147,9 @@ export async function GET(req: Request) {
       canManage: can(gate, 'projects.manage'),
       canOpenPricing: can(gate, 'admin.setup.manage'),
     })
-  })
-}
+    })
+  },
+})
 
 type SqlExecutor = Pick<typeof db, 'execute'>
 
@@ -286,15 +285,15 @@ async function normalizedInput(
   return { values: { rateBookId, customerId, projectId, effectiveFrom, effectiveTo, dateBasis, isActive } } as const
 }
 
-export async function POST(req: Request) {
-  const gate = await projectGate('projects.manage')
-  if (gate instanceof NextResponse) return gate
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as AssignmentInput
+export const POST = defineRoute({
+  permission: 'projects.manage',
+  feature: 'projects',
+  body: assignmentBody,
+  handler: async ({ authz: gate, body }) => {
+  const input = body as AssignmentInput
   try {
     const outcome = await db.transaction(async (tx) => {
-      const parsed = await normalizedInput(body, gate.user.orgId, gate, gate.allowedSubsidiaryIds, undefined, tx)
+      const parsed = await normalizedInput(input, gate.user.orgId, gate, gate.allowedSubsidiaryIds, undefined, tx)
       if ('errorCode' in parsed) return parsed
       const v = parsed.values
       const inserted = await tx.execute(sql`
@@ -321,19 +320,20 @@ export async function POST(req: Request) {
     }
     throw error
   }
-}
+  },
+})
 
-export async function PATCH(req: Request) {
-  const gate = await projectGate('projects.manage')
-  if (gate instanceof NextResponse) return gate
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
-  if (!parsedBody2.ok) return parsedBody2.response;
-  const body = (parsedBody2.data) as AssignmentInput
-  const id = String(body.id ?? '')
+export const PATCH = defineRoute({
+  permission: 'projects.manage',
+  feature: 'projects',
+  body: assignmentBody,
+  handler: async ({ authz: gate, body }) => {
+  const input = body as AssignmentInput
+  const id = String(input.id ?? '')
   if (!isUuid(id)) return NextResponse.json({ errorCode: 'save' }, { status: 404 })
   try {
     const outcome = await db.transaction(async (tx) => {
-      const parsed = await normalizedInput(body, gate.user.orgId, gate, gate.allowedSubsidiaryIds, id, tx)
+      const parsed = await normalizedInput(input, gate.user.orgId, gate, gate.allowedSubsidiaryIds, id, tx)
       if ('errorCode' in parsed) return parsed
       const v = parsed.values
       const before = (await tx.execute(sql`
@@ -359,11 +359,13 @@ export async function PATCH(req: Request) {
     }
     throw error
   }
-}
+  },
+})
 
-export async function DELETE(req: Request) {
-  const gate = await projectGate('projects.manage')
-  if (gate instanceof NextResponse) return gate
+export const DELETE = defineRoute({
+  permission: 'projects.manage',
+  feature: 'projects',
+  handler: async ({ request: req, authz: gate }) => {
   const id = new URL(req.url).searchParams.get('id') ?? ''
   if (!isUuid(id)) return NextResponse.json({ errorCode: 'save' }, { status: 404 })
   const outcome = await db.transaction(async (tx) => {
@@ -388,4 +390,5 @@ export async function DELETE(req: Request) {
   })
   if ('errorCode' in outcome) return NextResponse.json({ errorCode: outcome.errorCode }, { status: 404 })
   return NextResponse.json({ ok: true })
-}
+  },
+})
