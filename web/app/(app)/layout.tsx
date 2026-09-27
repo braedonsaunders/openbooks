@@ -4,6 +4,7 @@ import { cookies } from 'next/headers'
 import { SetupRedirectNotice } from './admin/setup/RedirectNotice'
 import { getTranslations } from 'next-intl/server'
 import { AppShell } from '../../components/app-shell'
+import { PageSkeleton } from '../../components/page-skeleton'
 import { SandboxBanner } from '../../components/sandbox-banner'
 import { ThemeProvider } from '../../components/theme-provider'
 import { NavigationProvider } from '../../components/navigation-provider'
@@ -120,7 +121,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Suspense fallback={null}>
               <SetupRedirectNotice />
             </Suspense>
-            {children}
+            {/* Page content streams behind the skeleton so the shell
+              (sidebar/header) paints before slow page loaders resolve.
+              Every ModuleView page renders inside {children}, so this one
+              boundary covers them without touching each page. */}
+            <Suspense fallback={<PageSkeleton />}>{children}</Suspense>
           </AppShell>
           {can(authz, 'admin.setup.manage') && <OnboardingWizard authz={authz} />}
         </NavigationProvider>

@@ -291,6 +291,7 @@ export function SidebarNav({ groups, collapsed = false }: { groups: SidebarNavGr
                   <div className={headerCls}>
                     <Link
                       href={group.groupHref as never}
+                      prefetch
                       aria-current={activeHref === group.groupHref ? 'page' : undefined}
                       data-walkthrough={`nav:${group.groupHref}`}
                       onClick={() => openGroup(group.id)}
@@ -418,6 +419,7 @@ function CollapsedWorkspace({
         {group.groupHref ? (
           <Link
             href={group.groupHref as never}
+            prefetch
             aria-current={activeHref === group.groupHref ? 'page' : undefined}
             data-walkthrough={`nav:${group.groupHref}`}
             className="block border-b border-slate-100 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase transition-colors hover:text-teal-700 dark:border-slate-800 dark:text-slate-400 dark:hover:text-teal-300"
@@ -516,6 +518,7 @@ function NavLink({ item, active, nested = false }: { item: SidebarNavItem; activ
   ) : (
     <Link
       href={item.href as never}
+      prefetch
       aria-current={active ? 'page' : undefined}
       data-walkthrough={`nav:${item.href}`}
       className={className}
@@ -587,6 +590,7 @@ function SubgroupSection({
           </button>
           <Link
             href={(href)}
+            prefetch
             aria-current={selfActive ? 'page' : undefined}
             data-walkthrough={`nav:${href}`}
             onClick={() => setOpen(true)}

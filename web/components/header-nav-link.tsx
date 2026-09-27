@@ -23,6 +23,7 @@ export function HeaderNavLink({
   return (
     <Link
       href={item.href as never}
+      prefetch
       aria-label={ariaLabel}
       title={title}
       aria-current={active ? 'page' : undefined}
