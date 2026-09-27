@@ -20,6 +20,8 @@
  * the caller produced. A provider that cannot balance (a missing pair, an
  * inactive value) throws a typed refusal naming the remedy; the error
  * propagates unchanged. With no providers registered this is one no-op call.
+ * Providers that enforce posting policy skip regeneration; providers that
+ * preserve accounting integrity still add their balancing legs.
  *
  * Registration is keyed and idempotent: the composition root runs once per
  * process and again in every test that installs the engine seams, so
@@ -35,6 +37,10 @@ export interface BalancingLineView {
   /** Signed functional-currency amount. */
   readonly amount: string;
   readonly subsidiaryId: string;
+  readonly departmentId?: string | null;
+  readonly projectId?: string | null;
+  readonly locationId?: string | null;
+  readonly classId?: string | null;
   readonly currency: string;
   /** Signed transaction-currency amount. */
   readonly txnAmount: string;
@@ -59,6 +65,11 @@ export interface BalancingLeg {
 export interface BalancingContext {
   orgId: string;
   postingDate: string;
+  /** Null resolves to the organization's primary posting book; this call site has not resolved it yet. */
+  bookId: string | null;
+  sourceDocumentId: string | null;
+  /** Policy providers skip regeneration; balancing providers still add legs. */
+  regeneration: boolean;
 }
 
 export type BalancingLegProvider = (

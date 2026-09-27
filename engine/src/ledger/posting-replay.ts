@@ -148,19 +148,6 @@ export async function regenerateGlImpactTx(
     .where(and(eq(schema.documentLines.documentId, documentId), eq(schema.documentLines.orgId, doc.orgId)))
     .orderBy(asc(schema.documentLines.lineNumber));
 
-  const projection = buildProjection(doc, lines, deps);
-  const subApplied = await applySubsidiaries(
-    tx,
-    doc,
-    projection,
-  );
-  const kernelLines = subApplied.lines;
-  assertFinalKernelBalance(kernelLines);
-  await validateRequiredDimensions(tx, doc.orgId, kernelLines);
-  const postingDate = doc.postingDate ?? doc.documentDate;
-
-  const period = await resolvePostingPeriod(tx, doc, postingDate);
-
   const [entry] = await tx
     .select()
     .from(schema.journalEntries)
@@ -170,6 +157,21 @@ export async function regenerateGlImpactTx(
       "the imported document's current journal entry is missing or not posted",
     );
   }
+
+  const projection = buildProjection(doc, lines, deps);
+  const subApplied = await applySubsidiaries(
+    tx,
+    doc,
+    projection,
+    { bookId: entry.bookId, regeneration: true },
+  );
+  const kernelLines = subApplied.lines;
+  assertFinalKernelBalance(kernelLines);
+  await validateRequiredDimensions(tx, doc.orgId, kernelLines);
+  const postingDate = doc.postingDate ?? doc.documentDate;
+
+  const period = await resolvePostingPeriod(tx, doc, postingDate);
+
   const existing = await tx
     .select()
     .from(schema.journalLines)

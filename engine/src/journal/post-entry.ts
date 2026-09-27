@@ -169,41 +169,6 @@ export async function postEntry(
     };
   });
 
-  // Balancing-segment legs from registered providers are appended after
-  // the caller's lines, so the balance check and every guard below see the
-  // final set. A provider can only add legs; each takes the next number.
-  const segmentLegs = await collectBalancingLegs(
-    executor,
-    { orgId, postingDate: input.postingDate },
-    lines,
-  );
-  let nextLineNumber = Math.max(0, ...seenNumbers);
-  for (const leg of segmentLegs) {
-    nextLineNumber += 1;
-    seenNumbers.add(nextLineNumber);
-    lines.push({
-      accountId: leg.accountId,
-      amount: leg.amount,
-      subsidiaryId: leg.subsidiaryId,
-      currency: leg.currency,
-      txnAmount: leg.txnAmount,
-      fxRate: leg.fxRate,
-      memo: leg.memo,
-      extraDims: leg.extraDims,
-      lineNumber: nextLineNumber,
-    });
-  }
-
-  // Balance validation before any write: whole entry and per subsidiary.
-  // assertFinalKernelBalance is the shared kernel check (also >= 2 lines).
-  try {
-    assertFinalKernelBalance(lines.map((line) => ({ amount: line.amount, subsidiaryId: line.subsidiaryId! })));
-  } catch (error) {
-    if (error instanceof PostingError)
-      throw new LedgerPostError(`journal entry ${input.entryNumber}: ${error.message}`);
-    throw error;
-  }
-
   // The posting's reads and writes run in one transaction: the guards' share
   // locks and the period fence hold through commit, and the header, its lines,
   // the posted flip and the audit record become visible together or not at all.
@@ -277,6 +242,83 @@ async function writeEntry(
   if (!period)
     fail(`journal entry ${input.entryNumber}: accounting period ${input.periodId} does not exist in this organization`);
 
+  if (input.reversesEntryId) {
+    const target = (await executor.execute<{ id: string; status: string }>(sql`
+      select id, status from journal_entries
+       where org_id = ${orgId} and id = ${input.reversesEntryId}
+       limit 1`)).rows[0];
+    if (!target)
+      fail(`journal entry ${input.entryNumber}: reversed entry ${input.reversesEntryId} does not exist in this organization`);
+    if (target!.status === "draft")
+      fail(`journal entry ${input.entryNumber}: a draft entry cannot be reversed`);
+  }
+
+  if (input.sourceDocumentId) {
+    const source = (await executor.execute<{ id: string }>(sql`
+      select id from documents
+       where org_id = ${orgId} and id = ${input.sourceDocumentId}
+       limit 1`)).rows[0];
+    if (!source)
+      fail(`journal entry ${input.entryNumber}: source document ${input.sourceDocumentId} does not exist in this organization`);
+  }
+
+  // Open-period check behind the shared close/posting fence, held through
+  // commit: a concurrent close either waits behind this posting or this
+  // check re-reads its commit. GL is always implied.
+  await executor.execute(sql`select period_posting_fence(${orgId}, ${input.periodId}, ${input.bookId})`);
+  // Authenticated connector historical replay carries a transaction-local
+  // token the DATABASE validates (connector_historical_replay_authorized:
+  // active sync run, owning connection, attributable automatic policy). The
+  // trigger guards honor that token through period_module_blocks_write. This
+  // application-level companion honors it only with durable evidence: the
+  // token names the replaying sync run (re-validated here by calling the
+  // same function, never trusted from the caller), and a
+  // controller-recorded connector_replay_authorizations row for that run's
+  // connector must cover the posting period before a closed period opens.
+  // The triggers re-validate the token again at write time.
+  // The policy state comes from the same transaction-local predicate used
+  // by the closed-period check. Integrity providers still run on replay.
+  const replayAuthorized = (
+    await executor.execute<{ allowed: boolean }>(sql`
+      select connector_historical_replay_authorized(${orgId}) as allowed`)
+  ).rows[0]?.allowed === true;
+  const segmentLegs = await collectBalancingLegs(
+    executor,
+    {
+      orgId,
+      postingDate: input.postingDate,
+      bookId: input.bookId,
+      sourceDocumentId: input.sourceDocumentId ?? null,
+      regeneration: replayAuthorized,
+    },
+    lines,
+  );
+  let nextLineNumber = Math.max(0, ...seenNumbers);
+  for (const leg of segmentLegs) {
+    nextLineNumber += 1;
+    seenNumbers.add(nextLineNumber);
+    lines.push({
+      accountId: leg.accountId,
+      amount: leg.amount,
+      subsidiaryId: leg.subsidiaryId,
+      currency: leg.currency,
+      txnAmount: leg.txnAmount,
+      fxRate: leg.fxRate,
+      memo: leg.memo,
+      extraDims: leg.extraDims,
+      lineNumber: nextLineNumber,
+    });
+  }
+
+  // Balance validation before any write: whole entry and per subsidiary.
+  try {
+    assertFinalKernelBalance(lines.map((line) => ({ amount: line.amount, subsidiaryId: line.subsidiaryId! })));
+  } catch (error) {
+    if (error instanceof PostingError)
+      throw new LedgerPostError(`journal entry ${input.entryNumber}: ${error.message}`);
+    throw error;
+  }
+
   // Entity guards: the entry and every leg reference subsidiaries of this org.
   const subsidiaryIds = [...new Set([input.subsidiaryId, ...lines.map((line) => line.subsidiaryId!)])];
   const foundSubs = (await executor.execute<{ id: string }>(sql`
@@ -314,45 +356,6 @@ async function writeEntry(
     if (account!.currency_restriction && line.currency !== account!.currency_restriction)
       fail(`journal entry ${input.entryNumber}: account ${line.accountId} only accepts ${account!.currency_restriction} postings`);
   }
-
-  if (input.reversesEntryId) {
-    const target = (await executor.execute<{ id: string; status: string }>(sql`
-      select id, status from journal_entries
-       where org_id = ${orgId} and id = ${input.reversesEntryId}
-       limit 1`)).rows[0];
-    if (!target)
-      fail(`journal entry ${input.entryNumber}: reversed entry ${input.reversesEntryId} does not exist in this organization`);
-    if (target!.status === "draft")
-      fail(`journal entry ${input.entryNumber}: a draft entry cannot be reversed`);
-  }
-
-  if (input.sourceDocumentId) {
-    const source = (await executor.execute<{ id: string }>(sql`
-      select id from documents
-       where org_id = ${orgId} and id = ${input.sourceDocumentId}
-       limit 1`)).rows[0];
-    if (!source)
-      fail(`journal entry ${input.entryNumber}: source document ${input.sourceDocumentId} does not exist in this organization`);
-  }
-
-  // Open-period check behind the shared close/posting fence, held through
-  // commit: a concurrent close either waits behind this posting or this
-  // check re-reads its commit. GL is always implied.
-  await executor.execute(sql`select period_posting_fence(${orgId}, ${input.periodId}, ${input.bookId})`);
-  // Authenticated connector historical replay carries a transaction-local
-  // token the DATABASE validates (connector_historical_replay_authorized:
-  // active sync run, owning connection, attributable automatic policy). The
-  // trigger guards honor that token through period_module_blocks_write. This
-  // application-level companion honors it only with durable evidence: the
-  // token names the replaying sync run (re-validated here by calling the
-  // same function, never trusted from the caller), and a
-  // controller-recorded connector_replay_authorizations row for that run's
-  // connector must cover the posting period before a closed period opens.
-  // The triggers re-validate the token again at write time.
-  const replayAuthorized = (
-    await executor.execute<{ allowed: boolean }>(sql`
-      select connector_historical_replay_authorized(${orgId}) as allowed`)
-  ).rows[0]?.allowed === true;
   // Evidence for an admitted closed-period replay, cited in the posting
   // audit below. The flag alone never opens a closed period: it only names
   // the replaying sync run, and a controller-recorded authorization row for

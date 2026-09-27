@@ -16,7 +16,13 @@ import {
 } from "./balancing-hooks.ts";
 
 const runner = {} as SqlExecutor;
-const ctx = { orgId: "org-1", postingDate: "2026-09-30" };
+const ctx = {
+  orgId: "org-1",
+  postingDate: "2026-09-30",
+  bookId: null,
+  sourceDocumentId: null,
+  regeneration: false,
+};
 const lines = [
   { accountId: "bank", amount: "100.0000", subsidiaryId: "sub-1", currency: "USD", txnAmount: "100.0000", fxRate: "1", extraDims: { fund: "general" } },
   { accountId: "revenue", amount: "-100.0000", subsidiaryId: "sub-1", currency: "USD", txnAmount: "-100.0000", fxRate: "1", extraDims: { fund: "scholarships" } },
