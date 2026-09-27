@@ -22,7 +22,6 @@ import { InventoryError } from "../inventory/contracts.ts";
 import { reverseInventoryMovement } from "../inventory/reversal.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
-import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Machine-readable void refusal reasons (F-t06-021). The human message
@@ -43,6 +42,9 @@ export class DocumentVoidError extends Error {
     readonly code: DocumentVoidCode = "invalid",
   ) { super(message); }
 }
+
+/** Provenance ids travel as text; validate the shape before any uuid[] cast. */
+const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface DocumentVoidResult {
   status: "voided" | "pending_approval";
@@ -113,7 +115,7 @@ async function resolveVoidReversalPeriod(
   reversalPeriodId: string,
   reversalDate: string,
 ): Promise<string> {
-  if (!isUuid(reversalPeriodId)) {
+  if (!UUID_SHAPE.test(reversalPeriodId)) {
     throw new DocumentVoidError(
       `reversal period ${reversalPeriodId} is not a valid period reference — name an adjustment period covering ${reversalDate}, or omit the override to reverse in the regular covering period`,
       422,
@@ -360,7 +362,7 @@ async function reverseOrderShipment(
     // Malformed legacy provenance must refuse as a controlled void error,
     // never as a raw SQL cast failure from the uuid[] predicates below.
     for (const source of sources) {
-      if (!isUuid(source.source_line_id)) {
+      if (!UUID_SHAPE.test(source.source_line_id)) {
         throw new DocumentVoidError(
           "this document has a line with malformed order-line provenance — correct the line before voiding",
         );
