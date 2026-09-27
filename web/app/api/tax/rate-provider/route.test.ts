@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-const root = pathToFileURL(`${process.cwd()}/`).href;
 const state = { saves: [] as unknown[][] };
 Object.assign(globalThis, { __taxRateProviderRouteTestState: state });
 

@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
-import { join } from "node:path";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 
 // POST /api/pdf-templates with a taken name must answer 409 with
