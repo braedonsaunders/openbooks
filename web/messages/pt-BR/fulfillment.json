@@ -1,0 +1,123 @@
+{
+  "actionFailed": "Não foi possível concluir a ação.",
+  "voidReasonPlaceholder": "Por que isto está sendo anulado?",
+  "fields": {
+    "salesOrder": "Pedido de venda",
+    "pickList": "Lista de separação",
+    "shipment": "Remessa",
+    "salesFulfillment": "Atendimento de venda",
+    "salesOrderLine": "Linha do pedido",
+    "bin": "Endereço de estoque",
+    "lotSerial": "Lote / número de série",
+    "carrier": "Transportadora",
+    "service": "Serviço",
+    "trackingNumber": "Código de rastreio",
+    "shipTo": "Entregar em",
+    "carton": "Caixa",
+    "stage": "Etapa",
+    "open": "Em aberto",
+    "held": "Em listas de separação",
+    "pickable": "Separável"
+  },
+  "stage": {
+    "open": "Aberta",
+    "done": "Concluída"
+  },
+  "state": {
+    "draft": "Rascunho",
+    "pendingApproval": "Aguardando aprovação",
+    "released": "Liberada",
+    "shipped": "Enviada",
+    "completed": "Concluída",
+    "voided": "Anulada"
+  },
+  "lines": {
+    "orderLine": "Linha {line}",
+    "lot": "Lote {lot}",
+    "serial": "Série {serial}",
+    "actionsFor": "Ações da linha {line}",
+    "empty": "Este documento não tem linhas."
+  },
+  "related": {
+    "tab": "Relacionados",
+    "empty": "Nenhum documento relacionado."
+  },
+  "cartons": {
+    "set": "Definir caixa…",
+    "clear": "Remover caixa",
+    "all": "Embalar tudo em uma caixa…",
+    "setTitle": "Caixa da linha {line}",
+    "allTitle": "Embalar todas as linhas de {number} em uma caixa",
+    "placeholder": "Por exemplo C1",
+    "saved": "Caixas salvas.",
+    "failed": "Não foi possível salvar as caixas."
+  },
+  "pick": {
+    "listTitle": "Listas de separação",
+    "listDescription": "Endereços de estoque de onde os pedidos de venda emitidos são separados. Crie uma lista de separação a partir de um pedido de venda emitido, libere-a para reservar seus endereços e depois envie-a.",
+    "createFromOrder": "Criar lista de separação",
+    "release": "Liberar",
+    "released": "{number} está liberada e reserva seus endereços de estoque.",
+    "releasePending": "{number} está aguardando aprovação.",
+    "releaseFailed": "Não foi possível liberar a lista de separação.",
+    "createShipment": "Criar remessa",
+    "shipmentCreated": "Remessa {number} criada.",
+    "shipFailed": "Não foi possível criar a remessa.",
+    "openShipment": "Abrir remessa {number}",
+    "voidTitle": "Anular {number}",
+    "voidMessage": "Uma lista de separação anulada deixa de reservar seus endereços de estoque. Ela permanece registrada com o motivo.",
+    "voided": "{number} está anulada.",
+    "voidFailed": "Não foi possível anular a lista de separação.",
+    "draftHint": "Um rascunho não reserva estoque. Libere-o para reservar seus endereços para a separação."
+  },
+  "create": {
+    "title": "Nova lista de separação para {order}",
+    "loading": "Carregando as linhas a separar…",
+    "loadFailed": "Não foi possível carregar as linhas a separar.",
+    "empty": "Este pedido não tem linhas de estoque em aberto para separar.",
+    "hint": "Duplique uma linha para separá-la de dois endereços de estoque. Deixe uma quantidade em branco para deixar essa linha para depois.",
+    "nothingPickable": "Já está em listas de separação",
+    "noStock": "Nenhum endereço de estoque tem este item",
+    "otherWarehouse": "Enviado de {warehouse}",
+    "binOption": "{bin} · {onHand} em estoque",
+    "noLines": "Informe uma quantidade em pelo menos uma linha a separar.",
+    "binRequired": "Escolha um endereço de estoque para a linha do pedido {line}.",
+    "created": "Lista de separação {number} criada.",
+    "failed": "Não foi possível criar a lista de separação."
+  },
+  "shipment": {
+    "listTitle": "Remessas",
+    "listDescription": "Mercadorias saindo do armazém. Informe a transportadora e o código de rastreio, embale as caixas e conclua a remessa para registrar o atendimento de venda.",
+    "chooseCarrier": "Escolha uma transportadora",
+    "noCarriers": "Nenhuma transportadora ativa — adicione uma em Armazém → Transportadoras",
+    "chooseService": "Escolha um serviço",
+    "carrierRequired": "Escolha uma transportadora.",
+    "serviceRequired": "Escolha o serviço da transportadora.",
+    "carrierHint": "Informe a transportadora e o serviço antes de concluir esta remessa.",
+    "saved": "{number} salva.",
+    "saveFailed": "Não foi possível salvar a remessa.",
+    "complete": "Concluir",
+    "completeTitle": "Concluir {number}",
+    "completeMessage": "Concluir registra o atendimento de venda, retira o estoque dos endereços separados e encerra a reserva da lista de separação. Não é possível desfazer aqui.",
+    "completeNeedsPost": "Concluir uma remessa movimenta estoque e exige permissão para lançar estoque.",
+    "completed": "{number} concluída; {fulfillment} registrado.",
+    "completeFailed": "Não foi possível concluir a remessa.",
+    "voidTitle": "Anular {number}",
+    "voidMessage": "Uma remessa anulada não envia nada. Sua lista de separação continua reservando os endereços de estoque.",
+    "voided": "{number} está anulada.",
+    "voidFailed": "Não foi possível anular a remessa.",
+    "openPickList": "Abrir lista de separação {number}"
+  },
+  "tracking": {
+    "action": "Enviar rastreio por e-mail…",
+    "title": "Enviar o rastreio de {number}",
+    "recipient": "Destinatário",
+    "recipientPlaceholder": "Endereço de e-mail",
+    "message": "Mensagem (opcional)",
+    "messagePlaceholder": "Adicione uma observação para o cliente ou deixe em branco",
+    "confirm": "Enviar a transportadora e o link de rastreio para {to}?",
+    "send": "Enviar",
+    "sent": "Rastreio enviado para {to}.",
+    "failed": "Não foi possível enviar o e-mail de rastreio."
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "actionFailed": "The action could not be completed.",
+  "voidReasonPlaceholder": "Why is this being voided?",
+  "fields": {
+    "salesOrder": "Sales order",
+    "pickList": "Pick list",
+    "shipment": "Shipment",
+    "salesFulfillment": "Sales fulfillment",
+    "salesOrderLine": "Order line",
+    "bin": "Bin",
+    "lotSerial": "Lot / serial",
+    "carrier": "Carrier",
+    "service": "Service",
+    "trackingNumber": "Tracking number",
+    "shipTo": "Ship to",
+    "carton": "Carton",
+    "stage": "Stage",
+    "open": "Open",
+    "held": "On pick lists",
+    "pickable": "Pickable"
+  },
+  "stage": {
+    "open": "Open",
+    "done": "Done"
+  },
+  "state": {
+    "draft": "Draft",
+    "pendingApproval": "Pending approval",
+    "released": "Released",
+    "shipped": "Shipped",
+    "completed": "Completed",
+    "voided": "Voided"
+  },
+  "lines": {
+    "orderLine": "Line {line}",
+    "lot": "Lot {lot}",
+    "serial": "Serial {serial}",
+    "actionsFor": "Actions for line {line}",
+    "empty": "This document has no lines."
+  },
+  "related": {
+    "tab": "Related",
+    "empty": "No related documents."
+  },
+  "cartons": {
+    "set": "Set carton…",
+    "clear": "Clear carton",
+    "all": "Pack all in one carton…",
+    "setTitle": "Carton for line {line}",
+    "allTitle": "Pack every line of {number} in one carton",
+    "placeholder": "For example C1",
+    "saved": "Cartons saved.",
+    "failed": "The cartons could not be saved."
+  },
+  "pick": {
+    "listTitle": "Pick lists",
+    "listDescription": "Bins to pick issued sales orders from. Create a pick list from an issued sales order, release it to hold its bins, then ship it.",
+    "createFromOrder": "Create pick list",
+    "release": "Release",
+    "released": "{number} is released and holds its bins.",
+    "releasePending": "{number} is waiting for approval.",
+    "releaseFailed": "The pick list could not be released.",
+    "createShipment": "Create shipment",
+    "shipmentCreated": "Shipment {number} created.",
+    "shipFailed": "The shipment could not be created.",
+    "openShipment": "Open shipment {number}",
+    "voidTitle": "Void {number}",
+    "voidMessage": "A voided pick list stops holding its bins. It stays on record with the reason.",
+    "voided": "{number} is voided.",
+    "voidFailed": "The pick list could not be voided.",
+    "draftHint": "A draft holds no stock. Release it to hold its bins for picking."
+  },
+  "create": {
+    "title": "New pick list for {order}",
+    "loading": "Loading the lines to pick…",
+    "loadFailed": "The lines to pick could not be loaded.",
+    "empty": "This order has no open stock lines to pick.",
+    "hint": "Duplicate a line to pick it from two bins. Leave a quantity blank to leave that line for later.",
+    "nothingPickable": "Already on pick lists",
+    "noStock": "No bin holds this item",
+    "otherWarehouse": "Ships from {warehouse}",
+    "binOption": "{bin} · {onHand} on hand",
+    "noLines": "Enter a quantity on at least one line to pick.",
+    "binRequired": "Choose a bin for order line {line}.",
+    "created": "Pick list {number} created.",
+    "failed": "The pick list could not be created."
+  },
+  "shipment": {
+    "listTitle": "Shipments",
+    "listDescription": "Goods leaving the warehouse. Name the carrier and tracking number, pack cartons, then complete the shipment to record the sales fulfillment.",
+    "chooseCarrier": "Choose a carrier",
+    "noCarriers": "No active carriers — add one under Warehouse → Carriers",
+    "chooseService": "Choose a service",
+    "carrierRequired": "Choose a carrier.",
+    "serviceRequired": "Choose the carrier's service.",
+    "carrierHint": "Name the carrier and service before completing this shipment.",
+    "saved": "{number} saved.",
+    "saveFailed": "The shipment could not be saved.",
+    "complete": "Complete",
+    "completeTitle": "Complete {number}",
+    "completeMessage": "Completing records the sales fulfillment, moves the stock out of the picked bins, and ends the pick list's hold. It cannot be undone here.",
+    "completeNeedsPost": "Completing a shipment moves stock and needs permission to post inventory.",
+    "completed": "{number} completed; recorded {fulfillment}.",
+    "completeFailed": "The shipment could not be completed.",
+    "voidTitle": "Void {number}",
+    "voidMessage": "A voided shipment ships nothing. Its pick list keeps holding the bins.",
+    "voided": "{number} is voided.",
+    "voidFailed": "The shipment could not be voided.",
+    "openPickList": "Open pick list {number}"
+  },
+  "tracking": {
+    "action": "Email tracking…",
+    "title": "Email tracking for {number}",
+    "recipient": "Recipient",
+    "recipientPlaceholder": "Email address",
+    "message": "Message (optional)",
+    "messagePlaceholder": "Add a note for the customer, or leave blank",
+    "confirm": "Send the carrier and tracking link to {to}?",
+    "send": "Send",
+    "sent": "Tracking sent to {to}.",
+    "failed": "The tracking email could not be sent."
+  }
+}

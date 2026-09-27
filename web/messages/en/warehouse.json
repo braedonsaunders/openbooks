@@ -92,7 +92,8 @@
   },
   "setup": {
     "warehouses": "Warehouse details",
-    "rules": "Putaway rules"
+    "rules": "Putaway rules",
+    "carriers": "Carriers"
   },
   "availability": {
     "title": "Availability",
@@ -170,5 +171,13 @@
     "noPoints": "No reorder point",
     "onOrder": "Items on order",
     "openReplenishment": "Open replenishment"
+  },
+  "fulfillment": {
+    "title": "Fulfillment",
+    "hint": "Pick lists and shipments still to finish.",
+    "openPickLists": "Open pick lists",
+    "openPickListsHint": "Not yet shipped or voided",
+    "shipmentsToComplete": "Shipments to complete",
+    "shipmentsToCompleteHint": "Drafts waiting for a carrier and completion"
   }
 }

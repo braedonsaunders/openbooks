@@ -24,10 +24,12 @@ import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
 import { availabilityEntityScope, availabilityRefusalText } from '../../../lib/availability-report'
+import { fulfillmentQueueCounts } from '../../../lib/fulfillment'
 import { pickString } from '../../../lib/list-params'
 import { getMoneyFormatter } from '@/lib/money-server'
 import type { ReportDrillTarget } from '@/lib/report-drill'
-import { groupTabs } from '../../../components/module-home/group-tabs'
+import { warehouseGroupTabs } from '../../../components/module-home/group-tabs'
+import type { DirectoryItem } from '../../../components/module-home/ui'
 import type { StagedStockRowView } from './PutawayQueue'
 import type { WarehouseTieOutRowView } from './WarehousesPanel'
 import type { AttentionItem } from '../purchasing/sections'
@@ -38,14 +40,16 @@ import type { AttentionItem } from '../purchasing/sections'
  * control accounts; beside it sit the stock awaiting putaway and the
  * warehouse and putaway-rule setup sections re-homed from Setup. Below them,
  * the availability and replenishment sections summarise the reader's default
- * legal entity and drill into the two reports.
+ * legal entity and drill into the two reports. With Fulfillment on, a
+ * fulfilment queue drills to the open pick lists and the shipments still to
+ * complete, and the carrier setup section joins the re-homed setup.
  *
  * Every figure is read through the engine for the caller's visible legal
  * entities, so a subsidiary-restricted reader sees their own stock and the
  * control balance of their own entities, never another's.
  */
 
-type Tabs = Awaited<ReturnType<typeof groupTabs>>
+type Tabs = Awaited<ReturnType<typeof warehouseGroupTabs>>
 
 export interface WarehouseData {
   title: string
@@ -84,6 +88,14 @@ export interface WarehouseData {
   showSupplyRefusal: boolean
   setupTitle: string
   rulesTitle: string
+  /** Fulfillment on and the viewer can fulfil orders. */
+  showFulfillment: boolean
+  /** Fulfillment on and the viewer manages setup: carriers are re-homed here. */
+  showCarriers: boolean
+  fulfillmentTitle: string
+  fulfillmentHint: string
+  fulfillmentQueue: DirectoryItem[]
+  carriersTitle: string
   newDrawer: { locations: { id: string; name: string }[]; closeHref: string } | null
   showNewDrawer: boolean
 }
@@ -111,7 +123,10 @@ export async function loadWarehouse(
 
   const tieOut = await warehouseStockTieOut(db, orgId, subsidiaryIds)
   const staged = await listStagedStock(db, orgId, subsidiaryIds)
-  const tabs = await groupTabs('warehouse', '/warehouse', { orgId })
+  const tabs = await warehouseGroupTabs(authz, '/warehouse')
+  const fulfillmentOn = await isFeatureEnabled(orgId, 'fulfillment')
+  const showFulfillment = fulfillmentOn && can(authz, 'orders.fulfill')
+  const queue = showFulfillment ? await fulfillmentQueueCounts(orgId, authz.allowedSubsidiaryIds) : null
   const showNew = canManage && pickString(sp.warehouseNew) === '1'
   const locations = showNew
     ? (await db.execute<{ id: string; name: string }>(sql`
@@ -215,6 +230,35 @@ export async function loadWarehouse(
     showSupplyRefusal: supplyRefusal !== null,
     setupTitle: t('setup.warehouses'),
     rulesTitle: t('setup.rules'),
+    showFulfillment,
+    showCarriers: fulfillmentOn && can(authz, 'admin.setup.manage'),
+    fulfillmentTitle: t('fulfillment.title'),
+    fulfillmentHint: t('fulfillment.hint'),
+    fulfillmentQueue: queue
+      ? [
+          {
+            href: '/picks?stage=open',
+            label: t('fulfillment.openPickLists'),
+            iconKey: 'list-checks',
+            badge: {
+              value: String(queue.openPickLists),
+              hint: t('fulfillment.openPickListsHint'),
+              tone: queue.openPickLists > 0 ? 'warning' : 'positive',
+            },
+          },
+          {
+            href: '/shipments?stage=open',
+            label: t('fulfillment.shipmentsToComplete'),
+            iconKey: 'truck',
+            badge: {
+              value: String(queue.shipmentsToComplete),
+              hint: t('fulfillment.shipmentsToCompleteHint'),
+              tone: queue.shipmentsToComplete > 0 ? 'warning' : 'positive',
+            },
+          },
+        ]
+      : [],
+    carriersTitle: t('setup.carriers'),
     newDrawer: showNew ? { locations, closeHref: '/warehouse' } : null,
     showNewDrawer: showNew,
   }
@@ -298,6 +342,13 @@ export function warehouseSpec(data: WarehouseData): PageSpec {
           }),
         ]),
         panel({
+          title: f('fulfillmentTitle'),
+          iconKey: 'list-checks',
+          hint: f('fulfillmentHint'),
+          when: f('showFulfillment'),
+          blocks: [widgetBlock('live-directory', { items: data.fulfillmentQueue })],
+        }),
+        panel({
           title: f('setupTitle'),
           iconKey: 'settings',
           when: f('canSetup'),
@@ -308,6 +359,12 @@ export function warehouseSpec(data: WarehouseData): PageSpec {
           iconKey: 'settings',
           when: f('canSetup'),
           blocks: [widgetBlock('setup-section', { entityKey: 'putaway-rules', basePath: '/warehouse', rowParam: 'rule', sp: data.currentParams })],
+        }),
+        panel({
+          title: f('carriersTitle'),
+          iconKey: 'settings',
+          when: f('showCarriers'),
+          blocks: [widgetBlock('setup-section', { entityKey: 'carriers', basePath: '/warehouse', rowParam: 'carrier', sp: data.currentParams })],
         }),
       ]),
       {

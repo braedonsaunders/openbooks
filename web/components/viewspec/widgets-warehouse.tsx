@@ -3,10 +3,15 @@ import { NewWarehouseButton, NewWarehouseDrawer } from '../../app/(app)/warehous
 import { PutawayQueue } from '../../app/(app)/warehouse/PutawayQueue'
 import { WarehousesPanel } from '../../app/(app)/warehouse/WarehousesPanel'
 import { ReplenishmentProposals } from '../../app/(app)/reports/replenishment/ReplenishmentProposals'
+import { PickListDrawer } from '../../app/(app)/picks/PickListDrawer'
+import { NewPickListDrawer } from '../../app/(app)/picks/NewPickListDrawer'
+import { ShipmentDrawer } from '../../app/(app)/shipments/ShipmentDrawer'
 import { str, type WidgetRenderer } from './widget-props'
 
 /** Warehouse adapters: the cockpit's tie-out hero, putaway queue and create
- *  drawer, and the Replenishment report's proposal lines. */
+ *  drawer; the Replenishment report's proposal lines; and the fulfilment
+ *  drawers placed by the pick-list and shipment lists. Each drawer is keyed
+ *  by its record so switching records resets its client state. */
 export const WAREHOUSE_WIDGETS = {
   'warehouses-panel': (props) => (
     <WarehousesPanel
@@ -40,4 +45,20 @@ export const WAREHOUSE_WIDGETS = {
       canOrder={props.canOrder === true}
     />
   ),
+  'pick-list-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof PickListDrawer>['data'] | null
+    if (!drawer) return null
+    return <PickListDrawer key={drawer.document.id} data={drawer} />
+  },
+  'new-pick-list-drawer': (props) => {
+    const drawer = props.drawer as ComponentProps<typeof NewPickListDrawer>['data'] | null
+    if (!drawer) return null
+    return <NewPickListDrawer key={drawer.salesOrder.id} data={drawer} />
+  },
+  'shipment-drawer': (props) => {
+    const drawer = props.drawer as (ComponentProps<typeof ShipmentDrawer>['data'] & { initialMode?: 'view' | 'edit' }) | null
+    if (!drawer) return null
+    const { initialMode, ...data } = drawer
+    return <ShipmentDrawer key={data.document.id} data={data} initialMode={initialMode} />
+  },
 } satisfies Record<string, WidgetRenderer>

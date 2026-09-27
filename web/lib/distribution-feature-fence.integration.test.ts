@@ -38,7 +38,8 @@ export async function getLocale() { return 'en' }
 registerHooks({ resolve(specifier, context, next) {
   const parent = context.parentURL ?? ''
   const authzImport = specifier === './authz' || specifier.endsWith('/lib/authz')
-  const fenced = ['/lib/api/route', '/lib/feature-gates', '/warehouse/view', '/api/admin/setup/', '/reports/', '/api/reports/statement/'].some((path) => parent.includes(path))
+  const fenced = ['/lib/api/route', '/lib/feature-gates', '/warehouse/view', '/api/admin/setup/', '/reports/',
+    '/api/reports/statement/', '/picks/view', '/shipments/view', '/sales-orders/view'].some((path) => parent.includes(path))
   if (authzImport && fenced) return { shortCircuit: true, url: AUTHZ_DOUBLE }
   const reportCopy = ['/reports/', '/lib/availability-report'].some((path) => parent.includes(path))
   if (specifier === 'next-intl/server' && reportCopy) return { shortCircuit: true, url: INTL_DOUBLE }
@@ -235,5 +236,148 @@ test('availability and replenishment vanish with warehousing, and releasable bac
     await engineRefusal(() => replenishmentProposals(db, org.orgId, query))
     await engineRefusal(() => itemTool.execute({ itemId: org.items.fifo }, state.authz as never))
     await engineRefusal(() => replenishmentTool.execute({}, state.authz as never))
+  })
+})
+
+// ---- Fulfillment ----------------------------------------------------------
+
+const pickRoutes = await import('../app/api/picks/route')
+const pickRoute = await import('../app/api/picks/[id]/route')
+const pickReleaseRoute = await import('../app/api/picks/[id]/release/route')
+const pickVoidRoute = await import('../app/api/picks/[id]/void/route')
+const pickCandidatesRoute = await import('../app/api/picks/candidates/route')
+const shipmentRoutes = await import('../app/api/shipments/route')
+const shipmentRoute = await import('../app/api/shipments/[id]/route')
+const shipmentCompleteRoute = await import('../app/api/shipments/[id]/complete/route')
+const shipmentVoidRoute = await import('../app/api/shipments/[id]/void/route')
+const shipmentTrackingRoute = await import('../app/api/shipments/[id]/send-tracking/route')
+const backordersRoute = await import('../app/api/sales-orders/[id]/backorders/route')
+const { loadPicks } = await import('../app/(app)/picks/view')
+const { loadShipments } = await import('../app/(app)/shipments/view')
+const { orderFulfillmentActions } = await import('../app/(app)/sales-orders/view')
+const { enabledListSource } = await import('./list/sources')
+const { guardReportEntity, hiddenReportEntityKeys } = await import('./report-authz')
+const { FULFILLMENT_TOOLS } = await import('./assistant/tools-fulfillment')
+const fulfillment = await import('@openbooks/engine/src/sales/fulfillment.ts')
+const { backorderPosition, cancelOrderLineRemainder } = await import('@openbooks/engine/src/sales/backorders.ts')
+const { salesOrderLineRemainders } = await import('@openbooks/engine/src/records/order-line-remainders.ts')
+
+const FULFILLMENT_REMEDY = 'Turn on Warehousing and Fulfillment on Company Settings → Features'
+
+async function fulfillmentEvidence(orgId: string) {
+  return withBypassContext(async () => (await db.execute<{ state: unknown }>(sql`select jsonb_build_object(
+    'carriers', (select jsonb_agg(to_jsonb(c) order by id) from carriers c where org_id = ${orgId}),
+    'documents', (select jsonb_agg(to_jsonb(d) - 'revision_seq' order by id) from documents d where org_id = ${orgId} and kind in ('pick_list', 'shipment')),
+    'stages', (select jsonb_agg(to_jsonb(f) order by document_id) from fulfillment_documents f where org_id = ${orgId}),
+    'lines', (select jsonb_agg(to_jsonb(l) order by line_id) from fulfillment_lines l where org_id = ${orgId}),
+    'cancellations', (select jsonb_agg(to_jsonb(x) order by id) from order_line_cancellations x where org_id = ${orgId}),
+    'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${orgId} and table_name in ('fulfillment_documents', 'document_lines', 'carriers'))
+  ) as state`)).rows[0]!.state)
+}
+
+async function fulfillmentRefusal(run: () => Promise<unknown>) {
+  await assert.rejects(withBypassContext(run), (error: unknown) =>
+    error instanceof fulfillment.FulfillmentRefusal && error.code === 'feature_disabled' && error.remedy === FULFILLMENT_REMEDY)
+}
+
+test('fulfillment off hides picks, shipments and backorders at every layer and preserves their rows', { skip: !DB }, async () => {
+  await withFencedOrg(async (org, actorId) => {
+    state.authz = { ...(state.authz as object), permissions: new Set(['assistant.use', 'items.read', 'items.post', 'orders.fulfill', 'ar.read', 'admin.setup.manage']) }
+    await setFeature(org.orgId, 'warehousing', true)
+    await setFeature(org.orgId, 'fulfillment', true)
+    const [bin, orderId, lineId] = [randomUUID(), randomUUID(), randomUUID()]
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into stock_locations (id, org_id, location_id, parent_id, code, kind, is_active)
+        values (${bin}, ${org.orgId}, ${org.locationId}, ${org.stockLocationId}, 'F-A1', 'bin', true)`)
+      await receiveInventory(org.orgId, actorId, {
+        itemId: org.items.fifo, stockLocationId: bin, quantity: '10', unitCost: '2',
+        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+      })
+      await db.execute(sql`
+        insert into documents (id, org_id, kind, document_number, party_id, document_date, currency, status, subsidiary_id, subtotal, tax_total, total)
+        values (${orderId}, ${org.orgId}, 'sales_order', 'SO-FENCE', ${org.customerId}, ${org.date}, 'CAD', 'draft', ${org.subsidiaryId}, '0', '0', '0')`)
+      await db.execute(sql`
+        insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount, tax_amount, stock_location_id)
+        values (${lineId}, ${org.orgId}, ${orderId}, 1, ${org.items.fifo}, ${org.accounts.revenue}, '8', '10', '80', '0', ${org.stockLocationId})`)
+      await db.execute(sql`update documents set status = 'approved', subtotal = '80', total = '80' where id = ${orderId}`)
+    })
+    assert.ok((await navHrefs(org.orgId)).includes('/picks'), 'the nav entry is present while the feature is on')
+    const carrier = await setupWrite('POST', 'carriers', { code: 'PARCEL', name: 'Parcel Co', services: ['Ground'], trackingUrlTemplate: 'https://track.example/{tracking}' })
+    assert.equal(carrier.status, 200, JSON.stringify(await carrier.clone().json()))
+    const carrierId = String((await carrier.json()).id)
+    const scope = { allowedSubsidiaryIds: null }
+    const pickList = await withBypassContext(() => db.transaction((tx) => fulfillment.createPickList(tx, org.orgId, actorId, {
+      salesOrderId: orderId, lines: [{ salesOrderLineId: lineId, binId: bin, quantity: '5' }], ...scope,
+    })))
+    await withBypassContext(() => fulfillment.releasePickList(org.orgId, actorId, { pickListId: pickList.id, ...scope }))
+    const shipment = await withBypassContext(() => db.transaction((tx) => fulfillment.createShipment(tx, org.orgId, actorId, { pickListId: pickList.id, ...scope })))
+    await withBypassContext(() => db.transaction((tx) => fulfillment.setShipmentCarrier(tx, org.orgId, actorId, { shipmentId: shipment.id, carrierId, service: 'Ground', ...scope })))
+    await withBypassContext(() => db.transaction((tx) => cancelOrderLineRemainder(tx, org.orgId, actorId, {
+      documentId: orderId, lineId, quantity: '1', reason: 'customer reduced the order', ...scope,
+    })))
+    const openAfterCancel = async () => (await withBypassContext(() => salesOrderLineRemainders(db, org.orgId, { lineId })))[0]!.open
+    assert.equal(await openAfterCancel(), '7.00000000')
+    const before = await fulfillmentEvidence(org.orgId)
+
+    const assertUnreachable = async (feature: string) => {
+      const hrefs = await navHrefs(org.orgId)
+      assert.equal(hrefs.includes('/picks') || hrefs.includes('/shipments'), false, 'both nav entries disappear')
+      for (const load of [loadPicks, loadShipments]) {
+        await assert.rejects(load({}), (error: unknown) => String((error as { digest?: string }).digest).includes(`/feature-required?feature=${feature}`))
+      }
+      const on = (id: string) => ({ params: Promise.resolve({ id }) })
+      const responses = [
+        await pickRoutes.POST(json('POST', '/api/picks', { salesOrderId: orderId, lines: [{ salesOrderLineId: lineId, binId: bin, quantity: '1' }] })),
+        await pickRoute.GET(json('GET', `/api/picks/${pickList.id}`), on(pickList.id)),
+        await pickReleaseRoute.POST(json('POST', `/api/picks/${pickList.id}/release`), on(pickList.id)),
+        await pickVoidRoute.POST(json('POST', `/api/picks/${pickList.id}/void`, { reason: 'x' }), on(pickList.id)),
+        await pickCandidatesRoute.GET(json('GET', `/api/picks/candidates?salesOrderId=${orderId}`)),
+        await shipmentRoutes.POST(json('POST', '/api/shipments', { pickListId: pickList.id })),
+        await shipmentRoute.GET(json('GET', `/api/shipments/${shipment.id}`), on(shipment.id)),
+        await shipmentRoute.PATCH(json('PATCH', `/api/shipments/${shipment.id}`, { cartons: [] }), on(shipment.id)),
+        await shipmentCompleteRoute.POST(json('POST', `/api/shipments/${shipment.id}/complete`), on(shipment.id)),
+        await shipmentVoidRoute.POST(json('POST', `/api/shipments/${shipment.id}/void`, { reason: 'x' }), on(shipment.id)),
+        await shipmentTrackingRoute.POST(json('POST', `/api/shipments/${shipment.id}/send-tracking`, {}), on(shipment.id)),
+        await backordersRoute.GET(json('GET', `/api/sales-orders/${orderId}/backorders`), on(orderId)),
+        await backordersRoute.POST(json('POST', `/api/sales-orders/${orderId}/backorders`, { lineId, quantity: '1', reason: 'x' }), on(orderId)),
+      ]
+      for (const response of responses) {
+        assert.equal(response.status, 404)
+        assert.deepEqual(await response.json(), { error: 'not_found' })
+      }
+      await fulfillmentRefusal(() => db.transaction((tx) => fulfillment.createPickList(tx, org.orgId, actorId, {
+        salesOrderId: orderId, lines: [{ salesOrderLineId: lineId, binId: bin, quantity: '1' }], ...scope,
+      })))
+      await fulfillmentRefusal(() => fulfillment.releasePickList(org.orgId, actorId, { pickListId: pickList.id, ...scope }))
+      await fulfillmentRefusal(() => db.transaction((tx) => fulfillment.voidShipment(tx, org.orgId, actorId, { shipmentId: shipment.id, reason: 'x', ...scope })))
+      await fulfillmentRefusal(() => fulfillment.getFulfillmentDocument(db, org.orgId, shipment.id, null))
+      await assert.rejects(withBypassContext(() => backorderPosition(db, org.orgId, { documentId: orderId, ...scope })), { code: 'feature_disabled' })
+      assert.equal((await setupWrite('PATCH', 'carriers', { id: carrierId, name: 'Renamed' })).status, 404)
+      assert.equal((await setupWrite('POST', 'carriers', { code: 'OTHER', name: 'Other', services: ['Ground'] })).status, 404)
+      assert.equal(await enabledListSource(org.orgId, 'pick_list'), null)
+      assert.equal(await enabledListSource(org.orgId, 'shipment'), null)
+      assert.ok((await hiddenReportEntityKeys(state.authz as never)).includes('backorders'))
+      assert.equal((await guardReportEntity(state.authz as never, { entity: 'backorders' }))?.status, 404)
+      assert.deepEqual(await orderFulfillmentActions(state.authz as never), { backorders: false, pickLists: false },
+        'the order drawer offers neither Backorders nor Create pick list')
+      const features = await resolvedFeatureState(org.orgId)
+      for (const tool of FULFILLMENT_TOOLS) {
+        assert.equal(canRunTool(state.authz as never, tool, features), false, `${tool.name} is withheld`)
+      }
+      await fulfillmentRefusal(() => FULFILLMENT_TOOLS[0]!.execute({}, state.authz as never))
+      assert.equal(await openAfterCancel(), '7.00000000', 'cancelled quantity is still subtracted')
+    }
+
+    await setFeature(org.orgId, 'fulfillment', false)
+    await assertUnreachable('fulfillment')
+    // Fulfillment on but Warehousing off: fulfillment still resolves off.
+    await setFeature(org.orgId, 'fulfillment', true)
+    await setFeature(org.orgId, 'warehousing', false)
+    await assertUnreachable('fulfillment')
+
+    await setFeature(org.orgId, 'warehousing', true)
+    assert.deepEqual(await fulfillmentEvidence(org.orgId), before, 'off and on again changes no carrier, pick list, shipment, cancellation or audit row')
+    assert.equal(await openAfterCancel(), '7.00000000')
   })
 })
