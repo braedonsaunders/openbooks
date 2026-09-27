@@ -1,4 +1,4 @@
-import type { CoaEntry, PlanSpec, Profile, SubscriberSpec } from "./types.ts";
+import type { CoaEntry, MeteredProductSpec, PlanSpec, Profile, SubscriberSpec, UsageSubscriptionSpec } from "./types.ts";
 
 /**
  * A B2B SaaS company running on RECURRING subscription revenue — the polar
@@ -8,7 +8,7 @@ import type { CoaEntry, PlanSpec, Profile, SubscriberSpec } from "./types.ts";
  * plans are billed up front and recognized over twelve months (the classic
  * deferred-revenue liability); monthly plans recognize in-month. On top of the
  * base MRR ride expansion (seat upgrades → prorated), churn (cancellations),
- * dunning on failed collections, and usage overages. The cost base is a software
+ * dunning on failed collections, and metered API usage. The cost base is a software
  * company's: hosting/infrastructure + a big R&D and S&M payroll, near-zero COGS
  * of goods. This exercises a completely different swath of the product than the
  * contractor: subscriptions, deferred revenue, ratable recognition, and dunning.
@@ -52,7 +52,7 @@ const SAAS_COA: CoaEntry[] = [
   // ---- Income ----
   ["subscriptionRevenue", "4000", "Subscription Revenue (recognized)", "income"],
   ["revenueService", "4001", "Subscription Revenue — Other", "income"],
-  ["usageRevenue", "4010", "Usage & Overage Revenue", "income"],
+  ["usageRevenue", "4010", "Usage Revenue", "income"],
   ["servicesRevenue", "4020", "Onboarding & Professional Services", "income"],
   ["revenueProduct", "4030", "Device / Hardware Revenue", "income"],
   ["otherIncome", "4900", "Other Income", "income_other"],
@@ -114,6 +114,34 @@ const SUBSCRIBERS: SubscriberSpec[] = [
   { customer: "Continental Bank Corp", plan: "enterprise_a", quantity: 200 },
 ];
 
+const METERED_PRODUCTS: MeteredProductSpec[] = [{
+  key: "api-requests",
+  name: "Northstar API Requests",
+  unit: "1,000 requests",
+  aggregation: "sum",
+  bands: [
+    { upToQty: "5000.00000000", unitPrice: "0.42000000" },
+    { upToQty: "20000.00000000", unitPrice: "0.28000000" },
+    { upToQty: null, unitPrice: "0.18000000" },
+  ],
+}];
+
+const USAGE_SUBSCRIPTIONS: UsageSubscriptionSpec[] = [
+  { customer: "Rivera Dental Group", product: "api-requests", volume: { initialMonthlyQuantity: "8000", monthlyChangeQuantity: "500", dailyVariationPercent: 4 } },
+  { customer: "Kettle & Co Roasters", product: "api-requests", volume: { initialMonthlyQuantity: "22000", monthlyChangeQuantity: "-3000", minimumMonthlyQuantity: "8000", dailyVariationPercent: 4 } },
+  { customer: "Brightpath Tutoring", product: "api-requests", volume: { initialMonthlyQuantity: "6000", monthlyChangeQuantity: "250", dailyVariationPercent: 3 }, pauseAfterDays: 23, resumeAfterDays: 38 },
+  { customer: "Nomad Gear Outfitters", product: "api-requests", volume: { initialMonthlyQuantity: "18000", monthlyChangeQuantity: "800", dailyVariationPercent: 4 } },
+  { customer: "Harbor Freight Logistics", product: "api-requests", volume: { initialMonthlyQuantity: "35000", monthlyChangeQuantity: "1800", dailyVariationPercent: 5 } },
+  { customer: "Summit Physical Therapy", product: "api-requests", volume: { initialMonthlyQuantity: "16000", monthlyChangeQuantity: "600", dailyVariationPercent: 4 } },
+  { customer: "Lumen Media Agency", product: "api-requests", volume: { initialMonthlyQuantity: "65000", monthlyChangeQuantity: "2500", dailyVariationPercent: 5 } },
+  { customer: "Vertex Manufacturing", product: "api-requests", volume: { initialMonthlyQuantity: "85000", monthlyChangeQuantity: "3000", dailyVariationPercent: 5 } },
+  { customer: "Cobalt Fintech", product: "api-requests", volume: { initialMonthlyQuantity: "42000", monthlyChangeQuantity: "1200", dailyVariationPercent: 4 }, annualCommitAmount: "240000" },
+  { customer: "Meridian Health Network", product: "api-requests", volume: { initialMonthlyQuantity: "78000", monthlyChangeQuantity: "3000", dailyVariationPercent: 5 } },
+  { customer: "Atlas Retail Group", product: "api-requests", volume: { initialMonthlyQuantity: "24000", monthlyChangeQuantity: "1200", dailyVariationPercent: 4 }, prepaidPack: { amount: "30000.0000" } },
+  { customer: "Orion Aerospace", product: "api-requests", volume: { initialMonthlyQuantity: "110000", monthlyChangeQuantity: "4000", dailyVariationPercent: 5 } },
+  { customer: "Continental Bank Corp", product: "api-requests", volume: { initialMonthlyQuantity: "145000", monthlyChangeQuantity: "5000", dailyVariationPercent: 5 } },
+];
+
 export const saasCompany: Profile = {
   id: "saas",
   name: "Northstar Cloud",
@@ -124,7 +152,8 @@ export const saasCompany: Profile = {
   openingScale: "2.0",
   subscriptionPlans: PLANS,
   subscribers: SUBSCRIBERS,
-  usageBillingRate: 0.25,
+  meteredProducts: METERED_PRODUCTS,
+  usageSubscriptions: USAGE_SUBSCRIPTIONS,
   // Payroll (R&D + S&M + G&A) is a software company's dominant cost and is FIXED
   // monthly (not revenue-pegged) — the SaaS driver books it at month-end so annual
   // up-front billings don't distort the burn.
@@ -141,9 +170,8 @@ export const saasCompany: Profile = {
     { name: "Fenwick Legal", termDays: 30, expenseCategories: ["professionalFees"], billMin: 4000, billMax: 30000 },
     { name: "Corporate Travel", termDays: 30, expenseCategories: ["travel", "meals"], billMin: 1500, billMax: 20000 },
   ],
-  // Subscribers are the revenue source; these customer records back the
-  // subscriptions (and take usage-overage + services invoices). No per-day
-  // random invoicing — revenue is 100% recurring.
+  // These customers back recurring subscriptions and metered API usage.
+  // No unrelated per-day sales invoices dilute the subscription and usage flows.
   customers: [
     "Rivera Dental Group", "Kettle & Co Roasters", "Brightpath Tutoring", "Nomad Gear Outfitters",
     "Harbor Freight Logistics", "Summit Physical Therapy", "Lumen Media Agency", "Vertex Manufacturing",

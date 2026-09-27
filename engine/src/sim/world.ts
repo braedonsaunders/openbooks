@@ -10,6 +10,7 @@ import { mul, neg, roundMoney, sum } from "../money/money.ts";
 import { SIM_ORG_PREFIX } from "./db-guard.ts";
 import type { Profile } from "./profiles/index.ts";
 import { provisionResourcingPlan } from "./resourcing-plan.ts";
+import { provisionSaasUsage } from "./saas-usage.ts";
 import { Rng } from "./rng.ts";
 
 /**
@@ -480,7 +481,7 @@ export async function provisionOrg(
       await db.execute(sql`
         update orgs
            set settings = coalesce(settings, '{}'::jsonb)
-             || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb) || '{"subscriptionBilling": true}'::jsonb)
+             || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb) || '{"subscriptionBilling": true,"usageBilling": true,"saasMetrics": true}'::jsonb)
          where id = ${orgId}`);
       // One straight-line recognition rule per distinct term length.
       const ruleByTerm = new Map<number, string>();
@@ -553,6 +554,9 @@ export async function provisionOrg(
       vendors, customers, actors, periods, employees, timeTypeId, laborItemId,
       engagements, jobs, subscriptions,
     };
+    if (profile.meteredProducts?.length) {
+      await provisionSaasUsage(profile, simWorld, window);
+    }
     if (profile.resourcing) await provisionResourcingPlan({
       profile,
       plan: profile.resourcing,

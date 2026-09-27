@@ -391,6 +391,8 @@ export const INDUSTRIES: IndustryDef[] = [
     category: 'services',
     features: {
       subscriptionBilling: true,
+      usageBilling: true,
+      saasMetrics: true,
       advancedSubscriptions: true,
       revenueRecognition: true,
       projects: true,

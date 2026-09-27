@@ -80,6 +80,42 @@ export interface SubscriberSpec {
   quantity: number;
 }
 
+/** A graduated usage price; the final band has no upper quantity bound. */
+export interface MeteredBandSpec {
+  upToQty: string | null;
+  unitPrice: string;
+}
+
+/** A metered product and its published graduated price schedule. */
+export interface MeteredProductSpec {
+  key: string;
+  name: string;
+  unit: string;
+  aggregation: "sum";
+  bands: MeteredBandSpec[];
+}
+
+/** Monthly quantity plan for one subscriber's metered product. */
+export interface UsageVolumeShape {
+  initialMonthlyQuantity: string;
+  monthlyChangeQuantity: string;
+  minimumMonthlyQuantity?: string;
+  /** Daily variation around the monthly trend, in whole percent. */
+  dailyVariationPercent: number;
+}
+
+/** A metered subscription attached to one of the profile's existing subscribers. */
+export interface UsageSubscriptionSpec {
+  customer: string;
+  product: string;
+  volume: UsageVolumeShape;
+  annualCommitAmount?: string;
+  prepaidPack?: { amount: string };
+  /** Optional lifecycle dates are offsets from this simulation's start date. */
+  pauseAfterDays?: number;
+  resumeAfterDays?: number;
+}
+
 /** The five governed construction billing methods (project_types keys). */
 export type BillingMethod =
   | "time_and_materials"
@@ -171,12 +207,14 @@ export interface Profile {
    * present, the company runs on RECURRING revenue: the recurring-billing engine
    * bills subscriptions on their cycle, invoices park in deferred revenue, and the
    * revenue-recognition engine drains deferred → earned ratably. Churn/expansion,
-   * dunning, and usage overages ride on top.
+   * dunning, seat changes, and metered API usage ride on top.
    */
   subscriptionPlans?: PlanSpec[];
   subscribers?: SubscriberSpec[];
-  /** Fraction of subscribers billed monthly for usage overages (0-1). */
-  usageBillingRate?: number;
+  /** Metered products published when the simulation organization is provisioned. */
+  meteredProducts?: MeteredProductSpec[];
+  /** Per-subscriber usage and optional commit, prepaid, or lifecycle behavior. */
+  usageSubscriptions?: UsageSubscriptionSpec[];
   /** Staffing practices, seasonal demand and tentative bookings provisioned for this firm. */
   resourcing?: ResourcingSimPlan;
   /** SaaS fixed monthly payroll/opex (R&D + S&M + G&A), booked month-end. */
