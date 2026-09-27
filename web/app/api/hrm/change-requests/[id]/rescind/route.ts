@@ -1,53 +1,48 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { rescindEmploymentChange } from "@openbooks/engine/src/automations/event-verbs.ts";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
 import { hrmAuthorizationResponse } from "../../../../../../lib/api/record-not-found";
-import { guardPermission } from "../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
-import { changeRequestErrorResponse } from '../../_lib';
+import { changeRequestErrorResponse } from "../../_lib";
 import { automationErrorResponse } from "../../../../automations/_lib";
 import { rescindBody } from "../../../../automations/bodies";
-import { notFound } from "@/lib/api/responses";
-
-
-export const runtime = "nodejs";
-
 /**
  * Rescind a COMPLETED employment change: closes the version it created,
  * reopens the prior image, and appends the verb rescind event. Danger
  * action on a completed change; refuses with a dependent change or a
  * consumed payroll period.
  */
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.employment.approve");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmEventVerbs"))) {
-    return notFound("record");
-  }
-  const { id } = await ctx.params;
-  if (!isUuid(id)) return NextResponse.json({ error: "change id must be a uuid" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, rescindBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const result = await rescindEmploymentChange({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      changeId: id,
-      reason: parsedBody.data.reason,
-    });
-    return NextResponse.json(result, { status: 201 });
-  } catch (e) {
-    // Uniform HRM mapping first — the permission regex below
-    // must not swallow scope denials into the request-error shape.
-    if (e instanceof HrmAuthorizationError) return hrmAuthorizationResponse(e);
-    if (e instanceof Error && /requires the .* permission/.test(e.message)) {
-      return changeRequestErrorResponse(e);
+export const POST = defineRoute({
+  permission: "hrm.employment.approve",
+  feature: "hrmEventVerbs",
+  body: rescindBody,
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params, body }) => {
+    const { id } = params;
+    if (!isUuid(id))
+      return NextResponse.json(
+        { error: "change id must be a uuid" },
+        { status: 400 },
+      );
+    try {
+      const result = await rescindEmploymentChange({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        changeId: id,
+        reason: body.reason,
+      });
+      return NextResponse.json(result, { status: 201 });
+    } catch (e) {
+      // Uniform HRM mapping first — the permission regex below
+      // must not swallow scope denials into the request-error shape.
+      if (e instanceof HrmAuthorizationError)
+        return hrmAuthorizationResponse(e);
+      if (e instanceof Error && /requires the .* permission/.test(e.message)) {
+        return changeRequestErrorResponse(e);
+      }
+      return automationErrorResponse(e);
     }
-    return automationErrorResponse(e);
-  }
-}
+  },
+});

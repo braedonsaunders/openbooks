@@ -1,31 +1,32 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { openEnrollmentWindow } from "@openbooks/engine/src/hrm/benefits/windows.ts";
-import { guardPermission } from "../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
 import { benefitsErrorResponse } from "../../../benefits/_lib";
 import { emptyBody } from "../../bodies";
-import { notFound } from "@/lib/api/responses";
-
-
-export const runtime = "nodejs";
-
 /** Open a draft window (overlap and inverted-range refusals name the remedy). */
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.benefits.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const { id } = await ctx.params;
-  if (!isUuid(id)) return NextResponse.json({ error: "window id must be a uuid" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, emptyBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const window = await openEnrollmentWindow({ orgId: gate.user.orgId, actorId: gate.user.id, windowId: id });
-    return NextResponse.json({ window });
-  } catch (e) {
-    return benefitsErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.benefits.manage",
+  feature: "hrm",
+  body: emptyBody,
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params, body }) => {
+    const { id } = params;
+    if (!isUuid(id))
+      return NextResponse.json(
+        { error: "window id must be a uuid" },
+        { status: 400 },
+      );
+    try {
+      const window = await openEnrollmentWindow({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        windowId: id,
+      });
+      return NextResponse.json({ window });
+    } catch (e) {
+      return benefitsErrorResponse(e);
+    }
+  },
+});

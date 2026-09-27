@@ -31,6 +31,7 @@ const mockSources = new Map<string, string>([
       export async function getAuthz() {
         return state.authz
       }
+      export async function guardPermission() { return state.authz }; export function guardRootSubsidiaryScope() { return null }; export function guardUnrestrictedScope() { return null }
     `,
   ],
   [
@@ -80,6 +81,7 @@ const mockSources = new Map<string, string>([
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmGoalItemRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
+  ["@/lib/features", "mock:features"],
   ["../../../../../lib/authz", "mock:authz"],
   ["../../../../../lib/features", "mock:features"],
   ["@openbooks/engine/src/hrm/performance/goals.ts", "mock:service"],
@@ -88,7 +90,7 @@ const mockUrls = new Map<string, string>([
 
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
+      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" ? "mock:authz" : undefined);
       if (mocked) return { url: mocked, shortCircuit: true };
       return nextResolve(specifier);
     },
@@ -100,7 +102,6 @@ const mockUrls = new Map<string, string>([
   });
   const routeUrl = "./route.ts?hrm-goal-item";
   const itemRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  hooks.deregister();
 
 
 const GOAL_ID = "00000000-0000-4000-8000-000000000071";

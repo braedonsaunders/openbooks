@@ -279,6 +279,82 @@ export interface ListRequirementsInput {
   readonly subjectId?: string;
 }
 
+export interface RequirementSubjectOption {
+  readonly id: string;
+  readonly label: string;
+}
+
+export interface ListRequirementSubjectOptionsInput {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly subjectKind: RequirementSubjectKind;
+  readonly query: string;
+  readonly limit: number;
+}
+
+/** Search subjects that can receive qualification requirements within the caller's scope. */
+export async function listRequirementSubjectOptions(
+  exec: SqlExecutor,
+  input: ListRequirementSubjectOptionsInput,
+): Promise<RequirementSubjectOption[]> {
+  const orgId = requireId(input.orgId, "orgId");
+  const actorId = requireId(input.actorId, "actorId");
+  if (!SUBJECT_KINDS.includes(input.subjectKind)) {
+    throw new HrmQualificationError(`Unknown requirement subject ${String(input.subjectKind)} — use one of ${SUBJECT_KINDS.join(", ")}.`);
+  }
+  if (typeof input.query !== "string" || input.query.trim().length < 2) {
+    throw new HrmQualificationError("Search text must contain at least two characters — enter a longer subject name or code.");
+  }
+  if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 101) {
+    throw new HrmQualificationError("The subject search limit must be between 1 and 101 — use the bounded picker limit.");
+  }
+  const allowed = await requireAggregateCertificationsManage(exec, orgId, actorId);
+  await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification requirements");
+  const ids = allowed === null ? null : `{${[...allowed].join(",")}}`;
+  const pattern = `%${input.query.trim().replace(/[\\%_]/g, "\\$&")}%`;
+  if (input.subjectKind === "project") {
+    return (await exec.execute<RequirementSubjectOption>(sql`
+      select id::text as id, name as label from projects
+       where org_id = ${orgId}::uuid
+         and (${ids}::uuid[] is null or subsidiary_id = any(${ids}::uuid[]))
+         and name ilike ${pattern} escape '\\'
+       order by name, id limit ${input.limit}
+    `)).rows;
+  }
+  if (input.subjectKind === "equipment") {
+    return (await exec.execute<RequirementSubjectOption>(sql`
+      select id::text as id, coalesce(name, serial_number, unit_number) as label
+        from equipment_units
+       where org_id = ${orgId}::uuid
+         and (${ids}::uuid[] is null or subsidiary_id = any(${ids}::uuid[]))
+         and coalesce(name, serial_number, unit_number) ilike ${pattern} escape '\\'
+       order by label, id limit ${input.limit}
+    `)).rows;
+  }
+  if (input.subjectKind === "position") {
+    const today = await businessToday(orgId);
+    return (await exec.execute<RequirementSubjectOption>(sql`
+      select p.id::text as id, p.position_code || ' · ' || v.title as label
+        from positions p
+        join position_versions v
+          on v.org_id = p.org_id and v.position_id = p.id and v.recorded_until is null
+         and v.effective_from <= ${today}::date
+         and (v.effective_to is null or v.effective_to > ${today}::date)
+       where p.org_id = ${orgId}::uuid and v.status <> 'closed'
+         and (${ids}::uuid[] is null or v.employer_subsidiary_id = any(${ids}::uuid[]))
+         and (p.position_code || ' ' || v.title) ilike ${pattern} escape '\\'
+       order by p.position_code, p.id limit ${input.limit}
+    `)).rows;
+  }
+  return (await exec.execute<RequirementSubjectOption>(sql`
+    select id::text as id, code || ' · ' || name as label
+      from hrm_work_classifications
+     where org_id = ${orgId}::uuid and is_active
+       and (code || ' ' || name || ' ' || trade) ilike ${pattern} escape '\\'
+     order by code, id limit ${input.limit}
+  `)).rows;
+}
+
 /** HR reads all; anyone else reads through the certifications read grant only. */
 export async function listRequirements(
   exec: SqlExecutor,

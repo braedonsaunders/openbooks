@@ -5,7 +5,6 @@ import { NextResponse } from "next/server";
 import { HrmQualificationError } from "@openbooks/engine/src/hrm/qualifications/errors.ts";
 import { pathToFileURL } from "node:url";
 
-/** Route gates and engine refusal mapping. */
 
 interface RouteState {
   gate: { user: { id: string; orgId: string }; allowedSubsidiaryIds?: ReadonlySet<string> | null } | { status: number };
@@ -50,6 +49,8 @@ const mockSources = new Map<string, string>([
         }
         return state.gate
       }
+      export async function getAuthz() { return state.gate && !('status' in state.gate) ? state.gate : null }
+      export function guardRootSubsidiaryScope() { return null }
     `,
   ],
   [
@@ -60,6 +61,7 @@ const mockSources = new Map<string, string>([
         if (key !== 'hrmCertifications') throw new Error('unexpected feature ' + key)
         return state.featureOn
       }
+      export async function subsidiaryFeatureEnabled() { return true }
     `,
   ],
   [
@@ -192,7 +194,7 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
+    const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier);
   },
@@ -212,7 +214,6 @@ const evidenceRoute = (await import("./[id]/evidence/route.ts")) as typeof impor
 const typesRoute = (await import("../qualification-types/route.ts")) as typeof import("../qualification-types/route.ts");
 const typeDetailRoute = (await import("../qualification-types/[id]/route.ts")) as typeof import("../qualification-types/[id]/route.ts");
 const categoriesRoute = (await import("../qualification-types/categories/route.ts")) as typeof import("../qualification-types/categories/route.ts");
-hooks.deregister();
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" }, allowedSubsidiaryIds: null };
@@ -404,7 +405,7 @@ test("type creation carries code and category into the service", async () => {
   ]);
 });
 
-test("F3-37: record, verify, renew and revoke refuse a read-only role before the service runs", async () => {
+test("record, verify, renew and revoke refuse a read-only role before the service runs", async () => {
   reset();
   routeState.perms = ["hrm.certifications.read", "hrm.self.read"];
   const params = { params: Promise.resolve({ id: "q-9" }) };

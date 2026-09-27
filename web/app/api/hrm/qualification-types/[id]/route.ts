@@ -1,36 +1,28 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { updateQualificationType } from "@openbooks/engine/src/hrm/qualifications/types.ts";
-import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { qualificationErrorResponse } from "../../qualifications/_lib";
 import { updateQualificationTypeBody } from "../../qualifications/bodies";
-import { notFound } from "@/lib/api/responses";
-
-
-export const runtime = "nodejs";
-
 /** Retire or correct a qualification type (code is immutable). */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.certifications.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
-    return notFound("record");
-  }
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
-  const parsedBody = await parseJsonBody(req, updateQualificationTypeBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const type = await updateQualificationType(db, {
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      typeId: (await params).id,
-      ...parsedBody.data,
-    });
-    return NextResponse.json({ type });
-  } catch (e) {
-    return qualificationErrorResponse(e);
-  }
-}
+export const PATCH = defineRoute({
+  permission: "hrm.certifications.manage",
+  feature: "hrmCertifications",
+  scope: "unrestricted",
+  body: updateQualificationTypeBody,
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params, body }) => {
+    try {
+      const type = await updateQualificationType(db, {
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        typeId: params.id,
+        ...body,
+      });
+      return NextResponse.json({ type });
+    } catch (e) {
+      return qualificationErrorResponse(e);
+    }
+  },
+});

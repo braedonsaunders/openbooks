@@ -2,10 +2,6 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// HR letters ride the upload body as base64 (bodies.ts caps fileBase64 at
-// 14M chars), so the 15 MiB upload ceiling is load-bearing: a real letter
-// exceeds the 1 MiB house default. The boundary itself stays REAL — mocking
-// parseJsonBody here would make the 413 assertions hollow.
 
 
 const mockSources = new Map<string, string>([
@@ -15,6 +11,8 @@ const mockSources = new Map<string, string>([
       export async function guardPermission() {
         return { user: { orgId: "org-1", id: "user-1" } };
       }
+      export async function getAuthz() { return { user: { orgId: "org-1", id: "user-1" } }; }
+      export function guardRootSubsidiaryScope() { return null }; export function guardUnrestrictedScope() { return null }
     `,
   ],
   [
@@ -23,6 +21,7 @@ const mockSources = new Map<string, string>([
       export async function isFeatureEnabled() {
         return true;
       }
+      export async function subsidiaryFeatureEnabled() { return true; }
     `,
   ],
   [
@@ -46,6 +45,8 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === "@/lib/authz" || specifier === "./authz") return { url: "mock:authz", shortCircuit: true };
+    if (specifier === "./features") return { url: "mock:features", shortCircuit: true };
     if (specifier === "../../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -67,7 +68,6 @@ const hooks = registerHooks({
 });
 
 const { POST, MAX_UPLOAD_BODY_BYTES } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 assert.equal(MAX_UPLOAD_BODY_BYTES, 15 * 1024 * 1024);
 

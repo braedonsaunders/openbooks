@@ -1,30 +1,27 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import { removeRequirement } from "@openbooks/engine/src/hrm/qualifications/requirements.ts";
-import { guardPermission } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { qualificationErrorResponse } from "../../qualifications/_lib";
-import { notFound } from "@/lib/api/responses";
-
-
-export const runtime = "nodejs";
-
 /** Remove a dispatch requirement (zero matched rows refuse). */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.certifications.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
-    return notFound("record");
-  }
-  try {
-    const { id } = await params;
-    await withOrgTransaction(gate.user.orgId, () => removeRequirement(db, {
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      requirementId: id,
-    }));
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    return qualificationErrorResponse(e);
-  }
-}
+export const DELETE = defineRoute({
+  permission: "hrm.certifications.manage",
+  feature: "hrmCertifications",
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: _req, authz: gate, params }) => {
+    try {
+      const { id } = params;
+      await withOrgTransaction(gate.user.orgId, () =>
+        removeRequirement(db, {
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          requirementId: id,
+        }),
+      );
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      return qualificationErrorResponse(e);
+    }
+  },
+});

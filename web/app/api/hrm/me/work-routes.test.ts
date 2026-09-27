@@ -39,6 +39,8 @@ const mockSources = new Map<string, string>([
         }
         return state.gate
       }
+      export async function getAuthz() { return state.gate && !('status' in state.gate) ? state.gate : null }
+      export function guardRootSubsidiaryScope() { return null }; export function guardUnrestrictedScope() { return null }
     `,
   ],
   [
@@ -92,7 +94,7 @@ let changeRoute: typeof import("./benefits/change/route.ts") | undefined;
 {
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
+      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
       if (mocked) return { url: mocked, shortCircuit: true };
       return nextResolve(specifier);
     },
@@ -116,7 +118,6 @@ let changeRoute: typeof import("./benefits/change/route.ts") | undefined;
   electRoute = (await import(electRouteUrl)) as typeof import("./benefits/elect/route.ts");
   const changeRouteUrl = "./benefits/change/route.ts?hrm-me-work-change";
   changeRoute = (await import(changeRouteUrl)) as typeof import("./benefits/change/route.ts");
-  hooks.deregister();
 }
 
 const REVIEW_ID = "00000000-0000-4000-8000-000000000031";

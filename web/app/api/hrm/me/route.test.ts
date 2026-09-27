@@ -39,6 +39,8 @@ const mockSources = new Map<string, string>([
         }
         return state.gate
       }
+      export async function getAuthz() { return state.gate && !('status' in state.gate) ? state.gate : null }
+      export function guardRootSubsidiaryScope() { return null }; export function guardUnrestrictedScope() { return null }
     `,
   ],
   [
@@ -101,10 +103,7 @@ const mockUrls = new Map<string, string>([
 
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
-      // The real JSON boundary is pure (Request + schema → value) and runs
-      // The real error mapping runs as-is too: refusals assert their real
-      // statuses, not a mocked mapping.
-      const mocked = mockUrls.get(specifier);
+      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
       if (mocked) return { url: mocked, shortCircuit: true };
       return nextResolve(specifier);
     },
@@ -124,7 +123,6 @@ const mockUrls = new Map<string, string>([
   const teamRoute: typeof import("./team/route.ts") | undefined = (await import(teamRouteUrl)) as typeof import("./team/route.ts");
   const fileRouteUrl = "./profile-changes/route.ts?hrm-me-file";
   const fileRoute: typeof import("./profile-changes/route.ts") | undefined = (await import(fileRouteUrl)) as typeof import("./profile-changes/route.ts");
-  hooks.deregister();
 
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";

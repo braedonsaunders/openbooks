@@ -38,6 +38,8 @@ const mockSources = new Map<string, string>([
         }
         return state.gate
       }
+      export async function getAuthz() { return state.gate && !('status' in state.gate) ? state.gate : null }
+      export function guardRootSubsidiaryScope() { return null }; export function guardUnrestrictedScope() { return null }
     `,
   ],
   [
@@ -91,8 +93,7 @@ const mockUrls = new Map<string, string>([
 
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
-      // The real JSON boundary is pure (Request + schema → value) and runs as-is;
-      const mocked = mockUrls.get(specifier);
+      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
       if (mocked) return { url: mocked, shortCircuit: true };
       return nextResolve(specifier);
     },
@@ -104,7 +105,6 @@ const mockUrls = new Map<string, string>([
   });
   const routeUrl = "./route.ts?hrm-positions-collection";
   const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  hooks.deregister();
 
 
 const SUBSIDIARY_ID = "00000000-0000-4000-8000-000000000021";

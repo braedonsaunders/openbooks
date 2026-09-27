@@ -1,56 +1,59 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import {
   getChangeRequest,
   updateChangeRequestPayload,
 } from "@openbooks/engine/src/hrm/change-requests.ts";
-import { guardPermission } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { changeRequestErrorResponse } from "../_lib";
 import { patchChangeRequestBody } from "../bodies";
-import { notFound } from "@/lib/api/responses";
-
-
-export const runtime = "nodejs";
-
 /** Single employment change request: GET reads, PATCH edits the draft payload. */
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.employment.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const { id } = await ctx.params;
-  if (!isUuid(id)) return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });
-  try {
-    const request = await getChangeRequest({ orgId: gate.user.orgId, actorId: gate.user.id, requestId: id });
-    return NextResponse.json({ request });
-  } catch (e) {
-    return changeRequestErrorResponse(e);
-  }
-}
-
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.employment.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const { id } = await ctx.params;
-  if (!isUuid(id)) return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, patchChangeRequestBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const request = await updateChangeRequestPayload({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      requestId: id,
-      payload: body.payload,
-    });
-    return NextResponse.json({ request });
-  } catch (e) {
-    return changeRequestErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.employment.read",
+  feature: "hrm",
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: _req, authz: gate, params }) => {
+    const { id } = params;
+    if (!isUuid(id))
+      return NextResponse.json(
+        { error: "request id must be a uuid" },
+        { status: 400 },
+      );
+    try {
+      const request = await getChangeRequest({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        requestId: id,
+      });
+      return NextResponse.json({ request });
+    } catch (e) {
+      return changeRequestErrorResponse(e);
+    }
+  },
+});
+export const PATCH = defineRoute({
+  permission: "hrm.employment.manage",
+  feature: "hrm",
+  body: patchChangeRequestBody,
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params, body }) => {
+    const { id } = params;
+    if (!isUuid(id))
+      return NextResponse.json(
+        { error: "request id must be a uuid" },
+        { status: 400 },
+      );
+    try {
+      const request = await updateChangeRequestPayload({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        requestId: id,
+        payload: body.payload,
+      });
+      return NextResponse.json({ request });
+    } catch (e) {
+      return changeRequestErrorResponse(e);
+    }
+  },
+});

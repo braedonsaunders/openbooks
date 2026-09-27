@@ -1,35 +1,25 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { declareCategory } from "@openbooks/engine/src/hrm/qualifications/types.ts";
-import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { qualificationErrorResponse } from "../../qualifications/_lib";
 import { declareCategoryBody } from "../../qualifications/bodies";
-import { notFound } from "@/lib/api/responses";
-
-
-export const runtime = "nodejs";
-
 /** Extend the org's category vocabulary through Setup. */
-export async function POST(req: Request) {
-  const gate = await guardPermission("hrm.certifications.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
-    return notFound("record");
-  }
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
-  const parsedBody = await parseJsonBody(req, declareCategoryBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const settings = await declareCategory(db, {
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      ...parsedBody.data,
-    });
-    return NextResponse.json({ settings }, { status: 201 });
-  } catch (e) {
-    return qualificationErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.certifications.manage",
+  feature: "hrmCertifications",
+  scope: "unrestricted",
+  body: declareCategoryBody,
+  handler: async ({ request: req, authz: gate, body }) => {
+    try {
+      const settings = await declareCategory(db, {
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        ...body,
+      });
+      return NextResponse.json({ settings }, { status: 201 });
+    } catch (e) {
+      return qualificationErrorResponse(e);
+    }
+  },
+});

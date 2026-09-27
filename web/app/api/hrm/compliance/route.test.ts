@@ -3,14 +3,6 @@ import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
 
-/**
- * Compliance-findings route gates: the feature-off 404 fires
- * before the service runs, an unauthenticated caller never reaches it,
- * and engine refusals map with their message intact. Module doubles
- * follow the positions route-test pattern; the zod bodies and JSON
- * boundary run as-is.
- */
-
 interface RouteState {
   gate: { user: { id: string; orgId: string } } | { status: number };
   featureOn: boolean;
@@ -47,6 +39,8 @@ const mockSources = new Map<string, string>([
         }
         return state.gate
       }
+      export async function getAuthz() { return state.gate && !('status' in state.gate) ? state.gate : null }
+      export function guardRootSubsidiaryScope() { return null }; export function guardUnrestrictedScope() { return null }
     `,
   ],
   [
@@ -104,7 +98,7 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
+    const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier);
   },
@@ -115,7 +109,6 @@ const hooks = registerHooks({
   },
 });
 const findingsRoute = (await import("./compliance-findings/route.ts")) as typeof import("./compliance-findings/route.ts");
-hooks.deregister();
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };

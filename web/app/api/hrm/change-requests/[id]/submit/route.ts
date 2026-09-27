@@ -1,56 +1,56 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { submitChangeRequest } from "@openbooks/engine/src/hrm/change-requests.ts";
-import { guardPermission } from "../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
 import { changeRequestErrorResponse } from "../../_lib";
 import { submitChangeRequestBody } from "../../bodies";
-import { notFound } from "@/lib/api/responses";
-
-
-export const runtime = "nodejs";
-
 /** Submit a draft employment change request for governed approval. */
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.employment.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const { id } = await ctx.params;
-  if (!isUuid(id)) return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, submitChangeRequestBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    // When hrmActionReasons is on, submit requires both action and
-    // an active reason code; when off, classification is ignored entirely.
-    const { validateSubmitActionReason } = await import(
-      "@openbooks/engine/src/automations/action-reasons.ts"
-    );
-    const { automationErrorResponse } = await import("../../../../automations/_lib");
+export const POST = defineRoute({
+  permission: "hrm.employment.manage",
+  feature: "hrm",
+  body: submitChangeRequestBody,
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params, body }) => {
+    const { id } = params;
+    if (!isUuid(id))
+      return NextResponse.json(
+        { error: "request id must be a uuid" },
+        { status: 400 },
+      );
     try {
-      await validateSubmitActionReason({
+      // When hrmActionReasons is on, submit requires both action and
+      // an active reason code; when off, classification is ignored entirely.
+      const { validateSubmitActionReason } =
+        await import("@openbooks/engine/src/automations/action-reasons.ts");
+      const { automationErrorResponse } =
+        await import("../../../../automations/_lib");
+      try {
+        await validateSubmitActionReason({
+          orgId: gate.user.orgId,
+          featureOn: await isFeatureEnabled(
+            gate.user.orgId,
+            "hrmActionReasons",
+          ),
+          ...(body.action ? { action: body.action } : {}),
+          ...(body.reasonCode ? { reasonCode: body.reasonCode } : {}),
+          ...(body.reason ? { reason: body.reason } : {}),
+        });
+      } catch (e) {
+        return automationErrorResponse(e);
+      }
+      const request = await submitChangeRequest({
         orgId: gate.user.orgId,
-        featureOn: await isFeatureEnabled(gate.user.orgId, "hrmActionReasons"),
+        actorId: gate.user.id,
+        requestId: id,
+        reason: body.reason,
         ...(body.action ? { action: body.action } : {}),
         ...(body.reasonCode ? { reasonCode: body.reasonCode } : {}),
-        ...(body.reason ? { reason: body.reason } : {}),
       });
+      return NextResponse.json({ request });
     } catch (e) {
-      return automationErrorResponse(e);
+      return changeRequestErrorResponse(e);
     }
-    const request = await submitChangeRequest({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      requestId: id,
-      reason: body.reason,
-      ...(body.action ? { action: body.action } : {}),
-      ...(body.reasonCode ? { reasonCode: body.reasonCode } : {}),
-    });
-    return NextResponse.json({ request });
-  } catch (e) {
-    return changeRequestErrorResponse(e);
-  }
-}
+  },
+});
