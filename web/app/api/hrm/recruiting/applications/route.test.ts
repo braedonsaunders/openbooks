@@ -38,18 +38,13 @@ const mockSources = new Map<string, string>([
         }
         return state.gate
       }
+      export async function getAuthz() { return state.gate && 'status' in state.gate && state.gate.status === 401 ? null : state.gate }
+      export function guardRootSubsidiaryScope() { return null } export function guardUnrestrictedScope() { return null }
+      export async function isFeatureEnabled(orgId, key) { if (key !== 'hrmRecruiting') throw new Error('unexpected feature ' + key); return state.featureOn }
+      export async function guardFeaturePermission(permission, feature) { const gate = await guardPermission(permission); if (gate instanceof globalThis.openbooksHrmRecruitingApplicationsNextResponse) return gate; return await isFeatureEnabled(gate.user.orgId, feature) ? gate : globalThis.openbooksHrmRecruitingApplicationsNextResponse.json({ error: 'not found' }, { status: 404 }) }
     `,
   ],
-  [
-    "mock:features",
-    `
-      const state = globalThis[Symbol.for('openbooks.hrm-recruiting-applications-route-test')]
-      export async function isFeatureEnabled(orgId, key) {
-        if (key !== 'hrmRecruiting') throw new Error('unexpected feature ' + key)
-        return state.featureOn
-      }
-    `,
-  ],
+
   [
     "mock:service",
     `
@@ -94,12 +89,14 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
-  ["../../../../../lib/features", "mock:features"],
+  ["../../../../../lib/features", "mock:authz"],
   ["../../../../../../lib/authz", "mock:authz"],
-  ["../../../../../../lib/features", "mock:features"],
+  ["../../../../../../lib/features", "mock:authz"],
   ["@openbooks/engine/src/hrm/recruiting/applications.ts", "mock:service"],
   ["../_lib", "mock:lib"],
   ["../../_lib", "mock:lib"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/feature-gates", "mock:authz"],
 ]);
 
   const hooks = registerHooks({
@@ -118,7 +115,7 @@ const mockUrls = new Map<string, string>([
   const collectionRoute: typeof import("./route.ts") | undefined = (await import(collectionUrl)) as typeof import("./route.ts");
   const itemUrl = "./[id]/route.ts?hrm-recruiting-applications-item";
   const itemRoute: typeof import("./[id]/route.ts") | undefined = (await import(itemUrl)) as typeof import("./[id]/route.ts");
-  hooks.deregister();
+  test.after(() => hooks.deregister());
 
 
 const REQUISITION_ID = "00000000-0000-4000-8000-000000000021";

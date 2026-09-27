@@ -47,16 +47,10 @@ const mockSources = new Map<string, string>([
         }
         return { user: { id: 'user-1', orgId: 'org-1' } }
       }
-    `,
-  ],
-  [
-    "mock:features",
-    `
-      const state = globalThis[Symbol.for('openbooks.hrm-benefits-enrollments-route-test')]
-      export async function isFeatureEnabled(orgId, key) {
-        if (key !== 'hrm') throw new Error('unexpected feature ' + key)
-        return state.featureOn
-      }
+      export async function getAuthz() { return state.gateStatus ? null : { user: { id: 'user-1', orgId: 'org-1' } } }
+      export function guardRootSubsidiaryScope() { return null } export function guardUnrestrictedScope() { return null }
+      export async function isFeatureEnabled(orgId, key) { if (key !== 'hrm') throw new Error('unexpected feature ' + key); return state.featureOn }
+      export async function guardFeaturePermission(permission, feature) { const gate = await guardPermission(permission); if (gate instanceof globalThis.openbooksHrmBenefitsEnrollmentsRouteNextResponse) return gate; return await isFeatureEnabled(gate.user.orgId, feature) ? gate : globalThis.openbooksHrmBenefitsEnrollmentsRouteNextResponse.json({ error: 'not found' }, { status: 404 }) }
     `,
   ],
   [
@@ -99,7 +93,9 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
-  ["../../../../lib/features", "mock:features"],
+  ["../../../../lib/features", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/feature-gates", "mock:authz"],
   ["@openbooks/engine/src/hrm/benefits/enrollments.ts", "mock:service"],
   ["@openbooks/engine/src/hrm/benefits/benefits-read.ts", "mock:read"],
   ["@openbooks/engine/src/platform/db.ts", "mock:read"],
@@ -119,7 +115,7 @@ const mockUrls = new Map<string, string>([
   });
   const routeUrl = "./route.ts?hrm-benefits-enrollments-collection";
   const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  hooks.deregister();
+  test.after(() => hooks.deregister());
 
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000041";

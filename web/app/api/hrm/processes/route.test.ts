@@ -53,18 +53,13 @@ const mockSources = new Map<string, string>([
         }
         return state.gate
       }
+      export async function getAuthz() { return state.gate && 'status' in state.gate && state.gate.status === 401 ? null : state.gate }
+      export function guardRootSubsidiaryScope() { return null } export function guardUnrestrictedScope() { return null }
+      export async function isFeatureEnabled(orgId, key) { if (key !== 'hrm') throw new Error('unexpected feature ' + key); return state.featureOn }
+      export async function guardFeaturePermission(permission, feature) { const gate = await guardPermission(permission); if (gate instanceof globalThis.openbooksHrmProcessRouteNextResponse) return gate; return await isFeatureEnabled(gate.user.orgId, feature) ? gate : globalThis.openbooksHrmProcessRouteNextResponse.json({ error: 'not found' }, { status: 404 }) }
     `,
   ],
-  [
-    "mock:features",
-    `
-      const state = globalThis[Symbol.for('openbooks.hrm-processes-route-test')]
-      export async function isFeatureEnabled(orgId, key) {
-        if (key !== 'hrm') throw new Error('unexpected feature ' + key)
-        return state.featureOn
-      }
-    `,
-  ],
+
   [
     "mock:processes-service",
     `
@@ -138,9 +133,11 @@ const featureDepths = [
 
 const mockUrls = new Map<string, string>([
   ...authzDepths.map((specifier) => [specifier, "mock:authz"] as const),
-  ...featureDepths.map((specifier) => [specifier, "mock:features"] as const),
+  ...featureDepths.map((specifier) => [specifier, "mock:authz"] as const),
   ["@openbooks/engine/src/hrm/processes.ts", "mock:processes-service"],
   ["@openbooks/engine/src/hrm/processes-read.ts", "mock:processes-read-service"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/feature-gates", "mock:authz"],
 ]);
 
 type RouteModule = Record<
@@ -172,7 +169,7 @@ async function loadRoute(path: string): Promise<RouteModule> {
   try {
     return (await import(path)) as RouteModule;
   } finally {
-    hooks.deregister();
+    test.after(() => hooks.deregister());
   }
 }
 
