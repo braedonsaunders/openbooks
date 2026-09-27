@@ -170,6 +170,8 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   { table: "payment_instructions", reason: "financial instruments; finance remit." },
   { table: "payment_links", reason: "financial instruments; finance remit." },
   { table: "payment_mandates", reason: "financial instruments; finance remit." },
+  { table: "subscription_usage_links", reason: "usage pricing config; customer counterparty." },
+  { table: "usage_prepaid_grants", reason: "prepaid balances; customer counterparty." },
   {
     table: "information_return_recipients",
     reason: "tax filing counterparties; tax remit.",
