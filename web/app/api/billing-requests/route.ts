@@ -17,11 +17,18 @@ import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.object({
   projectId: z.string().uuid(),
-  drawAmount: z.string().superRefine((value, ctx) => {
-    if (value !== "" && canonicalDecimal(value, 4) === null) {
-      ctx.addIssue({ code: "custom", message: moneyRefusal("Draw amount", value) });
-    }
-  }).nullable().optional(),
+  invoiceType: z.enum(["progress", "final"]).optional(),
+  basis: z.enum(["date_range", "draw_amount", "time_selection", "milestone", "field_ticket"]).optional(),
+  drawAmount: z.string().nullable().optional(),
+  startDate: z.string().nullable().optional(),
+  cutoffDate: z.string().nullable().optional(),
+  invoiceDescription: z.string().nullable().optional(),
+  customerPo: z.string().nullable().optional(),
+  backupRequired: z.boolean().optional(),
+  backupType: z.string().optional(),
+  selectedTimeEntryIds: z.array(z.string()).nullable().optional(),
+  fieldTicketIds: z.array(z.string()).nullable().optional(),
+  notes: z.string().nullable().optional(),
 });
 
 

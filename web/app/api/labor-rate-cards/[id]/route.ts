@@ -28,7 +28,7 @@ const cardBodySchema = z.object({
   code: z.string().trim().min(1),
   currency: z.string().optional(),
   effective_from: z.string(),
-  effective_to: z.string().nullable(),
+  effective_to: z.string().nullable().optional(),
   status: z.enum(["draft", "active", "retired"]),
   derivation_policy: z.enum(["explicit", "time_type_multipliers"]),
   custom: z.record(z.string(), z.json()).optional(),

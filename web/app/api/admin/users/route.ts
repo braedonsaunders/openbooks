@@ -348,7 +348,7 @@ export const POST = defineRoute({
         return NextResponse.json({ error: "userId required" }, { status: 400 });
       }
     }
-    const userId = typeof body.userId === "string" ? body.userId.toLowerCase() : "";
+    const userId = "userId" in body && typeof body.userId === "string" ? body.userId.toLowerCase() : "";
 
     // All assignment and activation decisions serialize on the same user row.
     // Grants lock their role first, matching role deletion's role → user order.

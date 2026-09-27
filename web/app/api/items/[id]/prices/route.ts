@@ -23,7 +23,7 @@ export const runtime = 'nodejs'
 interface BreakInput { minimumQuantity?: unknown; unitPrice?: unknown }
 
 const priceScheduleBody = z.object({
-  priceLevelId: z.union([uuidId, z.literal('')]).optional(),
+  priceLevelId: z.union([uuidId, z.literal('')]).nullable().optional(),
   customerId: z.union([uuidId, z.literal('')]).optional(),
   currency: z.string(),
   quantityBasis: z.enum(['line_quantity', 'overall_item_quantity']).optional(),
@@ -35,7 +35,7 @@ const priceScheduleBody = z.object({
 
 const priceScheduleUpdateBody = priceScheduleBody.extend({
   id: uuidId,
-  revision: z.number().int().nonnegative(),
+  revision: z.number().int().nonnegative().optional(),
   reason: z.string().optional(),
 })
 

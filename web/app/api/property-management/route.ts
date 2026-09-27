@@ -389,7 +389,8 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   body: requestBodySchema,
-  handler: async ({ request, body, authz: routeAuthz }) => {
+  handler: async ({ request, body: parsedBody, authz: routeAuthz }) => {
+    const body = parsedBody as Record<string, unknown>;
 
 
 

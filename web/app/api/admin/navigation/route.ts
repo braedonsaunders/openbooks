@@ -100,12 +100,11 @@ async function guardNavManage(): Promise<Authz | NextResponse> {
 
 
 export const PUT = defineRoute({
-  public: "session",
+  authorize: async () => guardNavManage(),
+  feature: { none: "Navigation access is controlled by the navigation and customization permissions." },
   body: requestBodySchema,
-  handler: async ({  }) => {
-
-    const gate = await guardNavManage()
-    if (gate instanceof NextResponse) return gate
+  handler: async ({ body, authz: gate }) => {
+    const { config, expectedUpdatedAt } = body;
     const { user } = gate
 
 
