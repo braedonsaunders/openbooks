@@ -60,6 +60,260 @@ const WORKFORCE_BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] =
     query: defaultRowsQuery(entity),
   }))
 
+const COST_OF_REVENUE_GUARD =
+  'No cost of revenue recorded — classify cost-of-revenue accounts as Cost of Goods Sold in the chart of accounts'
+
+const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
+  {
+    slug: 'mrr-movements',
+    name: 'MRR movements',
+    description: 'Monthly new, expansion, contraction, churned and reactivated MRR with opening and closing MRR and the quick ratio. A paused subscription counts as churn and resuming as reactivation; revenue is on the recognised basis, or billed when revenue recognition is off.',
+    query: {
+      entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'month', bin: 'month' }],
+      measures: [
+        { fn: 'sum', column: 'new_mrr', key: 'new_mrr', label: 'New MRR' },
+        { fn: 'sum', column: 'expansion_mrr', key: 'expansion_mrr', label: 'Expansion MRR' },
+        { fn: 'sum', column: 'contraction_mrr', key: 'contraction_mrr', label: 'Contraction MRR' },
+        { fn: 'sum', column: 'churned_mrr', key: 'churned_mrr', label: 'Churned MRR' },
+        { fn: 'sum', column: 'reactivation_mrr', key: 'reactivation_mrr', label: 'Reactivated MRR' },
+        { fn: 'opening', column: 'mrr_start', key: 'opening_mrr', label: 'Opening MRR' },
+        { fn: 'closing', column: 'mrr_end', key: 'closing_mrr', label: 'Closing MRR' },
+        {
+          fn: 'formula', key: 'quick_ratio', label: 'Quick ratio', format: 'ratio',
+          undefinedLabel: 'No contraction or churn in the period',
+          expr: {
+            op: '/',
+            left: {
+              op: '+',
+              left: { op: '+', left: { ref: 'new_mrr' }, right: { ref: 'expansion_mrr' } },
+              right: { ref: 'reactivation_mrr' },
+            },
+            right: { op: '+', left: { ref: 'contraction_mrr' }, right: { ref: 'churned_mrr' } },
+          },
+        },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'arr-summary',
+    name: 'ARR summary',
+    description: 'Monthly annual recurring revenue is twelve times closing MRR. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off.',
+    query: {
+      entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'month', bin: 'month' }],
+      measures: [
+        { fn: 'closing', column: 'mrr_end', key: 'closing_mrr', hidden: true },
+        {
+          fn: 'formula', key: 'arr', label: 'Annual recurring revenue', format: 'money',
+          expr: { op: '*', left: { const: '12' }, right: { ref: 'closing_mrr' } },
+        },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'revenue-churn',
+    name: 'Revenue and logo churn',
+    description: 'Monthly revenue and logo churn compare churned MRR and billing-account losses with opening balances. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off.',
+    query: {
+      entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'month', bin: 'month' }],
+      measures: [
+        { fn: 'sum', column: 'churned_mrr', key: 'churned_mrr', hidden: true },
+        { fn: 'opening', column: 'mrr_start', key: 'opening_mrr', hidden: true },
+        { fn: 'sum', column: 'customers_churned', key: 'customers_churned', hidden: true },
+        { fn: 'opening', column: 'customers_start', key: 'opening_customers', hidden: true },
+        {
+          fn: 'formula', key: 'revenue_churn', label: 'Revenue churn', format: 'percent',
+          undefinedLabel: 'No starting MRR',
+          expr: { op: '/', left: { ref: 'churned_mrr' }, right: { ref: 'opening_mrr' } },
+        },
+        {
+          fn: 'formula', key: 'logo_churn', label: 'Logo churn', format: 'percent',
+          undefinedLabel: 'No starting customers',
+          expr: { op: '/', left: { ref: 'customers_churned' }, right: { ref: 'opening_customers' } },
+        },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'nrr-grr',
+    name: 'Net and gross revenue retention',
+    description: 'Monthly net and gross revenue retention compare expansion, contraction and churn with opening MRR. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off.',
+    query: {
+      entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'month', bin: 'month' }],
+      measures: [
+        { fn: 'opening', column: 'mrr_start', key: 'opening_mrr', hidden: true },
+        { fn: 'sum', column: 'expansion_mrr', key: 'expansion_mrr', hidden: true },
+        { fn: 'sum', column: 'contraction_mrr', key: 'contraction_mrr', hidden: true },
+        { fn: 'sum', column: 'churned_mrr', key: 'churned_mrr', hidden: true },
+        {
+          fn: 'formula', key: 'nrr', label: 'Net revenue retention', format: 'percent',
+          undefinedLabel: 'No starting MRR',
+          expr: {
+            op: '/',
+            left: {
+              op: '-',
+              left: { op: '+', left: { ref: 'opening_mrr' }, right: { ref: 'expansion_mrr' } },
+              right: { op: '+', left: { ref: 'contraction_mrr' }, right: { ref: 'churned_mrr' } },
+            },
+            right: { ref: 'opening_mrr' },
+          },
+        },
+        {
+          fn: 'formula', key: 'grr', label: 'Gross revenue retention', format: 'percent',
+          undefinedLabel: 'No starting MRR',
+          expr: {
+            op: '/',
+            left: {
+              op: '-',
+              left: { ref: 'opening_mrr' },
+              right: { op: '+', left: { ref: 'contraction_mrr' }, right: { ref: 'churned_mrr' } },
+            },
+            right: { ref: 'opening_mrr' },
+          },
+        },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'cohort-retention',
+    name: 'Cohort retention',
+    description: 'Retention by signup cohort month and elapsed month shows retained MRR and billing accounts. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off.',
+    query: {
+      entity: 'saas_metrics_cohorts', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'cohort_month', bin: 'month' }, { column: 'months_since_start' }],
+      measures: [
+        { fn: 'closing', column: 'mrr', key: 'cohort_mrr', hidden: true },
+        { fn: 'closing', column: 'start_mrr', key: 'start_mrr', hidden: true },
+        { fn: 'closing', column: 'customers', key: 'cohort_customers', hidden: true },
+        { fn: 'closing', column: 'start_customers', key: 'start_customers', hidden: true },
+        {
+          fn: 'formula', key: 'mrr_retention', label: 'MRR retention', format: 'percent',
+          undefinedLabel: 'No starting cohort MRR',
+          expr: { op: '/', left: { ref: 'cohort_mrr' }, right: { ref: 'start_mrr' } },
+        },
+        {
+          fn: 'formula', key: 'customer_retention', label: 'Customer retention', format: 'percent',
+          undefinedLabel: 'No starting cohort customers',
+          expr: { op: '/', left: { ref: 'cohort_customers' }, right: { ref: 'start_customers' } },
+        },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'arpa-ltv',
+    name: 'ARPA and lifetime value',
+    description: 'Trailing twelve-month average revenue per billing account, monthly revenue churn, gross margin and lifetime value. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off.',
+    query: {
+      entity: 'saas_metrics_facts', mode: 'summarize', columns: [], breakouts: [],
+      measures: [
+        { fn: 'closing', column: 'mrr_end', key: 'closing_mrr', hidden: true },
+        { fn: 'closing', column: 'customers_end', key: 'closing_customers', hidden: true },
+        { fn: 'sum', column: 'churned_mrr', key: 'churned_mrr', hidden: true },
+        { fn: 'sum', column: 'mrr_at_risk', key: 'mrr_at_risk', hidden: true },
+        { fn: 'sum', column: 'gl_revenue', key: 'gl_revenue', hidden: true },
+        { fn: 'sum', column: 'gl_cogs', key: 'gl_cogs', hidden: true },
+        {
+          fn: 'formula', key: 'arpa', label: 'Average revenue per account', format: 'money',
+          undefinedLabel: 'No customers at period end',
+          expr: { op: '/', left: { ref: 'closing_mrr' }, right: { ref: 'closing_customers' } },
+        },
+        {
+          fn: 'formula', key: 'average_monthly_revenue_churn', label: 'Average monthly revenue churn', hidden: true,
+          format: 'ratio', undefinedLabel: 'No MRR at risk',
+          expr: { op: '/', left: { ref: 'churned_mrr' }, right: { ref: 'mrr_at_risk' } },
+        },
+        {
+          fn: 'formula', key: 'gross_margin', label: 'Gross margin', hidden: true,
+          format: 'percent', undefinedLabel: 'No revenue in the period',
+          guards: [{ measure: 'gl_cogs', when: 'zero', label: COST_OF_REVENUE_GUARD }],
+          expr: {
+            op: '/',
+            left: { op: '-', left: { ref: 'gl_revenue' }, right: { ref: 'gl_cogs' } },
+            right: { ref: 'gl_revenue' },
+          },
+        },
+        {
+          fn: 'formula', key: 'ltv', label: 'Lifetime value', format: 'money',
+          undefinedLabel: 'No revenue churn in the period',
+          guards: [{ measure: 'gl_cogs', when: 'zero', label: COST_OF_REVENUE_GUARD }],
+          expr: {
+            op: '/',
+            left: { op: '*', left: { ref: 'arpa' }, right: { ref: 'gross_margin' } },
+            right: { ref: 'average_monthly_revenue_churn' },
+          },
+        },
+      ],
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'month', op: 'period_preset', value: 'trailing_12_months' }],
+      },
+      groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'gross-margin',
+    name: 'Gross margin',
+    description: 'Monthly gross margin compares revenue on the recognised basis, or billed when revenue recognition is off, with cost of revenue from the general ledger.',
+    query: {
+      entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'month', bin: 'month' }],
+      measures: [
+        { fn: 'sum', column: 'gl_revenue', key: 'gl_revenue', hidden: true },
+        { fn: 'sum', column: 'gl_cogs', key: 'gl_cogs', hidden: true },
+        {
+          fn: 'formula', key: 'gross_margin', label: 'Gross margin', format: 'percent',
+          undefinedLabel: 'No revenue in the period',
+          guards: [{ measure: 'gl_cogs', when: 'zero', label: COST_OF_REVENUE_GUARD }],
+          expr: {
+            op: '/',
+            left: { op: '-', left: { ref: 'gl_revenue' }, right: { ref: 'gl_cogs' } },
+            right: { ref: 'gl_revenue' },
+          },
+        },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'deferred-waterfall',
+    name: 'Deferred revenue waterfall',
+    description: 'Future recognition scheduled for live deferred revenue obligations by month, deferred account and currency, on the recognised basis.',
+    query: {
+      entity: 'deferred_revenue_runoff', mode: 'summarize', columns: [],
+      breakouts: [
+        { column: 'month', bin: 'month' },
+        { column: 'deferred_account' },
+        { column: 'currency' },
+      ],
+      measures: [{ fn: 'sum', column: 'amount', label: 'Planned recognition' }],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'bookings-billings-revenue',
+    name: 'Bookings, billings and revenue',
+    description: 'Monthly bookings, billings and revenue on the recognised basis, or billed when revenue recognition is off. A paused subscription counts as churn and resuming as reactivation.',
+    query: {
+      entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'month', bin: 'month' }],
+      measures: [
+        { fn: 'sum', column: 'bookings', label: 'Bookings' },
+        { fn: 'sum', column: 'billings', label: 'Billings' },
+        { fn: 'sum', column: 'recognized_revenue', label: 'Recognised revenue' },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+]
+
 export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'ap-aging-by-vendor',
@@ -609,6 +863,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       sorts: [{ column: 'lifecycle_stage', direction: 'asc' }],
     },
   },
+  ...SAAS_METRICS_BUILT_IN_REPORTS,
   ...WORKFORCE_BUILT_IN_REPORT_DEFINITIONS,
   {
     slug: 'headcount-statement',

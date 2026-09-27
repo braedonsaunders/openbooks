@@ -2184,6 +2184,42 @@
       "name": "Personalbestandsaufstellung",
       "description": "Personalbestand und FTE je Tochtergesellschaft und Abteilung, mit Summen."
     },
+    "mrr-movements": {
+      "name": "MRR-Bewegungen",
+      "description": "Monatliche neue, ausgeweitete, reduzierte, verlorene und reaktivierte MRR mit Anfangs- und End-MRR sowie Quick Ratio. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung; der Umsatz folgt der realisierten Basis oder bei deaktivierter Umsatzrealisierung der fakturierten Basis."
+    },
+    "arr-summary": {
+      "name": "ARR-Übersicht",
+      "description": "Der monatliche annualisierte wiederkehrende Umsatz entspricht dem Zwölffachen der End-MRR. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung; der Umsatz folgt der realisierten Basis oder bei deaktivierter Umsatzrealisierung der fakturierten Basis."
+    },
+    "revenue-churn": {
+      "name": "Umsatz- und Kundenabwanderung",
+      "description": "Monatliche Umsatz- und Kundenabwanderung vergleicht verlorene MRR und verlorene Abrechnungskonten mit den Anfangssalden. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung; der Umsatz folgt der realisierten Basis oder bei deaktivierter Umsatzrealisierung der fakturierten Basis."
+    },
+    "nrr-grr": {
+      "name": "Netto- und Brutto-Umsatzbindung",
+      "description": "Die monatliche Netto- und Bruttoumsatzbindung vergleicht Expansion, Kontraktion und Abwanderung mit der Anfangs-MRR. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung; der Umsatz folgt der realisierten Basis oder bei deaktivierter Umsatzrealisierung der fakturierten Basis."
+    },
+    "cohort-retention": {
+      "name": "Kohortenbindung",
+      "description": "Die Bindung nach Startmonat und verstrichenen Monaten zeigt die erhaltene MRR und Abrechnungskonten. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung; der Umsatz folgt der realisierten Basis oder bei deaktivierter Umsatzrealisierung der fakturierten Basis."
+    },
+    "arpa-ltv": {
+      "name": "ARPA und Kundenlebenszeitwert",
+      "description": "Durchschnittlicher Umsatz je Abrechnungskonto der letzten zwölf Monate, monatliche Umsatzabwanderung, Bruttomarge und Kundenlebenszeitwert. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung; der Umsatz folgt der realisierten Basis oder bei deaktivierter Umsatzrealisierung der fakturierten Basis."
+    },
+    "gross-margin": {
+      "name": "Bruttomarge",
+      "description": "Die monatliche Bruttomarge vergleicht den realisierten oder bei deaktivierter Umsatzrealisierung fakturierten Umsatz mit den Umsatzkosten aus dem Hauptbuch."
+    },
+    "deferred-waterfall": {
+      "name": "Verlauf abgegrenzter Umsätze",
+      "description": "Geplante künftige Realisierung aus aktiven abgegrenzten Umsatzverpflichtungen, nach Monat, Abgrenzungskonto und Währung, auf realisierter Basis."
+    },
+    "bookings-billings-revenue": {
+      "name": "Buchungen, Rechnungen und Umsatz",
+      "description": "Monatliche Auftragseingänge, Abrechnungen und Umsätze auf realisierter Basis oder bei deaktivierter Umsatzrealisierung auf fakturierter Basis. Ein pausiertes Abonnement zählt als Abwanderung und bei Wiederaufnahme als Reaktivierung."
+    },
     "backorders": {
       "name": "Rückstände",
       "description": "Noch geschuldete Lagerpositionen von Kundenaufträgen – bestellt, erfüllt, storniert und offen nach Kunde und Artikel."

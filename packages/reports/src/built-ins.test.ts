@@ -8,7 +8,7 @@ import {
 import { REPORT_ENTITY_MAP } from './entities'
 import { HRM_REPORT_ENTITIES } from './hrm-entities'
 import { compileRule, SqlParams } from './filters'
-import { resolvePreset, PERIOD_PRESET_IDS } from './period-presets'
+import { PERIOD_PRESETS, resolvePreset, PERIOD_PRESET_IDS } from './period-presets'
 import { validateCustomQuery } from './validate'
 import type { ReportRule } from './types'
 
@@ -38,8 +38,15 @@ describe('built-in report definitions', () => {
         assert.notEqual(leaf.op, 'this_year', `${def.slug} still filters on the calendar year`)
         if (leaf.op === 'period_preset') {
           windowed += 1
-          assert.equal(leaf.value, 'this_fiscal_year', `${def.slug} uses an unexpected preset`)
-          assert.ok(PERIOD_PRESET_IDS.includes(leaf.value), `${def.slug} preset id is not in the catalog`)
+          const presetId = typeof leaf.value === 'string' ? leaf.value : ''
+          assert.ok(PERIOD_PRESET_IDS.includes(presetId), `${def.slug} preset id is not in the catalog`)
+          const preset = PERIOD_PRESETS.find((candidate) => candidate.id === presetId)
+          assert.ok(preset, `${def.slug} preset id is not in the catalog`)
+          assert.ok(
+            preset.id === 'this_fiscal_year' || preset.group === 'rolling',
+            `${def.slug} uses a non-fiscal, non-rolling preset`,
+          )
+          assert.notEqual(preset.group, 'calendar', `${def.slug} uses a calendar-year window`)
         }
       }
     }

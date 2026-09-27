@@ -2184,6 +2184,42 @@
       "name": "Demonstrativo de headcount",
       "description": "Headcount e equivalentes em tempo integral por subsidiária e departamento, com totais."
     },
+    "mrr-movements": {
+      "name": "Movimentações de MRR",
+      "description": "MRR nova, expandida, contraída, cancelada e reativada por mês, com MRR inicial e final e o índice de cobertura rápida. Uma assinatura pausada conta como cancelamento e a retomada como reativação; a receita segue a base reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada."
+    },
+    "arr-summary": {
+      "name": "Resumo de ARR",
+      "description": "A receita recorrente anual de cada mês equivale a doze vezes a MRR final. Uma assinatura pausada conta como cancelamento e a retomada como reativação; a receita segue a base reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada."
+    },
+    "revenue-churn": {
+      "name": "Churn de receita e clientes",
+      "description": "O cancelamento de receita e de contas compara mensalmente a MRR perdida e as contas de faturamento perdidas com os saldos iniciais. Uma assinatura pausada conta como cancelamento e a retomada como reativação; a receita segue a base reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada."
+    },
+    "nrr-grr": {
+      "name": "Retenção líquida e bruta",
+      "description": "A retenção líquida e bruta de receita compara mensalmente expansão, contração e cancelamentos com a MRR inicial. Uma assinatura pausada conta como cancelamento e a retomada como reativação; a receita segue a base reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada."
+    },
+    "cohort-retention": {
+      "name": "Retenção por coorte",
+      "description": "A retenção por mês da coorte e meses decorridos mostra a MRR mantida e as contas de faturamento. Uma assinatura pausada conta como cancelamento e a retomada como reativação; a receita segue a base reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada."
+    },
+    "arpa-ltv": {
+      "name": "ARPA e valor vitalício",
+      "description": "Receita média por conta de faturamento nos últimos doze meses, cancelamento mensal de receita, margem bruta e valor do ciclo de vida do cliente. Uma assinatura pausada conta como cancelamento e a retomada como reativação; a receita segue a base reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada."
+    },
+    "gross-margin": {
+      "name": "Margem bruta",
+      "description": "A margem bruta mensal compara a receita reconhecida ou, se o reconhecimento de receita estiver desativado, a faturada, com o custo da receita no razão geral."
+    },
+    "deferred-waterfall": {
+      "name": "Projeção de receita diferida",
+      "description": "Reconhecimento futuro previsto de obrigações ativas de receita diferida por mês, conta de diferimento e moeda, na base reconhecida."
+    },
+    "bookings-billings-revenue": {
+      "name": "Contratações, cobranças e receita",
+      "description": "Reservas, faturamento e receita mensais na base reconhecida ou, se o reconhecimento de receita estiver desativado, na base faturada. Uma assinatura pausada conta como cancelamento e a retomada como reativação."
+    },
     "backorders": {
       "name": "Pedidos em atraso",
       "description": "Linhas de estoque de pedidos de venda ainda devidas — pedida, atendida, cancelada e em aberto por cliente e item."
