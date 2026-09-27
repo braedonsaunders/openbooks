@@ -353,7 +353,7 @@ async function mixedCurrencyAccruals(
     select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.country, l.remittance_party_id,
            l.liability_account_id,
            ${filingAccount} as filing_account_id,
-           bool_or(s.filing_account_source = 'unknown') as "filingUnknown",
+           bool_or(s.filing_account_source = 'unknown' or s.filing_account_id is null) as "filingUnknown",
            s.province,
            source_document.subsidiary_id,
            s.currency_code as currency,
@@ -631,7 +631,7 @@ export async function payrollRemittanceSummary(
            -- accrual remits to: both are the stub line's commit-time snapshot.
            l.liability_account_id,
            ${filingAccount} as filing_account_id,
-           bool_or(s.filing_account_source = 'unknown') as "filingUnknown",
+           bool_or(s.filing_account_source = 'unknown' or s.filing_account_id is null) as "filingUnknown",
            s.province,
            -- The WRITE path's grouping dimension: which entity's books
            -- credited the accrual, and in which currency. Splitting rows by
