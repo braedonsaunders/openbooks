@@ -415,7 +415,7 @@ async function loadGrants(
      where g.org_id = ${orgId} and g.customer_id = ${context.link.customerId}
        and g.currency_code = ${context.link.currency}
        and (g.expires_on is null or g.expires_on >= ${periodEnd})
-       and source_document.kind = 'customer_invoice' and source_document.status in ('posted', 'approved')
+       and source_document.kind = 'customer_invoice' and source_document.status = 'posted'
        and r.method = 'usage'
      order by g.created_at, g.id`)).rows;
   const addBack = new Map<string, Money>();

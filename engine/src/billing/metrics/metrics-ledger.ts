@@ -360,7 +360,7 @@ async function readSources(
         join subscriptions s on s.org_id = d.org_id
          and (d.subscription_id = s.id or d.custom->>'subscriptionId' = s.id::text)
        where d.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
-         and d.status in ('posted', 'reversed')
+         and d.status in ('posted', 'voided')
     ), entries as (
       select subscription_id, posted_entry_id as entry_id from source_documents
        where posted_entry_id is not null
@@ -377,7 +377,7 @@ async function readSources(
         join recognition_schedule_lines rsl on rsl.org_id = rs.org_id and rsl.schedule_id = rs.id
         cross join lateral (values (rsl.journal_entry_id), (rsl.reversal_journal_entry_id)) posted(entry_id)
        where s.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
-         and d.status in ('posted', 'reversed') and posted.entry_id is not null` : sql``}
+         and d.status in ('posted', 'voided') and posted.entry_id is not null` : sql``}
     )
     select e.subscription_id, coalesce(sum(-l.amount) filter (where a.type in ('income', 'income_other')), 0)::text as revenue
       from entries e
@@ -399,7 +399,7 @@ async function readSources(
         join performance_obligations po on po.org_id = dl.org_id and po.document_line_id = dl.id
         join recognition_rules rr on rr.org_id = po.org_id and rr.id = po.recognition_rule_id
        where s.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
-         and d.status in ('posted', 'reversed') and coalesce(po.deferred_account_id, rr.deferred_account_id) is not null
+         and d.status in ('posted', 'voided') and coalesce(po.deferred_account_id, rr.deferred_account_id) is not null
     ), entries as (
       select distinct so.subscription_id, so.deferred_account_id, d.posted_entry_id as entry_id
         from subscription_obligations so
@@ -407,6 +407,7 @@ async function readSources(
         join document_lines dl on dl.org_id = d.org_id and dl.document_id = d.id
         join performance_obligations po on po.org_id = dl.org_id and po.id = so.obligation_id and po.document_line_id = dl.id
        where (d.subscription_id = so.subscription_id or d.custom->>'subscriptionId' = so.subscription_id::text)
+         and d.status in ('posted', 'voided')
          and d.posted_entry_id is not null
       union
       select so.subscription_id, so.deferred_account_id, d.reversal_entry_id
@@ -415,6 +416,7 @@ async function readSources(
         join document_lines dl on dl.org_id = d.org_id and dl.document_id = d.id
         join performance_obligations po on po.org_id = dl.org_id and po.id = so.obligation_id and po.document_line_id = dl.id
        where (d.subscription_id = so.subscription_id or d.custom->>'subscriptionId' = so.subscription_id::text)
+         and d.status in ('posted', 'voided')
          and d.reversal_entry_id is not null
       union
       select so.subscription_id, so.deferred_account_id, posted.entry_id
@@ -451,12 +453,25 @@ async function readSources(
     ? sql`case when d.kind = 'customer_credit' then -${billingsBaseAmount} else ${billingsBaseAmount} end`
     : billingsBaseAmount;
   const billingRows = (await executor.execute<BillingRow>(sql`
-    select coalesce(d.subsidiary_id, (select id from subsidiaries where org_id = d.org_id and parent_id is null)) as subsidiary_id,
-           coalesce(sum(${billingsAmount}), 0)::text as billings
-      from documents d
-     where d.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
-       and d.status = 'posted' and d.document_date >= ${month}::date
-       and d.document_date < (${month}::date + interval '1 month')
+    with billing_entries as (
+      select d.org_id, d.subsidiary_id, d.document_date as effective_date, ${billingsAmount} as amount
+        from documents d
+       where d.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
+         and d.status in ('posted', 'voided') and d.posted_entry_id is not null
+      union all
+      select d.org_id, d.subsidiary_id, reversal.posting_date as effective_date, -(${billingsAmount}) as amount
+        from documents d
+        join journal_entries reversal
+          on reversal.org_id = d.org_id and reversal.id = d.reversal_entry_id
+         and reversal.status in ('posted', 'reversed')
+       where d.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
+         and d.status = 'voided' and d.posted_entry_id is not null
+    )
+    select coalesce(billing.subsidiary_id, (select id from subsidiaries where org_id = billing.org_id and parent_id is null)) as subsidiary_id,
+           coalesce(sum(billing.amount), 0)::text as billings
+      from billing_entries billing
+     where billing.effective_date >= ${month}::date
+       and billing.effective_date < (${month}::date + interval '1 month')
      group by 1
   `)).rows;
   const cohortStartRows = (await executor.execute<{

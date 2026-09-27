@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { toUnits } from "../../money/money.ts";
+import { neg, toUnits } from "../../money/money.ts";
+import { runScenario } from "../../golden/scenario.ts";
+import { cancelRevenueRecognitionForInvoice } from "../../ledger/revenue-recognition-cancellation.ts";
 import { db, withBypassContext } from "../../platform/db.ts";
-import { createScratchOrg, dropScratchOrg } from "../../testing/fixtures.ts";
+import { runRevenueRecognition } from "../../revenue/recognition.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../../testing/fixtures.ts";
+import { createSubscriptionInvoice } from "../subscription-billing.ts";
 import { UsageBillingError } from "../usage/errors.ts";
 import { recomputeSaasMetrics } from "./metrics-ledger.ts";
 
@@ -18,7 +22,7 @@ async function enableMetrics(orgId: string): Promise<void> {
     update orgs set settings = jsonb_set(
       settings,
       '{features}',
-      coalesce(settings->'features', '{}'::jsonb) || '{"subscriptionBilling":true,"saasMetrics":true}'::jsonb
+      coalesce(settings->'features', '{}'::jsonb) || '{"subscriptionBilling":true,"saasMetrics":true,"revenueRecognition":true}'::jsonb
     ) where id = ${orgId} returning id
   `);
   assert.equal(result.rows.length, 1, "the feature setting must be applied to the scratch organization");
@@ -235,6 +239,41 @@ test("closed SaaS metrics months freeze after their first computation", { skip: 
   } finally {
     await dropScratchOrg(org.orgId);
   }
+});
+
+test("voided subscription invoices preserve closed-month metrics and reverse in the void month", { skip: !DB }, async () => {
+  const org = await createScratchOrg(), actorId = await createScratchUser(org.orgId, "Metrics void controller", "admin");
+  try {
+    const subscriptionId = randomUUID(), planId = randomUUID();
+    await withBypassContext(async () => {
+      await enableMetrics(org.orgId);
+      await seedSubscription({ orgId: org.orgId, customerId: org.customerId, actorId, subscriptionId, planId, amount: "120", startOn: MONTH });
+      const calendar = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0]!;
+      const periods = await db.execute(sql`insert into accounting_periods (org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
+        select ${org.orgId}, extract(year from month_start)::int, extract(month from month_start)::int, to_char(month_start, 'YYYY-MM'), month_start,
+          (month_start + interval '1 month - 1 day')::date, false, ${calendar.id} from generate_series('2026-08-01'::date, '2027-06-01'::date, interval '1 month') months(month_start) returning id`);
+      assert.equal(periods.rows.length, 11);
+    });
+    const invoice = await createSubscriptionInvoice({ orgId: org.orgId, actorId, customerId: org.customerId, subsidiaryId: org.subsidiaryId,
+      currency: "CAD", incomeAccountId: org.accounts.revenue, itemId: org.items.service, taxCodeId: null, description: "Subscription",
+      quantity: "1", unitPrice: "120", memo: "Subscription invoice", invoiceDate: org.date, autoPost: true, custom: { subscriptionId } });
+    assert.equal((await runRevenueRecognition(org.orgId, "2026-07-31", actorId)).posted, 1); await recomputeSaasMetrics(org.orgId, MONTH); await recomputeSaasMetrics(org.orgId, MONTH);
+    const snapshot = async () => (await db.execute<{ value: string }>(sql`select jsonb_build_object('subscription', (select to_jsonb(m) from saas_metrics_monthly m where m.org_id = ${org.orgId} and m.subscription_id = ${subscriptionId} and m.month = ${MONTH}::date), 'facts',
+      (select to_jsonb(f) from saas_metrics_facts_monthly f where f.org_id = ${org.orgId} and f.month = ${MONTH}::date))::text as value`)).rows[0]?.value;
+    const julyBefore = await snapshot(); assert.ok(julyBefore);
+    await withBypassContext(async () => {
+      const closed = await db.execute(sql`insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state) values (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'ar', 'closed') returning period_id`); assert.equal(closed.rows.length, 1, "July AR must be closed before the void");
+    });
+    const voided = await cancelRevenueRecognitionForInvoice({ documentId: invoice.invoiceId, orgId: org.orgId, actorId, reason: "Subscription cancelled by customer", reversalDate: "2026-08-15", allowedSubsidiaryIds: null }); assert.equal(voided.status, "cancelled");
+    assert.equal((await recomputeSaasMetrics(org.orgId, MONTH)).frozen, true); assert.equal(await snapshot(), julyBefore, "the closed July facts must remain byte-identical");
+    await recomputeSaasMetrics(org.orgId, "2026-08-01");
+    const rows = (await db.execute<{ revenue: string; deferredDelta: string; billings: string; deferredBalance: string }>(sql`
+      select m.recognized_revenue::text as revenue, m.deferred_delta::text as "deferredDelta", f.billings::text as billings, f.deferred_balance::text as "deferredBalance"
+        from saas_metrics_monthly m join saas_metrics_facts_monthly f on f.org_id = m.org_id and f.subsidiary_id = m.subsidiary_id and f.month = m.month
+       where m.org_id = ${org.orgId} and m.subscription_id = ${subscriptionId} order by m.month`)).rows;
+    assert.equal(rows.length, 2); assert.ok([rows[0]!.revenue, rows[0]!.billings, rows[0]!.deferredDelta].every((value) => value !== "0.0000"));
+    assert.deepEqual([rows[1]!.revenue, rows[1]!.billings, rows[1]!.deferredDelta, rows[1]!.deferredBalance], [neg(rows[0]!.revenue), neg(rows[0]!.billings), neg(rows[0]!.deferredDelta), "0.0000"]); assert.equal((await runScenario(org.orgId, { at: "2026-08-15" })).checks.find((item) => item.name === "saas-metrics-tieout")?.ok, true);
+  } finally { await dropScratchOrg(org.orgId); }
 });
 
 test("SaaS metrics refuse by name when their feature is off", { skip: !DB }, async () => {
