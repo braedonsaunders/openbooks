@@ -23,6 +23,9 @@ export type StarterTemplate = {
   sourceHtml: string
   headerHtml: string
   footerHtml: string
+  paperSize?: 'letter' | 'a4' | 'legal' | '4x6'
+  orientation?: 'portrait' | 'landscape'
+  marginMm?: number
 }
 
 const th = (label: string, align = 'left', width?: string) =>
@@ -441,12 +444,66 @@ function packingSlipStarter(meta: PdfRecordTypeMeta, accent: string): StarterTem
   }
 }
 
+function cartonLabelStarter(accent: string): StarterTemplate {
+  const sourceHtml =
+    `<div data-each="cartons" style="${FONT}color:${INK};height:138mm;page-break-inside:avoid;overflow:hidden;">` +
+    `<div style="font-size:15px;font-weight:800;color:${accent};">{{org_name}}</div>` +
+    `<div style="font-size:10px;color:${MUTED};margin-top:4px;">{{warehouse_name}}</div>` +
+    `<div style="border-top:2px solid ${INK};margin:8px 0 10px;"></div>` +
+    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};">Shipment</div>` +
+    `<div style="font-size:22px;font-weight:800;">{{document_number}}</div>` +
+    `<div style="font-size:14px;font-weight:700;margin-top:6px;">Carton {{carton_number}} of {{carton_total}} · {{carton}}</div>` +
+    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};margin-top:13px;">Ship to</div>` +
+    `<div style="font-size:17px;font-weight:700;margin-top:3px;">{{ship_to_name}}</div>` +
+    `<div style="font-size:13px;line-height:1.35;margin-top:3px;">{{ship_to_address}}</div>` +
+    `<div style="display:flex;justify-content:center;margin-top:9mm;">{{barcode barcode}}</div>` +
+    `</div>`
+  return {
+    sourceHtml,
+    headerHtml: '',
+    footerHtml: '',
+    paperSize: '4x6',
+    orientation: 'portrait',
+    marginMm: 5,
+  }
+}
+
+function shippingLabelStarter(accent: string): StarterTemplate {
+  const sourceHtml =
+    `<div style="${FONT}color:${INK};height:138mm;overflow:hidden;">` +
+    `<div style="font-size:15px;font-weight:800;color:${accent};">{{org_name}}</div>` +
+    `<div style="border-top:2px solid ${INK};margin:8px 0 9px;"></div>` +
+    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};">Ship from</div>` +
+    `<div style="font-size:13px;font-weight:700;margin-top:3px;">{{warehouse_name}}</div>` +
+    `<div style="font-size:11px;line-height:1.35;margin-top:2px;">{{warehouse_address}}</div>` +
+    `<div style="border-top:1px solid ${RULE};margin:9px 0;"></div>` +
+    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};">Ship to</div>` +
+    `<div style="font-size:18px;font-weight:800;margin-top:4px;">{{ship_to_name}}</div>` +
+    `<div style="font-size:14px;line-height:1.35;margin-top:3px;">{{ship_to_address}}</div>` +
+    `<div style="border-top:1px solid ${RULE};margin:9px 0;"></div>` +
+    `<div style="font-size:12px;font-weight:700;">{{carrier_name}} · {{carrier_service}}</div>` +
+    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};margin-top:7px;">Tracking number</div>` +
+    `<div style="font-size:12px;font-weight:700;margin-top:2px;">{{tracking_number}}</div>` +
+    `<div style="display:flex;justify-content:center;margin-top:5mm;">{{barcode tracking_number}}</div>` +
+    `</div>`
+  return {
+    sourceHtml,
+    headerHtml: '',
+    footerHtml: '',
+    paperSize: '4x6',
+    orientation: 'portrait',
+    marginMm: 5,
+  }
+}
+
 export function starterTemplate(meta: PdfRecordTypeMeta, accent?: string | null): StarterTemplate {
   const color = accent && /^#[0-9a-fA-F]{3,8}$/.test(accent) ? accent : '#0f766e'
   if (meta.key === 'journal_entry') return journalStarter(meta, color)
   if (meta.key === 'pay_stub') return payStubStarter(meta, color)
   if (meta.key === 'payroll_cheque') return chequeStarter(meta, color)
   if (meta.key === 'field_ticket') return fieldTicketStarter(meta, color)
+  if (meta.key === 'shipment_carton_label') return cartonLabelStarter(color)
+  if (meta.key === 'shipment_shipping_label') return shippingLabelStarter(color)
   if (meta.key === 'shipment') return packingSlipStarter(meta, color)
   return documentStarter(meta, color)
 }

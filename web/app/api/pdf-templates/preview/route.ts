@@ -13,6 +13,7 @@ import { pdfResponse } from "../../../../lib/export";
 import { PDF_RECORD_TYPE_BY_KEY, sampleValues } from "../../../../lib/pdf-templates/catalog";
 import { mergeAndPrintPdf } from "../../../../lib/pdf-templates/render";
 import { findSamplePdfRecordId, loadPdfRecordValues } from "../../../../lib/pdf-templates/values";
+import { starterTemplate } from "../../../../lib/pdf-templates/starters";
 import { notFound } from "@/lib/api/responses";
 
 
@@ -53,7 +54,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   if (!can(gate, meta.readPermission)) {
     return NextResponse.json({ error: `missing permission: ${meta.readPermission}` }, { status: 403 });
   }
-  if (!(await isDocKindEnabled(user.orgId, meta.key))) {
+  if (!(await isDocKindEnabled(user.orgId, meta.docKind ?? meta.key))) {
     return notFound("record");
   }
 
@@ -79,8 +80,9 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
 
   // Preview geometry is refused like saved geometry: a misspelled size must
   // not preview as Letter while the saved template would print the same lie.
-  const paperSizeInput = body.paperSize ?? "letter";
-  const marginMmInput = body.marginMm ?? 14;
+  const starter = starterTemplate(meta)
+  const paperSizeInput = body.paperSize ?? starter.paperSize ?? "letter";
+  const marginMmInput = body.marginMm ?? starter.marginMm ?? 14;
   try {
     assertPrintablePage(paperSizeInput, marginMmInput);
   } catch (e) {
@@ -96,7 +98,11 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
         compiledHtml,
         // assertPrintablePage narrows paperSizeInput to the supported set.
         paperSize: paperSizeInput,
-        orientation: body.orientation === "landscape" ? "landscape" : "portrait",
+        orientation: body.orientation === "landscape"
+          ? "landscape"
+          : body.orientation === "portrait"
+            ? "portrait"
+            : starter.orientation ?? "portrait",
         marginMm: marginMmInput,
         headerHtml: header || null,
         footerHtml: footer || null,

@@ -33,7 +33,7 @@ async function renderRecordPdf(
   const gate = await guardPermission(meta.readPermission);
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
-  if (!(await isDocKindEnabled(user.orgId, recordType))) {
+  if (!(await isDocKindEnabled(user.orgId, meta.docKind ?? meta.key))) {
     return notFound("record");
   }
 

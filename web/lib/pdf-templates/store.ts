@@ -14,7 +14,7 @@ export type PdfTemplateRow = {
   recordType: string
   name: string
   description: string | null
-  paperSize: 'letter' | 'a4' | 'legal'
+  paperSize: 'letter' | 'a4' | 'legal' | '4x6'
   orientation: 'portrait' | 'landscape'
   marginMm: number
   headerHtml: string | null
@@ -58,22 +58,27 @@ export async function getPdfTemplate(orgId: string, id: string): Promise<PdfTemp
 
 /** Templates available through read surfaces, with the canonical document-kind feature fence applied. */
 export async function listVisiblePdfTemplates(orgId: string, recordType?: string): Promise<PdfTemplateRow[]> {
-  if (recordType && !(await isDocKindEnabled(orgId, recordType))) return []
+  const kind = recordType ? PDF_RECORD_TYPE_BY_KEY[recordType]?.docKind ?? recordType : null
+  if (kind && !(await isDocKindEnabled(orgId, kind))) return []
   const hidden = new Set(await disabledDocKinds(orgId))
-  return (await listPdfTemplates(orgId, recordType)).filter((row) => !hidden.has(row.recordType))
+  return (await listPdfTemplates(orgId, recordType)).filter((row) => {
+    const rowKind = PDF_RECORD_TYPE_BY_KEY[row.recordType]?.docKind ?? row.recordType
+    return !hidden.has(rowKind)
+  })
 }
 
 /** A saved design is not readable when its document kind is disabled. */
 export async function getVisiblePdfTemplate(orgId: string, id: string): Promise<PdfTemplateRow | null> {
   const row = await getPdfTemplate(orgId, id)
-  if (!row || !(await isDocKindEnabled(orgId, row.recordType))) return null
+  const kind = row ? PDF_RECORD_TYPE_BY_KEY[row.recordType]?.docKind ?? row.recordType : null
+  if (!row || !kind || !(await isDocKindEnabled(orgId, kind))) return null
   return row
 }
 
 /** What the render route prints with: a saved template or the built-in starter. */
 export type ResolvedPdfTemplate = {
   compiledHtml: string
-  paperSize: 'letter' | 'a4' | 'legal'
+  paperSize: 'letter' | 'a4' | 'legal' | '4x6'
   orientation: 'portrait' | 'landscape'
   marginMm: number
   headerHtml: string | null
@@ -175,11 +180,14 @@ export async function resolvePdfTemplate(
   `))
   const starter = starterTemplate(meta, org.rows[0]?.brand_primary)
   const { compiledHtml } = compileTemplateHtml(starter.sourceHtml)
+  const paperSize = starter.paperSize ?? 'letter'
+  const orientation = starter.orientation ?? 'portrait'
+  const marginMm = starter.marginMm ?? 14
   return {
     compiledHtml,
-    paperSize: 'letter',
-    orientation: 'portrait',
-    marginMm: 14,
+    paperSize,
+    orientation,
+    marginMm,
     headerHtml: starter.headerHtml || null,
     footerHtml: starter.footerHtml || null,
     provenance: {
@@ -187,9 +195,9 @@ export async function resolvePdfTemplate(
       revision: null,
       contentHash: printDesignHash({
         compiledHtml,
-        paperSize: 'letter',
-        orientation: 'portrait',
-        marginMm: 14,
+        paperSize,
+        orientation,
+        marginMm,
         headerHtml: starter.headerHtml || null,
         footerHtml: starter.footerHtml || null,
       }),

@@ -32,7 +32,7 @@ export type EditorTemplate = {
   recordTypeLabel: string
   name: string
   description: string | null
-  paperSize: 'letter' | 'a4' | 'legal'
+  paperSize: 'letter' | 'a4' | 'legal' | '4x6'
   orientation: 'portrait' | 'landscape'
   marginMm: number
   headerHtml: string | null
@@ -47,6 +47,7 @@ const PAPER_PX: Record<string, [number, number]> = {
   letter: [816, 1056],
   a4: [794, 1123],
   legal: [816, 1344],
+  '4x6': [384, 576],
 }
 const MM_TO_PX = 3.7795
 
@@ -65,6 +66,7 @@ export default function PdfTemplateEditor({
     letter: t('list.paperLetter'),
     a4: t('list.paperA4'),
     legal: t('list.paperLegal'),
+    '4x6': t('list.paper4x6'),
   }
   const router = useRouter()
 

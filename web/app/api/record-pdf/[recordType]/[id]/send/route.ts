@@ -64,7 +64,7 @@ async function getSendOptions(req: Request, { params }: { params: Promise<{ reco
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 })
   const gate = await guardPermission(meta.readPermission)
   if (gate instanceof NextResponse) return gate
-  if (!(await isDocKindEnabled(gate.user.orgId, recordType))) {
+  if (!(await isDocKindEnabled(gate.user.orgId, meta.docKind ?? meta.key))) {
     return notFound("record")
   }
   // A malformed id is a plain not-found, settled before any record lookup.
@@ -85,7 +85,7 @@ async function sendRecord(req: Request, { params }: { params: Promise<{ recordTy
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 })
   const gate = await guardPermission(meta.readPermission)
   if (gate instanceof NextResponse) return gate
-  if (!(await isDocKindEnabled(gate.user.orgId, recordType))) {
+  if (!(await isDocKindEnabled(gate.user.orgId, meta.docKind ?? meta.key))) {
     return notFound("record")
   }
   if (!isUuid(id)) return NextResponse.json({ error: 'record not found' }, { status: 404 })

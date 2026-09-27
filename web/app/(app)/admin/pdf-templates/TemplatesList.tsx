@@ -25,6 +25,9 @@ export interface StarterRow {
   sourceHtml: string
   headerHtml: string
   footerHtml: string
+  paperSize: 'letter' | 'a4' | 'legal' | '4x6'
+  orientation: 'portrait' | 'landscape'
+  marginMm: number
   /** No org template is the type default, so the starter is what prints. */
   isEffectiveDefault: boolean
 }
@@ -59,9 +62,8 @@ export function TemplatesList({
     [recordTypes],
   )
 
-  // Paper-size names come from the catalog (list.paperLetter/paperA4/
-  // paperLegal) — an unknown stored size renders verbatim, exactly like an
-  // unknown run status in the delivery panel.
+  // Paper-size names come from the catalog — an unknown stored size renders
+  // verbatim, exactly like an unknown run status in the delivery panel.
   const paperName = (size: string) =>
     size === 'letter'
       ? t('list.paperLetter')
@@ -69,7 +71,9 @@ export function TemplatesList({
         ? t('list.paperA4')
         : size === 'legal'
           ? t('list.paperLegal')
-          : size
+          : size === '4x6'
+            ? t('list.paper4x6')
+            : size
 
   // Taken names per record type (the unique index is org + type + name), so
   // the offered duplicate default never collides.
@@ -110,6 +114,9 @@ export function TemplatesList({
             sourceHtml: preview.sourceHtml,
             headerHtml: preview.headerHtml,
             footerHtml: preview.footerHtml,
+            paperSize: preview.paperSize,
+            orientation: preview.orientation,
+            marginMm: preview.marginMm,
           }),
         })
         if (!res.ok) {
@@ -214,6 +221,14 @@ export function TemplatesList({
           <NewTemplateButton
             recordType={row.starter.recordType}
             asDuplicateOfStarter
+            starterDesign={{
+              sourceHtml: row.starter.sourceHtml,
+              headerHtml: row.starter.headerHtml,
+              footerHtml: row.starter.footerHtml,
+              paperSize: row.starter.paperSize,
+              orientation: row.starter.orientation,
+              marginMm: row.starter.marginMm,
+            }}
             defaultName={uniqueTemplateName(
               t('list.starterNamed', { type: row.starter.label }),
               takenByType.get(row.starter.recordType) ?? new Set(),

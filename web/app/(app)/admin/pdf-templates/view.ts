@@ -4,7 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
 import { disabledDocKinds } from "../../../../lib/documents.ts";
-import { PDF_RECORD_TYPES } from '../../../../lib/pdf-templates/catalog'
+import { PDF_RECORD_TYPES, PDF_RECORD_TYPE_BY_KEY } from '../../../../lib/pdf-templates/catalog'
 import { starterTemplate } from '../../../../lib/pdf-templates/starters'
 import { listPdfTemplates } from '../../../../lib/pdf-templates/store'
 import type { StarterRow, TemplateRow } from './TemplatesList'
@@ -48,8 +48,11 @@ export async function loadPdfTemplates(): Promise<PdfTemplatesData> {
   const tHub = await getTranslations('admin.hub')
 
   const hiddenKinds = new Set(await disabledDocKinds(authz.user.orgId))
-  const catalog = PDF_RECORD_TYPES.filter((meta) => !hiddenKinds.has(meta.key))
-  const all = (await listPdfTemplates(authz.user.orgId)).filter((tp) => !hiddenKinds.has(tp.recordType))
+  const catalog = PDF_RECORD_TYPES.filter((meta) => !hiddenKinds.has(meta.docKind ?? meta.key))
+  const all = (await listPdfTemplates(authz.user.orgId)).filter((tp) => {
+    const docKind = PDF_RECORD_TYPE_BY_KEY[tp.recordType]?.docKind ?? tp.recordType
+    return !hiddenKinds.has(docKind)
+  })
   const templates: TemplateRow[] = all.map((tp) => ({
     id: tp.id,
     name: tp.name,
@@ -69,6 +72,9 @@ export async function loadPdfTemplates(): Promise<PdfTemplatesData> {
       sourceHtml: starter.sourceHtml,
       headerHtml: starter.headerHtml,
       footerHtml: starter.footerHtml,
+      paperSize: starter.paperSize ?? 'letter',
+      orientation: starter.orientation ?? 'portrait',
+      marginMm: starter.marginMm ?? 14,
       isEffectiveDefault: !defaultedTypes.has(meta.key),
     }
   })

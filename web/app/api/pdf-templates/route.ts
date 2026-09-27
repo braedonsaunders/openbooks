@@ -39,7 +39,7 @@ async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, inject
   const recordType = new URL(req.url).searchParams.get("recordType") ?? undefined;
   if (recordType && !PDF_RECORD_TYPE_BY_KEY[recordType])
     return NextResponse.json({ error: "unknown record type" }, { status: 400 });
-  if (recordType && !(await isDocKindEnabled(user.orgId, recordType))) {
+  if (recordType && !(await isDocKindEnabled(user.orgId, PDF_RECORD_TYPE_BY_KEY[recordType]!.docKind ?? recordType))) {
     return notFound("record");
   }
   const rows = await listVisiblePdfTemplates(user.orgId, recordType);
@@ -74,7 +74,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   const body = parsedBody.data;
   const meta = body.recordType ? PDF_RECORD_TYPE_BY_KEY[body.recordType] : undefined;
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
-  if (!(await isDocKindEnabled(user.orgId, meta.key))) {
+  if (!(await isDocKindEnabled(user.orgId, meta.docKind ?? meta.key))) {
     return notFound("record");
   }
 
@@ -101,8 +101,8 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   // Page geometry is refused, never coerced: a misspelled size printing
   // Letter, or a 500 mm margin printing blank, is a silent misprint. Omitted
   // values take the starter defaults.
-  const paperSizeInput = body.paperSize ?? "letter";
-  const marginMmInput = body.marginMm ?? 14;
+  const paperSizeInput = body.paperSize ?? starter.paperSize ?? "letter";
+  const marginMmInput = body.marginMm ?? starter.marginMm ?? 14;
   try {
     assertPrintablePage(paperSizeInput, marginMmInput);
   } catch (e) {
@@ -117,7 +117,11 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
   if (body.orientation !== undefined && body.orientation !== "landscape" && body.orientation !== "portrait") {
     return NextResponse.json({ error: `Unknown orientation "${body.orientation}" — use portrait or landscape.` }, { status: 400 });
   }
-  const orientation = body.orientation === "landscape" ? "landscape" : "portrait";
+  const orientation = body.orientation === "landscape"
+    ? "landscape"
+    : body.orientation === "portrait"
+      ? "portrait"
+      : starter.orientation ?? "portrait";
 
   try {
     const row = await db.transaction(async (tx) => {

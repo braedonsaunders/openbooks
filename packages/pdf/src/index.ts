@@ -56,3 +56,11 @@ export type {
   StatementPdfRow,
   StatementPdfStyle,
 } from './statement'
+export {
+  CODE128_BAR_HEIGHT_MM,
+  CODE128_MODULE_WIDTH_MM,
+  CODE128_QUIET_ZONE_MODULES,
+  encodeCode128,
+  renderCode128Svg,
+  type Code128Encoding,
+} from './barcode'

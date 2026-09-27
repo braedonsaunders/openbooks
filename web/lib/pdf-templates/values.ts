@@ -522,7 +522,7 @@ export async function loadPdfRecordValues(
   if (meta.key === 'pay_stub') return loadPayStubValues(orgId, id, scope)
   if (meta.key === 'payroll_cheque') return loadPayrollChequeValues(orgId, id, scope)
   if (meta.key === 'field_ticket') return loadFieldTicketValues(orgId, id, scope)
-  if (meta.key === 'shipment') return loadShipmentValues(orgId, id, scope)
+  if (meta.docKind === 'shipment') return loadShipmentValues(orgId, id, scope)
   return loadDocumentValues(meta, orgId, id, scope)
 }
 
@@ -560,9 +560,22 @@ async function loadShipmentValues(
     db.execute<{ custom: Record<string, unknown> | null }>(sql`
       select custom from documents where org_id = ${orgId} and id = ${shipment.id}`),
   ])
+  const warehouse = await db.execute<{
+    address_line1: string | null
+    address_line2: string | null
+    city: string | null
+    region: string | null
+    postal_code: string | null
+    country: string | null
+  }>(sql`
+    select address_line1, address_line2, city, region, postal_code, country
+      from warehouses where org_id = ${orgId} and stock_location_id = ${shipment.warehouse.id}`)
   const format = createMoneyFormatter(locale, org.base_currency)
   const address = shipment.shipToAddress
-  const cartons = new Set(shipment.lines.map((line) => line.carton).filter((carton): carton is string => Boolean(carton)))
+  const cartons = [...new Set(
+    shipment.lines.map((line) => line.carton?.trim()).filter((carton): carton is string => Boolean(carton)),
+  )]
+  const shipFrom = warehouse.rows[0]
   const itemIds = [...new Set(shipment.lines.map((line) => line.itemId))]
   const customerSkus = customerPartNumbersEnabled && shipment.customer && itemIds.length > 0
     ? (await db.execute<{ item_id: string; customer_sku: string }>(sql`
@@ -588,11 +601,25 @@ async function loadShipmentValues(
           .join(', ')
       : '',
     warehouse_name: `${shipment.warehouse.code} · ${shipment.warehouse.name}`,
+    warehouse_address: shipFrom
+      ? [
+          shipFrom.address_line1,
+          shipFrom.address_line2,
+          [shipFrom.city, shipFrom.region, shipFrom.postal_code].filter(Boolean).join(', '),
+          shipFrom.country,
+        ].filter(Boolean).join(', ')
+      : '',
     carrier_name: shipment.carrier?.name ?? '',
     carrier_service: shipment.carrierService ?? '',
     tracking_number: shipment.trackingNumber ?? '',
     tracking_url: shipment.trackingUrl ?? '',
-    carton_count: cartons.size > 0 ? String(cartons.size) : '',
+    carton_count: cartons.length > 0 ? String(cartons.length) : '',
+    cartons: cartons.map((carton, index) => ({
+      carton,
+      carton_number: String(index + 1),
+      carton_total: String(cartons.length),
+      barcode: `${shipment.documentNumber}-C${index + 1}`,
+    })),
     memo: shipment.memo ?? '',
     org_name: org.name,
     printed_date: fmtDate(await businessToday(orgId), locale),
