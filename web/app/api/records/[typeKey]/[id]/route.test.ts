@@ -255,7 +255,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/setup/audit', 'mock:audit'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, _context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
@@ -270,8 +270,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?custom-record-route-test'
 const { PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
-
 function reset(record: StoredRecord = initialRecord()): void {
   state.record = clone(record)
   state.calls = []

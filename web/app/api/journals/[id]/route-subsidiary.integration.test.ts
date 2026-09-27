@@ -42,7 +42,7 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
@@ -59,8 +59,6 @@ const hooks = registerHooks({
 
 const patchRouteUrl = "./route.ts?journal-subsidiary-test";
 const { PATCH } = (await import(patchRouteUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");

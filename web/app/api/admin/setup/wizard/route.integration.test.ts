@@ -32,7 +32,7 @@ const mockAuthz = `
 `;
 let authzRealUrl = ''
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       specifier === "../../../../../lib/authz"
@@ -53,8 +53,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?period-staging-regression-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db, withBypassContext, withOrgContext } = await import(
   "@openbooks/engine/src/platform/db.ts"
 );

@@ -31,7 +31,7 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("me/page-layout/route")) {
       return { url: "mock:page-layout-authz", shortCircuit: true };
@@ -48,8 +48,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?page-layout-revision-integration";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { mergePageLayouts } = await import("../../../../lib/page-layout-shared.ts");
 const { createScratchOrg, createScratchUser } = await import(

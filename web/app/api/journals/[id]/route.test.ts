@@ -117,7 +117,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/journals', 'mock:journals-loader'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as documents.test.ts).
     const mocked = mockUrls.get(specifier)
@@ -135,8 +135,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?journal-occ-test'
 const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
-
 const STORED_REVISION = '2026-08-24T12:00:00.200001Z'
 const NEXT_REVISION = '2026-08-24T12:00:00.200002Z'
 const JOURNAL_ID = '00000000-0000-4000-8000-00000000j001'.replace('j', 'a')

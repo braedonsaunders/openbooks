@@ -35,7 +35,7 @@ const state: {
 } = { authz: null, deliveries: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, next) {
     const virtual = (source: string) => ({
       shortCircuit: true,
@@ -86,8 +86,6 @@ const hooks = registerHooks({
 });
 const routeUrl = "./route.ts?admin-users-delegation";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const post = (body: object) =>
   POST(
     new Request("http://localhost/api/admin/users", {

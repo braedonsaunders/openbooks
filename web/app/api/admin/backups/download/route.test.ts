@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") {
       return {
@@ -16,8 +16,6 @@ const hooks = registerHooks({
 
 const directDownloadRouteUrl: string = "./route.ts?direct-backup-download-test";
 const { GET } = await import(directDownloadRouteUrl) as typeof import("./route.ts");
-hooks.deregister();
-
 test("direct browser export refuses with the restore-grade recovery path", async () => {
   const response = await GET();
 

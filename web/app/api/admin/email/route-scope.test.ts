@@ -10,7 +10,7 @@ const state: { allowedSubsidiaryIds: Set<string> | null; saves: unknown[] } = {
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 let authzUrl = ''
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       (specifier === '../../../../lib/authz' && context.parentURL?.includes('/admin/email/route')) ||
@@ -40,8 +40,6 @@ const hooks = registerHooks({
 })
 
 const { PUT } = await import('./route.ts')
-hooks.deregister()
-
 test('restricted actors cannot change the organization outbound email transport', async () => {
   state.allowedSubsidiaryIds = new Set(['subsidiary-a'])
   state.saves.length = 0

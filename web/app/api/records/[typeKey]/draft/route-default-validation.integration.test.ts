@@ -22,7 +22,7 @@ const mockAuthz = `
   }
 `
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('/api/records/')) {
       return { url: 'mock:custom-record-draft-validation-authz', shortCircuit: true }
@@ -42,8 +42,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?custom-record-draft-validation-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
-
 const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts',

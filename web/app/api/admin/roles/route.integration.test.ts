@@ -41,7 +41,7 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
@@ -55,8 +55,6 @@ const hooks = registerHooks({
 });
 const routeUrl = "./route.ts?admin-roles-integration";
 const { POST, PATCH, DELETE, GET } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 function call(method: "POST" | "PATCH" | "DELETE", body: Record<string, unknown>): Promise<Response> {
   const handler = method === "POST" ? POST : method === "PATCH" ? PATCH : DELETE;
   return handler(

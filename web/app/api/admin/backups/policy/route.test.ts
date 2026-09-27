@@ -54,7 +54,7 @@ const mockSources = new Map<string, string>([
 ]);
 const jsonUrl = new URL("../../../../../lib/api/json.ts", import.meta.url).href;
 const backupUrl = new URL("../../../../../../engine/src/backup/backup.ts", import.meta.url).href;
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "@/lib/api/json") return nextResolve(jsonUrl, context);
     if (specifier === "@openbooks/engine/src/backup/backup.ts") return nextResolve(backupUrl, context);
@@ -72,8 +72,6 @@ const hooks = registerHooks({
 });
 const backupPolicyRouteUrl: string = "./route.ts?backup-policy-test";
 const { PUT } = await import(backupPolicyRouteUrl) as typeof import("./route.ts");
-hooks.deregister();
-
 function reset(): void {
   state.calls = [];
   state.auditWasTransactional = [];

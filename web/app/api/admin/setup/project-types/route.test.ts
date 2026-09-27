@@ -219,7 +219,7 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       context.parentURL?.includes("setup/project-types") ||
@@ -248,8 +248,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?project-types-boundary-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 function resetState(): void {
   routeState.authz = {
     user: { orgId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },

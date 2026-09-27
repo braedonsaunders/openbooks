@@ -219,7 +219,7 @@ const mockUrls = new Map<string, string>([
   ['@/lib/authz', 'mock:authz'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@/lib/api/json') {
       return {
@@ -249,8 +249,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?record-types-idempotency-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
-
 function reset(): void {
   state.requestKey = null
   state.rows.clear()

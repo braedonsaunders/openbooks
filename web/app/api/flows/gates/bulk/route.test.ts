@@ -67,7 +67,7 @@ const mockUrls = new Map<string, string>([
   ['@/lib/authz', 'mock:authz'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, _context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { shortCircuit: true, url: mocked }
@@ -83,8 +83,6 @@ const hooks = registerHooks({
 const routeUrl = './route.ts?bulk-gates-boundary-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 const { MAX_BULK_ITEMS } = await import('./bulk-limit.ts')
-hooks.deregister()
-
 function reset(allowedSubsidiaryIds: Set<string> | null = null): void {
   routeState.authz = { user: { id: 'user-1', orgId: 'org-1' }, allowedSubsidiaryIds }
   routeState.gates.clear()

@@ -18,7 +18,7 @@ const module_ = (source: string): { shortCircuit: true; format: 'module'; url: s
   url: `data:text/javascript,${encodeURIComponent(source)}`,
 })
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     // The shared dependency tree links @openbooks/engine to another checkout;
     // route tests must execute this worktree's engine boundary (otherwise the
@@ -55,8 +55,6 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'
 )
 const { POST } = await import('./route.ts')
-hooks.deregister()
-
 async function setup() {
   const org = await withBypassContext(() => (createScratchOrg()))
   const actor = await withBypassContext(() => (createScratchUser(org.orgId, 'Setup runner', 'reviewer')))

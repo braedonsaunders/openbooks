@@ -12,7 +12,7 @@ const state: { authz: {
   permissions: Set<string>; allowedSubsidiaryIds: null;
 } | null } = { authz: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.user-control-integration")] = state;
-const hooks = registerHooks({ resolve(specifier, context, next) {
+registerHooks({ resolve(specifier, context, next) {
   const virtual = (source: string) => ({ shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) });
   if (specifier.endsWith("/lib/authz") && /\/api\/admin\/(users|roles)\/route.ts/.test(context.parentURL ?? "")) {
     const realAuthzUrl = next(specifier, context).url;
@@ -22,7 +22,6 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
 } });
 const { POST } = await import("./route");
 const { DELETE } = await import("../roles/route");
-hooks.deregister();
 const request = (method: string, body: object) => new Request("http://localhost/api/admin/users", {
   method, headers: { "content-type": "application/json" }, body: JSON.stringify(body),
 });

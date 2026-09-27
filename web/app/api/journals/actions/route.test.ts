@@ -22,7 +22,7 @@ const mockAuthz = `
   export function guardSubsidiaryScope() { return null }
 `
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '../../../../lib/authz' || specifier === '../../../lib/authz') {
       return { url: 'mock:journal-actions-authz', shortCircuit: true }
@@ -37,8 +37,6 @@ const hooks = registerHooks({
 
 const { POST: createJournal } = await import('../route.ts')
 const { POST: postJournal } = await import('./route.ts')
-hooks.deregister()
-
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')

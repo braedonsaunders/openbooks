@@ -30,7 +30,7 @@ const mockAuthz = `
 `;
 
 const engineRoot = new URL("../../../../../engine/", import.meta.url).href;
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "next/navigation") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript,export function redirect() {}" };
@@ -58,8 +58,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?close-run-date-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"

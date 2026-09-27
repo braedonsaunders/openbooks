@@ -81,7 +81,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/features', 'mock:features'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
@@ -96,8 +96,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?field-ticket-sign-gate-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
-
 const pageKey = Symbol.for('openbooks.field-ticket-sign-page-test')
 interface PageState {
   featureEnabled: boolean

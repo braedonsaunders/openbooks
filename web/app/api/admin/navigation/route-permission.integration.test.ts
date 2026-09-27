@@ -33,7 +33,7 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("admin/navigation")) {
       return { url: "mock:nav-permission-authz", shortCircuit: true };
@@ -53,8 +53,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?nav-permission-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"

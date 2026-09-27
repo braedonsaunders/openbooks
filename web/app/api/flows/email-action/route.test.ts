@@ -141,7 +141,7 @@ const mockUrls = new Map<string, string>([
   ["next/navigation", "mock:next-navigation"],
 ]);
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     // Session machinery is unused; the production subsidiaryScopeAllows
     // helper must load from web/lib/authz.ts so a permissive rewrite fails.
@@ -165,8 +165,6 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?email-action-refusal";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 const { subsidiaryScopeAllows } = (await import("../../../../lib/authz.ts")) as typeof import("../../../../lib/authz");
-hooks.deregister();
-
 function reset(allowedSubsidiaryIds: Set<string> | null = null): void {
   routeState.claims = {
     gateId: "gate-1",

@@ -66,7 +66,7 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/backup/backup.ts", "mock:backup"],
 ]);
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../../../lib/list-params") {
       return nextResolve(listParamsUrl, context);
@@ -88,8 +88,6 @@ const routeUrl = "../[id]/manifest/route.ts?backup-manifest";
 const { GET } = (await import(routeUrl)) as typeof import(
   "../[id]/manifest/route.ts"
 );
-hooks.deregister();
-
 function reset(run: Record<string, unknown> | null): void {
   routeState.run = run;
   routeState.queries = 0;

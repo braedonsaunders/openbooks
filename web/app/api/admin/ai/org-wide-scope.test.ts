@@ -17,7 +17,7 @@ const virtual = (source: string) => ({
   url: `data:text/javascript,${encodeURIComponent(source)}`,
 });
 const realAuthz = pathToFileURL(`${process.cwd()}/web/lib/authz.ts`).href;
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier.endsWith("/lib/authz")) {
       return virtual(`
@@ -52,8 +52,6 @@ const hooks = registerHooks({
 const [setupAgent, aiAgent, ai, documentCapture] = await Promise.all([
   import("../setup/agents/[agentKey]/route.ts"), import("./agents/[agentKey]/route.ts"), import("./route.ts"), import("./document-capture/route.ts"),
 ]);
-hooks.deregister();
-
 const params = { params: Promise.resolve({ agentKey: "continuous_close_daily" }) };
 const request = () => new Request("http://localhost/api/admin/ai", {
   method: "PUT",

@@ -90,7 +90,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/customization/gates', 'mock:feature-gates'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
@@ -105,8 +105,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?custom-fields-route-test'
 const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
-
 function reset(): void {
   state.existing = {
     target_table: 'documents',

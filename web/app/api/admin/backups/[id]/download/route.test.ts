@@ -58,7 +58,7 @@ const mockUrls = new Map([
   ["@openbooks/engine/src/backup/backup.ts", "mock:backup"],
 ]);
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../../../lib/list-params") return nextResolve(listParamsUrl, context);
     if (specifier === "../../../../../../lib/export") return nextResolve(exportUrl, context);
@@ -75,8 +75,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?stored-backup-download";
 const { GET } = await import(routeUrl) as typeof import("./route.ts");
-hooks.deregister();
-
 function reset(run = completedRun(), sha256 = archiveSha256) {
   state.run = run;
   state.queries = 0;

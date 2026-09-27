@@ -11,7 +11,7 @@ import { sql } from "drizzle-orm";
 
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __defaultGuardUser: state });
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, next) {
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/close/")) {
       return {
@@ -29,8 +29,6 @@ const hooks = registerHooks({
 const { POST } = await import("./route");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-hooks.deregister();
-
 const request = (body: unknown) =>
   new Request("http://close.local/api/admin/close", {
     method: "POST",

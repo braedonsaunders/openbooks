@@ -129,7 +129,7 @@ const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
 ]);
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, _context, nextResolve) {
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
@@ -144,8 +144,6 @@ const hooks = registerHooks({
 
 const flow_retryUrl = './route.ts?flow-retry'
 const { POST } = (await import(flow_retryUrl)) as typeof import('./route.ts');
-hooks.deregister();
-
 const RUN_ID = "019f0000-0000-4000-8000-000000000001";
 const SUBJECT_SUBSIDIARY = "sub-hidden";
 const NOT_FOUND = { error: "not_found" };

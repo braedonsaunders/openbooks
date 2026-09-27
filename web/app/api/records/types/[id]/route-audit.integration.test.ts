@@ -23,7 +23,7 @@ const mockAuthz = `
   }
 `
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       specifier === '../../../../../lib/authz' &&
@@ -46,8 +46,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?record-type-audit-test'
 const { GET, PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
-
 const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   '@openbooks/engine/src/testing/fixtures.ts'

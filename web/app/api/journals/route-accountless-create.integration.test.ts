@@ -35,7 +35,7 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../lib/authz") {
       return { url: "mock:create-authz", shortCircuit: true };
@@ -52,8 +52,6 @@ const hooks = registerHooks({
 
 const createRouteUrl = "./route.ts?journal-create-accountless-test";
 const { POST } = (await import(createRouteUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
 

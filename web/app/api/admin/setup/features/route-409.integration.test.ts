@@ -20,7 +20,7 @@ const state: {
 } = { authz: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, next) {
     const virtual = (source: string) => ({
       shortCircuit: true,
@@ -43,7 +43,6 @@ const hooks = registerHooks({
   },
 });
 const { PUT } = await import("./route");
-hooks.deregister();
 async function seed() {
   const seeded = await withBypassContext(async () => {
     const org = await createScratchOrg();

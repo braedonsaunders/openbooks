@@ -138,7 +138,7 @@ const mockUrls = new Map<string, string>([
   ['../../_lib', 'mock:audit'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
@@ -153,8 +153,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?payment-format-concurrency-test'
 const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
-
 const FORMAT_ID = '00000000-0000-4000-8000-000000000001'
 
 function reset(): void {
