@@ -268,6 +268,9 @@ const COGNATES = new Set<string>([
   'pt-BR:banking.bankFeeds.operational.providers.manual|Manual',
   'pt-BR:admin.setup.agents.overview.columns.status|Status',
   'zh:admin.features.apiAccess.title|REST API',
+  // German and Brazilian Portuguese consulting use “Retainer” as a loanword for a prepaid engagement.
+  'de:customization.recordTypes.retainer|Retainer',
+  'pt-BR:customization.recordTypes.retainer|Retainer',
   // Per-area reviewed identical terms (the local identicalByFact sets across the area backfills).
   'de:agents.drawer.assignment.roles.administrator|Administrator',
   'de:agents.drawer.assignment.roles.controller|Controller',
