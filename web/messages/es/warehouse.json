@@ -1,0 +1,96 @@
+{
+  "home": {
+    "title": "Almacén",
+    "description": "Almacenes, existencias pendientes de ubicar y valor en existencia conciliado con las cuentas de control de inventario.",
+    "vitals": {
+      "active": "Almacenes activos",
+      "suspended": "Almacenes suspendidos",
+      "staged": "Líneas pendientes de ubicar"
+    }
+  },
+  "status": {
+    "draft": "Borrador",
+    "active": "Activo",
+    "suspended": "Suspendido",
+    "retired": "Retirado"
+  },
+  "warehouses": {
+    "empty": "Aún no hay almacenes. Cree uno para empezar a recibir existencias.",
+    "unassigned": "Fuera de cualquier almacén",
+    "actionsFor": "Acciones para {code}",
+    "columns": {
+      "code": "Código",
+      "name": "Nombre",
+      "status": "Estado",
+      "value": "Valor en existencia",
+      "actions": "Acciones"
+    }
+  },
+  "tieOut": {
+    "title": "Existencias por almacén",
+    "hint": "Valor en existencia de cada almacén junto al saldo contabilizado de las cuentas de control de inventario.",
+    "layers": "Valor en existencia",
+    "control": "Saldo de control de inventario",
+    "difference": "Diferencia",
+    "tiesOut": "Cuadra"
+  },
+  "lifecycle": {
+    "reason": "Motivo",
+    "failed": "No se pudo cambiar el estado del almacén.",
+    "activate": {
+      "action": "Activar",
+      "done": "{code} está activo."
+    },
+    "suspend": {
+      "action": "Suspender",
+      "title": "Suspender {code}",
+      "confirm": "Suspender",
+      "done": "{code} está suspendido y no admite entradas."
+    },
+    "retire": {
+      "action": "Retirar",
+      "title": "Retirar {code}",
+      "confirm": "Retirar",
+      "done": "{code} está retirado."
+    }
+  },
+  "putaway": {
+    "title": "Existencias pendientes de ubicar",
+    "hint": "Existencias en ubicaciones de preparación. Ubicar las mueve al hueco que eligen las reglas de ubicación.",
+    "empty": "No hay nada esperando en una ubicación de preparación.",
+    "action": "Ubicar",
+    "failed": "No se pudieron ubicar las existencias.",
+    "done": "{item} ubicado en {bin}.",
+    "columns": {
+      "warehouse": "Almacén",
+      "staging": "Ubicación de preparación",
+      "item": "Artículo",
+      "quantity": "Cantidad",
+      "action": "Acción"
+    }
+  },
+  "create": {
+    "new": "Nuevo almacén",
+    "title": "Nuevo almacén",
+    "description": "El almacén empieza en borrador y no admite existencias hasta que lo active.",
+    "save": "Crear almacén",
+    "missing": "Introduzca un código y un nombre, y elija una ubicación.",
+    "failed": "No se pudo crear el almacén."
+  },
+  "fields": {
+    "code": "Código",
+    "name": "Nombre",
+    "location": "Ubicación",
+    "chooseLocation": "Elija una ubicación",
+    "addressLine1": "Dirección, línea 1",
+    "addressLine2": "Dirección, línea 2",
+    "city": "Ciudad",
+    "region": "Región o provincia",
+    "postalCode": "Código postal",
+    "country": "Código de país"
+  },
+  "setup": {
+    "warehouses": "Datos del almacén",
+    "rules": "Reglas de ubicación"
+  }
+}

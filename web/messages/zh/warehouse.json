@@ -1,0 +1,96 @@
+{
+  "home": {
+    "title": "仓库",
+    "description": "仓库、待上架库存，以及与存货控制科目核对的在库金额。",
+    "vitals": {
+      "active": "启用中的仓库",
+      "suspended": "已暂停的仓库",
+      "staged": "待上架明细"
+    }
+  },
+  "status": {
+    "draft": "草稿",
+    "active": "启用",
+    "suspended": "已暂停",
+    "retired": "已停用"
+  },
+  "warehouses": {
+    "empty": "尚无仓库。创建一个仓库即可开始收货入库。",
+    "unassigned": "不属于任何仓库",
+    "actionsFor": "{code} 的操作",
+    "columns": {
+      "code": "编码",
+      "name": "名称",
+      "status": "状态",
+      "value": "在库金额",
+      "actions": "操作"
+    }
+  },
+  "tieOut": {
+    "title": "按仓库的库存",
+    "hint": "各仓库的在库金额与存货控制科目已过账余额对照。",
+    "layers": "在库金额",
+    "control": "存货控制科目余额",
+    "difference": "差额",
+    "tiesOut": "一致"
+  },
+  "lifecycle": {
+    "reason": "原因",
+    "failed": "无法更改仓库状态。",
+    "activate": {
+      "action": "启用",
+      "done": "{code} 已启用。"
+    },
+    "suspend": {
+      "action": "暂停",
+      "title": "暂停 {code}",
+      "confirm": "暂停",
+      "done": "{code} 已暂停，不再接收入库。"
+    },
+    "retire": {
+      "action": "停用",
+      "title": "停用 {code}",
+      "confirm": "停用",
+      "done": "{code} 已停用。"
+    }
+  },
+  "putaway": {
+    "title": "待上架库存",
+    "hint": "暂存区中的库存。上架会将其移至上架规则选定的库位。",
+    "empty": "暂存区中没有待上架的库存。",
+    "action": "上架",
+    "failed": "无法上架该库存。",
+    "done": "{item} 已上架至 {bin}。",
+    "columns": {
+      "warehouse": "仓库",
+      "staging": "暂存区",
+      "item": "物料",
+      "quantity": "数量",
+      "action": "操作"
+    }
+  },
+  "create": {
+    "new": "新建仓库",
+    "title": "新建仓库",
+    "description": "仓库以草稿创建，启用前不接收库存。",
+    "save": "创建仓库",
+    "missing": "请输入编码和名称，并选择地点。",
+    "failed": "无法创建仓库。"
+  },
+  "fields": {
+    "code": "编码",
+    "name": "名称",
+    "location": "地点",
+    "chooseLocation": "选择地点",
+    "addressLine1": "地址行 1",
+    "addressLine2": "地址行 2",
+    "city": "城市",
+    "region": "省/地区",
+    "postalCode": "邮政编码",
+    "country": "国家代码"
+  },
+  "setup": {
+    "warehouses": "仓库详情",
+    "rules": "上架规则"
+  }
+}

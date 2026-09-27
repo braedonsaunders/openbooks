@@ -1,0 +1,96 @@
+{
+  "home": {
+    "title": "倉庫",
+    "description": "倉庫、格納待ちの在庫、および在庫管理勘定と照合した手持在庫金額。",
+    "vitals": {
+      "active": "稼働中の倉庫",
+      "suspended": "停止中の倉庫",
+      "staged": "格納待ちの明細"
+    }
+  },
+  "status": {
+    "draft": "下書き",
+    "active": "稼働中",
+    "suspended": "停止中",
+    "retired": "廃止"
+  },
+  "warehouses": {
+    "empty": "倉庫がまだありません。在庫を受け入れるには倉庫を作成してください。",
+    "unassigned": "どの倉庫にも属さない",
+    "actionsFor": "{code} の操作",
+    "columns": {
+      "code": "コード",
+      "name": "名称",
+      "status": "状態",
+      "value": "手持在庫金額",
+      "actions": "操作"
+    }
+  },
+  "tieOut": {
+    "title": "倉庫別在庫",
+    "hint": "各倉庫の手持在庫金額と在庫管理勘定の記帳済み残高の比較。",
+    "layers": "手持在庫金額",
+    "control": "在庫管理勘定残高",
+    "difference": "差異",
+    "tiesOut": "一致"
+  },
+  "lifecycle": {
+    "reason": "理由",
+    "failed": "倉庫の状態を変更できませんでした。",
+    "activate": {
+      "action": "稼働",
+      "done": "{code} は稼働中です。"
+    },
+    "suspend": {
+      "action": "停止",
+      "title": "{code} を停止",
+      "confirm": "停止する",
+      "done": "{code} は停止され、入庫を受け付けません。"
+    },
+    "retire": {
+      "action": "廃止",
+      "title": "{code} を廃止",
+      "confirm": "廃止する",
+      "done": "{code} は廃止されました。"
+    }
+  },
+  "putaway": {
+    "title": "格納待ちの在庫",
+    "hint": "仮置き場所にある在庫です。格納すると、格納ルールが選んだ棚へ移動します。",
+    "empty": "仮置き場所で待機している在庫はありません。",
+    "action": "格納",
+    "failed": "在庫を格納できませんでした。",
+    "done": "{item} を {bin} に格納しました。",
+    "columns": {
+      "warehouse": "倉庫",
+      "staging": "仮置き場所",
+      "item": "品目",
+      "quantity": "数量",
+      "action": "操作"
+    }
+  },
+  "create": {
+    "new": "新規倉庫",
+    "title": "新規倉庫",
+    "description": "倉庫は下書きで作成され、稼働させるまで在庫を受け付けません。",
+    "save": "倉庫を作成",
+    "missing": "コードと名称を入力し、ロケーションを選択してください。",
+    "failed": "倉庫を作成できませんでした。"
+  },
+  "fields": {
+    "code": "コード",
+    "name": "名称",
+    "location": "ロケーション",
+    "chooseLocation": "ロケーションを選択",
+    "addressLine1": "住所 1",
+    "addressLine2": "住所 2",
+    "city": "市区町村",
+    "region": "都道府県・地域",
+    "postalCode": "郵便番号",
+    "country": "国コード"
+  },
+  "setup": {
+    "warehouses": "倉庫の詳細",
+    "rules": "格納ルール"
+  }
+}
