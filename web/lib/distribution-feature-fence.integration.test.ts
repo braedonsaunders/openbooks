@@ -376,7 +376,8 @@ test('fulfillment off hides picks, shipments and backorders at every layer and p
       for (const tool of FULFILLMENT_TOOLS) {
         assert.equal(canRunTool(state.authz as never, tool, features), false, `${tool.name} is withheld`)
       }
-      await fulfillmentRefusal(() => FULFILLMENT_TOOLS[0]!.execute({}, state.authz as never))
+      assert.deepEqual(await FULFILLMENT_TOOLS[0]!.execute({}, state.authz as never),
+        { ok: false, error: 'fulfillment_feature_disabled' })
       assert.equal(await openAfterCancel(), '7.00000000', 'cancelled quantity is still subtracted')
     }
 
@@ -386,6 +387,8 @@ test('fulfillment off hides picks, shipments and backorders at every layer and p
     await setFeature(org.orgId, 'fulfillment', true)
     await setFeature(org.orgId, 'warehousing', false)
     await assertUnreachable('fulfillment')
+    assert.deepEqual(await FULFILLMENT_TOOLS[0]!.execute({}, state.authz as never),
+      { ok: false, error: 'warehousing_feature_disabled' })
 
     await setFeature(org.orgId, 'warehousing', true)
     assert.deepEqual(await fulfillmentEvidence(org.orgId), before, 'off and on again changes no carrier, pick list, shipment, cancellation or audit row')
@@ -451,8 +454,8 @@ test('return authorizations are hidden while off and retain their records and au
         && /Return Authorizations/.test(error.message) && /Company Settings → Features/.test(error.remedy ?? ''))
     const features = await resolvedFeatureState(org.orgId)
     for (const tool of RETURNS_TOOLS) assert.equal(canRunTool(state.authz as never, tool, features), false)
-    await assert.rejects(RETURNS_TOOLS[0]!.execute({}, state.authz as never),
-      (error: unknown) => error instanceof returnEngine.ReturnRefusal && error.code === 'feature_disabled')
+    assert.deepEqual(await RETURNS_TOOLS[0]!.execute({}, state.authz as never),
+      { ok: false, error: 'returnAuthorizations_feature_disabled' })
     await setFeature(org.orgId, 'returnAuthorizations', true)
     const after = await withBypassContext(() => db.execute(sql`
       select jsonb_build_object(
