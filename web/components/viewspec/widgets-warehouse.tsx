@@ -2,9 +2,11 @@ import { type ComponentProps } from 'react'
 import { NewWarehouseButton, NewWarehouseDrawer } from '../../app/(app)/warehouse/NewWarehouseDrawer'
 import { PutawayQueue } from '../../app/(app)/warehouse/PutawayQueue'
 import { WarehousesPanel } from '../../app/(app)/warehouse/WarehousesPanel'
+import { ReplenishmentProposals } from '../../app/(app)/reports/replenishment/ReplenishmentProposals'
 import { str, type WidgetRenderer } from './widget-props'
 
-/** Warehouse cockpit adapters: the tie-out hero, the putaway queue, and the create drawer. */
+/** Warehouse adapters: the cockpit's tie-out hero, putaway queue and create
+ *  drawer, and the Replenishment report's proposal lines. */
 export const WAREHOUSE_WIDGETS = {
   'warehouses-panel': (props) => (
     <WarehousesPanel
@@ -29,6 +31,13 @@ export const WAREHOUSE_WIDGETS = {
     <NewWarehouseDrawer
       locations={(props.locations as ComponentProps<typeof NewWarehouseDrawer>['locations']) ?? []}
       closeHref={str(props, 'closeHref') ?? '/warehouse'}
+    />
+  ),
+  'replenishment-proposals': (props) => (
+    <ReplenishmentProposals
+      rows={(props.rows as ComponentProps<typeof ReplenishmentProposals>['rows']) ?? []}
+      orderSubsidiaryId={str(props, 'orderSubsidiaryId') ?? null}
+      canOrder={props.canOrder === true}
     />
   ),
 } satisfies Record<string, WidgetRenderer>

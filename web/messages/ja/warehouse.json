@@ -24,7 +24,8 @@
       "status": "状態",
       "value": "手持在庫金額",
       "actions": "操作"
-    }
+    },
+    "availabilityFor": "{code} の在庫可用性"
   },
   "tieOut": {
     "title": "倉庫別在庫",
@@ -92,5 +93,82 @@
   "setup": {
     "warehouses": "倉庫の詳細",
     "rules": "格納ルール"
+  },
+  "availability": {
+    "title": "在庫可用性",
+    "description": "品目ごとの手持在庫、発行済み受注への引当数量、および約束可能数量。",
+    "hubDescription": "品目ごとの手持、引当、利用可能数量と未割当需要（倉庫・法人別）。",
+    "note": "数量は各品目の基本単位です。引当はこれらのロケーションにある発行済み受注明細の未出荷数量、未割当は在庫ロケーションのない明細の未出荷需要で、どのロケーションでも相殺できません。",
+    "search": "品目を検索",
+    "warehouse": "倉庫",
+    "allLocations": "すべてのロケーション",
+    "empty": "ここには在庫または未出荷需要のある在庫品目がありません。",
+    "columns": {
+      "item": "品目",
+      "unit": "単位",
+      "onHand": "手持",
+      "committed": "引当",
+      "available": "利用可能",
+      "unallocated": "未割当"
+    },
+    "releasable": {
+      "title": "出荷可能な受注残",
+      "note": "各倉庫の手持在庫は、受注日、次に伝票番号の順で未出荷明細に割り当てられます。これは提案のみで、割当や予約は行いません。",
+      "empty": "手持在庫でまかなえる未出荷の受注明細はありません。",
+      "orderLine": "{number} 明細 {line}",
+      "columns": {
+        "order": "受注明細",
+        "date": "受注日",
+        "customer": "得意先",
+        "open": "未出荷",
+        "releasable": "出荷可能"
+      }
+    }
+  },
+  "replenishment": {
+    "title": "補充",
+    "description": "各品目の発注点に対する予測供給量と、希望在庫水準に戻すための数量。",
+    "hubDescription": "手持在庫、引当需要、発注残に基づく発注提案と、各明細の根拠。",
+    "note": "予測供給量は、手持在庫から引当需要と未割当需要を差し引き、発行済み発注書の未入荷数量を加えたものです。両方の水準が未設定の品目は一覧に表示されますが、提案はされません。発注書の作成では確認用の下書きが作成され、自動では発注されません。",
+    "search": "品目を検索",
+    "empty": "有効な在庫品目がありません。",
+    "selected": "{count, plural, =0 {明細が選択されていません} other {# 件の明細を選択中}}",
+    "createOrders": "発注書を作成",
+    "memo": "補充提案",
+    "noVendor": "次の品目には発注先の仕入先がありません: {items}。選択を解除し、発注書画面で発注書を作成してください。",
+    "refused": "{vendor} への発注書は拒否されました: {reason} {created, plural, =0 {発注書は作成されていません。} other {それ以前に # 件の発注書が作成されました。同じ選択で再度作成すると残りのみが作成されます。}}",
+    "failed": "発注書を作成できませんでした。",
+    "created": "{count, plural, other {# 件の発注書の下書きを作成しました。}}",
+    "columns": {
+      "item": "品目",
+      "unit": "単位",
+      "onHand": "手持",
+      "committed": "引当",
+      "unallocated": "未割当",
+      "onOrder": "発注残",
+      "projected": "予測",
+      "reorderPoint": "発注点",
+      "preferred": "希望在庫水準",
+      "proposed": "提案数量",
+      "vendor": "直近の仕入先",
+      "status": "ステータス"
+    },
+    "status": {
+      "reorder": "要発注",
+      "covered": "充足",
+      "no_reorder_point": "発注点未設定",
+      "points_inverted": "希望水準が発注点未満"
+    }
+  },
+  "supply": {
+    "hint": "{entity} の在庫状況。",
+    "stocked": "在庫のある品目",
+    "short": "不足",
+    "releasable": "出荷可能な明細",
+    "openAvailability": "在庫可用性を開く",
+    "toReorder": "要発注",
+    "noPoints": "発注点未設定",
+    "onOrder": "発注中の品目",
+    "openReplenishment": "補充を開く"
   }
 }

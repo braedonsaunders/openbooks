@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -35,7 +36,9 @@ const STATUS_VARIANT: Record<WarehouseStatus, 'success' | 'secondary' | 'outline
 /**
  * Warehouses with their lifecycle status and the on-hand value each holds,
  * tied out against the inventory control accounts. Row click opens the
- * warehouse's setup drawer; the row menu moves it through its lifecycle.
+ * warehouse's setup drawer; each warehouse's value drills into the
+ * Availability report for that warehouse; the row menu moves it through its
+ * lifecycle.
  */
 export function WarehousesPanel({
   rows,
@@ -129,7 +132,19 @@ export function WarehousesPanel({
             key: 'value',
             header: t('warehouses.columns.value'),
             align: 'right',
-            cell: (row) => <span className="tabular-nums">{row.valueLabel}</span>,
+            cell: (row) =>
+              row.warehouseId ? (
+                <Link
+                  href={`/reports/availability?warehouse=${row.warehouseId}`}
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label={t('warehouses.availabilityFor', { code: row.code ?? '' })}
+                  className="tabular-nums text-teal-700 hover:underline dark:text-teal-300"
+                >
+                  {row.valueLabel}
+                </Link>
+              ) : (
+                <span className="tabular-nums">{row.valueLabel}</span>
+              ),
           },
           ...(canManage
             ? [{

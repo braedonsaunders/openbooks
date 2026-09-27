@@ -24,7 +24,8 @@
       "status": "状态",
       "value": "在库金额",
       "actions": "操作"
-    }
+    },
+    "availabilityFor": "{code} 的可用量"
   },
   "tieOut": {
     "title": "按仓库的库存",
@@ -92,5 +93,82 @@
   "setup": {
     "warehouses": "仓库详情",
     "rules": "上架规则"
+  },
+  "availability": {
+    "title": "可用量",
+    "description": "按物料列示的现有库存、已承诺给已下达销售订单的数量及可承诺数量。",
+    "hubDescription": "按仓库和法人实体列示各物料的现有、已承诺、可用数量及未分配需求。",
+    "note": "数量以各物料的基本单位表示。已承诺是这些库位上已下达销售订单行的未结数量；未分配是没有库存库位的订单行上的未结需求，任何库位都无法抵减。",
+    "search": "搜索物料",
+    "warehouse": "仓库",
+    "allLocations": "所有库位",
+    "empty": "此处没有库存物料有库存或未结需求。",
+    "columns": {
+      "item": "物料",
+      "unit": "单位",
+      "onHand": "现有",
+      "committed": "已承诺",
+      "available": "可用",
+      "unallocated": "未分配"
+    },
+    "releasable": {
+      "title": "可发放的欠交订单",
+      "note": "每个仓库的现有库存按订单日期、再按单据编号分配给其未结订单行。这只是建议：不会分配或预留任何库存。",
+      "empty": "没有可由现有库存满足的未结订单行。",
+      "orderLine": "{number} 第 {line} 行",
+      "columns": {
+        "order": "订单行",
+        "date": "订单日期",
+        "customer": "客户",
+        "open": "未结",
+        "releasable": "可发放"
+      }
+    }
+  },
+  "replenishment": {
+    "title": "补货",
+    "description": "各物料的预计供应与再订货点的比较，以及恢复其首选库存水平所需的数量。",
+    "hubDescription": "基于现有库存、已承诺需求和在途订购数量的补货建议，并附每行的依据。",
+    "note": "预计供应等于现有库存减去已承诺和未分配需求，加上已下达采购订单的未结数量。未设置两个水平的物料会列出，但不会建议补货。创建采购订单会生成供审核的草稿；不会自动下单。",
+    "search": "搜索物料",
+    "empty": "没有启用的库存物料。",
+    "selected": "{count, plural, =0 {未选择任何行} other {已选择 # 行}}",
+    "createOrders": "创建采购订单",
+    "memo": "补货建议",
+    "noVendor": "以下物料没有可下单的供应商：{items}。请取消选择，并在采购订单页面创建其采购订单。",
+    "refused": "发给 {vendor} 的采购订单被拒绝：{reason} {created, plural, =0 {未创建任何订单。} other {在此之前已创建 # 张订单；使用相同选择再次创建只会创建其余订单。}}",
+    "failed": "无法创建采购订单。",
+    "created": "{count, plural, other {已创建 # 张采购订单草稿。}}",
+    "columns": {
+      "item": "物料",
+      "unit": "单位",
+      "onHand": "现有",
+      "committed": "已承诺",
+      "unallocated": "未分配",
+      "onOrder": "在途订购",
+      "projected": "预计",
+      "reorderPoint": "再订货点",
+      "preferred": "首选水平",
+      "proposed": "建议数量",
+      "vendor": "最近供应商",
+      "status": "状态"
+    },
+    "status": {
+      "reorder": "需补货",
+      "covered": "已满足",
+      "no_reorder_point": "未设再订货点",
+      "points_inverted": "首选水平低于再订货点"
+    }
+  },
+  "supply": {
+    "hint": "{entity} 的库存状况。",
+    "stocked": "有库存的物料",
+    "short": "短缺",
+    "releasable": "可发放的行",
+    "openAvailability": "打开可用量",
+    "toReorder": "需补货",
+    "noPoints": "未设再订货点",
+    "onOrder": "在途订购物料",
+    "openReplenishment": "打开补货"
   }
 }

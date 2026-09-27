@@ -24,7 +24,8 @@
       "status": "Situação",
       "value": "Valor em estoque",
       "actions": "Ações"
-    }
+    },
+    "availabilityFor": "Disponibilidade em {code}"
   },
   "tieOut": {
     "title": "Estoque por armazém",
@@ -92,5 +93,82 @@
   "setup": {
     "warehouses": "Dados do armazém",
     "rules": "Regras de armazenagem"
+  },
+  "availability": {
+    "title": "Disponibilidade",
+    "description": "Estoque disponível, quantidade comprometida com pedidos de venda emitidos e quantidade disponível para prometer, por item.",
+    "hubDescription": "Em estoque, comprometido, disponível e demanda não alocada por item, por depósito e entidade legal.",
+    "note": "As quantidades estão na unidade base de cada item. Comprometido é a quantidade em aberto das linhas de pedidos de venda emitidos nesses locais; não alocado é a demanda em aberto em linhas sem local de estoque, que nenhum local pode compensar.",
+    "search": "Pesquisar itens",
+    "warehouse": "Depósito",
+    "allLocations": "Todos os locais",
+    "empty": "Nenhum item estocável tem estoque ou demanda em aberto aqui.",
+    "columns": {
+      "item": "Item",
+      "unit": "Unidade",
+      "onHand": "Em estoque",
+      "committed": "Comprometido",
+      "available": "Disponível",
+      "unallocated": "Não alocado"
+    },
+    "releasable": {
+      "title": "Pendências liberáveis",
+      "note": "O estoque de cada depósito é destinado às suas linhas em aberto por data do pedido e depois por número do documento. É apenas uma proposta: nada é alocado nem reservado.",
+      "empty": "Nenhuma linha de pedido em aberto pode ser coberta pelo estoque.",
+      "orderLine": "{number} linha {line}",
+      "columns": {
+        "order": "Linha do pedido",
+        "date": "Data do pedido",
+        "customer": "Cliente",
+        "open": "Em aberto",
+        "releasable": "Liberável"
+      }
+    }
+  },
+  "replenishment": {
+    "title": "Reabastecimento",
+    "description": "Suprimento projetado em relação ao ponto de pedido de cada item e a quantidade que restaura seu nível de estoque preferido.",
+    "hubDescription": "Propostas de compra a partir do estoque, da demanda comprometida e das quantidades pedidas, com a evidência de cada linha.",
+    "note": "O suprimento projetado é o estoque menos a demanda comprometida e não alocada, mais a quantidade em aberto dos pedidos de compra emitidos. Itens sem os dois níveis são listados, mas nunca propostos. Criar pedidos de compra gera rascunhos para revisão; nada é pedido automaticamente.",
+    "search": "Pesquisar itens",
+    "empty": "Nenhum item estocável ativo.",
+    "selected": "{count, plural, =0 {Nenhuma linha selecionada} one {# linha selecionada} other {# linhas selecionadas}}",
+    "createOrders": "Criar pedidos de compra",
+    "memo": "Proposta de reabastecimento",
+    "noVendor": "Nenhum fornecedor para pedir: {items}. Desmarque-os e crie os pedidos de compra em Pedidos de compra.",
+    "refused": "O pedido de compra para {vendor} foi recusado: {reason} {created, plural, =0 {Nenhum pedido foi criado.} one {# pedido foi criado antes; criar novamente com a mesma seleção cria apenas os restantes.} other {# pedidos foram criados antes; criar novamente com a mesma seleção cria apenas os restantes.}}",
+    "failed": "Não foi possível criar os pedidos de compra.",
+    "created": "{count, plural, one {# rascunho de pedido de compra criado.} other {# rascunhos de pedidos de compra criados.}}",
+    "columns": {
+      "item": "Item",
+      "unit": "Unidade",
+      "onHand": "Em estoque",
+      "committed": "Comprometido",
+      "unallocated": "Não alocado",
+      "onOrder": "Pedido",
+      "projected": "Projetado",
+      "reorderPoint": "Ponto de pedido",
+      "preferred": "Nível preferido",
+      "proposed": "Proposto",
+      "vendor": "Último fornecedor",
+      "status": "Situação"
+    },
+    "status": {
+      "reorder": "Repor",
+      "covered": "Coberto",
+      "no_reorder_point": "Sem ponto de pedido",
+      "points_inverted": "Nível preferido abaixo do ponto de pedido"
+    }
+  },
+  "supply": {
+    "hint": "Posição de estoque de {entity}.",
+    "stocked": "Itens em estoque",
+    "short": "Em falta",
+    "releasable": "Linhas liberáveis",
+    "openAvailability": "Abrir disponibilidade",
+    "toReorder": "A repor",
+    "noPoints": "Sem ponto de pedido",
+    "onOrder": "Itens pedidos",
+    "openReplenishment": "Abrir reabastecimento"
   }
 }
