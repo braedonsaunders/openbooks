@@ -2108,6 +2108,11 @@
         "singular": "Armazém",
         "description": "Nome, endereço e ciclo de vida de cada local de estoque do tipo armazém."
       },
+      "carriers": {
+        "title": "Transportadoras",
+        "singular": "Transportadora",
+        "description": "Transportadoras com as quais você envia, os níveis de serviço de cada uma e um link de rastreamento opcional."
+      },
       "putaway-rules": {
         "title": "Regras de armazenagem",
         "singular": "Regra de armazenagem",
@@ -2672,6 +2677,8 @@
       "strategy": "Estratégia",
       "targetLocationId": "Local de destino",
       "capacityQuantity": "Capacidade",
+      "services": "Serviços",
+      "trackingUrlTemplate": "Modelo do link de rastreamento",
       "accountId": "Conta",
       "code": "Código",
       "name": "Nome",
@@ -3064,6 +3071,9 @@
     "fieldHelp": {
       "putawayItem": "Deixe em branco para aplicar a regra a todos os itens.",
       "putawayCapacity": "O máximo que o destino pode conter do item. Obrigatório em uma zona a granel; deixe em branco em uma posição fixa para não haver limite.",
+      "carrierServices": "Os níveis de serviço que esta transportadora oferece, como Econômico ou Expresso. Cada remessa escolhe um deles.",
+      "carrierTrackingUrlTemplate": "O endereço da página de rastreamento da transportadora com '{tracking}' onde entra o código de rastreamento, por exemplo https://carrier.example/track?number='{tracking}'. Deixe em branco se a transportadora não tiver link de rastreamento.",
+      "carrierActive": "Desmarque Ativo em uma transportadora que você não usa mais. Uma transportadora inativa não pode ser escolhida em uma remessa; as remessas que já a indicam a mantêm.",
       "recognitionRulePolicy": "Alterar o método, o prazo, as datas, os deslocamentos, o percentual ou as contas de uma regra já usada na receita cria uma nova versão; as obrigações existentes mantêm a versão anterior.",
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta.",
       "lienWaiverEnforcement": "Bloquear significa que uma fatura desta classe não pode ser paga até que uma quitação assinada a cubra.",

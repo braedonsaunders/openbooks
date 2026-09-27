@@ -19,6 +19,11 @@ export type FormActionKey = (typeof FORM_ACTION_KEYS)[number];
  */
 const SUPPORTED_FORM_ACTIONS: Record<string, readonly FormActionKey[]> = {
   field_ticket: ["customize", "pdf", "workflow", "approval", "edit", "submit"],
+  // The pick-list and shipment drawers render a fixed lifecycle menu (release,
+  // ship, complete, void) rather than layout-placed actions, so the designer
+  // offers no action toggles for them.
+  pick_list: [],
+  shipment: [],
 };
 
 /** The action toggles the layout designer may offer for a record type. */

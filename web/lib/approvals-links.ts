@@ -10,6 +10,10 @@ const ORDER_HREF: Record<string, (id: string) => string> = {
   quote: (id) => `/estimates?estimate=${id}`,
   sales_order: (id) => `/sales-orders?order=${id}`,
   purchase_order: (id) => `/purchase-orders?order=${id}`,
+  // Pick lists can be held for approval on release; both fulfilment kinds
+  // open their own drawers.
+  pick_list: (id) => `/picks?pick=${id}`,
+  shipment: (id) => `/shipments?shipment=${id}`,
   close_run: (id) => `/close?run=${id}&stage=lock`,
   // Budgets open their module drawer, where the checker decision is recorded.
   budget_scenario: (id) => `/budgets?budget=${id}`,

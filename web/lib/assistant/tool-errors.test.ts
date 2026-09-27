@@ -29,3 +29,32 @@ test('engine domain errors surface their operator-facing message', () => {
   class RandomError extends Error {}
   assert.equal(safeApplicationToolError(new RandomError('postgres://secret')), 'tool_failed')
 })
+
+test('distribution refusals reach the model with their code and remedy', () => {
+  class FulfillmentRefusal extends Error {
+    constructor(message: string, readonly code: string, readonly status: number, readonly remedy?: string) {
+      super(message)
+    }
+  }
+  class InventoryError extends Error {}
+  class WarehouseRefusal extends InventoryError {
+    constructor(message: string, readonly code: string, readonly remedy: string, readonly status = 409) {
+      super(message)
+    }
+  }
+  assert.equal(
+    safeApplicationToolError(new FulfillmentRefusal(
+      'Fulfillment is turned off for this organization', 'feature_disabled', 409,
+      'Turn on Warehousing and Fulfillment on Company Settings → Features',
+    )),
+    'fulfillment/feature_disabled: Fulfillment is turned off for this organization. Remedy: Turn on Warehousing and Fulfillment on Company Settings → Features',
+  )
+  assert.equal(
+    safeApplicationToolError(new WarehouseRefusal(
+      'warehouse WH-1 is suspended and refuses inbound movements; reactivate WH-1 in Warehouse → Warehouses',
+      'warehouse_not_admitting', 'reactivate WH-1 in Warehouse → Warehouses',
+    )),
+    'warehouse/warehouse_not_admitting: warehouse WH-1 is suspended and refuses inbound movements; reactivate WH-1 in Warehouse → Warehouses. Remedy: reactivate WH-1 in Warehouse → Warehouses',
+  )
+  assert.equal(safeApplicationToolError(new FulfillmentRefusal('Pick list not found', 'not_found', 404)), 'fulfillment/not_found: Pick list not found')
+})

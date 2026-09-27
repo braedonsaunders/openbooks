@@ -1,6 +1,7 @@
 import { getMoneyFormatter } from '@/lib/money-server'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { Eye } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -21,7 +22,7 @@ import { loadFieldDefs } from '../lib/custom-fields'
 import { AmbiguousListViewDefaultError, resolveListView } from '../lib/customization/resolve'
 import { displayListViewName } from '../lib/customization/display'
 import { columnDescriptors, documentWhere, type ListColDesc } from '../lib/customization/list-query'
-import { listOrderClause, listSource } from '../lib/list/sources'
+import { enabledListSource, listOrderClause, listSource } from '../lib/list/sources'
 import { RelatedPartyLink } from './related-party-link'
 
 /**
@@ -91,9 +92,12 @@ export async function RecordListView({
   renderRowActions?: (row: Record<string, unknown>) => ReactNode
 }) {
   const { money } = await getMoneyFormatter()
-  const source = listSource(recordType)
   const meta = getRecordType(recordType)
-  if (!source || !meta) throw new Error(`no list source registered for record type "${recordType}"`)
+  if (!listSource(recordType) || !meta) throw new Error(`no list source registered for record type "${recordType}"`)
+  // A record type whose Features switch is off lists nothing: the page is
+  // not found, exactly like the module's routes, and its rows are untouched.
+  const source = await enabledListSource(orgId, recordType)
+  if (!source) notFound()
 
   const t = await getTranslations()
   const tCommon = await getTranslations('common')

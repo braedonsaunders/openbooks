@@ -39,7 +39,9 @@
     "field_ticket": "Bon de régie",
     "fixed_asset": "Immobilisation",
     "property": "Propriété",
-    "pay_run": "Cycle de paie"
+    "pay_run": "Cycle de paie",
+    "pick_list": "Liste de prélèvement",
+    "shipment": "Expédition"
   },
   "property": {
     "tabs": {

@@ -34,6 +34,8 @@ import {
   multirefField,
   pgErrorCode,
   scaleShapeCheckRefusal,
+  carrierCheckRefusal,
+  carrierTrackingTemplateProblem,
   taxRatePercentProblem,
   UUID_RE,
 } from './coerce'
@@ -434,6 +436,10 @@ export async function validateEntityIntegrity(
   if (entity.key === 'putaway-rules' && body.strategy === 'bulk-zone'
     && (body.capacityQuantity === undefined || body.capacityQuantity === null || body.capacityQuantity === '')) {
     return 'A bulk-zone putaway rule needs a capacity: enter the most the zone may hold of the item'
+  }
+  if (entity.key === 'carriers') {
+    const problem = carrierTrackingTemplateProblem(body.trackingUrlTemplate)
+    if (problem) return problem
   }
   if (entity.key === 'time-types' && body.showOnFieldTicket !== undefined
     && !(await isFeatureEnabled(orgId, 'fieldTickets', executor))) {
@@ -1637,6 +1643,13 @@ function bomCommandOnly(entity: SetupEntity): SetupWriteResult | null {
   }
 }
 
+/** Shipments keep the carrier they named, so a carrier is retired by
+ *  clearing Active (an inactive carrier cannot be chosen on a shipment). */
+const CARRIER_DELETE_REFUSAL: SetupWriteResult = {
+  status: 405,
+  body: { error: 'Carriers are kept for the shipments that name them: clear Active on the carrier instead of deleting it' },
+}
+
 /**
  * The refusals every mutation applies before it reads a body or touches the
  * database: unknown/disabled entity (404), declaration-owned, command-owned,
@@ -1657,6 +1670,7 @@ export async function preflightSetupWrite(
   const owned = bomCommandOnly(entity)
   if (owned) return owned
   if (method === 'create' && entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
+  if (method === 'delete' && entity.key === 'carriers') return CARRIER_DELETE_REFUSAL
   if (method === 'delete' && entity.allowDelete === false) return { status: 405, body: { error: 'Module setting history is preserved' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
   if (method === 'delete' && entity.key === 'accounting-books') return { status: 405, body: { error: 'archive-only' } }
@@ -2060,6 +2074,8 @@ export async function createSetupRecord(
     // itself stays intact; only its surfacing changes.
     const scaleRefusal = scaleShapeCheckRefusal(entity.key, e)
     if (scaleRefusal) return scaleRefusal
+    const carrierRefusal = carrierCheckRefusal(entity.key, e)
+    if (carrierRefusal) return carrierRefusal
     return { status: 400, body: { error: describeDbError(e) } }
   }
 }
@@ -2617,6 +2633,8 @@ export async function updateSetupRecord(
     }
     const scaleRefusal = scaleShapeCheckRefusal(entity.key, e)
     if (scaleRefusal) return scaleRefusal
+    const carrierRefusal = carrierCheckRefusal(entity.key, e)
+    if (carrierRefusal) return carrierRefusal
     return { status: 400, body: { error: describeDbError(e) } }
   }
 }
@@ -2637,6 +2655,7 @@ export async function deleteSetupRecord(
   if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
   if (owned) return owned
+  if (entity.key === 'carriers') return CARRIER_DELETE_REFUSAL
   if (entity.allowDelete === false) return { status: 405, body: { error: 'Module setting history is preserved' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
   if (entity.key === 'accounting-books') {

@@ -88,7 +88,13 @@
     "projectCharge": "プロジェクトチャージ",
     "projectChargeShort": "チャージ",
     "fieldTicket": "作業票",
-    "fieldTicketShort": "作業票"
+    "fieldTicketShort": "作業票",
+    "pickList": "ピッキングリスト",
+    "pickListShort": "ピック",
+    "shipment": "出荷",
+    "shipmentShort": "出荷",
+    "fulfillment": "出荷実績",
+    "fulfillmentShort": "出荷実績"
   },
   "labels": {
     "name": "名前",

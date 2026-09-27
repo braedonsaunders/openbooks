@@ -6,6 +6,8 @@ import { OrderDrawer } from '../app/(app)/_order/OrderDrawer'
 import { ExpenseDrawer } from '../app/(app)/expenses/ExpenseDrawer'
 import { JournalDrawer } from '../app/(app)/journal/JournalDrawer'
 import { FieldTicketDrawer } from '../app/(app)/field-tickets/FieldTicketDrawer'
+import { PickListDrawer } from '../app/(app)/picks/PickListDrawer'
+import { ShipmentDrawer } from '../app/(app)/shipments/ShipmentDrawer'
 
 export type RelatedTransactionDrawerData =
   | { type: 'document'; props: Parameters<typeof DocumentDrawer>[0] }
@@ -14,6 +16,8 @@ export type RelatedTransactionDrawerData =
   | { type: 'expense'; props: Parameters<typeof ExpenseDrawer>[0] }
   | { type: 'journal'; props: Parameters<typeof JournalDrawer>[0] }
   | { type: 'fieldTicket'; props: Parameters<typeof FieldTicketDrawer>[0] }
+  | { type: 'pickList'; props: Parameters<typeof PickListDrawer>[0] }
+  | { type: 'shipment'; props: Parameters<typeof ShipmentDrawer>[0] }
 
 export function RelatedTransactionDrawerClient({ data }: { data: RelatedTransactionDrawerData }) {
   if (data.type === 'document') return <DocumentDrawer {...data.props} />
@@ -21,5 +25,7 @@ export function RelatedTransactionDrawerClient({ data }: { data: RelatedTransact
   if (data.type === 'order') return <OrderDrawer {...data.props} />
   if (data.type === 'expense') return <ExpenseDrawer {...data.props} />
   if (data.type === 'journal') return <JournalDrawer {...data.props} />
+  if (data.type === 'pickList') return <PickListDrawer {...data.props} />
+  if (data.type === 'shipment') return <ShipmentDrawer {...data.props} />
   return <FieldTicketDrawer {...data.props} />
 }

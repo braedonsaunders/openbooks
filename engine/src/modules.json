@@ -508,6 +508,7 @@
       "description": "Sales orders, credit exposure and item rate pricing ladders.",
       "dependsOn": [
         "flows",
+        "inventory",
         "money",
         "organization",
         "platform",

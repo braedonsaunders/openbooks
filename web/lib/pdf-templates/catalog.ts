@@ -219,6 +219,56 @@ const FIELD_TICKET: PdfRecordTypeMeta = {
   ],
 }
 
+/**
+ * Shipment — the packing slip that travels with the goods. It names what is
+ * in the box, not what it costs: lines carry item, quantity and carton, and
+ * the header carries the ship-to address, carrier, service and tracking.
+ */
+const SHIPMENT: PdfRecordTypeMeta = {
+  key: 'shipment',
+  labelKey: 'shipment',
+  docKind: 'shipment',
+  docTitle: 'Packing Slip',
+  partyHeading: 'Ship to',
+  readPermission: 'orders.fulfill',
+  fields: [
+    { key: 'document_number', label: 'Shipment number', sample: 'SHP-000042' },
+    { key: 'document_date', label: 'Ship date', sample: 'Jul 16, 2026' },
+    { key: 'status', label: 'Status', sample: 'Draft' },
+    { key: 'sales_order_number', label: 'Sales order', sample: 'SO-000118' },
+    { key: 'pick_list_number', label: 'Pick list', sample: 'PICK-000077' },
+    { key: 'party_name', label: 'Customer', sample: 'Acme Construction Inc.' },
+    { key: 'party_email', label: 'Customer email', sample: 'receiving@acme.example' },
+    { key: 'party_phone', label: 'Customer phone', sample: '(555) 010-0199' },
+    { key: 'ship_to_name', label: 'Ship-to name', sample: 'Acme — Site 4 receiving' },
+    { key: 'ship_to_address', label: 'Ship-to address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2, CA' },
+    { key: 'warehouse_name', label: 'Ship from warehouse', sample: 'MAIN · Main warehouse' },
+    { key: 'carrier_name', label: 'Carrier', sample: 'Northline Freight' },
+    { key: 'carrier_service', label: 'Service', sample: 'Ground' },
+    { key: 'tracking_number', label: 'Tracking number', sample: '1Z999AA10123456784' },
+    { key: 'tracking_url', label: 'Tracking link', sample: 'https://track.example/1Z999AA10123456784' },
+    { key: 'carton_count', label: 'Cartons', sample: '2' },
+    { key: 'memo', label: 'Memo', sample: 'Deliver to the loading dock.' },
+    ...ORG_FIELDS,
+  ],
+  collections: [
+    {
+      key: 'lines',
+      label: 'Packed lines',
+      fields: [
+        { key: 'line_number', label: 'Line #', sample: '1' },
+        { key: 'item_name', label: 'Item', sample: 'W12x26 beam' },
+        { key: 'description', label: 'Description', sample: 'Structural steel — level 2 mezzanine' },
+        { key: 'quantity', label: 'Quantity', sample: '12' },
+        { key: 'unit', label: 'Unit', sample: 'ea' },
+        { key: 'carton', label: 'Carton', sample: 'C1' },
+        { key: 'bin', label: 'Bin', sample: 'A-01-03' },
+        { key: 'lot_serial', label: 'Lot / serial', sample: 'LOT-2407' },
+      ],
+    },
+  ],
+}
+
 const PAY_STUB: PdfRecordTypeMeta = {
   key: 'pay_stub',
   labelKey: 'pay_stub',
@@ -340,6 +390,7 @@ export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   docType({ key: 'card_charge', docTitle: 'Card Charge', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
   docType({ key: 'card_refund', docTitle: 'Card Refund', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
   docType({ key: 'journal', docTitle: 'Journal Entry', partyHeading: null, readPermission: 'gl.read', hasParty: false, hasDue: false, hasReference: false }),
+  SHIPMENT,
   FIELD_TICKET,
   JOURNAL_ENTRY,
   PAY_STUB,

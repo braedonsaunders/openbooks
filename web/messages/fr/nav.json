@@ -1,6 +1,8 @@
 {
   "modules": {
     "warehouses": "Entrepôts",
+    "picks": "Listes de préparation",
+    "shipments": "Expéditions",
     "accounts": "Plan comptable",
     "assets": "Immobilisations",
     "equipment": "Équipement",

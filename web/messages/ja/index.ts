@@ -34,6 +34,7 @@ import entities from './entities.json'
 import estimates from './estimates.json'
 import expenses from './expenses.json'
 import fieldTickets from './fieldTickets.json'
+import fulfillment from './fulfillment.json'
 import home from './home.json'
 import hrm from './hrm.json'
 import inbox from './inbox.json'
@@ -100,6 +101,7 @@ export default {
   estimates,
   expenses,
   fieldTickets,
+  fulfillment,
   home,
   hrm,
   inbox,

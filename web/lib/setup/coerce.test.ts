@@ -1,6 +1,13 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildRow, coerceField, describeDbError, scaleShapeCheckRefusal } from './coerce.ts'
+import {
+  buildRow,
+  carrierCheckRefusal,
+  carrierTrackingTemplateProblem,
+  coerceField,
+  describeDbError,
+  scaleShapeCheckRefusal,
+} from './coerce.ts'
 import { foldWholeNumber } from './whole-number'
 import { SETUP_ENTITY_BY_KEY, type SetupField } from './registry.ts'
 
@@ -244,4 +251,38 @@ test('a residual scale-shape CHECK refusal names the remedy, never the CHECK', (
   })
   assert.equal(scaleShapeCheckRefusal('hrm-review-templates', otherCheck), null)
   assert.equal(scaleShapeCheckRefusal('hrm-review-templates', new Error('nope')), null)
+})
+
+test('a carrier tracking template is a web address holding {tracking}', () => {
+  assert.equal(carrierTrackingTemplateProblem(undefined), null)
+  assert.equal(carrierTrackingTemplateProblem(null), null)
+  assert.equal(carrierTrackingTemplateProblem(''), null)
+  assert.equal(carrierTrackingTemplateProblem('https://carrier.example/track?number={tracking}'), null)
+  assert.match(
+    carrierTrackingTemplateProblem('https://carrier.example/track') ?? '',
+    /must contain \{tracking\} where the tracking number goes/,
+  )
+  // It becomes a link on the shipment and in the customer's email, so a
+  // script or bare-text template is refused by name, not stored.
+  for (const template of ['javascript:alert({tracking})', 'carrier.example/{tracking}', ' https://carrier.example/{tracking}']) {
+    assert.match(carrierTrackingTemplateProblem(template) ?? '', /must be a web address starting with https:\/\//, template)
+  }
+})
+
+test('carrier storage checks answer with the named refusal, never the raw CHECK', () => {
+  const check = (constraint: string) => Object.assign(new Error('driver text'), {
+    code: '23514',
+    cause: { constraint, message: 'raw CHECK text' },
+  })
+  assert.deepEqual(carrierCheckRefusal('carriers', check('carriers_services_check')), {
+    status: 400,
+    body: { error: 'A carrier needs at least one service: enter the service levels it offers, such as Ground', code: 'invalid' },
+  })
+  assert.match(
+    carrierCheckRefusal('carriers', check('carriers_tracking_url_template_check'))?.body.error ?? '',
+    /must contain \{tracking\}/,
+  )
+  assert.equal(carrierCheckRefusal('putaway-rules', check('carriers_services_check')), null)
+  assert.equal(carrierCheckRefusal('carriers', check('some_other_check')), null)
+  assert.equal(carrierCheckRefusal('carriers', new Error('nope')), null)
 })

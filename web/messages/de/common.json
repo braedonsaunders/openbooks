@@ -88,7 +88,13 @@
     "projectCharge": "Projektbelastung",
     "projectChargeShort": "Belastung",
     "fieldTicket": "Regiebericht",
-    "fieldTicketShort": "Bericht"
+    "fieldTicketShort": "Bericht",
+    "pickList": "Kommissionierliste",
+    "pickListShort": "Komm.",
+    "shipment": "Sendung",
+    "shipmentShort": "Sendung",
+    "fulfillment": "Auftragserfüllung",
+    "fulfillmentShort": "Erfüllung"
   },
   "labels": {
     "name": "Name",

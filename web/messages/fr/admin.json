@@ -2063,6 +2063,11 @@
         "singular": "Entrepôt",
         "description": "Nom, adresse et cycle de vie de chaque emplacement de stock de type entrepôt."
       },
+      "carriers": {
+        "title": "Transporteurs",
+        "singular": "Transporteur",
+        "description": "Transporteurs avec lesquels vous expédiez, leurs niveaux de service et un lien de suivi facultatif."
+      },
       "putaway-rules": {
         "title": "Règles de rangement",
         "singular": "Règle de rangement",
@@ -2627,6 +2632,8 @@
       "strategy": "Stratégie",
       "targetLocationId": "Emplacement cible",
       "capacityQuantity": "Capacité",
+      "services": "Niveaux de service",
+      "trackingUrlTemplate": "Modèle de lien de suivi",
       "accountId": "Compte",
       "classAttribute": "Attribut de catégorie d'immobilisation",
       "countryCode": "Pays",
@@ -3019,6 +3026,9 @@
     "fieldHelp": {
       "putawayItem": "Laissez vide pour appliquer la règle à tous les articles.",
       "putawayCapacity": "Quantité maximale de l’article dans la cible. Obligatoire pour une zone de vrac ; laissez vide sur un emplacement fixe pour ne pas fixer de limite.",
+      "carrierServices": "Les niveaux de service proposés par ce transporteur, par exemple Standard ou Express. Chaque expédition en choisit un.",
+      "carrierTrackingUrlTemplate": "L’adresse de la page de suivi du transporteur avec '{tracking}' à la place du numéro de suivi, par exemple https://carrier.example/track?number='{tracking}'. Laissez vide si le transporteur n’a pas de lien de suivi.",
+      "carrierActive": "Décochez Actif pour un transporteur que vous n’utilisez plus. Un transporteur inactif ne peut être choisi sur aucune expédition ; les expéditions qui le mentionnent déjà le conservent.",
       "recognitionRulePolicy": "Modifier la méthode, la durée, les dates, les décalages, le pourcentage ou les comptes d’une règle déjà utilisée pour les produits crée une nouvelle version ; les obligations existantes conservent l’ancienne version.",
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
       "lienWaiverEnforcement": "Bloquer signifie qu'une facture de cette catégorie ne peut être payée sans renonciation signée qui la couvre.",

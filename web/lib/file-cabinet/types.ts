@@ -40,6 +40,7 @@ export function attachmentReadPermission(targetTable: string, kind?: string | nu
       customer_credit: 'ar.read', customer_payment: 'ar.pay', sales_order: 'ar.read', quote: 'ar.read',
       expense_report: 'expenses.read', field_ticket: 'time.read', project_charge: 'projects.read',
       pay_run: 'payroll.read', journal: 'gl.read', deposit: 'gl.read', transfer: 'gl.read',
+      pick_list: 'orders.fulfill', shipment: 'orders.fulfill',
     }
     return kind ? (permissions[kind] ?? null) : null
   }

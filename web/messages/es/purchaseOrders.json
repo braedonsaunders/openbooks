@@ -15,9 +15,9 @@
       "invoice": "Factura",
       "bill": "Factura de proveedor",
       "receipt": "Recibo de mercancías",
-      "shipment": "Envío"
+      "fulfillment": "Cumplimiento"
     },
-    "docKind": "{kind, select, quote {Cotización} sales_order {Orden de venta} purchase_order {Orden de compra} customer_invoice {Factura} vendor_bill {Factura de proveedor} purchase_receipt {Recibo de mercancías} sales_fulfillment {Envío} other {{kind}}}",
+    "docKind": "{kind, select, quote {Cotización} sales_order {Orden de venta} purchase_order {Orden de compra} customer_invoice {Factura} vendor_bill {Factura de proveedor} purchase_receipt {Recibo de mercancías} sales_fulfillment {Cumplimiento} pick_list {Lista de preparación} shipment {Envío} other {{kind}}}",
     "partyLabel": "{kind, select, purchase_order {Proveedor} other {Cliente}}",
     "selectPartyPlaceholder": "{kind, select, purchase_order {Seleccionar proveedor…} other {Seleccionar cliente…}}",
     "dateLabel": "{kind, select, quote {Fecha de la cotización} other {Fecha de la orden}}",

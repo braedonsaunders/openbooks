@@ -22,8 +22,10 @@ export const runtime = 'nodejs'
  * PDF_RECORD_TYPE_BY_KEY (an unmapped type fails closed below); each value
  * reuses the family's existing gate: document/order creates (ar.create,
  * ap.create), payment drafts (ar.pay / ap.pay), journals post (gl.post),
- * expense submit (expenses.create), field-ticket manage (time.manage), and
- * payroll run delivery (payroll.run).
+ * expense submit (expenses.create), field-ticket manage (time.manage),
+ * payroll run delivery (payroll.run), and the sales-order create grant for
+ * a shipment's packing slip (ar.create): sending is customer correspondence,
+ * stronger than the fulfilment grant that reads it.
  */
 const RECORD_TYPE_SEND_PERMISSION: Record<string, string> = {
   customer_invoice: 'ar.create',
@@ -40,6 +42,7 @@ const RECORD_TYPE_SEND_PERMISSION: Record<string, string> = {
   card_refund: 'ap.create',
   expense_report: 'expenses.create',
   field_ticket: 'time.manage',
+  shipment: 'ar.create',
   journal: 'gl.post',
   journal_entry: 'gl.post',
   pay_stub: 'payroll.run',

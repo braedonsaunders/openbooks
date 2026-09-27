@@ -39,7 +39,9 @@
     "vendor": "Lieferant",
     "employee": "Mitarbeiter",
     "pay_run": "Lohnlauf",
-    "field_ticket": "Außendienstbeleg"
+    "field_ticket": "Außendienstbeleg",
+    "pick_list": "Kommissionierliste",
+    "shipment": "Sendung"
   },
   "property": {
     "tabs": {

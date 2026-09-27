@@ -1796,6 +1796,120 @@ const FIELD_TICKET: RecordTypeMeta = {
 };
 
 /**
+ * Pick lists and shipments — the warehouse half of the order cycle
+ * (Fulfillment feature). Neither is edited through the generic document
+ * API: a pick list is built from an issued sales order's open stock lines and
+ * a shipment from a released pick list, so the customer, sales order,
+ * warehouse and lines are locked on the form. The date and memo are captured
+ * when the document is created; a draft shipment also takes its carrier,
+ * service, tracking number and cartons. Custom fields are header-only.
+ */
+const FULFILLMENT_STAGE_FILTER: ListFilterMeta = {
+  key: "fulfillment_stage",
+  labelKey: "fulfillment.fields.stage",
+  kind: "select",
+  operators: ["eq", "ne"],
+  options: [
+    { value: "open", labelKey: "fulfillment.stage.open" },
+    { value: "done", labelKey: "fulfillment.stage.done" },
+  ],
+};
+
+const FULFILLMENT_WAREHOUSE_FILTER: ListFilterMeta = {
+  key: "warehouse_id",
+  labelKey: "common.labels.warehouse",
+  kind: "entity_ref",
+  operators: OPERATORS_BY_KIND.entity_ref,
+  entitySource: "warehouse",
+};
+
+const FULFILLMENT_LINE_FIELDS: RecordTypeMeta["lineFields"] = [
+  { key: "sales_order_line", labelKey: "fulfillment.fields.salesOrderLine", level: "line", kind: "text", locked: true },
+  { key: "item_id", labelKey: "common.labels.item", level: "line", kind: "entity_ref", required: true, locked: true },
+  { key: "description", labelKey: "common.labels.description", level: "line", kind: "text" },
+  { key: "bin_id", labelKey: "fulfillment.fields.bin", level: "line", kind: "entity_ref", required: true, locked: true },
+  { key: "lot_serial", labelKey: "fulfillment.fields.lotSerial", level: "line", kind: "text" },
+  { key: "quantity", labelKey: "common.labels.quantity", level: "line", kind: "number", required: true, locked: true },
+  { key: "unit", labelKey: "common.labels.unit", level: "line", kind: "text" },
+];
+
+function fulfillmentRecordType(key: "pick_list" | "shipment"): RecordTypeMeta {
+  const shipment = key === "shipment";
+  return {
+    key,
+    labelKey: `customization.recordTypes.${key}`,
+    category: "transaction",
+    featureKey: "fulfillment",
+    customFieldLineTable: null,
+    headerFields: [
+      { key: "party_id", labelKey: "common.labels.customer", level: "header", kind: "entity_ref", locked: true },
+      { key: "sales_order_id", labelKey: "fulfillment.fields.salesOrder", level: "header", kind: "entity_ref", locked: true },
+      ...(shipment
+        ? [{ key: "pick_list_id", labelKey: "fulfillment.fields.pickList", level: "header" as const, kind: "entity_ref" as const, locked: true }]
+        : []),
+      { key: "warehouse_id", labelKey: "common.labels.warehouse", level: "header", kind: "entity_ref", locked: true },
+      { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
+      ...(shipment
+        ? [
+            { key: "carrier_id", labelKey: "fulfillment.fields.carrier", level: "header" as const, kind: "entity_ref" as const },
+            { key: "carrier_service", labelKey: "fulfillment.fields.service", level: "header" as const, kind: "select" as const },
+            { key: "tracking_number", labelKey: "fulfillment.fields.trackingNumber", level: "header" as const, kind: "text" as const },
+            { key: "ship_to_address", labelKey: "fulfillment.fields.shipTo", level: "header" as const, kind: "long_text" as const },
+          ]
+        : []),
+      { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+    ],
+    lineFields: shipment
+      ? [...FULFILLMENT_LINE_FIELDS, { key: "carton", labelKey: "fulfillment.fields.carton", level: "line", kind: "text" }]
+      : FULFILLMENT_LINE_FIELDS,
+    defaultSort: { sortKey: "date", dir: "desc" },
+    listColumns: [
+      { key: "document_number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+      { key: "party_name", labelKey: "common.labels.customer", kind: "text", sortable: true, sortKey: "party" },
+      { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
+      { key: "sales_order_number", labelKey: "fulfillment.fields.salesOrder", kind: "text", sortable: true, sortKey: "salesOrder" },
+      { key: "warehouse_code", labelKey: "common.labels.warehouse", kind: "text", sortable: true, sortKey: "warehouse", defaultWidth: 120 },
+      ...(shipment
+        ? [
+            { key: "carrier_name", labelKey: "fulfillment.fields.carrier", kind: "text" as const, sortable: true, sortKey: "carrier" },
+            { key: "tracking_number", labelKey: "fulfillment.fields.trackingNumber", kind: "text" as const },
+          ]
+        : []),
+      { key: "fulfillment_stage", labelKey: "fulfillment.fields.stage", kind: "text", sortable: true, sortKey: "stage", defaultWidth: 110 },
+      { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 130 },
+      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+    ],
+    listFilters: [
+      {
+        key: "status",
+        labelKey: "common.labels.status",
+        kind: "select",
+        operators: OPERATORS_BY_KIND.select,
+        options: shipment
+          ? [
+              { value: "draft", labelKey: "common.status.draft" },
+              { value: "approved", labelKey: "common.status.approved" },
+              { value: "voided", labelKey: "common.status.voided" },
+            ]
+          : [
+              { value: "draft", labelKey: "common.status.draft" },
+              { value: "pending_approval", labelKey: "common.status.pendingApproval" },
+              { value: "approved", labelKey: "common.status.approved" },
+              { value: "voided", labelKey: "common.status.voided" },
+            ],
+      },
+      FULFILLMENT_STAGE_FILTER,
+      FULFILLMENT_WAREHOUSE_FILTER,
+      { key: "party_id", labelKey: "common.labels.customer", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "customer" },
+      DATE_FILTER,
+    ],
+  };
+}
+
+const PICK_LIST = fulfillmentRecordType("pick_list");
+const SHIPMENT = fulfillmentRecordType("shipment");
+
+/**
  * Pay runs — machine-built posting documents (kind 'pay_run'). The payroll
  * wizard is the only editing surface, so the record type is list-only:
  * saved views + custom columns ride the universal machinery, forms stay off.
@@ -1859,6 +1973,8 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   QUOTE,
   SALES_ORDER,
   PURCHASE_ORDER,
+  PICK_LIST,
+  SHIPMENT,
   CUSTOMER,
   OPPORTUNITY,
   ACTIVITY,

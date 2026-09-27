@@ -2178,6 +2178,11 @@
         "singular": "Lager",
         "description": "Bezeichnung, Adresse und Lebenszyklus jedes Lagerorts der Art Lager."
       },
+      "carriers": {
+        "title": "Versanddienstleister",
+        "singular": "Versanddienstleister",
+        "description": "Versanddienstleister, mit denen Sie versenden, ihre Versandarten und ein optionaler Link zur Sendungsverfolgung."
+      },
       "putaway-rules": {
         "title": "Einlagerungsregeln",
         "singular": "Einlagerungsregel",
@@ -2742,6 +2747,8 @@
       "strategy": "Strategie",
       "targetLocationId": "Ziellagerort",
       "capacityQuantity": "Kapazität",
+      "services": "Versandarten",
+      "trackingUrlTemplate": "Vorlage für den Sendungsverfolgungslink",
       "accountId": "Konto",
       "classAttribute": "Attribut der Anlagegüterklasse",
       "countryCode": "Land",
@@ -3134,6 +3141,9 @@
     "fieldHelp": {
       "putawayItem": "Leer lassen, damit die Regel für alle Artikel gilt.",
       "putawayCapacity": "Die Höchstmenge des Artikels am Ziel. Für eine Blockzone erforderlich; bei einem festen Lagerplatz leer lassen für keine Begrenzung.",
+      "carrierServices": "Die Versandarten dieses Dienstleisters, etwa Standard oder Express. Eine Sendung wählt eine davon.",
+      "carrierTrackingUrlTemplate": "Die Adresse der Sendungsverfolgungsseite mit '{tracking}' an der Stelle der Sendungsnummer, zum Beispiel https://carrier.example/track?number='{tracking}'. Leer lassen, wenn der Dienstleister keinen Verfolgungslink hat.",
+      "carrierActive": "Deaktivieren Sie einen Versanddienstleister, den Sie nicht mehr nutzen. Ein inaktiver Dienstleister kann auf keiner Sendung gewählt werden; Sendungen, die ihn bereits nennen, behalten ihn.",
       "recognitionRulePolicy": "Wenn Sie Methode, Laufzeit, Daten, Versätze, Prozentsatz oder Konten einer bereits im Umsatz verwendeten Regel ändern, entsteht eine neue Version; bestehende Verpflichtungen behalten die alte Version.",
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
       "basisCapAmountPerPeriod": "Diese Komponente stoppen, sobald sie in einer Lohnperiode diesen Betrag erreicht hat.",

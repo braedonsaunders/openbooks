@@ -88,7 +88,13 @@
     "projectCharge": "Charge de projet",
     "projectChargeShort": "Charge",
     "fieldTicket": "Bon de régie",
-    "fieldTicketShort": "Bon"
+    "fieldTicketShort": "Bon",
+    "pickList": "Liste de prélèvement",
+    "pickListShort": "Prélèv.",
+    "shipment": "Expédition",
+    "shipmentShort": "Expéd.",
+    "fulfillment": "Exécution de commande",
+    "fulfillmentShort": "Exéc."
   },
   "labels": {
     "name": "Nom",

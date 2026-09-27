@@ -2178,6 +2178,11 @@
         "singular": "倉庫",
         "description": "倉庫種別の在庫ロケーションごとの名称、住所、ライフサイクル。"
       },
+      "carriers": {
+        "title": "配送業者",
+        "singular": "配送業者",
+        "description": "出荷に利用する配送業者、各業者のサービス区分、および任意の追跡リンク。"
+      },
       "putaway-rules": {
         "title": "格納ルール",
         "singular": "格納ルール",
@@ -2742,6 +2747,8 @@
       "strategy": "方式",
       "targetLocationId": "格納先",
       "capacityQuantity": "容量",
+      "services": "サービス区分",
+      "trackingUrlTemplate": "追跡リンクのテンプレート",
       "accountId": "勘定科目",
       "classAttribute": "資産区分属性",
       "countryCode": "国",
@@ -3134,6 +3141,9 @@
     "fieldHelp": {
       "putawayItem": "空欄にするとすべての品目に適用されます。",
       "putawayCapacity": "格納先に置ける品目の上限数量。バルクゾーンでは必須です。固定棚で空欄にすると上限なしになります。",
+      "carrierServices": "この配送業者が提供するサービス区分（例：通常便、翌日配達）。出荷ごとにいずれか1つを選択します。",
+      "carrierTrackingUrlTemplate": "配送業者の追跡ページのアドレス。追跡番号が入る位置に '{tracking}' を記述します（例：https://carrier.example/track?number='{tracking}'）。追跡リンクがない場合は空欄にします。",
+      "carrierActive": "使用しなくなった配送業者は「有効」をオフにします。無効な配送業者は出荷で選択できませんが、既にその業者を指定している出荷はそのまま保持されます。",
       "recognitionRulePolicy": "収益で既に使用されているルールの方法、期間、日付、オフセット、割合、または勘定科目を変更すると新しいバージョンが作成され、既存の履行義務は旧バージョンを保持します。",
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
       "basisCapAmountPerPeriod": "1給与期間にこの金額に達したらこの項目を停止します。",

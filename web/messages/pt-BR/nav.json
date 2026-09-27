@@ -1,6 +1,8 @@
 {
   "modules": {
     "warehouses": "Armazéns",
+    "picks": "Listas de Separação",
+    "shipments": "Remessas",
     "accounts": "Plano de Contas",
     "assets": "Ativo Imobilizado",
     "equipment": "Equipamentos",

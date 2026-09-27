@@ -12,7 +12,7 @@ import { DOCUMENT_KINDS } from "../periods/period-policy.ts";
  * The profile is collapsed onto the single `documents` supertype.
  */
 
-export const NON_POSTING_DOC_KINDS = ["sales_order", "purchase_order", "quote"] as const;
+export const NON_POSTING_DOC_KINDS = ["sales_order", "purchase_order", "quote", "pick_list", "shipment"] as const;
 
 /**
  * Document kinds flows can run over. The posting kinds are derived from the

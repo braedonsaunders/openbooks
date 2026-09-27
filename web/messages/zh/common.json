@@ -88,7 +88,13 @@
     "projectCharge": "项目计费项",
     "projectChargeShort": "计费项",
     "fieldTicket": "现场工单",
-    "fieldTicketShort": "工单"
+    "fieldTicketShort": "工单",
+    "pickList": "拣货单",
+    "pickListShort": "拣货",
+    "shipment": "发运单",
+    "shipmentShort": "发运",
+    "fulfillment": "销售履约",
+    "fulfillmentShort": "履约"
   },
   "labels": {
     "name": "名称",

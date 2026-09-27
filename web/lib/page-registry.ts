@@ -1960,6 +1960,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/picks': {
+    route: '/picks',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/picks/view')
+      return {
+        load: (input) => m.loadPicks(input.searchParams ?? {}),
+        spec: (data) => m.picksSpec(data as never),
+      }
+    },
+  },
   '/projects': {
     route: '/projects',
     segments: [],
@@ -2365,6 +2377,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: () => m.loadSecurity(),
         spec: () => m.securitySpec(),
+      }
+    },
+  },
+  '/shipments': {
+    route: '/shipments',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/shipments/view')
+      return {
+        load: (input) => m.loadShipments(input.searchParams ?? {}),
+        spec: (data) => m.shipmentsSpec(data as never),
       }
     },
   },

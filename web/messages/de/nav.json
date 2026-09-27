@@ -1,6 +1,8 @@
 {
   "modules": {
     "warehouses": "Lager",
+    "picks": "Kommissionierlisten",
+    "shipments": "Sendungen",
     "accounts": "Kontenplan",
     "assets": "Anlagevermögen",
     "equipment": "Ausrüstung",

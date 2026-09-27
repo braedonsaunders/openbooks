@@ -39,7 +39,9 @@
     "field_ticket": "Parte de obra",
     "fixed_asset": "Activo fijo",
     "property": "Propiedad",
-    "pay_run": "Ciclo de nómina"
+    "pay_run": "Ciclo de nómina",
+    "pick_list": "Lista de preparación",
+    "shipment": "Envío"
   },
   "property": {
     "tabs": {

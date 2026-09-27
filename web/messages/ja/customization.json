@@ -39,7 +39,9 @@
     "vendor": "仕入先",
     "employee": "従業員",
     "pay_run": "給与計算",
-    "field_ticket": "作業日報"
+    "field_ticket": "作業日報",
+    "pick_list": "ピッキングリスト",
+    "shipment": "出荷"
   },
   "property": {
     "tabs": {

@@ -180,6 +180,7 @@ export const MODULE_KEYWORDS: Record<string, string[]> = {
   files: ["file", "files", "upload", "attachment", "folder", "cabinet"],
   inventory: ["inventory", "stock", "item", "items", "warehouse", "sku", "on hand", "quantity"],
   orders: ["order", "orders", "sales order", "purchase order", "backorder", "fulfil", "fulfill", "shipment"],
+  fulfillment: ["pick list", "pick lists", "picking", "shipment", "shipments", "carrier", "tracking number", "tracking link"],
   banking: ["bank", "banks", "cash", "reconcil", "bank feed", "unmatched", "bank line", "bank statement", "clearing"],
   budgets: ["budget", "budgets", "variance", "vs actual", "budget scenario", "budget workspace"],
   projects: [
