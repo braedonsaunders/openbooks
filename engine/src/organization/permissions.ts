@@ -85,6 +85,10 @@ export const PERMISSION_CATALOGUE = [
   // Warehousing: maintain warehouse locations. A catalog fact like
   // items.manage, so it carries no posting authority of its own.
   "items.warehouses",
+  // Manufacturing master data, planning, and shop-floor records are separate
+  // from inventory posting authority; posting still requires items.post.
+  "manufacturing.read",
+  "manufacturing.manage",
   // Order fulfillment: pick, pack, and ship sales orders. Shipping moves
   // stock, so it is granted where order entry and items.post already meet.
   "orders.fulfill",
@@ -439,6 +443,14 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "manufacturing",
+    labelKey: "permissions.groups.manufacturing",
+    permissions: [
+      { key: "manufacturing.read", labelKey: permissionLabelKey("manufacturing.read") },
+      { key: "manufacturing.manage", labelKey: permissionLabelKey("manufacturing.manage") },
+    ],
+  },
+  {
     key: "orders",
     labelKey: "permissions.groups.orders",
     permissions: [{ key: "orders.fulfill", labelKey: permissionLabelKey("orders.fulfill") }],
@@ -756,6 +768,8 @@ export const BUILT_IN_ROLES: Record<
       "items.post",
       "items.reverse",
       "items.warehouses",
+      "manufacturing.read",
+      "manufacturing.manage",
       "orders.fulfill",
       "projects.read",
       "projects.manage",
@@ -872,6 +886,11 @@ export const BUILT_IN_ROLES: Record<
       "hrm.self.read",
       "hrm.self.request",
     ],
+  },
+  production: {
+    name: "Production",
+    description: "Manages manufacturing masters and shop-floor work, with inventory posting authority but no reversal authority.",
+    permissions: ["manufacturing.read", "manufacturing.manage", "items.read", "items.post"],
   },
   approver: {
     name: "Approver",

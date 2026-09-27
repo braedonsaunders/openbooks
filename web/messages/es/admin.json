@@ -442,6 +442,7 @@
   },
   "roles": {
     "metaTitle": "Roles",
+    "named": {"production":{"name":"Producción","description":"Administra datos maestros y el trabajo de planta; puede contabilizar inventario, pero no revertirlo."}},
     "title": "Roles",
     "description": "Conjuntos de permisos que se asignan a los usuarios. Los roles integrados vienen incluidos con la aplicación; cree roles personalizados para un control más detallado.",
     "manageUsers": "Administrar usuarios",
@@ -871,6 +872,7 @@
       "reports": "Informes",
       "budgets": "Presupuestos y pronósticos",
       "insights": "Análisis",
+      "manufacturing": "Fabricación",
       "items": "Artículos y servicios",
       "orders": "Pedidos y preparación",
       "projects": "Proyectos y costeo de trabajos",
@@ -926,6 +928,8 @@
     "items_post": "Contabilizar movimientos de inventario",
     "items_reverse": "Revertir movimientos de inventario",
     "items_warehouses": "Gestionar almacenes y ubicaciones",
+    "manufacturing_read": "Ver registros de fabricación",
+    "manufacturing_manage": "Administrar datos maestros y órdenes de fabricación",
     "orders_fulfill": "Preparar, empaquetar y enviar pedidos",
     "projects_read": "Ver proyectos y costeo de trabajos",
     "projects_manage": "Crear y editar proyectos",
@@ -2198,6 +2202,9 @@
         "singular": "Ubicación de stock",
         "description": "Contenedores, zonas y almacenes físicos bajo la dimensión de ubicaciones."
       },
+      "mfg-scrap-reasons": {"title":"Motivos de desecho","singular":"Motivos de desecho"},
+      "mfg-item-policies": {"title":"Políticas de fabricación por artículo","singular":"Políticas de fabricación por artículo"},
+      "manufacturing-policies": {"title":"Políticas de fabricación","singular":"Políticas de fabricación","description":"Defina cómo la planificación de fabricación gestiona faltantes de materiales, tolerancias de finalización y desechos anormales.","shortage":"Política de faltantes de material","warn":"Advertir y permitir la liberación","refuse":"Rechazar la liberación si faltan materiales","tolerance":"Tolerancia de finalización (%)","threshold":"Umbral de aprobación para desechos anormales","thresholdHelp":"Déjelo en blanco si no se requiere aprobación.","save":"Guardar políticas","saving":"Guardando políticas…","saved":"Políticas de fabricación guardadas","failed":"No se pudieron guardar las políticas de fabricación."},
       "item-inventory-profiles": {
         "title": "Costeo de artículos",
         "description": "Método de costeo, cuentas de inventario, seguimiento y costo estándar por artículo."
@@ -3254,6 +3261,8 @@
         "transit": "Tránsito",
         "quarantine": "Cuarentena"
       },
+      "manufacturingScrap": {"normal":"Desecho normal","abnormal":"Desecho anormal"},
+      "manufacturingSupplyMethod": {"make":"Fabricar","buy":"Comprar","transfer":"Transferir entre ubicaciones"},
       "overheadMethod": {
         "live": "Live",
         "standard": "Standard"

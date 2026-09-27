@@ -395,6 +395,7 @@
   },
   "roles": {
     "metaTitle": "Rollen",
+    "named": {"production":{"name":"Produktion","description":"Verwaltet Fertigungsstammdaten und Werkstattarbeit, darf Bestände buchen, aber nicht stornieren."}},
     "title": "Rollen",
     "description": "Bündel von Berechtigungen, die Sie Benutzern zuweisen. Integrierte Rollen werden mit der App geliefert; erstellen Sie benutzerdefinierte Rollen für alles Feinkörnigere.",
     "manageUsers": "Benutzer verwalten",
@@ -871,6 +872,7 @@
       "reports": "Berichte",
       "budgets": "Budgets & Prognosen",
       "insights": "Insights",
+      "manufacturing": "Fertigung",
       "items": "Artikel & Dienstleistungen",
       "orders": "Aufträge und Versand",
       "projects": "Projekte & Auftragskalkulation",
@@ -926,6 +928,8 @@
     "items_post": "Lagerbewegungen buchen",
     "items_reverse": "Lagerbewegungen stornieren",
     "items_warehouses": "Lager und Lagerplätze verwalten",
+    "manufacturing_read": "Fertigungsdaten anzeigen",
+    "manufacturing_manage": "Fertigungsstammdaten und Fertigungsaufträge verwalten",
     "orders_fulfill": "Aufträge kommissionieren, verpacken und versenden",
     "projects_read": "Projekte und Auftragskalkulation anzeigen",
     "projects_manage": "Projekte erstellen und bearbeiten",
@@ -2322,6 +2326,9 @@
         "singular": "Lagerort",
         "description": "Physische Behälter, Zonen und Lager unter der Standortdimension."
       },
+      "mfg-scrap-reasons": {"title":"Ausschussgründe","singular":"Ausschussgründe"},
+      "mfg-item-policies": {"title":"Fertigungsartikelrichtlinien","singular":"Fertigungsartikelrichtlinien"},
+      "manufacturing-policies": {"title":"Fertigungseinstellungen","singular":"Fertigungseinstellungen","description":"Legen Sie fest, wie die Fertigungsplanung mit Materialengpässen, Fertigstellungstoleranzen und ungewöhnlichem Ausschuss umgeht.","shortage":"Materialengpassrichtlinie","warn":"Warnen und die Freigabe fortsetzen","refuse":"Freigabe bei Engpässen verweigern","tolerance":"Fertigstellungstoleranz (%)","threshold":"Genehmigungsgrenze für ungewöhnlichen Ausschuss","thresholdHelp":"Leer lassen, wenn keine Genehmigung erforderlich ist.","save":"Einstellungen speichern","saving":"Einstellungen werden gespeichert…","saved":"Fertigungseinstellungen gespeichert","failed":"Fertigungseinstellungen konnten nicht gespeichert werden."},
       "item-inventory-profiles": {
         "title": "Artikelkalkulation",
         "description": "Kalkulationsmethode, Bestandskonten, Nachverfolgung und Standardkosten je Artikel."
@@ -3373,6 +3380,8 @@
         "transit": "Transit",
         "quarantine": "Quarantäne"
       },
+      "manufacturingScrap": {"normal":"Normaler Ausschuss","abnormal":"Ungewöhnlicher Ausschuss"},
+      "manufacturingSupplyMethod": {"make":"Selbst fertigen","buy":"Kaufen","transfer":"Zwischen Lagerorten umlagern"},
       "complianceCategory": {
         "bond": "Bürgschaft",
         "insurance": "Versicherung",

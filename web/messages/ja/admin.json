@@ -395,6 +395,7 @@
   },
   "roles": {
     "metaTitle": "ロール",
+    "named": {"production":{"name":"製造担当","description":"製造マスターと現場作業を管理し、在庫の計上はできますが取消権限はありません。"}},
     "title": "ロール",
     "description": "ユーザーに割り当てる権限の束です。組み込みロールはアプリに付属しています。より細かい制御が必要な場合はカスタムロールを作成してください。",
     "manageUsers": "ユーザーを管理",
@@ -871,6 +872,7 @@
       "reports": "レポート",
       "budgets": "予算と予測",
       "insights": "インサイト",
+      "manufacturing": "製造",
       "items": "品目とサービス",
       "orders": "受注と出荷",
       "projects": "プロジェクトと原価計算",
@@ -926,6 +928,8 @@
     "items_post": "在庫変動を記帳",
     "items_reverse": "在庫変動を取消",
     "items_warehouses": "倉庫とロケーションを管理",
+    "manufacturing_read": "製造データを表示",
+    "manufacturing_manage": "製造マスターと製造オーダーを管理",
     "orders_fulfill": "受注のピッキング・梱包・出荷",
     "projects_read": "プロジェクトと原価計算を表示",
     "projects_manage": "プロジェクトを作成および編集",
@@ -2322,6 +2326,9 @@
         "singular": "在庫ロケーション",
         "description": "ロケーションディメンション配下の物理的なビン、ゾーン、および倉庫。"
       },
+      "mfg-scrap-reasons": {"title":"スクラップ理由","singular":"スクラップ理由"},
+      "mfg-item-policies": {"title":"品目別製造ポリシー","singular":"品目別製造ポリシー"},
+      "manufacturing-policies": {"title":"製造ポリシー","singular":"製造ポリシー","description":"資材不足、完成許容差、異常スクラップを製造計画でどのように扱うかを設定します。","shortage":"資材不足ポリシー","warn":"警告してリリースを許可","refuse":"資材不足時はリリースを拒否","tolerance":"完成許容差 (%)","threshold":"異常スクラップ承認しきい値","thresholdHelp":"承認が不要な場合は空欄にします。","save":"ポリシーを保存","saving":"ポリシーを保存中…","saved":"製造ポリシーを保存しました","failed":"製造ポリシーを保存できませんでした。"},
       "item-inventory-profiles": {
         "title": "品目原価計算",
         "description": "品目ごとの原価計算方法、在庫勘定、追跡、および標準原価。"
@@ -3373,6 +3380,8 @@
         "transit": "輸送中",
         "quarantine": "検疫"
       },
+      "manufacturingScrap": {"normal":"通常スクラップ","abnormal":"異常スクラップ"},
+      "manufacturingSupplyMethod": {"make":"製造","buy":"購入","transfer":"拠点間移動"},
       "complianceCategory": {
         "bond": "保証金",
         "insurance": "保険",

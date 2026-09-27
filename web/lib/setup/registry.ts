@@ -29,6 +29,7 @@ import { WORKFORCE_ENTITIES } from './entities/workforce'
 import { HRM_PROCESS_ENTITIES } from './entities/hrm-processes'
 import { ASSET_ENTITIES } from './entities/assets'
 import { CURRENCY_ENTITIES } from './entities/currency'
+import { MANUFACTURING_ENTITIES } from './entities/manufacturing'
 
 export type { SetupFieldKind, SetupColumnKind, SetupRefSource, SetupOption, SetupDynamicOptionsSource, SetupField, SetupColumn, SetupFilter, SetupEntity, SetupGroup } from './types'
 export { setupOptionLabel, setupFieldVisible, setupFieldOptions, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, setupEntityForFeatureState } from './types'
@@ -48,6 +49,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...HRM_PROCESS_ENTITIES,
   ...ASSET_ENTITIES,
   ...CURRENCY_ENTITIES,
+  ...MANUFACTURING_ENTITIES,
 ]
 
 export const SETUP_ENTITY_BY_KEY = new Map(SETUP_ENTITIES.map((e) => [e.key, e]))
