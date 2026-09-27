@@ -3,7 +3,7 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "@openbooks/engine/src/platform/db.ts";
-import { sealJson, unsealJson } from "@openbooks/engine/src/platform/secrets.ts";
+import { sealJson, SecretIntegrityError, unsealJson } from "@openbooks/engine/src/platform/secrets.ts";
 import {
   getConnection,
   sourceType,
@@ -36,6 +36,20 @@ class MirrorScheduleRefusal extends Error {
   constructor(message: string) {
     super(message);
     this.name = "MirrorScheduleRefusal";
+  }
+}
+
+/**
+ * A stored credential that no longer unseals refuses at 400 with the
+ * integrity error's own remedy intact. Thrown as a named class (never a
+ * plain Error) so the sanitizer surfaces it instead of genericizing to
+ * a 500.
+ */
+class ConnectionSecretsRefusal extends Error {
+  readonly status = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = "ConnectionSecretsRefusal";
   }
 }
 
@@ -136,10 +150,26 @@ export async function PATCH(
       updates.config = merged;
     }
     if (body.secrets && manifest) {
-      const current =
-        existing.secrets == null
-          ? {}
-          : unsealJson<Record<string, string>>(existing.secrets, { orgId, purpose: "connection.secrets" });
+      // A tampered stored credential refuses as unreadable — re-enter it —
+      // the same shape as a missing one, never a 500. The merge below cannot
+      // proceed without the current secrets, so the refusal carries the
+      // integrity error's own remedy.
+      let current: Record<string, string>;
+      try {
+        current =
+          existing.secrets == null
+            ? {}
+            : unsealJson<Record<string, string>>(existing.secrets, { orgId, purpose: "connection.secrets" });
+      } catch (error) {
+        if (!(error instanceof SecretIntegrityError)) throw error;
+        console.error("[connections] stored credential failed integrity check:", {
+          orgId,
+          connectionId: id,
+          purpose: error.purpose,
+          keyId: error.keyId,
+        });
+        return apiErrorResponse(new ConnectionSecretsRefusal(error.message));
+      }
       for (const field of manifest.secretFields) {
         const value = body.secrets[field.key];
         if (value !== undefined && value !== null && String(value) !== "") {

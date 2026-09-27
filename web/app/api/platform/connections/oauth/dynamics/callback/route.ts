@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { isDeepStrictEqual } from 'node:util'
 import { and, eq } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
-import { sealJson, unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
+import { sealJson, SecretIntegrityError, unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
 import { exchangeCode, listCompanies, type DynamicsApp } from '@openbooks/engine/src/connectors/dynamics.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { connectionAuditChanges } from '@openbooks/schema/src/connections.ts'
@@ -48,7 +48,13 @@ export async function GET(req: Request) {
     throw e
   })
   if (!conn || conn.source !== 'dynamics') return connectionOauthBounce('notfound')
-  const secret = conn.secrets == null ? null : unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets, { orgId: st.orgId, purpose: "connection.secrets" })
+  // A tampered credential bounces as missing credentials — re-enter them.
+  let secret: { clientId?: string; clientSecret?: string } | null = null
+  try {
+    secret = conn.secrets == null ? null : unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets, { orgId: st.orgId, purpose: "connection.secrets" })
+  } catch (error) {
+    if (!(error instanceof SecretIntegrityError)) throw error
+  }
   const cfg = conn.config as { aadTenantId?: string; environment?: string; companyId?: string }
   if (!secret?.clientId || !secret?.clientSecret) return connectionOauthBounce('nocreds')
   if (!cfg.aadTenantId || !cfg.environment) return connectionOauthBounce('nocreds')

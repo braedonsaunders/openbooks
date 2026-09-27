@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { isDeepStrictEqual } from 'node:util'
 import { and, eq } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
-import { sealJson, unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
+import { sealJson, SecretIntegrityError, unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
 import { QboClient, exchangeCode, type QboApp } from '@openbooks/engine/src/connectors/qbo.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { connectionAuditChanges } from '@openbooks/schema/src/connections.ts'
@@ -48,7 +48,13 @@ export async function GET(req: Request) {
     throw e
   })
   if (!conn || conn.source !== 'qbo') return connectionOauthBounce('notfound')
-  const secret = conn.secrets == null ? null : unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets, { orgId: st.orgId, purpose: "connection.secrets" })
+  // A tampered credential bounces as missing credentials — re-enter them.
+  let secret: { clientId?: string; clientSecret?: string } | null = null
+  try {
+    secret = conn.secrets == null ? null : unsealJson<{ clientId?: string; clientSecret?: string }>(conn.secrets, { orgId: st.orgId, purpose: "connection.secrets" })
+  } catch (error) {
+    if (!(error instanceof SecretIntegrityError)) throw error
+  }
   if (!secret?.clientId || !secret?.clientSecret) return connectionOauthBounce('nocreds')
 
   const environment = (conn.config as { environment?: string }).environment === 'production' ? 'production' : 'sandbox'
