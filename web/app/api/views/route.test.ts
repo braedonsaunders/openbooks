@@ -310,7 +310,7 @@ test('view create refuses a bad scope and a malformed query before inserting', a
   const key = '00000000-0000-4000-8000-00000000c010'
 
   const badScope = await post(key, { ...BODY, scope: 'everyone' })
-  assert.equal(badScope.status, 400)
+  assert.equal(badScope.status, 422)
   const badScopeBody = await badScope.json() as { error: string; issues: { path: string }[] }
   assert.equal(badScopeBody.error, 'Invalid scope')
   assert.ok(badScopeBody.issues.some((issue) => issue.path === 'scope'))

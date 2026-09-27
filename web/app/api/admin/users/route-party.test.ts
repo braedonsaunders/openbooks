@@ -400,11 +400,11 @@ test('attestation absent or false is refused without mutation', async () => {
   const without: Record<string, unknown> = { ...validLink() }
   delete without.attestation
   const missing = await post(without)
-  assert.equal(missing.status, 400)
+  assert.equal(missing.status, 422)
   assert.match(((await missing.json()) as { error: string }).error, /attestation/i)
 
   const falseAtt = await post(validLink({ attestation: false }))
-  assert.equal(falseAtt.status, 400)
+  assert.equal(falseAtt.status, 422)
   assert.equal(state.currentPartyId, null)
   assert.equal(state.committed.some((t) => t.includes('update users set party_id')), false)
 })
@@ -412,9 +412,9 @@ test('attestation absent or false is refused without mutation', async () => {
 test('blank and overlong reasons are refused', async () => {
   reset()
   const blank = await post(validLink({ reason: '   ' }))
-  assert.equal(blank.status, 400)
+  assert.equal(blank.status, 422)
   const long = await post(validLink({ reason: 'x'.repeat(501) }))
-  assert.equal(long.status, 400)
+  assert.equal(long.status, 422)
   assert.equal(state.currentPartyId, null)
 })
 

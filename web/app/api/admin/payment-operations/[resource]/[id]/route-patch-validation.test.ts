@@ -117,7 +117,7 @@ function patch(resource: string, id: string, body: Record<string, unknown>): Pro
 test('mandate PATCH refuses a status outside the POST value domain', async () => {
   state.updates = []
   const response = await patch('mandates', MANDATE_ID, { status: 'bogus' })
-  assert.equal(response.status, 400)
+  assert.equal(response.status, 422)
   assert.match(String((await response.json()).error), /status/)
   assert.deepEqual(state.updates, [], 'no mandate write may run for an invalid status')
 })
@@ -125,7 +125,7 @@ test('mandate PATCH refuses a status outside the POST value domain', async () =>
 test('mandate PATCH refuses a wrong-case status POST would never store', async () => {
   state.updates = []
   const response = await patch('mandates', MANDATE_ID, { status: 'Active' })
-  assert.equal(response.status, 400)
+  assert.equal(response.status, 422)
   assert.deepEqual(state.updates, [], 'no mandate write may run for a wrong-case status')
 })
 
@@ -141,7 +141,7 @@ test('mandate PATCH still accepts every POST status', async () => {
 test('schedule PATCH refuses an action outside the POST value domain', async () => {
   state.updates = []
   const response = await patch('schedules', SCHEDULE_ID, { action: 'auto_pay' })
-  assert.equal(response.status, 400)
+  assert.equal(response.status, 422)
   assert.match(String((await response.json()).error), /action/)
   assert.deepEqual(state.updates, [], 'no schedule write may run for an invalid action')
 })
