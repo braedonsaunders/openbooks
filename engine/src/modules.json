@@ -112,7 +112,9 @@
         "close",
         "flows",
         "hrm",
+        "journal",
         "ledger",
+        "nonprofit",
         "payments",
         "platform",
         "records",
@@ -325,6 +327,15 @@
     "navigation": {
       "description": "The navigation module registry.",
       "dependsOn": []
+    },
+    "nonprofit": {
+      "description": "Fund accounting records, classifications, and interfund posting legs.",
+      "dependsOn": [
+        "journal",
+        "money",
+        "organization",
+        "platform"
+      ]
     },
     "organization": {
       "description": "Organizations, subsidiaries, permissions and actor authority, the feature registry and org feature locks, sandbox and extension-permission guards.",

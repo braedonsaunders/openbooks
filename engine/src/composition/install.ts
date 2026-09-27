@@ -16,6 +16,8 @@ import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-chang
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
 import { releaseAllocationRunApproval } from "../allocations/flow-release.ts";
 import { releaseCloseRunApproval } from "../close/flow-release.ts";
+import { registerBalancingLegProvider } from "../journal/balancing-hooks.ts";
+import { fundBalancingLegProvider } from "../nonprofit/fund-posting.ts";
 import {
   releaseCompCycleApproval,
   releaseHrmChangeRequestApproval,
@@ -41,6 +43,7 @@ import {
  */
 export function installEngineSeams(): void {
   registerScriptJournalWriter(createScriptJournal);
+  registerBalancingLegProvider("fund", fundBalancingLegProvider);
   // Engine-owned approval releases: the adapters delegate through
   // releaseFlowApproval; the handlers run inside decideGate's transaction.
   registerFlowApprovalReleaseHandler(ALLOCATION_RUN_SUBJECT_KIND, releaseAllocationRunApproval);
