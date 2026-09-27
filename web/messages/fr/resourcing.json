@@ -1,0 +1,18 @@
+{
+  "demand": {
+    "basis": {
+      "manual": "Saisie manuelle",
+      "pipeline": "Prévisions",
+      "excluded": "Exclu"
+    },
+    "exclusion": {
+      "won": "Opportunité gagnée : affectez les ressources au moyen d'une demande de ressources",
+      "closed": "Opportunité clôturée",
+      "omitted": "Exclue des prévisions",
+      "inactive": "Opportunité inactive",
+      "out_of_scope": "Opportunité hors de vos filiales"
+    },
+    "weightedHours": "Heures pondérées",
+    "probability": "Probabilité"
+  }
+}

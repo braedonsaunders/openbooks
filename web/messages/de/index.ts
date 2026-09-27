@@ -58,6 +58,7 @@ import query from './query.json'
 import receipts from './receipts.json'
 import records from './records.json'
 import reports from './reports.json'
+import resourcing from './resourcing.json'
 import revenue from './revenue.json'
 import salesOrders from './salesOrders.json'
 import shell from './shell.json'
@@ -125,6 +126,7 @@ export default {
   receipts,
   records,
   reports,
+  resourcing,
   revenue,
   salesOrders,
   shell,

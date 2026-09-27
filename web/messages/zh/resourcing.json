@@ -1,0 +1,18 @@
+{
+  "demand": {
+    "basis": {
+      "manual": "手动录入",
+      "pipeline": "销售商机",
+      "excluded": "已排除"
+    },
+    "exclusion": {
+      "won": "商机已赢单：请通过资源申请安排人员",
+      "closed": "商机已关闭",
+      "omitted": "未纳入预测",
+      "inactive": "商机未启用",
+      "out_of_scope": "商机不在您可见的子公司范围内"
+    },
+    "weightedHours": "加权工时",
+    "probability": "概率"
+  }
+}

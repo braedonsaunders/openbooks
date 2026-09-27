@@ -204,6 +204,12 @@ export type ForecastRow = {
   closed_amount: string
 }
 
+/** The CRM pipeline: an active opportunity whose status is open and whose
+ * forecast category is not omitted. Every pipeline reader uses this predicate. */
+export function crmOpportunityInPipeline(opportunity: SQL, status: SQL): SQL {
+  return sql`(${opportunity}.is_active and not ${status}.is_closed and ${opportunity}.forecast_category <> 'omitted')`
+}
+
 /** Exact forecast rollup performed by PostgreSQL numeric arithmetic. */
 export async function calculateForecast(scope: ForecastScope) {
   if (!isIsoCalendarDate(scope.periodStart) || !isIsoCalendarDate(scope.periodEnd) || scope.periodEnd < scope.periodStart) {
@@ -302,7 +308,9 @@ export async function calculateForecast(scope: ForecastScope) {
          ${teamScopeFilter}
          ${crmOpportunityScope(scope.allowedSubsidiaryIds)}
     ), opportunity_base as (
-      select o.currency, o.projected_amount, o.weighted_amount, o.forecast_category, s.is_closed, s.is_won
+      select o.currency, o.projected_amount, o.weighted_amount, o.forecast_category,
+             ${crmOpportunityInPipeline(sql`${sql.identifier('o')}`, sql`${sql.identifier('s')}`)} as in_pipeline,
+             s.is_closed, s.is_won
         from crm_opportunities o
         join forecast_scope fo on fo.id = o.id
         join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
@@ -322,11 +330,11 @@ export async function calculateForecast(scope: ForecastScope) {
       select currency from opportunity_base union select currency from actuals
     )
     select c.currency,
-           coalesce(sum(o.projected_amount) filter (where not o.is_closed and o.forecast_category <> 'omitted'), 0)::text as pipeline_amount,
-           coalesce(sum(o.weighted_amount) filter (where not o.is_closed and o.forecast_category <> 'omitted'), 0)::text as weighted_amount,
-           coalesce(sum(o.projected_amount) filter (where not o.is_closed and o.forecast_category = 'worst_case'), 0)::text as worst_case_amount,
-           coalesce(sum(o.projected_amount) filter (where not o.is_closed and o.forecast_category = 'most_likely'), 0)::text as most_likely_amount,
-           coalesce(sum(o.projected_amount) filter (where not o.is_closed and o.forecast_category = 'upside'), 0)::text as upside_amount,
+           coalesce(sum(o.projected_amount) filter (where o.in_pipeline), 0)::text as pipeline_amount,
+           coalesce(sum(o.weighted_amount) filter (where o.in_pipeline), 0)::text as weighted_amount,
+           coalesce(sum(o.projected_amount) filter (where o.in_pipeline and o.forecast_category = 'worst_case'), 0)::text as worst_case_amount,
+           coalesce(sum(o.projected_amount) filter (where o.in_pipeline and o.forecast_category = 'most_likely'), 0)::text as most_likely_amount,
+           coalesce(sum(o.projected_amount) filter (where o.in_pipeline and o.forecast_category = 'upside'), 0)::text as upside_amount,
            coalesce(max(a.closed_amount), 0)::text as closed_amount
       from currencies c
       left join opportunity_base o on o.currency = c.currency
@@ -355,8 +363,8 @@ export async function countUndatedForecastExcluded(scope: {
     select count(*)::text as count
       from crm_opportunities o
       join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
-     where o.org_id = ${scope.orgId} and o.is_active
-       and not s.is_closed and o.forecast_category <> 'omitted'
+     where o.org_id = ${scope.orgId}
+       and ${crmOpportunityInPipeline(sql`${sql.identifier('o')}`, sql`${sql.identifier('s')}`)}
        and o.expected_close_date is null
        ${ownerFilter}
        ${teamFilter}${crmOpportunityScope(scope.allowedSubsidiaryIds)}
