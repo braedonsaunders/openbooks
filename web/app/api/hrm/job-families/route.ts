@@ -40,7 +40,7 @@ export const POST = defineRoute({
   permission: "hrm.compensation.manage",
   feature: "hrmCompensation",
   body: createFamilyBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     try {
       const family = await createJobFamily({
         orgId: gate.user.orgId,

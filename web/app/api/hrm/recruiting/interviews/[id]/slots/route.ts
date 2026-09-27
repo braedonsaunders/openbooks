@@ -6,7 +6,6 @@ import {
   proposeSlots,
 } from "@openbooks/engine/src/hrm/recruiting/scheduling.ts";
 
-import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../../_lib";
 import { proposeSlotsBody } from "./bodies";
 
@@ -18,11 +17,6 @@ export const runtime = "nodejs";
  * link (manage gate in the service). 404s while hrm, hrmRecruiting, or
  * hrmInterviewScheduling is off.
  */
-async function depthGate(orgId: string) {
-  if (!(await isFeatureEnabled(orgId, "hrmRecruiting"))) return false;
-  return isFeatureEnabled(orgId, "hrmInterviewScheduling");
-}
-
 export const GET = defineRoute({
   permission: "hrm.recruiting.manage",
   feature: "hrmInterviewScheduling",
@@ -48,7 +42,6 @@ export const POST = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   body: proposeSlotsBody,
   handler: async ({
-    request: req,
     authz: gate,
     params: routeParams,
     body: body,

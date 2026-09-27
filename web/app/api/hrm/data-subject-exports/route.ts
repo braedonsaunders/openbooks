@@ -48,7 +48,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   body: requestExportBody,
-  handler: async ({ request: req, body: body }) => {
+  handler: async ({ body: body }) => {
     // The service fences subject-vs-manage itself, so the route admits
     // both HR readers and self-service logins; anyone else meets 403 here.
     const hr = await guardPermission("hrm.documents.manage");

@@ -53,7 +53,6 @@ export const POST = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   body: addOneOnOneItemBody,
   handler: async ({
-    request: req,
     authz: authz,
     params: routeParams,
     body: body,
@@ -86,7 +85,6 @@ export const PATCH = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   body: patchOneOnOneItemBody,
   handler: async ({
-    request: req,
     authz: authz,
     params: routeParams,
     body: body,

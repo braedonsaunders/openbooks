@@ -94,7 +94,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   body: enrollmentPostBody,
-  handler: async ({ request: req, body: body }) => {
+  handler: async ({ body: body }) => {
     // The body decides the grant: self-service elects with the read grant,
     // on-behalf filing needs hrm.benefits.manage (enforced again inside the
     // engine per employment). Parsing first is safe — nothing is written

@@ -16,10 +16,8 @@ export const POST = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   body: submitLeaveRequestBody,
   handler: async ({
-    request: req,
     authz: gate,
     params: routeParams,
-    body: body,
   }) => {
     const { id } = routeParams;
     if (!isUuid(id))

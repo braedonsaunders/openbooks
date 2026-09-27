@@ -22,7 +22,7 @@ export const runtime = "nodejs";
 export const POST = defineRoute({
   public: "session",
   body: linkCompetencyBody,
-  handler: async ({ request: req, authz: authz, body: body }) => {
+  handler: async ({ authz: authz, body: body }) => {
     if (
       !(await isFeatureEnabled(authz.user.orgId, "hrm")) ||
       !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||

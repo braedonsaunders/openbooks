@@ -5,7 +5,6 @@ import {
   withdrawConsent,
 } from "@openbooks/engine/src/hrm/recruiting/retention.ts";
 
-import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../../_lib";
 import { recordConsentBody, withdrawConsentBody } from "./bodies";
 import { z } from "zod";
@@ -19,18 +18,12 @@ const consentActionBody = z.union([withdrawConsentBody, recordConsentBody]);
  * POST with action withdraw withdraws it (the row stays as evidence).
  * 404s while hrm, hrmRecruiting, or hrmCandidateRetention is off.
  */
-async function depthGate(orgId: string) {
-  if (!(await isFeatureEnabled(orgId, "hrmRecruiting"))) return false;
-  return isFeatureEnabled(orgId, "hrmCandidateRetention");
-}
-
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
   feature: "hrmCandidateRetention",
   params: z.object({ id: z.string().min(1) }),
   body: consentActionBody,
   handler: async ({
-    request: req,
     authz: gate,
     params: routeParams,
     body: body,

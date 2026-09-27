@@ -54,7 +54,7 @@ export const POST = defineRoute({
   permission: "hrm.compensation.manage",
   feature: "hrmCompensation",
   body: createBandBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     try {
       const band = await createPayBand({
         orgId: gate.user.orgId,

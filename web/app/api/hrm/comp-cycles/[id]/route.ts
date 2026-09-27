@@ -33,7 +33,7 @@ export const GET = defineRoute({
   permission: "hrm.compensation.read",
   feature: "hrmMeritCycles",
   params: z.object({ id: z.string().min(1) }),
-  handler: async ({ request: req, authz: gate, params: routeParams }) => {
+  handler: async ({ authz: gate, params: routeParams }) => {
     const { id } = routeParams;
     if (!isUuid(id))
       return NextResponse.json({ error: "invalid cycle" }, { status: 400 });
@@ -76,7 +76,6 @@ export const POST = defineRoute({
     }),
   ),
   handler: async ({
-    request: req,
     authz: gate,
     params: routeParams,
     body: body,

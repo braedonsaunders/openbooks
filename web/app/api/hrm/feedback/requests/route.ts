@@ -28,7 +28,7 @@ async function gated(orgId: string): Promise<boolean> {
  */
 export const GET = defineRoute({
   public: "session",
-  handler: async ({ request: req, authz: authz }) => {
+  handler: async ({ authz: authz }) => {
     if (!(await gated(authz.user.orgId))) {
       return notFound("record");
     }
@@ -48,7 +48,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   body: fulfillRequestBody,
-  handler: async ({ request: req, authz: authz, body: body }) => {
+  handler: async ({ authz: authz, body: body }) => {
     if (!(await gated(authz.user.orgId))) {
       return notFound("record");
     }

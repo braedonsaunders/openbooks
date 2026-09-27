@@ -6,7 +6,6 @@ import {
   setKitActive,
 } from "@openbooks/engine/src/hrm/recruiting/kits.ts";
 
-import { isFeatureEnabled } from "../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../_lib";
 import { setKitActiveBody } from "../bodies";
 
@@ -17,18 +16,12 @@ export const runtime = "nodejs";
  * kit with no sittings (a kit with interviews refuses by name). 404s while
  * hrm, hrmRecruiting, or hrmStructuredInterviews is off.
  */
-async function depthGate(orgId: string) {
-  if (!(await isFeatureEnabled(orgId, "hrmRecruiting"))) return false;
-  return isFeatureEnabled(orgId, "hrmStructuredInterviews");
-}
-
 export const PATCH = defineRoute({
   permission: "hrm.recruiting.manage",
   feature: "hrmStructuredInterviews",
   params: z.object({ id: z.string().min(1) }),
   body: setKitActiveBody,
   handler: async ({
-    request: req,
     authz: gate,
     params: routeParams,
     body: body,

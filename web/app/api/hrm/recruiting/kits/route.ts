@@ -5,7 +5,6 @@ import {
   listKits,
 } from "@openbooks/engine/src/hrm/recruiting/kits.ts";
 
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { recruitingErrorResponse } from "../_lib";
 import { createKitBody } from "./bodies";
 
@@ -16,11 +15,6 @@ export const runtime = "nodejs";
  * in the service). 404s while hrm, hrmRecruiting, or hrmStructuredInterviews
  * is off — the Setup surface hides with the same switch.
  */
-async function depthGate(orgId: string) {
-  if (!(await isFeatureEnabled(orgId, "hrmRecruiting"))) return false;
-  return isFeatureEnabled(orgId, "hrmStructuredInterviews");
-}
-
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
   feature: "hrmStructuredInterviews",
@@ -44,7 +38,7 @@ export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
   feature: "hrmStructuredInterviews",
   body: createKitBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     try {
       const kit = await createKit({
         orgId: gate.user.orgId,

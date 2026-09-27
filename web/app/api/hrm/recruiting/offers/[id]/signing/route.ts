@@ -22,7 +22,6 @@ export const POST = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   body: offerSigningBody,
   handler: async ({
-    request: req,
     authz: gate,
     params: routeParams,
     body: body,

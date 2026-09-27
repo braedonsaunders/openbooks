@@ -6,7 +6,6 @@ import {
   submitScorecard,
 } from "@openbooks/engine/src/hrm/recruiting/scorecards.ts";
 
-import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../../_lib";
 import { submitScorecardBody } from "./bodies";
 
@@ -19,11 +18,6 @@ export const runtime = "nodejs";
  * needs a panel seat (checked in the service). 404s while hrm,
  * hrmRecruiting, or hrmStructuredInterviews is off.
  */
-async function depthGate(orgId: string) {
-  if (!(await isFeatureEnabled(orgId, "hrmRecruiting"))) return false;
-  return isFeatureEnabled(orgId, "hrmStructuredInterviews");
-}
-
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
   feature: "hrmStructuredInterviews",
@@ -49,7 +43,6 @@ export const POST = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   body: submitScorecardBody,
   handler: async ({
-    request: req,
     authz: gate,
     params: routeParams,
     body: body,

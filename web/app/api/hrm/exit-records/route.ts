@@ -46,7 +46,7 @@ export const POST = defineRoute({
   permission: "hrm.performance.manage",
   feature: "hrm",
   body: recordExitBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     // Recording stays HR: the manage grant at the route plus the
     // employment's employer scope in the service.
 

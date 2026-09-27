@@ -5,7 +5,6 @@ import {
   listOfferTemplates,
 } from "@openbooks/engine/src/hrm/recruiting/offers-signing.ts";
 
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { recruitingErrorResponse } from "../_lib";
 import { createOfferTemplateBody } from "./bodies";
 
@@ -16,11 +15,6 @@ export const runtime = "nodejs";
  * (manage gate in the service). 404s while hrm, hrmRecruiting, or
  * hrmOfferSigning is off — the Setup surface hides with the same switch.
  */
-async function depthGate(orgId: string) {
-  if (!(await isFeatureEnabled(orgId, "hrmRecruiting"))) return false;
-  return isFeatureEnabled(orgId, "hrmOfferSigning");
-}
-
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
   feature: "hrmRecruiting",
@@ -44,7 +38,7 @@ export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
   feature: "hrmRecruiting",
   body: createOfferTemplateBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     try {
       const template = await createOfferTemplate({
         orgId: gate.user.orgId,

@@ -76,7 +76,7 @@ export const POST = defineRoute({
   permission: "hrm.compensation.manage",
   feature: "hrmCompensation",
   body: createStatementBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     try {
       const statement = await generateStatement({
         orgId: gate.user.orgId,

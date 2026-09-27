@@ -19,7 +19,7 @@ export const runtime = "nodejs";
  */
 export const GET = defineRoute({
   public: "session",
-  handler: async ({ request: req, authz: authz }) => {
+  handler: async ({ authz: authz }) => {
     if (!(await isFeatureEnabled(authz.user.orgId, "hrmPerformance"))) {
       return notFound("record");
     }
@@ -42,7 +42,7 @@ export const POST = defineRoute({
   permission: "hrm.performance.manage",
   feature: "hrmPerformance",
   body: createCycleBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     try {
       const cycle = await createCycle({
         orgId: gate.user.orgId,

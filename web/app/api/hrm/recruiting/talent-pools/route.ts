@@ -5,7 +5,6 @@ import {
   listTalentPools,
 } from "@openbooks/engine/src/hrm/recruiting/pools.ts";
 
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { recruitingErrorResponse } from "../_lib";
 import { createTalentPoolBody } from "./bodies";
 
@@ -15,15 +14,10 @@ export const runtime = "nodejs";
  * Talent-pool collection: GET lists pools, POST creates one (manage gate
  * in the service). 404s while hrm, hrmRecruiting, or hrmTalentPool is off.
  */
-async function depthGate(orgId: string) {
-  if (!(await isFeatureEnabled(orgId, "hrmRecruiting"))) return false;
-  return isFeatureEnabled(orgId, "hrmTalentPool");
-}
-
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
   feature: "hrmTalentPool",
-  handler: async ({ request: req, authz: gate }) => {
+  handler: async ({ authz: gate }) => {
     try {
       const pools = await listTalentPools({
         orgId: gate.user.orgId,
@@ -40,7 +34,7 @@ export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
   feature: "hrmTalentPool",
   body: createTalentPoolBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     try {
       const pool = await createTalentPool({
         orgId: gate.user.orgId,

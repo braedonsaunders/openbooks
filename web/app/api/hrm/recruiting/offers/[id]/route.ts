@@ -51,7 +51,6 @@ export const PATCH = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   body: patchOfferBody,
   handler: async ({
-    request: req,
     authz: gate,
     params: routeParams,
     body: body,
