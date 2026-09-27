@@ -6,7 +6,6 @@ import {
   renderOfferVersion,
 } from "@openbooks/engine/src/hrm/recruiting/offers-signing.ts";
 
-import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../../_lib";
 import { renderOfferVersionBody } from "./bodies";
 
@@ -17,11 +16,6 @@ export const runtime = "nodejs";
  * version (never an overwrite — manage gate in the service). 404s while
  * hrm, hrmRecruiting, or hrmOfferSigning is off.
  */
-async function depthGate(orgId: string) {
-  if (!(await isFeatureEnabled(orgId, "hrmRecruiting"))) return false;
-  return isFeatureEnabled(orgId, "hrmOfferSigning");
-}
-
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
   feature: "hrmRecruiting",
@@ -47,7 +41,6 @@ export const POST = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   body: renderOfferVersionBody,
   handler: async ({
-    request: req,
     authz: gate,
     params: routeParams,
     body: body,

@@ -25,7 +25,6 @@ export const PATCH = defineRoute({
   params: z.object({ id: z.string().min(1) }),
   body: patchCalibrationEntryBody,
   handler: async ({
-    request: req,
     authz: authz,
     params: routeParams,
     body: body,

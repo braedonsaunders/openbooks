@@ -27,7 +27,7 @@ export const PATCH = defineRoute({
   public: "session",
   params: z.object({ id: z.string().min(1), stepId: z.string().min(1) }),
   body: saveProcessTemplateStepBody,
-  handler: async ({ request: req, params: routeParams, body: body }) => {
+  handler: async ({ params: routeParams, body: body }) => {
     const authz = await gate();
     if (authz instanceof NextResponse) return authz;
 

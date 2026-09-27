@@ -23,7 +23,7 @@ const settingsBody = z.object({
  */
 export const GET = defineRoute({
   public: "session",
-  handler: async ({ request: req, authz: authz }) => {
+  handler: async ({ authz: authz }) => {
     const scopeDenied = guardUnrestrictedScope(authz);
     if (scopeDenied) return scopeDenied;
     if (
@@ -49,7 +49,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   body: settingsBody,
-  handler: async ({ request: req, authz: authz, body: body }) => {
+  handler: async ({ authz: authz, body: body }) => {
     const scopeDenied = guardUnrestrictedScope(authz);
     if (scopeDenied) return scopeDenied;
     if (

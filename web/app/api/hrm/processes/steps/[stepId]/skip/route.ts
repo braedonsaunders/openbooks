@@ -16,7 +16,6 @@ export const POST = defineRoute({
   params: z.object({ stepId: z.string().min(1) }),
   body: skipStepBody,
   handler: async ({
-    request: req,
     authz: gate,
     params: routeParams,
     body: body,

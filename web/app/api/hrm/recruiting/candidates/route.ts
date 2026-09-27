@@ -19,7 +19,7 @@ export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
   feature: "hrmRecruiting",
   body: createCandidateBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     try {
       const { candidate, mergedInto } = await createCandidate({
         orgId: gate.user.orgId,

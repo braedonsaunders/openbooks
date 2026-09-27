@@ -29,7 +29,7 @@ const setScheduleBody = z.object({
 export const GET = defineRoute({
   permission: "hrm.certifications.read",
   feature: "hrmCertifications",
-  handler: async ({ request: req, authz: gate }) => {
+  handler: async ({ authz: gate }) => {
     try {
       const settings = await loadSettings(db, gate.user.orgId);
       return NextResponse.json({ settings });
@@ -43,7 +43,7 @@ export const POST = defineRoute({
   permission: "hrm.certifications.manage",
   feature: "hrmCertifications",
   body: setScheduleBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     const scopeDenied = guardUnrestrictedScope(gate);
     if (scopeDenied) return scopeDenied;
 

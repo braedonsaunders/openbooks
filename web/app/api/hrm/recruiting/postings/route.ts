@@ -5,7 +5,6 @@ import {
   publishPosting,
 } from "@openbooks/engine/src/hrm/recruiting/postings.ts";
 
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { recruitingErrorResponse } from "../_lib";
 import { publishPostingBody } from "./bodies";
 
@@ -16,11 +15,6 @@ export const runtime = "nodejs";
  * publishes one board (manage gate in the service). 404s while hrm,
  * hrmRecruiting, or hrmJobBoards is off.
  */
-async function depthGate(orgId: string) {
-  if (!(await isFeatureEnabled(orgId, "hrmRecruiting"))) return false;
-  return isFeatureEnabled(orgId, "hrmJobBoards");
-}
-
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
   feature: "hrmJobBoards",
@@ -44,7 +38,7 @@ export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
   feature: "hrmJobBoards",
   body: publishPostingBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     try {
       const posting = await publishPosting({
         orgId: gate.user.orgId,

@@ -70,7 +70,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   body: scheduleOneOnOneBody,
-  handler: async ({ request: req, authz: authz, body: body }) => {
+  handler: async ({ authz: authz, body: body }) => {
     if (!(await gated(authz.user.orgId))) {
       return notFound("record");
     }

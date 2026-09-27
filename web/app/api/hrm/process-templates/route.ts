@@ -75,7 +75,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   body: createProcessTemplateBody,
-  handler: async ({ request: req, body: body }) => {
+  handler: async ({ body: body }) => {
     const authz = await gate();
     if (authz instanceof NextResponse) return authz;
 

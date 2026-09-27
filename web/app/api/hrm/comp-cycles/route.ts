@@ -19,7 +19,7 @@ export const runtime = "nodejs";
 export const GET = defineRoute({
   permission: "hrm.compensation.read",
   feature: "hrmMeritCycles",
-  handler: async ({ request: req, authz: gate }) => {
+  handler: async ({ authz: gate }) => {
     try {
       const cycles = await listCycles({
         orgId: gate.user.orgId,
@@ -36,7 +36,7 @@ export const POST = defineRoute({
   permission: "hrm.compensation.manage",
   feature: "hrmMeritCycles",
   body: createCycleBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     try {
       const cycle = await createCycle({
         orgId: gate.user.orgId,

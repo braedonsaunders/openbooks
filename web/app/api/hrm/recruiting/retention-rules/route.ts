@@ -5,7 +5,6 @@ import {
   listRetentionRules,
 } from "@openbooks/engine/src/hrm/recruiting/retention.ts";
 
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { recruitingErrorResponse } from "../_lib";
 import { createRetentionRuleBody } from "./bodies";
 
@@ -16,11 +15,6 @@ export const runtime = "nodejs";
  * gate in the service). 404s while hrm, hrmRecruiting, or
  * hrmCandidateRetention is off.
  */
-async function depthGate(orgId: string) {
-  if (!(await isFeatureEnabled(orgId, "hrmRecruiting"))) return false;
-  return isFeatureEnabled(orgId, "hrmCandidateRetention");
-}
-
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
   feature: "hrmCandidateRetention",
@@ -44,7 +38,7 @@ export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
   feature: "hrmCandidateRetention",
   body: createRetentionRuleBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     try {
       const rule = await createRetentionRule({
         orgId: gate.user.orgId,

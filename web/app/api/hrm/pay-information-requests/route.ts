@@ -19,7 +19,7 @@ export const POST = defineRoute({
   permission: "hrm.self.request",
   feature: "hrmPayTransparency",
   body: requestPayInfoBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     try {
       const request = await requestPayInformation({
         orgId: gate.user.orgId,

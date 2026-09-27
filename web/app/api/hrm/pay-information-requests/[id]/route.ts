@@ -26,7 +26,6 @@ export const PUT = defineRoute({
     reason: z.string().trim().min(1).max(2000).nullable().optional(),
   }),
   handler: async ({
-    request: req,
     authz: gate,
     params: routeParams,
     body: body,

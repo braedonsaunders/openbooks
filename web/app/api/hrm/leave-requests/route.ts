@@ -99,7 +99,7 @@ export const POST = defineRoute({
   permission: "hrm.leave.request",
   feature: "hrm",
   body: fileLeaveRequestBody,
-  handler: async ({ request: req, authz: gate, body: body }) => {
+  handler: async ({ authz: gate, body: body }) => {
     // Filing needs the request grant; on-behalf filing additionally needs
     // hrm.leave.manage, enforced inside the engine per employment.
 
