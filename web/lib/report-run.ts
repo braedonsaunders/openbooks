@@ -62,6 +62,8 @@ import { resolveSubsidiaryView } from './consolidation'
 import { resolvePeriod } from './periods'
 import { reportEntityPermission, STATEMENT_KIND_FEATURE } from './report-authz'
 import { reportBookSelection } from './report-books'
+import { AvailabilityRefusal } from '@openbooks/engine/src/inventory/availability.ts'
+import { availabilityExportData, availabilityRefusalText, replenishmentExportData } from './availability-report'
 
 /**
  * The single catalog of built-in report "kinds" and the one place that turns
@@ -88,6 +90,8 @@ export const REPORT_KINDS = [
   'partner-statement',
   'project-profitability',
   'true-cost',
+  'availability',
+  'replenishment',
 ] as const
 export type ReportKind = (typeof REPORT_KINDS)[number]
 
@@ -128,6 +132,10 @@ export function statementPageHref(statement: { kind?: string; params?: Record<st
       return '/reports/project-profitability'
     case 'true-cost':
       return '/reports/true-cost'
+    case 'availability':
+      return '/reports/availability'
+    case 'replenishment':
+      return '/reports/replenishment'
     case 'aging':
       return `/reports/aging?side=${p.side ?? 'ar'}`
     case 'registers':
@@ -197,6 +205,20 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   // Subsidiary context: exports and scheduled runs honor the same picker value
   // as the on-screen report (consolidated subtree + translation included).
   const authz = await requireReportAuthz(orgId)
+  // Availability and replenishment read one legal entity's stock and have no
+  // consolidated view; they take the same read permission as their pages, and
+  // an engine refusal (an order line in a unit its item cannot convert) keeps
+  // its remedy.
+  if (kind === 'availability' || kind === 'replenishment') {
+    if (!can(authz, 'items.read')) throw new ReportResolutionError('this report needs permission to read items')
+    try {
+      const data = kind === 'availability' ? await availabilityExportData(authz, p) : await replenishmentExportData(authz, p)
+      return { render: 'data', data }
+    } catch (error) {
+      if (error instanceof AvailabilityRefusal) throw new ReportResolutionError(availabilityRefusalText(error))
+      throw error
+    }
+  }
   const subView = await resolveSubsidiaryView(q.subsidiaryId, period.to, authz.allowedSubsidiaryIds)
   const dims: DimFilter = {
     departmentId: q.dims.departmentId,

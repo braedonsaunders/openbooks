@@ -2092,6 +2092,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/reports/availability': {
+    route: '/reports/availability',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/availability/view')
+      return {
+        load: (input) => m.loadAvailability(input.searchParams ?? {}),
+        spec: (data) => m.availabilitySpec(data as never),
+      }
+    },
+  },
   '/reports/balance-sheet': {
     route: '/reports/balance-sheet',
     segments: [],
@@ -2269,6 +2281,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadRegisters(input.searchParams ?? {}),
         spec: (data) => m.registersSpec(data as never),
+      }
+    },
+  },
+  '/reports/replenishment': {
+    route: '/reports/replenishment',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/replenishment/view')
+      return {
+        load: (input) => m.loadReplenishment(input.searchParams ?? {}),
+        spec: (data) => m.replenishmentSpec(data as never),
       }
     },
   },

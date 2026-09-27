@@ -12,7 +12,7 @@
  * Pure (no imports): safe for unit tests and both server and client bundles.
  */
 
-export type GatedReportFeature = 'projects' | 'budgets' | 'orders' | 'inventory'
+export type GatedReportFeature = 'projects' | 'budgets' | 'orders' | 'inventory' | 'warehousing'
 
 export const REPORT_PATH_FEATURE_GATES: ReadonlyArray<{
   prefix: string
@@ -25,6 +25,8 @@ export const REPORT_PATH_FEATURE_GATES: ReadonlyArray<{
   { prefix: '/reports/budget', feature: 'budgets' },
   { prefix: '/reports/orders', feature: 'orders' },
   { prefix: '/reports/lot-recall', feature: 'inventory' },
+  { prefix: '/reports/availability', feature: 'warehousing' },
+  { prefix: '/reports/replenishment', feature: 'warehousing' },
 ]
 
 /**

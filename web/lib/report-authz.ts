@@ -50,6 +50,8 @@ export const STATEMENT_KIND_FEATURE: Partial<Record<string, string>> = {
   'project-profitability': 'projects',
   'true-cost': 'projects',
   budget: 'budgets',
+  availability: 'warehousing',
+  replenishment: 'warehousing',
 }
 
 export function reportStatementFeatureKey(kind: string | null | undefined): string | null {
