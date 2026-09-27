@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { pathToFileURL } from 'node:url'
 
 const { stubModules } = await import('../../../../testing/stub-modules')
 stubModules({ intl: 'export async function getTranslations(){const t=(k)=>k;return t};export async function getLocale(){return "en"}' })

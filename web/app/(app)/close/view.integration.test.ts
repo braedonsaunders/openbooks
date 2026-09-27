@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { readFileSync } from 'node:fs'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: 'actor' }
 Object.assign(globalThis, { __closeListState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

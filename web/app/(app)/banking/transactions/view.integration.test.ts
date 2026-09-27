@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from '../../../../lib/auth'
 
@@ -18,7 +17,6 @@ import type { SessionUser } from '../../../../lib/auth'
  * Only session copy and translations are doubled; the loaders, kind gates,
  * and permission checks run REAL against a scratch org.
  */
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __documentCreateViewUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

@@ -9,10 +9,6 @@ import test from 'node:test'
 // enforce subsidiary visibility: an entity-restricted caller sees only their
 // legal entities' vendors, never another entity's rows. (Was Vendors.scope
 // source pins on the scope arguments.)
-const virtual = (source: string) => ({
-  shortCircuit: true as const,
-  url: 'data:text/javascript,' + encodeURIComponent(source),
-})
 
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
