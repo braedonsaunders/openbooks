@@ -15,6 +15,18 @@
     "bom": "Lista de materiais",
     "counts": "Contagens"
   },
+  "bom": {
+    "columns": { "effectiveFrom": "Vigente a partir de", "effectiveTo": "Vigente até", "operationSeq": "Sequência da operação", "scrapPct": "% de refugo", "isByproduct": "Tipo de linha" },
+    "values": { "component": "Componente", "byproduct": "Subproduto" },
+    "refusals": {
+      "effectivityOverlap": "O componente {component} tem períodos de vigência sobrepostos {windows}. Ajuste as datas ou use outra operação ou classificação de subproduto quando necessário.",
+      "invalidDate": "Informe uma data real no formato AAAA-MM-DD.",
+      "invalidRange": "A data final deve ser posterior à data inicial.",
+      "invalidScrap": "O percentual de refugo deve ser um decimal exato entre 0 (inclusive) e 100 (exclusive).",
+      "invalidOperation": "A sequência da operação deve ser um número inteiro positivo.",
+      "manufacturingDisabled": "Ative Manufatura em Configurações da empresa → Recursos para editar operações e subprodutos."
+    }
+  },
   "labels": {
     "item": "Item",
     "location": "Local",

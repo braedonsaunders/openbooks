@@ -22,6 +22,38 @@ async function quietly(statement: string): Promise<void> {
 }
 
 test(
+  "planned scrap is included in assembly component consumption",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const updated = await db.execute(sql`
+        update bom_components
+           set quantity_per = '2', scrap_pct = '5'
+         where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}
+         returning component_item_id`);
+      assert.equal(updated.rows.length, 1, "the fixture BOM line must be present");
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.component, stockLocationId: org.stockLocationId, quantity: "21", unitCost: "1",
+        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+      });
+
+      const built = await buildAssembly(org.orgId, null, {
+        assemblyItemId: org.items.assembly, quantity: "10", stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId, date: org.date,
+      });
+      const consumed = (await db.execute<{ quantity: string }>(sql`
+        select quantity::text as quantity from inventory_movements
+         where org_id = ${org.orgId} and journal_entry_id = ${built.entryId} and kind = 'assembly_consume'
+      `)).rows;
+      assert.deepEqual(consumed.map((row) => row.quantity), ["-21.0000"]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
   "an in-flight build waits for a BOM edit, re-reads it, and retains finished-layer provenance",
   { skip: !DB },
   async () => {
@@ -46,9 +78,14 @@ test(
       await editor.query("lock table bom_components in row exclusive mode");
       await editor.query(
         `update bom_components
-            set quantity_per = '3', updated_at = now()
+            set quantity_per = '3', effective_to = '2099-01-01', updated_at = now()
           where org_id = $1 and assembly_item_id = $2`,
         [org.orgId, org.items.assembly],
+      );
+      await editor.query(
+        `insert into bom_components (org_id, assembly_item_id, component_item_id, quantity_per, sort_order, effective_from)
+         values ($1, $2, $3, '999', 1, '2099-01-01')`,
+        [org.orgId, org.items.assembly, org.items.component],
       );
 
       pendingBuild = buildAssembly(org.orgId, null, {
@@ -115,10 +152,20 @@ test(
             componentItemId: org.items.component,
             quantityPer: "3.0000",
             sortOrder: 0,
+            effectiveTo: "2099-01-01",
           },
         ],
       });
       assert.match(built.bomRevision, /^sha256:[0-9a-f]{64}$/);
+      await receiveInventory(org.orgId, null, {
+        itemId: org.items.component, stockLocationId: org.stockLocationId, quantity: "6", unitCost: "1",
+        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+      });
+      const repeated = await buildAssembly(org.orgId, null, {
+        assemblyItemId: org.items.assembly, quantity: "2", stockLocationId: org.stockLocationId,
+        subsidiaryId: org.subsidiaryId, date: org.date,
+      });
+      assert.equal(repeated.bomRevision, built.bomRevision, "an unchanged effective BOM keeps identical revision evidence");
     } finally {
       if (!editorCommitted) await editor.query("rollback").catch(() => undefined);
       await editor.end().catch(() => undefined);
@@ -158,6 +205,16 @@ test(
                (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
                (select count(*)::int from cost_layers where org_id = ${org.orgId}) as layers
       `)).rows[0]!;
+
+      await db.execute(sql`update bom_components set is_byproduct = true where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`);
+      await assert.rejects(
+        buildAssembly(org.orgId, null, {
+          assemblyItemId: org.items.assembly, quantity: "2", stockLocationId: org.stockLocationId,
+          subsidiaryId: org.subsidiaryId, date: org.date,
+        }),
+        /by-product .*build it through a work order/,
+      );
+      await db.execute(sql`update bom_components set is_byproduct = false where org_id = ${org.orgId} and assembly_item_id = ${org.items.assembly}`);
 
       await db.execute(sql.raw(`
         create function "${guard}"() returns trigger language plpgsql as $fn$

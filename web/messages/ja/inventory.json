@@ -15,6 +15,18 @@
     "bom": "部品表",
     "counts": "カウント"
   },
+  "bom": {
+    "columns": { "effectiveFrom": "有効開始日", "effectiveTo": "有効終了日", "operationSeq": "作業順序", "scrapPct": "仕損率 %", "isByproduct": "明細種別" },
+    "values": { "component": "構成品", "byproduct": "副産物" },
+    "refusals": {
+      "effectivityOverlap": "構成品 {component} の有効期間 {windows} が重複しています。日付を修正するか、必要に応じて異なる作業順序または副産物区分を指定してください。",
+      "invalidDate": "実在する日付を YYYY-MM-DD 形式で入力してください。",
+      "invalidRange": "有効終了日は有効開始日より後の日付にしてください。",
+      "invalidScrap": "仕損率は 0 以上 100 未満の正確な小数で入力してください。",
+      "invalidOperation": "作業順序には正の整数を入力してください。",
+      "manufacturingDisabled": "作業順序と副産物の設定を編集するには、会社設定 → 機能で製造を有効にしてください。"
+    }
+  },
   "labels": {
     "item": "品目",
     "location": "拠点",

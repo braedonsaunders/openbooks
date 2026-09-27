@@ -6,7 +6,9 @@ import { jsonObject, parseJsonBody } from '@/lib/api/json'
 import { inventoryErrorStatus } from '@/lib/api/inventory-errors'
 import { guardUnrestrictedScope } from '@/lib/authz'
 import { guardFeaturePermission } from '@/lib/feature-gates'
+import { isFeatureEnabled } from '@/lib/features'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
@@ -17,10 +19,61 @@ type ComponentInput = {
   componentItemId: string
   quantityPer: string
   sortOrder: number
+  effectiveFrom: string | null
+  effectiveTo: string | null
+  operationSeq: number | null
+  scrapPct: string | null
+  isByproduct: boolean
 }
 
 function refusal(error: string, status = 422) {
   return NextResponse.json({ error }, { status })
+}
+
+function postgresErrorCode(error: unknown): string | undefined {
+  let current: unknown = error
+  for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth += 1) {
+    const candidate = current as { code?: unknown; cause?: unknown }
+    if (typeof candidate.code === 'string') return candidate.code
+    current = candidate.cause
+  }
+  return undefined
+}
+
+function postgresErrorDetail(error: unknown): string {
+  let current: unknown = error
+  for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth += 1) {
+    const candidate = current as { detail?: unknown; cause?: unknown }
+    if (typeof candidate.detail === 'string') return candidate.detail
+    current = candidate.cause
+  }
+  return ''
+}
+
+function overlappingWindows(components: ComponentInput[]) {
+  for (let left = 0; left < components.length; left += 1) {
+    for (let right = left + 1; right < components.length; right += 1) {
+      const a = components[left]!
+      const b = components[right]!
+      if (a.componentItemId !== b.componentItemId || a.operationSeq !== b.operationSeq || a.isByproduct !== b.isByproduct) continue
+      const overlaps = (a.effectiveTo === null || b.effectiveFrom === null || a.effectiveTo > b.effectiveFrom)
+        && (b.effectiveTo === null || a.effectiveFrom === null || b.effectiveTo > a.effectiveFrom)
+      if (overlaps) return [a, b] as const
+    }
+  }
+  return null
+}
+
+function overlapRefusal(pair: readonly [ComponentInput, ComponentInput]) {
+  const window = (line: ComponentInput) => `[${line.effectiveFrom ?? 'unbounded start'}, ${line.effectiveTo ?? 'unbounded end'})`
+  const componentItemId = pair[0].componentItemId
+  const windows = [window(pair[0]), window(pair[1])]
+  return NextResponse.json({
+    error: `Component ${componentItemId} has overlapping effectivity windows ${windows[0]} and ${windows[1]}; adjust the dates so the same operation and by-product designation do not overlap.`,
+    code: 'bom_effectivity_overlap',
+    componentItemId,
+    windows,
+  }, { status: 422 })
 }
 
 /**
@@ -61,7 +114,6 @@ export async function PUT(req: Request) {
   if (body.components.length > 500) return refusal('A bill of materials cannot exceed 500 component lines.')
 
   const components: ComponentInput[] = []
-  const componentIds = new Set<string>()
   for (let index = 0; index < body.components.length; index += 1) {
     const raw = body.components[index]
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -72,13 +124,52 @@ export async function PUT(req: Request) {
     const quantityPer = canonicalDecimal(row.quantityPer, 4)
     if (!isUuid(componentItemId)) return refusal(`Choose a valid item on component line ${index + 1}.`)
     if (componentItemId === assemblyItemId) return refusal('An assembly cannot contain itself as a component.')
-    if (componentIds.has(componentItemId)) return refusal('Each component item may appear only once in a bill of materials.')
     if (quantityPer === null || compareDecimal(quantityPer, '0') <= 0) {
       return refusal(`Quantity per on component line ${index + 1} must be a positive decimal with at most 4 decimal places.`)
     }
-    componentIds.add(componentItemId)
-    components.push({ componentItemId, quantityPer, sortOrder: index })
+    const dateValue = (value: unknown): string | null | undefined => {
+      if (value === undefined || value === null || value === '') return null
+      if (typeof value !== 'string' || !isIsoCalendarDate(value)) return undefined
+      return value
+    }
+    const effectiveFrom = dateValue(row.effectiveFrom)
+    const effectiveTo = dateValue(row.effectiveTo)
+    if (effectiveFrom === undefined) return refusal(`Effective start on component line ${index + 1} must be a real YYYY-MM-DD calendar date.`)
+    if (effectiveTo === undefined) return refusal(`Effective end on component line ${index + 1} must be a real YYYY-MM-DD calendar date.`)
+    if (effectiveFrom && effectiveTo && effectiveTo <= effectiveFrom) {
+      return refusal(`Effective end ${effectiveTo} on component line ${index + 1} must be after effective start ${effectiveFrom}.`)
+    }
+    const scrapRaw = row.scrapPct
+    const scrapPct = scrapRaw === undefined || scrapRaw === null || scrapRaw === '' ? null : canonicalDecimal(scrapRaw, 4)
+    if (scrapPct === null && scrapRaw !== undefined && scrapRaw !== null && scrapRaw !== '') {
+      return refusal(`Scrap percentage on component line ${index + 1} must be an exact decimal with at most 4 decimal places.`)
+    }
+    if (scrapPct !== null && (compareDecimal(scrapPct, '0') < 0 || compareDecimal(scrapPct, '100') >= 0)) {
+      return refusal(`Scrap percentage on component line ${index + 1} must be at least 0 and less than 100.`)
+    }
+    const operationRaw = row.operationSeq
+    const operationDecimal = operationRaw === undefined || operationRaw === null || operationRaw === ''
+      ? null
+      : canonicalDecimal(typeof operationRaw === 'number' && Number.isSafeInteger(operationRaw) ? String(operationRaw) : operationRaw, 0)
+    const operationSeq = operationDecimal === null ? null : Number(operationDecimal)
+    if (operationRaw !== undefined && operationRaw !== null && operationRaw !== '' &&
+        (operationDecimal === null || !Number.isSafeInteger(operationSeq) || operationSeq! <= 0 || operationSeq! > 2_147_483_647)) {
+      return refusal(`Operation sequence on component line ${index + 1} must be a positive integer.`)
+    }
+    const byproductRaw = row.isByproduct
+    const isByproduct = byproductRaw === undefined || byproductRaw === null || byproductRaw === false || byproductRaw === 'false'
+      ? false
+      : byproductRaw === true || byproductRaw === 'true'
+    if (byproductRaw !== undefined && byproductRaw !== null && isByproduct === false && byproductRaw !== false && byproductRaw !== 'false') {
+      return refusal(`By-product setting on component line ${index + 1} must be true or false.`)
+    }
+    components.push({
+      componentItemId, quantityPer, sortOrder: index,
+      effectiveFrom, effectiveTo, operationSeq, scrapPct, isByproduct,
+    })
   }
+  const overlapping = overlappingWindows(components)
+  if (overlapping) return overlapRefusal(overlapping)
 
   try {
     const result = await db.transaction(async (tx) => {
@@ -88,6 +179,10 @@ export async function PUT(req: Request) {
       // no recipe or audit written. The FOR SHARE row lock is held to commit,
       // so a concurrent disable orders itself against this save either way.
       if (!(await lockAndCheckOrgFeature(tx, gate.user.orgId, 'inventory'))) {
+        return { featureDisabled: true as const }
+      }
+      const manufacturingEnabled = await lockAndCheckOrgFeature(tx, gate.user.orgId, 'manufacturing')
+      if (!manufacturingEnabled && components.some((line) => line.operationSeq !== null || line.isByproduct)) {
         return { featureDisabled: true as const }
       }
       // Serialize concurrent replacements on the parent item row. Two PUTs on
@@ -106,8 +201,11 @@ export async function PUT(req: Request) {
       const versionResult = await tx.execute<{ version: string | null }>(sql`
         select md5(string_agg(
           id::text || ':' || updated_at::text || ':' || component_item_id::text || ':' ||
-          quantity_per::text || ':' || sort_order::text,
-          ',' order by sort_order, component_item_id
+          quantity_per::text || ':' || sort_order::text || ':' ||
+          coalesce(effective_from::text, '') || ':' || coalesce(effective_to::text, '') || ':' ||
+          coalesce(operation_seq::text, '') || ':' || coalesce(scrap_pct::text, '') || ':' || is_byproduct::text,
+          ',' order by sort_order, component_item_id, operation_seq nulls first,
+                   is_byproduct, effective_from nulls first, effective_to nulls first
         )) as version
           from bom_components
          where org_id = ${gate.user.orgId} and assembly_item_id = ${assemblyItemId}`)
@@ -121,14 +219,25 @@ export async function PUT(req: Request) {
         componentItemId: string
         quantityPer: string
         sortOrder: number
+        effectiveFrom: string | null
+        effectiveTo: string | null
+        operationSeq: number | null
+        scrapPct: string | null
+        isByproduct: boolean
       }>(sql`
         select id, component_item_id as "componentItemId",
-               quantity_per::text as "quantityPer", sort_order as "sortOrder"
+               quantity_per::text as "quantityPer", sort_order as "sortOrder",
+               effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
+               operation_seq as "operationSeq", scrap_pct::text as "scrapPct", is_byproduct as "isByproduct"
           from bom_components
          where org_id = ${gate.user.orgId} and assembly_item_id = ${assemblyItemId}
-         order by sort_order, component_item_id`)
+         order by sort_order, component_item_id, operation_seq nulls first,
+                  is_byproduct, effective_from nulls first, effective_to nulls first`)
+      if (!manufacturingEnabled && beforeResult.rows.some((line) => line.operationSeq !== null || line.isByproduct)) {
+        return { featureDisabled: true as const }
+      }
 
-      const itemIds = [assemblyItemId, ...components.map((line) => line.componentItemId)]
+      const itemIds = [...new Set([assemblyItemId, ...components.map((line) => line.componentItemId)])]
       const validItems = await tx.execute<{ id: string }>(sql`
         select distinct item.id
           from items item
@@ -153,12 +262,15 @@ export async function PUT(req: Request) {
 
       for (const component of components) {
         const inserted = await tx.execute<{ id: string }>(sql`
-          insert into bom_components (
+        insert into bom_components (
             org_id, assembly_item_id, component_item_id, quantity_per, sort_order,
+            effective_from, effective_to, operation_seq, scrap_pct, is_byproduct,
             created_by, updated_by
           ) values (
             ${gate.user.orgId}, ${assemblyItemId}, ${component.componentItemId},
-            ${component.quantityPer}, ${component.sortOrder}, ${gate.user.id}, ${gate.user.id}
+            ${component.quantityPer}, ${component.sortOrder},
+            ${component.effectiveFrom}, ${component.effectiveTo}, ${component.operationSeq},
+            ${component.scrapPct}, ${component.isByproduct}, ${gate.user.id}, ${gate.user.id}
           )
           returning id`)
         if (inserted.rows.length !== 1) {
@@ -186,8 +298,11 @@ export async function PUT(req: Request) {
       const nextVersionResult = await tx.execute<{ version: string | null }>(sql`
         select md5(string_agg(
           id::text || ':' || updated_at::text || ':' || component_item_id::text || ':' ||
-          quantity_per::text || ':' || sort_order::text,
-          ',' order by sort_order, component_item_id
+          quantity_per::text || ':' || sort_order::text || ':' ||
+          coalesce(effective_from::text, '') || ':' || coalesce(effective_to::text, '') || ':' ||
+          coalesce(operation_seq::text, '') || ':' || coalesce(scrap_pct::text, '') || ':' || is_byproduct::text,
+          ',' order by sort_order, component_item_id, operation_seq nulls first,
+                   is_byproduct, effective_from nulls first, effective_to nulls first
         )) as version
           from bom_components
          where org_id = ${gate.user.orgId} and assembly_item_id = ${assemblyItemId}`)
@@ -208,7 +323,76 @@ export async function PUT(req: Request) {
     }
     return NextResponse.json(result)
   } catch (error) {
+    if (postgresErrorCode(error) === '23P01') {
+      const pair = overlappingWindows(components)
+      if (pair) return overlapRefusal(pair)
+      const detail = postgresErrorDetail(error)
+      const component = components.find((line) => detail.includes(line.componentItemId)) ?? components[0]!
+      const ranges = [...detail.matchAll(/\[(\d{4}-\d{2}-\d{2})?,(\d{4}-\d{2}-\d{2})?\)/g)]
+        .map((match) => `[${match[1] || 'unbounded start'}, ${match[2] || 'unbounded end'})`)
+      const dates = ranges.length ? ranges.join(' and ') : `[${component.effectiveFrom ?? 'unbounded start'}, ${component.effectiveTo ?? 'unbounded end'})`
+      return NextResponse.json({
+        error: `Component ${component.componentItemId} has overlapping effectivity dates ${dates}; adjust the dates so the same operation and by-product designation do not overlap.`,
+        code: 'bom_effectivity_overlap',
+        componentItemId: component.componentItemId,
+        windows: ranges,
+      }, { status: 422 })
+    }
     const message = error instanceof Error ? error.message : 'Bill of materials save failed.'
     return refusal(message, inventoryErrorStatus(error))
   }
+}
+
+export async function GET(req: Request) {
+  const gate = await guardFeaturePermission('admin.setup.manage', 'inventory')
+  if (gate instanceof NextResponse) return gate
+  const unrestricted = guardUnrestrictedScope(gate)
+  if (unrestricted) return unrestricted
+  const assemblyItemId = new URL(req.url).searchParams.get('assemblyItemId')
+  const manufacturingEnabled = await isFeatureEnabled(gate.user.orgId, 'manufacturing')
+  if (!assemblyItemId) return NextResponse.json({ manufacturingEnabled })
+  if (!isUuid(assemblyItemId)) return refusal('Choose a valid assembly item.')
+
+  const assembly = await db.execute<{ id: string }>(sql`
+    select id from items where org_id = ${gate.user.orgId} and id = ${assemblyItemId}`)
+  if (!assembly.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const components = await db.execute<{
+    id: string;
+    componentItemId: string;
+    quantityPer: string;
+    sortOrder: number;
+    effectiveFrom: string | null;
+    effectiveTo: string | null;
+    operationSeq: number | null;
+    scrapPct: string | null;
+    isByproduct: boolean;
+  }>(sql`
+    select id, component_item_id as "componentItemId", quantity_per::text as "quantityPer",
+           sort_order as "sortOrder", effective_from::text as "effectiveFrom",
+           effective_to::text as "effectiveTo", operation_seq as "operationSeq",
+           scrap_pct::text as "scrapPct", is_byproduct as "isByproduct"
+      from bom_components
+     where org_id = ${gate.user.orgId} and assembly_item_id = ${assemblyItemId}
+     order by sort_order, component_item_id, operation_seq nulls first,
+              is_byproduct, effective_from nulls first, effective_to nulls first`)
+  const version = await db.execute<{ version: string | null }>(sql`
+    select md5(string_agg(
+      id::text || ':' || updated_at::text || ':' || component_item_id::text || ':' ||
+      quantity_per::text || ':' || sort_order::text || ':' ||
+      coalesce(effective_from::text, '') || ':' || coalesce(effective_to::text, '') || ':' ||
+      coalesce(operation_seq::text, '') || ':' || coalesce(scrap_pct::text, '') || ':' || is_byproduct::text,
+      ',' order by sort_order, component_item_id, operation_seq nulls first,
+               is_byproduct, effective_from nulls first, effective_to nulls first
+    )) as version
+      from bom_components
+     where org_id = ${gate.user.orgId} and assembly_item_id = ${assemblyItemId}`)
+  return NextResponse.json({
+    manufacturingEnabled,
+    version: version.rows[0]?.version ?? null,
+    components: components.rows.map((line) => ({
+      ...line,
+      operationSeq: manufacturingEnabled ? line.operationSeq : null,
+      isByproduct: manufacturingEnabled ? line.isByproduct : false,
+    })),
+  })
 }

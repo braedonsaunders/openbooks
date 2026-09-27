@@ -15,6 +15,18 @@
     "bom": "Stückliste",
     "counts": "Zählungen"
   },
+  "bom": {
+    "columns": { "effectiveFrom": "Gültig ab", "effectiveTo": "Gültig bis", "operationSeq": "Arbeitsgangfolge", "scrapPct": "Ausschuss %", "isByproduct": "Positionstyp" },
+    "values": { "component": "Komponente", "byproduct": "Nebenprodukt" },
+    "refusals": {
+      "effectivityOverlap": "Komponente {component} hat sich überschneidende Gültigkeitszeiträume {windows}. Passen Sie die Daten an oder verwenden Sie bei Bedarf einen anderen Arbeitsgang oder Positionstyp.",
+      "invalidDate": "Geben Sie ein gültiges Kalenderdatum im Format JJJJ-MM-TT ein.",
+      "invalidRange": "Das Enddatum muss nach dem Startdatum liegen.",
+      "invalidScrap": "Der Ausschussprozentsatz muss eine exakte Dezimalzahl von 0 bis unter 100 sein.",
+      "invalidOperation": "Die Arbeitsgangfolge muss eine positive ganze Zahl sein.",
+      "manufacturingDisabled": "Aktivieren Sie Fertigung unter Unternehmenseinstellungen → Funktionen, um Arbeitsgang- und Nebenprodukteinstellungen zu bearbeiten."
+    }
+  },
   "labels": {
     "item": "Artikel",
     "location": "Standort",

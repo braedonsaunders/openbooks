@@ -15,6 +15,18 @@
     "bom": "物料清单",
     "counts": "盘点"
   },
+  "bom": {
+    "columns": { "effectiveFrom": "生效日期", "effectiveTo": "失效日期", "operationSeq": "工序顺序", "scrapPct": "报废率 %", "isByproduct": "行类型" },
+    "values": { "component": "组件", "byproduct": "副产品" },
+    "refusals": {
+      "effectivityOverlap": "组件 {component} 的生效期间 {windows} 存在重叠。请调整日期，或在适用时指定不同的工序或副产品类型。",
+      "invalidDate": "请输入 YYYY-MM-DD 格式的真实日历日期。",
+      "invalidRange": "失效日期必须晚于生效日期。",
+      "invalidScrap": "报废率必须是大于或等于 0 且小于 100 的精确小数。",
+      "invalidOperation": "工序顺序必须是正整数。",
+      "manufacturingDisabled": "请在公司设置 → 功能中启用制造，以编辑工序和副产品设置。"
+    }
+  },
   "labels": {
     "item": "物料",
     "location": "库位",

@@ -57,7 +57,7 @@ const hooks = registerHooks({
 });
 
 const routeUrl = "./route.ts?bom-route-concurrency-test";
-const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
+const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
 const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
@@ -145,12 +145,21 @@ test("two concurrent empty-BOM replacements serialize: one recipe, one 409", asy
   }
 });
 
-test("a committed Inventory disable refuses the BOM save with nothing written", async () => {
+test("disabled Manufacturing refuses operation and by-product fields; disabled Inventory refuses every save", async () => {
   const org = await createScratchOrg();
   try {
     const actorId = await createScratchUser(org.orgId, "BOM Fence Admin", "admin");
     authenticate(org.orgId, actorId);
     await emptyBom(org.orgId, org.items.assembly);
+    for (const fields of [{ operationSeq: 2 }, { isByproduct: true }]) {
+      const response = await PUT(putRequest({
+        ...recipe(org.items.assembly, org.items.component),
+        components: [{ componentItemId: org.items.component, quantityPer: "1", ...fields }],
+      }));
+      assert.equal(response.status, 404);
+      assert.deepEqual(await bomRows(org.orgId, org.items.assembly), []);
+      assert.deepEqual(await bomAudits(org.orgId, org.items.assembly), []);
+    }
     await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"inventory":false}'::jsonb)
        where id = ${org.orgId}`);
@@ -159,6 +168,36 @@ test("a committed Inventory disable refuses the BOM save with nothing written", 
     assert.equal(res.status, 404);
     assert.deepEqual(await bomRows(org.orgId, org.items.assembly), [], "the refused save stores no recipe");
     assert.deepEqual(await bomAudits(org.orgId, org.items.assembly), [], "the refused save audits nothing");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("BOM replacement accepts adjacent effectivity windows and names overlapping dates", async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = await createScratchUser(org.orgId, "BOM Effectivity Admin", "admin");
+    authenticate(org.orgId, actorId);
+    await emptyBom(org.orgId, org.items.assembly);
+    const base = recipe(org.items.assembly, org.items.component);
+    const first = { componentItemId: org.items.component, quantityPer: "1", effectiveFrom: "2026-01-01", effectiveTo: "2026-07-01" };
+    const second = { componentItemId: org.items.component, quantityPer: "2", effectiveFrom: "2026-07-01" };
+    const accepted = await PUT(putRequest({ ...base, components: [first, second] }));
+    assert.equal(accepted.status, 200);
+    const version = (await accepted.json() as { version: string }).version;
+    assert.equal((await bomRows(org.orgId, org.items.assembly)).length, 2);
+    const detail = await GET(new Request(`http://localhost/api/inventory/bom?assemblyItemId=${org.items.assembly}`));
+    const detailBody = await detail.json() as { version: string; components: { effectiveFrom: string | null; effectiveTo: string | null }[] };
+    assert.equal(detailBody.version, version);
+    assert.deepEqual(detailBody.components.map((line) => [line.effectiveFrom, line.effectiveTo]), [["2026-01-01", "2026-07-01"], ["2026-07-01", null]]);
+    const refused = await PUT(putRequest({ ...base, expectedVersion: version, components: [
+      { ...first, effectiveTo: "2026-08-01" }, { ...second, effectiveFrom: "2026-07-01" },
+    ] }));
+    const body = await refused.json() as { error: string; componentItemId: string };
+    assert.equal(refused.status, 422);
+    assert.equal(body.componentItemId, org.items.component);
+    assert.match(body.error, /2026-01-01.*2026-08-01.*2026-07-01/);
+    assert.equal((await bomRows(org.orgId, org.items.assembly)).length, 2);
   } finally {
     await dropScratchOrg(org.orgId);
   }
