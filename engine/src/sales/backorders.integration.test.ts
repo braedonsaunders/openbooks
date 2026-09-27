@@ -17,10 +17,12 @@ test("a sales-order line conserves quantity across fulfil, cancel and a voided s
     import { db, withOrg } from "./engine/src/platform/db.ts";
     import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
     import { receiveInventory } from "./engine/src/inventory/movements.ts";
+    import { getAvailableToPromise } from "./engine/src/inventory/availability.ts";
     import { requestDocumentVoid } from "./engine/src/ledger/document-void.ts";
     import { toUnits } from "./engine/src/money/money.ts";
     import { salesOrderLineRemainders } from "./engine/src/records/order-line-remainders.ts";
     import { backorderPosition, cancelOrderLineRemainder } from "./engine/src/sales/backorders.ts";
+    import { routeDropShipLine, unrouteDropShipLine } from "./engine/src/sales/drop-ship.ts";
     import { createOrderDraft, fulfillSalesOrder } from "./web/lib/order-cycle.ts";
     import { createScratchOrg, createScratchUser, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
 
@@ -70,8 +72,41 @@ test("a sales-order line conserves quantity across fulfil, cancel and a voided s
       for (const orgId of [org.orgId, other.orgId]) {
         await withOrg(orgId, () => db.execute(sql\`
           update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
-                 || '{"warehousing": true, "fulfillment": true}'::jsonb) where id = \${orgId}\`));
+                 || '{"warehousing": true, "fulfillment": true, "dropShipping": true}'::jsonb) where id = \${orgId}\`));
       }
+
+      const routedOrder = await withOrg(org.orgId, () => createOrderDraft(org.orgId, userId, "sales_order", randomUUID(), null));
+      const routedLineId = randomUUID();
+      await withOrg(org.orgId, async () => {
+        await db.execute(sql\`
+          insert into document_lines
+            (id, org_id, document_id, line_number, item_id, account_id, description,
+             quantity, unit, unit_price, amount, tax_amount, stock_location_id, custom)
+          values
+            (\${routedLineId}, \${org.orgId}, \${routedOrder.id}, 1, \${org.items.fifo}, \${org.accounts.revenue},
+             'Vendor routed', '2', 'ea', '10', '20', '0', \${org.stockLocationId}, '{}'::jsonb)
+        \`);
+        await db.execute(sql\`
+          update documents set status = 'approved', party_id = \${org.customerId}, subsidiary_id = \${org.subsidiaryId},
+                 document_date = \${org.date}, subtotal = '20', total = '20'
+           where id = \${routedOrder.id} and org_id = \${org.orgId}
+        \`);
+      });
+      await withOrg(org.orgId, () => routeDropShipLine({
+        orgId: org.orgId, actorId: userId, salesOrderId: routedOrder.id,
+        salesOrderLineId: routedLineId, allowedSubsidiaryIds: null,
+      }));
+      assert.deepEqual(await withOrg(org.orgId, () => salesOrderLineRemainders(db, org.orgId, { lineId: routedLineId })), []);
+      assert.equal(toUnits((await withOrg(org.orgId, () => getAvailableToPromise(db, org.orgId, {
+        itemId: org.items.fifo, subsidiaryId: org.subsidiaryId,
+      }))).committed), toUnits('10'), 'routed demand is absent from ATP while the other order is still open');
+      await withOrg(org.orgId, () => unrouteDropShipLine({
+        orgId: org.orgId, actorId: userId, salesOrderId: routedOrder.id,
+        salesOrderLineId: routedLineId, allowedSubsidiaryIds: null,
+      }));
+      assert.equal(toUnits((await withOrg(org.orgId, () => getAvailableToPromise(db, org.orgId, {
+        itemId: org.items.fifo, subsidiaryId: org.subsidiaryId,
+      }))).committed), toUnits('12'), 'unrouting restores the stock commitment');
 
       const shipment = await withOrg(org.orgId, () => fulfillSalesOrder(org.orgId, userId, order.id, {
         fulfillmentDate: org.date, idempotencyKey: "backorder-ship-four", lines: [{ sourceLineId: lineId, quantity: "4" }],
