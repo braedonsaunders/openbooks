@@ -9,6 +9,7 @@ import { projectTypes } from './articles/project-types'
 import { overheadCosting } from './articles/overhead-costing'
 import { laborCosting } from './articles/labor-costing'
 import { laborPricing } from './articles/labor-pricing'
+import { manufacturingOverview } from './articles/mfg-overview'
 import { hrmProcesses } from './articles/hrm-processes'
 // HR-15: inbox and persona homes article.
 import { inboxAndHome } from './articles/inbox-and-home'
@@ -155,13 +156,22 @@ export const DOC_CATEGORIES: DocCategory[] = [
     order: 6,
   },
   {
+    key: 'manufacturing',
+    title: 'Manufacturing',
+    titleKey: 'categories.manufacturing.title',
+    description: 'Manufacturing concepts, production masters, and the flow of costs from raw materials through work in process to finished goods.',
+    descriptionKey: 'categories.manufacturing.description',
+    icon: 'package',
+    order: 7,
+  },
+  {
     key: 'reporting',
     title: 'Reporting & Analytics',
     titleKey: 'categories.reporting.title',
     description: 'Financial statements, ledger detail, dashboards, analytics, and reusable views.',
     descriptionKey: 'categories.reporting.description',
     icon: 'file',
-    order: 7,
+    order: 8,
   },
   {
     key: 'integrations',
@@ -170,7 +180,7 @@ export const DOC_CATEGORIES: DocCategory[] = [
     description: 'Plan cutover, prove migrated books, and operate tenant-scoped source connections.',
     descriptionKey: 'categories.integrations.description',
     icon: 'plug',
-    order: 8,
+    order: 9,
   },
   {
     key: 'apps',
@@ -179,7 +189,7 @@ export const DOC_CATEGORIES: DocCategory[] = [
     description: 'Install, use, update, and administer organization extensions.',
     descriptionKey: 'categories.apps.description',
     icon: 'grid',
-    order: 9,
+    order: 10,
   },
   {
     key: 'administration',
@@ -188,7 +198,7 @@ export const DOC_CATEGORIES: DocCategory[] = [
     description: 'Configuration, permissions, imports, files, security, and immutable evidence.',
     descriptionKey: 'categories.administration.description',
     icon: 'shield',
-    order: 10,
+    order: 11,
   },
 ]
 
@@ -307,7 +317,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   distributionAvailability,
   bankingAndReconciliation,
   periodClose,
-  projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance, compensationAndTransparency,
+  projectTypes, overheadCosting, laborCosting, laborPricing, manufacturingOverview, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance, compensationAndTransparency,
   // HR-13 begin
   certifiedPayrollPrevailingWagePerDiem,
   // HR-13 end
