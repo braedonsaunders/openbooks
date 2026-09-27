@@ -9,9 +9,9 @@ import { testManifest } from './test-suite.mjs'
 // leases a fixture tenant, or self-skips without a database) cannot live in
 // the unit partition: its ledger cases would skip while ordinary npm test
 // stays green. Pure files may live anywhere; database-backed files must be
-// database-owned (the `.integration.test.ts` suffix or a
-// DATABASE_TEST_OVERRIDES entry, as resolved by the single testManifest
-// source of truth).
+// database-owned (the `.integration.test.ts` suffix or an import of the
+// tenant fixture module, as resolved by the single testManifest source of
+// truth).
 const DATABASE_SIGNALS = /process\.env\.OPENBOOKS_DB_URL|test-fixtures|createConformanceOrg|from\s+['"]\.\/roles(\.ts)?['"]|skip:\s*!/
 
 function needsDatabase(file) {
@@ -72,6 +72,6 @@ test('no unit-partition test file can gate a skip on the database contract', () 
   assert.deepEqual(
     dead,
     [],
-    `${dead.length} unit-partition file(s) gate a skip on the database contract, so their cases never run in ANY partition:\n${dead.join('\n')}\nrename to *.integration.test.ts or add a DATABASE_TEST_OVERRIDES entry in scripts/test-suite.mjs`,
+    `${dead.length} unit-partition file(s) gate a skip on the database contract, so their cases never run in ANY partition:\n${dead.join('\n')}\nrename to *.integration.test.ts so scripts/test-suite.mjs assigns it to the database partition`,
   )
 })

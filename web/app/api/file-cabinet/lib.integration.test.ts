@@ -44,7 +44,7 @@ test(
   "folder metadata and breadcrumbs enforce private-folder visibility",
   { skip: !env.OPENBOOKS_DB_URL },
   () => {
-    // Same canonical bootstrap as file-cabinet.private-boundary.test.ts: a bare
+    // Same canonical bootstrap as file-cabinet.private-boundary.integration.test.ts: a bare
     // OPENBOOKS_DB_URL gets the published schema; an already-migrated host is
     // only probed.
     const probe = spawnSync(

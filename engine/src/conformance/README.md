@@ -80,10 +80,10 @@ pointed at a throwaway PostgreSQL database — never a production one. Without a
 database they report as **not run** rather than passing, the same anti-false-
 green rule the integration CI job enforces with its canary.
 
-The corpus also runs as an ordinary test file, so `npm test` covers it:
+The corpus also runs as a database test file in the integration partition:
 
 ```bash
-node --import tsx --test engine/src/conformance/conformance.test.ts
+node --import tsx --test engine/src/conformance/conformance.integration.test.ts
 ```
 
 ## Adding a case
