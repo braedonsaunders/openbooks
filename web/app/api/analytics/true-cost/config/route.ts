@@ -107,7 +107,7 @@ const requestBodySchema = z.strictObject({
   expectedRevision: z.union([
     z.number().int().nonnegative(),
     z.string().regex(/^\d+$/, 'expectedRevision must be a non-negative integer').transform(Number),
-  ]).pipe(z.number().int().safe().nonnegative()),
+  ]).pipe(z.number().int().safe().nonnegative()).optional(),
   profiles: z.array(profileSchema).min(1).max(20),
 }).superRefine((body, ctx) => {
   if (!body.profiles.some((profile) => profile.id === body.activeProfileId)) {
