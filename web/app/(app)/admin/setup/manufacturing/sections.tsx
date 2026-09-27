@@ -5,8 +5,13 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
+import { ModuleHomeTabs, type ModuleHomeTab } from '../../../../../components/module-home/ui'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import type { ManufacturingPolicies } from '@openbooks/engine/src/manufacturing/policies.ts'
+
+export function ManufacturingSetupTabs({ tabs }: { tabs: ModuleHomeTab[] }) {
+  return <ModuleHomeTabs tabs={tabs} />
+}
 
 export function ManufacturingPoliciesForm({ initial }: { initial: ManufacturingPolicies }) {
   const t = useTranslations('admin.setup.entities.manufacturing-policies')

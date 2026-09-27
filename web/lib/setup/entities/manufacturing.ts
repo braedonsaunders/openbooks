@@ -7,6 +7,8 @@ export const MANUFACTURING_ENTITIES: SetupEntity[] = [
     table: 'mfg_scrap_reasons',
     actorCols: true,
     groupKey: 'inventory',
+    rehomed: true,
+    rehomedTo: '/admin/setup/manufacturing?tab=scrap-reasons',
     featureKey: 'manufacturing',
     iconKey: 'package',
     orgScoped: true,
@@ -39,6 +41,8 @@ export const MANUFACTURING_ENTITIES: SetupEntity[] = [
     // Writes use the dedicated service route so transfer eligibility is checked.
     readOnly: true,
     groupKey: 'inventory',
+    rehomed: true,
+    rehomedTo: '/admin/setup/manufacturing?tab=item-policies',
     featureKey: 'manufacturing',
     iconKey: 'package',
     orgScoped: true,

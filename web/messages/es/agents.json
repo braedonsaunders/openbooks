@@ -91,7 +91,8 @@
         "controller": "Controlador",
         "salesManager": "Gerente de ventas",
         "salesRepresentative": "Representante de ventas",
-        "viewer": "Visor"
+        "viewer": "Visor",
+        "production": "Producción"
       },
       "due": "Vence",
       "overdue": "Vencido",
