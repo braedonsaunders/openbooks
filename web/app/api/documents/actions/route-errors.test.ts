@@ -8,6 +8,8 @@ const { toActionFailure } = await import('./action-failure')
 const { PostingError } = await import("@openbooks/engine/src/journal/posting-contracts.ts");
 const { ControlAccountsIncompleteError } = await import('@openbooks/engine/src/records/control-accounts.ts')
 const { PayrollError } = await import('@openbooks/engine/src/payroll/error.ts')
+const { PostingEffectsReplayError } = await import('@openbooks/engine/src/ledger/posting-effects.ts')
+const { postingRefusal } = await import('@/lib/api/responses')
 
 test('typed refusals keep their message as a 422', () => {
   for (const error of [
@@ -19,6 +21,15 @@ test('typed refusals keep their message as a 422', () => {
     assert.equal(mapped.status, 422)
     assert.equal(mapped.body.error, (error as Error).message)
   }
+})
+
+test('posting-effect replay refusals keep their message in the shared vocabulary', async () => {
+  const response = postingRefusal(new PostingEffectsReplayError('replay reason must be reviewed'))!
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), {
+    error: 'replay reason must be reviewed',
+    code: 'posting_effects_replay_refused',
+  })
 })
 
 test('an unexpected driver failure becomes a stable code with no echo', () => {

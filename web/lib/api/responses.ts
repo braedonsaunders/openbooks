@@ -4,6 +4,7 @@ import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
+import { PostingEffectsReplayError } from "@openbooks/engine/src/ledger/posting-effects.ts";
 
 /**
  * The one response vocabulary for factory routes (`defineRoute` in
@@ -107,6 +108,7 @@ interface RefusalFamily {
 }
 
 const REFUSAL_FAMILIES: RefusalFamily[] = [
+  { match: (error) => error instanceof PostingEffectsReplayError, code: "posting_effects_replay_refused", pinCode: true },
   { match: (error) => error instanceof PostingError, code: "posting_refused", pinCode: false },
   { match: (error) => error instanceof InventoryError, code: "inventory_refused", pinCode: false },
   { match: (error) => error instanceof PaymentError, code: "payment_refused", pinCode: false },

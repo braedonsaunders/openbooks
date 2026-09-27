@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor, withBypassContext } from "../platform/db.ts";
+import { db, type SqlExecutor, withBypassContext, withOrgContext } from "../platform/db.ts";
 import {
   logTerminalFailure,
   POSTING_EFFECTS_WORKER_IDENTITY,
@@ -74,7 +74,7 @@ export function postingEffectTerminalNotice(input: {
  * cannot be stored is logged, never fatal.
  */
 async function notifyPostingEffectTerminalFailed(row: TerminalizedPostingEffectsRow): Promise<void> {
-  await withBypassContext(async () => {
+  await withOrgContext(row.org_id, async () => {
     const doc = (await db.execute<{ document_number: string; kind: string }>(sql`
       select document_number, kind from documents
        where id = ${row.document_id} and org_id = ${row.org_id}
