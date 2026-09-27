@@ -1,6 +1,13 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { REPORT_AS_OF, REPORT_ENTITIES, REPORT_ENTITY_MAP, reportEntityForFeatureState } from './entities'
+import {
+  allReportEntities,
+  registerReportEntityList,
+  REPORT_AS_OF,
+  REPORT_ENTITIES,
+  REPORT_ENTITY_MAP,
+  reportEntityForFeatureState,
+} from './entities'
 import { compileCustomQuery } from './custom-query'
 
 test('items report kind options drop inventory kinds when Inventory is off', () => {
@@ -101,6 +108,23 @@ test('nonprofit report sources are feature-gated and keep every joined row in it
     filters: null, limit: 10,
   }, '00000000-0000-4000-8000-000000000001')
   assert.match(compiled.text, /WHERE jl\.org_id = \$1/)
+})
+
+test('report entity lists retain source order and reject duplicate sources and keys', () => {
+  const entity = { ...REPORT_ENTITIES[0]!, key: 'registry_fixture_entity' }
+  registerReportEntityList('registry_fixture', [entity])
+  assert.deepEqual(
+    allReportEntities().slice(-1).map(({ source, entity: registered }) => [source, registered.key]),
+    [['registry_fixture', 'registry_fixture_entity']],
+  )
+  assert.throws(() => registerReportEntityList('registry_fixture', []), {
+    name: 'ReportEntityRegistrationError',
+    message: 'report entity source "registry_fixture" is already registered',
+  })
+  assert.throws(() => registerReportEntityList('registry_duplicate_key', [entity]), {
+    name: 'ReportEntityRegistrationError',
+    message: 'report entity key "registry_fixture_entity" from "registry_duplicate_key" is already registered by "registry_fixture"',
+  })
 })
 
 test('every inventory lot movement join is pinned to the base organization', () => {

@@ -6,6 +6,7 @@ import test from 'node:test'
 import { parse, TYPE } from '@formatjs/icu-messageformat-parser'
 import type { MessageFormatElement } from '@formatjs/icu-messageformat-parser'
 import { LOCALES } from '../i18n/config.ts'
+import { allReportEntities } from '@openbooks/reports'
 import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
 import { COUNTRY_TAX_PACKS } from '@openbooks/engine/src/country-tax-packs/index.ts'
 import {
@@ -3256,6 +3257,25 @@ test('every English message key exists non-empty in every shipped locale', () =>
       `${catalog.code} leaves ${blank.length} keys blank (an empty string counts as present, so the English fallback never fires):\n  ${sample(blank)}`,
     )
   }
+})
+
+test('every registered report entity and column has a message in every shipped locale', () => {
+  const missing: string[] = []
+  for (const catalog of CATALOGS) {
+    for (const { entity } of allReportEntities()) {
+      for (const field of ['label', 'description'] as const) {
+        if (!catalog.leaves.get(`reports.catalog.entities.${entity.key}.${field}`)?.trim()) {
+          missing.push(`${catalog.code}:reports.catalog.entities.${entity.key}.${field}`)
+        }
+      }
+      for (const column of entity.columns ?? []) {
+        if (!catalog.leaves.get(`reports.catalog.columns.${entity.key}.${column.key}`)?.trim()) {
+          missing.push(`${catalog.code}:reports.catalog.columns.${entity.key}.${column.key}`)
+        }
+      }
+    }
+  }
+  assert.deepEqual(missing, [], `report catalog strings are missing:\n  ${sample(missing)}`)
 })
 
 test('no locale carries message keys absent from English', () => {
