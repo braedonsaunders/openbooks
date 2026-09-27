@@ -197,7 +197,7 @@ function patchRequest(url: string, body: unknown): Request {
   test("cycles 404 while hrmMeritCycles is off — the feature-off refusal", async () => {
     reset("hrm.compensation.read");
     routeState.features = { hrmCompensation: true, hrmMeritCycles: false };
-    const response = await collectionRoute!.GET();
+    const response = await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/comp-cycles"));
     assert.equal(response.status, 404);
     assert.deepEqual(routeState.calls, []);
   });

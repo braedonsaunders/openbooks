@@ -87,6 +87,10 @@ export const POST = defineRoute({
 
     try {
       const q = { orgId: gate.user.orgId, actorId: gate.user.id, cycleId: id };
+      if ("budgets" in body) {
+        await setCycleBudgets({ ...q, budgets: body.budgets });
+        return NextResponse.json({ ok: true });
+      }
       switch (body.action) {
         case "open": {
           const opened = await openCycle(q);
@@ -113,15 +117,11 @@ export const POST = defineRoute({
           const cycle = await cancelCycle({ ...q, reason: body.reason });
           return NextResponse.json({ cycle });
         }
-        default: {
-          if (!body.budgets)
-            return NextResponse.json(
-              { error: "unknown action" },
-              { status: 400 },
-            );
-          await setCycleBudgets({ ...q, budgets: body.budgets });
-          return NextResponse.json({ ok: true });
-        }
+        default:
+          return NextResponse.json(
+            { error: "unknown action" },
+            { status: 400 },
+          );
       }
     } catch (e) {
       return compensationErrorResponse(e);

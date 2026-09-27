@@ -131,7 +131,7 @@ test("an unrestricted caller writes it; restricted callers still read it", async
     assert.equal(saved.status, 200, JSON.stringify(await saved.json().catch(() => null)));
     assert.deepEqual(await storedLeadDays(org.orgId), [30, 7]);
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
-    const response = await GET();
+    const response = await GET(new Request("http://quals.test/api/hrm/qualification-settings"));
     assert.equal(response.status, 200);
     const body = (await response.json()) as { settings: { alertLeadDays: number[] } };
     assert.deepEqual(body.settings.alertLeadDays, [30, 7]);
