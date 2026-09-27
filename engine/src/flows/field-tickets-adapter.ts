@@ -6,10 +6,10 @@ import type {
   FlowSubjectContext,
 } from "./types.ts";
 import {
-  BUILT_IN_ROLE_NAMES,
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 export const FIELD_TICKET_SUBJECT_KIND = "field_ticket";
 
@@ -32,7 +32,7 @@ export const fieldTicketSubjectProfile: FlowSubjectProfile = {
   statuses: [...FIELD_TICKET_STATUSES],
   fields: [
     { key: "documentNumber", label: "Ticket number", type: "text" },
-    { key: "status", label: "Status", type: "enum", options: [...FIELD_TICKET_STATUSES] },
+    { key: "status", label: "Status", type: "enum" },
     { key: "projectId", label: "Project", type: "text" },
     { key: "projectCode", label: "Project code", type: "text" },
     { key: "projectName", label: "Project name", type: "text" },
@@ -59,7 +59,6 @@ export const fieldTicketSubjectProfile: FlowSubjectProfile = {
       options: [...EVENT_SOURCE_OPTIONS],
     },
   ],
-  roles: [...BUILT_IN_ROLE_NAMES],
 };
 
 type FieldTicketRow = {
@@ -117,10 +116,9 @@ async function loadTicket(subjectId: string): Promise<FieldTicketRow | null> {
   return result.rows[0] ?? null;
 }
 
-export const fieldTicketsFlowAdapter: FlowSubjectAdapter = {
+export const fieldTicketsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: FIELD_TICKET_SUBJECT_KIND,
   profile: fieldTicketSubjectProfile,
-  writableFields: new Set<string>(),
   // releaseApproval below delegates to the registered handler: this kind
   // needs a handler registered at web boot (see handlerReleasedSubjectKinds).
   releaseViaHandler: true,
@@ -198,4 +196,4 @@ export const fieldTicketsFlowAdapter: FlowSubjectAdapter = {
       "field-ticket fields are not writable by flows; edit the draft ticket",
     );
   },
-};
+});

@@ -1,9 +1,10 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db } from "../platform/db.ts";
-import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
+import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 export const CLOSE_RUN_SUBJECT_KIND = "close_run";
 
@@ -34,14 +35,13 @@ export const closeRunSubjectProfile: FlowSubjectProfile = {
     { key: "bookId", label: "Accounting book", type: "text" },
     { key: "bookName", label: "Accounting book name", type: "text" },
     { key: "blueprintName", label: "Close blueprint", type: "text" },
-    { key: "status", label: "Status", type: "enum", options: CLOSE_RUN_STATUSES.map((status) => ({ ...status })) },
+    { key: "status", label: "Status", type: "enum" },
     { key: "readinessScore", label: "Readiness score", type: "number" },
     { key: "targetCloseDate", label: "Target close date", type: "date" },
     { key: "openExceptionCount", label: "Open exceptions", type: "number" },
     { key: "startedBy", label: "Run initiator", type: "user" },
     { key: "event_source", label: "Event source", type: "enum", options: [...EVENT_SOURCE_OPTIONS] },
   ],
-  roles: [...BUILT_IN_ROLE_NAMES],
 };
 
 type CloseRunRow = {
@@ -84,12 +84,11 @@ function periodType(row: CloseRunRow): "month" | "quarter" | "year" | "adjustmen
   return "month";
 }
 
-export const closeRunsFlowAdapter: FlowSubjectAdapter = {
+export const closeRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: CLOSE_RUN_SUBJECT_KIND,
   profile: closeRunSubjectProfile,
   // releaseApproval below delegates to the registered engine handler.
   releaseViaHandler: true,
-  writableFields: new Set<string>(),
   selfApprovalPolicy: "forbidden",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
@@ -146,4 +145,4 @@ export const closeRunsFlowAdapter: FlowSubjectAdapter = {
   async setField(): Promise<void> {
     throw new Error("close run fields are not writable by flows");
   },
-};
+});

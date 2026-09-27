@@ -28,10 +28,10 @@ import type {
   FlowSubjectContext,
 } from "./types.ts";
 import {
-  BUILT_IN_ROLE_NAMES,
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
 import { HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND } from "@openbooks/schema/src/hrm.ts";
+import { defineTableSubjectAdapter, isTableSubjectId } from "./table-subject-adapter.ts";
 
 const MAPPING_APPROVAL_STATUSES = [
   { value: "draft", label: "Draft" },
@@ -49,7 +49,7 @@ export const employmentMigrationSubjectProfile: FlowSubjectProfile = {
   fields: [
     { key: "approvalId", label: "Approval", type: "text" },
     { key: "mappingDigest", label: "Mapping digest", type: "text" },
-    { key: "status", label: "Status", type: "enum", options: [...MAPPING_APPROVAL_STATUSES] },
+    { key: "status", label: "Status", type: "enum" },
     { key: "requestedBy", label: "Requested by", type: "user" },
     {
       key: "event_source",
@@ -58,10 +58,7 @@ export const employmentMigrationSubjectProfile: FlowSubjectProfile = {
       options: [...EVENT_SOURCE_OPTIONS],
     },
   ],
-  roles: [...BUILT_IN_ROLE_NAMES],
 };
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type ApprovalRow = {
   org_id: string;
@@ -71,7 +68,7 @@ type ApprovalRow = {
 };
 
 async function loadApproval(subjectId: string): Promise<ApprovalRow | null> {
-  if (!UUID_RE.test(subjectId)) return null;
+  if (!isTableSubjectId(subjectId)) return null;
   // No ambient-tenant requirement and no org predicate here, by adapter
   // parity (documents, budget, timesheet, HRM change requests): decideGate's
   // pre-flight resolves the decider outside withOrg, and every caller scopes
@@ -85,12 +82,11 @@ async function loadApproval(subjectId: string): Promise<ApprovalRow | null> {
   return result.rows[0] ?? null;
 }
 
-export const employmentMigrationFlowAdapter: FlowSubjectAdapter = {
+export const employmentMigrationFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND,
   profile: employmentMigrationSubjectProfile,
   // A flow must not rewrite the digest it is approving: the mapping set
   // freezes when the approval is requested, so no field is flow-writable.
-  writableFields: new Set<string>(),
   selfApprovalPolicy: "forbidden",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
@@ -140,7 +136,7 @@ export const employmentMigrationFlowAdapter: FlowSubjectAdapter = {
     ctx: FlowExecCtx,
     detail?: { comment?: string | null },
   ): Promise<void> {
-    if (!UUID_RE.test(subjectId)) {
+    if (!isTableSubjectId(subjectId)) {
       throw new Error(`unknown employment migration approval ${subjectId}`);
     }
     if (outcome !== "approved" && outcome !== "rejected") {
@@ -199,4 +195,4 @@ export const employmentMigrationFlowAdapter: FlowSubjectAdapter = {
     `));
     return result.rows.map((row) => row.id);
   },
-};
+});

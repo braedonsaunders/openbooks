@@ -6,10 +6,10 @@ import type {
   FlowSubjectContext,
 } from "./types.ts";
 import {
-  BUILT_IN_ROLE_NAMES,
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
+import { defineTableSubjectAdapter, isTableSubjectId } from "./table-subject-adapter.ts";
 
 export const TIMESHEET_WEEK_SUBJECT_KIND = "timesheet_week";
 
@@ -46,7 +46,7 @@ export const timesheetWeekSubjectProfile: FlowSubjectProfile = {
     { key: "employeeName", label: "Employee name", type: "text" },
     { key: "weekStart", label: "Week starting", type: "date" },
     { key: "weekEnd", label: "Week ending", type: "date" },
-    { key: "status", label: "Status", type: "enum", options: [...TIMESHEET_WEEK_STATUSES] },
+    { key: "status", label: "Status", type: "enum" },
     { key: "totalHours", label: "Total hours", type: "number" },
     { key: "billableHours", label: "Billable hours", type: "number" },
     { key: "overtimeHours", label: "Hours beyond 40", type: "number" },
@@ -61,17 +61,14 @@ export const timesheetWeekSubjectProfile: FlowSubjectProfile = {
       options: [...EVENT_SOURCE_OPTIONS],
     },
   ],
-  roles: [...BUILT_IN_ROLE_NAMES],
 };
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** The employee + week a header row identifies, or null when it is gone. */
 export async function resolveTimesheetWeek(
   subjectId: string,
   orgId?: string,
 ): Promise<{ employeePartyId: string; weekStart: string; orgId: string } | null> {
-  if (!UUID_RE.test(subjectId)) return null;
+  if (!isTableSubjectId(subjectId)) return null;
   const result = (await db.execute<{ org_id: string; employee_party_id: string; week_start: string }>(sql`
     select org_id, employee_party_id, week_start::text as week_start
       from timesheet_weeks
@@ -103,7 +100,6 @@ type WeekRow = {
 };
 
 async function loadWeekSummary(subjectId: string): Promise<WeekRow | null> {
-  if (!UUID_RE.test(subjectId)) return null;
   // Status comes from the header — the record's own lifecycle — while the
   // measures aggregate the hours the header covers.
   const result = (await db.execute<WeekRow>(sql`
@@ -139,7 +135,7 @@ async function loadWeekSummary(subjectId: string): Promise<WeekRow | null> {
   return result.rows[0] ?? null;
 }
 
-export const timesheetWeeksFlowAdapter: FlowSubjectAdapter = {
+export const timesheetWeeksFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: TIMESHEET_WEEK_SUBJECT_KIND,
   profile: timesheetWeekSubjectProfile,
   // releaseApproval below delegates to the registered handler: this kind
@@ -147,7 +143,6 @@ export const timesheetWeeksFlowAdapter: FlowSubjectAdapter = {
   releaseViaHandler: true,
   // Nothing on a week is a flow-writable header field: the hours are the
   // record, and a flow must not rewrite the thing it is approving.
-  writableFields: new Set<string>(),
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const week = await loadWeekSummary(subjectId);
@@ -250,4 +245,4 @@ export const timesheetWeeksFlowAdapter: FlowSubjectAdapter = {
     `));
     return result.rows.map((row) => row.id);
   },
-};
+});

@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
-import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
+import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 export const BUDGET_SCENARIO_SUBJECT_KIND = "budget_scenario";
 
@@ -43,12 +44,6 @@ export const budgetScenarioSubjectProfile: FlowSubjectProfile = {
       key: "status",
       label: "Status",
       type: "enum",
-      options: [
-        { value: "draft", label: "Draft" },
-        { value: "pending_approval", label: "Pending approval" },
-        { value: "approved", label: "Approved" },
-        { value: "archived", label: "Archived" },
-      ],
     },
     { key: "total", label: "Total", type: "number" },
     { key: "lineCount", label: "Line count", type: "number" },
@@ -58,7 +53,6 @@ export const budgetScenarioSubjectProfile: FlowSubjectProfile = {
     { key: "is_submitter", label: "Viewer is submitter (manual buttons)", type: "bool" },
     { key: "is_pending_approver", label: "Viewer has a pending gate (manual buttons)", type: "bool" },
   ],
-  roles: [...BUILT_IN_ROLE_NAMES],
 };
 
 type BudgetRow = {
@@ -86,10 +80,9 @@ async function loadBudget(subjectId: string): Promise<BudgetRow | null> {
   return result.rows[0] ?? null;
 }
 
-export const budgetScenariosFlowAdapter: FlowSubjectAdapter = {
+export const budgetScenariosFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: BUDGET_SCENARIO_SUBJECT_KIND,
   profile: budgetScenarioSubjectProfile,
-  writableFields: new Set<string>(),
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const budget = await loadBudget(subjectId);
@@ -201,4 +194,4 @@ export const budgetScenariosFlowAdapter: FlowSubjectAdapter = {
     `));
     return result.rows.map((row) => row.id);
   },
-};
+});

@@ -9,6 +9,7 @@ import { decryptAccountNumber, isValidBic, isValidIban, type EftSettings } from 
 import { buildBacsFile, normalizeGbAccountNumber, normalizeSortCode, validateBacsSettings, type BacsPayment, type BacsSettings } from "../payments-core/rail-bacs.ts";
 import { buildZenginFile, encodeZenginFile, normalizeBankCode, normalizeBranchCode, normalizeZenginAccount, toZenginKana, validateZenginSettings, type ZenginPayment, type ZenginSettings } from "../payments-core/rail-zengin.ts";
 import { buildCnab240BbFile, inscricaoTipoFor, isValidBancoCode, isValidContaDv, normalizeAgencia, normalizeContaNumero, normalizeCpfCnpj, validateCnab240BbSettings, type Cnab240BbPayment, type Cnab240BbSettings } from "../payments-core/rail-cnab240-bb.ts";
+import { PAYMENT_RAIL_DESCRIPTORS, type PaymentRailDescriptorKey } from "../payments-core/rail-descriptors.ts";
 import { stubPaymentMethods } from "./payment-method.ts";
 import { PayrollError } from "./error.ts";
 import { formatInZone, formatTimestampInZone } from "../platform/business-date.ts";
@@ -44,7 +45,7 @@ import { unsealJson } from "../platform/secrets.ts";
 /** Export is live; individual formats are gated by PAYROLL_BANK_FILE_FORMATS. */
 export const PAYROLL_BANK_FILE_EXPORT_ENABLED = true;
 
-export type PayRunBankFileFormat = "cpa005" | "nacha" | "sepa" | "cemtex" | "bacs" | "zengin" | "cnab240";
+export type PayRunBankFileFormat = PaymentRailDescriptorKey;
 
 export interface PayRunBankFileFormatSpec {
   /** Off means: do not emit these bytes, and say why. */
@@ -232,61 +233,25 @@ export interface PayRunBankFileFormatSpec {
  * than Cemtex.
  */
 export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankFileFormatSpec> = {
-  cpa005: {
-    enabled: true,
-    currency: "CAD",
-    rails: ["cpa005_credit"],
-    extension: "txt",
-    // CPA-005 customer-to-bank files are ASCII (the standard's own EBCDIC
-    // clause governs direct-clearer-to-direct-clearer exchange).
-    contentType: "text/plain; charset=us-ascii",
-  },
-  nacha: {
-    enabled: true,
-    currency: "USD",
-    rails: ["nacha_credit"],
-    extension: "ach",
-    contentType: "text/plain; charset=us-ascii",
-  },
-  sepa: {
-    enabled: true,
-    currency: "EUR",
-    rails: ["sepa_credit"],
-    extension: "xml",
-    contentType: "application/xml",
-  },
-  cemtex: {
-    enabled: true,
-    currency: "AUD",
-    rails: ["cemtex_credit"],
-    extension: "aba",
-    contentType: "text/plain; charset=us-ascii",
-  },
-  bacs: {
-    enabled: true,
-    currency: "GBP",
-    rails: ["bacs_credit"],
-    extension: "txt",
-    contentType: "text/plain; charset=us-ascii",
-  },
-  zengin: {
-    enabled: true,
-    currency: "JPY",
-    rails: ["zengin_credit"],
-    extension: "txt",
-    // Shift_JIS, never UTF-8: text fields are half-width katakana and the
-    // bank reads Shift_JIS bytes (see `buildZenginFile` /
-    // `encodeZenginFile`, engine/src/payments-core/rail-zengin.ts).
-    contentType: "text/plain; charset=Shift_JIS",
-  },
-  cnab240: {
-    enabled: true,
-    currency: "BRL",
-    rails: ["cnab240_bb_credit"],
-    extension: "rem",
-    contentType: "text/plain; charset=us-ascii",
-  },
+  cpa005: payrollFormat("cpa005"),
+  nacha: payrollFormat("nacha"),
+  sepa: payrollFormat("sepa"),
+  cemtex: payrollFormat("cemtex"),
+  bacs: payrollFormat("bacs"),
+  zengin: payrollFormat("zengin"),
+  cnab240: payrollFormat("cnab240"),
 };
+
+function payrollFormat(format: PayRunBankFileFormat): PayRunBankFileFormatSpec {
+  const descriptor = PAYMENT_RAIL_DESCRIPTORS[format];
+  return {
+    enabled: true,
+    currency: descriptor.currency,
+    rails: [...descriptor.payrollRails],
+    extension: descriptor.extension,
+    contentType: descriptor.contentType,
+  };
+}
 
 /** One credit on the direct-deposit file. */
 export interface PayRunBankFileEntry {
