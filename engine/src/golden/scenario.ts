@@ -175,7 +175,7 @@ async function saasMetricsTieOut(orgId: string): Promise<Check> {
       select d.id, d.posted_entry_id, d.reversal_entry_id
         from documents d
        where d.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
-         and d.status in ('posted', 'reversed')
+         and d.status in ('posted', 'voided')
          and (d.subscription_id is not null or d.custom->>'subscriptionId' is not null)
     ), obligations as (
       select distinct sd.id as document_id, po.id as obligation_id
@@ -207,7 +207,7 @@ async function saasMetricsTieOut(orgId: string): Promise<Check> {
       select d.id, d.posted_entry_id, d.reversal_entry_id
         from documents d
        where d.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
-         and d.status in ('posted', 'reversed')
+         and d.status in ('posted', 'voided')
          and (d.subscription_id is not null or d.custom->>'subscriptionId' is not null)
     ), obligation_accounts as (
       select distinct sd.id as document_id, po.id as obligation_id,
