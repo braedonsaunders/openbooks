@@ -7,8 +7,6 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { customerGroupTabs, hrmGroupTabs } from '../../../../components/module-home/group-tabs'
-import { hrmPeopleViewTabs } from '../../../../lib/hrm/workspace-tabs'
-import type { ModuleHomeTab } from '../../../../components/module-home/tab-types'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, mergeHref, pickString } from '../../../../lib/list-params'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
@@ -69,8 +67,6 @@ export interface EntityRoleData {
    * happen to share this renderer, so they get no strip.
    */
   tabs: Awaited<ReturnType<typeof customerGroupTabs | typeof hrmGroupTabs>>
-  /** Employees job strip — org chart, processes, documents, qualifications. */
-  viewTabs: ModuleHomeTab[]
   /**
    * On a lead or prospect segment, New mints a relationship draft at that
    * stage instead of a customer with an AR role. Null when the segment is
@@ -210,9 +206,6 @@ export async function loadEntityRole(
       : slug === 'employees' && canReadHrm
         ? await hrmGroupTabs(authz, '/entities/employees')
         : [],
-    viewTabs: slug === 'employees' && canReadHrm
-      ? await hrmPeopleViewTabs(authz, '/entities/employees')
-      : [],
     newAccount: (segment === 'lead' || segment === 'prospect') && can(authz, 'crm.accounts.create')
       ? { label: tCrm(`accounts.${segment}.new`), failed: tCrm('feedback.createFailed'), lifecycleStage: segment }
       : null,
@@ -381,9 +374,6 @@ export function entityRoleSpec(data: EntityRoleData): PageSpec {
       }),
     ],
     body: [
-      ...(data.viewTabs.length
-        ? [widgetBlock('module-home-tabs', { tabs: data.viewTabs })]
-        : []),
       widgetBlock('entity-list-view', {
         recordType: data.recordType,
         sp: data.currentParams,

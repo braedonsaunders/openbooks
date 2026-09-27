@@ -25,7 +25,6 @@ const { documentsSpec } = await import('./view.ts')
 function stubData(): Record<string, unknown> {
   return {
     tabs: [],
-    viewTabs: [],
     currentParams: {},
     segmentsLabel: 'Status',
     allLabel: 'All',

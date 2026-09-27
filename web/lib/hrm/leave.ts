@@ -74,7 +74,6 @@ export interface LeaveQueueData {
   view: 'requests' | 'calendar'
   onRequests: boolean
   onCalendar: boolean
-  viewTabs: { href: string; label: string; active: boolean }[]
   segmentsLabel: string
   allLabel: string
   counts: Record<string, number>
@@ -165,8 +164,6 @@ export async function loadLeaveQueue(
   // the viewport, so nobody scrolled to it and neither surface could be read
   // on its own.
   const view: 'requests' | 'calendar' = sp.view === 'calendar' ? 'calendar' : 'requests'
-  const viewHref = (next: 'requests' | 'calendar') =>
-    leaveHref('/hrm/leave', sp.segment, next === 'calendar' ? { view: 'calendar' } : {})
   const keepView: Record<string, string> = view === 'calendar' ? { view: 'calendar' } : {}
   const base = {
     title: t('leave.title'),
@@ -203,10 +200,6 @@ export async function loadLeaveQueue(
     view,
     onRequests: view === 'requests',
     onCalendar: view === 'calendar',
-    viewTabs: [
-      { href: viewHref('requests'), label: t('leave.listTitle'), active: view === 'requests' },
-      { href: viewHref('calendar'), label: t('leave.calendarTitle'), active: view === 'calendar' },
-    ],
     queue: { notAvailable: t('queue.notAvailable'), openEmployee: t('queue.openEmployee') },
     currentParams: sp as Record<string, string | string[] | undefined>,
     openRequest: t('leave.openRequest'),

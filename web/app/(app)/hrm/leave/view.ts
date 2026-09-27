@@ -81,10 +81,9 @@ export function leaveQueueSpec(data: LeaveQueueData, basePath: string = '/hrm/le
       ),
       {
         ...grid('flex h-full min-h-0 flex-col gap-4', [
-          // The view switch and the segment filter share one row: the shared
-          // subtab strip on the left, the shared toolbar on the right.
+          // Each view's filters on the shared toolbar. Requests and Calendar
+          // are views on the Time off strip under the page header.
           grid('flex shrink-0 flex-wrap items-center gap-3', [
-            widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
             {
               ...widgetBlock('list-toolbar', {
                 basePath,

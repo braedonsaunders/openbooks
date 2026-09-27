@@ -5,10 +5,10 @@ import test from "node:test";
 // Behaviour contract for the recruiting depth tabs (HR-18): Interviews,
 // Offers, Postings, and Pools ride /hrm/recruiting as ?tab= sub-tabs.
 // Unknown or switched-off tabs fall back to Openings (absent, never an
-// error), the strip lists only the enabled tabs, and selection hrefs are
-// stable. The only seam is the feature switch; the tab services behind
-// each surface stay covered by the engine recruiting tests, not doubled
-// here.
+// error) and selection hrefs are stable. The Hiring strip is the view-tab
+// registry's and is covered with it. The only seam is the feature switch;
+// the tab services behind each surface stay covered by the engine
+// recruiting tests, not doubled here.
 registerHooks({
   resolve(specifier, context, nextResolve) {
 
@@ -32,17 +32,13 @@ registerHooks({
   },
 });
 
-const { depthTabOptions, hrefForDepth, resolveDepthTab } = await import("./depth-view.ts");
+const { hrefForDepth, resolveDepthTab } = await import("./depth-view.ts");
 
 const gap = globalThis as Record<string, unknown>;
 
 function authz() {
   return { user: { orgId: "org-recruiting", id: "actor-recruiting" } } as never;
 }
-
-// Hand-written translator: labels are catalog data, and these tests pin
-// routing (values and hrefs), never copy.
-const t = ((key: string) => key) as never;
 
 function flags(set: Record<string, boolean>) {
   gap.__depthFeatures = set;
@@ -60,32 +56,6 @@ test("an unknown or switched-off tab falls back to Openings", async () => {
 
   flags({ hrmStructuredInterviews: true });
   assert.equal(await resolveDepthTab(authz(), "interviews"), "interviews", "a switched-on tab resolves");
-});
-
-test("the strip lists only the enabled tabs with stable hrefs", async () => {
-  flags({ hrmStructuredInterviews: false, hrmOfferSigning: false, hrmJobBoards: false, hrmTalentPool: false });
-  assert.deepEqual(await depthTabOptions(authz(), t, null), [
-    { value: "openings", label: "recruiting.tabs.openings", href: "/hrm/recruiting" },
-  ]);
-
-  flags({ hrmStructuredInterviews: true, hrmOfferSigning: false, hrmJobBoards: false, hrmTalentPool: false });
-  assert.deepEqual(await depthTabOptions(authz(), t, "open"), [
-    { value: "openings", label: "recruiting.tabs.openings", href: "/hrm/recruiting?status=open" },
-    { value: "interviews", label: "recruiting.tabs.interviews", href: "/hrm/recruiting?tab=interviews&status=open" },
-  ]);
-
-  flags({ hrmStructuredInterviews: true, hrmOfferSigning: true, hrmJobBoards: true, hrmTalentPool: true });
-  assert.deepEqual(
-    (await depthTabOptions(authz(), t, null)).map((option) => [option.value, option.href]),
-    [
-      ["openings", "/hrm/recruiting"],
-      ["interviews", "/hrm/recruiting?tab=interviews"],
-      ["offers", "/hrm/recruiting?tab=offers"],
-      ["postings", "/hrm/recruiting?tab=postings"],
-      ["pools", "/hrm/recruiting?tab=pools"],
-    ],
-    "every depth surface resolves its own tab href when switched on",
-  );
 });
 
 test("selection hrefs keep the tab and the selection", () => {

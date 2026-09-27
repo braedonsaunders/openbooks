@@ -12,7 +12,6 @@ import {
   table,
   text,
   widget,
-  widgetBlock,
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
@@ -55,7 +54,7 @@ export function compPlanSpec(data: NonNullable<Awaited<ReturnType<typeof loadHea
   return page({
     route: '/hrm/compensation/plans/[id]',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    bodyClassName: 'flex h-full min-h-0 flex-col gap-4',
     header: [
       pageHeader({
         title: f('title'),
@@ -68,7 +67,6 @@ export function compPlanSpec(data: NonNullable<Awaited<ReturnType<typeof loadHea
       }),
     ],
     body: [
-      widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
       panel({
         title: f('linesTitle'),
         bodyClassName: 'min-h-0 overflow-y-auto p-0',

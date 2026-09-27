@@ -46,8 +46,6 @@ function stubData(): Record<string, unknown> {
     totalLabel: 'Total',
     totals: { headcount: '0', filled: '0' },
     tab: 'openings',
-    depthTabs: [],
-    viewTabs: [],
     statusLabel: 'Status',
     depthRows: null,
     depthColumns: null,

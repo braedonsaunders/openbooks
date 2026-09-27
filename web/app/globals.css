@@ -470,3 +470,12 @@
 [data-page-actions] > * {
   min-width: 0;
 }
+
+/* A subtab strip inside the page-header action rail is always its LAST
+   item, so primary buttons stay to its left however a page lists them.
+   Scoped to the rail: the same strip used as a view switch anywhere else
+   keeps its document position. An unscoped `order-last` sent it to the
+   bottom of every flex-column page body it sat in. */
+[data-page-actions] [data-subtabs] {
+  order: 9999;
+}

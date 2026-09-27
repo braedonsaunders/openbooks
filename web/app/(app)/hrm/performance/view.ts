@@ -36,7 +36,7 @@ import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '..
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, getAuthz } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { continuousBlocks, continuousTabChips, loadContinuousTab, type ContinuousData } from './continuous-view'
+import { continuousBlocks, loadContinuousTab, type ContinuousData } from './continuous-view'
 import { performanceHref } from '../../../../lib/hrm/workspace-href'
 
 /**
@@ -305,12 +305,11 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
       // Retention are sibling surfaces and must share the same bottom
       // breathing room instead of each relying on incidental block margins.
       grid('flex h-full min-h-0 flex-col gap-4', [
-        // The view strip and the cycles filter share one row — the shape every
-        // list page in the module now uses.
-        grid('flex shrink-0 flex-wrap items-center gap-3', [
-          continuousTabChips(data.continuous),
-          {
-            ...widgetBlock('list-toolbar', {
+        // The cycles filter on the shared toolbar. The Talent views are the
+        // page layout's strip, under the header.
+        {
+          ...grid('flex shrink-0 flex-wrap items-center gap-3', [
+            widgetBlock('list-toolbar', {
               basePath: '/hrm/performance',
               currentParams: data.currentParams,
               filters: [
@@ -322,9 +321,9 @@ export function performanceSpec(data: PerformancePageData): PageSpec {
                 },
               ],
             }),
-            when: f('cyclesTab'),
-          },
-        ]),
+          ]),
+          when: f('cyclesTab'),
+        },
         {
           ...table({
             variant: 'app',

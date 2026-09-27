@@ -8,7 +8,6 @@ import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subs
 import { getSurvey, listSurveys } from '@openbooks/engine/src/hrm/surveys/surveys.ts'
 import { getSurveyResults } from '@openbooks/engine/src/hrm/surveys/responses.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
-import { hrmTalentViewTabs } from './workspace-tabs'
 import { can, requirePermission, type Authz } from '../authz'
 import { requireFeatureEnabled } from '../feature-gates'
 
@@ -90,7 +89,6 @@ function hrefFor(status: string | null, survey: string | null, authoring: boolea
 export async function loadSurveysHome(authz: SurveysHomeAuthz, sp: Record<string, string | undefined>) {
   const t = await getTranslations('hrm')
   const tabs = await hrmGroupTabs(authz.session, '/hrm/surveys')
-  const viewTabs = await hrmTalentViewTabs(authz.session, '/hrm/surveys')
   const status =
     typeof sp.status === 'string' && (SURVEY_STATUSES as readonly string[]).includes(sp.status)
       ? sp.status
@@ -247,7 +245,6 @@ export async function loadSurveysHome(authz: SurveysHomeAuthz, sp: Record<string
     title: t('surveys.title'),
     description: t('surveys.description'),
     tabs,
-    viewTabs,
     canManage: can(authz.session, 'hrm.surveys.manage'),
     addLabel: t('surveys.author.open'),
     addHref: hrefFor(status, null, true),

@@ -1,7 +1,5 @@
 import 'server-only'
 
-import type { ModuleHomeTab } from '../../components/module-home/tab-types'
-
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -15,7 +13,6 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { benefitsCockpit } from '@openbooks/engine/src/hrm/benefits/benefits-read.ts'
 import { can, type Authz } from '../authz'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
-import { hrmRewardsViewTabs } from './workspace-tabs'
 import { loadQueueLabels } from './change-requests'
 import { listScopedDepartmentOptions } from '../scoped-options'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
@@ -75,8 +72,6 @@ export interface BenefitsData {
   refusal: BenefitsRefusal | null
   hasContent: boolean
   segmentsLabel: string
-  /** Windows / Enrolments — the two views, on the shared subtab strip. */
-  viewTabs: ModuleHomeTab[]
   allLabel: string
   segments: BenefitsSegment[]
   currentParams: Record<string, string | string[] | undefined>
@@ -140,7 +135,7 @@ function windowKindLabel(t: BenefitsCatalog, kind: string): string {
  * Window STATUSES. `enrolments` used to sit in this list, so one control
  * mixed two axes: picking "Open" filtered the windows, picking "Enrolments"
  * swapped the table for a different entity. It is a view, and views are
- * tabs — see `viewTabs`.
+ * tabs on the Rewards view strip.
  */
 const SEGMENTS = ['all', 'open', 'draft', 'closed'] as const
 
@@ -157,10 +152,6 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
   const keepView: Record<string, string> = showingEnrolments ? { view: 'enrolments' } : {}
   const currentParams: BenefitsData['currentParams'] = { ...keepView }
   if (sp.segment) currentParams.segment = sp.segment
-  const viewTabs = await hrmRewardsViewTabs(
-    authz,
-    showingEnrolments ? '/hrm/benefits?view=enrolments' : '/hrm/benefits',
-  )
 
   if (segment === null) {
     return {
@@ -173,7 +164,6 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
       segmentsLabel: t('benefits.segmentsLabel'),
       allLabel: t('benefits.allLabel'),
       segments: [],
-      viewTabs,
       currentParams,
       columns: { window: '', kind: '', range: '', elections: '', pending: '', status: '' },
       enrollmentColumns: { employee: '', plan: '', coverage: '', employeeAmount: '', employerAmount: '', status: '' },
@@ -289,7 +279,6 @@ export async function loadBenefits(authz: Authz, sp: Record<string, string | und
     segmentsLabel: t('benefits.segmentsLabel'),
     allLabel: t('benefits.allLabel'),
     segments,
-    viewTabs,
     currentParams,
     columns: {
       window: t('benefits.columns.window'),

@@ -51,7 +51,6 @@ export function surveysSpec(data: SurveysPageData): PageSpec {
       }),
     ],
     body: [
-      widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
       grid('flex h-full min-h-0 flex-col gap-4', [
         widgetBlock('filter-chips', {
           basePath: '/hrm/surveys',
