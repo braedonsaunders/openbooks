@@ -741,7 +741,7 @@ export async function loadPerformancePage(sp: Record<string, string | undefined>
       submitLabel: t('performance.createCycle'),
       cancelLabel: t('performance.cancel'),
       setupHint: t('performance.templateSetupHint'),
-      setupHref: '/admin/setup/hrm-review-templates',
+      setupHref: '/admin/setup/review-templates',
       failed: t('performance.actionFailed'),
     }
   }

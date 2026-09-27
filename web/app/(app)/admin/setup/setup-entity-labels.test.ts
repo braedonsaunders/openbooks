@@ -109,16 +109,16 @@ test('every Setup mount names a real registry entity', () => {
   }
 })
 
-test('the six keys that shipped without labels stay covered', () => {
-  // hrm-pipeline-templates/stages (F5), ai-rails-settings (follow-up),
-  // hrm-action-reasons and qualification-types/settings (same prod-log
-  // class): each rendered through a Setup surface with no locale copy.
-  // If any of them ever leaves the mounted set, its surface stopped
-  // resolving admin.setup labels — say so explicitly, never silently.
+test('the keys that shipped without labels stay covered', () => {
+  // ai-rails-settings (follow-up), hrm-action-reasons and
+  // qualification-types/settings (same prod-log class): each rendered
+  // through a Setup surface with no locale copy. If any of them ever leaves
+  // the mounted set, its surface stopped resolving admin.setup labels — say
+  // so explicitly, never silently. (hrm-pipeline-templates/stages left the
+  // set on purpose: the hiring-pipeline builder renders them with its own
+  // admin.setup.pipelineBuilder catalog.)
   const mounted = mountedKeys()
   for (const key of [
-    'hrm-pipeline-templates',
-    'hrm-pipeline-stages',
     'ai-rails-settings',
     'hrm-action-reasons',
     'qualification-types',

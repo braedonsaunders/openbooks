@@ -9,6 +9,7 @@ import {
   Briefcase,
   Building2,
   Calendar,
+  ClipboardList,
   Coins,
   Download,
   FileText,
@@ -31,6 +32,7 @@ import {
   Upload,
   Users,
   WalletCards,
+  Workflow,
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { SETUP_GROUPS, setupEntitiesByGroup } from '../../../../lib/setup/registry'
@@ -64,7 +66,12 @@ const ICONS: Record<string, ReactNode> = {
   sparkles: <Sparkles size={15} />,
   // HR-15: home announcements entity icon.
   megaphone: <Megaphone size={15} />,
+  'clipboard-list': <ClipboardList size={15} />,
+  workflow: <Workflow size={15} />,
 }
+
+/** Index pages whose per-record builder pages live beneath them. */
+const BUILDER_INDEXES = new Set(['/admin/setup/review-templates', '/admin/setup/hiring-pipelines'])
 
 type NavItem = { href: string; label: string; iconKey: string }
 
@@ -87,6 +94,7 @@ export function SetupNav({
   bankFeedsEnabled = false,
   onlinePaymentsEnabled = false,
   payrollEnabled = false,
+  hrmEnabled = false,
 }: {
   canExport: boolean
   canImport: boolean
@@ -100,6 +108,7 @@ export function SetupNav({
   bankFeedsEnabled?: boolean
   onlinePaymentsEnabled?: boolean
   payrollEnabled?: boolean
+  hrmEnabled?: boolean
 }) {
   const t = useTranslations('admin.setup')
   const tClose = useTranslations('close.setup')
@@ -216,6 +225,14 @@ export function SetupNav({
                 ]
               : group.key === 'workforce'
               ? [
+                  // The review-form and hiring-funnel builders: one page per
+                  // template/pipeline behind these index pages.
+                  ...(hrmEnabled
+                    ? [
+                        { href: '/admin/setup/review-templates', label: t('reviewBuilder.navTitle'), iconKey: 'clipboard-list' },
+                        { href: '/admin/setup/hiring-pipelines', label: t('pipelineBuilder.navTitle'), iconKey: 'workflow' },
+                      ]
+                    : []),
                   ...(byGroup.get(group.key) ?? []).map((e) => ({
                     href: `/admin/setup/${e.key}`,
                     label: t(`entities.${e.key}.title`),
@@ -257,7 +274,8 @@ export function SetupNav({
               </h3>
               <ul className="flex flex-row gap-1 sm:flex-col sm:gap-0 sm:space-y-0.5">
                 {visibleItems.map((item) => {
-                  const active = pathname === item.href
+                  // Builder index pages stay highlighted on their per-record pages.
+                  const active = pathname === item.href || (BUILDER_INDEXES.has(item.href) && pathname.startsWith(`${item.href}/`))
                   return (
                     <li key={item.href} className="shrink-0">
                       <Link

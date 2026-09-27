@@ -13,6 +13,10 @@ import { SandboxManager } from '../../app/(app)/admin/sandboxes/SandboxManager'
 import { ChangeSetDrawer } from '../../app/(app)/admin/sandboxes/change-sets/ChangeSetDrawer'
 import { PaymentProvidersClient } from '../../app/(app)/admin/setup/payment-providers/PaymentProvidersClient'
 import { ProjectTypesWorkspace } from '../../app/(app)/admin/setup/project-types/ProjectTypesWorkspace'
+import { ReviewTemplateIndex } from '../../app/(app)/admin/setup/review-templates/ReviewTemplateIndex'
+import { ReviewTemplateBuilder } from '../../app/(app)/admin/setup/review-templates/ReviewTemplateBuilder'
+import { PipelineIndex } from '../../app/(app)/admin/setup/hiring-pipelines/PipelineIndex'
+import { PipelineBuilder } from '../../app/(app)/admin/setup/hiring-pipelines/PipelineBuilder'
 import { SecurityPageContent } from '../../app/(app)/settings/security/sections'
 import { ApiConsole } from '../../app/(app)/api-docs/ApiConsole'
 import { SetupWizard } from '../../app/(app)/admin/setup/wizard/SetupWizard'
@@ -248,6 +252,24 @@ export const SETUP_WIDGETS = {
    *  carry identical data and a future read cannot diverge them. */
   'project-types-workspace': (props) => (
     <ProjectTypesWorkspace {...(props as unknown as ComponentProps<typeof ProjectTypesWorkspace>)} />
+  ),
+
+  /* --- workforce builders ------------------------------------------------------------ */
+  /** Review templates and hiring pipelines: an index of cards, then one builder
+   *  page per record. Each builder is one client island — the outline, drag
+   *  state, inspector drafts and fetch mutations share state a spec cannot
+   *  name — so it arrives whole with loader-resolved data only. */
+  'review-template-index': (props) => (
+    <ReviewTemplateIndex {...(props as unknown as ComponentProps<typeof ReviewTemplateIndex>)} />
+  ),
+  'review-template-builder': (props) => (
+    <ReviewTemplateBuilder {...(props as unknown as ComponentProps<typeof ReviewTemplateBuilder>)} />
+  ),
+  'hiring-pipeline-index': (props) => (
+    <PipelineIndex {...(props as unknown as ComponentProps<typeof PipelineIndex>)} />
+  ),
+  'hiring-pipeline-builder': (props) => (
+    <PipelineBuilder {...(props as unknown as ComponentProps<typeof PipelineBuilder>)} />
   ),
 
   /* --- sandboxes -------------------------------------------------------------------- */

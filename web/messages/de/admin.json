@@ -1439,6 +1439,240 @@
     "manageAgentsTitle": "Hintergrundagenten"
   },
   "setup": {
+    "builder": {
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "saveChanges": "Änderungen speichern",
+      "saved": "Änderungen gespeichert",
+      "discard": "Verwerfen",
+      "unsaved": "Ungespeicherte Änderungen",
+      "discardChanges": "Im Inspektor gibt es ungespeicherte Änderungen. Verwerfen?",
+      "moveUp": "Nach oben",
+      "moveDown": "Nach unten",
+      "rowActions": "Zeilenaktionen",
+      "dragToReorder": "Zum Umsortieren ziehen",
+      "errors": {
+        "duplicate": "Ein anderer Datensatz verwendet diesen Wert bereits.",
+        "inUse": "Dieser Datensatz wird noch verwendet und kann nicht gelöscht werden.",
+        "stale": "Die Gliederung hat sich seit dem Laden geändert. Laden Sie die Seite neu und versuchen Sie es erneut.",
+        "network": "Der Server ist nicht erreichbar. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
+      }
+    },
+    "reviewBuilder": {
+      "navTitle": "Beurteilungsvorlagen",
+      "title": "Beurteilungsvorlagen",
+      "description": "Gestalten Sie die Formulare für Selbst- und Vorgesetztenbeurteilungen. Jede Vorlage ist eine Seite: Abschnitte, Fragen und Bewertungsskala, mit Live-Vorschau.",
+      "newTemplate": "Neue Vorlage",
+      "emptyTitle": "Noch keine Beurteilungsvorlagen",
+      "emptyDescription": "Legen Sie eine Vorlage an und fügen Sie im Builder Abschnitte und Fragen hinzu. Beurteilungszyklen werden auf einer Vorlage eröffnet.",
+      "cardSummary": "{sections, plural, one {# Abschnitt} other {# Abschnitte}} · {questions, plural, one {# Frage} other {# Fragen}}",
+      "scaleSummary": "Bewertungsskala {min}–{max}",
+      "cycleCount": "{count, plural, one {In # Zyklus verwendet} other {In # Zyklen verwendet}}",
+      "backToTemplates": "Alle Beurteilungsvorlagen",
+      "outline": "Formulargliederung",
+      "templateSettings": "Vorlageneinstellungen",
+      "section": "Abschnitt",
+      "addSection": "Abschnitt hinzufügen",
+      "addQuestion": "Frage hinzufügen",
+      "addQuestionTo": "Frage zu {section} hinzufügen",
+      "noSections": "Noch keine Abschnitte. Fügen Sie einen Abschnitt und danach seine Fragen hinzu.",
+      "questionCount": "{count, plural, one {# Frage} other {# Fragen}}",
+      "questionIn": "Frage in {section}",
+      "weightShare": "{share} % Gewichtung",
+      "weightShareLong": "{share} % der Gesamtgewichtung der Vorlage",
+      "required": "Pflichtfrage",
+      "ratingScale": "Bewertungsskala",
+      "scaleLabelsPlaceholder": "Bezeichnung eingeben und Enter drücken",
+      "scaleRange": "Bewertungen von {min} bis {max}",
+      "scaleInvalid": "Geben Sie eine niedrigste Bewertung unter der höchsten ein, um die Skala zu sehen.",
+      "weightPlaceholder": "Keine Gewichtung",
+      "competencyPlaceholder": "Keine Kompetenz",
+      "deleteTemplateTitle": "Vorlage löschen",
+      "deleteTemplate": "Die Beurteilungsvorlage „{name}“ mit allen Abschnitten und Fragen löschen?",
+      "deleteBlocked": "Auf dieser Vorlage wurden Beurteilungszyklen eröffnet, daher bleibt sie als Verlauf erhalten. Deaktivieren Sie sie stattdessen.",
+      "templateDeleted": "Beurteilungsvorlage gelöscht",
+      "deleteSectionTitle": "Abschnitt löschen",
+      "deleteSection": "Den Abschnitt „{title}“ löschen?",
+      "deleteSectionWithQuestions": "Den Abschnitt „{title}“ und {count, plural, one {seine # Frage} other {seine # Fragen}} löschen?",
+      "sectionDeleted": "Abschnitt gelöscht",
+      "deleteQuestionTitle": "Frage löschen",
+      "deleteQuestion": "Die Frage „{prompt}“ löschen?",
+      "questionDeleted": "Frage gelöscht",
+      "fields": {
+        "name": "Vorlagenname",
+        "scaleMin": "Niedrigste Bewertung",
+        "scaleMax": "Höchste Bewertung",
+        "scaleLabels": "Skalenbezeichnungen",
+        "sectionTitle": "Abschnittstitel",
+        "sectionKind": "Abschnittstyp",
+        "weight": "Gewichtung",
+        "competency": "Kompetenz",
+        "prompt": "Frage",
+        "answerKind": "Antworttyp",
+        "required": "Pflichtfrage"
+      },
+      "help": {
+        "active": "Nur aktive Vorlagen können neue Beurteilungszyklen eröffnen.",
+        "scaleMin": "Die niedrigste Bewertung, die vergeben werden kann, zum Beispiel 1.",
+        "scaleMax": "Die höchste Bewertung, die vergeben werden kann, zum Beispiel 5. Die Skala umfasst höchstens 99 Punkte.",
+        "scaleLabels": "Optionale Bezeichnungen für die Skala, die niedrigste zuerst. Eine pro Punkt oder nur die beiden Enden.",
+        "historyPinned": "Auf dieser Vorlage {count, plural, one {wurde # Beurteilungszyklus} other {wurden # Beurteilungszyklen}} eröffnet. Änderungen gelten für ab jetzt eröffnete Zyklen; offene Zyklen behalten ihr ursprüngliches Formular.",
+        "weight": "Optionale relative Gewichtung dieses Abschnitts. Der Builder zeigt sie als Anteil an der Gesamtgewichtung aller Abschnitte.",
+        "competency": "Die Kompetenz, die dieser Abschnitt beurteilt. Beurteilungen zeigen ihre Stufenerwartungen neben den Antworten.",
+        "goalsSection": "Ein Zielabschnitt zeigt die Ziele der beurteilten Person für den Zykluszeitraum, auch ohne Fragen.",
+        "required": "Beurteilende können erst absenden, wenn Pflichtfragen beantwortet sind. Ein Zyklus braucht mindestens eine Pflichtfrage, um eröffnet zu werden."
+      },
+      "errors": {
+        "nameRequired": "Geben Sie einen Vorlagennamen ein.",
+        "titleRequired": "Geben Sie einen Abschnittstitel ein.",
+        "promptRequired": "Geben Sie die Frage ein.",
+        "weightInvalid": "Geben Sie die Gewichtung als Zahl ab null ein oder lassen Sie das Feld leer.",
+        "duplicateName": "Eine Beurteilungsvorlage mit diesem Namen existiert bereits."
+      },
+      "issues": {
+        "noRequiredQuestion": "Noch keine Pflichtfrage. Auf dieser Vorlage können erst Beurteilungszyklen eröffnet werden, wenn mindestens eine Frage Pflicht ist.",
+        "inactive": "Diese Vorlage ist inaktiv, daher kann kein neuer Beurteilungszyklus darauf eröffnet werden.",
+        "emptySection": "„{section}“ enthält keine Fragen, Beurteilende sehen dort also nichts zu beantworten."
+      },
+      "sectionKinds": {
+        "competency": {
+          "label": "Kompetenz",
+          "description": "Eine Fähigkeit oder ein Verhalten bewerten."
+        },
+        "goals": {
+          "label": "Ziele",
+          "description": "Fortschritt bei den Zielen des Zyklus beurteilen."
+        },
+        "freeText": {
+          "label": "Freitext",
+          "description": "Offenes schriftliches Feedback."
+        }
+      },
+      "answerKinds": {
+        "rating": {
+          "label": "Bewertung",
+          "description": "Eine Punktzahl von {min} bis {max}."
+        },
+        "text": {
+          "label": "Schriftliche Antwort",
+          "description": "Eine schriftliche Rückmeldung."
+        },
+        "ratingAndText": {
+          "label": "Bewertung und Kommentar",
+          "description": "Eine Punktzahl von {min} bis {max} mit schriftlichem Kommentar."
+        }
+      },
+      "preview": {
+        "title": "Vorschau für Beurteilende",
+        "subtitle": "Was Beurteilte und Vorgesetzte ausfüllen",
+        "eyebrow": "Leistungsbeurteilung",
+        "empty": "Fügen Sie einen Abschnitt hinzu, um das Formular aufzubauen.",
+        "goalsNote": "Hier erscheinen die Ziele der beurteilten Person für den Zykluszeitraum.",
+        "textPlaceholder": "Schriftliche Antwort …"
+      }
+    },
+    "pipelineBuilder": {
+      "navTitle": "Einstellungsprozesse",
+      "title": "Einstellungsprozesse",
+      "description": "Gestalten Sie die Phasen, die Bewerbende durchlaufen. Jeder Prozess ist eine Seite: seine geordneten Phasen und was jede Phase bedeutet.",
+      "newPipeline": "Neuer Prozess",
+      "emptyTitle": "Noch keine Einstellungsprozesse",
+      "emptyDescription": "Legen Sie einen Prozess an und ordnen Sie seine Phasen. Stellenanforderungen werden auf einem Prozess eröffnet; der Standardprozess gilt, wenn keiner gewählt ist.",
+      "stageCount": "{count, plural, one {# Phase} other {# Phasen}}",
+      "requisitionCount": "{count, plural, =0 {Keine Stellenanforderungen} one {# Stellenanforderung} other {# Stellenanforderungen}}",
+      "default": "Standard",
+      "defaultPipeline": "Standardprozess",
+      "makeDefault": "Als Standard festlegen",
+      "madeDefault": "„{name}“ ist jetzt der Standardprozess",
+      "backToPipelines": "Alle Einstellungsprozesse",
+      "flow": "Weg der Bewerbenden",
+      "stages": "Phasen",
+      "addStage": "Phase hinzufügen",
+      "pipelineSettings": "Prozesseinstellungen",
+      "noStages": "Dieser Prozess hat noch keine Phasen.",
+      "useStandardStages": "Standardphasen hinzufügen",
+      "stageNumber": "Phase {number}",
+      "activeApplications": "{count, plural, one {# Bewerbung in dieser Phase} other {# Bewerbungen in dieser Phase}}",
+      "activeApplicationsLabel": "Bewerbungen in dieser Phase",
+      "totalApplicationsLabel": "Bewerbungen, die je in dieser Phase waren",
+      "kits": "Interviewleitfäden für diese Phase",
+      "manageKits": "Interviewleitfäden verwalten",
+      "noKits": "Dieser Phase ist kein Interviewleitfaden zugeordnet.",
+      "deletePipelineTitle": "Prozess löschen",
+      "deletePipeline": "Den Einstellungsprozess „{name}“ mit allen Phasen löschen?",
+      "deleteBlocked": "Auf diesem Prozess wurden Stellenanforderungen eröffnet, daher bleibt er als Verlauf erhalten. Deaktivieren Sie ihn stattdessen.",
+      "deleteDefaultBlocked": "Legen Sie einen anderen Prozess als Standard fest, bevor Sie diesen löschen.",
+      "pipelineDeleted": "Einstellungsprozess gelöscht",
+      "deleteStageTitle": "Phase löschen",
+      "deleteStage": "Die Phase „{name}“ löschen?",
+      "deleteStageBlocked": "Bewerbungen waren bereits in dieser Phase, daher bleibt sie als Verlauf erhalten und kann nicht gelöscht werden.",
+      "stageDeleted": "Phase gelöscht",
+      "standardStages": {
+        "applied": "Beworben",
+        "screening": "Vorauswahl",
+        "interview": "Vorstellungsgespräch",
+        "offer": "Angebot",
+        "hired": "Eingestellt",
+        "rejected": "Abgelehnt"
+      },
+      "fields": {
+        "name": "Phasenname",
+        "pipelineName": "Prozessname",
+        "key": "Phasenschlüssel",
+        "kind": "Phasentyp"
+      },
+      "help": {
+        "active": "Nur aktive Prozesse können für neue Stellenanforderungen gewählt werden.",
+        "defaultStaysActive": "Der Standardprozess bleibt aktiv. Legen Sie einen anderen Prozess als Standard fest, um diesen zu deaktivieren.",
+        "isDefault": "Neue Stellenanforderungen verwenden diesen Prozess, wenn keiner gewählt ist.",
+        "notDefault": "Diesen Prozess für neue Stellenanforderungen ohne Auswahl verwenden.",
+        "historyPinned": "Auf diesem Prozess {count, plural, one {wurde # Stellenanforderung} other {wurden # Stellenanforderungen}} eröffnet, daher bleibt er als Verlauf erhalten. Deaktivieren Sie ihn, statt ihn zu löschen.",
+        "noRequisitions": "Noch keine Stellenanforderung verwendet diesen Prozess.",
+        "key": "Eine stabile Kennung der Phase, verwendet in der Trichterauswertung und im Bewerbungsstatus. Ändern Sie sie nicht mehr, sobald Bewerbende die Phase nutzen.",
+        "terminal": "Diese Phase beendet den Trichter: Bewerbende, die sie erreichen, verlassen den Prozess."
+      },
+      "errors": {
+        "nameRequired": "Geben Sie einen Prozessnamen ein.",
+        "stageNameRequired": "Geben Sie einen Phasennamen ein.",
+        "keyRequired": "Geben Sie einen Phasenschlüssel ein.",
+        "duplicateKey": "Eine andere Phase dieses Prozesses verwendet diesen Schlüssel bereits.",
+        "duplicateName": "Ein Einstellungsprozess mit diesem Namen existiert bereits.",
+        "stageInUse": "Bewerbungen waren bereits in dieser Phase, daher kann sie nicht gelöscht werden."
+      },
+      "issues": {
+        "noStages": "Noch keine Phasen. Ohne Phasen können keine Stellenanforderungen auf diesem Prozess eröffnet werden.",
+        "noHiredStage": "Keine Phase hat den Typ „Eingestellt“, daher kann über diesen Prozess niemand eingestellt werden.",
+        "multipleHiredStages": "Mehr als eine Phase hat den Typ „Eingestellt“. Eine Einstellung landet immer in der ersten.",
+        "terminalFirstStage": "Die erste Phase beendet den Trichter. Neue Bewerbungen beginnen in der ersten Phase, machen Sie sie daher zu einer Arbeitsphase.",
+        "inactive": "Dieser Prozess ist inaktiv, daher können neue Stellenanforderungen ihn nicht verwenden."
+      },
+      "kinds": {
+        "screening": {
+          "label": "Vorauswahl",
+          "description": "Bewerbungen sichten und in die engere Wahl nehmen."
+        },
+        "interview": {
+          "label": "Vorstellungsgespräch",
+          "description": "Die bewerbende Person kennenlernen."
+        },
+        "assessment": {
+          "label": "Eignungstest",
+          "description": "Tests und Arbeitsproben."
+        },
+        "offer": {
+          "label": "Angebot",
+          "description": "Ein Angebot wird vorbereitet oder ist verschickt."
+        },
+        "hired": {
+          "label": "Eingestellt",
+          "description": "Beendet den Trichter mit einer Einstellung."
+        },
+        "rejected": {
+          "label": "Abgelehnt",
+          "description": "Beendet den Trichter ohne Einstellung."
+        }
+      }
+    },
     "title": "Einrichtung",
     "description": "Konfigurieren Sie Steuern, Dimensionen, Zahlungsbedingungen und die Referenzdaten, auf denen Ihre Buchhaltung basiert.",
     "laborCosting": {

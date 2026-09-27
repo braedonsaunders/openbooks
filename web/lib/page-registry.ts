@@ -472,6 +472,30 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/admin/setup/hiring-pipelines': {
+    route: '/admin/setup/hiring-pipelines',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/admin/setup/hiring-pipelines/view')
+      return {
+        load: () => m.loadHiringPipelines(),
+        spec: (data) => m.hiringPipelinesSpec(data as never),
+      }
+    },
+  },
+  '/admin/setup/hiring-pipelines/[id]': {
+    route: '/admin/setup/hiring-pipelines/[id]',
+    segments: ['id'],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/admin/setup/hiring-pipelines/[id]/view')
+      return {
+        load: (input) => m.loadPipelineBuilder(segment(input, 'id')),
+        spec: (data) => m.pipelineBuilderSpec(data as never),
+      }
+    },
+  },
   '/admin/setup/invoicing': {
     route: '/admin/setup/invoicing',
     segments: [],
@@ -505,6 +529,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadLaborPricing(input.searchParams ?? {}),
         spec: (data) => m.laborPricingSpec(data as never),
+      }
+    },
+  },
+  '/admin/setup/manufacturing': {
+    route: '/admin/setup/manufacturing',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/admin/setup/manufacturing/view')
+      return {
+        load: () => m.loadManufacturingSetup(),
+        spec: (data) => m.manufacturingPoliciesSpec(data as never),
       }
     },
   },
@@ -577,6 +613,30 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: () => m.loadSetupReadiness(),
         spec: () => m.setupReadinessSpec(),
+      }
+    },
+  },
+  '/admin/setup/review-templates': {
+    route: '/admin/setup/review-templates',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/admin/setup/review-templates/view')
+      return {
+        load: () => m.loadReviewTemplates(),
+        spec: (data) => m.reviewTemplatesSpec(data as never),
+      }
+    },
+  },
+  '/admin/setup/review-templates/[id]': {
+    route: '/admin/setup/review-templates/[id]',
+    segments: ['id'],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/admin/setup/review-templates/[id]/view')
+      return {
+        load: (input) => m.loadReviewTemplateBuilder(segment(input, 'id')),
+        spec: (data) => m.reviewTemplateBuilderSpec(data as never),
       }
     },
   },
