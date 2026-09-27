@@ -5,7 +5,7 @@ import {
 } from "../organization/org-feature-lock.ts";
 import { ManufacturingFeatureDisabledError } from "./errors.ts";
 
-export type ManufacturingFeatureKey = "manufacturing";
+export type ManufacturingFeatureKey = "manufacturing" | "manufacturingMrp";
 
 export async function assertManufacturingFeature(
   tx: SqlExecutor,

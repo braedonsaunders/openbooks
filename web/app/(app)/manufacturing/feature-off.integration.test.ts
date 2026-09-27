@@ -9,6 +9,7 @@ import { db, env, withBypassContext, withOrgTransaction } from "@openbooks/engin
 import { ManufacturingFeatureDisabledError } from "@openbooks/engine/src/manufacturing/errors.ts";
 import { manufacturingFeatureEnabled } from "@openbooks/engine/src/manufacturing/gate.ts";
 import { postManufacturingEntry } from "@openbooks/engine/src/manufacturing/journal.ts";
+import { runMrp } from "@openbooks/engine/src/manufacturing/mrp.ts";
 import { featureGateLockKey } from "@openbooks/engine/src/organization/org-feature-lock.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, type ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
 import { runRecordFlows } from "@openbooks/engine/src/flows/index.ts";
@@ -40,6 +41,7 @@ const { POST: manufacturingPost } = await import("../../api/manufacturing/work-c
 const { POST: workOrderPost } = await import("../../api/manufacturing/work-orders/route");
 const { POST: issueWorkOrderPost } = await import("../../api/manufacturing/work-orders/[id]/issue/route");
 const { POST: completeWorkOrderPost } = await import("../../api/manufacturing/work-orders/[id]/complete/route");
+const { POST: mrpRunPost } = await import("../../api/manufacturing/mrp/runs/route");
 const { loadManufacturingSetup } = await import("../admin/setup/manufacturing/view");
 
 async function features(orgId: string, state: Record<string, boolean>) {
@@ -81,19 +83,46 @@ test("manufacturing is off by default, parent-fenced, and preserves posted histo
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Shop lead", "admin")); assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturing")), false); await refuses(post(org, actorId));
-    await features(org.orgId, { manufacturing: true, inventory: false });
+    await features(org.orgId, { manufacturing: true, inventory: false, manufacturingMrp: true });
     assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturing")), false);
+    assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturingMrp")), false);
     await refuses(post(org, actorId));
     const refusedCount = await withBypassContext(async () => (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`)).rows[0]!.n);
     assert.equal(refusedCount, 0);
-    await features(org.orgId, { manufacturing: true, inventory: true });
+    await features(org.orgId, { manufacturing: true, inventory: true, warehousing: true, manufacturingMrp: false });
     routeState.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["admin.setup.manage", "items.post", "manufacturing.manage"]), allowedSubsidiaryIds: null };
+    const mrpOff = await mrpRunPost(new Request("http://audit.local/api/manufacturing/mrp/runs", {
+      method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+      body: JSON.stringify({ subsidiaryId: org.subsidiaryId }),
+    }), { params: Promise.resolve({}) });
+    assert.equal(mrpOff.status, 404);
+    assert.doesNotMatch(await mrpOff.clone().text(), /manufacturing/i);
+    await features(org.orgId, { manufacturingMrp: true });
+    const policy = await withBypassContext(async () => db.execute(sql`insert into mfg_item_policies
+      (org_id,item_id,supply_method,lead_time_days,safety_stock_qty,minimum_qty,order_multiple_qty,scrap_pct_planned,created_by,updated_by)
+      values (${org.orgId},${org.items.assembly},'buy',7,'0','1000','1','0',${actorId},${actorId}) returning id`));
+    assert.equal(policy.rows.length, 1);
+    const mrpRun = await withOrgTransaction(org.orgId, () => runMrp(db, org.orgId, actorId, { subsidiaryId: org.subsidiaryId, horizonDays: 30, capacityCheck: false }));
+    const mrpBefore = await withBypassContext(async () => ({
+      run: (await db.execute(sql`select id,status,parameters from mfg_mrp_runs where org_id=${org.orgId} and id=${mrpRun.id}`)).rows[0],
+      suggestions: (await db.execute(sql`select id,item_id,quantity,due_date,action,demand_ref,status from mfg_planned_orders where org_id=${org.orgId} and run_id=${mrpRun.id} order by id`)).rows,
+    }));
+    assert.equal(mrpBefore.suggestions.length, 1);
+    await features(org.orgId, { manufacturingMrp: false });
+    const childOff = await mrpRunPost(new Request("http://audit.local/api/manufacturing/mrp/runs", {
+      method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() },
+      body: JSON.stringify({ subsidiaryId: org.subsidiaryId }),
+    }), { params: Promise.resolve({}) });
+    assert.equal(childOff.status, 404);
+    assert.doesNotMatch(await childOff.clone().text(), /manufacturing/i);
     const scrap = await setupWrite("mfg-scrap-reasons", { code: "NORMAL", name: "Normal trim loss", classification: "normal", isActive: true });
     assert.equal(scrap.status, 200, await scrap.clone().text());
     const scrapId = String((await scrap.json()).id);
     const first = await post(org, actorId); const original = await snapshot(org.orgId, first);
     assert.deepEqual(await listed(org.orgId, first), [first]);
     await features(org.orgId, { manufacturing: false });
+    await features(org.orgId, { manufacturingMrp: true });
+    assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturingMrp")), false);
     await refuses(post(org, actorId));
     const fencedSetup = await setupWrite("mfg-scrap-reasons", { code: "OFF", name: "Unavailable reason", classification: "normal", isActive: true });
     assert.equal(fencedSetup.status, 404);
@@ -129,8 +158,18 @@ test("manufacturing is off by default, parent-fenced, and preserves posted histo
     assert.equal(preservedScrap.rows.length, 1);
     assert.deepEqual(await snapshot(org.orgId, first), original);
     assert.deepEqual(await listed(org.orgId, first), [first]);
-    await features(org.orgId, { manufacturing: true });
+    const mrpDuringOff = await withBypassContext(async () => ({
+      run: (await db.execute(sql`select id,status,parameters from mfg_mrp_runs where org_id=${org.orgId} and id=${mrpRun.id}`)).rows[0],
+      suggestions: (await db.execute(sql`select id,item_id,quantity,due_date,action,demand_ref,status from mfg_planned_orders where org_id=${org.orgId} and run_id=${mrpRun.id} order by id`)).rows,
+    }));
+    assert.deepEqual(mrpDuringOff, mrpBefore);
+    await features(org.orgId, { manufacturing: true, manufacturingMrp: true });
     assert.deepEqual(await snapshot(org.orgId, first), original);
+    const mrpAfter = await withBypassContext(async () => ({
+      run: (await db.execute(sql`select id,status,parameters from mfg_mrp_runs where org_id=${org.orgId} and id=${mrpRun.id}`)).rows[0],
+      suggestions: (await db.execute(sql`select id,item_id,quantity,due_date,action,demand_ref,status from mfg_planned_orders where org_id=${org.orgId} and run_id=${mrpRun.id} order by id`)).rows,
+    }));
+    assert.deepEqual(mrpAfter, mrpBefore);
     assert.equal((await setupWrite("mfg-scrap-reasons", { code: "RETURNED", name: "Available after re-enable", classification: "normal", isActive: true })).status, 200);
     const second = await post(org, actorId);
     assert.notEqual(second, first);
