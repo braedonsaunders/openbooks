@@ -151,7 +151,7 @@ function put(body: Record<string, unknown>): Promise<Response> {
 test('GET exposes the persisted configuration revision', async () => {
   reset(7)
 
-  const response = await GET()
+  const response = await GET(new Request('http://test.local/'))
 
   assert.equal(response.status, 200)
   assert.equal((await response.json()).revision, 7)

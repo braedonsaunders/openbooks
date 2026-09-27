@@ -1002,7 +1002,7 @@ test(
         POST(request("POST", { action: "install-pack", country: "GB" })),
       );
       assert.equal(installed.status, 200, await installed.clone().text());
-      const res = await withOrgContext(fixture.orgId, () => GET());
+      const res = await withOrgContext(fixture.orgId, () => GET(new Request("http://payroll.test/api/payroll/settings")));
       assert.equal(res.status, 200, await res.clone().text());
       const body = (await res.json()) as {
         installable: string[];
@@ -1034,7 +1034,7 @@ test(
         values (${org.orgId}, ${org.vendorId}, true)
       `))
 
-      const response = await withOrgContext(org.orgId, () => GET())
+      const response = await withOrgContext(org.orgId, () => GET(new Request("http://payroll.test/api/payroll/settings")))
       assert.equal(response.status, 200, await response.clone().text())
       const body = await response.json() as { vendors: Array<{ id: string; label: string }> }
       assert.ok(

@@ -52,7 +52,9 @@ export const runtime = 'nodejs'
 type Gate = Exclude<Awaited<ReturnType<typeof guardPermission>>, NextResponse>
 
 /** Resolve + authorize the project, or return the response to send. */
-async function resolveProject(gate: Gate, projectId: string | null) {
+type ProjectResolution = { error: NextResponse } | { projectId: string }
+
+async function resolveProject(gate: Gate, projectId: string | null): Promise<ProjectResolution> {
   if (!projectId || !isUuid(projectId)) {
     return { error: NextResponse.json({ error: 'projectId required' }, { status: 400 }) }
   }
@@ -77,9 +79,9 @@ function handleError(error: unknown): Promise<NextResponse> {
 export const GET = defineRoute({
   permission: 'projects.read',
   feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
-  handler: async ({ request: req, authz: gate }) => {
+  handler: async ({ request: req, authz: gate }): Promise<NextResponse> => {
     const feature = await guardProjectSchedulingFeature(gate.user.orgId)
-    if (feature) return feature
+    if (feature instanceof NextResponse) return feature
 
     const resolved = await resolveProject(gate, new URL(req.url).searchParams.get('projectId'))
     if ('error' in resolved) return resolved.error
@@ -109,9 +111,9 @@ type Body = {
 export const POST = defineRoute({
   permission: 'projects.manage',
   feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
-  handler: async ({ request: req, authz: gate }) => {
+  handler: async ({ request: req, authz: gate }): Promise<NextResponse> => {
     const feature = await guardProjectSchedulingFeature(gate.user.orgId)
-    if (feature) return feature
+    if (feature instanceof NextResponse) return feature
 
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;

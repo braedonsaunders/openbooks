@@ -63,7 +63,7 @@ type Action = 'verify' | 'reject' | 'reopen' | 'update'
 export const PATCH = defineRoute({
   public: 'session',
   params: z.object({ "id": z.string() }),
-  handler: async ({ request: req, params: routeParams }) => {
+  handler: async ({ request: req, params: routeParams, authz }) => {
     const params = Promise.resolve(routeParams);
     const blocked = await guardComplianceFeature(authz.user.orgId)
     if (blocked) return blocked

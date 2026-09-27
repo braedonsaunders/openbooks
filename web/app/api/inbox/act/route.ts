@@ -40,7 +40,7 @@ function errorOf(error: unknown): { status: number; message: string } {
  */
 export const POST = defineRoute({
   public: 'session',
-  handler: async ({ request: req }) => {
+  handler: async ({ request: req, authz }) => {
     const parsedBody = await parseJsonBody(req, actBody);
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data;

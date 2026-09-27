@@ -20,7 +20,7 @@ function documentReadPermission(kind: string): string {
 
 export const GET = defineRoute({
   public: 'session',
-  handler: async ({ request: request }) => {
+  handler: async ({ request, authz }) => {
 
     const table = new URL(request.url).searchParams.get('table')
     const recordId = new URL(request.url).searchParams.get('id')
