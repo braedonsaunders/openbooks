@@ -18,9 +18,10 @@ import { notFound } from "@/lib/api/responses";
  * and the central recognition run posts the catch-up. Nothing posts here.
  */
 const percentCompleteBody = z.object({
-  percentComplete: z.number().finite().nullable(),
-  expectedPercentComplete: z.number().finite().nullable(),
-}).strict()
+  action: z.literal('set').default('set'),
+  percentComplete: z.number().finite().nullable().optional(),
+  expectedPercentComplete: z.number().finite().nullable().optional(),
+}).strict().refine((body) => Object.keys(body).length > 0, 'A percent-complete action is required.')
 
 export const PUT = defineRoute({
   permission: 'projects.manage',

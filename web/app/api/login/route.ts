@@ -62,7 +62,7 @@ export const POST = defineRoute({
       ?.slice(LOGIN_CHALLENGE_COOKIE.length + 1);
     const result = typeof body.mfaCode === "string"
       ? await completeMfaLogin(challengeToken ? decodeURIComponent(challengeToken) : undefined, body.mfaCode, context)
-      : typeof body.email === "string" && typeof body.password === "string"
+      : "email" in body && typeof body.email === "string" && typeof body.password === "string"
         ? await login(body.email, body.password, context)
         : null;
     if (!result) return NextResponse.json({ error: "missing credentials" }, { status: 400 });

@@ -41,6 +41,7 @@ export const POST = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   body: journalActionBody,
   handler: async ({ body }) => {
+    const { documentId } = body;
 
 
 

@@ -69,6 +69,35 @@ const paymentMandateBodySchema = z.object({
 const requestBodySchema = z.union([
   paymentFormatBodySchema, paymentProfileBodySchema, paymentScheduleBodySchema, paymentMandateBodySchema,
 ])
+type PaymentOperationBody = Record<string, unknown> & {
+  action?: 'create_draft' | 'submit_for_approval'
+  bankAccountId?: string
+  code?: string
+  contentType?: string
+  country?: string | null
+  cron?: string
+  currency?: string
+  direction?: 'credit' | 'debit' | 'both'
+  expiresOn?: string
+  fileExtension?: string
+  formatterScript?: string
+  isActive?: boolean
+  mandateReference?: string
+  name?: string
+  partyBankAccountId?: string
+  partyId?: string
+  paymentBankProfileId?: string
+  paymentFormatId?: string
+  proofFileId?: string
+  scheme?: 'nacha' | 'sepa_core' | 'sepa_b2b' | 'custom'
+  selectionCriteria?: Record<string, unknown>
+  settings?: Record<string, unknown>
+  signedOn?: string
+  status?: 'pending' | 'active' | 'suspended' | 'revoked' | 'expired'
+  subsidiaryId?: string | null
+  timezone?: string
+  validFrom?: string
+}
 
 
 
@@ -156,7 +185,8 @@ export const POST = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "resource": z.string() }),
   body: requestBodySchema,
-  handler: async ({ request, body, params, authz: routeAuthz }) => {
+  handler: async ({ request, body: parsedBody, params, authz: routeAuthz }) => {
+    const body = parsedBody as unknown as PaymentOperationBody
 
     const gate = routeAuthz
 

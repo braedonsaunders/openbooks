@@ -1,6 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { defineRoute } from "@/lib/api/route";
-import { exactMoney, nullableUuidId, uuidId } from "@/lib/api/json";
+import { nullableUuidId, uuidId } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
@@ -18,7 +18,7 @@ const itemParams = z.object({ id: uuidId })
 const itemRatesBody = z.object({
   rateBookId: nullableUuidId.optional(), effectiveFrom: z.string(), baseUnit: z.string().trim().min(1),
   pricingPolicy: z.enum(["capped_ladder", "lowest_cost"]), invoicePresentation: z.enum(["summary", "rate_components"]).optional(),
-  tiers: z.array(z.object({ unitCode: z.string().trim().min(1), unitName: z.string().trim().min(1), baseQuantity: exactMoney(), costRate: exactMoney(), billRate: exactMoney(), timeTypeBillRates: z.record(z.string(), exactMoney()).optional() })).min(1),
+  tiers: z.array(z.object({ unitCode: z.string().trim().min(1), unitName: z.string().trim().min(1), baseQuantity: z.string(), costRate: z.string(), billRate: z.string(), timeTypeBillRates: z.record(z.string(), z.string()).optional() })).min(1),
 })
 
 /**

@@ -90,7 +90,7 @@ const journalLineInput = z
 
 const journalPatchBody = z.object({
   /** Optimistic concurrency token from documents.revision_seq (exact form). */
-  expectedUpdatedAt: z.string().min(1),
+  expectedUpdatedAt: z.string().min(1).optional(),
   partyId: nullableUuidId.optional(),
   documentDate: isoDate().optional(),
   referenceNumber: z.string().nullable().optional(),
@@ -100,7 +100,7 @@ const journalPatchBody = z.object({
   extraDims: z.record(z.string(), z.string().nullable()).optional(),
   custom: z.record(z.string(), z.json()).optional(),
   lines: z.array(journalLineInput).optional(),
-})
+}).refine((body) => Object.keys(body).length > 0, 'At least one field must be provided.')
 
 /**
  * Autosave a manual-journal draft. Once it enters approval or posts, the
@@ -484,7 +484,8 @@ export const DELETE = defineRoute({
   permission: "gl.post",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "id": z.string() }),
-  body: z.object({ expectedUpdatedAt: z.string().min(1) }),
+  body: z.object({ action: z.literal('delete').default('delete'), expectedUpdatedAt: z.string().min(1).optional() })
+    .refine((body) => Object.keys(body).length > 0, 'A delete action is required.'),
   handler: async ({ body, params, authz: routeAuthz }) => {
 
     const gate = routeAuthz

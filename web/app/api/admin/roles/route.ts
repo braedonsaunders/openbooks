@@ -428,7 +428,7 @@ export const PATCH = defineRoute({
           changes.name = [role.name, name];
         }
         if (body.description !== undefined) {
-          const description = body.description.trim() || null;
+          const description = body.description?.trim() || null;
           sets.push(sql`description = ${description}`);
           changes.description = [role.description, description];
         }
@@ -451,11 +451,12 @@ export const DELETE = defineRoute({
   permission: "admin.roles.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   body: deleteRoleBodySchema,
-  handler: async ({ authz: routeAuthz }) => {
+  handler: async ({ body, authz: routeAuthz }) => {
 
     const gate = routeAuthz;
 
     const actor = gate.user;
+    const { id, replacementRoleId } = body;
 
 
 

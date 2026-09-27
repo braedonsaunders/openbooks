@@ -61,6 +61,7 @@ const closeActionSchemas = [
   z.object({ action: z.literal("reclose-reopen"), requestId: z.string().uuid(), reason: z.string().trim().min(1) }),
 ] as const;
 const requestBodySchema = z.discriminatedUnion("action", closeActionSchemas);
+type Body = Record<string, unknown>;
 
 
 export const runtime = "nodejs";
@@ -583,7 +584,8 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
 export const POST = defineRoute({
   public: "session",
   body: requestBodySchema,
-  handler: async ({ body, authz: routeAuthz }) => {
+  handler: async ({ body: parsedBody, authz: routeAuthz }) => {
+    const body = parsedBody as Body;
 
 
 
