@@ -21,18 +21,26 @@ import {
 import { isUuid } from "../../../../lib/list-params";
 import { z } from "zod";
 
+const apiKeyExpirySchema = z.string()
+  .datetime({ offset: true, error: "expiresAt must be an ISO date-time with a timezone or null" })
+  .refine((value) => new Date(value).getTime() > Date.now(), {
+    error: "expiresAt must be in the future",
+  })
+  .nullable()
+  .optional();
+
 const createApiKeyBodySchema = z.object({
   name: z.string().trim().min(1),
   scopes: z.array(z.string().trim().min(1), { error: "at least one scope is required" }).min(1, { error: "at least one scope is required" }),
   description: z.string().nullable().optional(),
-  expiresAt: z.string().datetime({ offset: true, error: "expiresAt must be an ISO date-time with a timezone or null" }).nullable().optional(),
+  expiresAt: apiKeyExpirySchema,
   rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\\d+$/)]).nullable().optional(),
 });
 
 const updateApiKeyBodySchema = z.object({
   id: z.string().uuid(),
   description: z.string().nullable().optional(),
-  expiresAt: z.string().datetime({ offset: true, error: "expiresAt must be an ISO date-time with a timezone or null" }).nullable().optional(),
+  expiresAt: apiKeyExpirySchema,
   isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
   name: z.string().trim().min(1).optional(),
   rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\\d+$/)]).nullable().optional(),
@@ -50,7 +58,7 @@ export const runtime = "nodejs";
  * — at rest we keep the SHA-256 hash + a 4-char preview.
  *
  * Scopes are the grant contract: every key must state at least one explicit
- * catalogue permission. Omitted or empty scope sets are rejected (400), never
+ * catalogue permission. Omitted or empty scope sets are rejected (422), never
  * defaulted to the owner's permission set — storage enforces the same
  * invariant (api_keys_scopes_non_empty) for every other writer.
  *
@@ -292,21 +300,9 @@ export const POST = defineRoute({
     // (omitted is kept as non-expiring for backward compatibility; new
     // clients should send null). No expiry policy table exists yet, so an
     // explicit null is currently allowed; a future policy may restrict it.
-    let expiresAt: string | null = null;
-    if (body.expiresAt === undefined || body.expiresAt === null) {
-      expiresAt = null;
-    } else if (typeof body.expiresAt === "string") {
-      if (!z.string().datetime({ offset: true }).safeParse(body.expiresAt).success) {
-        return NextResponse.json({ error: "expiresAt must be an ISO date-time with a timezone or null" }, { status: 400 });
-      }
-      const d = new Date(body.expiresAt);
-      if (d.getTime() <= Date.now()) {
-        return NextResponse.json({ error: "expiresAt must be in the future" }, { status: 400 });
-      }
-      expiresAt = d.toISOString();
-    } else {
-      return NextResponse.json({ error: "expiresAt must be an ISO date-time with a timezone or null" }, { status: 400 });
-    }
+    const expiresAt = body.expiresAt === undefined || body.expiresAt === null
+      ? null
+      : new Date(body.expiresAt).toISOString();
 
     const gen = generateApiKey();
     const description = typeof body.description === "string" ? body.description.trim() || null : null;
