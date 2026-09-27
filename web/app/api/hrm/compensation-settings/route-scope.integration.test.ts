@@ -29,13 +29,8 @@ const hooks = registerHooks({
       return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers")
       return virtual("export function cookies() { throw new Error('no cookies in route test') }");
-    if (
-      !specifier.startsWith("file:") &&
-      (specifier.endsWith("/lib/authz") ||
-        specifier.endsWith("/lib/authz.ts") ||
-        specifier === "./authz" ||
-        specifier === "./authz.ts")
-    ) {
+    if (!specifier.startsWith("file:") &&
+      (specifier.endsWith("/lib/authz") || specifier === "./authz")) {
       // Only identity resolution is doubled; the scope guard is the real
       // one, re-exported — never a second implementation.
       return virtual(`
