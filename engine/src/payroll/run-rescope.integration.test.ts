@@ -11,20 +11,9 @@ import { createPayRun, discardPayRun, payScheduleSubsidiaryProblem, rescopePaySc
 import { PayrollError } from "./error.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
-import { seedHiredEmployee } from "./filing-test-fixtures.ts";
-
-/**
- * The frozen-entity defect: a run freezes its paying entity and currency at
- * creation, and re-scoping the pay schedule afterwards healed nothing — the
- * run kept calculating (and would have posted) in the wrong currency, could
- * not be discarded, and duplicate protection blocked the correct replacement.
- *
- * The scenario mirrors the report with the packs the suite already exercises
- * end to end (CA root + US entity instead of GB + IE — the mechanism is
- * country-agnostic): an UNSCOPED schedule mints a run on the root entity,
- * the schedule is scoped afterwards, and the run must follow while it is
- * still uncommitted.
- */
+import { seedHiredEmployee, seedUsSuiAccount } from "./filing-test-fixtures.ts";
+import { US_PACK_RATES } from "./us/rates.ts";
+import { upsertStatutoryRate } from "./statutory-rates.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -66,7 +55,6 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
         netPayAccountId: netPayable,
         wagesTo: "expense",
         countries: ["US"],
-        us: { sui: { TX: { rate: "0.027", wageBase: "9000" } } },
       },
     })}::jsonb where id = ${org.orgId}`);
 
@@ -98,6 +86,13 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
     province: "TX", payBasis: "salary", currency: "USD", rate: "104000", rateBasis: "year",
     annualHours: "2080", partySubsidiaryId: usSubsidiaryId, filingStatus: "married_joint",
   });
+  const suiAccountId = await seedUsSuiAccount(org.orgId, actorId, "TX");
+  await upsertStatutoryRate({ orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
+    region: "TX", filingAccountId: suiAccountId, taxYear: 2026,
+    values: { rate: "0.027", wageBase: "9000" } });
+  const profile = await db.execute(sql`update employee_payroll_profiles set filing_account_id=${suiAccountId}
+    where org_id=${org.orgId} and employee_party_id=${employeeId} returning employee_party_id`);
+  assert.equal(profile.rows.length, 1);
   // Federal withholding distinguishes nonresident aliens before Pub. 15-T.
   await db.execute(sql`
     insert into employee_tax_certificates (org_id, employee_party_id, country, certificate_key,

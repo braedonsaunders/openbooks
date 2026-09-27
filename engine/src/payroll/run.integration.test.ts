@@ -15,13 +15,24 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { seedCanadianPayrollComponentsForTest } from "./filing-test-fixtures.ts";
+import { seedCanadianPayrollComponentsForTest, seedUsSuiAccount } from "./filing-test-fixtures.ts";
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
 import { assertPayRunNotStale, payRunStaleness } from "./readiness.ts";
 import { unionRemittanceReport, upsertUnionFringe } from "./union.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+async function seedUsSui(orgId: string, actorId: string, employeeId: string, state: string,
+  rate: string, wageBase: string): Promise<string> {
+  const filingAccountId = await seedUsSuiAccount(orgId, actorId, state);
+  await upsertStatutoryRate({ orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
+    region: state, filingAccountId, taxYear: 2026, values: { rate, wageBase } });
+  const profile = await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+    where org_id=${orgId} and employee_party_id=${employeeId} returning employee_party_id`);
+  if (profile.rows.length !== 1) throw new Error(`expected a payroll profile for ${employeeId}`);
+  return filingAccountId;
+}
 
 test(
   "pay run end to end: hourly Ontario employee, calculate → commit → balanced GL projection",
@@ -515,19 +526,9 @@ test(
             netPayAccountId: netPayable,
             wagesTo: "expense",
             countries: ["US"],
-            // Both states on the run carry their SUI rate: a live-but-
-            // unconfigured SUI refuses by name at calculate rather than
-            // accruing 0.00, so the second employee needs theirs too.
             us: {
-              // Presence-only FUTA the same way: the 2026 Schedule A is not
-              // transcribed, so an unconfigured FUTA refuses by name; the
-              // ordinary 0.6% full-credit figure is the TEST entering a
-              // number as an employer would, and no expectation asserts it.
+              // The fixture supplies the ordinary 0.6% FUTA method.
               futaRate: "0.006",
-              sui: {
-                TX: { rate: "0.027", wageBase: "9000" },
-                CA: { rate: "0.034", wageBase: "7000" },
-              },
             },
           },
         })}::jsonb where id = ${org.orgId}`);
@@ -552,11 +553,6 @@ test(
         values: { reserveBalance: "-100.00" },
       });
 
-      // The US employees are paid BY a US entity. The pay run is denominated in
-      // its subsidiary's functional currency and the wage rows are USD, so
-      // paying them from the CAD root would (correctly) demand a USD→CAD spot
-      // rate — resolvePayRate converts the wage rather than paying the raw
-      // number in the wrong currency.
       const usSubId = randomUUID();
       await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
@@ -628,13 +624,13 @@ test(
         values (${org.orgId}, ${caStateEmployee}, '2026-07-08', 8, 'approved', false,
                 'unbilled', 'actual', ${actorId}, ${actorId})`);
 
+      const txSuiAccount = await seedUsSui(org.orgId, actorId, employeeId, "TX", "0.027", "9000");
+      const caSuiAccount = await seedUsSui(org.orgId, actorId, caStateEmployee, "CA", "0.034", "7000");
+
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
-      const originalFilingAccountId = randomUUID();
-      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,is_default)
-        values(${originalFilingAccountId},${org.orgId},'US','us_ein','12-3456789','Original employer',true)`);
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       // BOTH employees calculate now. This assertion used to be "1 paid, 1
       // refused, because California is not supported" — California IS
@@ -741,8 +737,8 @@ test(
       const countryEvidence = (await db.execute(sql`select country,country_source from pay_stubs
         where org_id=${org.orgId} and pay_run_document_id=${run.documentId}`)).rows;
       assert.deepEqual(countryEvidence,[{country:'US',country_source:'calculation'},{country:'US',country_source:'calculation'}]);
-      assert.ok(historicalW2.every(slip => slip.filingAccountId === originalFilingAccountId));
-      assert.ok(historical941.every(quarter => quarter.filingAccountId === originalFilingAccountId));
+      assert.deepEqual([...new Set(historicalW2.map((slip) => slip.filingAccountId))].sort(), [caSuiAccount, txSuiAccount].sort());
+      assert.deepEqual([...new Set(historical941.map((quarter) => quarter.filingAccountId))].sort(), [caSuiAccount, txSuiAccount].sort());
       const nextFilingAccountId = randomUUID();
       await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name)
         values(${nextFilingAccountId},${org.orgId},'US','us_ein','98-7654321','Next employer')`);
@@ -892,13 +888,11 @@ test(
         update employee_payroll_profiles
            set country = 'US', province = 'TX', filing_status = 'single'
          where org_id = ${org.orgId} and employee_party_id = ${usEmployee}`);
+      await seedUsSui(org.orgId, actorId, usEmployee, "TX", "0.027", "9000");
       await db.execute(sql`
         update orgs set settings = settings || ${JSON.stringify({
-          // Presence-only FUTA the same way: the 2026 Schedule A is not
-          // transcribed, so an unconfigured FUTA refuses by name; the
-          // ordinary 0.6% full-credit figure is the TEST entering a number
-          // as an employer would, and no expectation asserts it.
-          payroll: { us: { futaRate: "0.006", sui: { TX: { rate: "0.027", wageBase: "9000" } } } },
+          // The fixture supplies the ordinary 0.6% FUTA method.
+          payroll: { us: { futaRate: "0.006" } },
         })}::jsonb where id = ${org.orgId}`);
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);

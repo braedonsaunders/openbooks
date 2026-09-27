@@ -11,13 +11,17 @@ import {createRemittanceBill,payrollRemittanceSummary} from './remittance.ts';
 test('unknown legacy liability accounts cannot follow setup changes or generate remittance bills',{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
  const fx=await seedAdoption();
  try{
+  const filingAccountId=randomUUID();
+  await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,remitter_type,is_default,created_by,updated_by)
+    values(${filingAccountId},${fx.orgId},'CA','ca_rp','123456789RP0001','CRA payroll','regular',true,${fx.actorId},${fx.actorId})`);
+  const profile=await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+    where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`);
+  assert.equal(profile.rows.length,1);
   const {input}=await calculatedRun(fx);await commitPayRun(input);
   const range={from:'2026-07-01',to:'2026-07-31'};
   const known=await payrollRemittanceSummary(fx.orgId,range);
   const original=known.flatMap(g=>g.components).find(c=>c.systemKey==='cpp')!.liabilityAccountId;
   assert.ok(original);
-  // Model pre-0094 evidence in this disposable fixture only. Re-enable the
-  // immutability guard in the same transaction, including on rollback.
   await db.transaction(async tx=>{
    await tx.execute(sql`alter table pay_stub_lines disable trigger pay_stub_line_liability_guard`);
    await tx.execute(sql`update pay_stub_lines l set liability_account_id=null,liability_account_source='unknown' from pay_components c where l.org_id=${fx.orgId} and c.org_id=l.org_id and c.id=l.component_id and c.system_key='cpp'`);
@@ -29,7 +33,6 @@ test('unknown legacy liability accounts cannot follow setup changes or generate 
   await db.execute(sql`insert into accounts(id,org_id,number,name,type,is_summary,is_active,eliminate,reconcilable,required_dimensions,custom,subsidiary_include_children) values(${replacement},${fx.orgId},'2311','Replacement payroll payable','liability_current_other',false,true,false,false,'[]'::jsonb,'{}'::jsonb,true)`);
   await db.execute(sql`update pay_components set liability_account_id=${replacement} where org_id=${fx.orgId} and system_key='cpp'`);
   await assert.rejects(payrollRemittanceSummary(fx.orgId,range),unresolved);
-  // A legacy statutory slot is equally mutable and cannot repair evidence.
   await db.execute(sql`update pay_components set liability_account_id=null where org_id=${fx.orgId} and system_key='cpp'`);
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{payroll,cppPayableAccountId}',to_jsonb(${replacement}::text)) where id=${fx.orgId}`);
   await assert.rejects(payrollRemittanceSummary(fx.orgId,range),unresolved);

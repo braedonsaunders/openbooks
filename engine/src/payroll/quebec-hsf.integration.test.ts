@@ -79,6 +79,9 @@ test(
             rqRemittancePartyId: rqVendorId,
           },
         })}::jsonb where id = ${org.orgId}`);
+      await db.execute(sql`insert into payroll_filing_accounts
+        (id, org_id, country, program_type, account_number, name, remitter_type, is_default, created_by, updated_by)
+        values (${randomUUID()}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0001', 'CRA payroll', 'regular', true, ${actorId}, ${actorId})`);
 
       await seedPayrollComponents(org.orgId, actorId, "CA");
       await setPackSlotAccount(org.orgId, actorId, "CA", "qc_income_tax", qcPayable);
