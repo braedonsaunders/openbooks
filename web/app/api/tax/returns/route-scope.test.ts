@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 
 // Tax pack installation changes organization-wide statutory forms and
 // libraries, so subsidiary-restricted setup managers cannot install them.
@@ -96,7 +96,7 @@ const provisionUrl = '../provision/route.ts?tax-setup-scope-test'
 const { POST: provisionPost } = (await import(provisionUrl)) as typeof import('../provision/route.ts')
 const returnsUrl = './route.ts?tax-setup-scope-test'
 const { POST: returnsPost } = (await import(returnsUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function jsonRequest(body: unknown): Request {
   return new Request('http://openbooks.test/api/tax', {

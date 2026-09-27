@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import test from "node:test";
+import test, { after } from "node:test";
 
 // Unsaved-create contract for POST /api/parties: opening the drawer writes
 // nothing, Cancel writes nothing, and the drawer's explicit Save lands here
@@ -179,7 +179,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?parties-create-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+after(() => hooks.deregister());
 
 function reset(): void {
   state.requestKey = null;

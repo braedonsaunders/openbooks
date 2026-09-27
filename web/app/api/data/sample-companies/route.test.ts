@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 
 // When provisioning fails mid-pipeline, POST /api/data/sample-companies
 // must return the NAMED stage refusal (stable code + operator-facing message)
@@ -102,7 +102,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?sample-companies-stage-refusal-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function post(body: unknown): Promise<Response> {
   return POST(
