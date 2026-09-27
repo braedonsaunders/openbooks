@@ -33,7 +33,6 @@ export const GET = defineRoute({
     ) {
       return notFound("record");
     }
-    void req;
     try {
       const settings = await getFeedbackSettings({
         orgId: authz.user.orgId,
