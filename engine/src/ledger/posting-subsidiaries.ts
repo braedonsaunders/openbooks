@@ -53,6 +53,7 @@ export async function applySubsidiaries(
   runner: Pick<typeof db, "execute">,
   doc: Doc,
   kernelLines: KernelLine[],
+  options: { bookId: string | null; regeneration: boolean },
 ): Promise<{
   lines: (KernelLine & {
     subsidiaryId: string;
@@ -177,7 +178,13 @@ export async function applySubsidiaries(
     // segment, for example) come from registered providers. They are
     // appended before the restriction checks below so every leg is
     // validated exactly like a kernel line; a provider can only add legs.
-    const segmentLegs = await collectBalancingLegs(runner, { orgId: doc.orgId, postingDate }, all);
+    const segmentLegs = await collectBalancingLegs(runner, {
+      orgId: doc.orgId,
+      postingDate,
+      bookId: options.bookId,
+      sourceDocumentId: doc.id,
+      regeneration: options.regeneration,
+    }, all);
     for (const leg of segmentLegs) {
       all.push({
         accountId: leg.accountId,

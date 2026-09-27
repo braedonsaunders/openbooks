@@ -410,6 +410,7 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
           tx,
           effectiveDoc,
           bookLines.map((l) => ({ ...l, amount: parseMoney(l.amount) })),
+          { bookId, regeneration: false },
         );
         assertFinalKernelBalance(secApplied.lines);
         await validateRequiredDimensions(tx, doc.orgId, secApplied.lines);

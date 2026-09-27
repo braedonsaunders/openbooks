@@ -524,7 +524,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   }
 
   // -- subsidiaries: stamp, intercompany-balance, validate restrictions ----
-  const subApplied = await applySubsidiaries(db, effectiveDoc, unionLines);
+  const subApplied = await applySubsidiaries(db, effectiveDoc, unionLines, { bookId: null, regeneration: false });
   assertFinalKernelBalance(subApplied.lines);
   // Script contributions translate through the same subsidiary/FX kernel
   // (defaults, spot rates, restriction checks). The host proved they balance
@@ -543,6 +543,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       db,
       effectiveDoc,
       customGlLines.map((l) => ({ ...l, amount: parseMoney(l.amount) })),
+      { bookId: null, regeneration: false },
     );
     if (translated.lines.length !== customGlLines.length) {
       throw new PostingError(
