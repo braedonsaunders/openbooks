@@ -23,31 +23,10 @@ import {
   type SelectOption,
 } from '@openbooks/ui'
 import { LOCALES, isLocale, type Locale } from '../../../../i18n/config'
+import type { ControlAccountRole } from '@openbooks/engine/src/records/control-accounts.ts'
 import { countryOptions } from '../../../../lib/countries'
 
 export type AccountOption = { id: string; label: string; type: string }
-
-type ControlAccounts = {
-  ar: string
-  ap: string
-  bank: string
-  taxCollected: string
-  taxPaid: string
-  employeePayable: string
-  fxUnrealizedGainLoss: string
-  fxRealizedGainLoss: string
-  retainageReceivable?: string
-  retainagePayable?: string
-  laborWip?: string
-  laborClearing?: string
-  unbilledReceivable?: string
-  projectRevenue?: string
-  incomeTaxExpense?: string
-  incomeTaxPayable?: string
-  deferredTaxAsset?: string
-  deferredTaxLiability?: string
-  valuationAllowance?: string
-}
 
 type Initial = {
   name: string
@@ -69,7 +48,7 @@ type Initial = {
   }
   requireVendorBillApproval: boolean
   requireStockCountReview: boolean
-  controlAccounts: ControlAccounts
+  controlAccounts: Partial<Record<ControlAccountRole, string>>
 }
 
 // Month message keys under admin.settings.months, indexed 0–11.
@@ -78,33 +57,10 @@ const MONTH_KEYS = [
   'july', 'august', 'september', 'october', 'november', 'december',
 ] as const
 
-// Control-account fields; label/hint are message keys under
-// admin.settings.controlAccounts.fields, translated at the render site.
-const CONTROL_FIELDS: { key: keyof ControlAccounts }[] = [
-  { key: 'ar' },
-  { key: 'ap' },
-  { key: 'bank' },
-  { key: 'taxCollected' },
-  { key: 'taxPaid' },
-  { key: 'employeePayable' },
-  { key: 'fxUnrealizedGainLoss' },
-  { key: 'fxRealizedGainLoss' },
-  { key: 'retainageReceivable' },
-  { key: 'retainagePayable' },
-  { key: 'laborWip' },
-  { key: 'laborClearing' },
-  { key: 'unbilledReceivable' },
-  { key: 'projectRevenue' },
-  { key: 'incomeTaxExpense' },
-  { key: 'incomeTaxPayable' },
-  { key: 'deferredTaxAsset' },
-  { key: 'deferredTaxLiability' },
-  { key: 'valuationAllowance' },
-]
-
 export function SettingsForm({
   initial,
   accounts,
+  controlAccountRoles,
   currencies,
   timeZones,
   multiSubsidiary = false,
@@ -114,6 +70,7 @@ export function SettingsForm({
 }: {
   initial: Initial
   accounts: AccountOption[]
+  controlAccountRoles: readonly ControlAccountRole[]
   currencies: { code: string; name: string }[]
   /** Canonical IANA zone names the business-time-zone picker offers. */
   timeZones: string[]
@@ -167,7 +124,7 @@ export function SettingsForm({
 
   const startMonthChanged = form.fiscalYearStartMonth !== initial.fiscalYearStartMonth
 
-  function setControl(key: keyof ControlAccounts, value: string) {
+  function setControl(key: ControlAccountRole, value: string) {
     setForm((f) => ({ ...f, controlAccounts: { ...f.controlAccounts, [key]: value } }))
   }
 
@@ -536,15 +493,15 @@ export function SettingsForm({
           </CardContent>
         ) : null}
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          {CONTROL_FIELDS.map((field) => {
-            const label = t(`controlAccounts.fields.${field.key}.label`)
+          {controlAccountRoles.map((role) => {
+            const label = t(`controlAccounts.fields.${role}.label`)
             return (
-              <div key={field.key} className="space-y-1.5">
-                <FieldLabel htmlFor={`ctrl-${field.key}`} help={t(`controlAccounts.fields.${field.key}.hint`)}>{label}</FieldLabel>
+              <div key={role} className="space-y-1.5">
+                <FieldLabel htmlFor={`ctrl-${role}`} help={t(`controlAccounts.fields.${role}.hint`)}>{label}</FieldLabel>
                 <SearchSelect
-                  id={`ctrl-${field.key}`}
-                  value={form.controlAccounts[field.key] ?? ''}
-                  onChange={(v) => setControl(field.key, v)}
+                  id={`ctrl-${role}`}
+                  value={form.controlAccounts[role] ?? ''}
+                  onChange={(v) => setControl(role, v)}
                   options={accountOptions}
                   placeholder={t('controlAccounts.selectPlaceholder')}
                   searchPlaceholder={t('controlAccounts.searchPlaceholder')}

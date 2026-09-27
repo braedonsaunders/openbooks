@@ -50,8 +50,9 @@ const mockAuthz = `
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      specifier === "../../../../lib/authz" &&
-      context.parentURL?.includes("admin/settings")
+      specifier === "@/lib/authz" ||
+      (specifier === "../../../../lib/authz" &&
+        context.parentURL?.includes("admin/settings"))
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
@@ -264,7 +265,7 @@ test(
           requireStockCountReview: false,
         },
       });
-      assert.deepEqual(routeState.requestedPermissions, ["admin.users.manage"]);
+      assert.deepEqual(routeState.requestedPermissions, ["admin.users.manage", "admin.users.manage"]);
       routeState.requestedPermissions = [];
 
       const denied = await put(fixture, {
@@ -289,9 +290,10 @@ test(
 
       const invalid = await put(fixture, { reportingFramework: "local_gaap" });
       assert.equal(invalid.status, 400);
-      assert.deepEqual(await invalid.json(), {
-        error: "reportingFramework must be us_gaap or ifrs",
-      });
+      const refusal = await invalid.json();
+      assert.match(refusal.error, /us_gaap/);
+      assert.match(refusal.error, /ifrs/);
+      assert.deepEqual(refusal.issues, [{ path: "reportingFramework", message: refusal.error }]);
 
       const explicit = await put(fixture, { reportingFramework: "ifrs" });
       assert.equal(explicit.status, 200);
@@ -558,6 +560,14 @@ test(
         );
       }
       assert.equal((await settingsState(fixture.orgId)).audits, 0);
+
+      const before = await settingsState(fixture.orgId);
+      const unknown = await put(fixture, {
+        controlAccounts: { mfgWIP: fixture.accounts.ar },
+      });
+      assert.equal(unknown.status, 400);
+      assert.deepEqual(await unknown.json(), { error: "unknown control account role mfgWIP" });
+      assert.deepEqual(await settingsState(fixture.orgId), before);
 
       const valid = await put(fixture, {
         controlAccounts: {

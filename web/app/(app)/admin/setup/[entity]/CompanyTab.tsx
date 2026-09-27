@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
+import { CONTROL_ACCOUNT_ROLES } from '@openbooks/engine/src/records/control-accounts.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { canonicalTimeZone, listCanonicalTimeZones } from '@openbooks/engine/src/platform/time-zone.ts'
 import { hasVendorBillApprovalFlow } from '@openbooks/engine/src/flows/index.ts'
@@ -82,28 +83,11 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
           requireStockCountReview:
             (settings.approvals as Record<string, unknown> | undefined)
               ?.requireStockCountReview === true,
-          controlAccounts: {
-            ar: control.ar ?? '',
-            ap: control.ap ?? '',
-            bank: control.bank ?? '',
-            taxCollected: control.taxCollected ?? '',
-            taxPaid: control.taxPaid ?? '',
-            employeePayable: control.employeePayable ?? '',
-            fxUnrealizedGainLoss: control.fxUnrealizedGainLoss ?? '',
-            fxRealizedGainLoss: control.fxRealizedGainLoss ?? '',
-            retainageReceivable: control.retainageReceivable ?? '',
-            retainagePayable: control.retainagePayable ?? '',
-            laborWip: control.laborWip ?? '',
-            laborClearing: control.laborClearing ?? '',
-            unbilledReceivable: control.unbilledReceivable ?? '',
-            projectRevenue: control.projectRevenue ?? '',
-            incomeTaxExpense: control.incomeTaxExpense ?? '',
-            incomeTaxPayable: control.incomeTaxPayable ?? '',
-            deferredTaxAsset: control.deferredTaxAsset ?? '',
-            deferredTaxLiability: control.deferredTaxLiability ?? '',
-            valuationAllowance: control.valuationAllowance ?? '',
-          },
+          controlAccounts: Object.fromEntries(
+            CONTROL_ACCOUNT_ROLES.map((role) => [role, control[role] ?? '']),
+          ),
         }}
+        controlAccountRoles={CONTROL_ACCOUNT_ROLES}
         accounts={accountOptions}
         currencies={currencies.rows as { code: string; name: string }[]}
         timeZones={listCanonicalTimeZones()}

@@ -679,6 +679,18 @@
           "label": "従業員未払金",
           "hint": "従業員への経費立替の未払分"
         },
+        "payrollDeductions": {
+          "label": "給与控除預り金",
+          "hint": "行政機関等に納付する法定給与控除額および事業主負担分"
+        },
+        "employeeReceivable": {
+          "label": "従業員未収金",
+          "hint": "従業員が会社に返済する法人カードの私的利用額"
+        },
+        "payrollVariance": {
+          "label": "給与差異",
+          "hint": "プロジェクトに計上した労務費と実際の給与費用との差額"
+        },
         "fxUnrealizedGainLoss": {
           "label": "為替未実現損益",
           "hint": "外貨建残高の期末再評価が計上される場所"

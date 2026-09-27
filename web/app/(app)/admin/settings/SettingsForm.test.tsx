@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { CONTROL_ACCOUNT_ROLES } from '@openbooks/engine/src/records/control-accounts.ts'
 
 declare global {
   var __settingsRouter: { push(url: string): void; refresh(): void } | undefined
@@ -72,6 +73,7 @@ const INITIAL: FormProps['initial'] = {
 }
 
 const PROPS: Omit<FormProps, 'initial'> = {
+  controlAccountRoles: CONTROL_ACCOUNT_ROLES,
   accounts: [],
   currencies: [
     { code: 'USD', name: 'US Dollar' },

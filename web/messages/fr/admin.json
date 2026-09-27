@@ -679,6 +679,18 @@
           "label": "Dû aux employés",
           "hint": "Remboursements de dépenses dus au personnel"
         },
+        "payrollDeductions": {
+          "label": "Retenues sur salaires",
+          "hint": "Retenues légales sur salaires et cotisations patronales à reverser aux organismes compétents"
+        },
+        "employeeReceivable": {
+          "label": "Créances sur le personnel",
+          "hint": "Dépenses personnelles par carte d’entreprise à rembourser par le personnel"
+        },
+        "payrollVariance": {
+          "label": "Écarts de paie",
+          "hint": "Différences entre les coûts de main-d’œuvre imputés aux projets et les coûts réels de paie"
+        },
         "fxUnrealizedGainLoss": {
           "label": "Gain/perte de change latent",
           "hint": "Où est comptabilisée la réévaluation de fin de période des soldes en devises"
