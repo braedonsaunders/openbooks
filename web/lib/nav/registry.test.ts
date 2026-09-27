@@ -60,6 +60,7 @@ test('default workspaces follow the approved journey-oriented information archit
     'warehouses',
     'picks',
     'shipments',
+    'returns',
     'equipment',
     'employees',
     'hrm',
