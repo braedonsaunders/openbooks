@@ -79,10 +79,10 @@ async function loadOrder(tx: SqlExecutor, orgId: string, id: string, lock = fals
 
 async function itemDetails(tx: SqlExecutor, orgId: string, itemId: string) {
   const row = (await tx.execute<{
-    id: string; code: string | null; name: string; subsidiary_id: string | null; is_active: boolean;
+    id: string; code: string | null; name: string; is_active: boolean;
     base_unit: string | null;
   }>(sql`
-    select i.id, i.code, i.name, i.subsidiary_id, i.is_active, profile.base_unit
+    select i.id, i.code, i.name, i.is_active, profile.base_unit
       from items i left join item_inventory_profiles profile
         on profile.org_id=i.org_id and profile.item_id=i.id
      where i.org_id=${orgId} and i.id=${itemId}`)).rows[0];
@@ -207,8 +207,11 @@ async function insertDraft(
 ): Promise<WorkOrderRead> {
   const item = await itemDetails(tx, orgId, input.producedItemId);
   if (!item.is_active) refuse(`Produced item ${item.code?.trim() || item.name} is inactive.`, "inactive_item", "Reactivate the item in Item setup before creating a work order.");
-  if (item.subsidiary_id && item.subsidiary_id !== input.subsidiaryId) {
-    refuse("The produced item belongs to another subsidiary.", "subsidiary_mismatch", "Choose the item's subsidiary or a produced item assigned to this subsidiary.");
+  const subsidiaries = await loadSubsidiaryContext(tx as Runner, orgId);
+  const subsidiary = subsidiaries.byId.get(input.subsidiaryId);
+  if (!subsidiary) throw new ManufacturingNotFoundError();
+  if (!subsidiary.isActive || subsidiary.isElimination) {
+    refuse("Choose an active operating subsidiary for the work order.", "invalid_work_order_subsidiary", "Choose an active, non-elimination subsidiary in Company setup.");
   }
   if (!item.base_unit) {
     refuse(`Produced item ${item.code?.trim() || item.name} has no inventory profile.`, "item_not_stocked", "Add an inventory costing profile in the item's Inventory costing section.");
