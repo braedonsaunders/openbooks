@@ -142,7 +142,7 @@ function postRequest(body: unknown): Request {
 test("a missing feature flag 404s before the service runs", async () => {
   reset();
   routeState.featureOn = false;
-  const get = await collectionRoute!.GET();
+  const get = await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/review-cycles"));
   assert.equal(get.status, 404);
   assert.deepEqual(routeState.calls, []);
   const post = await collectionRoute!.POST(postRequest({ name: "X" }));
@@ -154,14 +154,14 @@ test("an unauthenticated caller never reaches the service", async () => {
   reset();
   routeState.authz = null;
   routeState.gate = { status: 401 };
-  assert.equal((await collectionRoute!.GET()).status, 401);
+  assert.equal((await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/review-cycles"))).status, 401);
   assert.equal((await collectionRoute!.POST(postRequest({ name: "X" }))).status, 401);
   assert.deepEqual(routeState.calls, []);
 });
 
 test("listing fans out to the privacy-scoped loader with the caller's identity", async () => {
   reset();
-  const response = await collectionRoute!.GET();
+  const response = await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/review-cycles"));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { cycles: [{ id: "cycle-1", scoped: true }] });
   assert.deepEqual(routeState.calls, [
