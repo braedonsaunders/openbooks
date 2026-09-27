@@ -111,10 +111,9 @@ test(
       await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,remitter_type,is_default)
       values(${account},${fx.orgId},'CA','ca_rp','123456789RP0001','Later account','regular',true)`);
       assert.deepEqual(await t4Slips(fx.orgId, 2026), before);
-      await assert.rejects(
-        payrollRemittanceSummary(fx.orgId, { from: "2026-07-01", to: "2026-07-31" }),
-        /no filing account with a declared remitter type/,
-      );
+      const remittance = await payrollRemittanceSummary(fx.orgId, { from: "2026-07-01", to: "2026-07-31" });
+      assert.equal(remittance[0]?.filingAccount.id, null);
+      assert.equal(remittance[0]?.hasUnknownFilingAccount, true);
       await assert.rejects(
         db.execute(
           sql`update pay_stubs set filing_account_id=${account} where org_id=${fx.orgId} and id=${stub.id}`,
