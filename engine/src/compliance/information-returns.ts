@@ -625,6 +625,7 @@ export async function loadPaymentTraces(args: {
              where jl.amount < 0 and not jl.is_open_item and funding.type = 'asset_bank'
            ), 0) as cash
       from documents d
+      -- Live entries only: a voided payment never paid reportable cash.
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
       join accounts funding on funding.id = jl.account_id and funding.org_id = jl.org_id
@@ -655,6 +656,7 @@ export async function loadPaymentTraces(args: {
     with paid as (
       select d.id as payment_id, jl.id as line_id
         from documents d
+        -- Live entries only: settlements are read from the same live payments as the cash above.
         join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item
        where d.org_id = ${args.orgId} and d.id = any(${`{${paymentIds.join(',')}}`}::uuid[])

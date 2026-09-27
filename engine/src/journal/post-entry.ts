@@ -548,6 +548,7 @@ export async function markEntryReversed(
   const updated = (await executor.execute<{ id: string }>(sql`
     update journal_entries
        set status = 'reversed', updated_at = now(), updated_by = ${input.actorId ?? null}
+     -- Live entries only: an entry already reversed cannot be marked again.
      where org_id = ${input.orgId} and id = ${input.entryId} and status = 'posted'
      returning id`)).rows[0];
   if (!updated)
