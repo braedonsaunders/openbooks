@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
-import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
 import { moneyRefusal } from "../money/decimal-refusal.ts";
 import { db, orgContext, withBypass, withOrg, withOrgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { now } from "../platform/clock.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
-import { add, mul, mulRatio, neg, normalizeMoney, toUnits } from "../money/money.ts";
+import { add, mul, mulDecimalFactors, mulRatio, neg, normalizeMoney, toUnits } from "../money/money.ts";
 import { computeLineTaxes } from "../tax/tax.ts";
 import { loadTaxComponentConfig, persistLineTaxComponents } from "../tax/persist.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -162,6 +162,28 @@ function persistSubscriptionMoney(
   requirement: "nonnegative" | "positive",
 ): string {
   return normalizeSubscriptionMoney(value, label, requirement);
+}
+
+function persistRatedQuantity(value: unknown): string {
+  const exact = canonicalDecimal(value, 8);
+  if (exact === null || compareDecimal(exact, "0") <= 0) {
+    throw new SubscriptionError("rated invoice quantity must be a positive decimal with no more than 8 decimal places");
+  }
+  if (exact.split(".", 1)[0]!.replace(/^0+/, "").length > 20) {
+    throw new SubscriptionError("rated invoice quantity is outside the supported numeric(28,8) range");
+  }
+  return exact;
+}
+
+function persistRatedUnitPrice(value: unknown): string {
+  const exact = canonicalDecimal(value, 8);
+  if (exact === null || compareDecimal(exact, "0") < 0) {
+    throw new SubscriptionError("rated invoice unit price must be a nonnegative decimal with no more than 8 decimal places");
+  }
+  if (exact.split(".", 1)[0]!.replace(/^0+/, "").length > 20) {
+    throw new SubscriptionError("rated invoice unit price is outside the supported numeric(28,8) range");
+  }
+  return exact;
 }
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
@@ -578,9 +600,24 @@ async function createSubscriptionInvoiceInTransaction(
     taxComponents: Awaited<ReturnType<typeof computeLineTaxes>>["components"];
   }> = [];
   for (const input of invoiceLines) {
-    const quantity = persistSubscriptionMoney(input.quantity, "quantity", "positive");
-    const unitPrice = persistSubscriptionMoney(input.unitPrice, "unit price", "nonnegative");
-    const amount = mul(quantity, unitPrice);
+    const carriesRatedAmount = input.amount !== undefined;
+    const quantity = carriesRatedAmount
+      ? persistRatedQuantity(input.quantity)
+      : persistSubscriptionMoney(input.quantity, "quantity", "positive");
+    const unitPrice = carriesRatedAmount
+      ? persistRatedUnitPrice(input.unitPrice)
+      : persistSubscriptionMoney(input.unitPrice, "unit price", "nonnegative");
+    const exactAmount = carriesRatedAmount ? canonicalDecimal(input.amount, 4) : null;
+    if (carriesRatedAmount && exactAmount === null) {
+      throw new SubscriptionError("rated invoice amount must be an exact money amount");
+    }
+    const amount = carriesRatedAmount ? normalizeMoney(exactAmount!) : mul(quantity, unitPrice);
+    if (carriesRatedAmount && (compareDecimal(amount, "0") < 0 || toUnits(amount) > POSTGRES_MONEY_MAX_UNITS)) {
+      throw new SubscriptionError("rated invoice amount is outside the supported nonnegative numeric(19,4) range");
+    }
+    if (carriesRatedAmount && compareDecimal(amount, mulDecimalFactors("1", [unitPrice, quantity])) !== 0) {
+      throw new SubscriptionError("rated invoice amount does not reproduce from its quantity and unit price");
+    }
     const applyTax = spec.applyTax !== false && input.taxCodeId && toUnits(amount) > 0n;
     let lineTax = "0.0000";
     let taxComponents: Awaited<ReturnType<typeof computeLineTaxes>>["components"] = [];
@@ -630,14 +667,15 @@ async function createSubscriptionInvoiceInTransaction(
   const invoiceId = created.rows[0]!.id;
 
   for (const [index, preparedLine] of prepared.entries()) {
-    const line = (await db.execute<{ id: string }>(sql`
+    const line = await db.execute<{ id: string }>(sql`
       insert into document_lines (org_id, document_id, line_number, item_id, account_id, description, quantity,
-            unit_price, amount, tax_code_id, tax_amount, is_billable, created_by)
+            unit_price, amount, tax_code_id, tax_amount, custom, is_billable, created_by)
       values (${spec.orgId}, ${invoiceId}, ${index + 1}, ${preparedLine.input.itemId}, ${preparedLine.accountId},
             ${preparedLine.input.description}, ${preparedLine.input.quantity}, ${preparedLine.input.unitPrice},
-            ${preparedLine.amount}, ${preparedLine.input.taxCodeId}, ${preparedLine.taxAmount}, true, ${spec.actorId})
+            ${preparedLine.amount}, ${preparedLine.input.taxCodeId}, ${preparedLine.taxAmount},
+            ${JSON.stringify(preparedLine.input.custom ?? {})}::jsonb, true, ${spec.actorId})
       returning id
-    `));
+    `);
     if (preparedLine.taxComponents.length) {
       await persistLineTaxComponents(spec.orgId, line.rows[0]!.id, preparedLine.taxComponents, spec.actorId);
     }

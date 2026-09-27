@@ -346,6 +346,72 @@ async function overheadRecomputes(orgId: string): Promise<Check> {
     detail: first
       ? `${mismatches.length} overhead time-entry line mismatch(es); first entry ${first.entry_id}, line ${first.line_number ?? "missing"}: ${first.reason}, expected ${first.expected}, actual ${first.actual ?? "missing"}`
       : "all posted overhead time-entry lines recompute from their effective per-hour rate",
+
+  };
+}
+
+async function usageInvoiceTrace(orgId: string): Promise<Check> {
+  const issues = await all<{
+    document_number: string;
+    invoice_id: string;
+    line_number: number | null;
+    line_id: string | null;
+    issue: string;
+  }>(sql`
+    select d.document_number, d.id::text as invoice_id,
+           l.line_number, l.id::text as line_id,
+           case
+             when l.id is null then 'invoice has no lines'
+             when jsonb_typeof(l.custom->'rating') is distinct from 'object' then 'line has no rating trace'
+             when l.custom->'rating'->>'runId' is distinct from d.custom->>'usageRunId' then 'line names a different rating run'
+             when run.status is distinct from 'active' then 'rating run is not active'
+             when run.invoice_id is distinct from d.id then 'rating run does not name this invoice'
+             when coalesce(l.custom->'rating'->>'quantity', '') !~ '^-?[0-9]+(\\.[0-9]+)?$'
+               or coalesce(l.custom->'rating'->>'unitPrice', '') !~ '^-?[0-9]+(\\.[0-9]+)?$'
+               then 'trace quantity or unit price is not an exact decimal'
+             when l.amount <> round(
+               (l.custom->'rating'->>'quantity')::numeric *
+               (l.custom->'rating'->>'unitPrice')::numeric,
+               4
+             ) then 'line amount differs from the rounded trace quantity and unit price'
+             else 'unknown trace issue'
+           end as issue
+      from documents d
+      left join document_lines l on l.org_id = d.org_id and l.document_id = d.id
+      left join usage_rating_runs run
+        on run.org_id = d.org_id and run.id::text = d.custom->>'usageRunId'
+     where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
+       and nullif(d.custom->>'usageRunId', '') is not null
+       and (
+         l.id is null
+         or jsonb_typeof(l.custom->'rating') is distinct from 'object'
+         or l.custom->'rating'->>'runId' is distinct from d.custom->>'usageRunId'
+         or run.status is distinct from 'active'
+         or run.invoice_id is distinct from d.id
+         or coalesce(l.custom->'rating'->>'quantity', '') !~ '^-?[0-9]+(\\.[0-9]+)?$'
+         or coalesce(l.custom->'rating'->>'unitPrice', '') !~ '^-?[0-9]+(\\.[0-9]+)?$'
+         or CASE
+              WHEN coalesce(l.custom->'rating'->>'quantity', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+               and coalesce(l.custom->'rating'->>'unitPrice', '') ~ '^-?[0-9]+(\\.[0-9]+)?$'
+              THEN l.amount <> round(
+                (l.custom->'rating'->>'quantity')::numeric *
+                (l.custom->'rating'->>'unitPrice')::numeric,
+                4
+              )
+              ELSE false
+            END
+       )
+     order by d.document_number, l.line_number
+     limit 20`);
+  const detail = issues.length === 0
+    ? "posted usage invoices have complete rating traces and reconcile to their active runs"
+    : issues.map((row) =>
+        `invoice ${row.document_number} (${row.invoice_id}) line ${row.line_number ?? "(missing)"}${row.line_id ? ` ${row.line_id}` : ""}: ${row.issue}`,
+      ).join("; ");
+  return {
+    name: "usage-invoice-trace",
+    ok: issues.length === 0,
+    detail: issues.length === 0 ? `no usage invoice trace errors; ${detail}` : detail,
   };
 }
 
@@ -961,6 +1027,7 @@ export async function runScenario(
   });
 
   checks.push(await saasMetricsTieOut(orgId));
+  checks.push(await usageInvoiceTrace(orgId));
 
   // -- Inventory subledger ↔ GL tie-out per legal entity and control account.
   // The inventory control accounts are the asset accounts on item costing
