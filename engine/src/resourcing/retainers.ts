@@ -3,6 +3,7 @@ import {
   asc,
   eq,
   gte,
+  isNull,
   lte,
   notExists,
   sql,
@@ -31,8 +32,9 @@ import { parseIsoDate } from "../platform/business-date.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { ResourcingRefusal } from "./errors.ts";
 import { weekDates } from "./weeks.ts";
+import { syncRetainerActivation } from "./retainer-billing.ts";
 
-type RetainerRow = typeof resRetainers.$inferSelect;
+export type RetainerRow = typeof resRetainers.$inferSelect;
 type RetainerWriteRow = RetainerRow & Record<string, unknown>;
 type RetainerAuditRow = { id: string } & Record<string, unknown>;
 type RetainerAuditLogWriteRow = { row_id: string } & Record<string, unknown>;
@@ -75,6 +77,72 @@ export interface CreateRetainerInput {
   endsOn: string;
   retainerItemId: string;
   custom?: Record<string, unknown>;
+}
+
+export type UpdateRetainerDraftInput = RetainerWriteInput & Partial<Pick<
+  CreateRetainerInput,
+  "projectId" | "customerPartyId" | "kind" | "currency" | "totalAmount" | "totalHours" | "unitRate" | "startsOn" | "endsOn" | "retainerItemId"
+>> & { custom?: Record<string, unknown> };
+
+export type NormalizedRetainerTerms = {
+  startsOn: string;
+  endsOn: string;
+  totalAmount: string;
+  totalHours: string | null;
+  unitRate: string | null;
+};
+
+/** Apply the same exact-date and cent-rounding rules to new and edited terms. */
+export function normalizeRetainerTerms(
+  input: Pick<CreateRetainerInput, "kind" | "totalAmount" | "totalHours" | "unitRate" | "startsOn" | "endsOn">,
+): NormalizedRetainerTerms {
+  const startsOn = requireIsoDate(input.startsOn, "startsOn");
+  const endsOn = requireIsoDate(input.endsOn, "endsOn");
+  if (startsOn > endsOn) {
+    throw new ResourcingRefusal(
+      422,
+      "retainer_date_order",
+      "retainer end date is before its start date",
+      "enter an end date on or after the start date",
+      "endsOn",
+    );
+  }
+
+  let totalAmount: string;
+  let totalHours: string | null = null;
+  let unitRate: string | null = null;
+  if (input.kind === "hours") {
+    totalHours = requireDecimal(input.totalHours, "totalHours", "a number of hours", "invalid_hours");
+    unitRate = requireDecimal(input.unitRate, "unitRate", "a rate per hour", "invalid_unit_rate");
+    if (cmp(totalHours, "0") <= 0) {
+      throw new ResourcingRefusal(422, "invalid_hours", "retainer hours must be positive", "enter a positive number of hours", "totalHours");
+    }
+    if (cmp(unitRate, "0") <= 0) {
+      throw new ResourcingRefusal(422, "invalid_unit_rate", "retainer unit rate must be positive", "enter a positive rate per hour", "unitRate");
+    }
+    totalAmount = roundMoney(mulDecimal(roundMoney(totalHours, 4), roundMoney(unitRate, 4)), 2);
+  } else {
+    if (input.totalHours != null || input.unitRate != null) {
+      throw new ResourcingRefusal(
+        422,
+        "fees_retainer_has_hour_terms",
+        "a fees retainer cannot carry hour terms",
+        "omit total hours and unit rate for a fees retainer",
+        "kind",
+      );
+    }
+    totalAmount = roundMoney(requireDecimal(input.totalAmount, "totalAmount", "an amount", "invalid_amount"), 2);
+  }
+  if (cmp(totalAmount, "0") <= 0) {
+    throw new ResourcingRefusal(
+      422,
+      "retainer_amount_too_small",
+      "retainer total amount must be at least one cent",
+      "increase the retainer terms so the total rounds to at least one cent",
+      "totalAmount",
+    );
+  }
+  return { startsOn, endsOn, totalAmount, totalHours, unitRate };
 }
 
 type RetainerCreateIdempotency = {
@@ -227,53 +295,7 @@ export async function createRetainer(
   input: CreateRetainerInput,
   idempotency?: RetainerCreateIdempotency,
 ): Promise<RetainerRow> {
-  const startsOn = requireIsoDate(input.startsOn, "startsOn");
-  const endsOn = requireIsoDate(input.endsOn, "endsOn");
-  if (startsOn > endsOn) {
-    throw new ResourcingRefusal(
-      422,
-      "retainer_date_order",
-      "retainer end date is before its start date",
-      "enter an end date on or after the start date",
-      "endsOn",
-    );
-  }
-
-  let totalAmount: string;
-  let totalHours: string | null = null;
-  let unitRate: string | null = null;
-  if (input.kind === "hours") {
-    totalHours = requireDecimal(input.totalHours, "totalHours", "a number of hours", "invalid_hours");
-    unitRate = requireDecimal(input.unitRate, "unitRate", "a rate per hour", "invalid_unit_rate");
-    if (cmp(totalHours, "0") <= 0) {
-      throw new ResourcingRefusal(422, "invalid_hours", "retainer hours must be positive", "enter a positive number of hours", "totalHours");
-    }
-    if (cmp(unitRate, "0") <= 0) {
-      throw new ResourcingRefusal(422, "invalid_unit_rate", "retainer unit rate must be positive", "enter a positive rate per hour", "unitRate");
-    }
-    totalAmount = roundMoney(mulDecimal(roundMoney(totalHours, 4), roundMoney(unitRate, 4)), 2);
-  } else {
-    if (input.totalHours != null || input.unitRate != null) {
-      throw new ResourcingRefusal(
-        422,
-        "fees_retainer_has_hour_terms",
-        "a fees retainer cannot carry hour terms",
-        "omit total hours and unit rate for a fees retainer",
-        "kind",
-      );
-    }
-    const rawAmount = requireDecimal(input.totalAmount, "totalAmount", "an amount", "invalid_amount");
-    totalAmount = roundMoney(rawAmount, 2);
-  }
-  if (cmp(totalAmount, "0") <= 0) {
-    throw new ResourcingRefusal(
-      422,
-      "retainer_amount_too_small",
-      "retainer total amount must be at least one cent",
-      "increase the retainer terms so the total rounds to at least one cent",
-      "totalAmount",
-    );
-  }
+  const { startsOn, endsOn, totalAmount, totalHours, unitRate } = normalizeRetainerTerms(input);
 
   return withRetainerWrite(input.orgId, async (tx) => {
     await lockProjectForScope(tx, input.orgId, input.projectId, input.allowedSubsidiaryIds);
@@ -371,9 +393,107 @@ export async function createRetainer(
   });
 }
 
+/** Change an unbilled draft's commercial terms before it has an invoice. */
+export async function updateRetainerDraft(input: UpdateRetainerDraftInput): Promise<RetainerRow> {
+  return withRetainerWrite(input.orgId, async (tx) => {
+    const current = await loadRetainerForUpdate(input);
+    if (current.state !== "draft") {
+      throw new ResourcingRefusal(
+        409,
+        "retainer_not_editable",
+        `a ${current.state} retainer cannot be edited`,
+        "edit a draft retainer before invoicing it",
+        "retainerId",
+      );
+    }
+    if (current.invoiceDocumentId !== null) {
+      throw new ResourcingRefusal(
+        409,
+        "retainer_invoice_linked",
+        "a retainer with a linked invoice cannot be edited",
+        "delete the draft invoice before changing retainer terms",
+        "retainerId",
+      );
+    }
+
+    const projectId = input.projectId ?? current.projectId;
+    const customerPartyId = input.customerPartyId ?? current.customerPartyId;
+    const kind = input.kind ?? current.kind;
+    await lockProjectForScope(tx, input.orgId, projectId, input.allowedSubsidiaryIds);
+    const project = (await tx.execute<{ customer_id: string | null; status: string }>(sql`
+      select customer_id, status from projects
+       where id = ${projectId} and org_id = ${input.orgId} for share
+    `)).rows[0];
+    if (!project) throw new ScopeNotFoundError();
+    if (project.status === "closed" || project.status === "cancelled") {
+      throw new ResourcingRefusal(409, "project_not_open", `cannot assign a retainer to a ${project.status} project`, "reopen the project or choose an active one", "projectId");
+    }
+    if (project.customer_id !== customerPartyId) {
+      throw new ResourcingRefusal(422, "retainer_customer_mismatch", "retainer customer does not match the project's customer", "select the customer assigned to this project", "customerPartyId");
+    }
+
+    const normalized = normalizeRetainerTerms({
+      kind,
+      totalAmount: input.totalAmount === undefined ? current.totalAmount : input.totalAmount,
+      totalHours: input.totalHours === undefined ? current.totalHours : input.totalHours,
+      unitRate: input.unitRate === undefined ? current.unitRate : input.unitRate,
+      startsOn: input.startsOn ?? current.startsOn,
+      endsOn: input.endsOn ?? current.endsOn,
+    });
+    const currency = await resolveRetainerCurrency(tx, {
+      orgId: input.orgId,
+      customerPartyId,
+      currency: input.currency ?? current.currency,
+    });
+    const next = {
+      projectId,
+      customerPartyId,
+      kind,
+      totalAmount: normalized.totalAmount,
+      totalHours: normalized.totalHours,
+      unitRate: normalized.unitRate,
+      startsOn: normalized.startsOn,
+      endsOn: normalized.endsOn,
+      retainerItemId: input.retainerItemId ?? current.retainerItemId,
+      currency,
+      custom: input.custom ?? current.custom,
+    };
+    const updated = await tx.update(resRetainers).set({
+      ...next,
+      updatedAt: new Date(),
+      updatedBy: input.actorId,
+    }).where(and(
+      eq(resRetainers.orgId, input.orgId),
+      eq(resRetainers.id, input.retainerId),
+      eq(resRetainers.state, "draft"),
+      isNull(resRetainers.invoiceDocumentId),
+    )).returning();
+    assertWriteRows(updated, 1, "retainer draft update");
+    await writeAudit(input.orgId, "res_retainers", input.retainerId, "update", {
+      before: {
+        projectId: current.projectId,
+        customerPartyId: current.customerPartyId,
+        kind: current.kind,
+        totalAmount: current.totalAmount,
+        totalHours: current.totalHours,
+        unitRate: current.unitRate,
+        startsOn: current.startsOn,
+        endsOn: current.endsOn,
+        retainerItemId: current.retainerItemId,
+        currency: current.currency,
+        custom: current.custom,
+      },
+      after: next,
+    }, input.actorId);
+    return updated[0]!;
+  });
+}
+
 export async function draftHoursDrawdown(input: DraftHoursDrawdownInput): Promise<DraftDrawdownResult> {
   const dates = requireSunday(input.sunday);
   return withRetainerWrite(input.orgId, async () => {
+    await loadRetainerForScope(input);
+    await syncRetainerActivation(db, input.orgId, input.retainerId, input.actorId);
     const retainer = await loadRetainerForUpdate(input);
     requireActiveRetainer(retainer);
     if (retainer.kind !== "hours") {
@@ -423,6 +543,11 @@ export async function draftHoursDrawdown(input: DraftHoursDrawdownInput): Promis
       throw new Error("hours retainer is missing its required hour terms");
     }
     const priced = priceHoursDrawdown(entries, retainer.unitRate);
+    const hoursByMonth = new Map<string, string>();
+    for (const entry of priced.byEntry) {
+      const month = entry.workedOn.slice(0, 7);
+      hoursByMonth.set(month, add(hoursByMonth.get(month) ?? "0", entry.hours));
+    }
     const balance = await retainerBalance(input.orgId, retainer);
     assertDrawdownWithinBalance(priced.total, balance.amount, "hours");
 
@@ -454,6 +579,8 @@ export async function draftHoursDrawdown(input: DraftHoursDrawdownInput): Promis
         amount: priced.total,
         state: "draft",
         timeEntryIds: priced.byEntry.map((entry) => entry.id),
+        byMonth: priced.byMonth,
+        hoursByMonth: Object.fromEntries([...hoursByMonth].sort(([left], [right]) => left.localeCompare(right))),
       },
     }, input.actorId);
     return {
@@ -478,6 +605,8 @@ export async function draftFeeDrawdown(input: DraftFeeDrawdownInput): Promise<Dr
   }
 
   return withRetainerWrite(input.orgId, async () => {
+    await loadRetainerForScope(input);
+    await syncRetainerActivation(db, input.orgId, input.retainerId, input.actorId);
     const retainer = await loadRetainerForUpdate(input);
     requireActiveRetainer(retainer);
     if (retainer.kind !== "fees") {
@@ -598,7 +727,7 @@ export async function closeRetainer(
   });
 }
 
-async function withRetainerWrite<T>(orgId: string, work: (tx: typeof db) => Promise<T>): Promise<T> {
+export async function withRetainerWrite<T>(orgId: string, work: (tx: typeof db) => Promise<T>): Promise<T> {
   try {
     return await withOrgTransaction(orgId, async () => {
       const tx = db;
@@ -653,13 +782,18 @@ async function writeIdempotentCreateAudit(
   }
 }
 
-async function loadRetainerForUpdate(input: RetainerWriteInput): Promise<RetainerRow> {
+export async function loadRetainerForScope(input: RetainerWriteInput): Promise<string> {
   const [candidate] = await db.select({ projectId: resRetainers.projectId })
     .from(resRetainers)
     .where(and(eq(resRetainers.orgId, input.orgId), eq(resRetainers.id, input.retainerId)))
     .limit(1);
   if (!candidate) throw new ScopeNotFoundError();
   await lockProjectForScope(db, input.orgId, candidate.projectId, input.allowedSubsidiaryIds);
+  return candidate.projectId;
+}
+
+export async function loadRetainerForUpdate(input: RetainerWriteInput): Promise<RetainerRow> {
+  await loadRetainerForScope(input);
   const [retainer] = await db.select().from(resRetainers)
     .where(and(eq(resRetainers.orgId, input.orgId), eq(resRetainers.id, input.retainerId)))
     .limit(1)
@@ -670,7 +804,7 @@ async function loadRetainerForUpdate(input: RetainerWriteInput): Promise<Retaine
 
 async function resolveRetainerCurrency(
   tx: typeof db,
-  input: CreateRetainerInput,
+  input: Pick<CreateRetainerInput, "orgId" | "customerPartyId" | "currency">,
 ): Promise<string> {
   const context = (await tx.execute<RetainerCurrencyContext>(sql`
     select o.base_currency as "baseCurrency", cr.currency as "customerCurrency"
@@ -716,7 +850,7 @@ async function resolveRetainerCurrency(
   return currency;
 }
 
-async function retainerBalance(orgId: string, retainer: RetainerRow): Promise<RetainerBalance> {
+export async function retainerBalance(orgId: string, retainer: RetainerRow): Promise<RetainerBalance> {
   const posted = await db.select({ amount: resRetainerDrawdowns.amount })
     .from(resRetainerDrawdowns)
     .where(and(
@@ -747,15 +881,16 @@ async function refuseExistingDrawdown(orgId: string, retainerId: string, sunday:
   }
 }
 
-async function writeAudit(
+export async function writeAudit(
   orgId: string,
   tableName: string,
   rowId: string,
   action: "insert" | "update",
   changes: Record<string, unknown>,
-  actorId: string,
+  actorId: string | null,
+  runner: SqlExecutor = db,
 ): Promise<void> {
-  const rows = await db.execute<RetainerAuditLogWriteRow>(sql`
+  const rows = await runner.execute<RetainerAuditLogWriteRow>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, ${tableName}, ${rowId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
     returning row_id
@@ -763,11 +898,13 @@ async function writeAudit(
   assertWriteRows(rows.rows, 1, `audit record for ${tableName}`);
 }
 
-function requireActiveRetainer(retainer: RetainerRow): void {
+export function requireActiveRetainer(retainer: RetainerRow): void {
   if (retainer.state === "active") return;
   const remedy = retainer.state === "expired"
     ? "extend the retainer with a later end date"
-    : "choose an active retainer";
+    : retainer.state === "draft" && retainer.invoiceDocumentId
+      ? "post the linked invoice to activate the retainer"
+      : "choose an active retainer";
   throw new ResourcingRefusal(
     409,
     "retainer_not_active",

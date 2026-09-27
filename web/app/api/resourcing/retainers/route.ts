@@ -3,9 +3,10 @@ import { z } from "zod";
 import { resRetainers } from "@openbooks/schema";
 import { createRetainer } from "@openbooks/engine/src/resourcing/retainers.ts";
 import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { created } from "@/lib/api/responses";
+import { created, unprocessable } from "@/lib/api/responses";
 import { defineRoute } from "@/lib/api/route";
 import { idempotentResourcingCreate } from "../_idempotent";
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "@/lib/custom-fields";
 
 const Body = z.object({
   projectId: z.string().uuid(),
@@ -27,24 +28,37 @@ export const POST = defineRoute({
   feature: "retainerBilling",
   params: Params,
   body: Body,
-  handler: async ({ request, authz, body }) => withOrgTransaction(authz.user.orgId, async () => {
-    const match = { ...body };
-    const row = await idempotentResourcingCreate({
-      orgId: authz.user.orgId,
-      request,
-      table: "res_retainers",
-      match,
-      create: (id, requestId, savedMatch) => createRetainer({
-        ...body,
+  handler: async ({ request, authz, body: routeBody }) => {
+    const defs = await loadFieldDefs("res_retainers");
+    const validated = validateCustomValues(defs, routeBody.custom ?? {});
+    if (!validated.ok) {
+      return unprocessable("invalid_custom_fields", {
+        field: "custom",
+        fieldErrors: Object.fromEntries(Object.entries(validated.errors).map(([key, message]) => [key, [message]])),
+      });
+    }
+    const unowned = await findUnownedCustomReferences(authz.user.orgId, defs, routeBody.custom ?? {});
+    if (unowned.length > 0) return unprocessable("unknown_custom_reference", { field: "custom" });
+    const body = { ...routeBody, custom: validated.cleaned };
+    return withOrgTransaction(authz.user.orgId, async () => {
+      const match = { ...body };
+      const row = await idempotentResourcingCreate({
         orgId: authz.user.orgId,
-        actorId: authz.user.id,
-        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-      }, { id, requestId, match: savedMatch }),
-      load: async () => (await db.select().from(resRetainers).where(and(
-        eq(resRetainers.orgId, authz.user.orgId),
-        eq(resRetainers.id, request.headers.get("Idempotency-Key")!.trim()),
-      )).limit(1))[0] ?? null,
+        request,
+        table: "res_retainers",
+        match,
+        create: (id, requestId, savedMatch) => createRetainer({
+          ...body,
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        }, { id, requestId, match: savedMatch }),
+        load: async () => (await db.select().from(resRetainers).where(and(
+          eq(resRetainers.orgId, authz.user.orgId),
+          eq(resRetainers.id, request.headers.get("Idempotency-Key")!.trim()),
+        )).limit(1))[0] ?? null,
+      });
+      return created(row);
     });
-    return created(row);
-  }),
+  },
 });

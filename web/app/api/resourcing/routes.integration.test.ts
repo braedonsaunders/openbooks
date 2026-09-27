@@ -35,6 +35,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await i
 const { POST: postAssignment } = await import("./assignments/route.ts");
 const { GET: getBoard } = await import("./board/route.ts");
 const { POST: postRequest } = await import("./requests/route.ts");
+const { POST: postRetainer } = await import("./retainers/route.ts");
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 function written(result: { rowCount: number | null }, label: string): void {
@@ -90,7 +91,7 @@ test("resourcing routes enforce access, idempotency, scope, and board availabili
     assert.deepEqual(off.json, { error: "not_found" });
     assert.doesNotMatch(JSON.stringify(off.json), /resourcing/i);
 
-    await withBypassContext(async () => written(await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true,"resourceRequests":true,"flows":true}'::jsonb) where id = ${org.orgId}`), "feature setup"));
+    await withBypassContext(async () => written(await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true,"resourceRequests":true,"retainerBilling":true,"revenueRecognition":true,"flows":true}'::jsonb) where id = ${org.orgId}`), "feature setup"));
     state.authz = authz(["resourcing.read"]);
     assert.equal((await call(postAssignment, "/api/resourcing/assignments", assignmentBody)).status, 403);
 
@@ -172,6 +173,29 @@ test("resourcing routes enforce access, idempotency, scope, and board availabili
     assert.ok(figure);
     assert.equal(figure.employeePartyId, employeeId);
     assert.equal(typeof figure.capacity.hours, "string");
+
+    await withBypassContext(async () => written(await db.execute(sql`
+      insert into custom_field_defs
+        (id, org_id, target_table, target_kind, key, label, field_type, config,
+         is_required, is_active, sort_order, created_by, updated_by)
+      values (${randomUUID()}, ${org.orgId}, 'res_retainers', null, 'required_scope',
+        'Required scope', 'text', '{}'::jsonb, true, true, 0, ${actorId}, ${actorId})
+    `), "required retainer custom-field setup"));
+    state.authz = authz(["retainers.manage"]);
+    const missingCustom = await call(postRetainer, "/api/resourcing/retainers", {
+      projectId,
+      customerPartyId: org.customerId,
+      kind: "hours",
+      totalHours: "1.0000",
+      unitRate: "10.0000",
+      startsOn: "2026-10-01",
+      endsOn: "2026-10-31",
+      retainerItemId: org.items.service,
+      custom: {},
+    }, { "Idempotency-Key": randomUUID() });
+    assert.equal(missingCustom.status, 422);
+    assert.equal(missingCustom.json.error, "invalid_custom_fields");
+    assert.deepEqual(missingCustom.json.fieldErrors, { required_scope: ["Required scope is required"] });
   } finally {
     state.authz = null;
     await dropScratchOrgReporting(org.orgId);
