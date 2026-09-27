@@ -117,10 +117,6 @@ export const WI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "WI",
 }];
 
-export function wiRatesForPayDate(payDate: string): WiYearRates {
-  return WI_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /**
  * WT-4 marital-status boxes onto the two deduction formulas.
  *

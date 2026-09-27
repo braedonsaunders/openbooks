@@ -79,10 +79,6 @@ export const SC_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "SC",
 }];
 
-export function scRatesForPayDate(payDate: string): ScYearRates {
-  return SC_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 export function scStandardDeduction(annualWages: bigint, allowances: number, rates: ScYearRates): bigint {
   if (allowances <= 0) return 0n;
   const tenPercent = mulRateCents(annualWages, rates.standardDeductionRate);

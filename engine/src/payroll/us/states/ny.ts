@@ -578,10 +578,6 @@ export const NY_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "NY",
 }];
 
-export function nyRatesForPayDate(payDate: string): NyYearRates {
-  return NY_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 // ---------------------------------------------------------------------------
 // Shared mechanics
 // ---------------------------------------------------------------------------
@@ -652,7 +648,7 @@ export function nysWithholding(input: {
   marital: NyMarital;
   exemptions: number;
 }, ratesOverride?: NyYearRates, context?: StateEngineContext<NyYearRates>): { tax: bigint; factors: Record<string, string> } {
-  const rates = ratesOverride ?? nyRatesForPayDate(input.payDate);
+  const rates = ratesOverride ?? NY_STATE_ENGINE.ratesForPayDate(input.payDate);
   const period = nyPeriodFor(input.periodsPerYear);
   const factors = context?.factors ?? {};
   const trace = context?.trace ?? ((key: string, value: bigint) => { factors[key] = D(value); });
@@ -1026,7 +1022,7 @@ export function yonkersNonresidentAnnualized(input: {
   periodsPerYear: number;
   wages: string;
 }): string {
-  const rates = nyRatesForPayDate(input.payDate);
+  const rates = NY_STATE_ENGINE.ratesForPayDate(input.payDate);
   const annualized = U(input.wages) * BigInt(input.periodsPerYear);
   const bands = rates.yonkers.nonresidentBands.annual;
   const band = bands.find((candidate) =>

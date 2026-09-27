@@ -122,10 +122,6 @@ export const NC_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "NC",
 }];
 
-export function ncRatesForPayDate(payDate: string): NcYearRates {
-  return NC_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 function ncPeriodFor(periodsPerYear: number): NcPeriod {
   return NC_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, NC_PERIODS) as NcPeriod;
 }
@@ -167,7 +163,7 @@ export function ncPercentageMethod(input: {
   schedule: NcSchedule;
   allowances: number;
 }): { tax: bigint; factors: Record<string, string> } {
-  const rates = ncRatesForPayDate(input.payDate);
+  const rates = NC_STATE_ENGINE.ratesForPayDate(input.payDate);
   const period = ncPeriodFor(input.periodsPerYear);
   const values = rates.periods[period];
   const factors: Record<string, string> = { NC_METHOD: "percentage", NC_SCHEDULE: input.schedule };
@@ -207,7 +203,7 @@ export function ncAnnualizedMethod(input: {
   schedule: NcSchedule;
   allowances: number;
 }): { tax: string; annualTax: string } {
-  const rates = ncRatesForPayDate(input.payDate);
+  const rates = NC_STATE_ENGINE.ratesForPayDate(input.payDate);
   if (!Number.isInteger(input.periodsPerYear) || input.periodsPerYear < 1) {
     throw new PayrollError(`invalid pay periods per year for North Carolina: ${input.periodsPerYear}`);
   }
@@ -233,7 +229,7 @@ export function ncAnnualizedMethod(input: {
  * method (b) and is always permitted.
  */
 export function ncSupplementalFlat(payDate: string, supplemental: string): string {
-  const rates = ncRatesForPayDate(payDate);
+  const rates = NC_STATE_ENGINE.ratesForPayDate(payDate);
   return D(ncRoundToDollar(mulRateCents(U(supplemental), rates.withholdingRate)));
 }
 

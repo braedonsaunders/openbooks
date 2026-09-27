@@ -220,10 +220,6 @@ export const IN_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "IN",
 }];
 
-export function inRatesForPayDate(payDate: string): InYearRates {
-  return IN_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /**
  * The county Departmental Notice #1 names for an employee.
  *
@@ -241,7 +237,7 @@ export function inApplicableCounty(
   residenceCounty: string | null | undefined,
   workCounty: string | null | undefined,
 ): InCounty | null {
-  const year = inRatesForPayDate(payDate).year;
+  const year = IN_STATE_ENGINE.ratesForPayDate(payDate).year;
   const residence = normalizeCountyAnswer(residenceCounty);
   if (residence) return inCounty(year, residence);
   const work = normalizeCountyAnswer(workCounty);
@@ -250,7 +246,7 @@ export function inApplicableCounty(
 }
 
 export function inCounty(year: number, code: string): InCounty {
-  const resolvedYear = inRatesForPayDate(`${year}-01-01`).year;
+  const resolvedYear = IN_STATE_ENGINE.ratesForPayDate(`${year}-01-01`).year;
   const list = IN_COUNTIES_BY_YEAR[resolvedYear];
   if (!list) {
     throw new PayrollError(`Indiana county rates are not transcribed for ${resolvedYear} — ${RATES_MODULE}`);
@@ -296,7 +292,7 @@ export function inPeriodTaxable(input: {
   wages: string;
   exemptions: InExemptionCounts;
 }): { taxable: bigint; periodExemption: bigint; factors: Record<string, string> } {
-  const rates = inRatesForPayDate(input.payDate);
+  const rates = IN_STATE_ENGINE.ratesForPayDate(input.payDate);
   const P = IN_STATE_ENGINE.requirePeriodsPerYear(input.periodsPerYear);
   const factors: Record<string, string> = {};
   const annualExemption =

@@ -114,10 +114,6 @@ export const MI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "MI",
 }];
 
-export function miRatesForPayDate(payDate: string): MiYearRates {
-  return MI_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 function periodsGuard(periodsPerYear: number): void {
   MI_STATE_ENGINE.requirePeriodsPerYear(periodsPerYear);
 }
@@ -297,7 +293,7 @@ export function miDetroitResidentRate(input: {
   /** The work city's NONRESIDENT rate as a decimal, or null when in Detroit. */
   otherCityNonresidentRate: string | null;
 }): string {
-  const rates = miRatesForPayDate(input.payDate);
+  const rates = MI_STATE_ENGINE.ratesForPayDate(input.payDate);
   if (input.otherCityNonresidentRate == null) return rates.detroit.residentRate;
   const reduced = U(rates.detroit.residentRate) - U(input.otherCityNonresidentRate);
   if (reduced < 0n) {

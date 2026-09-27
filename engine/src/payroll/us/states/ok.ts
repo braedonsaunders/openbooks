@@ -149,10 +149,6 @@ export const OK_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "OK",
 }];
 
-export function okRatesForPayDate(payDate: string): OkYearRates {
-  return OK_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 export function okRoundToDollar(units: bigint): bigint {
   return roundDiv(units, DOLLAR) * DOLLAR;
 }

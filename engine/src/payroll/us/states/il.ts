@@ -106,10 +106,6 @@ export const IL_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "IL",
 }];
 
-export function ilRatesForPayDate(payDate: string): IlYearRates {
-  return IL_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 function compute(
   input: UsStateWithholdingInput,
   rates: IlYearRates,

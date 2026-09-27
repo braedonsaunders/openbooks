@@ -65,10 +65,6 @@ export const AL_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "AL",
 }];
 
-export function alRatesForPayDate(payDate: string): AlYearRates {
-  return AL_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /** "less $X for each $step increment or part thereof of GI above the first ceiling." */
 function phasedDeduction(
   gi: bigint,

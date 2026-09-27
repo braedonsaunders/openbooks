@@ -210,10 +210,6 @@ export const KS_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "KS",
 }];
 
-export function ksRatesForPayDate(payDate: string): KsYearRates {
-  return KS_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /**
  * KW-100 Step 1: Joint treats the first two allowances as the $18,320 personal
  * exemption (Esmeralda); Single treats the first allowance as the $9,160

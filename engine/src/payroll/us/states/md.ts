@@ -256,10 +256,6 @@ export const MD_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "MD",
 }];
 
-export function mdRatesForPayDate(payDate: string): MdYearRates {
-  return MD_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /**
  * Form MW507's three filing-status checkboxes onto the Guide's two schedules.
  *
@@ -459,7 +455,7 @@ const MD_DELAWARE_BY_YEAR: Record<number, MdDelawareSchedule> = {
 };
 
 export function mdDelawareRatesForPayDate(payDate: string): MdDelawareSchedule {
-  const year = mdRatesForPayDate(payDate).year;
+  const year = MD_STATE_ENGINE.ratesForPayDate(payDate).year;
   const schedule = MD_DELAWARE_BY_YEAR[year];
   if (!schedule) {
     throw new PayrollError(`Maryland Delaware withholding schedule is not transcribed for ${year} — ${RATES_MODULE}`);
@@ -517,7 +513,7 @@ export function mdDelawareResidentTax(input: {
   certificate: UsStateWithholdingInput["certificate"];
   supportingCertificates?: UsStateWithholdingInput["supportingCertificates"];
 }): UsStateWithholdingResult {
-  const rates = mdRatesForPayDate(input.payDate);
+  const rates = MD_STATE_ENGINE.ratesForPayDate(input.payDate);
   const scheduleBands = mdDelawareRatesForPayDate(input.payDate);
   const rateYear = rates.year;
   const P = MD_STATE_ENGINE.requirePeriodsPerYear(input.periodsPerYear);
@@ -625,7 +621,7 @@ export function mdLumpSumBonus(input: {
   county?: MdCounty | null;
   basis: "resident" | "nonresident";
 }): string {
-  const rates = mdRatesForPayDate(input.payDate);
+  const rates = MD_STATE_ENGINE.ratesForPayDate(input.payDate);
   const localPercent = input.basis === "nonresident"
     ? "2.25"
     : input.county == null
