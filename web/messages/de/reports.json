@@ -881,6 +881,22 @@
       "backorders": {
         "label": "Rückstände",
         "description": "Lagerpositionen freigegebener Kundenaufträge, die dem Kunden noch geschuldet werden – bestellte, erfüllte, stornierte und offene Menge je Zeile, mit Kunde, Artikel und Lagerort."
+      },
+      "saas_metrics_subscriptions": {
+        "label": "SaaS-Abonnementkennzahlen",
+        "description": "Monatliche Änderungen bei Abonnements mit Kunden- und Tarifnamen."
+      },
+      "saas_metrics_facts": {
+        "label": "Monatliche SaaS-Kennzahlen",
+        "description": "Monatliche additive Kennzahlen je Rechtseinheit einschließlich ihrer Erlösbasis."
+      },
+      "saas_metrics_cohorts": {
+        "label": "SaaS-Kohorten",
+        "description": "Monatliche Kunden- und MRR-Werte nach Abonnementkohorte."
+      },
+      "deferred_revenue_runoff": {
+        "label": "Abgrenzungsauflösung",
+        "description": "Noch nicht gebuchte künftige Umsatzrealisierungen nach Monat, Abgrenzungskonto, Buch und Währung."
       }
     },
     "columns": {
@@ -1938,6 +1954,72 @@
         "document_id": "Auftrag (ID)",
         "item_id": "Artikel (ID)",
         "transaction_entry_id": "Transaktionsbuchung (ID)"
+      },
+      "saas_metrics_subscriptions": {
+        "month": "Monat",
+        "subsidiary": "Tochtergesellschaft",
+        "customer": "Kunde",
+        "plan": "Tarif",
+        "subscription_id": "Abonnement (ID)",
+        "cohort_month": "Kohortenmonat",
+        "movement": "Änderung",
+        "mrr_start": "MRR zu Beginn",
+        "mrr_end": "MRR zum Ende",
+        "new_mrr": "Neues MRR",
+        "expansion_mrr": "MRR-Ausweitung",
+        "contraction_mrr": "MRR-Rückgang",
+        "churned_mrr": "Abgewandertes MRR",
+        "reactivation_mrr": "Reaktiviertes MRR",
+        "recognized_revenue": "Realisierter Umsatz",
+        "deferred_delta": "Änderung abgegrenzter Umsätze"
+      },
+      "saas_metrics_facts": {
+        "month": "Monat",
+        "subsidiary": "Tochtergesellschaft",
+        "basis": "Erlösbasis",
+        "mrr_start": "MRR zu Beginn",
+        "mrr_end": "MRR zum Ende",
+        "new_mrr": "Neues MRR",
+        "expansion_mrr": "MRR-Ausweitung",
+        "contraction_mrr": "MRR-Rückgang",
+        "churned_mrr": "Abgewandertes MRR",
+        "reactivation_mrr": "Reaktiviertes MRR",
+        "recognized_revenue": "Realisierter Umsatz",
+        "deferred_delta": "Änderung abgegrenzter Umsätze",
+        "mrr_at_risk": "MRR gefährdet",
+        "customers_start": "Kunden zu Beginn",
+        "customers_end": "Kunden zum Ende",
+        "customers_new": "Neue Kunden",
+        "customers_churned": "Abgewanderte Kunden",
+        "customers_reactivated": "Reaktivierte Kunden",
+        "gl_revenue": "Umsatz laut Hauptbuch",
+        "gl_cogs": "Umsatzkosten laut Hauptbuch",
+        "bookings": "Auftragseingänge",
+        "billings": "Abrechnungen",
+        "deferred_balance": "Abgegrenzter Saldo"
+      },
+      "saas_metrics_cohorts": {
+        "cohort_month": "Kohortenmonat",
+        "month": "Monat",
+        "months_since_start": "Monate seit Beginn",
+        "subsidiary": "Tochtergesellschaft",
+        "start_mrr": "MRR zu Beginn",
+        "mrr": "MRR der Kohorte",
+        "start_customers": "Kunden zu Beginn",
+        "customers": "Kunden der Kohorte"
+      },
+      "deferred_revenue_runoff": {
+        "month": "Monat",
+        "future_month": "Künftiger Monat",
+        "deferred_account": "Abgrenzungskonto",
+        "deferred_account_id": "Abgrenzungskonto (ID)",
+        "contract_number": "Vertrag",
+        "book_id": "Buch (ID)",
+        "currency": "Währung",
+        "amount": "Geplante Realisierung",
+        "schedule_status": "Planstatus",
+        "obligation_status": "Verpflichtungsstatus",
+        "journal_entry_id": "Journalbuchung (ID)"
       }
     },
     "enumValues": {

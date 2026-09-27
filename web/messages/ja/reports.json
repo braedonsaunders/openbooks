@@ -881,6 +881,22 @@
       "backorders": {
         "label": "受注残",
         "description": "承認済み受注の在庫明細のうち、まだ顧客へ未出荷のもの。明細ごとの受注・出荷済み・取消・未出荷数量と、顧客・品目・在庫拠点。"
+      },
+      "saas_metrics_subscriptions": {
+        "label": "SaaSサブスクリプション指標",
+        "description": "顧客名とプラン名を含む、サブスクリプションの月次変動です。"
+      },
+      "saas_metrics_facts": {
+        "label": "SaaS月次ファクト",
+        "description": "収益基準を含む、法的事業体別の月次加算データです。"
+      },
+      "saas_metrics_cohorts": {
+        "label": "SaaSコホート",
+        "description": "サブスクリプションコホート別の顧客数とMRRの月次推移です。"
+      },
+      "deferred_revenue_runoff": {
+        "label": "繰延収益の将来認識",
+        "description": "未転記の将来認識額を、月・繰延勘定・帳簿・通貨別に表示します。"
       }
     },
     "columns": {
@@ -1938,6 +1954,72 @@
         "document_id": "受注（ID）",
         "item_id": "品目（ID）",
         "transaction_entry_id": "取引仕訳（ID）"
+      },
+      "saas_metrics_subscriptions": {
+        "month": "月",
+        "subsidiary": "子会社",
+        "customer": "顧客",
+        "plan": "プラン",
+        "subscription_id": "サブスクリプション（ID）",
+        "cohort_month": "コホート月",
+        "movement": "変動",
+        "mrr_start": "期首MRR",
+        "mrr_end": "期末MRR",
+        "new_mrr": "新規MRR",
+        "expansion_mrr": "拡大MRR",
+        "contraction_mrr": "縮小MRR",
+        "churned_mrr": "解約MRR",
+        "reactivation_mrr": "再開MRR",
+        "recognized_revenue": "認識済み収益",
+        "deferred_delta": "繰延収益の変動"
+      },
+      "saas_metrics_facts": {
+        "month": "月",
+        "subsidiary": "子会社",
+        "basis": "収益基準",
+        "mrr_start": "期首MRR",
+        "mrr_end": "期末MRR",
+        "new_mrr": "新規MRR",
+        "expansion_mrr": "拡大MRR",
+        "contraction_mrr": "縮小MRR",
+        "churned_mrr": "解約MRR",
+        "reactivation_mrr": "再開MRR",
+        "recognized_revenue": "認識済み収益",
+        "deferred_delta": "繰延収益の変動",
+        "mrr_at_risk": "リスクのあるMRR",
+        "customers_start": "期首顧客数",
+        "customers_end": "期末顧客数",
+        "customers_new": "新規顧客数",
+        "customers_churned": "解約顧客数",
+        "customers_reactivated": "再開顧客数",
+        "gl_revenue": "総勘定元帳の収益",
+        "gl_cogs": "総勘定元帳の売上原価",
+        "bookings": "受注額",
+        "billings": "請求額",
+        "deferred_balance": "繰延残高"
+      },
+      "saas_metrics_cohorts": {
+        "cohort_month": "コホート月",
+        "month": "月",
+        "months_since_start": "開始からの月数",
+        "subsidiary": "子会社",
+        "start_mrr": "開始時MRR",
+        "mrr": "コホートMRR",
+        "start_customers": "開始時顧客数",
+        "customers": "コホート顧客数"
+      },
+      "deferred_revenue_runoff": {
+        "month": "月",
+        "future_month": "将来月",
+        "deferred_account": "繰延勘定",
+        "deferred_account_id": "繰延勘定（ID）",
+        "contract_number": "契約",
+        "book_id": "帳簿（ID）",
+        "currency": "通貨",
+        "amount": "予定認識額",
+        "schedule_status": "スケジュール状態",
+        "obligation_status": "履行義務の状態",
+        "journal_entry_id": "仕訳（ID）"
       }
     },
     "enumValues": {

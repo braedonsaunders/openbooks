@@ -881,6 +881,22 @@
       "backorders": {
         "label": "欠交订单",
         "description": "已批准销售订单中仍欠客户的库存行 — 每行的订购、已履行、已取消和未交数量，以及客户、物料和库存库位。"
+      },
+      "saas_metrics_subscriptions": {
+        "label": "SaaS订阅指标",
+        "description": "按月列示订阅变动，并显示客户和计划名称。"
+      },
+      "saas_metrics_facts": {
+        "label": "SaaS月度事实",
+        "description": "按法律实体汇总的月度可加总数据，包括收入口径。"
+      },
+      "saas_metrics_cohorts": {
+        "label": "SaaS客户群组",
+        "description": "按订阅群组列示月度客户数和MRR水平。"
+      },
+      "deferred_revenue_runoff": {
+        "label": "递延收入未来摊销",
+        "description": "按月份、递延科目、账簿和币种列示尚未过账的未来收入确认。"
       }
     },
     "columns": {
@@ -1938,6 +1954,72 @@
         "document_id": "订单（ID）",
         "item_id": "物料（ID）",
         "transaction_entry_id": "交易分录（ID）"
+      },
+      "saas_metrics_subscriptions": {
+        "month": "月份",
+        "subsidiary": "子公司",
+        "customer": "客户",
+        "plan": "计划",
+        "subscription_id": "订阅（ID）",
+        "cohort_month": "群组月份",
+        "movement": "变动",
+        "mrr_start": "期初MRR",
+        "mrr_end": "期末MRR",
+        "new_mrr": "新增MRR",
+        "expansion_mrr": "扩张MRR",
+        "contraction_mrr": "收缩MRR",
+        "churned_mrr": "流失MRR",
+        "reactivation_mrr": "重新激活MRR",
+        "recognized_revenue": "已确认收入",
+        "deferred_delta": "递延收入变动"
+      },
+      "saas_metrics_facts": {
+        "month": "月份",
+        "subsidiary": "子公司",
+        "basis": "收入口径",
+        "mrr_start": "期初MRR",
+        "mrr_end": "期末MRR",
+        "new_mrr": "新增MRR",
+        "expansion_mrr": "扩张MRR",
+        "contraction_mrr": "收缩MRR",
+        "churned_mrr": "流失MRR",
+        "reactivation_mrr": "重新激活MRR",
+        "recognized_revenue": "已确认收入",
+        "deferred_delta": "递延收入变动",
+        "mrr_at_risk": "风险MRR",
+        "customers_start": "期初客户数",
+        "customers_end": "期末客户数",
+        "customers_new": "新增客户",
+        "customers_churned": "流失客户",
+        "customers_reactivated": "重新激活客户",
+        "gl_revenue": "总账收入",
+        "gl_cogs": "总账销售成本",
+        "bookings": "签约额",
+        "billings": "开票额",
+        "deferred_balance": "递延余额"
+      },
+      "saas_metrics_cohorts": {
+        "cohort_month": "群组月份",
+        "month": "月份",
+        "months_since_start": "开始后月数",
+        "subsidiary": "子公司",
+        "start_mrr": "期初MRR",
+        "mrr": "群组MRR",
+        "start_customers": "期初客户数",
+        "customers": "群组客户数"
+      },
+      "deferred_revenue_runoff": {
+        "month": "月份",
+        "future_month": "未来月份",
+        "deferred_account": "递延科目",
+        "deferred_account_id": "递延科目（ID）",
+        "contract_number": "合同",
+        "book_id": "账簿（ID）",
+        "currency": "币种",
+        "amount": "计划确认额",
+        "schedule_status": "摊销计划状态",
+        "obligation_status": "履约义务状态",
+        "journal_entry_id": "日记账分录（ID）"
       }
     },
     "enumValues": {

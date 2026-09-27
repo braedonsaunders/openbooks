@@ -881,6 +881,22 @@
       "backorders": {
         "label": "Reliquats de commande",
         "description": "Lignes de stock des commandes client approuvées encore dues au client : quantité commandée, livrée, annulée et restante par ligne, avec client, article et emplacement de stock."
+      },
+      "saas_metrics_subscriptions": {
+        "label": "Indicateurs d’abonnement SaaS",
+        "description": "Mouvements mensuels des abonnements avec les noms des clients et des offres."
+      },
+      "saas_metrics_facts": {
+        "label": "Données mensuelles SaaS",
+        "description": "Données additives mensuelles par entité juridique, avec leur base de revenus."
+      },
+      "saas_metrics_cohorts": {
+        "label": "Cohortes SaaS",
+        "description": "Niveaux mensuels de clients et de MRR par cohorte d’abonnement."
+      },
+      "deferred_revenue_runoff": {
+        "label": "Échéancier du revenu différé",
+        "description": "Reconnaissance future non comptabilisée par mois, compte de produits différés, livre et devise."
       }
     },
     "columns": {
@@ -1938,6 +1954,72 @@
         "document_id": "Commande (id)",
         "item_id": "Article (id)",
         "transaction_entry_id": "Écriture de transaction (id)"
+      },
+      "saas_metrics_subscriptions": {
+        "month": "Mois",
+        "subsidiary": "Filiale",
+        "customer": "Client",
+        "plan": "Offre",
+        "subscription_id": "Abonnement (id)",
+        "cohort_month": "Mois de cohorte",
+        "movement": "Mouvement",
+        "mrr_start": "MRR initial",
+        "mrr_end": "MRR final",
+        "new_mrr": "Nouveau MRR",
+        "expansion_mrr": "Expansion du MRR",
+        "contraction_mrr": "Contraction du MRR",
+        "churned_mrr": "MRR résilié",
+        "reactivation_mrr": "MRR réactivé",
+        "recognized_revenue": "Revenu constaté",
+        "deferred_delta": "Variation du revenu différé"
+      },
+      "saas_metrics_facts": {
+        "month": "Mois",
+        "subsidiary": "Filiale",
+        "basis": "Base de revenus",
+        "mrr_start": "MRR initial",
+        "mrr_end": "MRR final",
+        "new_mrr": "Nouveau MRR",
+        "expansion_mrr": "Expansion du MRR",
+        "contraction_mrr": "Contraction du MRR",
+        "churned_mrr": "MRR résilié",
+        "reactivation_mrr": "MRR réactivé",
+        "recognized_revenue": "Revenu constaté",
+        "deferred_delta": "Variation du revenu différé",
+        "mrr_at_risk": "MRR à risque",
+        "customers_start": "Clients au début",
+        "customers_end": "Clients à la fin",
+        "customers_new": "Nouveaux clients",
+        "customers_churned": "Clients résiliés",
+        "customers_reactivated": "Clients réactivés",
+        "gl_revenue": "Revenus du grand livre",
+        "gl_cogs": "Coût des ventes du grand livre",
+        "bookings": "Commandes",
+        "billings": "Facturation",
+        "deferred_balance": "Solde différé"
+      },
+      "saas_metrics_cohorts": {
+        "cohort_month": "Mois de cohorte",
+        "month": "Mois",
+        "months_since_start": "Mois depuis le début",
+        "subsidiary": "Filiale",
+        "start_mrr": "MRR initial",
+        "mrr": "MRR de la cohorte",
+        "start_customers": "Clients au début",
+        "customers": "Clients de la cohorte"
+      },
+      "deferred_revenue_runoff": {
+        "month": "Mois",
+        "future_month": "Mois futur",
+        "deferred_account": "Compte de produits différés",
+        "deferred_account_id": "Compte de produits différés (id)",
+        "contract_number": "Contrat",
+        "book_id": "Livre (id)",
+        "currency": "Devise",
+        "amount": "Reconnaissance prévue",
+        "schedule_status": "État du calendrier",
+        "obligation_status": "État de l’obligation",
+        "journal_entry_id": "Écriture comptable (id)"
       }
     },
     "enumValues": {
