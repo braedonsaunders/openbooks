@@ -1,0 +1,1 @@
+The migration adds two tenant-owned tables and guards framework changes against posted fund history. It does not reinterpret or rewrite existing accounting data.
