@@ -14,20 +14,6 @@ const state = { lookups: [] as string[], writes: 0, template: null as null | Rec
 
 const mockSources = new Map<string, string>([
   [
-    'json',
-    `
-      import { NextResponse } from 'next/server'
-      export const jsonObject = {}
-      export async function parseJsonBody(req) {
-        const raw = await req.json().catch(() => undefined)
-        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-          return { ok: false, response: NextResponse.json({ error: 'invalid request body' }, { status: 400 }) }
-        }
-        return { ok: true, data: raw }
-      }
-    `,
-  ],
-  [
     'db',
     `
       const state = globalThis[Symbol.for('openbooks.pdf-template-id-route-test')]
@@ -80,7 +66,6 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', mockUrl('json')],
   ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
   ['@openbooks/pdf', mockUrl('pdf')],
   ['../../../../lib/authz', mockUrl('authz')],

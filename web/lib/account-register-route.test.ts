@@ -29,10 +29,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:list-params',
-    `export function isUuid() { return true }`,
-  ],
-  [
     'mock:reports',
     `
       const state = globalThis[Symbol.for('openbooks.account-register-route-test')]
@@ -98,7 +94,6 @@ const mockUrls = new Map<string, string>([
   ['next-intl/server', 'mock:intl'],
   ['../../../../../lib/report-books', 'mock:report-books'],
   ['../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../../../../lib/reports', 'mock:reports'],
   ['../../../../../lib/account-register-export', 'mock:account-register-export'],
   ['../../../../../lib/report-pdf', 'mock:report-pdf'],
@@ -165,9 +160,7 @@ test('register JSON and export preserve an explicit book for reports-only caller
   try {
     for (const suffix of ['', '&format=csv']) {
       routeState.lastBook = undefined;
-      const response = await GET(new Request(`http://openbooks.test/api/accounts/account/register?book=tax-book${suffix}`), {
-        params: Promise.resolve({ id: 'account' }),
-      });
+      const response = await get(`?book=tax-book${suffix}`);
       assert.equal(response.status, 200);
       assert.equal(routeState.lastBook, 'tax-book');
     }
@@ -176,14 +169,12 @@ test('register JSON and export preserve an explicit book for reports-only caller
 
 test('unavailable book and unrelated permissions refuse before ledger reads', async () => {
   routeState.accountRegisterCalls = 0;
-  const response = await GET(new Request('http://openbooks.test/api/accounts/account/register?book=foreign'), {
-    params: Promise.resolve({ id: 'account' }),
-  });
+  const response = await get('?book=foreign');
   assert.equal(response.status, 422);
   assert.equal(routeState.accountRegisterCalls, 0);
   routeState.permissions = ['ap.read'];
   try {
-    const denied = await GET(new Request('http://openbooks.test/api/accounts/account/register'), { params: Promise.resolve({ id: 'account' }) });
+    const denied = await get();
     assert.equal(denied.status, 403);
     assert.equal(routeState.accountRegisterCalls, 0);
   } finally { routeState.permissions = ['gl.read']; }

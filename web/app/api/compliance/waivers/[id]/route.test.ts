@@ -92,15 +92,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:authz',
     `
       export async function guardPermission(permission) {
@@ -119,15 +110,12 @@ const mockSources = new Map<string, string>([
       export async function guardComplianceFeature() { return null }
     `,
   ],
-  ['mock:list-params', `export function isUuid(value) { return value === '${WAIVER_ID}' }`],
 ])
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@/lib/api/json', 'mock:json'],
   ['@/lib/authz', 'mock:authz'],
   ['@/lib/compliance', 'mock:compliance'],
-  ['@/lib/list-params', 'mock:list-params'],
 ])
 
 const hooks = registerHooks({

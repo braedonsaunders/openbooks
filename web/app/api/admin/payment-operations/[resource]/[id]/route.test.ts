@@ -15,16 +15,12 @@ interface RouteState {
   calls: { kind: 'db' | 'tx'; text: string }[]
   audits: AuditSnapshot[]
   format: Record<string, unknown> | null
-  requestNames: string[]
-  transactionNumber: number
   tail: Promise<void>
 }
 const state: RouteState = {
   calls: [],
   audits: [],
   format: { id: 'format-1', name: 'initial', rail: 'custom' },
-  requestNames: [],
-  transactionNumber: 0,
   tail: Promise.resolve(),
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
@@ -47,18 +43,6 @@ function sqlText(query: unknown): string {
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      const state = globalThis[Symbol.for('openbooks.payment-format-route-test')]
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        const data = await request.json()
-        state.requestNames.push(String(data.name))
-        return { ok: true, data }
-      }
-    `,
-  ],
-  [
     'mock:db',
     `
       const state = globalThis[Symbol.for('openbooks.payment-format-route-test')]
@@ -76,7 +60,6 @@ const mockSources = new Map<string, string>([
           let release
           state.tail = new Promise((resolve) => { release = resolve })
           await previous
-          const number = state.transactionNumber++
           const tx = {
             async execute(query) {
               const text = sqlText(query)
@@ -86,7 +69,7 @@ const mockSources = new Map<string, string>([
               }
               if (text.includes('update payment_formats')) {
                 if (!state.format) return { rows: [] }
-                state.format = { ...state.format, name: state.requestNames[number] }
+                state.format = { ...state.format, name: /name = coalesce\\(([^,]*), name\\)/.exec(text)[1] }
                 return { rows: [{ ...state.format }] }
               }
               return { rows: [] }
@@ -113,12 +96,6 @@ const mockSources = new Map<string, string>([
     'mock:features',
     `
       export async function isFeatureEnabled() { return true }
-    `,
-  ],
-  [
-    'mock:list-params',
-    `
-      export function isUuid() { return true }
     `,
   ],
   [
@@ -151,13 +128,11 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/payments/operations.ts', 'mock:payment-operations'],
   ['@openbooks/engine/src/scripting/scripting.ts', 'mock:scripting'],
   ['../../../../../../lib/authz', 'mock:authz'],
   ['../../../../../../lib/features', 'mock:features'],
-  ['../../../../../../lib/list-params', 'mock:list-params'],
   ['../../../../../../lib/countries', 'mock:countries'],
   ['../../_lib', 'mock:audit'],
 ])
@@ -185,8 +160,6 @@ function reset(): void {
   state.calls = []
   state.audits = []
   state.format = { id: FORMAT_ID, name: 'initial', rail: 'custom' }
-  state.requestNames = []
-  state.transactionNumber = 0
   state.tail = Promise.resolve()
 }
 

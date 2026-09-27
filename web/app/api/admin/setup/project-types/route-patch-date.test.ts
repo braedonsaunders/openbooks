@@ -87,7 +87,6 @@ stubModules({
     `,
     "../../../../../lib/projects-gate": "export async function guardProjectsFeature() { return null }",
     "../../../../../lib/features": "export async function isFeatureEnabled() { return true }",
-    "../../../../../lib/list-params": "export function isUuid(v) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v)) }",
   },
 });
 

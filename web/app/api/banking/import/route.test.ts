@@ -33,15 +33,6 @@ const importState = {
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:feature-gates',
     `
       export async function guardFeaturePermission() {
@@ -126,9 +117,6 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@/lib/api/json') {
-      return { url: 'mock:json', shortCircuit: true }
-    }
     if (specifier === '@openbooks/engine/src/banking/banking.ts') {
       return { url: 'mock:banking', shortCircuit: true }
     }

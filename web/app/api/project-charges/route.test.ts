@@ -52,15 +52,6 @@ const mockSources = new Map<string, string>([
     `export async function guardProjectsFeature() { return null }`,
   ],
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:project-charges',
     `
       const state = globalThis[Symbol.for('openbooks.project-charge-route-test')]
@@ -96,7 +87,6 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@/lib/api/json', 'mock:json'],
   ['../../../lib/authz', 'mock:authz'],
   ['../../../lib/features', 'mock:features'],
   ['../../../lib/projects-gate', 'mock:projects-gate'],

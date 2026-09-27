@@ -243,26 +243,12 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        const body = await request.json().catch(() => undefined)
-        if (!body || typeof body !== 'object' || Array.isArray(body)) return { ok: false, response: new Response(JSON.stringify({ error: 'invalid request body' }), { status: 400 }) }
-        return { ok: true, data: body }
-      }
-    `,
-  ],
-  ['mock:list-params', `export function isUuid(value) { return value === '${RECORD_ID}' }`],
 ])
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/scripting/scripting.ts', 'mock:scripting'],
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../../../../lib/records', 'mock:records'],
   ['../../../../../lib/record-schema', 'mock:record-schema'],
   ['../../../../../lib/setup/audit', 'mock:audit'],

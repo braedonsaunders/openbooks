@@ -61,7 +61,6 @@ stubModules({
         return NextResponse.json({ error: 'not found' }, { status: 404 })
       }
     `,
-    "../../../../../../lib/list-params": `export function isUuid() { return true }`,
     "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.filing-export-route-test')]
       const sqlText = globalThis.openbooksSqlTextFilingExport

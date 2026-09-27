@@ -9,7 +9,6 @@ import { NextResponse } from 'next/server'
 interface RouteState {
   permissions: Set<string>
   allowedSubsidiaryIds: Set<string> | null
-  parseCalls: number
   engineCalls: Array<{ orgId: string; filingId: string; actorId: string; reference: string | null }>
 }
 
@@ -17,24 +16,12 @@ const stateKey = Symbol.for('openbooks.tax-filing-id-route-test')
 const routeState: RouteState = {
   permissions: new Set(),
   allowedSubsidiaryIds: null,
-  parseCalls: 0,
   engineCalls: [],
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksTaxFilingIdNextResponse = NextResponse
 
 const mockSources = new Map<string, string>([
-  [
-    'mock:json',
-    `
-      export const jsonObject = { safeParse: (data) => ({ success: typeof data === 'object' && data !== null && !Array.isArray(data), data }) }
-      export async function parseJsonBody(request, schema) {
-        globalThis[Symbol.for('openbooks.tax-filing-id-route-test')].parseCalls += 1
-        const parsed = schema.safeParse(await request.json().catch(() => undefined))
-        return parsed.success ? { ok: true, data: parsed.data } : { ok: false, response: Response.json({ error: 'invalid request body' }, { status: 400 }) }
-      }
-    `,
-  ],
   [
     'mock:authz',
     `
@@ -77,7 +64,6 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['@openbooks/engine/src/tax-returns/filing.ts', 'mock:tax-filing'],
 ])
@@ -103,7 +89,6 @@ const FILING_ID = '00000000-0000-4000-8000-00000000f001'
 function reset(allowedSubsidiaryIds: Set<string> | null, permissions = ['compliance.file']): void {
   routeState.permissions = new Set(permissions)
   routeState.allowedSubsidiaryIds = allowedSubsidiaryIds
-  routeState.parseCalls = 0
   routeState.engineCalls.length = 0
 }
 
@@ -123,9 +108,9 @@ test('a subsidiary-restricted filer gets the named 403 instead of certifying the
 
   const response = await patch('this is deliberately not JSON')
 
-  assert.equal(response.status, 403)
+  // The body is not JSON, so a parse-first route would answer 400 here.
+  assert.equal(response.status, 403, 'scope denial settles before request-body parsing')
   assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
-  assert.equal(routeState.parseCalls, 0, 'scope denial settles before request-body parsing')
   assert.deepEqual(routeState.engineCalls, [], 'scope denial never reaches markTaxFilingFiled')
 })
 
@@ -139,7 +124,6 @@ test('an unrestricted compliance filer can certify the snapshot', async () => {
     id: FILING_ID,
     filed_at: '2026-08-24T00:00:00.000Z',
   })
-  assert.equal(routeState.parseCalls, 1)
   assert.deepEqual(routeState.engineCalls, [{
     orgId: 'org-1',
     filingId: FILING_ID,

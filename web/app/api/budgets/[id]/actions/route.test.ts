@@ -66,12 +66,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:list-params',
-    `
-      export function isUuid(value) { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) }
-    `,
-  ],
-  [
     'mock:subsidiaries',
     `
       const sql = globalThis.openbooksBudgetSql
@@ -134,7 +128,6 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
-  ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../../../../lib/subsidiaries', 'mock:subsidiaries'],
   ['../../../../../lib/budget-mutations', 'mock:budget-mutations'],
 ])
@@ -166,10 +159,6 @@ let POST: typeof import('./route.ts')['POST']
 const vitestModule = 'vitest' as string
 if (process.env.VITEST) {
   const { vi } = await import(vitestModule)
-  vi['mock']('../../../../../lib/api/json', () => ({
-    jsonObject: {},
-    parseJsonBody: async (request: Request) => ({ ok: true, data: await request.json() }),
-  }))
   vi['mock']('@openbooks/engine/src/platform/db.ts', () => ({
     db: {
       transaction: async (work: (tx: { execute: (query: unknown) => Promise<{ rows: Record<string, unknown>[] }> }) => unknown) =>
@@ -186,9 +175,6 @@ if (process.env.VITEST) {
       user: { orgId: ORG_ID, id: USER_ID },
       allowedSubsidiaryIds: state.allowedSubsidiaryIds,
     }),
-  }))
-  vi['mock']('../../../../../lib/list-params', () => ({
-    isUuid: (value: unknown) => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value),
   }))
   vi['mock']('../../../../../lib/subsidiaries', () => ({
     subsidiaryVisibleFilter: (column: unknown, allowed: Scope) => {

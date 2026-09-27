@@ -19,15 +19,6 @@ const ORG_ID = '00000000-0000-4000-8000-00000000c001'
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:overhead-publish',
     `
       const state = globalThis[Symbol.for('openbooks.internal-overhead-publish-test')]
@@ -53,7 +44,6 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/overhead-publish', 'mock:overhead-publish'],
   ['../../../../../lib/projects-gate', 'mock:projects-gate'],
 ])

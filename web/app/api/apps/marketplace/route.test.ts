@@ -26,32 +26,6 @@ const USER_ID = '00000000-0000-4000-8000-00000000c002'
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      import { NextResponse } from 'next/server'
-      export const jsonObject = { safeParse(value) {
-        if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-          return { success: false, error: { issues: [{ path: [], message: 'invalid request body' }] } }
-        }
-        return { success: true, data: value }
-      } }
-      export async function parseJsonBody(request, schema) {
-        if (!schema || typeof schema.safeParse !== 'function') {
-          throw new Error('parseJsonBody requires a schema')
-        }
-        const raw = await request.json().catch(() => undefined)
-        const parsed = schema.safeParse(raw)
-        if (!parsed.success) {
-          return {
-            ok: false,
-            response: NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'invalid request body' }, { status: 400 }),
-          }
-        }
-        return { ok: true, data: parsed.data }
-      }
-    `,
-  ],
-  [
     'mock:sql',
     `
       export function sql(strings, ...values) {
@@ -122,10 +96,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:list-params',
-    `export function isUuid(value) { return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) }`,
-  ],
-  [
     'mock:next',
     `
       export class NextResponse extends Response {
@@ -142,7 +112,6 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['next/server', 'mock:next'],
-  ['@/lib/api/json', 'mock:json'],
   ['drizzle-orm', 'mock:sql'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@/lib/feature-gates', 'mock:gates'],
@@ -150,7 +119,6 @@ const mockUrls = new Map<string, string>([
   ['@/lib/application/context', 'mock:context'],
   ['@/lib/application/extensions', 'mock:extensions'],
   ['@/lib/application/errors', 'mock:errors'],
-  ['@/lib/list-params', 'mock:list-params'],
 ])
 
 const hooks = registerHooks({

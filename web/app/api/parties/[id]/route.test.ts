@@ -114,7 +114,6 @@ stubModules({
       export function validateCustomValues(_defs, values) { return { ok: true, errors: {}, cleaned: values ?? {} } }
       export async function findUnownedCustomReferences() { return [] }
     `,
-    "../../../../lib/list-params": `export function isUuid(value) { return typeof value === 'string' && value.length > 0 }`,
     "../../../../lib/countries": `
       export function normalizeCountryCode(value) {
         if (typeof value !== 'string') return null

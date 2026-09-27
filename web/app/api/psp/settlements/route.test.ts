@@ -36,16 +36,6 @@ const routeState: PspRouteState = {
 
 const mockSources = new Map<string, string>([
   [
-    "mock:json",
-    `
-      export const jsonObject = { safeParse: (data) => ({ success: typeof data === 'object' && data !== null && !Array.isArray(data), data }) }
-      export async function parseJsonBody(request, schema) {
-        const parsed = schema.safeParse(await request.json().catch(() => undefined))
-        return parsed.success ? { ok: true, data: parsed.data } : { ok: false, response: Response.json({ error: 'invalid request body' }, { status: 400 }) }
-      }
-    `,
-  ],
-  [
     "mock:db",
     `
       const state = globalThis[Symbol.for('openbooks.psp-settlement-route-test')]
@@ -204,7 +194,6 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@/lib/api/json", "mock:json"],
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/engine/src/payments/psp-settlement.ts", "mock:psp-settlement"],
   ["@openbooks/engine/src/organization/subsidiary-scope.ts", "mock:psp-settlement"],

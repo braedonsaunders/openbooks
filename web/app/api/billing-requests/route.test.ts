@@ -53,11 +53,6 @@ stubModules({
         }
       }
     `,
-    "../../../lib/list-params": `
-      export function isUuid(value) {
-        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-      }
-    `,
     "../../../lib/projects-gate": `
       export async function guardProjectsFeature() { return null }
     `,

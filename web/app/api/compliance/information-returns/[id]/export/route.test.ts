@@ -8,6 +8,7 @@ interface ExportState {
   dbCalls: number;
 }
 
+const FILING_ID = "11111111-1111-4111-8111-111111111111";
 const stateKey = Symbol.for("openbooks.information-return-export-route-test");
 const exportState: ExportState = {
   authz: { user: { orgId: "org-1", id: "user-1" } },
@@ -42,9 +43,6 @@ stubModules({
     "@/lib/compliance": `
       export async function guardComplianceFeature() { return null }
       export async function loadInformationReturnFilingScope() { return { subsidiaryId: null } }
-    `,
-    "@/lib/list-params": `
-      export function isUuid() { return true }
     `,
     "@openbooks/engine/src/platform/business-date.ts": `
       export async function businessToday() { return "2026-08-28" }
@@ -148,10 +146,10 @@ test("GET neutralizes formula-leading filing and recipient text in CSV exports",
 
   const response = await GET(
     new Request(
-      "http://openbooks.test/api/compliance/information-returns/filing-1/export",
+      `http://openbooks.test/api/compliance/information-returns/${FILING_ID}/export`,
     ),
     {
-      params: Promise.resolve({ id: "filing-1" }),
+      params: Promise.resolve({ id: FILING_ID }),
     },
   );
 
@@ -186,10 +184,10 @@ test("GET refuses unauthenticated export requests", async () => {
   exportState.dbCalls = 0;
   const response = await GET(
     new Request(
-      "http://openbooks.test/api/compliance/information-returns/filing-1/export",
+      `http://openbooks.test/api/compliance/information-returns/${FILING_ID}/export`,
     ),
     {
-      params: Promise.resolve({ id: "filing-1" }),
+      params: Promise.resolve({ id: FILING_ID }),
     },
   );
   assert.equal(response.status, 403);

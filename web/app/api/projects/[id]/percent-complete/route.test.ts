@@ -97,15 +97,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:authz',
     `
       const state = globalThis[Symbol.for('openbooks.percent-complete-route-test')]
@@ -153,7 +144,6 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['next/server', 'mock:next-server'],
   ['drizzle-orm', 'mock:drizzle'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],

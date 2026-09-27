@@ -22,19 +22,6 @@ const routeState: RouteState = {
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        try {
-          return { ok: true, data: await request.json() }
-        } catch {
-          return { ok: false, response: new Response(JSON.stringify({ error: 'invalid request body' }), { status: 400 }) }
-        }
-      }
-    `,
-  ],
-  [
     'mock:flows',
     `
       const state = globalThis[Symbol.for('openbooks.bulk-gates-route-test')]
@@ -42,14 +29,6 @@ const mockSources = new Map<string, string>([
         state.decideCalls.push(args)
         if (state.decideThrows.has(args.gateId)) throw new Error(state.decideThrows.get(args.gateId))
         return { ok: true, resumed: null, runStatus: 'waiting' }
-      }
-    `,
-  ],
-  [
-    'mock:list-params',
-    `
-      export function isUuid(value) {
-        return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
       }
     `,
   ],
@@ -80,9 +59,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/flows/index.ts', 'mock:flows'],
-  ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../_lib', 'mock:flows-lib'],
   ['../../../../../lib/authz', 'mock:authz'],
 ])

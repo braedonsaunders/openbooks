@@ -42,18 +42,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:json',
-    `
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-      export function isoDate() {
-        return { nullable() { return { optional() { return {} } } } }
-      }
-      export const uuidId = { safeParse() { return { success: true } } }
-    `,
-  ],
-  [
     'mock:payment-errors',
     `
       const NextResponse = globalThis.openbooksReceiptsRunsNextResponse
@@ -93,7 +81,6 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@/lib/authz', 'mock:authz'],
-  ['@/lib/api/json', 'mock:json'],
   ['@/app/api/payments/lib', 'mock:payment-errors'],
   ['@openbooks/engine/src/payments/direct-debit.ts', '@openbooks/engine/src/payments/direct-debit.ts'],
 ])
@@ -158,7 +145,7 @@ test('an empty restricted scope fails closed before collection', async () => {
 test('an unrestricted scope preserves cross-subsidiary collection behavior', async () => {
   reset(null)
 
-  const response = await post([INVOICE_B], 'profile-in-other-subsidiary')
+  const response = await post([INVOICE_B], '00000000-0000-4000-8000-00000000c002')
 
   assert.equal(response.status, 200)
   assert.equal(routeState.calls[0]?.allowedSubsidiaryIds, null)

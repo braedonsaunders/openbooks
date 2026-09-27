@@ -27,10 +27,6 @@ const mockSources = new Map<string, string>([
     `export async function getFolder() { return { name: 'Folder' } }`,
   ],
   [
-    'mock:list-params',
-    `export function isUuid() { return true }`,
-  ],
-  [
     'mock:business-date',
     `export async function businessToday() { return '2026-08-31' }`,
   ],
@@ -64,7 +60,6 @@ const hooks = registerHooks({
       ['../../../lib', 'mock:auth-lib'],
       ['../../../../../../lib/file-cabinet', 'mock:cabinet'],
       ['../../../../../../lib/file-zip', 'mock:file-zip'],
-      ['../../../../../../lib/list-params', 'mock:list-params'],
       ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
     ]).get(specifier)
     if (mocked) return { shortCircuit: true, format: 'module', url: mocked }
@@ -88,9 +83,11 @@ function reset(): void {
   state.buildCalls = 0
 }
 
+const FOLDER_ID = '11111111-1111-4111-8111-111111111111'
+
 function get(): Promise<Response> {
-  return GET(new Request('http://openbooks.test/api/file-cabinet/folders/folder-1/download-zip'), {
-    params: Promise.resolve({ id: 'folder-1' }),
+  return GET(new Request(`http://openbooks.test/api/file-cabinet/folders/${FOLDER_ID}/download-zip`), {
+    params: Promise.resolve({ id: FOLDER_ID }),
   })
 }
 

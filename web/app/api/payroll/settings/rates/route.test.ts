@@ -53,11 +53,6 @@ stubModules({
     "../../../../../lib/authz": `
       export async function guardRootSubsidiaryScope() { return null }
     `,
-    "../../../../../lib/list-params": `
-      export function isUuid(value) {
-        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-      }
-    `,
     "@openbooks/engine/src/payroll/error.ts": `
       export class PayrollError extends Error {}
     `,

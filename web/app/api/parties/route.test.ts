@@ -124,11 +124,6 @@ const mockSources = new Map<string, string>([
      export async function findUnownedCustomReferences() { return [] }`,
   ],
   [
-    "mock:json",
-    `export const jsonObject = {}
-     export async function parseJsonBody(request) { return { ok: true, data: await request.json() } }`,
-  ],
-  [
     "mock:parties-lib",
     `export async function loadParty(id, orgId) {
        const state = globalThis[Symbol.for('openbooks.parties-route-test')]
@@ -140,10 +135,6 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  // canonical-json.ts is a pure module with no imports of its own: there is
-  // nothing to isolate, and a copy could only drift from the hashing the
-  // audit evidence is reproduced with. It loads for real.
-  ["@/lib/api/json", "mock:json"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/features", "mock:features"],
   ["../../../lib/custom-fields", "mock:custom-fields"],
@@ -152,6 +143,9 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // canonical-json.ts is a pure module with no imports of its own: there is
+    // nothing to isolate, and a copy could only drift from the hashing the
+    // audit evidence is reproduced with. It loads for real.
     if (specifier === "@openbooks/engine/src/platform/canonical-json.ts") {
       return {
         url: new URL(

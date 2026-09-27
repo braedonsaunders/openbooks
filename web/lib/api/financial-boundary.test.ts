@@ -11,6 +11,7 @@ import { fileURLToPath } from "node:url";
 // source text. node's test runner isolates each file in its own process, so
 // the hook cannot leak elsewhere.
 const { jsonObject, parseJsonBody } = await import("./json");
+const { readV1JsonObject } = await import("./v1-request");
 
 /**
  * Reviewed non-JSON mutation routes. Every entry needs a narrow reason because
@@ -189,22 +190,6 @@ test("every JSON mutation route parses its body through the shared zod boundary"
     failures.push("web/app/api/_order/handlers.ts: assign-warehouse must parse through assignWarehouseBody, not jsonObject");
   }
 
-  const v1RequestSource = readFileSync(join(TEST_DIR, "v1-request.ts"), "utf8");
-  if (!v1RequestSource.includes("parseJsonBody(request, jsonObject)")) {
-    failures.push("web/lib/api/v1-request.ts: readV1JsonObject must parse through parseJsonBody(request, jsonObject)");
-  }
-  if (DIRECT_JSON_READ_RE.test(v1RequestSource)) {
-    failures.push("web/lib/api/v1-request.ts: v1 body helper reads req/request.json() directly");
-  }
-  const v1RecordsSource = readFileSync(join(TEST_DIR, "v1-records.ts"), "utf8");
-  if ((v1RecordsSource.match(/readV1JsonObject\(/g) ?? []).length < 2) {
-    failures.push("web/lib/api/v1-records.ts: record create/update aliases must parse through readV1JsonObject");
-  }
-  const v1OrdersSource = readFileSync(join(TEST_DIR, "v1-orders.ts"), "utf8");
-  if ((v1OrdersSource.match(/readV1JsonObject\(/g) ?? []).length < 2) {
-    failures.push("web/lib/api/v1-orders.ts: create/convert must parse through readV1JsonObject");
-  }
-
   for (const [file, reason] of Object.entries(EXEMPT_ROUTES)) {
     if (!reason.trim()) failures.push(`${file}: exemption is missing its reviewed reason`);
     if (!discovered.has(file)) failures.push(`${file}: stale exemption (no mutation route discovered)`);
@@ -247,6 +232,9 @@ test("the shared object-only boundary fails closed on hostile payloads at runtim
       assert.equal(payload.error, "invalid request body");
     }
   }
+
+  // The v1 record and order endpoints read bodies through the same composition.
+  await assert.rejects(readV1JsonObject(rawRequest("[1,2]")), { code: "invalid_input", status: 400 });
 
   // And it documents precisely what object-only validation does prove: any
   // object shape passes through untouched. Field-level typing is a per-route

@@ -100,19 +100,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(req) {
-        const data = await req.json().catch(() => undefined)
-        if (!data || typeof data !== 'object' || Array.isArray(data)) {
-          return { ok: false, response: new Response(JSON.stringify({ error: 'invalid request body' }), { status: 400, headers: { 'content-type': 'application/json' } }) }
-        }
-        return { ok: true, data }
-      }
-    `,
-  ],
-  [
     'mock:insights-lib',
     `
       const state = globalThis[Symbol.for('openbooks.insight-card-route-test')]
@@ -129,7 +116,6 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@/lib/insight-mutations', 'mock:mutations'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../_lib', 'mock:insights-lib'],
 ])

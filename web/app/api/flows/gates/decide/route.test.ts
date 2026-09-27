@@ -56,15 +56,6 @@ const routeState: RouteState = {
 
 const mockSources = new Map<string, string>([
   [
-    "mock:json",
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.flow-decide-route-test')]
@@ -76,14 +67,6 @@ const mockSources = new Map<string, string>([
           return NextResponse.json({ error: 'not found' }, { status: 404 })
         }
         return null
-      }
-    `,
-  ],
-  [
-    "mock:list-params",
-    `
-      export function isUuid(value) {
-        return typeof value === 'string' && value.length > 0
       }
     `,
   ],
@@ -116,9 +99,7 @@ const mockSources = new Map<string, string>([
 ).openbooksFlowDecideNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
-  ["@/lib/api/json", "mock:json"],
   ["../../../../../lib/authz", "mock:authz"],
-  ["../../../../../lib/list-params", "mock:list-params"],
   ["@openbooks/engine/src/flows/index.ts", "mock:engine"],
   ["../../_lib", "mock:lib"],
 ]);

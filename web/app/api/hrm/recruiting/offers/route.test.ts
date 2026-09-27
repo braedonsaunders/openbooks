@@ -51,14 +51,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    "mock:list-params",
-    `
-      export function isUuid(value) {
-        return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-      }
-    `,
-  ],
-  [
     "mock:service",
     `
       const state = globalThis[Symbol.for('openbooks.hrm-recruiting-offers-route-test')]
@@ -127,7 +119,6 @@ const mockUrls = new Map<string, string>([
   ["../../../../../lib/features", "mock:features"],
   ["../../../../../../lib/authz", "mock:authz"],
   ["../../../../../../lib/features", "mock:features"],
-  ["../../../../../../lib/list-params", "mock:list-params"],
   ["@openbooks/engine/src/hrm/recruiting/offers.ts", "mock:service"],
   ["@openbooks/engine/src/hrm/recruiting/hire.ts", "mock:hire"],
   ["@openbooks/engine/src/hrm/recruiting/recruiting-read.ts", "mock:read"],
