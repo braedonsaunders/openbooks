@@ -1,7 +1,16 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { ApplicationError } from "../../../../../lib/application/errors";
 import { readV1JsonObject, withV1Request } from "../../../../../lib/api/v1-request";
 import { draftExtension } from "../../../../../lib/application/extensions";
+
+const draftExtensionBody = z.looseObject({
+  bundle: z.unknown().refine((value) => value !== undefined, "bundle is required"),
+  reason: z.string().trim().min(1, "reason is required").optional(),
+  expectedBaseVersionId: z.union([z.string(), z.null()]).optional(),
+  sourceDraft: z.looseObject({ id: z.string().min(1), contentHash: z.string().min(1) }).nullable().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -10,9 +19,9 @@ export const runtime = "nodejs";
  * install, objects, execution, or activation). Same command as the
  * `draft_app` application tool; revisions are new drafts.
  */
-export async function POST(request: Request): Promise<NextResponse> {
+async function handleV1POST(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/apps/drafts", async (_auth, context) => {
-    const body = await readV1JsonObject(request);
+    const body = draftExtensionBody.parse(await readV1JsonObject(request));
     if (body.bundle === undefined) {
       throw new ApplicationError("invalid_input", "bundle is required", 422);
     }
@@ -32,3 +41,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     return { status: 201, body: { ok: true, ...result } };
   });
 }
+
+export const POST = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1POST(request),
+});

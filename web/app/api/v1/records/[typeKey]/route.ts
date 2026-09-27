@@ -1,5 +1,6 @@
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
@@ -20,8 +21,11 @@ import {
   listRecords,
 } from "../../../../../lib/application/records";
 import { clamp } from "../../../../../lib/list-params";
+import { z } from "zod";
 
 export const runtime = "nodejs";
+
+const recordBodySchema = z.record(z.string(), z.unknown());
 
 /**
  * Durably evidence one finished request attempt. Material commands already
@@ -47,7 +51,7 @@ async function emitExecutionEvent(status: number, auth: ApiKeyAuth, error?: stri
 }
 
 /** GET /api/v1/records/[typeKey] — same application query used by MCP. */
-export async function GET(
+async function handleV1GET(
   request: Request,
   { params }: { params: Promise<{ typeKey: string }> },
 ): Promise<NextResponse> {
@@ -76,7 +80,7 @@ export async function GET(
 }
 
 /** POST /api/v1/records/[typeKey] — exactly-once application command. */
-export async function POST(
+async function handleV1POST(
   request: Request,
   { params }: { params: Promise<{ typeKey: string }> },
 ): Promise<NextResponse> {
@@ -95,7 +99,7 @@ export async function POST(
   }
   let body: Record<string, unknown>;
   try {
-    const parsedBody = await parseJsonBody(request, jsonObject);
+    const parsedBody = await parseJsonBody(request, recordBodySchema);
     if (!parsedBody.ok) {
       const tail = await emitExecutionEvent(parsedBody.response.status, auth, "invalid_input");
       if (tail) return tail;
@@ -147,3 +151,13 @@ async function failure(auth: ApiKeyAuth, error: unknown): Promise<NextResponse> 
   const tail = await emitExecutionEvent(500, auth, "internal_error");
   return tail ?? NextResponse.json({ error: "internal_error" }, { status: 500 });
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: ({ request, params }) => handleV1GET(request, { params: Promise.resolve(params as never) } as never),
+});
+
+export const POST = defineRoute({
+  public: "token",
+  handler: ({ request, params }) => handleV1POST(request, { params: Promise.resolve(params as never) } as never),
+});

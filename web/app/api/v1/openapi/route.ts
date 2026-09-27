@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { canApi } from "../../../../lib/api-auth";
 import { generateOpenApiSpec } from "../../../../lib/api/openapi-server";
 import { withV1Request } from "../../../../lib/api/v1-request";
@@ -5,7 +6,7 @@ import { withV1Request } from "../../../../lib/api/v1-request";
 export const runtime = "nodejs";
 
 /** GET /api/v1/openapi — the tenant-specific OpenAPI 3.0 spec. */
-export async function GET(req: Request) {
+async function handleV1GET(req: Request) {
   return withV1Request(req, "api/v1/openapi", async (auth) => {
     if (!canApi(auth, "api.keys.manage")) {
       return { status: 403, body: { error: "missing permission: api.keys.manage" } };
@@ -22,3 +23,8 @@ export async function GET(req: Request) {
     };
   });
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1GET(request),
+});

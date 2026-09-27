@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { withV1Request } from "../../../../../lib/api/v1-request";
 import { getApplicationBudget } from "../../../../../lib/application/budgets";
@@ -5,7 +6,7 @@ import { getApplicationBudget } from "../../../../../lib/application/budgets";
 export const runtime = "nodejs";
 
 /** GET /api/v1/budgets/{id} — one scenario through the same loader as the budgets screen. */
-export async function GET(
+async function handleV1GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
@@ -14,3 +15,8 @@ export async function GET(
     return { status: 200, body: await getApplicationBudget(context, id) };
   });
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: ({ request, params }) => handleV1GET(request, { params: Promise.resolve(params as never) } as never),
+});

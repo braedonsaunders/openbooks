@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { v1ListRecords } from "../../../../lib/api/v1-records";
 import { readV1JsonObject, requireV1IdempotencyKey, withV1Request } from "../../../../lib/api/v1-request";
@@ -14,7 +15,7 @@ export const runtime = "nodejs";
  * This static folder already owns /journals/{id}/post, so the catch-all
  * alias never sees this path.
  */
-export async function GET(request: Request): Promise<NextResponse> {
+async function handleV1GET(request: Request): Promise<NextResponse> {
   return v1ListRecords(request, "journals", "api/v1/journals");
 }
 
@@ -23,7 +24,7 @@ export async function GET(request: Request): Promise<NextResponse> {
  * Same writer as POST /api/journals. The Idempotency-Key must be a UUID;
  * it becomes the document id.
  */
-export async function POST(request: Request): Promise<NextResponse> {
+async function handleV1POST(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/journals", async (_auth, context) => {
     const outcome = await createApplicationJournal(context, {
       idempotencyKey: requireUuidIdempotencyKey(requireV1IdempotencyKey(request)),
@@ -36,3 +37,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     };
   });
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1GET(request),
+});
+
+export const POST = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1POST(request),
+});

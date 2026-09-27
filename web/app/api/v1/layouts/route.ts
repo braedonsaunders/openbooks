@@ -1,12 +1,21 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { ApplicationError } from "../../../../lib/application/errors";
 import { readV1JsonObject, withV1Request } from "../../../../lib/api/v1-request";
 import { clearLayout, listLayouts, setLayout } from "../../../../lib/application/page-layouts";
 
+const setLayoutBody = z.looseObject({
+  route: z.unknown().optional(),
+  spec: z.unknown().optional(),
+  note: z.string().nullable().optional(),
+  scope: z.unknown().optional(),
+});
+
 export const runtime = "nodejs";
 
 /** GET /api/v1/layouts — the routes this org has customized. */
-export async function GET(request: Request): Promise<NextResponse> {
+async function handleV1GET(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/layouts", async (_auth, context) => {
     return { status: 200, body: { ok: true, ...(await listLayouts(context)) } };
   });
@@ -18,9 +27,9 @@ export async function GET(request: Request): Promise<NextResponse> {
  * rejected layout is an ordinary 200 outcome with `stored: false` and errors,
  * never an exception to retry blindly.
  */
-export async function PUT(request: Request): Promise<NextResponse> {
+async function handleV1PUT(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/layouts", async (_auth, context) => {
-    const body = await readV1JsonObject(request);
+    const body = setLayoutBody.parse(await readV1JsonObject(request));
     if (typeof body.route !== "string" || !body.route) {
       throw new ApplicationError("invalid_input", "route is required", 422);
     }
@@ -41,7 +50,7 @@ export async function PUT(request: Request): Promise<NextResponse> {
 }
 
 /** DELETE /api/v1/layouts?route=&scope= — drop a layout; the page returns to its built-in spec. */
-export async function DELETE(request: Request): Promise<NextResponse> {
+async function handleV1DELETE(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/layouts", async (_auth, context) => {
     const url = new URL(request.url);
     const route = url.searchParams.get("route") ?? "";
@@ -56,3 +65,18 @@ export async function DELETE(request: Request): Promise<NextResponse> {
     return { status: 200, body: { ok: true, ...result } };
   });
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1GET(request),
+});
+
+export const PUT = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1PUT(request),
+});
+
+export const DELETE = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1DELETE(request),
+});

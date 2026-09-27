@@ -1,7 +1,15 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { ApplicationError } from "../../../../../lib/application/errors";
 import { readV1JsonObject, withV1Request } from "../../../../../lib/api/v1-request";
 import { previewLayout } from "../../../../../lib/application/page-layouts";
+
+const previewLayoutBody = z.looseObject({
+  route: z.unknown().optional(),
+  spec: z.unknown().optional(),
+  params: z.unknown().optional(),
+});
 
 export const runtime = "nodejs";
 
@@ -10,9 +18,9 @@ export const runtime = "nodejs";
  * preview url. Staging changes nothing for anyone else; publishing is PUT
  * /api/v1/layouts.
  */
-export async function POST(request: Request): Promise<NextResponse> {
+async function handleV1POST(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/layouts/preview", async (_auth, context) => {
-    const body = await readV1JsonObject(request);
+    const body = previewLayoutBody.parse(await readV1JsonObject(request));
     if (typeof body.route !== "string" || !body.route) {
       throw new ApplicationError("invalid_input", "route is required", 422);
     }
@@ -35,3 +43,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     return { status: 200, body: { ok: true, ...(await previewLayout(context, { route: body.route, spec: body.spec, params })) } };
   });
 }
+
+export const POST = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1POST(request),
+});
