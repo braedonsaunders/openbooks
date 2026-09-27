@@ -32,6 +32,10 @@
     "budget_scenario": "Budget",
     "revenue_contract": "Revenue contract",
     "equipment_unit": "Equipment unit",
+    "resourcing_assignment": "Resource assignment",
+    "resourcing_request": "Resource request",
+    "resourcing_demand": "Resource demand",
+    "retainer": "Retainer",
     "timesheet_week": "Timesheet week",
     "bank_reconciliation": "Bank reconciliation",
     "bank_statement": "Bank statement",
@@ -42,6 +46,25 @@
     "property": "Property",
     "pick_list": "Pick list",
     "shipment": "Shipment"
+  },
+  "resourcing": {
+    "fields": {
+      "booking": "Booking type",
+      "kind": "Retainer type"
+    },
+    "booking": {
+      "hard": "Committed",
+      "soft": "Tentative"
+    },
+    "kind": {
+      "hours": "Hours",
+      "fees": "Fees"
+    },
+    "status": {
+      "released": "Released",
+      "exhausted": "Exhausted",
+      "expired": "Expired"
+    }
   },
   "property": {
     "tabs": {

@@ -28,6 +28,10 @@
     "budget_scenario": "Orçamento",
     "revenue_contract": "Contrato de receita",
     "equipment_unit": "Unidade de equipamento",
+    "resourcing_assignment": "Alocação de recursos",
+    "resourcing_request": "Solicitação de recursos",
+    "resourcing_demand": "Demanda de recursos",
+    "retainer": "Retainer",
     "timesheet_week": "Semana da folha de horas",
     "bank_reconciliation": "Conciliação bancária",
     "bank_statement": "Extrato bancário",
@@ -42,6 +46,25 @@
     "field_ticket": "Boletim de campo",
     "pick_list": "Lista de separação",
     "shipment": "Remessa"
+  },
+  "resourcing": {
+    "fields": {
+      "booking": "Tipo de reserva",
+      "kind": "Tipo de retenção"
+    },
+    "booking": {
+      "hard": "Confirmada",
+      "soft": "Provisória"
+    },
+    "kind": {
+      "hours": "Horas",
+      "fees": "Honorários"
+    },
+    "status": {
+      "released": "Liberada",
+      "exhausted": "Esgotada",
+      "expired": "Expirada"
+    }
   },
   "property": {
     "tabs": {

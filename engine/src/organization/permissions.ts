@@ -95,6 +95,11 @@ export const PERMISSION_CATALOGUE = [
   // Projects & job costing
   "projects.read",
   "projects.manage",
+  // Resourcing records and retainer lifecycle management.
+  "resourcing.read",
+  "resourcing.manage",
+  "retainers.read",
+  "retainers.manage",
   // Subcontractor compliance — certificates of insurance, lien waivers, and
   // year-end information returns. Deliberately four keys, because these are
   // four different duties: recording evidence is not verifying it, granting an
@@ -464,6 +469,16 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "resourcing",
+    labelKey: "permissions.groups.resourcing",
+    permissions: [
+      { key: "resourcing.read", labelKey: permissionLabelKey("resourcing.read") },
+      { key: "resourcing.manage", labelKey: permissionLabelKey("resourcing.manage") },
+      { key: "retainers.read", labelKey: permissionLabelKey("retainers.read") },
+      { key: "retainers.manage", labelKey: permissionLabelKey("retainers.manage") },
+    ],
+  },
+  {
     key: "compliance",
     labelKey: "permissions.groups.compliance",
     permissions: [
@@ -773,6 +788,10 @@ export const BUILT_IN_ROLES: Record<
       "orders.fulfill",
       "projects.read",
       "projects.manage",
+      "resourcing.read",
+      "resourcing.manage",
+      "retainers.read",
+      "retainers.manage",
       "compliance.read",
       "compliance.manage",
       "compliance.verify",
@@ -862,6 +881,10 @@ export const BUILT_IN_ROLES: Record<
       "orders.fulfill",
       "projects.read",
       "projects.manage",
+      "resourcing.read",
+      "resourcing.manage",
+      "retainers.read",
+      "retainers.manage",
       "compliance.read",
       "compliance.manage",
       "assets.read",
@@ -905,6 +928,7 @@ export const BUILT_IN_ROLES: Record<
       "ar.read",
       "ar.approve",
       "usage.read",
+      "resourcing.read",
       "flows.approve",
       "reports.read",
       "budgets.read",
@@ -935,7 +959,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
   },
   sales_manager: {
     name: "Sales Manager",

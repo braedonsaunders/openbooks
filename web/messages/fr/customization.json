@@ -31,6 +31,10 @@
     "budget_scenario": "Budget",
     "revenue_contract": "Contrat de revenus",
     "equipment_unit": "Unité d’équipement",
+    "resourcing_assignment": "Affectation de ressources",
+    "resourcing_request": "Demande de ressources",
+    "resourcing_demand": "Demande de capacité",
+    "retainer": "Retenue",
     "timesheet_week": "Semaine de feuille de temps",
     "bank_reconciliation": "Rapprochement bancaire",
     "bank_statement": "Relevé bancaire",
@@ -42,6 +46,25 @@
     "pay_run": "Cycle de paie",
     "pick_list": "Liste de prélèvement",
     "shipment": "Expédition"
+  },
+  "resourcing": {
+    "fields": {
+      "booking": "Type de réservation",
+      "kind": "Type de retenue"
+    },
+    "booking": {
+      "hard": "Confirmée",
+      "soft": "Provisoire"
+    },
+    "kind": {
+      "hours": "Heures",
+      "fees": "Honoraires"
+    },
+    "status": {
+      "released": "Libérée",
+      "exhausted": "Épuisée",
+      "expired": "Expirée"
+    }
   },
   "property": {
     "tabs": {
