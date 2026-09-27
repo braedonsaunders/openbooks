@@ -17,6 +17,7 @@ export const SEEDED_ROLE_NAMES: Record<string, string> = {
   Viewer: 'viewer',
   'Sales Manager': 'salesManager',
   'Sales Representative': 'salesRepresentative',
+  Production: 'production',
 }
 
 export function displayRoleName(storedName: string, translatedByKey: (key: string) => string): string {

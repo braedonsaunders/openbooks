@@ -535,11 +535,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/admin/setup/manufacturing': {
     route: '/admin/setup/manufacturing',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/admin/setup/manufacturing/view')
       return {
-        load: () => m.loadManufacturingSetup(),
+        load: (input) => m.loadManufacturingSetup(input.searchParams ?? {}),
         spec: (data) => m.manufacturingPoliciesSpec(data as never),
       }
     },

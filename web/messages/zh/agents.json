@@ -91,7 +91,8 @@
         "controller": "财务总监",
         "salesManager": "销售经理",
         "salesRepresentative": "销售代表",
-        "viewer": "查看者"
+        "viewer": "查看者",
+        "production": "生产"
       },
       "due": "到期",
       "overdue": "逾期",

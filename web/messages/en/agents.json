@@ -91,7 +91,8 @@
         "controller": "Controller",
         "salesManager": "Sales Manager",
         "salesRepresentative": "Sales Representative",
-        "viewer": "Viewer"
+        "viewer": "Viewer",
+        "production": "Production"
       },
       "due": "Due",
       "overdue": "Overdue",

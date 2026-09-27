@@ -91,7 +91,8 @@
         "controller": "経理責任者",
         "salesManager": "営業マネージャー",
         "salesRepresentative": "営業担当者",
-        "viewer": "閲覧者"
+        "viewer": "閲覧者",
+        "production": "製造"
       },
       "due": "期限",
       "overdue": "延滞",

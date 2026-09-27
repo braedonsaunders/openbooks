@@ -913,7 +913,7 @@ export const BUILT_IN_ROLES: Record<
   production: {
     name: "Production",
     description: "Manages manufacturing masters and shop-floor work, with inventory posting authority but no reversal authority.",
-    permissions: ["manufacturing.read", "manufacturing.manage", "items.read", "items.post"],
+    permissions: ["manufacturing.read", "manufacturing.manage", "items.read", "items.post", "time.clock", "hrm.self.read", "hrm.self.request"],
   },
   approver: {
     name: "Approver",

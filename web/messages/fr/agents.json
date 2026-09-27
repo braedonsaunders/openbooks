@@ -91,7 +91,8 @@
         "controller": "Contrôleur",
         "salesManager": "Responsable commercial",
         "salesRepresentative": "Représentant commercial",
-        "viewer": "Lecteur"
+        "viewer": "Lecteur",
+        "production": "Production"
       },
       "due": "Échéance",
       "overdue": "En retard",
