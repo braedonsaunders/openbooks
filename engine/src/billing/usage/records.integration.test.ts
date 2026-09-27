@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "../../platform/db.ts";
+import { db, withOrgContext } from "../../platform/db.ts";
+import { withSimClock } from "../../platform/clock.ts";
 import {
   createUsageMeter,
   deactivateUsageMeter,
@@ -24,8 +25,8 @@ const DB = { skip: !process.env.OPENBOOKS_DB_URL };
 async function withUsageOrg(run: (org: ScratchOrg, actor: string) => Promise<void>): Promise<void> {
   const org = await createScratchOrg();
   try {
-    const actor = await createScratchUser(org.orgId, "Usage controller", "admin");
-    await withBypassContext(async () => {
+    const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Usage controller", "admin"));
+    await withOrgContext(org.orgId, async () => {
       const enabled = await db.execute(sql`
         update orgs
            set settings = jsonb_set(
@@ -38,7 +39,7 @@ async function withUsageOrg(run: (org: ScratchOrg, actor: string) => Promise<voi
          where id = ${org.orgId}`);
       assert.equal(enabled.rowCount, 1, "the scratch organization must receive the usage feature settings");
     });
-    await run(org, actor);
+    await withOrgContext(org.orgId, () => run(org, actor));
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }
@@ -83,8 +84,11 @@ test("a reversal appends negative evidence and leaves the original unchanged", D
     });
     const [original] = await ingestUsageRecords(org.orgId, actor, [event(org, meter.key)]);
     assert.ok(original);
-    const reversal = await reverseUsageRecord(org.orgId, actor, original.id, "Duplicate source event", org.date);
-    const rows = await listUsageRecordsForWindow(org.orgId, meter.id, org.customerId, org.date, org.date);
+    const reversal = await withSimClock("2026-07-16", () =>
+      reverseUsageRecord(org.orgId, actor, original.id, "Duplicate source event"),
+    );
+    assert.equal(reversal.occurredOn, "2026-07-16");
+    const rows = await listUsageRecordsForWindow(org.orgId, meter.id, org.customerId, org.date, reversal.occurredOn);
     const stillOriginal = rows.find((row) => row.id === original.id);
     assert.deepEqual(stillOriginal, original);
     assert.equal(rows.length, 2);
@@ -102,7 +106,7 @@ test("a closed AR period refuses usage and names the open-period remedy", DB, as
       unit: "event",
       aggregation: "sum",
     });
-    await withBypassContext(async () => {
+    await withOrgContext(org.orgId, async () => {
       await db.execute(sql`
         insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state, locked_at, reason)
         values (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'ar', 'closed', now(), 'Controller close')`);
