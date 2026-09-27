@@ -1,6 +1,5 @@
 import type { SqlExecutor } from "../platform/db.ts";
 import {
-  acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
   orgFeatureEnabled,
 } from "../organization/org-feature-lock.ts";
@@ -13,7 +12,6 @@ export async function assertManufacturingFeature(
   orgId: string,
   key: ManufacturingFeatureKey,
 ): Promise<void> {
-  await acquireOrgFeatureGateLock(tx, orgId);
   if (!(await lockAndCheckOrgFeature(tx, orgId, key))) {
     throw new ManufacturingFeatureDisabledError(key);
   }
