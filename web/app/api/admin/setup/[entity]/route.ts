@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from 'next/server'
@@ -51,8 +52,7 @@ export const POST = defineRoute({
   permission: "admin.setup.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "entity": z.string() }),
-  body: requestBodySchema,
-  handler: async ({ request, body, params, authz: routeAuthz }) => {
+  handler: async ({ request, params, authz: routeAuthz }) => {
 
     const gate = routeAuthz
 
@@ -60,6 +60,8 @@ export const POST = defineRoute({
     const entityKey = (params).entity
     const refused = await preflightSetupWrite(actor, entityKey, 'create')
     if (refused) return setupWriteResponse(refused)
+    const parsedBody = await parseJsonBody(request, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
     // Creates are idempotent on the caller's key, which becomes the new row's
     // id: the drawer mints one UUID per mounted create session and reuses it
     // across retries and timeouts. The key is required (400, no write) and only
@@ -75,7 +77,7 @@ export const POST = defineRoute({
     }
 
 
-    const result = await createSetupRecord(actor, entityKey, body as Record<string, unknown>, { requestId })
+    const result = await createSetupRecord(actor, entityKey, parsedBody.data as Record<string, unknown>, { requestId })
     return setupWriteResponse(result)
   },
 });
@@ -84,8 +86,7 @@ export const PATCH = defineRoute({
   permission: "admin.setup.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "entity": z.string() }),
-  body: requestBodySchema,
-  handler: async ({ body, params, authz: routeAuthz }) => {
+  handler: async ({ request, params, authz: routeAuthz }) => {
 
     const gate = routeAuthz
 
@@ -93,9 +94,11 @@ export const PATCH = defineRoute({
     const entityKey = (params).entity
     const refused = await preflightSetupWrite(actor, entityKey, 'update')
     if (refused) return setupWriteResponse(refused)
+    const parsedBody = await parseJsonBody(request, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
 
 
-    const result = await updateSetupRecord(actor, entityKey, body as Record<string, unknown>)
+    const result = await updateSetupRecord(actor, entityKey, parsedBody.data as Record<string, unknown>)
     return setupWriteResponse(result)
   },
 });
