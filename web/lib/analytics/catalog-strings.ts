@@ -16,16 +16,17 @@ import englishAnalyticsMessages from "../../messages/en/analytics.json";
  * template, so "Mar '26" becomes "26年3月" where the locale reads that way.
  */
 
-export type CatalogMessageFn = (
-  key: string,
-  values?: Record<string, string | number>,
-) => string;
-
 const englishCatalogTranslator = createTranslator({
   locale: "en",
   messages: { analytics: englishAnalyticsMessages },
   namespace: "analytics",
 });
+
+export type CatalogMessageKey = Parameters<typeof englishCatalogTranslator>[0];
+export type CatalogMessageFn = (
+  key: CatalogMessageKey,
+  values?: Record<string, string | number>,
+) => string;
 
 /** English fallback for non-request callers, resolved from the message catalog. */
 export const englishCatalogMessage: CatalogMessageFn = (key, values) =>
@@ -38,7 +39,7 @@ export const MONTH_KEYS = [
 
 /** 12 short month names, Jan→Dec, in the request language. */
 export function catalogShortMonths(t: CatalogMessageFn): string[] {
-  return MONTH_KEYS.map((k) => t(`common.monthsShort.${k}`));
+  return MONTH_KEYS.map((k) => t(`common.monthsShort.${k}` as CatalogMessageKey));
 }
 
 /** "2026-03" → localized "Mar '26" style label. */
