@@ -180,7 +180,7 @@ test("add subscription rechecks customer scope after a concurrent rehome", async
 
     const response = await adding;
     assert.equal(response.status, 404);
-    assert.match(String((await response.json() as { error: string }).error), /not found/);
+    assert.equal(((await response.json()) as { error: string }).error, "not_found");
     const count = (await withBypassContext(() => db.execute<{ count: number }>(sql`
       select count(*)::int as count from subscriptions
        where org_id = ${org.orgId} and customer_id = ${customerId}`))).rows[0]!.count;
