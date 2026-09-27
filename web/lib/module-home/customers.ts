@@ -315,7 +315,7 @@ export async function customersHome(
     cur.openInvoices += 1
     openInvoices += 1
     arOutstanding = add(arOutstanding, item.remaining)
-    const due = item.dueDate
+    const due = item.dueDate?.toISOString().slice(0, 10) ?? null
     if (due && due < today) {
       cur.overdue = add(cur.overdue, item.remaining)
       arOverdue = add(arOverdue, item.remaining)
