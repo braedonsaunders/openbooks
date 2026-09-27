@@ -91,20 +91,6 @@
     "reason": "test-only fallback period; year derives from new Date() wall-clock, never below year 100"
   },
   {
-    "path": "engine/src/payroll/canada/cra/remittance.test.ts",
-    "fn": "(top-level)",
-    "test": "the declared CRA timetable matches the legacy function across three years",
-    "arg": "year",
-    "reason": "test-only month ends; year iterates the literals [2026, 2027, 2028]"
-  },
-  {
-    "path": "engine/src/payroll/remittance-due-dates.test.ts",
-    "fn": "(top-level)",
-    "test": "every due date lands on a business day",
-    "arg": "year",
-    "reason": "test-only month ends; year iterates the literals [2026, 2027, 2028]"
-  },
-  {
     "path": "engine/src/payroll/schedule-periods.test.ts",
     "fn": "(top-level)",
     "test": "every other day of the month derives a schedule",
