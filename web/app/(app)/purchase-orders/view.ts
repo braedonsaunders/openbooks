@@ -16,6 +16,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { requirePermission, can } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
+import { dropShipOrderStatus } from '@openbooks/engine/src/sales/drop-ship.ts'
 import { loadOrder } from '../../api/_order/lib'
 import type { OrderDrawer } from '../_order/OrderDrawer'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
@@ -62,6 +63,7 @@ export async function loadPurchaseOrders(
   const authz = await requirePermission('ap.read')
   await requireFeatureEnabled(authz.user.orgId, 'orders')
   const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
+  const dropShipping = await isFeatureEnabled(authz.user.orgId, 'dropShipping')
   const canManage = can(authz, 'ap.create')
   const t = await getTranslations('purchaseOrders')
   const openId = pickString(sp[PARAM])
@@ -121,6 +123,14 @@ export async function loadPurchaseOrders(
         ])
       : null,
   ])
+  const linkedSalesOrderId = openOrder && dropShipping
+    ? (await db.execute<{ sales_order_id: string }>(sql`
+        select sales_order_id from drop_ship_orders
+         where org_id = ${authz.user.orgId} and purchase_order_id = ${openDocumentId}`)).rows[0]?.sales_order_id ?? null
+    : null
+  const dropShipLines = linkedSalesOrderId
+    ? await dropShipOrderStatus(db, authz.user.orgId, linkedSalesOrderId, authz.allowedSubsidiaryIds)
+    : []
   const resolvedForm = openOrder && pickers ? await resolveFormLayout({
     orgId: authz.user.orgId, userId: authz.user.id, recordType: KIND,
     userRoles: authz.user.roles.map(({ key }) => key), headerDefs: [], lineDefs: [], explicitLayoutId: pickString(sp.form),
@@ -193,6 +203,10 @@ export async function loadPurchaseOrders(
               .map((subsidiary) => ({ id: subsidiary.id, name: `${'  '.repeat(subsidiary.depth)}${subsidiary.name}` })),
             canManage,
             layout: resolvedForm?.layout,
+            dropShipping,
+            dropShipLines,
+            canConfirmDropShip: dropShipping && can(authz, 'items.post'),
+            isDropShipPurchaseOrder: linkedSalesOrderId !== null,
           }
         : null,
   }

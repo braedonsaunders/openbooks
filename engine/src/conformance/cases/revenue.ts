@@ -32,7 +32,8 @@ import {
 } from "../../billing/usage/rating-plans.ts";
 import { aggregateUsage, commitShortfall, rateUsage } from "../../billing/usage/rating.ts";
 import { commitWindowForRun } from "../../billing/usage/true-ups.ts";
-import { capture, deps, type DraftDocumentInput } from "../ledger-helpers.ts";
+import { applyDropShipConfirmationInventory } from "../../sales/drop-ship.ts";
+import { capture, deps, draftDocument, type DraftDocumentInput } from "../ledger-helpers.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 
 /**
@@ -1127,5 +1128,133 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
         remainingTransactionPrice: "1800.0000",
       },
     },
+  },
+
+  {
+    id: "rev-drop-ship-principal-gross",
+    title: "A drop-ship principal reports the customer sale and vendor cost gross",
+    citations: [
+      {
+        standard: "ASC 606",
+        reference: "606-10-55-36 to 55-40",
+        kind: "requirement",
+        requirement:
+          "An entity is a principal when it controls the specified good before transfer to the customer and reports the consideration gross; an agent arranges for another party to provide it.",
+      },
+      {
+        standard: "IFRS 15",
+        reference: "IFRS 15.B34-B38",
+        kind: "requirement",
+        requirement:
+          "The principal controls the promised good before transfer and reports gross consideration, while an agent arranges for another party to provide the good and reports its fee.",
+      },
+    ],
+    support: "supported",
+    tier: "ledger",
+    assertion:
+      "When the distributor controls the good before it reaches the customer, the customer invoice records gross revenue and the vendor shipment records its cost separately as cost of goods sold.",
+    facts: [
+      "The distributor controls one item before transfer and invoices the customer 100.00.",
+      "The vendor's confirmed shipment has a recorded purchase value of 60.00.",
+      "The customer invoice posts through the document kernel and the drop-ship confirmation posts through the inventory journal service without creating a stock movement.",
+    ],
+    expected: {
+      entries: [
+        {
+          step: "customer invoice and vendor shipment",
+          lines: [
+            { role: "ar", amount: "100.0000" },
+            { role: "revenue", amount: "-100.0000" },
+            { role: "cogs", amount: "60.0000" },
+            { role: "inventoryClearing", amount: "-60.0000" },
+          ],
+        },
+      ],
+    },
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      const invoiceDraftId = await draftDocument(ledger, {
+        kind: "customer_invoice",
+        number: "CONF-REV-DS-PRINCIPAL",
+        partyId: ledger.customerId,
+        lines: [{ itemId: ledger.items.service, accountId: ctx.roles.revenue, quantity: "1", unitPrice: "100", amount: "100" }],
+      });
+      const receiptId = randomUUID();
+      const receiptLineId = randomUUID();
+      await db.execute(sql`
+        insert into documents
+          (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
+           currency, fx_rate, status, subtotal, tax_total, total, custom, extra_dims)
+        values
+          (${receiptId}, ${ledger.orgId}, 'purchase_receipt', 'CONF-REV-DS-RECEIPT', ${ledger.vendorId},
+           ${ledger.subsidiaryId}, ${ledger.date}, ${ledger.date}, 'CAD', '1', 'draft',
+           '60', '0', '60', '{"dropShipConfirmation":{"idempotencyKey":"conformance"}}'::jsonb, '{}'::jsonb)
+      `);
+      await db.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, quantity, unit_price, amount, tax_amount,
+           is_billable, quantity_fulfilled, quantity_billed, custom, extra_dims)
+        values
+          (${receiptLineId}, ${ledger.orgId}, ${receiptId}, 1, ${ledger.items.standard},
+           '1', '60', '60', '0', false, '0', '0',
+           ${JSON.stringify({ receipt: { sourceLineId: randomUUID(), lotId: null, serialId: null } })}::jsonb,
+           '{}'::jsonb)
+      `);
+      const receiptApproved = await db.execute<{ id: string }>(sql`
+        update documents set status = 'approved'
+         where id = ${receiptId} and org_id = ${ledger.orgId} and status = 'draft'
+        returning id`);
+      if (receiptApproved.rows.length !== 1) throw new Error("conformance drop-ship receipt was not approved");
+      await db.execute(sql`
+        update orgs set settings = jsonb_set(settings, '{features}',
+          coalesce(settings->'features', '{}'::jsonb) || '{"orders":true,"inventory":true,"dropShipping":true}'::jsonb)
+         where id = ${ledger.orgId}
+      `);
+      const invoiceEntry = await capture(ctx, "customer invoice", async () => {
+        const approved = await db.execute<{ id: string }>(sql`
+          update documents set status = 'approved'
+           where id = ${invoiceDraftId} and org_id = ${ledger.orgId} and status = 'draft'
+          returning id`);
+        if (approved.rows.length !== 1) throw new Error("conformance invoice was not approved");
+        await postDocument(invoiceDraftId, deps(ctx));
+      });
+      const confirmationEntry = await capture(ctx, "vendor shipment", async () => {
+        await applyDropShipConfirmationInventory(db, ledger.orgId, ledger.actorId, receiptId);
+      });
+      return { entries: [{ step: "customer invoice and vendor shipment", lines: [...invoiceEntry.lines, ...confirmationEntry.lines] }] };
+    },
+  },
+
+  {
+    id: "rev-drop-ship-agent-net",
+    title: "A drop-ship agent reports only its arranging fee",
+    citations: [
+      {
+        standard: "ASC 606",
+        reference: "606-10-55-36 to 55-40",
+        kind: "requirement",
+        requirement:
+          "An entity that arranges for another party to provide the specified good, without controlling it before transfer, reports its fee rather than the gross customer consideration.",
+      },
+      {
+        standard: "IFRS 15",
+        reference: "IFRS 15.B34-B38",
+        kind: "requirement",
+        requirement:
+          "An agent that arranges for another party to provide the good does not control it before transfer and reports only the amount of its fee.",
+      },
+    ],
+    support: "not-implemented",
+    tier: "ledger",
+    assertion:
+      "When the distributor never controls the vendor's good and only arranges delivery, its revenue is the contracted fee rather than the full amount charged to the customer.",
+    facts: [
+      "The vendor controls and transfers the item directly to the customer.",
+      "The customer pays 100.00 and the vendor is entitled to 80.00; the distributor earns a 20.00 arranging fee.",
+      "The target outcome is 20.00 net revenue with no gross cost of goods sold presentation by the agent.",
+    ],
+    gap:
+      "Drop-ship accounting currently records a distributor's customer invoice gross and its vendor cost as cost of goods sold. It has no principal-versus-agent assessment or net-fee recognition path for an entity that never controls the good before transfer.",
+    expected: { values: { netRevenue: "20.0000", costOfGoodsSold: "0.0000" } },
   },
 ];

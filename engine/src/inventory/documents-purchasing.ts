@@ -199,6 +199,20 @@ async function purchaseReceiptCoverage(
     quantity = add(quantity, live.quantity);
     value = add(value, live.value);
   }
+  const dropShipConfirmations = (await runner.execute<{ quantity: string; value: string }>(sql`
+    select rl.quantity::text as quantity, rl.amount::text as value
+      from document_lines rl
+      join documents rd on rd.id = rl.document_id and rd.org_id = rl.org_id
+     where rl.org_id = ${orgId}
+       and rd.kind = ${PURCHASE_RECEIPT_DOCUMENT_KIND}
+       and rd.status in ('approved', 'posted')
+       and rd.custom ? 'dropShipConfirmation'
+       and rl.custom->'receipt'->>'sourceLineId' = ${purchaseOrderLineId}
+  `)).rows;
+  for (const confirmation of dropShipConfirmations) {
+    quantity = add(quantity, confirmation.quantity);
+    value = add(value, confirmation.value);
+  }
   if (toUnits(quantity) <= 0n) return null;
   return { quantity, value };
 }

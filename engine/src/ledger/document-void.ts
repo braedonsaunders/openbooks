@@ -20,6 +20,7 @@ import { projectRetainageHeldSql } from "../projects/construction-billing.ts";
 import { add, cmp, neg } from "../money/money.ts";
 import { InventoryError } from "../inventory/contracts.ts";
 import { reverseInventoryMovement } from "../inventory/reversal.ts";
+import { reverseDropShipConfirmationPair } from "../inventory/drop-ship-reversal.ts";
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -663,6 +664,7 @@ export async function completeRequestedDocumentVoid(
       reversalEntryId: string | null;
       kind: string;
       previousStatus: string;
+      pairedDocumentId: string | null;
     } = await db.transaction(async (tx) => {
       // Completion-time backstop for the request-path check above: a release
       // landing between request and completion is refused here instead.
@@ -767,6 +769,7 @@ export async function completeRequestedDocumentVoid(
           reversalEntryId: String(doc.reversal_entry_id ?? "") || null,
           kind: String(doc.kind),
           previousStatus: "voided",
+          pairedDocumentId: null,
         };
       }
       if (!doc.void_requested_at || !doc.void_requested_by || !doc.void_reason) {
@@ -802,7 +805,41 @@ export async function completeRequestedDocumentVoid(
       // Reverse the dependent releases first, then void the draw.
       await assertRetainageDrawVoidable(tx, orgId, documentId, doc);
 
-      if (String(doc.kind) === "sales_fulfillment" || String(doc.kind) === "purchase_receipt") {
+      let reversalEntryId: string | null = null;
+      let pairedDocumentId: string | null = null;
+      const kind = String(doc.kind);
+      const custom = doc.custom && typeof doc.custom === "object" && !Array.isArray(doc.custom)
+        ? doc.custom as Record<string, unknown>
+        : null;
+      const confirmation = custom?.dropShipConfirmation;
+      const confirmationRecord = confirmation && typeof confirmation === "object" && !Array.isArray(confirmation)
+        ? confirmation as Record<string, unknown>
+        : null;
+      const isDropShipPair = kind === "purchase_receipt"
+        ? confirmationRecord !== null
+        : kind === "sales_fulfillment" && typeof confirmationRecord?.purchaseReceiptId === "string";
+      const dropShipPair = isDropShipPair
+        ? await reverseDropShipConfirmationPair(tx, {
+            orgId,
+            documentId,
+            document: doc,
+            actorId: String(doc.void_requested_by),
+            reversalDate: String(doc.void_reversal_date),
+            reason: String(doc.void_reason),
+            reverseDocument: (voidDocumentId, voidKind) => reverseOrderShipment(tx, {
+              orgId,
+              voidDocumentId,
+              voidKind,
+              actorId: String(doc.void_requested_by),
+              reversalDate: String(doc.void_reversal_date),
+              reason: String(doc.void_reason),
+            }),
+          })
+        : null;
+      if (dropShipPair) {
+        pairedDocumentId = dropShipPair.pairedDocumentId;
+        reversalEntryId = dropShipPair.reversalEntryId;
+      } else if (String(doc.kind) === "sales_fulfillment" || String(doc.kind) === "purchase_receipt") {
         // Voiding a shipment or goods receipt unwinds it completely in this
         // transaction: live stock movements are reversed through the
         // inventory kernel and the source order's fulfilled counters are
@@ -821,7 +858,6 @@ export async function completeRequestedDocumentVoid(
       const before = await captureTransactionAuditSnapshot(tx, documentId, orgId);
       if (!before) throw new DocumentVoidError("document not found");
       const entryId = doc.posted_entry_id ? String(doc.posted_entry_id) : null;
-      let reversalEntryId: string | null = null;
 
       if (entryId) {
         // lockApplicationEvidence already holds the source, all related
@@ -1155,6 +1191,7 @@ export async function completeRequestedDocumentVoid(
         reversalEntryId,
         kind: String(doc.kind),
         previousStatus: String(doc.status),
+        pairedDocumentId,
       };
     });
     await emitStatusChange(
@@ -1163,6 +1200,15 @@ export async function completeRequestedDocumentVoid(
       { from: result.previousStatus, to: "voided" },
       { orgId },
     );
+    if (result.pairedDocumentId) {
+      const pairedKind = result.kind === "purchase_receipt" ? "sales_fulfillment" : "purchase_receipt";
+      await emitStatusChange(
+        pairedKind,
+        result.pairedDocumentId,
+        { from: "approved", to: "voided" },
+        { orgId },
+      );
+    }
     return result.reversalEntryId;
   });
 }

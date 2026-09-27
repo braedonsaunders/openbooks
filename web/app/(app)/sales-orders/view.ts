@@ -9,6 +9,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { can, requirePermission, type Authz } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
+import { dropShipOrderStatus } from '@openbooks/engine/src/sales/drop-ship.ts'
 import { loadOrder } from '../../api/_order/lib'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
@@ -69,6 +70,11 @@ export interface SalesOrderDrawer {
   backorders: boolean
   pickLists: boolean
   returnAuthorizations: boolean
+  dropShipping: boolean
+  dropShipLines: OrderDrawerProps['dropShipLines']
+  dropShipVendors: OrderDrawerProps['dropShipVendors']
+  canRouteDropShip: boolean
+  canCreateDropShipPurchaseOrder: boolean
 }
 
 export interface SalesOrdersData {
@@ -112,7 +118,10 @@ export async function loadSalesOrders(
   const authz = await requirePermission('ar.read')
   await requireFeatureEnabled(authz.user.orgId, 'orders')
   const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
+  const dropShipping = await isFeatureEnabled(authz.user.orgId, 'dropShipping')
   const canManage = can(authz, 'ar.create')
+  const canRouteDropShip = dropShipping && can(authz, 'orders.fulfill')
+  const canCreateDropShipPurchaseOrder = dropShipping && can(authz, 'ap.create')
   const { backorders, pickLists, returnAuthorizations } = await orderFulfillmentActions(authz)
   const t = await getTranslations('salesOrders')
   const openId = pickString(sp[PARAM])
@@ -165,6 +174,12 @@ export async function loadSalesOrders(
         ])
       : null,
   ])
+  const dropShipVendors = opening && canCreateDropShipPurchaseOrder
+    ? await listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: 'vendor', activeOnly: true })
+    : []
+  const dropShipLines = openOrder && dropShipping
+    ? await dropShipOrderStatus(db, authz.user.orgId, openDocumentId!, authz.allowedSubsidiaryIds)
+    : []
   const resolvedForm = openOrder && pickers ? await resolveFormLayout({
     orgId: authz.user.orgId, userId: authz.user.id, recordType: KIND,
     userRoles: authz.user.roles.map(({ key }) => key), headerDefs: [], lineDefs: [], explicitLayoutId: pickString(sp.form),
@@ -240,6 +255,11 @@ export async function loadSalesOrders(
           backorders,
           pickLists,
           returnAuthorizations,
+          dropShipping,
+          dropShipLines,
+          dropShipVendors,
+          canRouteDropShip,
+          canCreateDropShipPurchaseOrder,
         }
       : null
 

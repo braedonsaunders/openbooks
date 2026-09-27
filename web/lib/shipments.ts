@@ -127,7 +127,7 @@ export async function completeShipment(
         serialId: line.serialId,
         stockLocationId: line.binId,
       })),
-    })
+    }, { inventory: 'apply' })
     await markShipmentComplete(tx, orgId, userId, {
       shipment: { id: locked.shipment.id, documentNumber: shipmentNumber },
       pickListId: locked.pickListId,

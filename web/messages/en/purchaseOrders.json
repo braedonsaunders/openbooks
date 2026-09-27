@@ -65,6 +65,22 @@
     "linksTitle": "Origin / Converted into",
     "linkCreatedFrom": "Created from",
     "linkConvertedInto": "Converted into",
+    "dropShip": {
+      "routeLine": "Route to vendor",
+      "unrouteLine": "Remove vendor route",
+      "routed": "Routed to vendor",
+      "unrouted": "Vendor route removed",
+      "routedLines": "Vendor shipments",
+      "selectVendor": "Select vendor…",
+      "createPurchaseOrder": "Create drop-ship PO",
+      "purchaseOrderCreated": "Purchase order {number} created",
+      "purchaseOrderLinked": "Drop-ship PO",
+      "confirmVendorShipment": "Confirm vendor shipment",
+      "confirmTitle": "Confirm vendor shipment?",
+      "confirmAllMessage": "Confirm the remaining quantity on {count} purchase-order line(s). This records a receipt and fulfillment without receiving stock.",
+      "confirm": "Confirm shipment",
+      "confirmed": "Vendor shipment confirmed as {number}"
+    },
     "backorders": {
       "tab": "Backorders",
       "loading": "Loading backorders…",

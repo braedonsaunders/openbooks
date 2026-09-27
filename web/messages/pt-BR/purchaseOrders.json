@@ -65,6 +65,22 @@
     "linksTitle": "Origem / Convertido em",
     "linkCreatedFrom": "Criado a partir de",
     "linkConvertedInto": "Convertido em",
+    "dropShip": {
+      "routeLine": "Direcionar ao fornecedor",
+      "unrouteLine": "Remover direcionamento ao fornecedor",
+      "routed": "Direcionado ao fornecedor",
+      "unrouted": "Direcionamento removido",
+      "routedLines": "Envios diretos do fornecedor",
+      "selectVendor": "Selecionar fornecedor…",
+      "createPurchaseOrder": "Criar pedido de compra para envio direto",
+      "purchaseOrderCreated": "Pedido de compra {number} criado",
+      "purchaseOrderLinked": "Pedido de compra para envio direto",
+      "confirmVendorShipment": "Confirmar envio do fornecedor",
+      "confirmTitle": "Confirmar o envio do fornecedor?",
+      "confirmAllMessage": "Confirme a quantidade restante em {count} linha(s) do pedido. Isso registra o recebimento e o atendimento sem entrada no estoque.",
+      "confirm": "Confirmar envio",
+      "confirmed": "Envio do fornecedor confirmado como {number}"
+    },
     "backorders": {
       "tab": "Pedidos em atraso",
       "loading": "Carregando pedidos em atraso…",

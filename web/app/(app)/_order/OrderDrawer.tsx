@@ -29,6 +29,7 @@ import { HeaderFields } from '../../../components/transaction-form/header-fields
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
 import { cmp, fromUnits, mul, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax/tax.ts'
+import { fromQuantityUnits, toQuantityUnits } from '../../../lib/order-cycle-math'
 type Opt = {
   id: string
   display_name?: string
@@ -116,6 +117,12 @@ export interface OrderPayload {
   doc: Record<string, unknown>
   lines: Record<string, unknown>[]
   links: LinkRow[]
+}
+
+type DropShipRoute = {
+  salesOrderLineId: string
+  purchaseOrderLineId: string | null
+  purchaseOrderId: string | null
 }
 
 /** The order header: `documents` plus the loader's joins. Dates, uuids and
@@ -420,6 +427,13 @@ export function OrderDrawer({
   backorders = false,
   pickLists = false,
   returnAuthorizations = false,
+  dropShipping = false,
+  dropShipLines = [],
+  dropShipVendors = [],
+  canRouteDropShip = false,
+  canCreateDropShipPurchaseOrder = false,
+  canConfirmDropShip = false,
+  isDropShipPurchaseOrder = false,
 }: {
   order: OrderPayload
   initialMode?: DrawerMode
@@ -458,6 +472,13 @@ export function OrderDrawer({
    *  its routes enforce both again. */
   pickLists?: boolean
   returnAuthorizations?: boolean
+  dropShipping?: boolean
+  dropShipLines?: DropShipRoute[]
+  dropShipVendors?: Opt[]
+  canRouteDropShip?: boolean
+  canCreateDropShipPurchaseOrder?: boolean
+  canConfirmDropShip?: boolean
+  isDropShipPurchaseOrder?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
@@ -522,6 +543,8 @@ export function OrderDrawer({
   })
   const [totals, setTotals] = useState({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
+  const [dropShipRoutes, setDropShipRoutes] = useState<DropShipRoute[]>(dropShipLines)
+  const [dropShipVendorId, setDropShipVendorId] = useState('')
 
   // Optimistic-concurrency token (documents.updated_at). Every mutating
   // request echoes it; the server refuses any mutation whose view of the
@@ -1086,6 +1109,83 @@ export function OrderDrawer({
     await setStatus('voided', reason)
   }
 
+  async function setDropShipRoute(salesOrderLineId: string, routed: boolean) {
+    await execute(
+      () => fetchAction(`/api/sales-orders/${doc.id}/drop-ship`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ salesOrderLineId, routed }),
+      }),
+      {
+        fallbackMessage: t('actionFailed'),
+        onOk: () => {
+          setDropShipRoutes((current) => routed
+            ? [...current.filter((row) => row.salesOrderLineId !== salesOrderLineId), {
+                salesOrderLineId,
+                purchaseOrderLineId: null,
+                purchaseOrderId: null,
+              }]
+            : current.filter((row) => row.salesOrderLineId !== salesOrderLineId))
+          toast.success(routed ? t('dropShip.routed') : t('dropShip.unrouted'))
+        },
+      },
+    )
+  }
+
+  async function createDropShipPurchaseOrder() {
+    if (!dropShipVendorId) return
+    const key = crypto.randomUUID()
+    await execute<{ id: string; documentNumber: string }>(
+      () => fetchAction(`/api/sales-orders/${doc.id}/drop-ship/purchase-orders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+        body: JSON.stringify({ vendorId: dropShipVendorId }),
+      }),
+      {
+        fallbackMessage: t('actionFailed'),
+        onOk: (created) => {
+          toast.success(t('dropShip.purchaseOrderCreated', { number: created.documentNumber }))
+          router.push(`/purchase-orders?order=${encodeURIComponent(created.id)}`)
+          router.refresh()
+        },
+      },
+    )
+  }
+
+  async function confirmDropShipShipment() {
+    const paired = new Set(dropShipRoutes
+      .filter((row) => row.purchaseOrderLineId && row.purchaseOrderId === doc.id)
+      .map((row) => row.purchaseOrderLineId!))
+    const lines = order.lines.flatMap((line) => {
+      const id = String(line.id ?? '')
+      if (!paired.has(id)) return []
+      const open = toQuantityUnits(String(line.quantity ?? '0'))
+        - toQuantityUnits(String(line.quantity_fulfilled ?? '0'))
+        - toQuantityUnits(String(line.quantity_cancelled ?? '0'))
+      return open > 0n ? [{ purchaseOrderLineId: id, quantity: fromQuantityUnits(open) }] : []
+    })
+    if (lines.length === 0) return
+    if (!(await confirmDialog({
+      title: t('dropShip.confirmTitle'),
+      message: t('dropShip.confirmAllMessage', { count: lines.length }),
+      confirmLabel: t('dropShip.confirm'),
+    }))) return
+    await execute<{ salesFulfillment: { documentNumber: string } }>(
+      () => fetchAction(`/api/purchase-orders/${doc.id}/drop-ship-confirmation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify({ lines }),
+      }),
+      {
+        fallbackMessage: t('actionFailed'),
+        onOk: (result) => {
+          toast.success(t('dropShip.confirmed', { number: result.salesFulfillment.documentNumber }))
+          router.refresh()
+        },
+      },
+    )
+  }
+
   async function remove() {
     if (
       !(await confirmDialog({
@@ -1352,32 +1452,55 @@ export function OrderDrawer({
               {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
           </>
-        ) : canManage ? (
+        ) : (canManage || canCreateDropShipPurchaseOrder || canConfirmDropShip) ? (
           <>
-            <PdfButton recordType={kind} recordId={String(doc.id)} />
-            <SendButton recordType={kind} recordId={String(doc.id)} />
-            <FlowManualButtons subjectKind={kind} subjectId={String(doc.id)} />
-            <ApprovalActions subjectKind={kind} subjectId={String(doc.id)} />
-            {isDraft ? (
-              <Button disabled={busy || !canIssue} onClick={issue} title={priceLookupBlocked ? t('pricingResolving') : !canIssue ? t('issueHint') : undefined}>
-                {t('issue')}
-              </Button>
-            ) : null}
-            {isApproved
-              ? convertTargets.map((target) => (
-                  <Button
-                    key={target.kind}
-                    disabled={busy || converted.full}
-                    title={converted.full ? t('fullyConverted') : undefined}
-                    onClick={() => convert(target.kind, t(target.labelKey))}
-                  >
-                    {t('convertTo', { target: t(target.labelKey) })}
+            {canManage ? (
+              <>
+                <PdfButton recordType={kind} recordId={String(doc.id)} />
+                <SendButton recordType={kind} recordId={String(doc.id)} />
+                <FlowManualButtons subjectKind={kind} subjectId={String(doc.id)} />
+                <ApprovalActions subjectKind={kind} subjectId={String(doc.id)} />
+                {isDraft ? (
+                  <Button disabled={busy || !canIssue} onClick={issue} title={priceLookupBlocked ? t('pricingResolving') : !canIssue ? t('issueHint') : undefined}>
+                    {t('issue')}
                   </Button>
-                ))
-              : null}
-            {pickLists && kind === 'sales_order' && isApproved ? (
-              <Button disabled={busy} onClick={() => router.push(`/picks?pickFrom=${encodeURIComponent(String(doc.id))}`)}>
-                {tFulfillment('pick.createFromOrder')}
+                ) : null}
+                {isApproved
+                  ? convertTargets.map((target) => (
+                      <Button
+                        key={target.kind}
+                        disabled={busy || converted.full}
+                        title={converted.full ? t('fullyConverted') : undefined}
+                        onClick={() => convert(target.kind, t(target.labelKey))}
+                      >
+                        {t('convertTo', { target: t(target.labelKey) })}
+                      </Button>
+                    ))
+                  : null}
+                {pickLists && kind === 'sales_order' && isApproved ? (
+                  <Button disabled={busy} onClick={() => router.push(`/picks?pickFrom=${encodeURIComponent(String(doc.id))}`)}>
+                    {tFulfillment('pick.createFromOrder')}
+                  </Button>
+                ) : null}
+              </>
+            ) : null}
+            {dropShipping && canCreateDropShipPurchaseOrder && kind === 'sales_order' && isApproved
+              && dropShipRoutes.some((row) => row.purchaseOrderLineId === null) ? (
+              <div className="flex items-center gap-2">
+                <SearchSelect
+                  options={dropShipVendors.map((vendor) => ({ value: vendor.id, label: vendor.display_name ?? '' }))}
+                  value={dropShipVendorId}
+                  onChange={(value) => setDropShipVendorId(value ?? '')}
+                  placeholder={t('dropShip.selectVendor')}
+                />
+                <Button disabled={busy || !dropShipVendorId} onClick={createDropShipPurchaseOrder}>
+                  {t('dropShip.createPurchaseOrder')}
+                </Button>
+              </div>
+            ) : null}
+            {dropShipping && canConfirmDropShip && isDropShipPurchaseOrder && isApproved ? (
+              <Button disabled={busy} onClick={confirmDropShipShipment}>
+                {t('dropShip.confirmVendorShipment')}
               </Button>
             ) : null}
             {returnAuthorizations && kind === 'sales_order' && isApproved ? (
@@ -1385,12 +1508,12 @@ export function OrderDrawer({
                 {tReturns('actions.new')}
               </Button>
             ) : null}
-            {isApproved ? (
+            {canManage && isApproved ? (
               <Button variant="outline" disabled={busy} onClick={voidOrder}>
                 {tCommon('actions.void')}
               </Button>
             ) : null}
-            {doc.status === 'draft' ? (
+            {canManage && doc.status === 'draft' ? (
               <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
                 {tCommon('actions.delete')}
               </Button>
@@ -1573,6 +1696,40 @@ export function OrderDrawer({
             formatAmount={(value) => money(value, { currency: doc.currency })}
           />
         </div>
+
+        {dropShipping && kind === 'sales_order' && isApproved ? (
+          <section className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <Label>{t('dropShip.routedLines')}</Label>
+            {order.lines.filter((line) => line.item_id && stockedItemIds.has(String(line.item_id))).map((line) => {
+              const lineId = String(line.id ?? '')
+              const route = dropShipRoutes.find((row) => row.salesOrderLineId === lineId)
+              return (
+                <div key={lineId} className="flex items-center gap-3 text-sm">
+                  <span className="min-w-0 flex-1 truncate">
+                    {t('backorders.line', { line: Number(line.line_number ?? 0) })}: {String(line.item_name ?? line.description ?? '')}
+                  </span>
+                  {route?.purchaseOrderId ? (
+                    <Link className="font-mono text-teal-700 hover:underline dark:text-teal-300" href={`/purchase-orders?order=${encodeURIComponent(route.purchaseOrderId)}`}>
+                      {t('dropShip.purchaseOrderLinked')}
+                    </Link>
+                  ) : route ? (
+                    <span className="text-slate-500 dark:text-slate-400">{t('dropShip.routed')}</span>
+                  ) : null}
+                  {canRouteDropShip && !route ? (
+                    <Button variant="outline" size="sm" disabled={busy} onClick={() => setDropShipRoute(lineId, true)}>
+                      {t('dropShip.routeLine')}
+                    </Button>
+                  ) : null}
+                  {canRouteDropShip && route && !route.purchaseOrderLineId ? (
+                    <Button variant="outline" size="sm" disabled={busy} onClick={() => setDropShipRoute(lineId, false)}>
+                      {t('dropShip.unrouteLine')}
+                    </Button>
+                  ) : null}
+                </div>
+              )
+            })}
+          </section>
+        ) : null}
 
         {order.links.length > 0 ? (
           <div className="space-y-2">

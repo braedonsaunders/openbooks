@@ -38,7 +38,7 @@ import { isUuid } from './list-params'
 export { ORDER_KINDS, CONVERSION_TARGETS }
 export type { OrderKind }
 
-interface OrderSourceRow extends Record<string, unknown> {
+type OrderSourceRow = Record<string, unknown> & {
   id: string
   kind: string
   status: string
@@ -57,7 +57,7 @@ interface OrderSourceRow extends Record<string, unknown> {
   billing_method: string | null
 }
 
-interface OrderConvertLineRow extends Record<string, unknown> {
+type OrderConvertLineRow = Record<string, unknown> & {
   id: string
   line_number: number
   item_id: string | null
@@ -377,6 +377,7 @@ export interface SalesFulfillmentInput {
    * same key; the stored fulfillment is returned instead of shipping twice. */
   idempotencyKey: string
   lines: SalesFulfillmentLineInput[]
+  dropShipConfirmation?: { purchaseReceiptId: string }
 }
 
 interface CanonicalFulfillmentLine {
@@ -387,7 +388,7 @@ interface CanonicalFulfillmentLine {
   stockLocationId?: string
 }
 
-interface SalesFulfillmentSourceRow extends Record<string, unknown> {
+type SalesFulfillmentSourceRow = Record<string, unknown> & {
   id: string
   kind: string
   status: string
@@ -406,7 +407,7 @@ interface SalesFulfillmentSourceRow extends Record<string, unknown> {
   billing_method: string | null
 }
 
-interface SalesFulfillmentSourceLineRow extends Record<string, unknown> {
+type SalesFulfillmentSourceLineRow = Record<string, unknown> & {
   id: string
   line_number: number
   item_id: string | null
@@ -478,7 +479,7 @@ export async function fulfillSalesOrder(
   sourceId: string,
   input: SalesFulfillmentInput,
 ): Promise<ConvertResult> {
-  return db.transaction((tx) => fulfillSalesOrderInTx(tx, orgId, userId, sourceId, input))
+  return db.transaction((tx) => fulfillSalesOrderInTx(tx, orgId, userId, sourceId, input, { inventory: 'apply' }))
 }
 
 type OrderCycleTx = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -494,6 +495,7 @@ export async function fulfillSalesOrderInTx(
   userId: string,
   sourceId: string,
   input: SalesFulfillmentInput,
+  options: { inventory: 'apply' | 'none' },
 ): Promise<ConvertResult> {
   if (!(await isFeatureEnabled(orgId, 'orders'))) throw new ConversionError('Orders feature is disabled')
   const idempotencyKey = input.idempotencyKey.trim()
@@ -505,6 +507,7 @@ export async function fulfillSalesOrderInTx(
   const command = {
     fulfillmentDate: input.fulfillmentDate,
     lines: requested,
+    ...(input.dropShipConfirmation ? { dropShipConfirmation: input.dropShipConfirmation } : {}),
   }
   const sourceResult = (await tx.execute<SalesFulfillmentSourceRow>(sql`
     select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
@@ -587,6 +590,62 @@ export async function fulfillSalesOrderInTx(
     return { request, line }
   })
 
+  const routedLine = selected.length > 0
+    ? (await tx.execute<{ line_number: number }>(sql`
+        select dl.line_number
+          from drop_ship_lines ds
+          join document_lines dl on dl.org_id = ds.org_id and dl.id = ds.sales_order_line_id
+         where ds.org_id = ${orgId} and dl.document_id = ${sourceId}
+           and dl.id in (${sql.join(selected.map(({ line }) => sql`${line.id}`), sql`, `)})
+         order by dl.line_number limit 1`)).rows[0]
+    : undefined
+  if (routedLine && options.inventory === 'apply') {
+    throw new ConversionError(
+      `Sales-order line ${routedLine.line_number} is routed for vendor shipment and cannot be fulfilled from stock`,
+      409,
+      'drop_ship_confirmation_required',
+      { remedy: 'Confirm the vendor shipment from the drop-ship purchase order' },
+    )
+  }
+  if (options.inventory === 'none' && !input.dropShipConfirmation) {
+    throw new ConversionError(
+      'Stock movements can be skipped only for a confirmed drop-ship order',
+      422,
+      'drop_ship_confirmation_required',
+      { remedy: 'Confirm the vendor shipment from the drop-ship purchase order' },
+    )
+  }
+  if (options.inventory === 'none') {
+    const receiptId = input.dropShipConfirmation!.purchaseReceiptId
+    const receiptEvidence = (await tx.execute<{ sales_order_line_id: string; quantity: string }>(sql`
+      select routed.sales_order_line_id, receipt_line.quantity::text as quantity
+        from drop_ship_lines routed
+        join document_lines po_line on po_line.id = routed.purchase_order_line_id and po_line.org_id = routed.org_id
+        join drop_ship_orders pair on pair.org_id = routed.org_id and pair.purchase_order_id = po_line.document_id
+        join document_links receipt_link on receipt_link.org_id = routed.org_id
+          and receipt_link.from_document_id = pair.purchase_order_id
+          and receipt_link.to_document_id = ${receiptId} and receipt_link.link_type = 'fulfills'
+        join document_lines receipt_line on receipt_line.org_id = routed.org_id
+          and receipt_line.document_id = ${receiptId}
+          and receipt_line.custom->'receipt'->>'sourceLineId' = po_line.id::text
+       where routed.org_id = ${orgId} and pair.sales_order_id = ${sourceId}
+         and routed.sales_order_line_id in (${sql.join(selected.map(({ line }) => sql`${line.id}`), sql`, `)})
+    `)).rows
+    const receiptBySalesLine = new Map(receiptEvidence.map((row) => [row.sales_order_line_id, row.quantity]))
+    if (receiptBySalesLine.size !== new Set(selected.map(({ line }) => line.id)).size
+      || selected.some(({ request, line }) => {
+        const confirmed = receiptBySalesLine.get(line.id)
+        return confirmed === undefined || toQuantityUnits(confirmed) !== toQuantityUnits(request.quantity)
+      })) {
+      throw new ConversionError(
+        'The receipt does not confirm the same routed sales-order quantities',
+        422,
+        'drop_ship_confirmation_required',
+        { remedy: 'Confirm the vendor shipment from the drop-ship purchase order' },
+      )
+    }
+  }
+
   // A named bin must be the line's own location or lie inside the
   // warehouse that location belongs to.
   const binIds = [...new Set(selected.flatMap(({ request }) => request.stockLocationId ? [request.stockLocationId] : []))]
@@ -618,7 +677,7 @@ export async function fulfillSalesOrderInTx(
     }
   }
 
-  if (!(await isFeatureEnabled(orgId, 'inventory'))) {
+  if (options.inventory === 'apply' && !(await isFeatureEnabled(orgId, 'inventory'))) {
     const inventoryLine = selected.find(({ line }) =>
       line.item_id != null && INVENTORY_ITEM_KINDS.has(String(line.item_kind)),
     )
@@ -639,33 +698,35 @@ export async function fulfillSalesOrderInTx(
   // and are storage-immutable, so fulfillment would otherwise fail deep
   // inside the inventory kernel with a generic stock-location error.
   // Refuse up front naming the line and the way forward (F-coord-004).
-  const activeWarehouses = await activeStockLocations(orgId)
-  const unwarehoused = missingOrderLineWarehouses(
-    selected.map(({ line }) => ({
-      lineNumber: line.line_number,
-      itemId: line.item_id,
-      hasInventoryProfile: line.has_inventory_profile,
-      stockLocationId: line.stock_location_id,
-    })),
-    activeWarehouses.length,
-  )
-  const warehouseless = unwarehoused[0]
-  if (warehouseless) {
-    const details = { lineNumber: warehouseless.lineNumber, activeWarehouses: activeWarehouses.length }
-    if (activeWarehouses.length === 0) {
+  if (options.inventory === 'apply') {
+    const activeWarehouses = await activeStockLocations(orgId)
+    const unwarehoused = missingOrderLineWarehouses(
+      selected.map(({ line }) => ({
+        lineNumber: line.line_number,
+        itemId: line.item_id,
+        hasInventoryProfile: line.has_inventory_profile,
+        stockLocationId: line.stock_location_id,
+      })),
+      activeWarehouses.length,
+    )
+    const warehouseless = unwarehoused[0]
+    if (warehouseless) {
+      const details = { lineNumber: warehouseless.lineNumber, activeWarehouses: activeWarehouses.length }
+      if (activeWarehouses.length === 0) {
+        throw new ConversionError(
+          `Sales-order line ${warehouseless.lineNumber} is a stocked item with no warehouse, and this organization has no active warehouse — create one, assign it to the line, then fulfill again`,
+          422,
+          ORDER_LINE_WAREHOUSE_REQUIRED,
+          details,
+        )
+      }
       throw new ConversionError(
-        `Sales-order line ${warehouseless.lineNumber} is a stocked item with no warehouse, and this organization has no active warehouse — create one, assign it to the line, then fulfill again`,
+        `Sales-order line ${warehouseless.lineNumber} is a stocked item with no warehouse, and this organization has ${activeWarehouses.length} active warehouses, so fulfillment cannot choose one — assign a warehouse to the line, then fulfill again`,
         422,
         ORDER_LINE_WAREHOUSE_REQUIRED,
         details,
       )
     }
-    throw new ConversionError(
-      `Sales-order line ${warehouseless.lineNumber} is a stocked item with no warehouse, and this organization has ${activeWarehouses.length} active warehouses, so fulfillment cannot choose one — assign a warehouse to the line, then fulfill again`,
-      422,
-      ORDER_LINE_WAREHOUSE_REQUIRED,
-      details,
-    )
   }
 
   const documentNumber = await nextDocumentNumber(orgId, SALES_FULFILLMENT_KIND, 'SHIP-', source.subsidiary_id)
@@ -673,6 +734,7 @@ export async function fulfillSalesOrderInTx(
   const custom = {
     fulfillmentIdempotencyKey: idempotencyKey,
     salesFulfillmentCommand: command,
+    ...(input.dropShipConfirmation ? { dropShipConfirmation: input.dropShipConfirmation } : {}),
   }
   await tx.execute(sql`
     insert into documents
@@ -757,14 +819,16 @@ export async function fulfillSalesOrderInTx(
       (org_id, from_document_id, to_document_id, link_type, created_by)
     values (${orgId}, ${sourceId}, ${fulfillmentId}, 'fulfills', ${userId})
   `)
-  await applySalesFulfillmentInventoryIssues(
-    tx,
-    orgId,
-    userId,
-    fulfillmentId,
-    input.fulfillmentDate,
-    source.subsidiary_id,
-  )
+  if (options.inventory === 'apply') {
+    await applySalesFulfillmentInventoryIssues(
+      tx,
+      orgId,
+      userId,
+      fulfillmentId,
+      input.fulfillmentDate,
+      source.subsidiary_id,
+    )
+  }
   await tx.execute(sql`
     update documents
        set status = 'approved', updated_by = ${userId}
@@ -839,9 +903,10 @@ export interface PurchaseReceiptInput {
    * key returns the stored receipt instead of receiving the stock twice. */
   idempotencyKey: string
   lines: PurchaseReceiptLineInput[]
+  dropShipConfirmation?: { idempotencyKey: string }
 }
 
-interface PurchaseReceiptSourceLineRow extends Record<string, unknown> {
+type PurchaseReceiptSourceLineRow = Record<string, unknown> & {
   id: string
   line_number: number
   item_id: string | null
@@ -879,6 +944,18 @@ export async function receivePurchaseOrder(
   sourceId: string,
   input: PurchaseReceiptInput,
 ): Promise<ConvertResult> {
+  return db.transaction((tx) => receivePurchaseOrderInTx(tx, orgId, userId, sourceId, input, { inventory: 'apply' }))
+}
+
+/** Receive a purchase order inside the caller's transaction. */
+export async function receivePurchaseOrderInTx(
+  tx: OrderCycleTx,
+  orgId: string,
+  userId: string,
+  sourceId: string,
+  input: PurchaseReceiptInput,
+  options: { inventory: 'apply' | 'none' },
+): Promise<ConvertResult> {
   if (!(await isFeatureEnabled(orgId, 'orders'))) throw new ConversionError('Orders feature is disabled')
   if (!(await isFeatureEnabled(orgId, 'inventory'))) throw new ConversionError('Inventory is disabled')
   const idempotencyKey = input.idempotencyKey.trim()
@@ -887,8 +964,11 @@ export async function receivePurchaseOrder(
   }
   if (!isIsoCalendarDate(input.receiptDate)) throw new ConversionError('Receipt date must be YYYY-MM-DD')
   const requested = canonicalFulfillmentLines(input.lines)
-  const command = { receiptDate: input.receiptDate, lines: requested }
-  return db.transaction(async (tx) => {
+  const command = {
+    receiptDate: input.receiptDate,
+    lines: requested,
+    ...(input.dropShipConfirmation ? { dropShipConfirmation: input.dropShipConfirmation } : {}),
+  }
     const source = (await tx.execute<SalesFulfillmentSourceRow>(sql`
       select id, kind, status, party_id, currency, fx_rate, document_date, due_date,
              subsidiary_id, department_id, project_id, location_id, class_id,
@@ -902,6 +982,27 @@ export async function receivePurchaseOrder(
     if (source.status === 'draft') throw new ConversionError('Issue the purchase order before receiving it')
     if (source.status === 'voided') throw new ConversionError('This purchase order is voided')
     if (source.status !== 'approved') throw new ConversionError(`This purchase order is ${source.status}`)
+
+    const dropShipOrder = (await tx.execute<{ sales_order_id: string }>(sql`
+      select sales_order_id from drop_ship_orders
+       where org_id = ${orgId} and purchase_order_id = ${sourceId}
+    `)).rows[0]
+    if (options.inventory === 'apply' && dropShipOrder) {
+      throw new ConversionError(
+        'This purchase order is routed for direct vendor shipment and cannot be received into stock',
+        409,
+        'drop_ship_confirmation_required',
+        { remedy: 'Confirm the vendor shipment from the drop-ship purchase order' },
+      )
+    }
+    if (options.inventory === 'none' && (!input.dropShipConfirmation || !dropShipOrder)) {
+      throw new ConversionError(
+        'Stock movements can be skipped only for a confirmed drop-ship purchase order',
+        422,
+        'drop_ship_confirmation_required',
+        { remedy: 'Confirm the vendor shipment from the drop-ship purchase order' },
+      )
+    }
 
     const replay = (await tx.execute<{ id: string; document_number: string; command_matches: boolean }>(sql`
       select target.id, target.document_number,
@@ -968,40 +1069,62 @@ export async function receivePurchaseOrder(
       return { request, line }
     })
 
+    if (options.inventory === 'none') {
+      const routed = (await tx.execute<{ purchase_order_line_id: string }>(sql`
+        select purchase_order_line_id from drop_ship_lines
+         where org_id = ${orgId} and purchase_order_line_id in (
+           ${sql.join(selected.map(({ line }) => sql`${line.id}`), sql`, `)}
+         )`)).rows
+      if (routed.length !== selected.length) {
+        throw new ConversionError(
+          'Every stockless receipt line must be paired to this drop-ship purchase order',
+          422,
+          'drop_ship_confirmation_required',
+          { remedy: 'Confirm the vendor shipment from the drop-ship purchase order' },
+        )
+      }
+    }
+
     // Same legacy trap as the sales side: a NULL warehouse on a stocked
     // line would fail inside the inventory kernel with a generic error.
     // Refuse up front naming the line and the way forward (F-coord-004).
-    const receiptWarehouses = await activeStockLocations(orgId)
-    const unwarehousedReceipt = missingOrderLineWarehouses(
-      selected.map(({ line }) => ({
-        lineNumber: line.line_number,
-        itemId: line.item_id,
-        hasInventoryProfile: line.has_inventory_profile,
-        stockLocationId: line.stock_location_id,
-      })),
-      receiptWarehouses.length,
-    )[0]
-    if (unwarehousedReceipt) {
-      const details = { lineNumber: unwarehousedReceipt.lineNumber, activeWarehouses: receiptWarehouses.length }
-      if (receiptWarehouses.length === 0) {
+    if (options.inventory === 'apply') {
+      const receiptWarehouses = await activeStockLocations(orgId)
+      const unwarehousedReceipt = missingOrderLineWarehouses(
+        selected.map(({ line }) => ({
+          lineNumber: line.line_number,
+          itemId: line.item_id,
+          hasInventoryProfile: line.has_inventory_profile,
+          stockLocationId: line.stock_location_id,
+        })),
+        receiptWarehouses.length,
+      )[0]
+      if (unwarehousedReceipt) {
+        const details = { lineNumber: unwarehousedReceipt.lineNumber, activeWarehouses: receiptWarehouses.length }
+        if (receiptWarehouses.length === 0) {
+          throw new ConversionError(
+            `Purchase-order line ${unwarehousedReceipt.lineNumber} is a stocked item with no warehouse, and this organization has no active warehouse — create one, assign it to the line, then receive again`,
+            422,
+            ORDER_LINE_WAREHOUSE_REQUIRED,
+            details,
+          )
+        }
         throw new ConversionError(
-          `Purchase-order line ${unwarehousedReceipt.lineNumber} is a stocked item with no warehouse, and this organization has no active warehouse — create one, assign it to the line, then receive again`,
+          `Purchase-order line ${unwarehousedReceipt.lineNumber} is a stocked item with no warehouse, and this organization has ${receiptWarehouses.length} active warehouses, so receipt cannot choose one — assign a warehouse to the line, then receive again`,
           422,
           ORDER_LINE_WAREHOUSE_REQUIRED,
           details,
         )
       }
-      throw new ConversionError(
-        `Purchase-order line ${unwarehousedReceipt.lineNumber} is a stocked item with no warehouse, and this organization has ${receiptWarehouses.length} active warehouses, so receipt cannot choose one — assign a warehouse to the line, then receive again`,
-        422,
-        ORDER_LINE_WAREHOUSE_REQUIRED,
-        details,
-      )
     }
 
     const documentNumber = await nextDocumentNumber(orgId, PURCHASE_RECEIPT_KIND, 'RCPT-', source.subsidiary_id)
     const receiptId = randomUUID()
-    const custom = { receiptIdempotencyKey: idempotencyKey, purchaseReceiptCommand: command }
+    const custom = {
+      receiptIdempotencyKey: idempotencyKey,
+      purchaseReceiptCommand: command,
+      ...(input.dropShipConfirmation ? { dropShipConfirmation: input.dropShipConfirmation } : {}),
+    }
     await tx.execute(sql`
       insert into documents
         (id, org_id, kind, document_number, party_id, document_date, currency,
@@ -1074,13 +1197,14 @@ export async function receivePurchaseOrder(
       insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by)
       values (${orgId}, ${sourceId}, ${receiptId}, 'fulfills', ${userId})
     `)
-    await applyPurchaseReceiptInventory(tx, orgId, userId, receiptId, input.receiptDate, source.subsidiary_id)
+    if (options.inventory === 'apply') {
+      await applyPurchaseReceiptInventory(tx, orgId, userId, receiptId, input.receiptDate, source.subsidiary_id)
+    }
     await tx.execute(sql`
       update documents set status = 'approved', updated_by = ${userId}
        where id = ${receiptId} and org_id = ${orgId}
     `)
     return { id: receiptId, documentNumber, kind: PURCHASE_RECEIPT_KIND }
-  })
 }
 
 /** Receive every stock line's remaining quantity through the conversion

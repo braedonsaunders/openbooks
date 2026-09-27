@@ -61,6 +61,22 @@
     "linksTitle": "Origen / Convertido en",
     "linkCreatedFrom": "Creado a partir de",
     "linkConvertedInto": "Convertido en",
+    "dropShip": {
+      "routeLine": "Asignar al proveedor",
+      "unrouteLine": "Quitar asignación al proveedor",
+      "routed": "Asignado al proveedor",
+      "unrouted": "Asignación al proveedor eliminada",
+      "routedLines": "Envíos directos del proveedor",
+      "selectVendor": "Seleccionar proveedor…",
+      "createPurchaseOrder": "Crear pedido de envío directo",
+      "purchaseOrderCreated": "Pedido {number} creado",
+      "purchaseOrderLinked": "Pedido de envío directo",
+      "confirmVendorShipment": "Confirmar envío del proveedor",
+      "confirmTitle": "¿Confirmar el envío del proveedor?",
+      "confirmAllMessage": "Confirme la cantidad pendiente en {count} línea(s) de pedido. Esto registra una recepción y un cumplimiento sin ingresar existencias.",
+      "confirm": "Confirmar envío",
+      "confirmed": "Envío del proveedor confirmado como {number}"
+    },
     "backorders": {
       "tab": "Pedidos pendientes",
       "loading": "Cargando pedidos pendientes…",

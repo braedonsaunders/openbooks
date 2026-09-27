@@ -65,6 +65,22 @@
     "linksTitle": "Herkunft / Umgewandelt in",
     "linkCreatedFrom": "Erstellt aus",
     "linkConvertedInto": "Umgewandelt in",
+    "dropShip": {
+      "routeLine": "An Lieferanten weiterleiten",
+      "unrouteLine": "Weiterleitung entfernen",
+      "routed": "An Lieferanten weitergeleitet",
+      "unrouted": "Weiterleitung entfernt",
+      "routedLines": "Direktlieferungen",
+      "selectVendor": "Lieferanten auswählen…",
+      "createPurchaseOrder": "Direktlieferungsbestellung erstellen",
+      "purchaseOrderCreated": "Bestellung {number} erstellt",
+      "purchaseOrderLinked": "Direktlieferungsbestellung",
+      "confirmVendorShipment": "Lieferantenversand bestätigen",
+      "confirmTitle": "Lieferantenversand bestätigen?",
+      "confirmAllMessage": "Die Restmenge auf {count} Bestellposition(en) bestätigen. Dies erfasst Wareneingang und Lieferung ohne Lagerzugang.",
+      "confirm": "Versand bestätigen",
+      "confirmed": "Lieferantenversand als {number} bestätigt"
+    },
     "backorders": {
       "tab": "Rückstände",
       "loading": "Rückstände werden geladen…",
