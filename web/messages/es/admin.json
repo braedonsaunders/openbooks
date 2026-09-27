@@ -691,6 +691,10 @@
           "label": "Mano de obra en curso / costo",
           "hint": "El costo de mano de obra aprobada se debita aquí (por proyecto)"
         },
+        "mfgWip": {
+          "label": "Producción en curso",
+          "hint": "Los materiales emitidos a órdenes de fabricación activas se cargan aquí."
+        },
         "laborClearing": {
           "label": "Compensación de mano de obra",
           "hint": "Se acredita cuando la mano de obra se carga a un proyecto; se liquida por nómina"
@@ -3957,6 +3961,7 @@
         "modeOff": "Apagado — solo capturar tarifas",
         "modePost": "Contabilizar costo estándar a proyectos",
         "laborWip": "Cuenta de obra en curso / costo de proyecto",
+        "mfgWip": "Cuenta de producción en curso",
         "laborClearing": "Cuenta puente de mano de obra",
         "overheadNote": "Los gastos generales no forman parte de esta tarifa — los aplica el Modelo de gastos generales como su propia capa.",
         "payrollVariance": "Cuenta de variación de nómina",
