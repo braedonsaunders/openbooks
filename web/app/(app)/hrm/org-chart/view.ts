@@ -84,11 +84,9 @@ export function orgChartSpec(data: OrgChartPageData): PageSpec {
             tone: 'default',
           }),
         ]),
-        // View switch + the as-of/search controls: one row, the shared strip
-        // and the shared toolbar, in that order — the same shape every other
-        // list in the product now uses.
-        grid('flex shrink-0 flex-wrap items-center justify-between gap-3', [
-          widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
+        // The as-of/search controls on the shared toolbar. The Employees
+        // view strip is the page layout's, under the header.
+        grid('flex shrink-0 flex-wrap items-center gap-3', [
           widgetBlock('list-toolbar', {
             basePath: '/hrm/org-chart',
             currentParams: data.currentParams,

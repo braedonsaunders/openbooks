@@ -5,7 +5,6 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { isCivilDate } from '@openbooks/engine/src/hrm/temporal.ts'
 import { loadDirectory, loadOrgChart } from '@openbooks/engine/src/hrm/org-chart.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
-import { hrmPeopleViewTabs } from './workspace-tabs'
 import { can, getAuthz, type Authz } from '../authz'
 import { requireFeatureEnabled } from '../feature-gates'
 
@@ -46,7 +45,6 @@ export async function loadOrgChartHome(
 ) {
   const t = await getTranslations('hrm')
   const tabs = await hrmGroupTabs(authz.session, '/hrm/org-chart')
-  const peopleTabs = await hrmPeopleViewTabs(authz.session, '/hrm/org-chart')
   const today = await businessToday(authz.orgId)
   // Shape is not enough: 2026-02-30 passes the regex and then throws out
   // of the chart reads as a VALIDATION error into the generic route
@@ -123,7 +121,6 @@ export async function loadOrgChartHome(
     // People job strip (employees, org chart, processes, documents,
     // qualifications). Tree vs directory is the same rows in two shapes —
     // a list-toolbar view filter, not a second tab strip.
-    viewTabs: peopleTabs,
     search,
     chart,
     directoryRows,

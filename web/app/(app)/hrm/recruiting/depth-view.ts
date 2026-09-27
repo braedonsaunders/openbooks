@@ -44,6 +44,7 @@ import { businessTimeZone } from '@openbooks/engine/src/platform/business-date.t
 import { sql } from 'drizzle-orm'
 import { can, type Authz } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
+import { RECRUITING_DEPTH_FEATURE } from '../../../../lib/hrm/view-tab-registry'
 
 /**
  * Recruiting depth tabs (HR-18): Interviews, Offers, Postings, and Pools
@@ -58,37 +59,12 @@ import { isFeatureEnabled } from '../../../../lib/features'
 export const DEPTH_TABS = ['openings', 'interviews', 'offers', 'postings', 'pools'] as const
 export type DepthTab = (typeof DEPTH_TABS)[number]
 
-const TAB_FEATURE: Record<Exclude<DepthTab, 'openings'>, string> = {
-  interviews: 'hrmStructuredInterviews',
-  offers: 'hrmOfferSigning',
-  postings: 'hrmJobBoards',
-  pools: 'hrmTalentPool',
-}
-
 type T = Awaited<ReturnType<typeof getTranslations>>
-
-export interface DepthTabOption {
-  value: string
-  label: string
-  href: string
-}
-
-export async function depthTabOptions(authz: Authz, t: T, status: string | null): Promise<DepthTabOption[]> {
-  const options: DepthTabOption[] = [
-    { value: 'openings', label: t('recruiting.tabs.openings'), href: hrefForTab('openings', status) },
-  ]
-  for (const tab of ['interviews', 'offers', 'postings', 'pools'] as const) {
-    if (await isFeatureEnabled(authz.user.orgId, TAB_FEATURE[tab])) {
-      options.push({ value: tab, label: t(`recruiting.tabs.${tab}`), href: hrefForTab(tab, status) })
-    }
-  }
-  return options
-}
 
 export async function resolveDepthTab(authz: Authz, tab: unknown): Promise<DepthTab> {
   if (typeof tab !== 'string' || !(DEPTH_TABS as readonly string[]).includes(tab)) return 'openings'
   if (tab === 'openings') return 'openings'
-  if (await isFeatureEnabled(authz.user.orgId, TAB_FEATURE[tab as Exclude<DepthTab, 'openings'>])) {
+  if (await isFeatureEnabled(authz.user.orgId, RECRUITING_DEPTH_FEATURE[tab as Exclude<DepthTab, 'openings'>])) {
     return tab as DepthTab
   }
   return 'openings'

@@ -36,7 +36,6 @@ import { HrmAuthorizationError, loadApprovalPerson, loadOwnEmploymentIds } from 
 import { can, getAuthz, type Authz } from '../authz'
 import { setupSectionParams } from '../list-params'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
-import { hrmRewardsViewTabs } from './workspace-tabs'
 import { isFeatureEnabled } from '../features'
 import { requireFeatureEnabled } from '../feature-gates'
 import { cmp } from '@openbooks/engine/src/money/money.ts'
@@ -168,7 +167,6 @@ export interface CompHomeData {
   title: string
   description: string
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  viewTabs: Awaited<ReturnType<typeof hrmRewardsViewTabs>>
   tiles: CompStatTile[]
   bandsTitle: string
   bandsColumns: { level: string; range: string; headcount: string; placement: string }
@@ -283,7 +281,6 @@ export async function loadCompensationHome(
   const t = await getTranslations('hrm')
   const orgId = authz.user.orgId
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
-  const viewTabs = await hrmRewardsViewTabs(authz, '/hrm/compensation')
   const today = await businessToday(orgId)
   const canManage = can(authz, 'hrm.compensation.manage')
   const meritOn = await isFeatureEnabled(orgId, 'hrmMeritCycles')
@@ -477,7 +474,6 @@ export async function loadCompensationHome(
     title: t('compensation.title'),
     description: t('compensation.description'),
     tabs,
-    viewTabs,
     tiles,
     bandsTitle: t('compensation.bandsTitle'),
     bandsColumns: {
@@ -632,7 +628,6 @@ export interface CompCycleDetailData {
   statusLabel: string
   effectiveOn: string
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  viewTabs: Awaited<ReturnType<typeof hrmRewardsViewTabs>>
   pacingLabel: string
   pacingPct: number | null
   pacingOver: boolean
@@ -710,7 +705,6 @@ export async function loadCompCycleDetail(
     throw error
   }
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
-  const viewTabs = await hrmRewardsViewTabs(authz, '/hrm/compensation')
   const lines = await listCycleLines({ orgId, actorId: authz.user.id, cycleId })
   const names = await workerNames(orgId, lines.map((l) => l.employmentId))
   const departments = new Map<string, { label: string; count: number }>()
@@ -800,7 +794,6 @@ export async function loadCompCycleDetail(
     statusLabel: t.has(`compensation.cycleStatus.${cycle.status}`) ? t(`compensation.cycleStatus.${cycle.status}`) : cycle.status,
     effectiveOn: cycle.effectiveOn,
     tabs,
-    viewTabs,
     pacingLabel: t('compensation.pacing'),
     pacingPct: pacing.totalPct,
     pacingOver: pacing.overBudget,
@@ -897,7 +890,6 @@ export interface CompPlanDetailData {
   statusLabel: string
   period: string
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  viewTabs: Awaited<ReturnType<typeof hrmRewardsViewTabs>>
   totalLabel: string
   totalCost: string
   linesTitle: string
@@ -929,7 +921,6 @@ export async function loadHeadcountPlanDetail(
   const plan = plans.find((p) => p.id === planId) ?? null
   if (!plan) return null
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
-  const viewTabs = await hrmRewardsViewTabs(authz, '/hrm/compensation')
   const lines = await listPlanLines({ orgId, actorId: authz.user.id, planId })
   const total = planTotalCost(lines)
   return {
@@ -940,7 +931,6 @@ export async function loadHeadcountPlanDetail(
     statusLabel: t.has(`compensation.planStatus.${plan.status}`) ? t(`compensation.planStatus.${plan.status}`) : plan.status,
     period: `${plan.fiscalPeriodFrom} – ${plan.fiscalPeriodTo}`,
     tabs,
-    viewTabs,
     totalLabel: t('compensation.totalCost'),
     totalCost: total,
     linesTitle: t('compensation.planLinesTitle'),
@@ -987,7 +977,6 @@ export interface EquityData {
   title: string
   description: string
   tabs: Awaited<ReturnType<typeof hrmGroupTabs>>
-  viewTabs: Awaited<ReturnType<typeof hrmRewardsViewTabs>>
   hasSnapshot: boolean
   asOf: string
   tiles: CompStatTile[]
@@ -1059,7 +1048,6 @@ export async function loadEquity(
     }
   }
   const tabs = await hrmGroupTabs(authz, '/hrm/compensation')
-  const viewTabs = await hrmRewardsViewTabs(authz, '/hrm/compensation/equity')
   // A refused snapshot read travels as data with its remedy intact — never
   // an empty page pretending no snapshot exists. A genuinely absent
   // snapshot keeps the empty state. Unexpected DB/system failures
@@ -1088,7 +1076,6 @@ export async function loadEquity(
     title: t('equity.title'),
     description: t('equity.description'),
     tabs,
-    viewTabs,
     hasSnapshot: snapshot !== null,
     asOf: snapshot?.asOf ?? '',
     tiles,

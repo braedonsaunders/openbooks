@@ -62,15 +62,14 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
       widgetBlock('empty-state', { title: data.refusal?.title ?? '', description: data.refusal?.message }, f('refusal')),
       {
         ...grid('flex h-full min-h-0 flex-col gap-4', [
-          // The view switch and the window-status filter on one row. The
-          // filter used to sit INSIDE the list card, above the rows, and it
-          // carried the view switch as one of its options: picking
-          // "Enrolments" swapped the table for a different entity.
-          grid('flex shrink-0 flex-wrap items-center gap-3', [
-            widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
-            ...(data.showingEnrolments
-              ? []
-              : [
+          // The window-status filter. It used to sit INSIDE the list card
+          // and carry the view switch as one of its options: picking
+          // "Enrolments" swapped the table for a different entity. Windows
+          // and Enrolments are views on the Rewards strip under the header.
+          ...(data.showingEnrolments
+            ? []
+            : [
+                grid('flex shrink-0 flex-wrap items-center gap-3', [
                   widgetBlock('list-toolbar', {
                     basePath,
                     currentParams: data.currentParams,
@@ -84,7 +83,7 @@ export function benefitsSpec(data: BenefitsData, basePath: string = '/hrm/benefi
                     ],
                   }),
                 ]),
-          ]),
+              ]),
             ...(data.showingEnrolments
               ? [
                   table({

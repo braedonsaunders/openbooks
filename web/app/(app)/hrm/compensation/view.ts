@@ -36,7 +36,7 @@ export function compensationSpec(data: NonNullable<Awaited<ReturnType<typeof loa
   return page({
     route: '/hrm/compensation',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    bodyClassName: 'flex h-full min-h-0 flex-col gap-4',
     header: [
       pageHeader({
         title: f('title'),
@@ -51,7 +51,6 @@ export function compensationSpec(data: NonNullable<Awaited<ReturnType<typeof loa
       }),
     ],
     body: [
-      widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
       // A refused gap-snapshot read renders with its remedy intact — never
       // a zero joint-flag tile pretending the read succeeded.
       widgetBlock('empty-state', { title: data.refusal?.title ?? '', description: data.refusal?.message }, f('refusal')),

@@ -1,7 +1,5 @@
 import 'server-only'
 
-import type { ModuleHomeTab } from '../../../../components/module-home/tab-types'
-
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -27,7 +25,6 @@ import {
   listRequisitions,
 } from '@openbooks/engine/src/hrm/recruiting/recruiting-read.ts'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
-import { hrmHiringViewTabs } from '../../../../lib/hrm/workspace-tabs'
 import { can, requirePermission, type Authz } from '../../../../lib/authz'
 
 /**
@@ -59,7 +56,6 @@ import type { RecruitingCreateProps } from './RecruitingCreateForm'
 import type { CandidateDrawerData, OfferDrawerData, RequisitionDrawerData } from './sections'
 import { drawerTitleKind } from './drawer-title'
 import {
-  depthTabOptions,
   hrefForDepth,
   isRecruitingAbsence,
   loadInterviewDrawer,
@@ -140,11 +136,8 @@ export interface RecruitingPageData {
   empty: string
   totalLabel: string
   totals: { headcount: string; filled: string }
-  // HR-18: sub-tab strip + depth table payload (null on Openings).
+  // The active depth view and its table payload (null on Openings).
   tab: DepthTab
-  depthTabs: { value: string; label: string; href: string }[]
-  /** The depth tabs as the shared strip reads them. */
-  viewTabs: ModuleHomeTab[]
   /** The status filter's own label — never the strip's. */
   statusLabel: string
   depthRows: InterviewTabRow[] | OfferTabRow[] | PostingTabRow[] | PoolTabRow[] | null
@@ -258,15 +251,11 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
       // paint over the overflowed row links (CK-32b). A single-column
       // grid cannot shrink under its content. The page scrolls as a whole.
       grid('grid gap-4', [
-        // HR-18: Openings and the enabled depth tabs are VIEWS, so they ride
-        // the shared subtab strip — the same component as the route strip in
-        // the header. They used to render as a `filter-chips` dropdown, which
-        // put a control reading "Status: Openings" directly above a second,
-        // identical-looking control that really was the status filter.
-        grid('flex shrink-0 flex-wrap items-center gap-3', [
-          widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
-          ...(data.tab === 'openings'
-            ? [
+        // Openings and the enabled depth views are tabs on the Hiring strip
+        // under the page header; only Openings has a status filter.
+        ...(data.tab === 'openings'
+          ? [
+              grid('flex shrink-0 flex-wrap items-center gap-3', [
                 widgetBlock('list-toolbar', {
                   basePath: '/hrm/recruiting',
                   currentParams: data.currentParams,
@@ -279,9 +268,9 @@ export function recruitingSpec(data: RecruitingPageData): PageSpec {
                     },
                   ],
                 }),
-              ]
-            : []),
-        ]),
+              ]),
+            ]
+          : []),
         ...(data.tab === 'openings'
           ? [
         table({
@@ -372,7 +361,6 @@ export async function loadRecruitingPage(
   // rehomed setup-section params through the ONE shared helper — closing a
   // drawer returns to the same tab/filter instead of the default view.
   const preservedParams = { ...(status ? { status } : {}), tab, ...setupSectionParams(sp) }
-  const depthTabs = await depthTabOptions(authz, t, status)
   const canManage = can(authz, 'hrm.recruiting.manage')
   const creating = sp.requisition === 'new' && canManage
   const requisitionId =
@@ -840,18 +828,7 @@ export async function loadRecruitingPage(
     addLabel: t('recruiting.add'),
     addHref: recruitingHref(preservedParams, { status, requisition: 'new' }),
     basePath: '/hrm/recruiting',
-    // HR-18: sub-tab strip + depth table payload (null on Openings).
     tab,
-    depthTabs,
-    viewTabs: await hrmHiringViewTabs(
-      authz,
-      '/hrm/recruiting',
-      depthTabs.map((option) => ({
-        href: option.href,
-        label: option.label,
-        active: option.value === tab,
-      })),
-    ),
     statusLabel: tc('labels.status'),
     depthRows,
     depthColumns,

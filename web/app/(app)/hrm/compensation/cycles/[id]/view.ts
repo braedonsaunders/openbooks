@@ -33,7 +33,7 @@ export function compCycleSpec(data: NonNullable<Awaited<ReturnType<typeof loadCo
   return page({
     route: '/hrm/compensation/cycles/[id]',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    bodyClassName: 'flex h-full min-h-0 flex-col gap-4',
     header: [
       pageHeader({
         title: f('title'),
@@ -46,7 +46,6 @@ export function compCycleSpec(data: NonNullable<Awaited<ReturnType<typeof loadCo
       }),
     ],
     body: [
-      widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
       widgetBlock('hrm-pacing-bar', { pct: f('pacingPct'), note: f('pacingNote') }),
       // The lifecycle block (open/submit/push/close/cancel) sits above the
       // team grid while the loader arms it — null for readers, so the move

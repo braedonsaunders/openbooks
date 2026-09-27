@@ -200,7 +200,7 @@ test("the position table renders a vacancy refusal from each row", () => {
     vacantFte: "0.0000", holderLabel: "Vacant", refusal, href: "/hrm/positions?position=position-1",
   };
   const data = {
-    title: "Positions", description: "Position details", tabs: [], viewTabs: [],
+    title: "Positions", description: "Position details", tabs: [],
     canManage: false, addLabel: "Add position", addHref: "/hrm/positions?position=new",
     basePath: "/hrm/positions", effectiveDate: "2026-09-22", segments: [],
     segmentsLabel: "Show", allLabel: "All", asOfLabel: "As of", segmentOptions: [],

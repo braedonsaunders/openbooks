@@ -38,7 +38,9 @@ import type { ModuleHomeTab } from "./tab-types";
  *
  * The strip is always the last item in a page-header action rail. This makes
  * the product rule structural: primary create/action buttons stay to its left
- * even when a page's JSX or ViewSpec happens to list the tabs first.
+ * even when a page's JSX or ViewSpec happens to list the tabs first. That rule
+ * lives in globals.css, scoped to the rail, so a strip anywhere else keeps its
+ * document position.
  */
 
 /** Rounding headroom, in CSS pixels, for the fit test. See `recompute`. */
@@ -164,7 +166,7 @@ export function ModuleHomeTabs({ tabs }: { tabs: ModuleHomeTab[] }) {
       ref={trackRef}
       data-subtabs
       className={cn(
-        "relative order-last flex h-10 min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800",
+        "relative flex h-10 min-w-0 max-w-full items-center gap-1 overflow-hidden rounded-lg bg-slate-100 p-0.5 dark:bg-slate-800",
         // A large route group is navigation, not the whole header. Cap it at
         // half the desktop viewport and let the component's existing,
         // measured More menu own the overflow. Small view switches keep

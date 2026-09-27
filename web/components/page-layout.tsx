@@ -1,5 +1,6 @@
 import { cn } from '@openbooks/ui'
 import { FadeInBody, FadeInHeader } from './page-layout-motion'
+import { PageViewTabs } from './module-home/view-tabs'
 
 /**
  * Default page wrapper for content-driven pages (dashboards, forms, etc).
@@ -26,7 +27,9 @@ export function PageContainer({
 /**
  * List page layout — header (title/actions/search/filter chips) is sticky;
  * only the table area scrolls. The header fades in on mount; the body
- * fades in slightly behind it.
+ * fades in slightly behind it. When a route layout provides sibling view
+ * tabs (see module-home/view-tabs), their strip renders directly under the
+ * page header — here, and only here, so every sibling page places it alike.
  *
  *   <ListPageLayout
  *     header={...}        // PageHeader, search/filter row, etc
@@ -51,6 +54,7 @@ export function ListPageLayout({
       <div className="border-b border-slate-200 bg-white px-3 pt-3 pb-2.5 sm:px-6 sm:pt-4 sm:pb-3 dark:border-slate-800 dark:bg-slate-900">
         <FadeInHeader className="mx-auto max-w-screen-2xl space-y-2 sm:space-y-2.5">
           {header}
+          <PageViewTabs />
         </FadeInHeader>
       </div>
       <div className="app-scroll min-h-0 flex-1 overflow-y-auto">
@@ -93,6 +97,9 @@ export function DetailPageLayout({
         <FadeInHeader className="mx-auto max-w-screen-2xl px-3 pt-3 sm:px-6 sm:pt-5">
           {header}
           {alerts ? <div className="mt-2.5 space-y-2 sm:mt-3">{alerts}</div> : null}
+          <div className="mt-2.5 empty:hidden sm:mt-3">
+            <PageViewTabs />
+          </div>
           {subtabs ? <div className="mt-2.5 sm:mt-4">{subtabs}</div> : null}
         </FadeInHeader>
       </div>

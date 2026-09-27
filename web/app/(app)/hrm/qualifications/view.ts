@@ -41,7 +41,7 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
   return page({
     route: '/hrm/qualifications',
     layout: 'list',
-    bodyClassName: 'flex h-full min-h-0 flex-col',
+    bodyClassName: 'flex h-full min-h-0 flex-col gap-4',
     header: [
       pageHeader({
         title: f('title'),
@@ -55,7 +55,6 @@ export function qualificationsSpec(data: NonNullable<Awaited<ReturnType<typeof l
       }),
     ],
     body: [
-      widgetBlock('module-home-tabs', { tabs: data.viewTabs }),
       grid('grid grid-cols-2 gap-4 xl:grid-cols-4', [
         statTile({ iconKey: f('tiles.0.iconKey'), accent: f('tiles.0.accent'), label: f('tiles.0.label'), value: f('tiles.0.value'), tone: f('tiles.0.tone') }),
         statTile({ iconKey: f('tiles.1.iconKey'), accent: f('tiles.1.accent'), label: f('tiles.1.label'), value: f('tiles.1.value'), tone: f('tiles.1.tone') }),

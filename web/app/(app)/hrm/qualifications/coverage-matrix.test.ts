@@ -18,7 +18,6 @@ const TYPES = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8']
 const data = {
   section: 'requirements',
   tabs: [],
-  viewTabs: [],
   coverageTypes: TYPES.map((code) => ({ code, name: `${code} name` })),
   coverageRows: [
     {

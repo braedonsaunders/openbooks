@@ -212,7 +212,6 @@ test("the documents spec gives each setup section its own drawer key", async () 
   const data = {
     currentParams: { template: "new" },
     tabs: [],
-    viewTabs: [],
     segmentsLabel: "",
     allLabel: "",
     segmentOptions: [],

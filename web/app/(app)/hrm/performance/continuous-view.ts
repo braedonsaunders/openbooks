@@ -1,7 +1,5 @@
 import 'server-only'
 
-import type { ModuleHomeTab } from '../../../../components/module-home/tab-types'
-
 import { getTranslations } from 'next-intl/server'
 import {
   badge,
@@ -33,7 +31,6 @@ import {
 } from '@openbooks/engine/src/hrm/performance/talent.ts'
 import type { Authz } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { hrmTalentViewTabs } from '../../../../lib/hrm/workspace-tabs'
 import { translateTalentCode } from './talent-labels.ts'
 
 /**
@@ -69,9 +66,6 @@ function isExpectedAbsence(error: unknown): boolean {
 
 export interface ContinuousData {
   tab: ContinuousTab
-  tabOptions: { value: string; label: string }[]
-  /** The tabs as the shared subtab strip reads them. */
-  viewTabs: ModuleHomeTab[]
   showCalibration: boolean
   showTalent: boolean
   calibration: {
@@ -218,18 +212,6 @@ export async function loadContinuousTab(
     : rawTab === 'settings' && showSettings ? 'settings'
     : rawTab === 'retention' && showRetention ? 'retention'
     : 'cycles'
-  const tabOptions = [
-    { value: 'cycles', label: t('performance.continuous.tabs.cycles') },
-    ...(showCalibration ? [{ value: 'calibration', label: t('performance.continuous.tabs.calibration') }] : []),
-    ...(showTalent ? [{ value: 'talent', label: t('performance.continuous.tabs.talent') }] : []),
-    ...(showRetention ? [{ value: 'retention', label: t('retention.title') }] : []),
-    ...(showSettings ? [{ value: 'settings', label: t('performance.continuous.tabs.settings') }] : []),
-  ]
-  const viewTabs = await hrmTalentViewTabs(
-    authz,
-    tab === 'cycles' ? '/hrm/performance' : `/hrm/performance?tab=${tab}`,
-  )
-
   let calibration: ContinuousData['calibration'] = null
   if (tab === 'calibration' && showCalibration) {
     const sessions = await listCalibrationSessions({ orgId: authz.user.orgId, actorId: authz.user.id })
@@ -495,18 +477,7 @@ export async function loadContinuousTab(
     }
   }
 
-  return { tab, tabOptions, viewTabs, showCalibration, showTalent, calibration, talent, talentError, feedbackSettings, settingsError }
-}
-
-/**
- * The performance view switch, on the shared subtab strip.
- *
- * It was a `filter-chips` dropdown with `label: ''` — an unlabelled control
- * that read as an empty select box, sitting directly above the real status
- * filter, which looked exactly the same. Tabs are tabs.
- */
-export function continuousTabChips(data: ContinuousData) {
-  return widgetBlock('module-home-tabs', { tabs: data.viewTabs })
+  return { tab, showCalibration, showTalent, calibration, talent, talentError, feedbackSettings, settingsError }
 }
 
 /**

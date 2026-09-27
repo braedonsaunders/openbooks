@@ -28,7 +28,6 @@ test('the calendar department filter offers the all-departments label, not the n
     title: 'Leave',
     description: 'Leave queue',
     tabs: [],
-    viewTabs: [],
     segmentsLabel: 'Segment',
     allLabel: 'All',
     segments: [],
