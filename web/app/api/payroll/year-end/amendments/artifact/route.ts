@@ -31,10 +31,12 @@ export const GET = defineRoute({
     // PostgreSQL still raises `invalid input syntax for type uuid` for values
     // a bare 36-char shape check accepted (36 hex digits, 36 dashes). Shape
     // refusals stay 422 and never bind the parameter.
+    // The guard narrows `id`; the refusal reads the raw supplied text.
+    const supplied: string = id
     if (!isUuid(id)) {
-      const error = id.trim() === ''
+      const error = supplied.trim() === ''
         ? 'a submission id is required'
-        : `submission id must be a UUID — "${suppliedValue(id)}" is not a UUID`
+        : `submission id must be a UUID — "${suppliedValue(supplied)}" is not a UUID`
       return NextResponse.json({ error }, { status: 422 })
     }
     const submission = (await db.execute<{
