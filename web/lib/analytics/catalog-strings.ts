@@ -23,6 +23,7 @@ const englishCatalogTranslator = createTranslator({
 });
 
 export type CatalogMessageKey = Parameters<typeof englishCatalogTranslator>[0];
+export type AnalyticsFindingKey = keyof typeof englishAnalyticsMessages.financialHealth.findings;
 export type CatalogMessageFn = (
   key: CatalogMessageKey,
   values?: Record<string, string | number>,

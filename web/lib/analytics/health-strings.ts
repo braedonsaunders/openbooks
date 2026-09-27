@@ -9,7 +9,7 @@
  * pre-rendered; money travels through the existing locale-aware formatter.
  */
 
-import type { CatalogMessageFn } from "./catalog-strings";
+import type { AnalyticsFindingKey, CatalogMessageFn } from "./catalog-strings";
 import { catalogMonthLabel } from "./catalog-strings";
 
 
@@ -66,12 +66,12 @@ export interface HealthStrings extends FinancialHealthNotes {
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
 export function healthStrings(t: CatalogMessageFn, locale: string): HealthStrings {
-  const issue = (key: string, detail?: Record<string, string>): HealthFinding => ({
+  const issue = (key: AnalyticsFindingKey, detail?: Record<string, string>): HealthFinding => ({
     severity: "issue",
     title: t(`financialHealth.findings.${key}.title`),
     detail: t(`financialHealth.findings.${key}.detail`, detail),
   });
-  const rec = (key: string, detail?: Record<string, string>): HealthFinding => ({
+  const rec = (key: AnalyticsFindingKey, detail?: Record<string, string>): HealthFinding => ({
     severity: "rec",
     title: t(`financialHealth.findings.${key}.title`),
     detail: t(`financialHealth.findings.${key}.detail`, detail),
