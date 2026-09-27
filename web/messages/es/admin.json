@@ -867,10 +867,12 @@
       "close": "Períodos y cierre",
       "ap": "Cuentas por pagar",
       "ar": "Cuentas por cobrar",
+      "usage": "Facturación por uso",
       "reports": "Informes",
       "budgets": "Presupuestos y pronósticos",
       "insights": "Análisis",
       "items": "Artículos y servicios",
+      "orders": "Pedidos y preparación",
       "projects": "Proyectos y costeo de trabajos",
       "time": "Tiempo y hojas de horas",
       "records": "Registros personalizados",
@@ -888,6 +890,7 @@
       "crm": "Gestión de relaciones con clientes",
       "compliance": "Cumplimiento",
       "allocations": "Distribuciones",
+      "nonprofit": "Entidades sin fines de lucro",
       "payroll": "Nómina"
     },
     "gl_read": "Ver asientos y saldos",
@@ -908,6 +911,7 @@
     "ar_approve": "Aprobar o rechazar facturas",
     "ar_post": "Contabilizar facturas en el libro mayor",
     "ar_pay": "Registrar pagos de clientes",
+    "usage_read": "Ver el uso medido",
     "reports_read": "Ver informes",
     "reports_create": "Crear y guardar informes",
     "reports_schedule": "Programar el envío de informes",
@@ -921,6 +925,8 @@
     "items_manage": "Crear y editar artículos",
     "items_post": "Contabilizar movimientos de inventario",
     "items_reverse": "Revertir movimientos de inventario",
+    "items_warehouses": "Gestionar almacenes y ubicaciones",
+    "orders_fulfill": "Preparar, empaquetar y enviar pedidos",
     "projects_read": "Ver proyectos y costeo de trabajos",
     "projects_manage": "Crear y editar proyectos",
     "time_read": "Ver hojas de horas",
@@ -983,6 +989,7 @@
     "compliance_file": "Finalizar y presentar declaraciones informativas",
     "admin_sandboxes_manage": "Crear y administrar entornos sandbox",
     "allocations_approve": "Aprobar las distribuciones pendientes de aprobación",
+    "nonprofit_report": "Ejecutar informes de entidades sin fines de lucro",
     "allocations_manage": "Crear y editar reglas y claves de distribución",
     "allocations_read": "Ver reglas, ejecuciones y trazabilidad de distribuciones",
     "allocations_run": "Obtener vista previa, contabilizar, revertir y repetir distribuciones",
@@ -4774,6 +4781,18 @@
       "title": "Inventario",
       "description": "Existencias, ubicaciones, costeo de artículos y ensamblajes."
     },
+    "warehousing": {
+      "title": "Almacenamiento",
+      "description": "Almacenes, zonas y ubicaciones, con existencias mantenidas y contadas por ubicación."
+    },
+    "fulfillment": {
+      "title": "Preparación de pedidos",
+      "description": "Prepare, empaquete y envíe pedidos de venta desde las existencias del almacén."
+    },
+    "manufacturing": {
+      "title": "Fabricación",
+      "description": "Listas de materiales, rutas y órdenes de trabajo que fabrican productos terminados a partir de componentes."
+    },
     "equipment": {
       "title": "Equipos y alquileres",
       "description": "Unidades de equipo, tarifas escalonadas y cargos de uso a obras."
@@ -4830,6 +4849,14 @@
       "title": "Ciclo de vida avanzado de suscripciones",
       "description": "Planes versionados, múltiples componentes, pruebas, renovaciones, cotérmino, enmiendas y facturación anticipada o vencida."
     },
+    "usageBilling": {
+      "title": "Facturación por uso",
+      "description": "Valore el uso medido según los planes de suscripción y factúrelo en la factura de la suscripción."
+    },
+    "saasMetrics": {
+      "title": "Métricas SaaS",
+      "description": "Ingresos recurrentes, bajas, retención y cohortes a partir de los datos de suscripción."
+    },
     "allocations": {
       "title": "Repartos",
       "description": "Un solo modelo de reglas versionado que distribuye el costo común a destinos mediante un inductor: claves de distribución al registrar, líneas adicionales del libro mayor al contabilizar y barridos programados de fin de período, con trazabilidad completa."
@@ -4841,6 +4868,34 @@
     "allocationsAtPosting": {
       "title": "Repartos al contabilizar",
       "description": "Permita que las reglas de distribución y los scripts autorizados aporten líneas adicionales del libro mayor al propio asiento de una transacción al contabilizar."
+    },
+    "nonprofit": {
+      "title": "Entidades sin fines de lucro",
+      "description": "Contabilidad para entidades sin fines de lucro: fondos, subvenciones, promesas de donación e informes de gastos funcionales."
+    },
+    "fundAccounting": {
+      "title": "Contabilidad por fondos",
+      "description": "Controle el patrimonio neto por fondo y restricción del donante, incluidas las liberaciones de restricción."
+    },
+    "grantManagement": {
+      "title": "Gestión de subvenciones",
+      "description": "Concesiones de subvenciones, presupuestos, gastos admisibles e informes a los financiadores vinculados a los fondos."
+    },
+    "pledges": {
+      "title": "Promesas de donación",
+      "description": "Registre promesas de donación, programe su cobro y controle el importe pendiente de cobro."
+    },
+    "encumbrances": {
+      "title": "Compromisos presupuestarios",
+      "description": "Reserve presupuesto para los compromisos antes del gasto e informe del saldo aún disponible."
+    },
+    "functionalExpenses": {
+      "title": "Gastos funcionales",
+      "description": "Distribuya los gastos entre las funciones de programas, administración general y captación de fondos."
+    },
+    "form990": {
+      "title": "Formulario 990",
+      "description": "Prepare la declaración informativa anual de entidades exentas de impuestos a partir de los gastos funcionales."
     },
     "apiAccess": {
       "title": "API REST",
@@ -4885,6 +4940,18 @@
     "wipBilling": {
       "title": "Trabajo en curso y prefacturación",
       "description": "Revise el trabajo facturable de proyectos, retenga o ajuste líneas con evidencia, apruebe prefacturas y supervise la antigüedad del trabajo en curso, la realización y las fugas."
+    },
+    "resourcing": {
+      "title": "Asignación de recursos",
+      "description": "Planifique personas frente a la demanda de los proyectos por rol, competencia y disponibilidad."
+    },
+    "resourceRequests": {
+      "title": "Solicitudes de recursos",
+      "description": "Solicite personal para los roles del proyecto y envíe cada solicitud por un flujo de aprobación."
+    },
+    "retainerBilling": {
+      "title": "Facturación de anticipos",
+      "description": "Facture anticipos prepagados y consúmalos a medida que se entrega el trabajo del proyecto."
     },
     "automations": {
       "title": "Automatizaciones",

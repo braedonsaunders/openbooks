@@ -855,11 +855,14 @@
       "close": "Periods & close",
       "ap": "Accounts payable",
       "ar": "Accounts receivable",
+      "usage": "Usage billing",
       "reports": "Reports",
       "budgets": "Budgets & forecasts",
       "allocations": "Allocations",
+      "nonprofit": "Nonprofit",
       "insights": "Insights",
       "items": "Items & services",
+      "orders": "Orders & fulfillment",
       "projects": "Projects & job costing",
       "time": "Time & timesheets",
       "payroll": "Payroll",
@@ -897,6 +900,7 @@
     "ar_approve": "Approve or reject invoices",
     "ar_post": "Post invoices to the ledger",
     "ar_pay": "Record customer payments",
+    "usage_read": "View metered usage",
     "reports_read": "View reports",
     "reports_create": "Create and save reports",
     "reports_schedule": "Schedule report delivery",
@@ -907,6 +911,7 @@
     "allocations_manage": "Create and edit allocation rules and drivers",
     "allocations_run": "Preview, post, reverse, and re-run allocations",
     "allocations_approve": "Approve allocation runs awaiting approval",
+    "nonprofit_report": "Run nonprofit reports",
     "insights_read": "View insights and the library",
     "insights_create": "Build cards and dashboards",
     "insights_publish": "Publish to the shared library",
@@ -914,6 +919,8 @@
     "items_manage": "Create and edit items",
     "items_post": "Post inventory movements",
     "items_reverse": "Reverse inventory movements",
+    "items_warehouses": "Manage warehouses and locations",
+    "orders_fulfill": "Pick, pack, and ship orders",
     "projects_read": "View projects and job costing",
     "projects_manage": "Create and edit projects",
     "time_read": "View timesheets",
@@ -4782,6 +4789,18 @@
       "title": "Inventory",
       "description": "Stock tracking, locations, item costing, and assemblies."
     },
+    "warehousing": {
+      "title": "Warehousing",
+      "description": "Warehouses, zones, and bins, with stock held and counted by location."
+    },
+    "fulfillment": {
+      "title": "Fulfillment",
+      "description": "Pick, pack, and ship sales orders from warehouse stock."
+    },
+    "manufacturing": {
+      "title": "Manufacturing",
+      "description": "Bills of materials, routings, and work orders that build finished goods from components."
+    },
     "equipment": {
       "title": "Equipment & rentals",
       "description": "Equipment units, rate ladders, and usage charges to jobs."
@@ -4854,6 +4873,14 @@
       "title": "Advanced subscription lifecycle",
       "description": "Versioned plans, multiple components, trials, renewals, co-terming, amendments, and advance or arrears billing."
     },
+    "usageBilling": {
+      "title": "Usage billing",
+      "description": "Rate metered usage against subscription plans and bill it on the subscription invoice."
+    },
+    "saasMetrics": {
+      "title": "SaaS metrics",
+      "description": "Recurring revenue, churn, retention, and cohort metrics from subscription data."
+    },
     "subcontracts": {
       "title": "Subcontracts & AP progress billing",
       "description": "Vendor commitments, subcontract changes, vendor SOVs and pay applications, retainage payable, releases, joint checks, and payment holds."
@@ -4861,6 +4888,18 @@
     "wipBilling": {
       "title": "WIP & prebilling",
       "description": "Review billable project work, hold or adjust lines with evidence, approve prebills, and monitor WIP aging, realization, and leakage."
+    },
+    "resourcing": {
+      "title": "Resourcing",
+      "description": "Plan people against project demand by role, skill, and availability."
+    },
+    "resourceRequests": {
+      "title": "Resource requests",
+      "description": "Request staffing for project roles and route each request through an approval flow."
+    },
+    "retainerBilling": {
+      "title": "Retainer billing",
+      "description": "Bill prepaid retainers and draw them down as project work is delivered."
     },
     "propertyManagement": {
       "title": "Property management",
@@ -4885,6 +4924,34 @@
     "allocationsAtPosting": {
       "title": "Allocations at posting",
       "description": "Let allocation rules and authorized scripts contribute extra GL lines to a transaction's own journal entry at posting."
+    },
+    "nonprofit": {
+      "title": "Nonprofit",
+      "description": "Accounting for nonprofit organizations: funds, grants, pledges, and functional-expense reporting."
+    },
+    "fundAccounting": {
+      "title": "Fund accounting",
+      "description": "Track net assets by fund and donor restriction, including releases from restriction."
+    },
+    "grantManagement": {
+      "title": "Grant management",
+      "description": "Grant awards, budgets, allowable spending, and funder reporting against funds."
+    },
+    "pledges": {
+      "title": "Pledges",
+      "description": "Record promises to give, schedule their collection, and track what remains receivable."
+    },
+    "encumbrances": {
+      "title": "Encumbrances",
+      "description": "Reserve budget for commitments before they are spent and report the balance still available."
+    },
+    "functionalExpenses": {
+      "title": "Functional expenses",
+      "description": "Allocate expenses across program, management and general, and fundraising functions."
+    },
+    "form990": {
+      "title": "Form 990",
+      "description": "Prepare the annual information return for tax-exempt organizations from functional-expense data."
     },
     "automations": {
       "title": "Automations",

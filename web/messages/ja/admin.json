@@ -867,10 +867,12 @@
       "close": "会計期間と締め",
       "ap": "買掛金",
       "ar": "売掛金",
+      "usage": "従量課金",
       "reports": "レポート",
       "budgets": "予算と予測",
       "insights": "インサイト",
       "items": "品目とサービス",
+      "orders": "受注と出荷",
       "projects": "プロジェクトと原価計算",
       "time": "工数とタイムシート",
       "records": "カスタムレコード",
@@ -887,6 +889,7 @@
       "data": "インポートとエクスポート",
       "crm": "顧客関係管理",
       "allocations": "配賦",
+      "nonprofit": "非営利組織",
       "compliance": "コンプライアンス",
       "payroll": "給与計算"
     },
@@ -908,6 +911,7 @@
     "ar_approve": "請求書を承認または却下",
     "ar_post": "請求書を元帳に記帳",
     "ar_pay": "入金を記録",
+    "usage_read": "計測された利用量を表示",
     "reports_read": "レポートを表示",
     "reports_create": "レポートを作成および保存",
     "reports_schedule": "レポート配信をスケジュール",
@@ -921,6 +925,8 @@
     "items_manage": "品目を作成および編集",
     "items_post": "在庫変動を記帳",
     "items_reverse": "在庫変動を取消",
+    "items_warehouses": "倉庫とロケーションを管理",
+    "orders_fulfill": "受注のピッキング・梱包・出荷",
     "projects_read": "プロジェクトと原価計算を表示",
     "projects_manage": "プロジェクトを作成および編集",
     "time_read": "タイムシートを表示",
@@ -978,6 +984,7 @@
     "crm_forecasts_override": "チーム予測を上書き",
     "crm_setup_manage": "CRMセットアップを管理",
     "allocations_approve": "承認待ちの配賦実行を承認します",
+    "nonprofit_report": "非営利組織レポートを実行",
     "allocations_manage": "配賦ルールとドライバーを作成・編集します",
     "allocations_read": "配賦ルール・実行・由来を表示します",
     "allocations_run": "配賦のプレビュー・記帳・取消・再実行をします",
@@ -4766,6 +4773,14 @@
       "title": "高度なサブスクリプション管理",
       "description": "版管理プラン・複数項目・試用・更新・共同期日・改定、前払・後払い請求に対応します。"
     },
+    "usageBilling": {
+      "title": "従量課金",
+      "description": "計測した利用量をサブスクリプションプランで料金計算し、サブスクリプション請求書で請求します。"
+    },
+    "saasMetrics": {
+      "title": "SaaS指標",
+      "description": "サブスクリプションデータから経常収益・解約率・継続率・コホート指標を算出します。"
+    },
     "allocations": {
       "title": "配賦",
       "description": "プール原価をドライバー基準で対象に配分する単一の版管理ルールモデルです。取引入力時の分配キー・記帳時の追加総勘定元帳行・定期の期末一掃を、完全な由来付きで管理します。"
@@ -4777,6 +4792,34 @@
     "allocationsAtPosting": {
       "title": "計上時配賦",
       "description": "記帳時に取引自体の仕訳へ追加の総勘定元帳行を寄せる配賦ルールと承認済みスクリプトを許可します。"
+    },
+    "nonprofit": {
+      "title": "非営利組織",
+      "description": "非営利組織向けの会計です。基金・助成金・寄付の約束・機能別費用の報告を扱います。"
+    },
+    "fundAccounting": {
+      "title": "基金会計",
+      "description": "基金別・寄付者の制約別に正味財産を管理し、制約の解除も記録します。"
+    },
+    "grantManagement": {
+      "title": "助成金管理",
+      "description": "助成金の交付決定・予算・対象経費・助成元への報告を基金に紐付けて管理します。"
+    },
+    "pledges": {
+      "title": "寄付の約束",
+      "description": "寄付の約束を記録し、回収予定を立て、未回収額を管理します。"
+    },
+    "encumbrances": {
+      "title": "予算引当",
+      "description": "支出前に確定した義務の分だけ予算を引き当て、残りの利用可能額を報告します。"
+    },
+    "functionalExpenses": {
+      "title": "機能別費用",
+      "description": "費用を事業・管理・資金調達の各機能に配分します。"
+    },
+    "form990": {
+      "title": "様式990",
+      "description": "機能別費用のデータから、免税団体の年次情報申告書を作成します。"
     },
     "apiAccess": {
       "title": "REST API",
@@ -4822,6 +4865,18 @@
       "title": "仕掛品と前請求",
       "description": "請求可能なプロジェクト作業を確認し、証跡付きで行の保留・調整、前請求の承認、仕掛品の経過・実現・漏れを監視します。"
     },
+    "resourcing": {
+      "title": "要員計画",
+      "description": "役割・スキル・稼働可能状況に基づき、プロジェクトの需要に人員を割り当てます。"
+    },
+    "resourceRequests": {
+      "title": "要員依頼",
+      "description": "プロジェクトの役割に対する要員を依頼し、各依頼を承認フローで処理します。"
+    },
+    "retainerBilling": {
+      "title": "前払顧問料請求",
+      "description": "前払いの顧問料を請求し、プロジェクト作業の提供に応じて取り崩します。"
+    },
     "apps": {
       "description": "アプリパッケージとアプリライブラリです。",
       "title": "アプリ"
@@ -4865,6 +4920,18 @@
     "inventory": {
       "description": "在庫追跡・拠点・品目原価・組立品です。",
       "title": "在庫"
+    },
+    "warehousing": {
+      "title": "倉庫管理",
+      "description": "倉庫・ゾーン・棚番を管理し、在庫をロケーション単位で保有・棚卸しします。"
+    },
+    "fulfillment": {
+      "title": "出荷処理",
+      "description": "倉庫在庫から受注をピッキング・梱包・出荷します。"
+    },
+    "manufacturing": {
+      "title": "製造",
+      "description": "部品表・工程表・製造指図により、部品から完成品を製造します。"
     },
     "orders": {
       "description": "請求書・仕入請求書への転換付きの見積・受注・発注です。",

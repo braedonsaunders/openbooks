@@ -867,10 +867,12 @@
       "close": "Perioden & Abschluss",
       "ap": "Kreditorenbuchhaltung",
       "ar": "Debitorenbuchhaltung",
+      "usage": "Nutzungsabrechnung",
       "reports": "Berichte",
       "budgets": "Budgets & Prognosen",
       "insights": "Insights",
       "items": "Artikel & Dienstleistungen",
+      "orders": "Aufträge und Versand",
       "projects": "Projekte & Auftragskalkulation",
       "time": "Zeit & Zeiterfassung",
       "records": "Benutzerdefinierte Datensätze",
@@ -887,6 +889,7 @@
       "data": "Import & Export",
       "crm": "Kundenbeziehungsmanagement",
       "allocations": "Umlagen",
+      "nonprofit": "Gemeinnützige Organisationen",
       "compliance": "Compliance",
       "payroll": "Lohnabrechnung"
     },
@@ -908,6 +911,7 @@
     "ar_approve": "Ausgangsrechnungen genehmigen oder ablehnen",
     "ar_post": "Ausgangsrechnungen im Hauptbuch buchen",
     "ar_pay": "Kundenzahlungen erfassen",
+    "usage_read": "Gemessene Nutzung anzeigen",
     "reports_read": "Berichte anzeigen",
     "reports_create": "Berichte erstellen und speichern",
     "reports_schedule": "Berichtszustellung planen",
@@ -921,6 +925,8 @@
     "items_manage": "Artikel erstellen und bearbeiten",
     "items_post": "Lagerbewegungen buchen",
     "items_reverse": "Lagerbewegungen stornieren",
+    "items_warehouses": "Lager und Lagerplätze verwalten",
+    "orders_fulfill": "Aufträge kommissionieren, verpacken und versenden",
     "projects_read": "Projekte und Auftragskalkulation anzeigen",
     "projects_manage": "Projekte erstellen und bearbeiten",
     "time_read": "Zeiterfassungen anzeigen",
@@ -978,6 +984,7 @@
     "crm_forecasts_override": "Teamprognosen überschreiben",
     "crm_setup_manage": "CRM-Einrichtung verwalten",
     "allocations_approve": "Umlagelläufe mit ausstehender Genehmigung freigeben",
+    "nonprofit_report": "Berichte für gemeinnützige Organisationen ausführen",
     "allocations_manage": "Umlageregeln und Treiber erstellen und bearbeiten",
     "allocations_read": "Umlageregeln, Läufe und Herkunft anzeigen",
     "allocations_run": "Umlagen in Vorschau ansehen, buchen, stornieren und erneut laufen lassen",
@@ -4766,6 +4773,14 @@
       "title": "Erweiterter Abonnement-Lebenszyklus",
       "description": "Versionierte Pläne, mehrere Komponenten, Testphasen, Verlängerungen, Co-Terminierung, Änderungen sowie Voraus- oder Nachabrechnung."
     },
+    "usageBilling": {
+      "title": "Nutzungsabrechnung",
+      "description": "Gemessene Nutzung nach Abonnementplänen bewerten und auf der Abonnementrechnung abrechnen."
+    },
+    "saasMetrics": {
+      "title": "SaaS-Kennzahlen",
+      "description": "Wiederkehrende Umsätze, Abwanderung, Kundenbindung und Kohorten aus Abonnementdaten."
+    },
     "allocations": {
       "title": "Umlagen",
       "description": "Ein versioniertes Regelmodell, das gepoolte Kosten anhand eines Treibers auf Ziele verteilt: Verteilungsschlüssel bei Belegerfassung, zusätzliche Hauptbuchzeilen bei Buchung und geplante Periodenendläufe, mit vollständiger Herkunft."
@@ -4777,6 +4792,34 @@
     "allocationsAtPosting": {
       "title": "Umlagen bei Buchung",
       "description": "Umlageregeln und autorisierte Skripte zur Buchung zusätzliche Hauptbuchzeilen zum eigenen Journaleintrag einer Transaktion beitragen lassen."
+    },
+    "nonprofit": {
+      "title": "Gemeinnützige Organisationen",
+      "description": "Rechnungswesen für gemeinnützige Organisationen: Fonds, Fördermittel, Spendenzusagen und Aufwandsberichte nach Funktionen."
+    },
+    "fundAccounting": {
+      "title": "Fondsbuchhaltung",
+      "description": "Nettovermögen nach Fonds und Spenderauflage verfolgen, einschließlich der Freigabe von Auflagen."
+    },
+    "grantManagement": {
+      "title": "Fördermittelverwaltung",
+      "description": "Förderzusagen, Budgets, förderfähige Ausgaben und Berichte an Mittelgeber, jeweils einem Fonds zugeordnet."
+    },
+    "pledges": {
+      "title": "Spendenzusagen",
+      "description": "Spendenzusagen erfassen, ihren Einzug planen und den noch ausstehenden Betrag verfolgen."
+    },
+    "encumbrances": {
+      "title": "Mittelbindungen",
+      "description": "Budget für Verpflichtungen vor der Ausgabe reservieren und den noch verfügbaren Betrag ausweisen."
+    },
+    "functionalExpenses": {
+      "title": "Aufwand nach Funktionen",
+      "description": "Aufwendungen auf die Funktionen Programme, Verwaltung und Mittelbeschaffung verteilen."
+    },
+    "form990": {
+      "title": "Formular 990",
+      "description": "Die jährliche Informationserklärung steuerbefreiter Organisationen aus den Aufwendungen nach Funktionen erstellen."
     },
     "apiAccess": {
       "title": "REST-API",
@@ -4822,6 +4865,18 @@
       "title": "Unfertige Leistungen und Vorauszahlungen",
       "description": "Abrechenbare Projektarbeit prüfen, Zeilen mit Nachweis zurückhalten oder anpassen, Vorabrechnungen genehmigen und WIP-Alterung, Realisierung und Schwund überwachen."
     },
+    "resourcing": {
+      "title": "Ressourcenplanung",
+      "description": "Personen nach Rolle, Qualifikation und Verfügbarkeit gegen den Projektbedarf planen."
+    },
+    "resourceRequests": {
+      "title": "Ressourcenanforderungen",
+      "description": "Personal für Projektrollen anfordern und jede Anforderung über einen Genehmigungsablauf leiten."
+    },
+    "retainerBilling": {
+      "title": "Vorschussabrechnung",
+      "description": "Vorausbezahlte Vorschüsse abrechnen und mit erbrachter Projektleistung verrechnen."
+    },
     "apps": {
       "description": "App-Pakete und die App-Bibliothek.",
       "title": "Apps"
@@ -4865,6 +4920,18 @@
     "inventory": {
       "description": "Bestandsverfolgung, Standorte, Artikelkalkulation und Baugruppen.",
       "title": "Vorräte"
+    },
+    "warehousing": {
+      "title": "Lagerverwaltung",
+      "description": "Lager, Zonen und Lagerplätze mit Beständen, die je Lagerplatz geführt und gezählt werden."
+    },
+    "fulfillment": {
+      "title": "Auftragsabwicklung",
+      "description": "Kundenaufträge aus dem Lagerbestand kommissionieren, verpacken und versenden."
+    },
+    "manufacturing": {
+      "title": "Fertigung",
+      "description": "Stücklisten, Arbeitspläne und Fertigungsaufträge, die Fertigerzeugnisse aus Komponenten herstellen."
     },
     "orders": {
       "description": "Kostenvoranschläge, Kunden- und Bestellaufträge mit Überleitung in Rechnungen und Eingangsrechnungen.",

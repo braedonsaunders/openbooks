@@ -867,11 +867,14 @@
       "close": "Períodos e fechamento",
       "ap": "Contas a pagar",
       "ar": "Contas a receber",
+      "usage": "Faturamento por uso",
       "reports": "Relatórios",
       "budgets": "Orçamentos e previsões",
       "allocations": "Rateios",
+      "nonprofit": "Organizações sem fins lucrativos",
       "insights": "Insights",
       "items": "Itens e serviços",
+      "orders": "Pedidos e atendimento",
       "projects": "Projetos e apropriação de custos",
       "time": "Tempo e planilhas de horas",
       "payroll": "Folha de pagamento",
@@ -908,6 +911,7 @@
     "ar_approve": "Aprovar ou rejeitar faturas",
     "ar_post": "Lançar faturas no razão",
     "ar_pay": "Registrar recebimentos de clientes",
+    "usage_read": "Ver o uso medido",
     "reports_read": "Ver relatórios",
     "reports_create": "Criar e salvar relatórios",
     "reports_schedule": "Agendar entrega de relatórios",
@@ -918,6 +922,7 @@
     "allocations_manage": "Criar e editar regras e direcionadores de rateio",
     "allocations_run": "Visualizar, lançar, estornar e reexecutar rateios",
     "allocations_approve": "Aprovar execuções de rateio aguardando aprovação",
+    "nonprofit_report": "Executar relatórios de organizações sem fins lucrativos",
     "insights_read": "Ver insights e a biblioteca",
     "insights_create": "Criar cartões e painéis",
     "insights_publish": "Publicar na biblioteca compartilhada",
@@ -925,6 +930,8 @@
     "items_manage": "Criar e editar itens",
     "items_post": "Lançar movimentações de estoque",
     "items_reverse": "Estornar movimentações de estoque",
+    "items_warehouses": "Gerenciar armazéns e endereços",
+    "orders_fulfill": "Separar, embalar e expedir pedidos",
     "projects_read": "Ver projetos e apropriação de custos",
     "projects_manage": "Criar e editar projetos",
     "time_read": "Ver planilhas de horas",
@@ -4782,6 +4789,18 @@
       "title": "Estoque",
       "description": "Rastreio de estoque, locais, custeio de itens e kits."
     },
+    "warehousing": {
+      "title": "Armazenagem",
+      "description": "Armazéns, zonas e endereços, com estoque mantido e contado por endereço."
+    },
+    "fulfillment": {
+      "title": "Atendimento de pedidos",
+      "description": "Separe, embale e expeça pedidos de venda a partir do estoque do armazém."
+    },
+    "manufacturing": {
+      "title": "Manufatura",
+      "description": "Listas de materiais, roteiros e ordens de produção que fabricam produtos acabados a partir de componentes."
+    },
     "equipment": {
       "title": "Equipamentos e locações",
       "description": "Unidades de equipamento, escadas de taxas e cobranças de uso nas obras."
@@ -4854,6 +4873,14 @@
       "title": "Ciclo de vida avançado de assinaturas",
       "description": "Planos versionados, múltiplos componentes, trials, renovações, co-terminação, aditivos e faturamento antecipado ou postecipado."
     },
+    "usageBilling": {
+      "title": "Faturamento por uso",
+      "description": "Tarife o uso medido conforme os planos de assinatura e cobre-o na fatura da assinatura."
+    },
+    "saasMetrics": {
+      "title": "Métricas de SaaS",
+      "description": "Receita recorrente, cancelamentos, retenção e coortes a partir dos dados de assinatura."
+    },
     "subcontracts": {
       "title": "Subcontratos e faturamento de progresso",
       "description": "Compromissos com fornecedores, alterações de subcontrato, SOVs e medições de fornecedores, retenções a pagar, liberações, cheques conjuntos e travas de pagamento."
@@ -4861,6 +4888,18 @@
     "wipBilling": {
       "title": "Trabalhos em curso e pré-faturamento",
       "description": "Revise trabalho faturável de obras, trave ou ajuste linhas com evidência, aprove pré-faturas e monitore aging de WIP, realização e vazamento."
+    },
+    "resourcing": {
+      "title": "Alocação de recursos",
+      "description": "Planeje pessoas conforme a demanda dos projetos por função, competência e disponibilidade."
+    },
+    "resourceRequests": {
+      "title": "Solicitações de recursos",
+      "description": "Solicite pessoal para funções do projeto e encaminhe cada solicitação por um fluxo de aprovação."
+    },
+    "retainerBilling": {
+      "title": "Faturamento de adiantamentos",
+      "description": "Fature adiantamentos pré-pagos e consuma-os à medida que o trabalho do projeto é entregue."
     },
     "propertyManagement": {
       "title": "Gestão imobiliária",
@@ -4885,6 +4924,34 @@
     "allocationsAtPosting": {
       "title": "Rateios na contabilização",
       "description": "Deixe regras de rateio e scripts autorizados contribuírem linhas extras no razão para o lançamento contábil da transação na contabilização."
+    },
+    "nonprofit": {
+      "title": "Organizações sem fins lucrativos",
+      "description": "Contabilidade para organizações sem fins lucrativos: fundos, subvenções, promessas de doação e relatórios de despesas funcionais."
+    },
+    "fundAccounting": {
+      "title": "Contabilidade por fundos",
+      "description": "Acompanhe o patrimônio líquido por fundo e restrição do doador, incluindo as liberações de restrição."
+    },
+    "grantManagement": {
+      "title": "Gestão de subvenções",
+      "description": "Concessões de subvenções, orçamentos, gastos elegíveis e relatórios aos financiadores vinculados aos fundos."
+    },
+    "pledges": {
+      "title": "Promessas de doação",
+      "description": "Registre promessas de doação, programe o recebimento e acompanhe o valor ainda a receber."
+    },
+    "encumbrances": {
+      "title": "Empenhos",
+      "description": "Reserve orçamento para compromissos antes do gasto e informe o saldo ainda disponível."
+    },
+    "functionalExpenses": {
+      "title": "Despesas funcionais",
+      "description": "Distribua as despesas entre as funções de programas, administração geral e captação de recursos."
+    },
+    "form990": {
+      "title": "Formulário 990",
+      "description": "Prepare a declaração anual de informações de organizações isentas de impostos a partir das despesas funcionais."
     },
     "automations": {
       "title": "Automações",
