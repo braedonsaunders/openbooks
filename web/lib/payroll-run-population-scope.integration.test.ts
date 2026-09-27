@@ -67,7 +67,7 @@ for (const surface of ["collection", "record list", "assistant list", "assistant
       state.gate = gate;
       const read = async (visible: boolean) => {
         if (surface === "collection") {
-          const response = await GET(); assert.equal(response.status, 200);
+          const response = await GET(new Request("http://openbooks.test/api/payroll/runs")); assert.equal(response.status, 200);
           const rows = (await response.json()).runs as { document_id: string }[];
           assert.equal(rows.some((row) => row.document_id === input.documentId), visible);
         } else if (surface === "record list") {
