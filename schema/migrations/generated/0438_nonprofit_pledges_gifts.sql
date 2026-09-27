@@ -1,4 +1,5 @@
--- OpenBooks forward migration 0438: pledge and gift records.
+-- OpenBooks forward migration 0438_nonprofit_pledges_gifts.
+-- Pledge and gift records.
 SET statement_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
