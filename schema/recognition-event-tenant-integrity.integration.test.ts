@@ -66,6 +66,12 @@ type RecognitionFixture = {
   obligationB: string;
 };
 
+type DependentForeignKey = {
+  table: string;
+  name: string;
+  definition: string;
+};
+
 function postgresCode(error: unknown): string | undefined {
   let current: unknown = error;
   for (let depth = 0; depth < 5 && current && typeof current === "object"; depth += 1) {
@@ -206,6 +212,40 @@ async function constraintDefinition(client: pg.Client): Promise<string> {
   return result.rows[0]!.definition;
 }
 
+async function dependentForeignKeys(client: pg.Client): Promise<DependentForeignKey[]> {
+  const result = await client.query<DependentForeignKey>(
+    `select conrelid::regclass::text as table,
+            conname as name,
+            pg_get_constraintdef(oid) as definition
+       from pg_constraint
+      where contype = 'f'
+        and confrelid = 'public.performance_obligations'::regclass
+        and conindid = 'public.performance_obligations_org_id_id_unique'::regclass
+      order by conrelid::regclass::text, conname`,
+  );
+  return result.rows;
+}
+
+function quoteIdentifier(identifier: string): string {
+  return `"${identifier.replaceAll('"', '""')}"`;
+}
+
+async function restoreDependentForeignKeys(
+  client: pg.Client,
+  constraints: DependentForeignKey[],
+): Promise<void> {
+  await client.query(
+    `create unique index if not exists performance_obligations_org_id_id_unique
+       on public.performance_obligations (org_id, id)`,
+  );
+  for (const constraint of constraints) {
+    const table = constraint.table.split(".").map(quoteIdentifier).join(".");
+    await client.query(
+      `alter table ${table} add constraint ${quoteIdentifier(constraint.name)} ${constraint.definition}`,
+    );
+  }
+}
+
 async function assertCrossTenantInsertRejected(
   client: pg.Client,
   fixture: RecognitionFixture,
@@ -269,10 +309,18 @@ test("0084 enforces tenant-coherent recognition events on replay and fresh boots
           foreign key (obligation_id)
           references public.performance_obligations (id)
           on delete cascade;
-        drop index if exists public.performance_obligations_org_id_id_unique;
         delete from public._applied_migrations
          where filename = 'generated/0084_recognition_event_tenant_coherence.sql';
       `);
+      const dependentKeys = await dependentForeignKeys(upgrade.client);
+      assert.ok(dependentKeys.length > 0, "the tenant key must have at least one dependent foreign key");
+      for (const constraint of dependentKeys) {
+        const table = constraint.table.split(".").map(quoteIdentifier).join(".");
+        await upgrade.client.query(
+          `alter table ${table} drop constraint ${quoteIdentifier(constraint.name)}`,
+        );
+      }
+      await upgrade.client.query(`drop index public.performance_obligations_org_id_id_unique`);
       const upgradeFixture = await seedRecognitionFixture(upgrade.client, "upgrade");
       const legacyEventId = randomUUID();
       await upgrade.client.query(
@@ -287,14 +335,18 @@ test("0084 enforces tenant-coherent recognition events on replay and fresh boots
         "0062's single-column FK must reproduce the legacy cross-tenant state",
       );
 
-      await assert.rejects(
-        runBootstrap(upgrade.url),
-        (error: unknown) => {
-          assert.match(String(error), /23514|legacy data violates tenant coherence/);
-          assert.match(String(error), /legacy data violates tenant coherence/);
-          return true;
-        },
-      );
+      try {
+        await assert.rejects(
+          runBootstrap(upgrade.url),
+          (error: unknown) => {
+            assert.match(String(error), /23514|legacy data violates tenant coherence/);
+            assert.match(String(error), /legacy data violates tenant coherence/);
+            return true;
+          },
+        );
+      } finally {
+        await restoreDependentForeignKeys(upgrade.client, dependentKeys);
+      }
       assert.match(await constraintDefinition(upgrade.client), /FOREIGN KEY \(obligation_id\) REFERENCES performance_obligations\(id\)/);
       assert.equal(
         (await upgrade.client.query(`select 1 from public.recognition_events where id = $1`, [legacyEventId])).rows.length,
