@@ -11,7 +11,6 @@ import { postInventoryEntry, stockLocationDim } from "../inventory/journal.ts";
 import { periodForDate, primaryBookId, subsidiaryCurrency } from "../inventory/position.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Scope = ReadonlySet<string> | null;
 
 export type DropShipRefusalCode =
