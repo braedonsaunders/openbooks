@@ -43,9 +43,10 @@ RUN npx esbuild scripts/bootstrap.ts \
 # without growing the pinned engine dependency cycle.
 RUN npx esbuild scripts/worker-entry.mts \
       --bundle --platform=node --format=esm \
-      --external:pg-native \
-      --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);" \
+      --external:pg-native --external:jsdom \
+      --banner:js="import { createRequire as openbooksCreateRequire } from 'node:module'; const require = openbooksCreateRequire(import.meta.url);" \
       --outfile=/out/worker.mjs
+RUN node --check /out/worker.mjs
 
 # --- runtime ------------------------------------------------------------------
 FROM node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d AS runtime
@@ -106,6 +107,9 @@ COPY --chown=node:node --from=build /out/bootstrap.mjs ./scripts/bootstrap.mjs
 COPY --chown=node:node --from=build /out/worker.mjs ./scripts/worker.mjs
 # The bootstrap reads migration SQL relative to its own location (/app/scripts → /app).
 COPY --chown=node:node schema/migrations ./schema/migrations
+RUN set -eu; \
+    output=$(node scripts/worker.mjs 2>&1) && { echo "worker unexpectedly started without database credentials" >&2; exit 1; }; \
+    printf '%s' "$output" | grep -Fq 'OPENBOOKS_BYPASS_DB_URL must name the dedicated BYPASSRLS login'
 
 EXPOSE 3000
 # Database bootstrap is intentionally not part of this process: the web server
