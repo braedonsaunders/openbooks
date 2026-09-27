@@ -302,6 +302,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "billing_schedules.milestone",
   "billing_schedules.name",
   "billing_schedules.type",
+  "budget_lines.extra_dims",
   "budget_lines.note",
   "budget_scenarios.description",
   "budget_scenarios.kind",
