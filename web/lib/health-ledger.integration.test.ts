@@ -13,7 +13,6 @@ const { sql } = await import("drizzle-orm");
 const { db, withOrgContext, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { healthData } = await import("./analytics/health-data");
-const { financialHealth, DEFAULT_BENCHMARKS } = await import("./analytics/financial-health");
 const { customerProfitability } = await import("./analytics/customer-data");
 const { profitAndLoss } = await import("./reports/statements");
 
