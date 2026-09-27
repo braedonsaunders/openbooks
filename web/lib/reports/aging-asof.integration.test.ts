@@ -19,6 +19,7 @@ const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/s
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
 const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
 const { agingByParty, agingDetail } = (await import(root + 'web/lib/reports/aging.ts')) as typeof import('./aging')
+const { voidScratchDocument } = await import('../test-document-void.ts')
 const { partnerBalances } = (await import(root + 'web/lib/reports/statements.ts')) as typeof import('./statements')
 const { partyRegister, partnerStatement } = (await import(root + 'web/lib/reports/registers.ts')) as typeof import('./registers')
 
@@ -49,9 +50,10 @@ async function lineId(entryId: string, accountId: string): Promise<string> {
   return r.rows[0]!.id
 }
 
-/** July invoice 1000 settled by a July part-payment, a July credit memo application, and an August final payment. */
-async function seedArScenario(): Promise<{ org: ScratchOrg }> {
+/** July invoice 1000 settled across months, plus a separate invoice voided after July. */
+async function seedArScenario(): Promise<{ org: ScratchOrg; voidDate: string }> {
   const org = await withBypassContext(() => createScratchOrg())
+  const voidedDoc = randomUUID()
   await withBypassContext(async () => {
     const july = org.periodId
     const cal = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where id = ${july}`)).rows[0]!.id
@@ -64,14 +66,8 @@ async function seedArScenario(): Promise<{ org: ScratchOrg }> {
       values (${randomUUID()}, ${org.orgId}, 'customer_invoice', 'AGE-INV-1', '2026-07-05', '2026-07-05', '2026-07-15', 'CAD', '1', '1000.0000', '0.0000', '1000.0000', ${org.customerId}, 'posted', ${eInv}, ${july}, '1000.0000')`)
 
     const eVoided = await postEntry(org, july, '2026-07-10', 'VOID-AFTER-CUTOFF', [[org.accounts.ar, '200.0000', org.customerId], [org.accounts.revenue, '-200.0000', null]])
-    const voidedDoc = randomUUID()
     await db.execute(sql`insert into documents (id, org_id, kind, document_number, document_date, posting_date, due_date, currency, fx_rate, subtotal, tax_total, total, party_id, status, posted_entry_id, posting_period_id, open_balance)
       values (${voidedDoc}, ${org.orgId}, 'customer_invoice', 'AGE-VOID-AFTER-CUTOFF', '2026-07-10', '2026-07-10', '2026-07-20', 'CAD', '1', '200.0000', '0.0000', '200.0000', ${org.customerId}, 'posted', ${eVoided}, ${july}, '200.0000')`)
-    const reversed = await db.execute(sql`update journal_entries set status = 'reversed' where id = ${eVoided} and org_id = ${org.orgId} returning id`)
-    assert.equal(reversed.rows.length, 1, 'the original entry must retain its reversed history')
-    const voided = await db.execute(sql`update documents set status = 'voided', voided_at = '2026-08-20 12:00:00+00'::timestamptz where id = ${voidedDoc} and org_id = ${org.orgId} returning id`)
-    assert.equal(voided.rows.length, 1, 'the invoice must be voided after the July cutoff')
-
     // July part-payment 400, applied 07-20.
     const ePayJul = await postEntry(org, july, '2026-07-20', 'PAYJ', [[org.accounts.bank, '400.0000', null], [org.accounts.ar, '-400.0000', org.customerId]])
     await applyLines(org, await lineId(ePayJul, org.accounts.ar), await lineId(eInv, org.accounts.ar), '400.0000', '2026-07-20')
@@ -86,7 +82,14 @@ async function seedArScenario(): Promise<{ org: ScratchOrg }> {
     const ePayAug = await postEntry(org, aug, '2026-08-05', 'PAYA', [[org.accounts.bank, '500.0000', null], [org.accounts.ar, '-500.0000', org.customerId]])
     await applyLines(org, await lineId(ePayAug, org.accounts.ar), await lineId(eInv, org.accounts.ar), '500.0000', '2026-08-05')
   })
-  return { org }
+  const voidResult = await voidScratchDocument({
+    orgId: org.orgId,
+    documentId: voidedDoc,
+    actorName: 'Aging Void Operator',
+    reason: 'Customer invoice was entered in error',
+    reversalDate: '2026-08-20',
+  })
+  return { org, voidDate: voidResult.voidedDate }
 }
 
 test('AR aging as of July still shows the balance settled in August', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -157,15 +160,15 @@ test('AP aging as of July still shows the bill paid in August', { skip: !process
   }
 })
 
-test('aging as of today still matches the live open balances', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { org } = await seedArScenario()
+test('aging on the void date still matches the live open balances', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, voidDate } = await seedArScenario()
   try {
     await withOrgContext(org.orgId, async () => {
-      // Everything settled in August: current aging is zero under either basis.
-      const aging = await agingByParty('ar', '2026-08-31', undefined, org.orgId)
+      // The invoice voided after its reversal posting date is absent on the current date.
+      const aging = await agingByParty('ar', voidDate, undefined, org.orgId)
       assert.equal(aging.totals.total, '0.0000')
       assert.equal(aging.rows.length, 0)
-      const detail = await agingDetail('ar', '2026-08-31', undefined, org.orgId)
+      const detail = await agingDetail('ar', voidDate, undefined, org.orgId)
       assert.equal(detail.totals.total, '0.0000')
     })
   } finally {

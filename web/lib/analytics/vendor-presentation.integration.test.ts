@@ -13,6 +13,7 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { voidScratchDocument } = await import('../test-document-void.ts')
 const { vendorData } = await import('./vendor-data')
 
 const D = '2026-07-14'
@@ -46,15 +47,13 @@ async function seedTwoCurrencySpend() {
       ['BILL-PRIOR', usSub, usVend, 'USD', '100', '1', '2025-07-15', priorPeriod, null],
     ] as const
     let usBillLine = ''
-    let usBillDocumentId = ''
+    let cadBillDocumentId = ''
     for (const [num, sub, party, cur, total, fx, date, period, due] of bills) {
       const docId = randomUUID()
       const entryId = randomUUID()
       const lineId = randomUUID()
-      if (num === 'BILL-USD') {
-        usBillLine = lineId
-        usBillDocumentId = docId
-      }
+      if (num === 'BILL-USD') usBillLine = lineId
+      if (num === 'BILL-CAD') cadBillDocumentId = docId
       await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
         values (${docId}, ${org.orgId}, 'vendor_bill', ${num}, ${party}, ${sub}, ${date}, ${date}, ${cur}, ${fx}, 'draft', ${total}, 0, ${total}, ${total})`)
       await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
@@ -81,7 +80,7 @@ async function seedTwoCurrencySpend() {
       values (${randomUUID()}, ${org.orgId}, ${payLine}, ${usBillLine}, 100, 100, 100, 'USD', 100, 'USD',
         1, 'same_currency', 'same transaction currency', ${D}, ${org.orgId})`)
   })
-  return { org, usVend, usBillDocumentId }
+  return { org, usVend, cadBillDocumentId }
 }
 
 /**
@@ -90,22 +89,26 @@ async function seedTwoCurrencySpend() {
  * and late-paid USD legs translate the same way — not 100 everywhere.
  */
 test('vendor performance translates every spend functional to presentation', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { org, usVend, usBillDocumentId } = await seedTwoCurrencySpend()
+  const { org, usVend, cadBillDocumentId } = await seedTwoCurrencySpend()
   try {
-    await withBypass(async () => {
-      const updated = await db.execute(sql`update documents
-        set status = 'voided', voided_at = '2026-08-05 12:00:00+00'::timestamptz
-        where id = ${usBillDocumentId} and org_id = ${org.orgId} returning id`)
-      assert.equal(updated.rows.length, 1, 'the July bill must be changed into a dated void')
+    const voidResult = await voidScratchDocument({
+      orgId: org.orgId,
+      documentId: cadBillDocumentId,
+      actorName: 'Vendor Report Void Operator',
+      reason: 'Vendor invoice was entered in error',
+      reversalDate: '2026-08-05',
     })
+    assert.ok(voidResult.reversalEntryId)
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
         const data = await vendorData(P, org.orgId, null)
         const usRow = data.rows.find((r) => r.id === usVend)!
+        const cadRow = data.rows.find((r) => r.id === org.vendorId)!
         assert.equal(usRow.spend, 135)
         assert.equal(usRow.priorSpend, 130)
         assert.equal(usRow.lateSpend, 135)
         assert.equal(usRow.bills, 1, 'a bill voided after the report cutoff remains in July activity')
+        assert.equal(cadRow.bills, 1, 'the voided CAD bill also remains in July activity')
         assert.equal(data.totals.spend, 235)
         assert.equal(data.totals.priorSpend, 130)
         assert.equal(data.totals.lateSpend, 135)

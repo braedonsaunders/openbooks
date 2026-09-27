@@ -13,6 +13,7 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { voidScratchDocument } = await import('../test-document-void.ts')
 const { purchasingHome } = await import('./purchasing.ts')
 
 const D = '2026-07-14'
@@ -77,12 +78,14 @@ async function seedTwoCurrencyPayables() {
 test('purchasing cockpit translates every payable functional to presentation', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const { org, usVend, usBillDocumentId } = await seedTwoCurrencyPayables()
   try {
-    await withBypass(async () => {
-      const updated = await db.execute(sql`update documents
-        set status = 'voided', voided_at = '2026-08-05 12:00:00+00'::timestamptz
-        where id = ${usBillDocumentId} and org_id = ${org.orgId} returning id`)
-      assert.equal(updated.rows.length, 1, 'the July bill must be voided after the report cutoff')
+    const voidResult = await voidScratchDocument({
+      orgId: org.orgId,
+      documentId: usBillDocumentId,
+      actorName: 'Purchasing Report Void Operator',
+      reason: 'Vendor invoice was entered in error',
+      reversalDate: '2026-08-05',
     })
+    assert.ok(voidResult.reversalEntryId)
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
         const home = await purchasingHome(org.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true })

@@ -166,11 +166,12 @@ export async function vendorData(
            and d.status in ('posted', 'voided') and d.posting_date::date between ${from}::date and ${ref}::date
            ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
         union all
-        select d.party_id, d.voided_at::date as movement_date, -1::int as direction
+        select d.party_id, coalesce(reversal_entry.posting_date::date, d.voided_at::date) as movement_date, -1::int as direction
           from documents d
+          left join journal_entries reversal_entry on reversal_entry.id = d.reversal_entry_id and reversal_entry.org_id = d.org_id
          where d.org_id = ${orgId} and d.kind = 'vendor_bill' and d.party_id is not null
            and d.status = 'voided' and d.voided_at is not null
-           and d.voided_at::date between ${from}::date and ${ref}::date
+           and coalesce(reversal_entry.posting_date::date, d.voided_at::date) between ${from}::date and ${ref}::date
            ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
       )
       select party_id as id, sum(direction)::int as bills, max(movement_date) as last_bill

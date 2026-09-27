@@ -13,6 +13,7 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { voidScratchDocument } = await import('../test-document-void.ts')
 const { customersHome } = await import('./customers.ts')
 
 const D = '2026-07-14'
@@ -168,24 +169,19 @@ test('customers cockpit drops a voided receivable from the current balance', { s
       await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${secondaryEntry} and org_id=${org.orgId}`)
       await db.execute(sql`update documents set status='posted', posted_entry_id=${secondaryEntry}, posting_period_id=${org.periodId}
         where id=${secondaryDocument} and org_id=${org.orgId}`)
-      const reversalId = randomUUID()
-      await db.execute(sql`insert into journal_entries
-        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id, reverses_entry_id)
-        values (${reversalId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`VOID-${reversalId}`}, '2026-07-15', ${org.periodId}, 'draft', 'manual', ${cadInvoice.documentId}, ${cadInvoice.entryId})`)
-      await db.execute(sql`insert into journal_lines
-        (org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
-        values (${org.orgId}, ${reversalId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, ${org.customerId}, false, '-100.1255', 'CAD', '-100.1255', '1'),
-               (${org.orgId}, ${reversalId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${org.customerId}, false, '100.1255', 'CAD', '100.1255', '1')`)
-      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${reversalId} and org_id=${org.orgId}`)
-      await db.execute(sql`update journal_entries set status='reversed' where id=${cadInvoice.entryId} and org_id=${org.orgId}`)
-      await db.execute(sql`update documents set status='voided', voided_at='2026-07-15 12:00:00+00'::timestamptz, open_balance=0 where id=${cadInvoice.documentId} and org_id=${org.orgId}`)
     })
-    await pinClock('2026-07-16', async () => {
-      await withOrgContext(org.orgId, async () => {
-        const home = await customersHome(org.orgId)
-        assert.equal(home.arOutstanding, '270.1694', 'the voided CAD invoice no longer changes the current receivable figure')
-        assert.equal(home.openInvoices, 1)
-      })
+    const voidResult = await voidScratchDocument({
+      actorName: 'Receivables Void Operator',
+      documentId: cadInvoice.documentId,
+      orgId: org.orgId,
+      reason: 'Invoice was entered in error',
+      reversalDate: '2026-07-15',
+    })
+    assert.ok(voidResult.reversalEntryId)
+    await withOrgContext(org.orgId, async () => {
+      const home = await customersHome(org.orgId)
+      assert.equal(home.arOutstanding, '270.1694', 'the voided CAD invoice no longer changes the current receivable figure')
+      assert.equal(home.openInvoices, 1)
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
