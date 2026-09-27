@@ -177,8 +177,8 @@ holds rows; none does anywhere).
 - `types.ts` — the shared contract (rule/version/target/driver shapes, `Coordinate`,
   `DriverVector`, `ApportionResult`, `ContributedLine`, `MatchResult`). Extend it only
   additively.
-- `apportion.ts` — pure: `apportion(total, weights, residualPolicy)` exact bigint
-  money via `money.ts`; `fixedPercentWeights(targets)`, `steppedWeights`. Never a float.
+- `apportion.ts` — pure: `apportionTargets(total, weights, residualPolicy)` over the
+  money kernel's exact bigint `apportion`; `fixedPercentWeights(targets)`, `steppedWeights`. Never a float.
 - `validate.ts` — `validateRuleVersion(version, targets)` (percents, remainder, driver
   presence, overlap of effective windows, dynamic target sanity, impact/offset coherence,
   mode-specific requirements) and `definitionHash(version, targets)`.

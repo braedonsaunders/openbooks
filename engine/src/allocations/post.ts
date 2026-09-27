@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import type { db } from "../platform/db.ts";
 import { fromUnits, isZero, neg, normalizeMoney, roundDiv, sum, toUnits } from "../money/money.ts";
 import { resolveAccountGroups } from "../records/account-groups.ts";
-import { AllocationApportionError, apportion, fixedPercentWeights } from "./apportion.ts";
+import { AllocationApportionError, apportionTargets, fixedPercentWeights } from "./apportion.ts";
 import { resolveDriverVintage } from "./driver-asof.ts";
 import { selectRule, type AccountGroupResolver } from "./match.ts";
 import { AllocationRuleError, listRulesInEffect } from "./rules.ts";
@@ -767,7 +767,7 @@ async function makeAccountGroupResolver(
 /** A1 apportionment errors surface as post errors naming the rule. */
 function apportionForRule(total: string, weights: WeightedTarget[], rule: RuleInEffect): ApportionResult {
   try {
-    return apportion(total, weights, rule.version.residualPolicy, rule.version.residualTargetId);
+    return apportionTargets(total, weights, rule.version.residualPolicy, rule.version.residualTargetId);
   } catch (error) {
     if (error instanceof AllocationApportionError) {
       throw new PostAllocationError(`rule ${rule.rule.key}: ${error.message}`);

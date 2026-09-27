@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
-import { add, fromUnits, roundDiv, sum, toUnits } from "../money/money.ts";
-import { apportion } from "./recognition.ts";
+import { add, apportion, fromUnits, roundDiv, sum, toUnits } from "../money/money.ts";
 export interface RevenueCreditSource {
   invoiceId: string;
   deferredAccountId: string;
@@ -83,9 +82,7 @@ export async function measureCreditExposure(
   if (exposure.kind === "none") return "0.0000";
   if (exposure.kind === "invoice") {
     const raw = await invoiceDeferredCredit(tx, orgId, exposure.source);
-    return fromUnits(
-      apportion(toUnits(raw), exposure.weights.map(toUnits))[exposure.index]!,
-    );
+    return creditShare(raw, exposure.weights, exposure.index);
   }
   if (exposure.bookId !== bookId)
     throw new Error(
@@ -115,8 +112,17 @@ export async function measureCreditExposure(
     );
   }
   const net = sum(parts);
-  if (group.weights.every((w) => toUnits(w) === 0n)) return "0.0000";
-  return fromUnits(
-    apportion(toUnits(net), group.weights.map(toUnits))[exposure.promiseIndex]!,
-  );
+  return creditShare(net, group.weights, exposure.promiseIndex);
+}
+
+/** One promise's share of a credit pool, by its booked weight. A negative
+ * booked weight carries no share, and a pool with no positive weight credits
+ * nothing to any promise. */
+function creditShare(pool: string, weights: string[], index: number): string {
+  const units = weights.map((weight) => {
+    const value = toUnits(weight);
+    return value > 0n ? value : 0n;
+  });
+  if (units.every((value) => value === 0n)) return "0.0000";
+  return fromUnits(apportion(toUnits(pool), units)[index]!);
 }

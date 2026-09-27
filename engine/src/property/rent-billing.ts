@@ -5,13 +5,12 @@ import { businessToday } from "../platform/business-date.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { createSubscriptionInvoice } from "../billing/subscription-billing.ts";
 import type { AdvancedBillingLine } from "../billing/advanced-subscriptions.ts";
-import { apportion } from "../revenue/recognition.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { postEntry } from "../journal/post-entry.ts";
-import { cmp, fromUnits, mulPercent, mulRatio, neg, toUnits } from "../money/money.ts";
+import { apportion, cmp, fromUnits, mulPercent, mulRatio, neg, toUnits } from "../money/money.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { addDays, addMonths, assertEnabled, assertLockedSubsidiaryInScope, audit, dayCount, exactMoney, INVENTORY_ITEM_KINDS, lockLeasePropertyInScope, lockPropertyInScope, PropertyManagementError, startOfMonth, validDate, type DueLeaseChargeRow, type LateFeeRow } from "./management-foundation.ts";
 import { leaseChargeSchedule } from "./management-foundation.ts";
@@ -152,7 +151,7 @@ export async function levelLeaseRentStraightLine(
       rows.sort((a, b) => (a.periodEndsOn < b.periodEndsOn ? -1 : a.periodEndsOn > b.periodEndsOn ? 1 : 0));
 
       const totalUnits = rows.reduce((a, r) => a + toUnits(r.amount), 0n);
-      const level = apportion(totalUnits, rows.map((r) => r.weight));
+      const level = apportion(totalUnits, rows.map((r) => toUnits(r.weight)));
       let straightLine = 0n;
       let billed = 0n;
       for (let i = 0; i < rows.length; i++) {

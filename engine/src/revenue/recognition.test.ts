@@ -6,7 +6,6 @@ import { db, type SqlExecutor } from "../platform/db.ts";
 import { toUnits } from "../money/money.ts";
 import {
   allocateByRelativeSSP,
-  apportion,
   buildAllRecognitionSchedules,
   buildAllRecognitionSchedulesInTransaction,
   buildRecognitionSchedule,
@@ -29,32 +28,6 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 function plannedUnits(plan: { planned: string }[]): bigint {
   return plan.reduce((acc, l) => acc + toUnits(l.planned), 0n);
 }
-
-// ---------------------------------------------------------------------------
-// apportion — exact, proportional, drift-free
-// ---------------------------------------------------------------------------
-
-test("apportion sums exactly to the total", () => {
-  const parts = apportion(toUnits("1000"), [1, 1, 1]);
-  assert.equal(parts.reduce((a, b) => a + b, 0n), toUnits("1000"));
-  // 1000/3 → 333.3334 + 333.3333 + 333.3333, largest remainder to the first
-  assert.deepEqual(parts.map(String), [toUnits("333.3334"), toUnits("333.3333"), toUnits("333.3333")].map(String));
-});
-
-test("apportion is proportional to weights", () => {
-  const parts = apportion(toUnits("1000"), [3, 1]);
-  assert.deepEqual(parts, [toUnits("750"), toUnits("250")]);
-});
-
-test("apportion handles negative totals and preserves the exact sum", () => {
-  const parts = apportion(toUnits("-1000"), [1, 1, 1]);
-  assert.equal(parts.reduce((a, b) => a + b, 0n), toUnits("-1000"));
-});
-
-test("apportion returns zeros for zero total or non-positive weights", () => {
-  assert.deepEqual(apportion(0n, [1, 2, 3]), [0n, 0n, 0n]);
-  assert.deepEqual(apportion(toUnits("100"), [0, 0]), [0n, 0n]);
-});
 
 // ---------------------------------------------------------------------------
 // allocateByRelativeSSP — ASC 606 relative standalone-selling-price

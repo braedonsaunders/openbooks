@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { utcDateFromParts } from "../platform/business-date.ts";
 import {
-  add, cmp, formatMoney, fromUnits, mul, mulPercent, roundMoney, sum, toUnits,
+  add, apportion, cmp, formatMoney, fromUnits, mul, mulPercent, roundMoney, sum, toUnits,
 } from "../money/money.ts";
 import type { UsSupplementalWageCategory } from "./supplemental-wages.ts";
 import type { UsStatutoryExemptionCategory } from "./statutory-exemptions.ts";
@@ -696,9 +696,9 @@ function perUnitRate(rule: DerivedRule, input: DerivedEarningsInput): string {
  */
 export function allocateByQuantity(total: string, quantities: string[]): string[] | null {
   const CENT = 100n; // money.ts units are 1e-4; a cent is 100 of them
-  const totalUnits = toUnits(total);
-  const sign = totalUnits < 0n ? -1n : 1n;
-  const cents = (sign * totalUnits) / CENT;
+  // BigInt division truncates toward zero, so a negative total floors its
+  // magnitude exactly as a positive one does.
+  const cents = toUnits(total) / CENT;
   const q = quantities.map((value) => {
     const units = toUnits(value);
     if (units < 0n) {
@@ -709,19 +709,7 @@ export function allocateByQuantity(total: string, quantities: string[]): string[
   const totalQuantity = q.reduce((acc, value) => acc + value, 0n);
   if (totalQuantity === 0n) return null;
 
-  const shares = q.map((value) => (cents * value) / totalQuantity);
-  const remainders = q.map((value, index) => cents * value - shares[index]! * totalQuantity);
-  let leftover = cents - shares.reduce((acc, value) => acc + value, 0n);
-  const order = shares
-    .map((_, index) => index)
-    .sort((a, b) => {
-      const diff = remainders[b]! - remainders[a]!;
-      return diff === 0n ? a - b : diff > 0n ? 1 : -1;
-    });
-  for (let i = 0; leftover > 0n && i < order.length; i++, leftover--) {
-    shares[order[i]!] = shares[order[i]!]! + 1n;
-  }
-  return shares.map((value) => fromUnits(sign * value * CENT));
+  return apportion(cents, q).map((value) => fromUnits(value * CENT));
 }
 
 /** Human trace of how an amount was reached, on the line the employee sees. */

@@ -1,8 +1,7 @@
 /** Pure recognition-schedule computation. Split from revenue/recognition.ts (pure moves only). */
-import { cmp, fromUnits, mulPercent, toUnits } from "../money/money.ts";
+import { apportion, cmp, fromUnits, mulPercent, toUnits } from "../money/money.ts";
 import { MAX_RECOGNITION_INITIAL_PERCENT, MAX_RECOGNITION_TERM_MONTHS, MIN_RECOGNITION_INITIAL_PERCENT } from "./recognition-limits.ts";
 import { addDays, addMonths, daysInMonth, epochDay, eventMonth, inclusiveDays, monthEnd, monthStart, recognitionDate, recognitionInteger } from "./recognition-dates.ts";
-import { apportion } from "./recognition-apportionment.ts";
 import { RevenueRecognitionError } from "./recognition-transaction-price.ts";
 
 export type RecognitionMethod =
@@ -82,7 +81,7 @@ function monthSpan(startOn: string, endOn: string): number {
 function spreadWithInitial(input: RecognitionInput, start: string, weights: number[]): { month: string; units: bigint }[] {
   const totalUnits = toUnits(input.total);
   const initialUnits = pctOf(totalUnits, input.initialAmountPercent ?? "0");
-  const parts = apportion(totalUnits - initialUnits, weights);
+  const parts = apportion(totalUnits - initialUnits, weights.map(BigInt));
   if (weights.length > 0) parts[0]! += initialUnits;
   return parts.map((units, i) => ({ month: addMonths(start, i), units }));
 }
@@ -112,9 +111,8 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
   const rawStart = addDays(input.startOn, input.startOffsetDays ?? 0);
   const start = monthStart(rawStart);
 
-  // Fail closed on an inverted term: end-before-start clamps every weight to
-  // zero in apportion(), silently planning an all-zero schedule instead of
-  // recognizing anything.
+  // Fail closed on an inverted term by name: end-before-start yields
+  // non-positive day weights, which apportion() refuses only generically.
   if (
     input.method === "straight_line_even" ||
     input.method === "straight_line_prorate_first_last" ||

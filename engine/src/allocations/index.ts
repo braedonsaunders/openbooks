@@ -26,7 +26,7 @@ export {
 } from "./entry.ts";
 export {
   AllocationApportionError,
-  apportion,
+  apportionTargets,
   fixedPercentWeights,
   steppedWeights,
   type SteppedTier,

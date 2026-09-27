@@ -1,47 +1,7 @@
 /** Standalone-selling-price apportionment and fair-value flags. Split from revenue/recognition.ts (pure moves only). */
-import { fromUnits, toUnits } from "../money/money.ts";
+import { apportion, fromUnits, toUnits } from "../money/money.ts";
 import { canonicalDecimal, fixedDecimal } from "../money/exact-decimal.ts";
 import { RevenueRecognitionError } from "./recognition-transaction-price.ts";
-
-// ---------------------------------------------------------------------------
-// Exact apportionment (integer money units, no drift)
-// ---------------------------------------------------------------------------
-
-/**
- * Split `totalUnits` across `weights` so the parts are proportional and sum
- * EXACTLY to the total (largest-remainder / Hamilton apportionment). A zero
- * total or non-positive weight sum yields all zeros.
- */
-export function apportion(totalUnits: bigint, weights: readonly (number | string | bigint)[]): bigint[] {
-  const n = weights.length;
-  if (n === 0) return [];
-  const iw = weights.map((weight) => {
-    if (typeof weight === "bigint") return weight > 0n ? weight : 0n;
-    const units = toUnits(String(weight));
-    return units > 0n ? units : 0n;
-  });
-  const iwsum = iw.reduce((a, b) => a + b, 0n);
-  if (iwsum === 0n || totalUnits === 0n) return new Array(n).fill(0n);
-
-  const negative = totalUnits < 0n;
-  const total = negative ? -totalUnits : totalUnits;
-
-  const base = iw.map((w) => (total * w) / iwsum);
-  const distributed = base.reduce((a, b) => a + b, 0n);
-  let remainder = total - distributed;
-
-  // Hand leftover units out by descending fractional part (stable by index).
-  const order = iw
-    .map((w, i) => ({ i, frac: (total * w) % iwsum }))
-    .sort((a, b) => (b.frac > a.frac ? 1 : b.frac < a.frac ? -1 : a.i - b.i));
-  let k = 0;
-  while (remainder > 0n) {
-    base[order[k % order.length]!.i]! += 1n;
-    remainder -= 1n;
-    k++;
-  }
-  return negative ? base.map((u) => -u) : base;
-}
 
 /**
  * Allocate a bundle's transaction price across obligations in proportion to

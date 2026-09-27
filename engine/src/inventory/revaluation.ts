@@ -366,25 +366,3 @@ export async function devalueLayerExactly(
      where id = ${layer.id} and org_id = ${orgId}
   `);
 }
-
-/** Largest-remainder apportionment of money units across numeric weights. */
-export function apportionUnits(totalUnits: bigint, weights: string[]): bigint[] {
-  const iw = weights.map((weight) => {
-    const units = toUnits(weight);
-    return units > 0n ? units : 0n;
-  });
-  const iwsum = iw.reduce((a, b) => a + b, 0n);
-  if (iwsum === 0n || totalUnits === 0n) return weights.map(() => 0n);
-  const base = iw.map((w) => (totalUnits * w) / iwsum);
-  let remainder = totalUnits - base.reduce((a, b) => a + b, 0n);
-  const order = iw
-    .map((w, i) => ({ i, frac: (totalUnits * w) % iwsum }))
-    .sort((a, b) => (b.frac > a.frac ? 1 : b.frac < a.frac ? -1 : a.i - b.i));
-  let k = 0;
-  while (remainder > 0n) {
-    base[order[k % order.length]!.i]! += 1n;
-    remainder -= 1n;
-    k++;
-  }
-  return base;
-}

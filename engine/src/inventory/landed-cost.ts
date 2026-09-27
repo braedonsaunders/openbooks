@@ -2,14 +2,14 @@ import { reverseInventoryJournal } from "./reversal.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { cmp, fromUnits, isZero, neg, sum, toUnits } from "../money/money.ts";
+import { apportion, cmp, fromUnits, isZero, neg, sum, toUnits } from "../money/money.ts";
 import { extendCost } from "./costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { InventoryError, type InventoryProfile } from "./contracts.ts";
 import { assertStockLocationAdmitsSubsidiary, resolveProfile, assertMovementOwner, assertInventoryFeature } from "./profile-policy.ts";
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, lockInventoryPosition, persistReceiptMoney, assertInventoryDate } from "./position.ts";
-import { revalueLayerExactly, devalueLayerExactly, apportionUnits, type RevaluableLayer } from "./revaluation.ts";
+import { revalueLayerExactly, devalueLayerExactly, type RevaluableLayer } from "./revaluation.ts";
 import { nextSequenceNumber } from "./document-numbering.ts";
 
 // ---------------------------------------------------------------------------
@@ -191,9 +191,9 @@ export async function postLandedCostVoucher(
     const shares =
       input.basis === "manual"
         ? resolved.map((r) => toUnits(r.manualAmount!))
-        : apportionUnits(
+        : apportion(
             toUnits(input.amount),
-            resolved.map((r) => r.shareWeight),
+            resolved.map((r) => toUnits(r.shareWeight)),
           );
     const shareTotal = fromUnits(shares.reduce((a, b) => a + b, 0n));
     if (cmp(shareTotal, input.amount) !== 0) {
@@ -302,15 +302,15 @@ export async function postLandedCostVoucher(
         if (input.basis === "manual" && isZero(sum(subWeights))) {
           subWeights = layerWeights(r.layers, "quantity");
         }
-        const subShares = apportionUnits(share, subWeights);
         // Every unit of the target's share must land on a layer before the
         // matching asset debit is written: GL = Σ layers is the invariant
         // the voucher exists to keep, and the reversal needs the evidence.
-        if (subShares.reduce((a, b) => a + b, 0n) !== share) {
+        if (share !== 0n && isZero(sum(subWeights))) {
           throw new InventoryError(
             `landed cost share ${shareAmount} for item ${r.target.itemId} at location ${r.target.stockLocationId} cannot be apportioned across its on-hand layers on the ${input.basis} basis`,
           );
         }
+        const subShares = apportion(share, subWeights.map(toUnits));
         for (let j = 0; j < r.layers.length; j++) {
           const layerShare = subShares[j]!;
           if (layerShare === 0n) continue;

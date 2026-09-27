@@ -1,4 +1,6 @@
 /** Client-safe exact decimal helpers for the editable budget worksheet. */
+import { apportion } from '@openbooks/engine/src/money/money.ts'
+
 const SCALE = 10_000n
 
 export function budgetToUnits(value: string): bigint {
@@ -20,21 +22,8 @@ export function budgetFromUnits(units: bigint): string {
 /** Split a total exactly across N periods; the earliest periods receive the remainder. */
 export function spreadBudgetTotal(total: string, periods: number): string[] {
   if (!Number.isInteger(periods) || periods <= 0) throw new Error('invalid_period_count')
-  const units = budgetToUnits(total)
-  const count = BigInt(periods)
-  const base = units / count
-  let remainder = units % count
-  return Array.from({ length: periods }, () => {
-    let value = base
-    if (remainder > 0n) {
-      value += 1n
-      remainder -= 1n
-    } else if (remainder < 0n) {
-      value -= 1n
-      remainder += 1n
-    }
-    return budgetFromUnits(value)
-  })
+  const equal = Array.from({ length: periods }, () => 1n)
+  return apportion(budgetToUnits(total), equal).map(budgetFromUnits)
 }
 
 /** Apply an exact percentage uplift, rounded half away from zero to 4 decimals. */

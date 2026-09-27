@@ -371,19 +371,87 @@ export function allocateLargestRemainder(exactAmounts: string[], decimalPlaces =
   const allocated = units.map((amount) => amount / quantum);
   const remainders = units.map((amount, index) => amount - allocated[index]! * quantum);
   const outstanding = target - allocated.reduce((total, cents) => total + cents, 0n);
-  const order = units.map((_, index) => index);
   if (outstanding > 0n) {
-    order.sort((a, b) =>
-      remainders[b]! > remainders[a]! ? 1 : remainders[b]! < remainders[a]! ? -1 : a - b,
-    );
-    for (let dealt = 0n; dealt < outstanding; dealt++) allocated[order[Number(dealt)]!]! += 1n;
+    dealLargestRemainder(allocated, remainders, outstanding, "first", 1n);
   } else if (outstanding < 0n) {
-    order.sort((a, b) =>
-      remainders[a]! > remainders[b]! ? 1 : remainders[a]! < remainders[b]! ? -1 : a - b,
-    );
-    for (let dealt = 0n; dealt < -outstanding; dealt++) allocated[order[Number(dealt)]!]! -= 1n;
+    dealLargestRemainder(allocated, remainders.map((remainder) => -remainder), -outstanding, "first", -1n);
   }
   return allocated.map((cents) => fromUnits(cents * quantum));
+}
+
+/**
+ * Where apportion puts the units left over after every part is floored.
+ * `largest_remainder` deals them one at a time to the largest fractional
+ * remainders, ties to the earlier index; `largest_remainder_last` breaks ties
+ * to the later index instead; `{ absorber }` books the whole leftover on the
+ * one part at that index.
+ */
+export type ApportionResidual = "largest_remainder" | "largest_remainder_last" | { absorber: number };
+
+/**
+ * Split `total` integer units across non-negative integer `weights` so the
+ * parts are proportional and sum EXACTLY to `total`. Every part is its exact
+ * share floored toward zero; the leftover units are placed by `residual`.
+ * A negative total is split as its magnitude and negated, so a credit
+ * mirrors the matching debit unit for unit. Under largest remainder a part
+ * with a zero remainder (every zero weight included) never receives a unit,
+ * so every part is its floor or floor + 1.
+ *
+ * The unit is the caller's: ledger money units, cents, milliseconds or
+ * rounding quanta. A zero total splits to zeros. A negative weight, or a
+ * nonzero total over weights that sum to zero, is refused: there is no
+ * proportional answer, and each caller decides what that case means for it.
+ */
+export function apportion(
+  total: bigint,
+  weights: readonly bigint[],
+  options: { residual?: ApportionResidual } = {},
+): bigint[] {
+  const residual = options.residual ?? "largest_remainder";
+  const negativeAt = weights.findIndex((weight) => weight < 0n);
+  if (negativeAt >= 0) {
+    throw new Error(`apportion weight ${negativeAt} is negative (${weights[negativeAt]}); weights must be zero or more`);
+  }
+  if (typeof residual === "object" && !(Number.isInteger(residual.absorber) && residual.absorber >= 0 && residual.absorber < weights.length)) {
+    throw new Error(`apportion absorber ${residual.absorber} is not one of the ${weights.length} parts`);
+  }
+  if (total === 0n) return weights.map(() => 0n);
+  const weightTotal = weights.reduce((acc, weight) => acc + weight, 0n);
+  if (weightTotal === 0n) {
+    throw new Error(`cannot apportion ${total} units over ${weights.length} parts whose weights sum to zero`);
+  }
+  const negative = total < 0n;
+  const magnitude = negative ? -total : total;
+  const parts = weights.map((weight) => (magnitude * weight) / weightTotal);
+  const leftover = magnitude - parts.reduce((acc, part) => acc + part, 0n);
+  if (typeof residual === "object") {
+    parts[residual.absorber]! += leftover;
+  } else {
+    const remainders = weights.map((weight) => (magnitude * weight) % weightTotal);
+    dealLargestRemainder(parts, remainders, leftover, residual === "largest_remainder" ? "first" : "last", 1n);
+  }
+  return negative ? parts.map((part) => -part) : parts;
+}
+
+/**
+ * Move each of the `count` parts with the largest remainders one unit by
+ * `step`, ties to the earlier or later index. Both callers keep `count` at or
+ * below the number of parts (for apportion, the leftover is a sum of
+ * remainders each smaller than the divisor), so no part moves twice.
+ */
+function dealLargestRemainder(
+  parts: bigint[],
+  remainders: readonly bigint[],
+  count: bigint,
+  ties: "first" | "last",
+  step: 1n | -1n,
+): void {
+  const order = remainders
+    .map((_, index) => index)
+    .sort((a, b) =>
+      remainders[b]! > remainders[a]! ? 1 : remainders[b]! < remainders[a]! ? -1 : ties === "first" ? a - b : b - a,
+    );
+  for (let dealt = 0; BigInt(dealt) < count; dealt++) parts[order[dealt]!]! += step;
 }
 
 /** Fixed-width exact decimal formatting, used by settlement/export formats. */

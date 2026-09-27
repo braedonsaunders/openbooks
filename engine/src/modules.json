@@ -432,8 +432,7 @@
         "organization",
         "periods",
         "platform",
-        "records",
-        "revenue"
+        "records"
       ]
     },
     "provisioning": {

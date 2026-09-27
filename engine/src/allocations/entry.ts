@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
-import { AllocationApportionError, apportion, fixedPercentWeights } from "./apportion.ts";
+import { AllocationApportionError, apportionTargets, fixedPercentWeights } from "./apportion.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { listEntryRulesInEffect, selectRule } from "./match.ts";
@@ -271,7 +271,7 @@ function apportionMoney(
   version: AllocationRuleVersion,
 ): ApportionResult {
   try {
-    return apportion(total, weights, version.residualPolicy, version.residualTargetId ?? null);
+    return apportionTargets(total, weights, version.residualPolicy, version.residualTargetId ?? null);
   } catch (error) {
     if (error instanceof AllocationApportionError) {
       if (error.code === "total_invalid") {

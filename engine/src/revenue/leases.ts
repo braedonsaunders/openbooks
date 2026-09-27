@@ -15,6 +15,7 @@ import {
 } from "../organization/subsidiaries.ts";
 import {
   add,
+  apportion,
   cmp,
   fromUnits,
   isZero,
@@ -26,7 +27,6 @@ import {
 } from "../money/money.ts";
 import { addCalendarDays, civilDateFromParts, daysInCivilMonth, isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { apportion } from "./recognition.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import {
   accreteToZero,
@@ -426,7 +426,7 @@ export function measureLesseeLease(args: {
   if (args.model === "finance") {
     const amortizations = apportion(
       toUnits(rouAsset),
-      new Array<number>(args.periods).fill(1),
+      new Array<bigint>(args.periods).fill(1n),
     ).map(fromUnits);
     schedule = accretion.map((line, i) => ({
       ...line,
@@ -436,7 +436,7 @@ export function measureLesseeLease(args: {
     const totalPayments = sum(accretion.map((line) => line.payment));
     const costs = apportion(
       toUnits(totalPayments),
-      new Array<number>(args.periods).fill(1),
+      new Array<bigint>(args.periods).fill(1n),
     ).map(fromUnits);
     // Continue-from-opening: the carried ROU generally differs from the
     // stated liability (unamortised costs in the outgoing system), so the
@@ -450,7 +450,7 @@ export function measureLesseeLease(args: {
         ? null
         : apportion(
             toUnits(rouDelta),
-            new Array<number>(args.periods).fill(1),
+            new Array<bigint>(args.periods).fill(1n),
           ).map(fromUnits);
     schedule = accretion.map((line, i) => ({
       ...line,
@@ -611,7 +611,7 @@ export function lessorStraightLineSchedule(
   const total = billedPayments.reduce((a, p) => a + toUnits(p), 0n);
   const incomes = apportion(
     total,
-    new Array<number>(billedPayments.length).fill(1),
+    new Array<bigint>(billedPayments.length).fill(1n),
   ).map(fromUnits);
   let cumulative = "0";
   return billedPayments.map((billed, i) => {

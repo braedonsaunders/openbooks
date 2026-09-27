@@ -8,6 +8,7 @@
 
 import { FieldTimeError } from "./errors.ts";
 import { canonicalTimeZone } from "../../platform/time-zone.ts";
+import { apportion } from "../../money/money.ts";
 
 export type RoundingMode = "nearest" | "up" | "down";
 
@@ -67,11 +68,10 @@ export function roundHours(hours: string, rule: RoundingRule): string {
 }
 
 /**
- * Largest-remainder deal: split `total` whole units across `weights`
- * so the shares sum to exactly `total`. Each share is floored, then
- * the leftover units go to the largest fractional remainders with
- * ties broken to the earlier index — deterministic for any input.
- * Zero weights deal zero; an all-zero weight vector deals all zero.
+ * Largest-remainder deal: split `total` whole units across whole-number
+ * `weights` so the shares sum to exactly `total`, through the money
+ * kernel's exact `apportion` (ties to the earlier index). Zero weights
+ * deal zero; an all-zero weight vector deals all zero.
  */
 export function distributeProRata(total: number, weights: number[]): number[] {
   if (!Number.isInteger(total) || total < 0) {
@@ -81,30 +81,16 @@ export function distributeProRata(total: number, weights: number[]): number[] {
     );
   }
   for (const w of weights) {
-    if (!Number.isFinite(w) || w < 0) {
+    if (!Number.isSafeInteger(w) || w < 0) {
       throw new FieldTimeError(
         "invalid_break_rule",
-        `Pro-rata weight ${String(w)} is not declared — weights must be finite and non-negative`,
+        `Pro-rata weight ${String(w)} is not declared — weights must be whole non-negative numbers`,
       );
     }
   }
-  const out = new Array<number>(weights.length).fill(0);
-  const weightSum = weights.reduce((a, b) => a + b, 0);
-  if (total === 0 || weightSum <= 0) return out;
-  const remainders: Array<{ index: number; rem: number }> = [];
-  let assigned = 0;
-  for (let i = 0; i < weights.length; i++) {
-    const floored = Math.floor((total * weights[i]!) / weightSum);
-    out[i] = floored;
-    assigned += floored;
-    remainders.push({ index: i, rem: (total * weights[i]!) / weightSum - floored });
-  }
-  remainders.sort((a, b) => b.rem - a.rem || a.index - b.index);
-  for (let k = 0; k < total - assigned; k++) {
-    const target = remainders[k % remainders.length]!.index;
-    out[target] = out[target]! + 1;
-  }
-  return out;
+  if (weights.every((w) => w === 0)) return weights.map(() => 0);
+  // Every share is at most `total`, a safe integer, so it converts back exactly.
+  return apportion(BigInt(total), weights.map(BigInt)).map(Number);
 }
 
 /**
