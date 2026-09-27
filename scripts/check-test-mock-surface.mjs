@@ -93,8 +93,11 @@ export function resolveReal(spec, fromFile, root = ROOT) {
   return null;
 }
 
+// Line comments may start a line: `^` is multiline so a column-0 `//` comment
+// is stripped too (an apostrophe in one otherwise opens a phantom string that
+// hides every brace after it from the dynamic-import depth scan).
 function stripComments(src) {
-  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^\n\\:"'`])\/\/[^\n]*/g, "$1");
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^\n\\:"'`])\/\/[^\n]*/gm, "$1");
 }
 
 // Code-only projection: replaces comments, string contents, and template
@@ -222,7 +225,9 @@ export function staticImports(src) {
     let k = 0;
     while (k < index) {
       const char = clean[k];
-      if (char === "'" || char === '"') {
+      // Template literals too: an apostrophe inside one ("the caller's
+      // session") must not open a phantom string that hides the braces after it.
+      if (char === "'" || char === '"' || char === "`") {
         const quote = char;
         k++;
         while (k < index && clean[k] !== quote) {
