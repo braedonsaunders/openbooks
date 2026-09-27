@@ -40,9 +40,10 @@ registerHooks({ resolve(specifier, context, next) {
   const parent = context.parentURL ?? ''
   const authzImport = specifier === './authz' || specifier.endsWith('/lib/authz')
   const fenced = ['/lib/api/route', '/lib/feature-gates', '/warehouse/view', '/api/admin/setup/', '/reports/',
-    '/api/reports/statement/', '/picks/view', '/shipments/view', '/sales-orders/view', '/returns/view', '/api/returns/'].some((path) => parent.includes(path))
+    '/api/reports/statement/', '/picks/view', '/shipments/view', '/sales-orders/view', '/purchase-orders/view',
+    '/api/sales-orders/', '/api/purchase-orders/', '/returns/view', '/api/returns/'].some((path) => parent.includes(path))
   if (authzImport && fenced) return { shortCircuit: true, url: AUTHZ_DOUBLE }
-  const reportCopy = ['/reports/', '/lib/availability-report'].some((path) => parent.includes(path))
+  const reportCopy = ['/reports/', '/lib/availability-report', '/sales-orders/view', '/purchase-orders/view'].some((path) => parent.includes(path))
   if (specifier === 'next-intl/server' && reportCopy) return { shortCircuit: true, url: INTL_DOUBLE }
   return next(specifier, context)
 } })
@@ -89,13 +90,20 @@ const shipmentTrackingRoute = await import('../app/api/shipments/[id]/send-track
 const backordersRoute = await import('../app/api/sales-orders/[id]/backorders/route')
 const { loadPicks } = await import('../app/(app)/picks/view')
 const { loadShipments } = await import('../app/(app)/shipments/view')
-const { orderFulfillmentActions } = await import('../app/(app)/sales-orders/view')
+const { loadSalesOrders, orderFulfillmentActions } = await import('../app/(app)/sales-orders/view')
+const { loadPurchaseOrders } = await import('../app/(app)/purchase-orders/view')
 const { enabledListSource } = await import('./list/sources')
 const { guardReportEntity, hiddenReportEntityKeys } = await import('./report-authz')
 const { FULFILLMENT_TOOLS } = await import('./assistant/tools-fulfillment')
 const fulfillment = await import('@openbooks/engine/src/sales/fulfillment.ts')
 const { backorderPosition, cancelOrderLineRemainder } = await import('@openbooks/engine/src/sales/backorders.ts')
 const { salesOrderLineRemainders } = await import('@openbooks/engine/src/records/order-line-remainders.ts')
+const dropShipEngine = await import('@openbooks/engine/src/sales/drop-ship.ts')
+const dropShipServices = await import('./drop-ship.ts')
+const dropShipRoute = await import('../app/api/sales-orders/[id]/drop-ship/route')
+const dropShipPurchaseOrderRoute = await import('../app/api/sales-orders/[id]/drop-ship/purchase-orders/route')
+const dropShipConfirmationRoute = await import('../app/api/purchase-orders/[id]/drop-ship-confirmation/route')
+const { createOrderDraft } = await import('./order-cycle.ts')
 
 const FEATURES_REMEDY = /turn on Warehousing in Company Settings → Features/
 
@@ -463,5 +471,105 @@ test('return authorizations are hidden while off and retain their records and au
         'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${org.orgId} and table_name = 'rma_documents')
       ) as state`)).then((result) => result.rows[0]!.state)
     assert.deepEqual(after, before, 'turning the feature off and on preserves authorization evidence and audit history')
+  })
+})
+
+// ---- Drop shipping ----------------------------------------------------------
+
+async function dropShipEvidence(orgId: string) {
+  return withBypassContext(async () => (await db.execute<{ state: unknown }>(sql`select jsonb_build_object(
+    'routes', (select jsonb_agg(to_jsonb(r) order by sales_order_line_id) from drop_ship_lines r where org_id = ${orgId}),
+    'orders', (select jsonb_agg(to_jsonb(o) order by purchase_order_id) from drop_ship_orders o where org_id = ${orgId}),
+    'confirmations', (select jsonb_agg(jsonb_build_object('id', d.id, 'status', d.status, 'custom', d.custom) order by d.id)
+      from documents d where d.org_id = ${orgId} and d.kind in ('purchase_receipt', 'sales_fulfillment')
+        and d.custom ? 'dropShipConfirmation'),
+    'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${orgId}
+      and table_name in ('drop_ship_lines', 'drop_ship_orders', 'documents'))
+  ) as state`)).rows[0]!.state)
+}
+
+test('drop shipping off hides drawer actions, returns bare route 404s, and preserves routed confirmation history', { skip: !DB }, async () => {
+  await withFencedOrg(async (org, actorId) => {
+    state.authz = {
+      ...(state.authz as object),
+      permissions: new Set(['assistant.use', 'items.read', 'items.post', 'orders.fulfill', 'ap.create', 'ar.read', 'ap.read', 'ar.create', 'admin.setup.manage']),
+    }
+    await setFeature(org.orgId, 'orders', true)
+    await setFeature(org.orgId, 'inventory', true)
+    await setFeature(org.orgId, 'dropShipping', true)
+    await withBypassContext(async () => {
+      await db.execute(sql`update items set default_cost = '20' where org_id = ${org.orgId} and id = ${org.items.fifo}`)
+      await db.execute(sql`insert into vendor_roles (org_id, party_id, is_active) values (${org.orgId}, ${org.vendorId}, true)`)
+      await db.execute(sql`
+        insert into addresses (id, org_id, party_id, label, line1, city, region, postal_code, country, is_default_shipping)
+        values (${randomUUID()}, ${org.orgId}, ${org.customerId}, 'Receiving', '10 Main St', 'Toronto', 'ON', 'M5V 1A1', 'CA', true)`)
+    })
+    const order = await withBypassContext(() => createOrderDraft(org.orgId, actorId, 'sales_order', randomUUID(), org.subsidiaryId))
+    const sourceLineId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount, tax_amount,
+           quantity_fulfilled, quantity_billed, stock_location_id)
+        values (${sourceLineId}, ${org.orgId}, ${order.id}, 1, ${org.items.fifo}, ${org.accounts.revenue},
+          '2', '50', '100', '0', '0', '0', ${org.stockLocationId})`)
+      await db.execute(sql`
+        update documents set status = 'approved', party_id = ${org.customerId}, document_date = ${org.date},
+          subtotal = '100', total = '100' where id = ${order.id} and org_id = ${org.orgId}`)
+    })
+    const context = { authz: state.authz, source: 'api', requestId: randomUUID(), apiKeyId: null } as Parameters<typeof dropShipServices.routeSalesOrderLine>[0]
+    await withBypassContext(() => dropShipServices.routeSalesOrderLine(context, { salesOrderId: order.id, salesOrderLineId: sourceLineId, routed: true }))
+    const po = await withBypassContext(() => dropShipServices.createDropShipPurchaseOrder(context, {
+      salesOrderId: order.id, vendorId: org.vendorId, idempotencyKey: randomUUID(),
+    }))
+    const poLine = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+      select id from document_lines where org_id = ${org.orgId} and document_id = ${po.id}`))).rows[0]!
+    await withBypassContext(() => db.execute(sql`
+      update documents set status = 'approved' where org_id = ${org.orgId} and id = ${po.id} and status = 'draft'`))
+    const confirmation = await withBypassContext(() => dropShipServices.confirmDropShip(context, {
+      purchaseOrderId: po.id, confirmationDate: org.date, idempotencyKey: randomUUID(),
+      lines: [{ purchaseOrderLineId: poLine.id, quantity: '2' }],
+    }))
+    const before = await dropShipEvidence(org.orgId)
+
+    await setFeature(org.orgId, 'dropShipping', false)
+    const sales = await withBypassContext(() => loadSalesOrders({ order: order.id }))
+    const salesDrawer = sales.drawer as unknown as { dropShipping: boolean; dropShipLines: unknown[]; canRouteDropShip: boolean; canCreateDropShipPurchaseOrder: boolean }
+    assert.equal(salesDrawer.dropShipping, false)
+    assert.deepEqual(salesDrawer.dropShipLines, [])
+    assert.equal(salesDrawer.canRouteDropShip, false)
+    assert.equal(salesDrawer.canCreateDropShipPurchaseOrder, false)
+    const purchase = await withBypassContext(() => loadPurchaseOrders({ order: po.id }))
+    assert.equal((purchase.drawer as unknown as { canConfirmDropShip: boolean }).canConfirmDropShip, false)
+
+    const soParams = { params: Promise.resolve({ id: order.id }) }
+    const poParams = { params: Promise.resolve({ id: po.id }) }
+    const offResponses = [
+      await withBypassContext(() => dropShipRoute.POST(json('POST', `/api/sales-orders/${order.id}/drop-ship`, { salesOrderLineId: sourceLineId, routed: false }), soParams)),
+      await withBypassContext(() => dropShipPurchaseOrderRoute.POST(json('POST', `/api/sales-orders/${order.id}/drop-ship/purchase-orders`, { vendorId: org.vendorId, idempotencyKey: randomUUID() }), soParams)),
+      await withBypassContext(() => dropShipConfirmationRoute.POST(json('POST', `/api/purchase-orders/${po.id}/drop-ship-confirmation`, {
+        lines: [{ purchaseOrderLineId: poLine.id, quantity: '1' }],
+      }, { 'Idempotency-Key': randomUUID() }), poParams)),
+    ]
+    for (const response of offResponses) {
+      assert.equal(response.status, 404)
+      assert.deepEqual(await response.json(), { error: 'not_found' })
+    }
+    await assert.rejects(withBypassContext(() => dropShipEngine.routeDropShipLine({
+      orgId: org.orgId, actorId, salesOrderId: order.id, salesOrderLineId: sourceLineId, allowedSubsidiaryIds: null,
+    })), (error: unknown) => error instanceof dropShipEngine.DropShipRefusal
+      && error.code === 'feature_disabled' && /Company Settings → Features/.test(error.remedy ?? ''))
+    await assert.rejects(withBypassContext(() => dropShipServices.confirmDropShip(context, {
+      purchaseOrderId: po.id, confirmationDate: org.date, idempotencyKey: randomUUID(),
+      lines: [{ purchaseOrderLineId: poLine.id, quantity: '1' }],
+    })), (error: unknown) => error instanceof dropShipEngine.DropShipRefusal
+      && error.code === 'feature_disabled' && /Company Settings → Features/.test(error.remedy ?? ''))
+    await assert.rejects(withBypassContext(() => dropShipEngine.applyDropShipConfirmationInventory(db, org.orgId, actorId, confirmation.purchaseReceipt.id)),
+      (error: unknown) => error instanceof dropShipEngine.DropShipRefusal
+        && error.code === 'feature_disabled' && /Company Settings → Features/.test(error.remedy ?? ''))
+
+    await setFeature(org.orgId, 'dropShipping', true)
+    assert.deepEqual(await dropShipEvidence(org.orgId), before, 'turning the feature off and on preserves routes, ship-to, confirmation documents and audit history')
+    assert.ok(confirmation.purchaseReceipt.id)
   })
 })

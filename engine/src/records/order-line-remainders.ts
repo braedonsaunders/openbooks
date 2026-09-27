@@ -67,7 +67,7 @@ export interface OrderLineRemainderFilter {
   openOnly?: boolean;
 }
 
-interface RemainderRow extends Record<string, unknown> {
+type RemainderRow = Record<string, unknown> & {
   document_id: string;
   document_number: string;
   document_date: string;
@@ -111,6 +111,13 @@ async function orderLineRemainders(
      where dl.org_id = ${orgId}
        and d.kind = ${kind}
        and d.status = 'approved'
+       ${kind === "sales_order" ? sql`and not exists (
+         select 1 from drop_ship_lines routed
+          where routed.org_id = dl.org_id and routed.sales_order_line_id = dl.id
+       )` : sql`and not exists (
+         select 1 from drop_ship_lines routed
+          where routed.org_id = dl.org_id and routed.purchase_order_line_id = dl.id
+       )`}
        ${filter.documentId ? sql`and d.id = ${filter.documentId}` : sql``}
        ${filter.lineId ? sql`and dl.id = ${filter.lineId}` : sql``}
        ${filter.itemId ? sql`and dl.item_id = ${filter.itemId}` : sql``}
