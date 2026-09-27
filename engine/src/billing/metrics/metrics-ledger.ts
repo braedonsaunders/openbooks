@@ -16,6 +16,7 @@ import { arePeriodModulesOpen } from "../../periods/period-policy.ts";
 import {
   db,
   withBypassContext,
+  withOrgContext,
   withOrgTransaction,
   type SqlExecutor,
 } from "../../platform/db.ts";
@@ -898,16 +899,16 @@ export async function recomputeSaasMetrics(
 }
 
 export async function saasMetricsScanTargets(): Promise<SaasMetricsScanTargets> {
-  return withBypassContext(async () => {
-    const orgIds = (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map((row) => row.id);
-    const enabledOrgIds: string[] = [];
-    const skippedFeatureOffOrgIds: string[] = [];
-    for (const orgId of orgIds) {
-      if (await orgFeatureEnabled(orgId, "saasMetrics", db)) enabledOrgIds.push(orgId);
-      else skippedFeatureOffOrgIds.push(orgId);
-    }
-    return { enabledOrgIds, skippedFeatureOffOrgIds };
-  });
+  // bypass: scheduler-tick — the metrics pass lists every organization before checking each one's feature gate.
+  const orgIds = await withBypassContext(async () =>
+    (await db.execute<{ id: string }>(sql`select id from orgs order by id`)).rows.map((row) => row.id));
+  const enabledOrgIds: string[] = [];
+  const skippedFeatureOffOrgIds: string[] = [];
+  for (const orgId of orgIds) {
+    if (await withOrgContext(orgId, () => orgFeatureEnabled(orgId, "saasMetrics", db))) enabledOrgIds.push(orgId);
+    else skippedFeatureOffOrgIds.push(orgId);
+  }
+  return { enabledOrgIds, skippedFeatureOffOrgIds };
 }
 
 async function monthIsOpenForAr(orgId: string, month: string): Promise<boolean> {

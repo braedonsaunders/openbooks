@@ -1,5 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
-import { db, withBypass, withOrg } from "../platform/db.ts";
+import { db, withBypass, withOrg, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
@@ -343,7 +343,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
       // the schema). That is preferable to silently losing the occurrence.
       result.failed += 1;
       const message = e instanceof Error ? e.message : String(e);
-      await withBypass(async () => {
+      await withOrgTransaction(s.orgId, async () => {
         await db.execute(sql`
           update recurring_schedules set last_error = ${message} where id = ${s.id} and org_id = ${s.orgId}
         `);
@@ -362,7 +362,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     // used to double-post. Surface through last_error instead; the claim stays
     // advanced so the schedule moves on to its next occurrence.
     try {
-      await withBypass(async () => {
+      await withOrgTransaction(s.orgId, async () => {
         await db.execute(sql`
           update recurring_schedules
              set run_count = run_count + 1, last_document_id = ${gen.documentId}, last_error = null
@@ -372,7 +372,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error(`[recurring] success bookkeeping failed for schedule ${s.id}:`, message);
-      await withBypass(async () => {
+      await withOrgTransaction(s.orgId, async () => {
         await db.execute(sql`
           update recurring_schedules
              set last_error = ${`generated ${gen.documentNumber} but bookkeeping failed: ${message}`}
@@ -392,19 +392,20 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
  * due the same day — replays the first document instead of posting a duplicate.
  */
 export async function runScheduleNow(
+  orgId: string,
   scheduleId: string,
   actorId: string,
   asOf?: string,
-  authority?: { orgId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; canPost: boolean },
+  authority?: { allowedSubsidiaryIds: ReadonlySet<string> | null; canPost: boolean },
 ): Promise<{ documentId: string; documentNumber: string; posted: boolean }> {
-  const s = await withBypass(async () => {
+  const s = await withOrgContext(orgId, async () => {
     return (await db.execute<{ orgId: string; templateId: string; autoPost: boolean }>(sql`
       select org_id as "orgId", template_document_id as "templateId", auto_post as "autoPost"
-        from recurring_schedules where id = ${scheduleId}
+        from recurring_schedules where id = ${scheduleId} and org_id = ${orgId}
     `));
   });
   const row = s.rows[0];
-  if (!row || (authority && authority.orgId !== row.orgId)) throw new RecurringError("recurring schedule not found", 404);
+  if (!row) throw new RecurringError("recurring schedule not found", 404);
   const today = asOf ?? (await businessToday(row.orgId));
   const gen = await withOrg(row.orgId, async () => {
     const current = (await db.execute<{ templateId: string; autoPost: boolean }>(sql`
@@ -437,7 +438,7 @@ export async function runScheduleNow(
       scheduleId, occurrenceOn: today, actorId, runSource: "run_now",
     });
   });
-  await withBypass(async () => {
+  await withOrgTransaction(row.orgId, async () => {
     await db.execute(sql`
       update recurring_schedules
          set run_count = run_count + 1, last_document_id = ${gen.documentId}, last_error = null

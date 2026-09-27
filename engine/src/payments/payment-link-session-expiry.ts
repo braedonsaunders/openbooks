@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor, withBypassContext, withOrg } from "../platform/db.ts";
+import { db, type SqlExecutor, withOrg, withOrgContext } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
 
 export async function loadPaymentProviderConfig<T extends Record<string, unknown>>(
@@ -23,7 +23,7 @@ type StripeSessionConfig = {
 };
 
 async function loadStripeSessionConfig(orgId: string): Promise<StripeSessionConfig | null> {
-  return withBypassContext(() => loadPaymentProviderConfig<StripeSessionConfig>(orgId, "stripe"));
+  return withOrgContext(orgId, () => loadPaymentProviderConfig<StripeSessionConfig>(orgId, "stripe"));
 }
 
 function stripeApiBase(settings: Record<string, unknown>): string | null {
@@ -49,7 +49,7 @@ export async function expireStalePaymentLinkSessions(
   invoiceIds: readonly string[],
 ): Promise<void> {
   if (invoiceIds.length === 0) return;
-  const attempts = await withBypassContext(() => db.execute<{
+  const attempts = await withOrgContext(orgId, () => db.execute<{
     id: string;
     externalRef: string;
     invoiceId: string;

@@ -431,7 +431,7 @@ export async function POST(req: Request) {
         if (prorateFirstPeriod) {
           // The authenticated caller authors the proration invoice — the
           // subscription's own id is never an actor.
-          proration = await prorateFirstInvoice(id, firstBillOn, undefined, {
+          proration = await prorateFirstInvoice(orgId, id, firstBillOn, undefined, {
             actorId: userId,
             allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
           });
@@ -453,7 +453,7 @@ export async function POST(req: Request) {
             priceOverride = null;
           }
         }
-        const result = await changeSubscription(String(body.id), {
+        const result = await changeSubscription(orgId, String(body.id), {
           quantity,
           priceOverride,
         }, undefined, { actorId: userId }, authz.allowedSubsidiaryIds);
@@ -583,7 +583,7 @@ export async function POST(req: Request) {
         if (scopeDenied) return scopeDenied;
         // The authenticated caller authors the bill-now invoice — the
         // subscription's own id is never an actor.
-        const gen = await billSubscriptionNow(String(body.id), undefined, { actorId: userId }, authz.allowedSubsidiaryIds);
+        const gen = await billSubscriptionNow(orgId, String(body.id), undefined, { actorId: userId }, authz.allowedSubsidiaryIds);
         return NextResponse.json(gen);
       }
       default:

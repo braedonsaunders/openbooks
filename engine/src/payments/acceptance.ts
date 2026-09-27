@@ -1,6 +1,6 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrg } from "../platform/db.ts";
+import { db, withBypassContext, withOrg, withOrgContext } from "../platform/db.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, mulPercent, roundDiv, toUnits } from "../money/money.ts";
 import { sealJson, sealSecret, unsealJson, unsealSecret } from "../platform/secrets.ts";
@@ -1309,7 +1309,7 @@ interface LinkWithContext {
  * through the canonical switchboard: the previous inline ::boolean cast threw
  * 22P02 on a non-boolean stored value. */
 export async function onlinePaymentsFeatureEnabled(orgId: string): Promise<boolean> {
-  return withBypassContext(() => orgFeatureEnabled(orgId, "onlinePayments"));
+  return withOrgContext(orgId, () => orgFeatureEnabled(orgId, "onlinePayments"));
 }
 
 export async function paymentLinkOrgId(token: string): Promise<string | null> {

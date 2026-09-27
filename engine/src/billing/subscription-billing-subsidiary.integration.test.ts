@@ -96,12 +96,12 @@ test(
       const branchSub = await seedSubscription(org, actorId, planId, branch.customerId);
       const rootSub = await seedSubscription(org, actorId, planId, org.customerId);
 
-      const branchGen = await billSubscriptionNow(branchSub, org.date, { actorId }, null);
+      const branchGen = await billSubscriptionNow(org.orgId, branchSub, org.date, { actorId }, null);
       const branchInvoice = await invoiceSubsidiary(org.orgId, branchGen.invoiceId);
       assert.equal(branchInvoice.subsidiaryId, branch.branchId, "customer B's invoice must carry branch B, not the root");
       assert.equal(branchInvoice.orgId, org.orgId, "no cross-org entity may leak onto the invoice");
 
-      const rootGen = await billSubscriptionNow(rootSub, org.date, { actorId }, null);
+      const rootGen = await billSubscriptionNow(org.orgId, rootSub, org.date, { actorId }, null);
       const rootInvoice = await invoiceSubsidiary(org.orgId, rootGen.invoiceId);
       assert.equal(rootInvoice.subsidiaryId, org.subsidiaryId, "a null-entity (org-wide) customer keeps the root fallback");
     } finally {
@@ -152,7 +152,7 @@ test(
         nextBillOn: "2026-08-01",
       });
 
-      const changed = await changeSubscription(subscriptionId, { quantity: "2" }, "2026-07-15", { actorId }, null);
+      const changed = await changeSubscription(org.orgId, subscriptionId, { quantity: "2" }, "2026-07-15", { actorId }, null);
       assert.ok(changed.invoiceId, "the upgrade must cut a proration invoice");
       assert.equal(
         (await invoiceSubsidiary(org.orgId, changed.invoiceId!)).subsidiaryId,
@@ -179,7 +179,7 @@ test(
         nextBillOn: "2026-07-10",
       });
 
-      const gen = await prorateFirstInvoice(subscriptionId, "2026-08-01", "2026-07-15", { actorId });
+      const gen = await prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-15", { actorId });
       assert.equal(
         (await invoiceSubsidiary(org.orgId, gen.invoiceId)).subsidiaryId,
         branch.branchId,
@@ -200,7 +200,7 @@ test(
       const actorId = await createScratchUser(org.orgId, "Billing", "admin"), plan = await seedPlan(org, actorId), branch = await seedBranchCustomer(org, "Rehomed Starter");
       const subscriptionId = await seedSubscription(org, actorId, plan, org.customerId, { startOn: "2026-07-10", nextBillOn: "2026-07-10" });
       await db.execute(sql`update parties set subsidiary_id = ${branch.branchId} where id = ${org.customerId} and org_id = ${org.orgId}`);
-      await assert.rejects(prorateFirstInvoice(subscriptionId, "2026-08-01", "2026-07-20", { actorId, allowedSubsidiaryIds: new Set([org.subsidiaryId]) }), ScopeNotFoundError);
+      await assert.rejects(prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-20", { actorId, allowedSubsidiaryIds: new Set([org.subsidiaryId]) }), ScopeNotFoundError);
       assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id = ${org.orgId} and kind = 'customer_invoice'`)).rows[0]!.n, 0);
     } finally {
       await dropScratchOrgReporting(org.orgId);
@@ -226,7 +226,7 @@ test(
         nextBillOn: "2026-07-10",
       });
 
-      const gen = await prorateFirstInvoice(subscriptionId, "2026-08-01", "2026-07-20", { actorId });
+      const gen = await prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-20", { actorId });
       assert.equal(gen.amount, "100.0000", "the full 22-day slice is charged");
       const total = (await db.execute<{ total: string }>(sql`
         select total from documents where id = ${gen.invoiceId} and org_id = ${org.orgId}
@@ -256,8 +256,8 @@ test(
       });
 
       const outcomes = await Promise.allSettled([
-        prorateFirstInvoice(subscriptionId, "2026-08-01", "2026-07-15", { actorId }),
-        prorateFirstInvoice(subscriptionId, "2026-08-01", "2026-07-15", { actorId }),
+        prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-15", { actorId }),
+        prorateFirstInvoice(org.orgId, subscriptionId, "2026-08-01", "2026-07-15", { actorId }),
       ]);
       const won = outcomes.filter((outcome) => outcome.status === "fulfilled");
       const refused = outcomes.filter((outcome) => outcome.status === "rejected");
@@ -296,7 +296,7 @@ test(
       `)).rows[0]!.n;
 
       await assert.rejects(
-        billSubscriptionNow(subscriptionId, org.date, { actorId }, null),
+        billSubscriptionNow(org.orgId, subscriptionId, org.date, { actorId }, null),
         (e: unknown) =>
           e instanceof SubscriptionError &&
           /not active/.test(e.message) &&

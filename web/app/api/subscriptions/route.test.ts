@@ -426,7 +426,7 @@ test("first proration passes the restricted caller scope to the billing service"
   routeState.authz.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
   const prorateResponse = await post({ action: "addSubscription", customerId: "customer-1", planId: "plan-1", startOn: "2026-08-26", firstBillOn: "2026-09-26", prorateFirstPeriod: true });
   assert.equal(prorateResponse.status, 201);
-  assert.deepEqual(routeState.engineCalls, [{ fn: "prorateFirstInvoice", args: ["subscription-1", "2026-09-26", undefined, { actorId: "user-1", allowedSubsidiaryIds: new Set(["subsidiary-a"]) }] }]);
+  assert.deepEqual(routeState.engineCalls, [{ fn: "prorateFirstInvoice", args: ["org-1", "subscription-1", "2026-09-26", undefined, { actorId: "user-1", allowedSubsidiaryIds: new Set(["subsidiary-a"]) }] }]);
 });
 
 /** A plain subscription billed for [Mar 1, Apr 1): cursor Apr 1, one invoice. */

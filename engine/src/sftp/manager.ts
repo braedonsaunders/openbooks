@@ -138,23 +138,23 @@ const asConfig = (row: ServerRow) => ({ id: row.id, orgId: row.orgId, username: 
  * turning the feature off revokes the credential the way a disable does,
  * without touching the row, its data, or its audit history.
  *
- * Explicitly bypass-scoped like the login lookup itself: the daemon runs
- * with no tenant scope, and RLS denies unscoped reads by default — without
- * this boundary the org row would read as missing and EVERY login would
- * refuse, feature on or not.
+ * Explicitly scoped to the login's organization: the daemon runs with no
+ * tenant scope, and RLS denies unscoped reads by default — without this
+ * boundary the org row would read as missing and EVERY login would refuse,
+ * feature on or not.
  */
 async function bankFeedsEnabled(orgId: string): Promise<boolean> {
-  return withBypassContext(() => lockAndCheckOrgFeature(db, orgId, "bankFeeds"));
+  return withOrgContext(orgId, () => lockAndCheckOrgFeature(db, orgId, "bankFeeds"));
 }
 
 type SessionRow = Pick<ServerRow, "id" | "orgId" | "username" | "password_encrypted" | "authorized_keys" | "updated_at"> & { is_active: boolean };
 
 /** The live row for a held session, by stable id — no is_active filter: the fence must SEE a disabled row to name it. */
 async function loadSessionRow(id: string, orgId: string): Promise<SessionRow | null> {
-  // Same explicitly trusted boundary as loadServer: the fence runs on the
-  // listener with no tenant scope, so without the bypass an unscoped or
-  // wrongly-scoped lookup would read every held session as deleted.
-  return withBypassContext(async () => {
+  // The fence runs on the listener with no tenant scope, so the lookup is
+  // scoped to the session's organization explicitly; unscoped, it would read
+  // every held session as deleted.
+  return withOrgContext(orgId, async () => {
     const r = await db.execute<SessionRow>(sql`
     select id, org_id as "orgId", username, is_active, updated_at, password_encrypted, authorized_keys
       from sftp_servers where id = ${id} and org_id = ${orgId} limit 1

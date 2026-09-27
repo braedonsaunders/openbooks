@@ -398,7 +398,7 @@ export async function nextWebConnectorRequest(ticket: string, metadata: {
   if (!current || current.status !== "open") return "";
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return await withBypassContext(async () => db.transaction(async (tx) => {
+      return await withOrgContext(current.orgId, async () => db.transaction(async (tx) => {
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + ticket}, 0))`);
         // Authoritative state check: a close, a connection error, or a pause
         // may have committed after the pre-transaction lookup above. Claiming
@@ -546,7 +546,7 @@ async function acknowledgeReplayedResponse(
 export async function acceptWebConnectorResponse(ticket: string, responseXml: string, hresult: string, message: string): Promise<number> {
   const current = await session(ticket);
   if (!current || current.status !== "open") return -101;
-  return withBypassContext(async () => db.transaction(async (tx) => {
+  return withOrgContext(current.orgId, async () => db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${"qbd-web-connector:" + ticket}, 0))`);
     // Authoritative state check: settle nothing for a ticket that stopped
     // being open — or whose connection stopped being active — after the
@@ -692,7 +692,7 @@ export async function isWebConnectorTicketOpen(ticket: string): Promise<boolean>
 export async function webConnectorLastError(ticket: string): Promise<string> {
   const current = await session(ticket);
   if (!current) return "Invalid or expired Web Connector ticket";
-  return withBypassContext(async () => {
+  return withOrgContext(current.orgId, async () => {
     const result = (await db.execute<{ error: string | null }>(sql`select last_error as error from qbd_sessions where id = ${ticket} and org_id = ${current.orgId}`));
     return result.rows[0]?.error ?? "No error recorded";
   });
@@ -701,7 +701,7 @@ export async function webConnectorLastError(ticket: string): Promise<string> {
 export async function closeWebConnectorSession(ticket: string): Promise<string> {
   const current = await session(ticket);
   if (!current) return "QuickBooks Web Connector session was already closed";
-  return withBypassContext(async () => {
+  return withOrgContext(current.orgId, async () => {
     // Same ticket advisory lock as send/receive, then re-read and lock the
     // session row: a send that read 'open' before this close commits must lose
     // the race (its in-lock re-read sees 'closed' and claims nothing) instead
@@ -738,7 +738,7 @@ export async function closeWebConnectorSession(ticket: string): Promise<string> 
  * correlation identity and are claimed by the next session after resume.
  */
 export async function terminateConnectionSessions(orgId: string, connectionId: string): Promise<number> {
-  return withBypassContext(async () => db.transaction(async (tx) => {
+  return withOrgContext(orgId, async () => db.transaction(async (tx) => {
     const open = (await tx.execute<{ id: string }>(sql`
       select id from qbd_sessions
        where connection_id = ${connectionId} and org_id = ${orgId} and status = 'open'
@@ -769,7 +769,7 @@ export async function recordConnectionError(ticket: string, hresult: string, mes
   const error = [hresult, message].filter(Boolean).join(": ") || "QuickBooks connection error";
   const current = await session(ticket);
   if (!current) return "done";
-  await withBypassContext(async () => {
+  await withOrgContext(current.orgId, async () => {
     // Same ticket advisory lock as send/receive, then re-read and lock the
     // session row: only an open session transitions to error, so this never
     // resurrects a closed ticket and never clobbers an earlier error's

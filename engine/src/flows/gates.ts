@@ -1480,7 +1480,7 @@ export async function processGateTimers(
       // The session lock is the recoverable lease. Do not make the durable
       // completion stamp until the notification effect has returned: a dead
       // process releases this lock and the still-due reminder is rediscovered.
-      const [gate] = await withBypassContext(() =>
+      const [gate] = await withOrgContext(orgId, () =>
         db.select().from(schema.flowGates).where(and(
           eq(schema.flowGates.id, id),
           eq(schema.flowGates.orgId, orgId),
@@ -1492,7 +1492,7 @@ export async function processGateTimers(
       if (!gate) continue;
 
       await withOrgContext(gate.orgId, () => notifyReminder(gate));
-      const completed = await withBypassContext(() => db.execute(sql`
+      const completed = await withOrgContext(orgId, () => db.execute(sql`
         update flow_gates set reminded_at = ${now}
          where id = ${id} and org_id = ${orgId} and status = 'pending'
            and remind_at <= ${now} and reminded_at is null
@@ -1533,7 +1533,7 @@ export async function processGateTimers(
   `));
 
   for (const { id, orgId } of dueEscalations.rows) {
-    await withBypassContext(() => enqueueApprovalEscalation({ orgId, gateId: id }));
+    await withOrgContext(orgId, () => enqueueApprovalEscalation({ orgId, gateId: id }));
     escalated++;
   }
 

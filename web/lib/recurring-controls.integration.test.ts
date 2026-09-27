@@ -133,7 +133,7 @@ for (const operation of ["list", "create by id", "create by number", "edit", "de
             await db.execute(sql`insert into user_permission_overrides (org_id,user_id,permission,effect) values (${org.orgId},${actor},'gl.post','deny')`);
             await db.execute(sql`update recurring_schedules set auto_post=true where id=${schedules[0]!}`);
           }
-          await assert.rejects(() => runScheduleNow(schedules[operation === "direct hidden" ? 1 : 0]!, actor, org.date),
+          await assert.rejects(() => runScheduleNow(org.orgId, schedules[operation === "direct hidden" ? 1 : 0]!, actor, org.date),
             { status: operation === "direct hidden" ? 404 : 403 });
           assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from documents where org_id=${org.orgId}`)).rows[0]!.n, 2);
           return;

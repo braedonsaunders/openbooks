@@ -12,7 +12,7 @@ import {
   type AutomationPlan,
   type EvalContext,
 } from "@openbooks/forms-core";
-import { db, schema, withBypassContext, withOrg } from "../platform/db.ts";
+import { db, schema, withBypassContext, withOrg, withOrgContext } from "../platform/db.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
 import { parseFlowGraph } from "./run.ts";
@@ -180,7 +180,7 @@ async function claimDueFlowOccurrences(
   flow: Pick<FlowRow, "id" | "orgId">,
   due: { nodeIds: string[]; latest: Date },
 ): Promise<FlowOccurrenceClaim[]> {
-  const inserted = await withBypassContext(() =>
+  const inserted = await withOrgContext(flow.orgId, () =>
     db.execute<{ id: string; node_id: string }>(sql`
       with advanced as (
         update flows set last_scheduled_run_at = ${due.latest}
@@ -292,7 +292,7 @@ function rootErrorMessage(e: unknown): string {
  * flowRuns.occurrence_key so retried/resumed attempts adopt the same rows.
  */
 async function fireScheduledOccurrence(claim: FlowOccurrenceClaim): Promise<void> {
-  const [flow] = await withBypassContext(() =>
+  const [flow] = await withOrgContext(claim.orgId, () =>
     db.select().from(schema.flows)
       .where(and(eq(schema.flows.id, claim.flowId), eq(schema.flows.orgId, claim.orgId))));
   // Claimed before the flow disappeared/was disabled: never ghost-fire a

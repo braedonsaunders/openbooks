@@ -10,7 +10,7 @@ import {
   ensureAllocationRunOutboxRows,
   processAllocationRunOutboxRow,
 } from "../allocations/scheduling.ts";
-import { db, type SqlExecutor, withBypassContext } from "../platform/db.ts";
+import { db, type SqlExecutor, withBypassContext, withOrgContext } from "../platform/db.ts";
 import {
   MAX_SCHEDULER_OUTBOX_ATTEMPTS,
   parseFlowEmailPayload,
@@ -369,7 +369,8 @@ const PROPERTY_MANAGEMENT_HREF = "/property-management";
  * unbound-schedule convention — a notification target is not an authz
  * decision). Idempotent: a second pass finds the unread notice and writes
  * nothing. Raw SQL, not the inbox helper, so the scheduling module gains no
- * inbox edge. Runs under bypass: the scan row itself is cross-org.
+ * inbox edge. Runs in the named organization's scope: the scan that failed is
+ * cross-org, but the notice and its recipients belong to one tenant.
  */
 async function ensureScanOrgFailureNotice(
   orgId: string,
@@ -378,7 +379,7 @@ async function ensureScanOrgFailureNotice(
   body: string,
   href: string,
 ): Promise<number> {
-  return withBypassContext(async () => {
+  return withOrgContext(orgId, async () => {
     const recipients = (await db.execute<{ id: string }>(sql`
       select distinct u.id::text as id
         from users u
@@ -817,7 +818,7 @@ export async function replayTerminalSchedulerOutbox(input: {
     throw new SchedulerOutboxReplayError("replay reason must be between 10 and 1000 characters");
   }
   const now = input.now ?? new Date();
-  await withBypassContext(() => db.transaction(async (tx) => {
+  await withOrgContext(input.orgId, () => db.transaction(async (tx) => {
     const actor = await tx.execute<{ exists: boolean }>(sql`
       select exists (
         select 1 from users
