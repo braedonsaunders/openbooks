@@ -16,23 +16,26 @@ SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', false);
 
 -- The replay predicate may be absent or already installed with these exact
 -- bytes. A differing definition is an unknown policy and must be reviewed
--- before CREATE OR REPLACE can replace it. The guard may be the published
--- pre-branch body or the exact replay-aware body from this migration.
+-- before CREATE OR REPLACE can replace it. The guard may be the 0405
+-- source-module-aware body or the replay-aware body from this migration.
 DO $preflight$
 DECLARE
   guard_source text;
   authorization_source text;
+  guard_digest text;
 BEGIN
   SELECT p.prosrc INTO guard_source
     FROM pg_catalog.pg_proc p
    WHERE p.oid = pg_catalog.to_regprocedure('public.je_guard()');
-  IF guard_source IS NULL OR guard_source NOT LIKE '%v_module%' THEN
-    RAISE EXCEPTION '0440 preflight: public.je_guard() has no source-module recheck; rebase this migration on its current body and re-run.';
+  IF guard_source IS NULL THEN
+    RAISE EXCEPTION '0440 preflight: public.je_guard() is missing; restore its 0405 source-module-aware body before applying.';
   END IF;
-  IF guard_source LIKE '%openbooks_connector_replay_authorized%'
-     AND pg_catalog.encode(public.digest(pg_catalog.convert_to(guard_source, 'UTF8'), 'sha256'), 'hex')
-       <> 'b04c5bd00429a773ddd89092376fd0be32740dcb545515c3848b70edd73e6778' THEN
-    RAISE EXCEPTION '0440 preflight: public.je_guard() has a different connector replay authorization body; review the live guard before applying.';
+  guard_digest := pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(guard_source, 'UTF8')), 'hex');
+  IF guard_digest NOT IN (
+    'a37008b2002f80373c69a0a4f1c1343845488cdf4c3511f00f749b0d2aa22ac3',
+    'b04c5bd00429a773ddd89092376fd0be32740dcb545515c3848b70edd73e6778'
+  ) THEN
+    RAISE EXCEPTION '0440 preflight: public.je_guard() has unrecognized installed body digest %; review the live guard before applying.', guard_digest;
   END IF;
 
   SELECT p.prosrc INTO authorization_source
@@ -41,7 +44,7 @@ BEGIN
      'public.openbooks_connector_replay_authorized(uuid,uuid,uuid)'
    );
   IF authorization_source IS NOT NULL
-     AND pg_catalog.encode(public.digest(pg_catalog.convert_to(authorization_source, 'UTF8'), 'sha256'), 'hex')
+     AND pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(authorization_source, 'UTF8')), 'hex')
        <> '30e83349531781e826cce792fa54a49f828b0d3667655870ecc11565f16653c3' THEN
     RAISE EXCEPTION '0440 preflight: public.openbooks_connector_replay_authorized() has a different body; review the live predicate before applying.';
   END IF;
