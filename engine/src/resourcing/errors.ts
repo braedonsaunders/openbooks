@@ -1,4 +1,4 @@
-export type ResourcingRefusalStatus = 409 | 422;
+export type ResourcingRefusalStatus = 400 | 409 | 422;
 
 /** A typed operator-facing refusal from a resourcing service. */
 export class ResourcingRefusal extends Error {

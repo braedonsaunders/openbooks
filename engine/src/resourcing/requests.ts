@@ -14,6 +14,11 @@ import { upsertAssignment, validateAssignmentPlan } from "./assignments.ts";
 import { weeksBetween } from "./weeks.ts";
 
 type RequestRow = typeof resRequests.$inferSelect;
+type RequestWriteRow = RequestRow & Record<string, unknown>;
+type RequestIdWriteRow = { id: string } & Record<string, unknown>;
+type RequestGateWriteRow = { id: string; status: string } & Record<string, unknown>;
+type RequestAuditLogWriteRow = { row_id: string } & Record<string, unknown>;
+type RequestAuditRow = { id: string } & Record<string, unknown>;
 type RequestTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 interface RequestWriteContext {
@@ -21,6 +26,12 @@ interface RequestWriteContext {
   actorId: string;
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }
+
+type ResourceRequestCreateIdempotency = {
+  id: string;
+  requestId: string;
+  match: Record<string, unknown>;
+};
 
 export type ResourceRequestSubject =
   | { employeePartyId: string; jobTitle?: never }
@@ -143,13 +154,29 @@ async function writeAudit(
   changes: Record<string, unknown>,
   actorId: string | null,
 ): Promise<void> {
-  const rows = await db.execute<{ row_id: string }>(sql`
+  const rows = await db.execute<RequestAuditLogWriteRow>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'res_requests', ${requestId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
     returning row_id
   `);
   if ((rows.rowCount ?? 0) !== 1 || rows.rows.length !== 1) {
     throw new Error(`audit record for resource request ${requestId} wrote ${rows.rows.length} rows; expected exactly one`);
+  }
+}
+
+async function writeIdempotentCreateAudit(
+  tx: SqlExecutor,
+  input: { orgId: string; rowId: string; after: object; actorId: string; requestId: string; match: Record<string, unknown> },
+): Promise<void> {
+  const result = await tx.execute<RequestAuditRow>(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+    values (${input.orgId}, 'res_requests', ${input.rowId}, 'insert',
+      ${JSON.stringify({ before: null, after: input.after, match: input.match })}::jsonb,
+      ${input.actorId}, ${input.requestId})
+    returning id
+  `);
+  if ((result.rowCount ?? 0) !== 1 || result.rows.length !== 1) {
+    throw new Error(`audit record for resource request ${input.rowId} wrote ${result.rows.length} rows; expected exactly one`);
   }
 }
 
@@ -173,27 +200,64 @@ function requestSnapshot(row: RequestRow): Record<string, unknown> {
 }
 
 /** Create a draft resource request after applying the assignment writer's validation. */
-export async function createResourceRequest(input: ResourceRequestDraftInput): Promise<RequestRow> {
+export async function createResourceRequest(
+  input: ResourceRequestDraftInput,
+  idempotency?: ResourceRequestCreateIdempotency,
+): Promise<RequestRow> {
   return withRequestWrite(input.orgId, async (tx) => {
     const values = await validateDraft(tx, input);
-    const rows = await tx.insert(resRequests).values({
-      orgId: input.orgId,
-      projectId: input.projectId,
-      employeePartyId: values.employeePartyId,
-      jobTitle: values.jobTitle,
-      firstWeek: values.firstWeek,
-      lastWeek: values.lastWeek,
-      hoursPerWeek: values.hoursPerWeek,
-      isBillable: values.isBillable,
-      billItemId: values.billItemId,
-      reason: values.reason,
-      status: "draft",
-      createdBy: input.actorId,
-      updatedBy: input.actorId,
-    }).returning();
-    if (rows.length !== 1) throw new Error(`resource request creation wrote ${rows.length} rows; expected exactly one`);
-    const request = rows[0]!;
-    await writeAudit(input.orgId, request.id, "insert", { after: requestSnapshot(request) }, input.actorId);
+    let request: RequestRow;
+    if (idempotency) {
+      const result = await tx.execute<RequestWriteRow>(sql`
+        insert into res_requests (
+          id, org_id, project_id, employee_party_id, job_title, first_week, last_week,
+          hours_per_week, is_billable, bill_item_id, reason, status, created_by, updated_by
+        ) values (
+          coalesce(${idempotency?.id ?? null}::uuid, public.uuid_generate_v7()), ${input.orgId},
+          ${input.projectId}, ${values.employeePartyId}, ${values.jobTitle}, ${values.firstWeek},
+          ${values.lastWeek}, ${values.hoursPerWeek}, ${values.isBillable}, ${values.billItemId},
+          ${values.reason}, 'draft', ${input.actorId}, ${input.actorId}
+        ) returning id, org_id as "orgId", project_id as "projectId",
+          employee_party_id as "employeePartyId", job_title as "jobTitle",
+          first_week::text as "firstWeek", last_week::text as "lastWeek",
+          hours_per_week::text as "hoursPerWeek", is_billable as "isBillable",
+          bill_item_id as "billItemId", reason, status, decided_by as "decidedBy",
+          decided_at as "decidedAt", decision_comment as "decisionComment",
+          flow_instance_id as "flowInstanceId", custom, created_at as "createdAt",
+          created_by as "createdBy", updated_at as "updatedAt", updated_by as "updatedBy"
+      `);
+      if ((result.rowCount ?? 0) !== 1 || !result.rows[0]) {
+        throw new Error(`resource request creation wrote ${result.rows.length} rows; expected exactly one`);
+      }
+      request = result.rows[0];
+      await writeIdempotentCreateAudit(tx, {
+        orgId: input.orgId,
+        rowId: request.id,
+        after: request,
+        actorId: input.actorId,
+        requestId: idempotency.requestId,
+        match: idempotency.match,
+      });
+    } else {
+      const rows = await tx.insert(resRequests).values({
+        orgId: input.orgId,
+        projectId: input.projectId,
+        employeePartyId: values.employeePartyId,
+        jobTitle: values.jobTitle,
+        firstWeek: values.firstWeek,
+        lastWeek: values.lastWeek,
+        hoursPerWeek: values.hoursPerWeek,
+        isBillable: values.isBillable,
+        billItemId: values.billItemId,
+        reason: values.reason,
+        status: "draft",
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      }).returning();
+      if (rows.length !== 1) throw new Error(`resource request creation wrote ${rows.length} rows; expected exactly one`);
+      request = rows[0]!;
+      await writeAudit(input.orgId, request.id, "insert", { after: requestSnapshot(request) }, input.actorId);
+    }
     return request;
   });
 }
@@ -274,13 +338,13 @@ export async function submitResourceRequest(input: ResourceRequestIdInput): Prom
     if (flowResult.failed || !gatedRun) {
       const strayRunIds = flowResult.runs.map((run) => run.runId);
       if (strayRunIds.length > 0) {
-        const gates = await tx.execute<{ id: string }>(sql`
+        const gates = await tx.execute<RequestIdWriteRow>(sql`
           update flow_gates set status = 'cancelled', updated_at = now()
            where run_id in (select jsonb_array_elements_text(${JSON.stringify(strayRunIds)}::jsonb)::uuid)
              and org_id = ${input.orgId} and status in ('pending', 'escalated')
           returning id
         `);
-        const openRuns = await tx.execute<{ id: string }>(sql`
+        const openRuns = await tx.execute<RequestIdWriteRow>(sql`
           update flow_runs set status = 'cancelled', finished_at = now()
            where id in (select jsonb_array_elements_text(${JSON.stringify(strayRunIds)}::jsonb)::uuid)
              and org_id = ${input.orgId} and status in ('running', 'waiting')
@@ -333,12 +397,12 @@ export async function cancelResourceRequest(input: CancelResourceRequestInput): 
     }
     await lockProjectForScope(tx, input.orgId, current.projectId, input.allowedSubsidiaryIds, "share");
     if (current.status === "submitted" && current.flowInstanceId) {
-      const gateIds = (await tx.execute<{ id: string; status: string }>(sql`
+      const gateIds = (await tx.execute<RequestGateWriteRow>(sql`
         select id, status from flow_gates where org_id = ${input.orgId} and run_id = ${current.flowInstanceId}
           and status in ('pending', 'escalated') for update
       `)).rows;
       if (gateIds.length > 0) {
-        const cancelled = await tx.execute<{ id: string }>(sql`
+        const cancelled = await tx.execute<RequestIdWriteRow>(sql`
           update flow_gates set status = 'cancelled', updated_at = now()
            where org_id = ${input.orgId} and id in (${sql.join(gateIds.map((gate) => sql`${gate.id}::uuid`), sql`, `)})
              and status in ('pending', 'escalated') returning id

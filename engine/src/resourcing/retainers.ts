@@ -28,11 +28,14 @@ import {
   sum,
 } from "../money/money.ts";
 import { parseIsoDate } from "../platform/business-date.ts";
-import { db, withOrgTransaction } from "../platform/db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { ResourcingRefusal } from "./errors.ts";
 import { weekDates } from "./weeks.ts";
 
 type RetainerRow = typeof resRetainers.$inferSelect;
+type RetainerWriteRow = RetainerRow & Record<string, unknown>;
+type RetainerAuditRow = { id: string } & Record<string, unknown>;
+type RetainerAuditLogWriteRow = { row_id: string } & Record<string, unknown>;
 type DrawdownRow = typeof resRetainerDrawdowns.$inferSelect;
 type RetainerState = RetainerRow["state"];
 
@@ -68,6 +71,12 @@ export interface CreateRetainerInput {
   retainerItemId: string;
   custom?: Record<string, unknown>;
 }
+
+type RetainerCreateIdempotency = {
+  id: string;
+  requestId: string;
+  match: Record<string, unknown>;
+};
 
 export interface RetainerWriteInput {
   orgId: string;
@@ -205,7 +214,10 @@ export function assertWriteRows(rows: readonly unknown[], expected: number, oper
   }
 }
 
-export async function createRetainer(input: CreateRetainerInput): Promise<RetainerRow> {
+export async function createRetainer(
+  input: CreateRetainerInput,
+  idempotency?: RetainerCreateIdempotency,
+): Promise<RetainerRow> {
   const startsOn = requireIsoDate(input.startsOn, "startsOn");
   const endsOn = requireIsoDate(input.endsOn, "endsOn");
   if (startsOn > endsOn) {
@@ -254,9 +266,9 @@ export async function createRetainer(input: CreateRetainerInput): Promise<Retain
     );
   }
 
-  return withRetainerWrite(input.orgId, async () => {
-    await lockProjectForScope(db, input.orgId, input.projectId, input.allowedSubsidiaryIds);
-    const [project] = await db.select({
+  return withRetainerWrite(input.orgId, async (tx) => {
+    await lockProjectForScope(tx, input.orgId, input.projectId, input.allowedSubsidiaryIds);
+    const [project] = await tx.select({
       customerId: projects.customerId,
       status: projects.status,
     }).from(projects).where(and(eq(projects.orgId, input.orgId), eq(projects.id, input.projectId))).limit(1);
@@ -280,25 +292,38 @@ export async function createRetainer(input: CreateRetainerInput): Promise<Retain
       );
     }
 
-    const inserted = await db.insert(resRetainers).values({
-      orgId: input.orgId,
-      projectId: input.projectId,
-      customerPartyId: input.customerPartyId,
-      kind: input.kind,
-      totalAmount,
-      totalHours,
-      unitRate,
-      startsOn,
-      endsOn,
-      retainerItemId: input.retainerItemId,
-      custom: input.custom ?? {},
-      createdBy: input.actorId,
-      updatedBy: input.actorId,
-    }).returning();
-    assertWriteRows(inserted, 1, "retainer creation");
-    const retainer = inserted[0]!;
-    await writeAudit(input.orgId, "res_retainers", retainer.id, "insert", {
-      after: {
+    let retainer: RetainerRow;
+    if (idempotency) {
+      const result = await tx.execute<RetainerWriteRow>(sql`
+        insert into res_retainers (
+          id, org_id, project_id, customer_party_id, kind, total_amount, total_hours,
+          unit_rate, starts_on, ends_on, retainer_item_id, custom, created_by, updated_by
+        ) values (
+          coalesce(${idempotency?.id ?? null}::uuid, public.uuid_generate_v7()), ${input.orgId},
+          ${input.projectId}, ${input.customerPartyId}, ${input.kind}, ${totalAmount},
+          ${totalHours}, ${unitRate}, ${startsOn}, ${endsOn}, ${input.retainerItemId},
+          ${JSON.stringify(input.custom ?? {})}::jsonb, ${input.actorId}, ${input.actorId}
+        ) returning id, org_id as "orgId", project_id as "projectId",
+          customer_party_id as "customerPartyId", kind, total_amount::text as "totalAmount",
+          total_hours::text as "totalHours", unit_rate::text as "unitRate",
+          starts_on::text as "startsOn", ends_on::text as "endsOn",
+          retainer_item_id as "retainerItemId", invoice_document_id as "invoiceDocumentId",
+          obligation_id as "obligationId", state, custom, created_at as "createdAt",
+          created_by as "createdBy", updated_at as "updatedAt", updated_by as "updatedBy"
+      `);
+      assertWriteRows(result.rows, 1, "retainer creation");
+      retainer = result.rows[0] as RetainerRow;
+      await writeIdempotentCreateAudit(tx, {
+        orgId: input.orgId,
+        rowId: retainer.id,
+        after: retainer,
+        actorId: input.actorId,
+        requestId: idempotency.requestId,
+        match: idempotency.match,
+      });
+    } else {
+      const inserted = await tx.insert(resRetainers).values({
+        orgId: input.orgId,
         projectId: input.projectId,
         customerPartyId: input.customerPartyId,
         kind: input.kind,
@@ -308,9 +333,27 @@ export async function createRetainer(input: CreateRetainerInput): Promise<Retain
         startsOn,
         endsOn,
         retainerItemId: input.retainerItemId,
-        state: "draft",
-      },
-    }, input.actorId);
+        custom: input.custom ?? {},
+        createdBy: input.actorId,
+        updatedBy: input.actorId,
+      }).returning();
+      assertWriteRows(inserted, 1, "retainer creation");
+      retainer = inserted[0]!;
+      await writeAudit(input.orgId, "res_retainers", retainer.id, "insert", {
+        after: {
+          projectId: input.projectId,
+          customerPartyId: input.customerPartyId,
+          kind: input.kind,
+          totalAmount,
+          totalHours,
+          unitRate,
+          startsOn,
+          endsOn,
+          retainerItemId: input.retainerItemId,
+          state: "draft",
+        },
+      }, input.actorId);
+    }
     return retainer;
   });
 }
@@ -540,7 +583,7 @@ export async function closeRetainer(
   });
 }
 
-async function withRetainerWrite<T>(orgId: string, work: () => Promise<T>): Promise<T> {
+async function withRetainerWrite<T>(orgId: string, work: (tx: typeof db) => Promise<T>): Promise<T> {
   try {
     return await withOrgTransaction(orgId, async () => {
       await acquireOrgFeatureGateLock(db, orgId);
@@ -552,7 +595,7 @@ async function withRetainerWrite<T>(orgId: string, work: () => Promise<T>): Prom
           "enable Retainer Billing in Company Settings → Features",
         );
       }
-      return work();
+      return work(db);
     });
   } catch (error) {
     const constraint = postgresUniqueConstraint(error);
@@ -575,6 +618,22 @@ async function withRetainerWrite<T>(orgId: string, work: () => Promise<T>): Prom
       );
     }
     throw error;
+  }
+}
+
+async function writeIdempotentCreateAudit(
+  tx: SqlExecutor,
+  input: { orgId: string; rowId: string; after: object; actorId: string; requestId: string; match: Record<string, unknown> },
+): Promise<void> {
+  const result = await tx.execute<RetainerAuditRow>(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+    values (${input.orgId}, 'res_retainers', ${input.rowId}, 'insert',
+      ${JSON.stringify({ before: null, after: input.after, match: input.match })}::jsonb,
+      ${input.actorId}, ${input.requestId})
+    returning id
+  `);
+  if ((result.rowCount ?? 0) !== 1 || result.rows.length !== 1) {
+    throw new Error(`audit record for retainer ${input.rowId} wrote ${result.rows.length} rows; expected exactly one`);
   }
 }
 
@@ -632,7 +691,7 @@ async function writeAudit(
   changes: Record<string, unknown>,
   actorId: string,
 ): Promise<void> {
-  const rows = await db.execute<{ row_id: string }>(sql`
+  const rows = await db.execute<RetainerAuditLogWriteRow>(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, ${tableName}, ${rowId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
     returning row_id
