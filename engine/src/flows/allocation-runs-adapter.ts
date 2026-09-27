@@ -1,9 +1,10 @@
 import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
-import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
+import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 export const ALLOCATION_RUN_SUBJECT_KIND = "allocation_run";
 
@@ -46,7 +47,7 @@ export const allocationRunSubjectProfile: FlowSubjectProfile = {
     { key: "periodName", label: "Accounting period", type: "text" },
     { key: "fiscalYear", label: "Fiscal year", type: "number" },
     { key: "bookCode", label: "Accounting book", type: "text" },
-    { key: "status", label: "Status", type: "enum", options: [...ALLOCATION_RUN_STATUSES] },
+    { key: "status", label: "Status", type: "enum" },
     { key: "sourceTotal", label: "Source total", type: "number" },
     { key: "allocatedTotal", label: "Allocated total", type: "number" },
     { key: "targetCount", label: "Targets", type: "number" },
@@ -66,7 +67,6 @@ export const allocationRunSubjectProfile: FlowSubjectProfile = {
       options: [...EVENT_SOURCE_OPTIONS],
     },
   ],
-  roles: [...BUILT_IN_ROLE_NAMES],
 };
 
 type AllocationRunRow = {
@@ -113,12 +113,11 @@ async function loadRun(subjectId: string): Promise<AllocationRunRow | null> {
   return result.rows[0] ?? null;
 }
 
-export const allocationRunsFlowAdapter: FlowSubjectAdapter = {
+export const allocationRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: ALLOCATION_RUN_SUBJECT_KIND,
   profile: allocationRunSubjectProfile,
   // Nothing on a run is a flow-writable header field: the stored computation
   // is the thing being approved, and a flow must not rewrite it.
-  writableFields: new Set<string>(),
   // releaseApproval below delegates to the registered engine handler:
   // allocation runs release inside the engine (see releaseViaHandler).
   releaseViaHandler: true,
@@ -211,4 +210,4 @@ export const allocationRunsFlowAdapter: FlowSubjectAdapter = {
     `));
     return result.rows.map((row) => row.id);
   },
-};
+});

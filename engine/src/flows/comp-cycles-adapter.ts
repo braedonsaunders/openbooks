@@ -9,9 +9,9 @@ import type {
 } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import {
-  BUILT_IN_ROLE_NAMES,
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 /**
  * Compensation cycles as a native flow subject.
@@ -57,7 +57,7 @@ export const hrmCompCycleSubjectProfile: FlowSubjectProfile = {
     { key: "cycleKind", label: "Kind", type: "text" },
     { key: "effectiveOn", label: "Effective on", type: "text" },
     { key: "budgetTotal", label: "Budget total", type: "text" },
-    { key: "status", label: "Status", type: "enum", options: [...CYCLE_STATUSES] },
+    { key: "status", label: "Status", type: "enum" },
     { key: "submittedBy", label: "Submitted by", type: "user" },
     {
       key: "event_source",
@@ -66,10 +66,7 @@ export const hrmCompCycleSubjectProfile: FlowSubjectProfile = {
       options: [...EVENT_SOURCE_OPTIONS],
     },
   ],
-  roles: [...BUILT_IN_ROLE_NAMES],
 };
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type CycleRow = {
   org_id: string;
@@ -82,7 +79,6 @@ type CycleRow = {
 };
 
 async function loadCycle(subjectId: string): Promise<CycleRow | null> {
-  if (!UUID_RE.test(subjectId)) return null;
   // No ambient-tenant requirement and no org predicate here, by adapter
   // parity (documents, budget, timesheet, leave, change-requests):
   // decideGate's pre-flight resolves the submitter outside withOrg, and
@@ -99,14 +95,13 @@ async function loadCycle(subjectId: string): Promise<CycleRow | null> {
   return result.rows[0] ?? null;
 }
 
-export const hrmCompCycleFlowAdapter: FlowSubjectAdapter = {
+export const hrmCompCycleFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
   profile: hrmCompCycleSubjectProfile,
   // releaseApproval below delegates to the registered engine handler.
   releaseViaHandler: true,
   // A flow must not rewrite the round it is approving: the cycle freezes
   // on submit, so no header field is flow-writable.
-  writableFields: new Set<string>(),
   selfApprovalPolicy: "forbidden",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
@@ -180,4 +175,4 @@ export const hrmCompCycleFlowAdapter: FlowSubjectAdapter = {
       ctx,
     });
   },
-};
+});

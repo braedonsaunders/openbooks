@@ -11,8 +11,9 @@ import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { ambientTenantOrgId, db } from "../platform/db.ts";
 import type { FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
-import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
+import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 export const CREW_TIME_BATCH_SUBJECT_KIND = "crew_time_batch" as const;
 
@@ -37,7 +38,7 @@ export const crewBatchSubjectProfile: FlowSubjectProfile = {
     { key: "projectId", label: "Project", type: "text" },
     { key: "projectName", label: "Project name", type: "text" },
     { key: "workedOn", label: "Worked on", type: "date" },
-    { key: "status", label: "Status", type: "enum", options: [...CREW_BATCH_STATUSES] },
+    { key: "status", label: "Status", type: "enum" },
     { key: "totalHours", label: "Total hours", type: "number" },
     { key: "lineCount", label: "Crew lines", type: "number" },
     { key: "workerCount", label: "Workers", type: "number" },
@@ -49,10 +50,7 @@ export const crewBatchSubjectProfile: FlowSubjectProfile = {
       options: [...EVENT_SOURCE_OPTIONS],
     },
   ],
-  roles: [...BUILT_IN_ROLE_NAMES],
 };
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type BatchRow = {
   org_id: string;
@@ -69,7 +67,6 @@ type BatchRow = {
 };
 
 async function loadBatchSummary(subjectId: string): Promise<BatchRow | null> {
-  if (!UUID_RE.test(subjectId)) return null;
   const result = (await db.execute<BatchRow>(sql`
     select b.org_id,
            foreman.display_name as foreman_name,
@@ -95,10 +92,9 @@ async function loadBatchSummary(subjectId: string): Promise<BatchRow | null> {
   return result.rows[0] ?? null;
 }
 
-export const crewBatchFlowAdapter: FlowSubjectAdapter = {
+export const crewBatchFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: CREW_TIME_BATCH_SUBJECT_KIND,
   profile: crewBatchSubjectProfile,
-  writableFields: new Set<string>(),
   // releaseApproval below delegates to the registered handler: this kind
   // needs a handler registered at web boot (see handlerReleasedSubjectKinds).
   releaseViaHandler: true,
@@ -188,4 +184,4 @@ export const crewBatchFlowAdapter: FlowSubjectAdapter = {
     `));
     return result.rows.map((row) => row.id);
   },
-};
+});

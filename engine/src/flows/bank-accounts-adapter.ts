@@ -4,7 +4,8 @@ import { businessToday } from "../platform/business-date.ts";
 import { db, schema } from "../platform/db.ts";
 import { lockScopeRow } from "../organization/subsidiary-scope.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
-import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
+import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 /**
  * party_bank_accounts FlowSubjectAdapter — the first non-document subject.
@@ -61,7 +62,6 @@ export const bankAccountSubjectProfile: FlowSubjectProfile = {
       key: "status",
       label: "Status",
       type: "enum",
-      options: BANK_ACCOUNT_STATUSES.map((status) => ({ ...status })),
     },
     { key: "isActive", label: "Active", type: "bool" },
     { key: "createdBy", label: "Created by (user)", type: "user" },
@@ -74,7 +74,6 @@ export const bankAccountSubjectProfile: FlowSubjectProfile = {
       options: [...EVENT_SOURCE_OPTIONS],
     },
   ],
-  roles: [...BUILT_IN_ROLE_NAMES],
 };
 
 type BankRow = typeof schema.partyBankAccounts.$inferSelect;
@@ -91,12 +90,11 @@ async function loadRow(subjectId: string, orgId?: string): Promise<BankRow | nul
   return row ?? null;
 }
 
-export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
+export const bankAccountsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: BANK_ACCOUNT_SUBJECT_KIND,
   profile: bankAccountSubjectProfile,
   // Flows never write bank fields directly — the material columns are exactly
   // what approval guards, so all mutation goes through the API + re-approval.
-  writableFields: new Set<string>(),
   // Vendor bank details are fraud-sensitive: the submitter must never be able
   // to approve their own details, even if a tenant opts out on the gate node.
   selfApprovalPolicy: "forbidden",
@@ -284,4 +282,4 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
   async setField(): Promise<void> {
     throw new Error("bank-detail fields are not writable by flows — edits go through the API and re-approval");
   },
-};
+});

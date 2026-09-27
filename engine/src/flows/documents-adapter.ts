@@ -9,6 +9,7 @@ import {
 } from "../records/transaction-audit.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { flowDocumentEffects } from "./document-effects-hook.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import {
   DOCUMENT_FIELDS,
   WRITABLE_DOCUMENT_FIELDS,
@@ -183,7 +184,7 @@ export const RESERVED_DOCUMENT_FIELD_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
-  return {
+  return defineTableSubjectAdapter({
     subjectKind: kind,
     profile: documentSubjectProfile(kind),
     writableFields: WRITABLE_DOCUMENT_FIELDS,
@@ -402,7 +403,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       `));
       return r.rows.map((row) => row.id);
     },
-  };
+  });
 }
 
 export { DOCUMENT_FIELDS };

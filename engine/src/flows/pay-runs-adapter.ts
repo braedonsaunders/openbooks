@@ -4,6 +4,7 @@ import { db } from "../platform/db.ts";
 import type { FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
 import { DOCUMENT_FIELDS, documentSubjectProfile } from "./subject-profiles.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 export const PAY_RUN_SUBJECT_KIND = "pay_run";
 
@@ -59,7 +60,7 @@ export const payRunSubjectProfile: FlowSubjectProfile = {
 
 const documentsAdapter = createDocumentsFlowAdapter(PAY_RUN_SUBJECT_KIND);
 
-export const payRunsFlowAdapter: FlowSubjectAdapter = {
+export const payRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   ...documentsAdapter,
   profile: payRunSubjectProfile,
 
@@ -109,4 +110,4 @@ export const payRunsFlowAdapter: FlowSubjectAdapter = {
   deepLink(subjectId: string): string {
     return `/payroll/runs/${subjectId}`;
   },
-};
+});

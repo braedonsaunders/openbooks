@@ -9,9 +9,9 @@ import type {
 } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import {
-  BUILT_IN_ROLE_NAMES,
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 /**
  * Employment change requests as a native flow subject.
@@ -52,7 +52,7 @@ export const hrmChangeRequestSubjectProfile: FlowSubjectProfile = {
     { key: "requestId", label: "Request", type: "text" },
     { key: "employmentId", label: "Employment", type: "text" },
     { key: "changeKind", label: "Change kind", type: "text" },
-    { key: "status", label: "Status", type: "enum", options: [...REQUEST_STATUSES] },
+    { key: "status", label: "Status", type: "enum" },
     { key: "expectedEmploymentRevision", label: "Expected employment revision", type: "number" },
     { key: "payloadDigest", label: "Payload digest", type: "text" },
     { key: "submittedBy", label: "Submitted by", type: "user" },
@@ -64,10 +64,7 @@ export const hrmChangeRequestSubjectProfile: FlowSubjectProfile = {
       options: [...EVENT_SOURCE_OPTIONS],
     },
   ],
-  roles: [...BUILT_IN_ROLE_NAMES],
 };
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type RequestRow = {
   org_id: string;
@@ -81,7 +78,6 @@ type RequestRow = {
 };
 
 async function loadRequest(subjectId: string): Promise<RequestRow | null> {
-  if (!UUID_RE.test(subjectId)) return null;
   // No ambient-tenant requirement and no org predicate here, by adapter
   // parity (documents, budget, timesheet): decideGate's pre-flight resolves
   // the submitter outside withOrg, and every caller scopes the subject
@@ -96,14 +92,13 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
   return result.rows[0] ?? null;
 }
 
-export const hrmChangeRequestFlowAdapter: FlowSubjectAdapter = {
+export const hrmChangeRequestFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
   profile: hrmChangeRequestSubjectProfile,
   // releaseApproval below delegates to the registered engine handler.
   releaseViaHandler: true,
   // A flow must not rewrite the proposal it is approving: the payload
   // freezes on submit, so no header field is flow-writable.
-  writableFields: new Set<string>(),
   selfApprovalPolicy: "forbidden",
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
@@ -181,4 +176,4 @@ export const hrmChangeRequestFlowAdapter: FlowSubjectAdapter = {
     `));
     return result.rows.map((row) => row.id);
   },
-};
+});

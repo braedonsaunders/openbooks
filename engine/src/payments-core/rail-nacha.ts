@@ -3,6 +3,7 @@ import { db } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import { parseIsoDate } from "../platform/business-date.ts";
 import { PaymentError } from "./payment-errors.ts";
+import { paymentFormatRails } from "./rail-descriptors.ts";
 
 export interface NachaSettings {
   /** ODFI 9-digit routing/ABA number (the originating bank). */
@@ -44,7 +45,8 @@ export async function loadNachaSettings(orgId: string, runId?: string) {
       from payment_bank_profiles p
       join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id
       left join payment_runs r on r.payment_bank_profile_id = p.id and r.org_id = p.org_id
-     where p.org_id = ${orgId} and p.is_active and f.rail in ('nacha_credit', 'nacha_debit')
+     where p.org_id = ${orgId} and p.is_active
+       and f.rail in (${sql.join(paymentFormatRails("nacha").map((rail) => sql`${rail}`), sql`, `)})
        and (${runId ?? null}::uuid is null or r.id = ${runId ?? null})
      order by case when r.id is not null then 0 else 1 end, p.created_at
      limit 1

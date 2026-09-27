@@ -8,11 +8,11 @@ import {
   loadFinancialChangeSubjectLabel,
 } from "../platform/financial-changes.ts";
 import {
-  BUILT_IN_ROLE_NAMES,
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
 import { runRecordFlows } from "./run.ts";
 import type { FlowSubjectAdapter } from "./types.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 
 export const FINANCIAL_CHANGE_SUBJECT_KIND = "financial_change";
 export const financialChangeSubjectProfile: FlowSubjectProfile = {
@@ -44,12 +44,10 @@ export const financialChangeSubjectProfile: FlowSubjectProfile = {
       options: [...EVENT_SOURCE_OPTIONS],
     },
   ],
-  roles: [...BUILT_IN_ROLE_NAMES],
 };
-export const financialChangesFlowAdapter: FlowSubjectAdapter = {
+export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: FINANCIAL_CHANGE_SUBJECT_KIND,
   profile: financialChangeSubjectProfile,
-  writableFields: new Set<string>(),
   selfApprovalPolicy: "forbidden",
   async loadContext(id) {
     // RLS supplies the org; this adapter never widens the active tenant scope.
@@ -128,7 +126,7 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = {
     if (updated.rows.length !== 1)
       throw new Error("accounting event decision could not be recorded");
   },
-};
+});
 
 /** Called in the domain request transaction after authorization/measurement.
  * Zero gates is a refusal, never implied approval. Flows remains the sole

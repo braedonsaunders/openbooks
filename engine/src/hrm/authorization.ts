@@ -11,6 +11,113 @@ import {
 import { businessToday } from "../platform/business-date.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 
+export class HrmAuthorizationError extends Error {}
+
+const HRM_PERMISSION_MAP = {
+  compensation: {
+    read: ["hrm.compensation.read", "Compensation access"],
+    manage: ["hrm.compensation.manage", "Compensation access"],
+    approve: ["hrm.compensation.approve", "Compensation access"],
+  },
+  employment: {
+    read: ["hrm.employment.read", "Employment access"],
+    manage: ["hrm.employment.manage", "Employment access"],
+    approve: ["hrm.employment.approve", "Employment access"],
+  },
+  process: {
+    read: ["hrm.process.read", "Process access"],
+    manage: ["hrm.process.manage", "Process access"],
+  },
+  position: {
+    read: ["hrm.position.read", "Position access"],
+    manage: ["hrm.position.manage", "Position access"],
+  },
+  documents: {
+    read: ["hrm.documents.read", "Document access"],
+    manage: ["hrm.documents.manage", "Document access"],
+  },
+  surveys: { manage: ["hrm.surveys.manage", "Survey access"] },
+  leave: {
+    read: ["hrm.leave.read", "Leave access"],
+    request: ["hrm.leave.request", "Leave access"],
+    approve: ["hrm.leave.approve", "Leave access"],
+    manage: ["hrm.leave.manage", "Leave access"],
+  },
+  leaveConfiguration: { manage: ["hrm.leave.manage", "Leave configuration"] },
+  recruiting: {
+    read: ["hrm.recruiting.read", "Recruiting access"],
+    manage: ["hrm.recruiting.manage", "Recruiting access"],
+  },
+  performance: {
+    read: ["hrm.performance.read", "Performance access"],
+    manage: ["hrm.performance.manage", "Performance access"],
+  },
+  retention: { read: ["hrm.retention.read", "Retention access"] },
+  benefits: {
+    read: ["hrm.benefits.read", "Benefits access"],
+    manage: ["hrm.benefits.manage", "Benefits access"],
+  },
+  benefitsConfiguration: { manage: ["hrm.benefits.manage", "Benefits configuration"] },
+  self: {
+    read: ["hrm.self.read", "Self-service"],
+    request: ["hrm.self.request", "Profile changes"],
+  },
+  selfService: {
+    read: ["hrm.self.read", "Self-service"],
+    request: ["hrm.self.request", "Self-service"],
+  },
+  team: {
+    read: ["hrm.team.read", "Team access"],
+    manage: ["hrm.team.manage", "Team access"],
+  },
+  benefitElections: { request: ["hrm.self.request", "Benefit elections from the Me workspace"] },
+  construction: {
+    read: ["hrm.construction.read", "Construction compliance access"],
+    manage: ["hrm.construction.manage", "Construction compliance access"],
+  },
+  certifications: {
+    read: ["hrm.certifications.read", "Qualification access"],
+    manage: ["hrm.certifications.manage", "Qualification access"],
+  },
+} as const;
+
+type HrmDomain = keyof typeof HRM_PERMISSION_MAP;
+type HrmPermission<D extends HrmDomain> = keyof (typeof HRM_PERMISSION_MAP)[D];
+type HrmPermissionName<D extends HrmDomain> = {
+  [P in HrmPermission<D>]: (typeof HRM_PERMISSION_MAP)[D][P][0];
+}[HrmPermission<D>];
+
+/** Create the standard permission gate for a domain and its declared key. */
+export function requireHrm<D extends HrmDomain, P extends HrmPermission<D>>(
+  domain: D,
+  perm: P,
+): (exec: SqlExecutor, orgId: string, actorId: string) => Promise<void> {
+  const [permission, label] = HRM_PERMISSION_MAP[domain][perm] as readonly [string, string];
+  return async (exec, orgId, actorId) => {
+    if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+      throw new HrmAuthorizationError(
+        `${label} requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
+      );
+    }
+  };
+}
+
+function requireMappedHrmPermission(
+  exec: SqlExecutor,
+  orgId: string,
+  actorId: string,
+  domain: HrmDomain,
+  permission: string,
+): Promise<void> {
+  const entry = Object.entries(HRM_PERMISSION_MAP[domain]).find(([, policy]) => policy[0] === permission);
+  if (!entry) throw new Error(`unmapped HRM permission "${permission}" for ${domain}`);
+  return requireHrm(domain, entry[0] as HrmPermission<typeof domain>)(exec, orgId, actorId);
+}
+
+function permissionValues<D extends HrmDomain>(domain: D): readonly HrmPermissionName<D>[] {
+  return Object.freeze(Object.values(HRM_PERMISSION_MAP[domain]).map(([permission]) => permission)) as readonly HrmPermissionName<D>[];
+}
+
 /**
  * Compensation duties (HR-12, 0221/0222). read = bands, architecture and
  * cycle reads; manage = cycles, push, plans and snapshots; approve =
@@ -23,53 +130,17 @@ import type { SqlExecutor } from "../platform/db.ts";
  * spread; the role seed refreshes on re-run).
  */
 // HR-12 begin
-export const HRM_COMPENSATION_PERMISSIONS = [
-  "hrm.compensation.read",
-  "hrm.compensation.manage",
-  "hrm.compensation.approve",
-] as const;
-
-export type HrmCompensationPermission = (typeof HRM_COMPENSATION_PERMISSIONS)[number];
-
-async function requireHrmCompensationAccess(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  permission: HrmCompensationPermission,
-): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
-    throw new HrmAuthorizationError(
-      `Compensation access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
-  }
-}
+export const HRM_COMPENSATION_PERMISSIONS = permissionValues("compensation");
+export type HrmCompensationPermission = HrmPermissionName<"compensation">;
 
 /** See bands, architecture and cycle reads (org configuration). */
-export async function requireHrmCompensationRead(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  return requireHrmCompensationAccess(exec, orgId, actorId, "hrm.compensation.read");
-}
+export const requireHrmCompensationRead = requireHrm("compensation", "read");
 
 /** Run cycles, push rates, author plans and compute snapshots. */
-export async function requireHrmCompensationManage(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  return requireHrmCompensationAccess(exec, orgId, actorId, "hrm.compensation.manage");
-}
+export const requireHrmCompensationManage = requireHrm("compensation", "manage");
 
 /** Decide cycle lines through the Flows approval run. */
-export async function requireHrmCompensationApprove(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  return requireHrmCompensationAccess(exec, orgId, actorId, "hrm.compensation.approve");
-}
+export const requireHrmCompensationApprove = requireHrm("compensation", "approve");
 
 /**
  * Aggregate compensation read for list-shaped reads that name no single
@@ -104,11 +175,7 @@ export async function requireCompensationManageForEmployer(
   employerSubsidiaryId: string | null,
   what: string,
 ): Promise<Set<string> | null> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.compensation.manage"))) {
-    throw new HrmAuthorizationError(
-      "Compensation access requires the hrm.compensation.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("compensation", "manage")(exec, orgId, actorId);
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (employerSubsidiaryId === null) {
     if (allowed !== null) {
@@ -159,11 +226,7 @@ async function requireHrmCompensationAccessOnEmployment(
   employmentId: string,
   permission: HrmCompensationPermission,
 ): Promise<TrustedEmploymentSubject> {
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
-    throw new HrmAuthorizationError(
-      `Compensation access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
-  }
+  await requireMappedHrmPermission(exec, orgId, actorId, "compensation", permission);
   const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
   await assertEmployerScope(exec, orgId, actorId, subject);
   return subject;
@@ -211,8 +274,6 @@ export async function requireHrmCompensationManageOnEmployment(
  * subject or submitter.
  */
 
-export class HrmAuthorizationError extends Error {}
-
 export type RecruitingFeatureKey =
   | "hrmRecruiting"
   | "hrmStructuredInterviews"
@@ -253,13 +314,8 @@ export async function requireRecruitingFeature(
 }
 
 /** Foundation employment duties. No future capabilities are granted here. */
-export const HRM_EMPLOYMENT_PERMISSIONS = [
-  "hrm.employment.read",
-  "hrm.employment.manage",
-  "hrm.employment.approve",
-] as const;
-
-export type HrmEmploymentPermission = (typeof HRM_EMPLOYMENT_PERMISSIONS)[number];
+export const HRM_EMPLOYMENT_PERMISSIONS = permissionValues("employment");
+export type HrmEmploymentPermission = HrmPermissionName<"employment">;
 
 /**
  * Headcount-plan duties (0192). read = see positions, funding and vacancy;
@@ -268,12 +324,8 @@ export type HrmEmploymentPermission = (typeof HRM_EMPLOYMENT_PERMISSIONS)[number
  * its approval stays hrm.employment.approve — there is deliberately no
  * position approve key.
  */
-export const HRM_POSITION_PERMISSIONS = [
-  "hrm.position.read",
-  "hrm.position.manage",
-] as const;
-
-export type HrmPositionPermission = (typeof HRM_POSITION_PERMISSIONS)[number];
+export const HRM_POSITION_PERMISSIONS = permissionValues("position");
+export type HrmPositionPermission = HrmPermissionName<"position">;
 
 /**
  * Process checklist duties (0193): read sees processes and steps, manage
@@ -282,9 +334,8 @@ export type HrmPositionPermission = (typeof HRM_POSITION_PERMISSIONS)[number];
  * the permission-role sync rule re-seeds on deploy). Skipping a required
  * step is NOT covered here: it needs hrm.employment.manage.
  */
-export const HRM_PROCESS_PERMISSIONS = ["hrm.process.read", "hrm.process.manage"] as const;
-
-export type HrmProcessPermission = (typeof HRM_PROCESS_PERMISSIONS)[number];
+export const HRM_PROCESS_PERMISSIONS = permissionValues("process");
+export type HrmProcessPermission = HrmPermissionName<"process">;
 
 // Module-private brand: a real symbol, so a forged record built without
 // this module cannot satisfy the type, and loading is the only producer.
@@ -416,16 +467,17 @@ async function requireHrmEmploymentAccess(
   // home-org bypass. Do not require a local users row first: that treats an
   // established cross-org super-admin as missing. Unknown and inactive
   // principals still fail closed here.
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
+  try {
+    await requireMappedHrmPermission(exec, orgId, actorId, "employment", permission);
+  } catch (error) {
+    if (!(error instanceof HrmAuthorizationError)) throw error;
     const identity = await actorIdentity(exec, orgId, actorId);
     if (!identity?.isActive) {
       throw new HrmAuthorizationError(
         "Employment access refused: the identity behind this action is not established in this organization.",
       );
     }
-    throw new HrmAuthorizationError(
-      `Employment access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
+    throw error;
   }
   const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
   await assertEmployerScope(exec, orgId, actorId, subject);
@@ -442,11 +494,7 @@ async function requireHrmProcessAccess(
   // Same shape as the employment gates: the live grant set decides, then
   // the trusted subject plus the employer scope. No caller-supplied parties,
   // booleans, or scope at any boundary.
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
-    throw new HrmAuthorizationError(
-      `Process access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
-  }
+  await requireMappedHrmPermission(exec, orgId, actorId, "process", permission);
   const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
   await assertEmployerScope(exec, orgId, actorId, subject);
   return subject;
@@ -484,17 +532,7 @@ export async function requireHrmProcessManage(
  * Setup registry UI fences the same writes behind admin.setup.manage; this
  * is the engine-service boundary for direct callers.
  */
-export async function requireHrmProcessConfig(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.process.manage"))) {
-    throw new HrmAuthorizationError(
-      "Process access requires the hrm.process.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
-}
+export const requireHrmProcessConfig = requireHrm("process", "manage");
 
 /** See an employment record. Read-only; accepts `db` or a transaction runner. */
 export async function requireHrmEmploymentRead(
@@ -631,11 +669,7 @@ async function requireHrmPositionAccess(
   positionId: string,
   permission: HrmPositionPermission,
 ): Promise<TrustedPositionSubject> {
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
-    throw new HrmAuthorizationError(
-      `Position access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
-  }
+  await requireMappedHrmPermission(exec, orgId, actorId, "position", permission);
   const subject = await loadTrustedPositionSubject(exec, orgId, positionId);
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (allowed !== null && !allowed.has(subject.employerSubsidiaryId)) {
@@ -682,11 +716,7 @@ export async function requirePositionManageForEmployer(
   actorId: string,
   employerSubsidiaryId: string,
 ): Promise<Set<string> | null> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.position.manage"))) {
-    throw new HrmAuthorizationError(
-      "Position access requires the hrm.position.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("position", "manage")(exec, orgId, actorId);
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (allowed !== null && !allowed.has(employerSubsidiaryId)) {
     throw new HrmAuthorizationError(
@@ -706,11 +736,7 @@ export async function requireAggregatePositionRead(
   orgId: string,
   actorId: string,
 ): Promise<Set<string> | null> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.position.read"))) {
-    throw new HrmAuthorizationError(
-      "Position access requires the hrm.position.read permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("position", "read")(exec, orgId, actorId);
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
@@ -725,44 +751,17 @@ export async function requireAggregatePositionRead(
  * employment keys above (granted via the catalogue spread).
  */
 // HR-19 begin
-export const HRM_DOCUMENT_PERMISSIONS = ["hrm.documents.read", "hrm.documents.manage"] as const;
+export const HRM_DOCUMENT_PERMISSIONS = permissionValues("documents");
+export type HrmDocumentPermission = HrmPermissionName<"documents">;
 
-export type HrmDocumentPermission = (typeof HRM_DOCUMENT_PERMISSIONS)[number];
-
-export const HRM_SURVEY_PERMISSIONS = ["hrm.surveys.manage"] as const;
-
-export type HrmSurveyPermission = (typeof HRM_SURVEY_PERMISSIONS)[number];
-
-async function requireHrmDocumentAccess(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-  permission: HrmDocumentPermission,
-): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
-    throw new HrmAuthorizationError(
-      `Document access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
-  }
-}
+export const HRM_SURVEY_PERMISSIONS = permissionValues("surveys");
+export type HrmSurveyPermission = HrmPermissionName<"surveys">;
 
 /** See HR documents, templates, retention state and exports. */
-export async function requireHrmDocumentsRead(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  return requireHrmDocumentAccess(exec, orgId, actorId, "hrm.documents.read");
-}
+export const requireHrmDocumentsRead = requireHrm("documents", "read");
 
 /** Author templates, issue/send/void documents, run retention and exports. */
-export async function requireHrmDocumentsManage(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  return requireHrmDocumentAccess(exec, orgId, actorId, "hrm.documents.manage");
-}
+export const requireHrmDocumentsManage = requireHrm("documents", "manage");
 
 /**
  * Aggregate half of document authority for list-shaped reads that name no
@@ -791,11 +790,7 @@ export async function requireHrmSurveysManage(
   orgId: string,
   actorId: string,
 ): Promise<Set<string> | null> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.surveys.manage"))) {
-    throw new HrmAuthorizationError(
-      "Survey access requires the hrm.surveys.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("surveys", "manage")(exec, orgId, actorId);
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
@@ -1014,14 +1009,8 @@ export function checkApprovalIdentitySeparation(args: {
 }
 
 /** Leave and attendance duties (HR-5). Confidential like employment. */
-export const HRM_LEAVE_PERMISSIONS = [
-  "hrm.leave.read",
-  "hrm.leave.request",
-  "hrm.leave.approve",
-  "hrm.leave.manage",
-] as const;
-
-export type HrmLeavePermission = (typeof HRM_LEAVE_PERMISSIONS)[number];
+export const HRM_LEAVE_PERMISSIONS = permissionValues("leave");
+export type HrmLeavePermission = HrmPermissionName<"leave">;
 
 async function requireHrmLeaveAccess(
   exec: SqlExecutor,
@@ -1032,11 +1021,7 @@ async function requireHrmLeaveAccess(
 ): Promise<TrustedEmploymentSubject> {
   // Same hardwiring as employment: live grant set, subject loaded from
   // worker_employments on the trusted runner, employer scope enforced.
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
-    throw new HrmAuthorizationError(
-      `Leave access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
-  }
+  await requireMappedHrmPermission(exec, orgId, actorId, "leave", permission);
   const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
   await assertEmployerScope(exec, orgId, actorId, subject);
   return subject;
@@ -1077,17 +1062,7 @@ export async function requireHrmLeaveApprove(
  * subsidiary scope — a type or policy is org configuration, and scoping it
  * by one employer would let two managers define the same code differently.
  */
-export async function requireHrmLeaveManage(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.leave.manage"))) {
-    throw new HrmAuthorizationError(
-      "Leave configuration requires the hrm.leave.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
-}
+export const requireHrmLeaveManage = requireHrm("leaveConfiguration", "manage");
 
 /**
  * The actor's own employments, resolved from users.party_id on the trusted
@@ -1120,11 +1095,7 @@ export async function requireHrmLeaveManageOnEmployment(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.leave.manage"))) {
-    throw new HrmAuthorizationError(
-      "Leave access requires the hrm.leave.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("leave", "manage")(exec, orgId, actorId);
   const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
   await assertEmployerScope(exec, orgId, actorId, subject);
   return subject;
@@ -1143,11 +1114,7 @@ export async function requireAggregateLeaveManage(
   orgId: string,
   actorId: string,
 ): Promise<Set<string> | null> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.leave.manage"))) {
-    throw new HrmAuthorizationError(
-      "Leave access requires the hrm.leave.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("leave", "manage")(exec, orgId, actorId);
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
@@ -1173,9 +1140,8 @@ export async function requireOwnEmploymentForRequest(
 }
 
 /** Recruiting duties (HR-6). Confidential like employment. */
-export const HRM_RECRUITING_PERMISSIONS = ["hrm.recruiting.read", "hrm.recruiting.manage"] as const;
-
-export type HrmRecruitingPermission = (typeof HRM_RECRUITING_PERMISSIONS)[number];
+export const HRM_RECRUITING_PERMISSIONS = permissionValues("recruiting");
+export type HrmRecruitingPermission = HrmPermissionName<"recruiting">;
 
 /**
  * Requisition identity loaded from hrm_requisitions on the trusted runner,
@@ -1251,11 +1217,7 @@ async function requireHrmRecruitingAccess(
   await requireRecruitingFeature(exec, orgId);
   // The live grant set decides, then the trusted subject plus the employer
   // scope. No caller-supplied parties, booleans, or scope at any boundary.
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
-    throw new HrmAuthorizationError(
-      `Recruiting access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
-  }
+  await requireMappedHrmPermission(exec, orgId, actorId, "recruiting", permission);
   const subject = await loadTrustedRequisitionSubject(exec, orgId, requisitionId);
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (allowed !== null && !allowed.has(subject.employerSubsidiaryId)) {
@@ -1303,11 +1265,7 @@ export async function requireRecruitingManageForEmployer(
   employerSubsidiaryId: string,
 ): Promise<Set<string> | null> {
   await requireRecruitingFeature(exec, orgId);
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.recruiting.manage"))) {
-    throw new HrmAuthorizationError(
-      "Recruiting access requires the hrm.recruiting.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("recruiting", "manage")(exec, orgId, actorId);
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
   if (allowed !== null && !allowed.has(employerSubsidiaryId)) {
     throw new HrmAuthorizationError(
@@ -1328,11 +1286,7 @@ export async function requireAggregateRecruitingRead(
   actorId: string,
 ): Promise<Set<string> | null> {
   await requireRecruitingFeature(exec, orgId);
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.recruiting.read"))) {
-    throw new HrmAuthorizationError(
-      "Recruiting access requires the hrm.recruiting.read permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("recruiting", "read")(exec, orgId, actorId);
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
@@ -1423,11 +1377,7 @@ export async function requireHrmRecruitingManageOrg(
   actorId: string,
 ): Promise<void> {
   await requireRecruitingFeature(exec, orgId);
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.recruiting.manage"))) {
-    throw new HrmAuthorizationError(
-      "Recruiting access requires the hrm.recruiting.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("recruiting", "manage")(exec, orgId, actorId);
 }
 
 /**
@@ -1442,25 +1392,16 @@ export async function requireHrmRecruitingReadOrg(
   actorId: string,
 ): Promise<void> {
   await requireRecruitingFeature(exec, orgId);
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.recruiting.read"))) {
-    throw new HrmAuthorizationError(
-      "Recruiting access requires the hrm.recruiting.read permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("recruiting", "read")(exec, orgId, actorId);
 }
 
 /** Performance and retention duties (HR-7, 0196). Confidential like employment. */
-export const HRM_PERFORMANCE_PERMISSIONS = [
-  "hrm.performance.read",
-  "hrm.performance.manage",
-] as const;
-
-export type HrmPerformancePermission = (typeof HRM_PERFORMANCE_PERMISSIONS)[number];
+export const HRM_PERFORMANCE_PERMISSIONS = permissionValues("performance");
+export type HrmPerformancePermission = HrmPermissionName<"performance">;
 
 /** Retention duties (HR-7, 0196): HR-only read of exit records and turnover. */
-export const HRM_RETENTION_PERMISSIONS = ["hrm.retention.read"] as const;
-
-export type HrmRetentionPermission = (typeof HRM_RETENTION_PERMISSIONS)[number];
+export const HRM_RETENTION_PERMISSIONS = permissionValues("retention");
+export type HrmRetentionPermission = HrmPermissionName<"retention">;
 
 async function requireHrmPerformanceGrant(
   exec: SqlExecutor,
@@ -1472,11 +1413,7 @@ async function requireHrmPerformanceGrant(
   // caller-supplied boolean. Cycles and reviews name no single employment,
   // so there is no trusted subject here — the aggregate subsidiary scope
   // below is what list-shaped callers filter by.
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
-    throw new HrmAuthorizationError(
-      `Performance access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
-  }
+  await requireMappedHrmPermission(exec, orgId, actorId, "performance", permission);
 }
 
 /**
@@ -1535,11 +1472,7 @@ export async function requireHrmRetentionRead(
   orgId: string,
   actorId: string,
 ): Promise<Set<string> | null> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.retention.read"))) {
-    throw new HrmAuthorizationError(
-      "Retention access requires the hrm.retention.read permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("retention", "read")(exec, orgId, actorId);
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
@@ -1581,9 +1514,8 @@ export async function loadManagedEmploymentIds(
 }
 
 /** Benefits duties (HR-8). Confidential like employment. */
-export const HRM_BENEFITS_PERMISSIONS = ["hrm.benefits.read", "hrm.benefits.manage"] as const;
-
-export type HrmBenefitsPermission = (typeof HRM_BENEFITS_PERMISSIONS)[number];
+export const HRM_BENEFITS_PERMISSIONS = permissionValues("benefits");
+export type HrmBenefitsPermission = HrmPermissionName<"benefits">;
 
 async function requireHrmBenefitsAccess(
   exec: SqlExecutor,
@@ -1594,11 +1526,7 @@ async function requireHrmBenefitsAccess(
 ): Promise<TrustedEmploymentSubject> {
   // Same hardwiring as employment and leave: live grant set, subject loaded
   // from worker_employments on the trusted runner, employer scope enforced.
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
-    throw new HrmAuthorizationError(
-      `Benefits access requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
-  }
+  await requireMappedHrmPermission(exec, orgId, actorId, "benefits", permission);
   const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
   await assertEmployerScope(exec, orgId, actorId, subject);
   return subject;
@@ -1633,17 +1561,7 @@ export async function requireHrmBenefitsManageOnEmployment(
  * configuration, and scoping it by one employer would let two managers
  * decide the same election differently.
  */
-export async function requireHrmBenefitsManage(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.benefits.manage"))) {
-    throw new HrmAuthorizationError(
-      "Benefits configuration requires the hrm.benefits.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
-}
+export const requireHrmBenefitsManage = requireHrm("benefitsConfiguration", "manage");
 
 /**
  * Aggregate benefits manage authority for employment-spanning writes
@@ -1699,11 +1617,7 @@ export async function requireOwnEmploymentForBenefitsSelf(
   actorId: string,
   employmentId: string,
 ): Promise<TrustedEmploymentSubject> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.request"))) {
-    throw new HrmAuthorizationError(
-      "Benefit elections from the Me workspace require the hrm.self.request permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("benefitElections", "request")(exec, orgId, actorId);
   const subject = await loadTrustedEmploymentSubject(exec, orgId, employmentId);
   await assertEmployerScope(exec, orgId, actorId, subject);
   const own = await loadOwnEmploymentIds(exec, orgId, actorId);
@@ -1726,11 +1640,7 @@ export async function requireAggregateBenefitsRead(
   orgId: string,
   actorId: string,
 ): Promise<Set<string> | null> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.benefits.read"))) {
-    throw new HrmAuthorizationError(
-      "Benefits access requires the hrm.benefits.read permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
+  await requireHrm("benefits", "read")(exec, orgId, actorId);
   return actorAllowedSubsidiaryIds(exec, orgId, actorId);
 }
 
@@ -1744,47 +1654,25 @@ export async function requireAggregateBenefitsRead(
  * structure and refuses a report-less actor by name. A role grant of these
  * keys never substitutes for that resolution and never widens it.
  */
-export const HRM_SELF_PERMISSIONS = ["hrm.self.read", "hrm.self.request"] as const;
+export const HRM_SELF_PERMISSIONS = permissionValues("self");
+export type HrmSelfPermission = HrmPermissionName<"self">;
 
-export type HrmSelfPermission = (typeof HRM_SELF_PERMISSIONS)[number];
-
-export const HRM_TEAM_PERMISSIONS = ["hrm.team.read", "hrm.team.manage"] as const;
-
-export type HrmTeamPermission = (typeof HRM_TEAM_PERMISSIONS)[number];
+export const HRM_TEAM_PERMISSIONS = permissionValues("team");
+export type HrmTeamPermission = HrmPermissionName<"team">;
 
 /**
  * See one's own employment summary, requests, and steps. Permission only —
  * scope comes from users.party_id on the trusted runner in the read
  * service, never from a caller-supplied party.
  */
-export async function requireHrmSelfRead(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.read"))) {
-    throw new HrmAuthorizationError(
-      "Self-service requires the hrm.self.read permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
-}
+export const requireHrmSelfRead = requireHrm("self", "read");
 
 /**
  * Propose a profile change for one's own party. Permission only — the
  * profile service additionally proves the bound employment is the actor's
  * own before a draft is stored.
  */
-export async function requireHrmSelfRequest(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.self.request"))) {
-    throw new HrmAuthorizationError(
-      "Profile changes require the hrm.self.request permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
-}
+export const requireHrmSelfRequest = requireHrm("self", "request");
 
 /**
  * Own-employment subject gate for the self-service change kinds
@@ -1802,11 +1690,7 @@ export async function requireOwnEmploymentSubject(
   employmentId: string,
   permission: HrmSelfPermission,
 ): Promise<TrustedEmploymentSubject> {
-  if (!(await actorHasPermission(exec, orgId, actorId, permission))) {
-    throw new HrmAuthorizationError(
-      `Self-service requires the ${permission} permission — ask an administrator to grant it in /admin/roles.`,
-    );
-  }
+  await requireMappedHrmPermission(exec, orgId, actorId, "selfService", permission);
   const own = await loadOwnEmploymentIds(exec, orgId, actorId);
   if (!own.includes(employmentId)) {
     throw new HrmAuthorizationError(
@@ -1899,25 +1783,11 @@ export async function requireEmploymentOrTeamSubject(
 // hrm.employment.read/manage, enforced at the service boundary on every
 // entry function — the API routes gate the same keys, never instead.
 /** Construction-compliance duties (0223/0224). */
-export const HRM_CONSTRUCTION_PERMISSIONS = [
-  "hrm.construction.read",
-  "hrm.construction.manage",
-] as const;
-
-export type HrmConstructionPermission = (typeof HRM_CONSTRUCTION_PERMISSIONS)[number];
+export const HRM_CONSTRUCTION_PERMISSIONS = permissionValues("construction");
+export type HrmConstructionPermission = HrmPermissionName<"construction">;
 
 /** See construction-compliance configuration and reports. */
-export async function requireHrmConstructionRead(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.construction.read"))) {
-    throw new HrmAuthorizationError(
-      "Construction compliance access requires the hrm.construction.read permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
-}
+export const requireHrmConstructionRead = requireHrm("construction", "read");
 
 /**
  * Construction grant plus the employer-subsidiary scope for the caller to
@@ -1942,17 +1812,7 @@ export async function requireConstructionScope(
 }
 
 /** Author construction-compliance configuration, entries, runs and findings transitions. */
-async function requireHrmConstructionManage(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.construction.manage"))) {
-    throw new HrmAuthorizationError(
-      "Construction compliance access requires the hrm.construction.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
-}
+const requireHrmConstructionManage = requireHrm("construction", "manage");
 // HR-13 end
 
 // HR-14 begin: certification and dispatch-gating duties (0225). Read sees
@@ -1966,38 +1826,14 @@ async function requireHrmConstructionManage(
 // in the read service); managers read their reports' through
 // requireEmploymentOrTeamSubject's structural team scope.
 /** Certification and dispatch-gating duties (0225). */
-export const HRM_QUALIFICATION_PERMISSIONS = [
-  "hrm.certifications.read",
-  "hrm.certifications.manage",
-] as const;
-
-export type HrmQualificationPermission = (typeof HRM_QUALIFICATION_PERMISSIONS)[number];
+export const HRM_QUALIFICATION_PERMISSIONS = permissionValues("certifications");
+export type HrmQualificationPermission = HrmPermissionName<"certifications">;
 
 /** See qualification types, held qualifications, requirements and alerts. */
-export async function requireHrmCertificationsRead(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.certifications.read"))) {
-    throw new HrmAuthorizationError(
-      "Qualification access requires the hrm.certifications.read permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
-}
+export const requireHrmCertificationsRead = requireHrm("certifications", "read");
 
 /** Record, verify, renew and revoke qualifications and author requirements. */
-export async function requireHrmCertificationsManage(
-  exec: SqlExecutor,
-  orgId: string,
-  actorId: string,
-): Promise<void> {
-  if (!(await actorHasPermission(exec, orgId, actorId, "hrm.certifications.manage"))) {
-    throw new HrmAuthorizationError(
-      "Qualification access requires the hrm.certifications.manage permission — ask an administrator to grant it in /admin/roles.",
-    );
-  }
-}
+export const requireHrmCertificationsManage = requireHrm("certifications", "manage");
 
 /**
  * The aggregate half of certification authority for list-shaped reads and
