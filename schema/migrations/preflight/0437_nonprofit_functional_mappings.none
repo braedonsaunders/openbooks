@@ -1,0 +1,1 @@
+No preflight query is needed. This transactional migration creates an empty, tenant-scoped mapping table with effective-date exclusions; it reads or changes no existing tenant rows.
