@@ -2,9 +2,8 @@ import { CloseError } from "../periods/period-policy.ts";
 import { defaultCloseFeatureContext, defaultCloseStepEnabled } from "./features.ts";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
-import { isIsoCalendarDate } from "../platform/business-date.ts";
+import { addCalendarDays, isIsoCalendarDate, parseIsoDate } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
-import { isoDate, utcDate, addDays } from "./calendar.ts";
 import { ensureCloseDefaults } from "./defaults.ts";
 import { periodFingerprint } from "./readiness.ts";
 import { refreshCloseRun, runCloseAutomations } from "./run-automation.ts";
@@ -28,15 +27,15 @@ interface CloseBlueprintStepRow extends Record<string, unknown> {
 }
 
 function addBusinessDays(value: string, days: number): string {
-  let date = utcDate(value);
+  let date = value;
   const direction = days < 0 ? -1 : 1;
   let remaining = Math.abs(days);
   while (remaining > 0) {
-    date = addDays(date, direction);
-    const weekday = date.getUTCDay();
+    date = addCalendarDays(date, direction);
+    const weekday = parseIsoDate(date).getUTCDay();
     if (weekday !== 0 && weekday !== 6) remaining--;
   }
-  return isoDate(date);
+  return date;
 }
 
 function blueprintStepApplies(

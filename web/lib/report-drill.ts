@@ -1,6 +1,7 @@
 import { isPeriodPreset } from '@openbooks/reports'
 import type { StatementBasis, StatementDimFilter, StatementMode } from './statement-matrix'
 import type { AgingBucket, AgingCurrencyBasis, AgingSide } from './reports'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 /** Namespaced so the drill flyout does not rewrite a report page's period. */
 export const REPORT_DRILL_PERIOD_PARAM = 'reportDrillPeriod'
@@ -128,7 +129,6 @@ export type ReportDrillResponse = {
   total: number
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const ACCOUNT_TYPE = /^[a-z][a-z0-9_]{0,63}$/
 const SEGMENT_KEY = /^[a-z][a-z0-9_]{0,63}$/
@@ -141,12 +141,12 @@ function stringValue(value: unknown, max = 200): string | null {
 }
 
 function uuidValue(value: unknown): string | undefined {
-  return typeof value === 'string' && UUID.test(value) ? value : undefined
+  return isUuid(value) ? value : undefined
 }
 
 function uuidList(value: unknown): string[] | undefined {
   if (!Array.isArray(value) || value.length === 0 || value.length > 50) return undefined
-  const ids = value.filter((item): item is string => typeof item === 'string' && UUID.test(item))
+  const ids = value.filter((item): item is string => isUuid(item))
   return ids.length === value.length ? ids : undefined
 }
 
@@ -158,7 +158,7 @@ function dimsValue(value: unknown): StatementDimFilter | undefined {
     segments = {}
     for (const [key, entry] of Object.entries(raw.segments as Record<string, unknown>)) {
       if (Object.keys(segments).length === 20) break
-      if (SEGMENT_KEY.test(key) && typeof entry === 'string' && UUID.test(entry)) segments[key] = entry
+      if (SEGMENT_KEY.test(key) && isUuid(entry)) segments[key] = entry
     }
   }
   // The view's entity set survives the URL round-trip under the same uuid

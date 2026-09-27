@@ -98,13 +98,6 @@
     "reason": "test-only month lengths; month iterates the literals 2026-01, 2026-02, 2026-04, 2028-02"
   },
   {
-    "path": "engine/src/projects/retainage-replay-lock.integration.test.ts",
-    "fn": "nextDay",
-    "test": "",
-    "arg": "y!",
-    "reason": "test-only date stepper; input is the scratch org's contemporary business date, never below year 100"
-  },
-  {
     "path": "engine/src/property/billing-provenance.integration.test.ts",
     "fn": "seedPropertyFixture",
     "test": "",

@@ -23,6 +23,7 @@ import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { assertUnrestrictedScope, ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Customer payment acceptance — hosted checkout links on posted invoices.
@@ -802,11 +803,8 @@ export interface SurchargeResolution {
   feeIncomeAccountId: string | null;
 }
 
-const ACCEPTANCE_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 function assertAcceptanceUuid(value: string, label: string): void {
-  if (typeof value !== "string" || !ACCEPTANCE_UUID_RE.test(value)) {
+  if (!isUuid(value)) {
     throw new PaymentAcceptanceError(`${label} must be a valid UUID`);
   }
 }

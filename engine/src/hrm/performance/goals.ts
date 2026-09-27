@@ -5,6 +5,7 @@ import { loadApprovalPerson, loadManagedEmploymentIds, requireHrmPerformanceOnEm
 import { businessToday } from "../../platform/business-date.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, mathRefusal } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 import {
   assertProgressPercent,
   parseAppliesScope,
@@ -30,14 +31,7 @@ import {
 
 export type GoalStatus = "active" | "achieved" | "missed" | "cancelled";
 
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || !UUID_RE.test(value)) {
-    throw new HrmPerformanceError("INVALID_INPUT", `${field} must be a uuid`);
-  }
-  return value;
-}
+const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 async function assertPerformanceFeature(exec: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
@@ -153,9 +147,9 @@ export async function createGoal(args: {
   weight?: string | number | null;
   cycleId?: string | null;
 }): Promise<GoalDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const employmentId = requireId("employmentId", args.employmentId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const employmentId = requireUuid(args.employmentId, "employmentId");
   if (typeof args.title !== "string" || args.title.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "title must be a non-blank string");
   }
@@ -167,7 +161,7 @@ export async function createGoal(args: {
       `weight must be a non-negative decimal, got ${JSON.stringify(args.weight)}`,
     );
   }
-  const cycleId = args.cycleId == null ? null : requireId("cycleId", args.cycleId);
+  const cycleId = args.cycleId == null ? null : requireUuid(args.cycleId, "cycleId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     await requireGoalAuthority(db, orgId, actorId, employmentId);
@@ -247,9 +241,9 @@ export async function updateGoalProgress(args: {
   progressPercent: number;
   note?: string | null;
 }): Promise<GoalDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const goalId = requireId("goalId", args.goalId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const goalId = requireUuid(args.goalId, "goalId");
   const progress = mathRefusal("INVALID_INPUT", () => assertProgressPercent(args.progressPercent));
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
@@ -291,9 +285,9 @@ export async function setGoalStatus(args: {
   status: "achieved" | "missed" | "cancelled";
   note?: string | null;
 }): Promise<GoalDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const goalId = requireId("goalId", args.goalId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const goalId = requireUuid(args.goalId, "goalId");
   if (args.status !== "achieved" && args.status !== "missed" && args.status !== "cancelled") {
     throw new HrmPerformanceError(
       "INVALID_INPUT",
@@ -377,9 +371,9 @@ export async function getGoal(args: {
   actorId: string;
   goalId: string;
 }): Promise<{ goal: GoalDTO; updates: { progressPercent: number; note: string | null; recordedAt: string }[] }> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const goalId = requireId("goalId", args.goalId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const goalId = requireUuid(args.goalId, "goalId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const goal = await loadGoal(db, orgId, goalId);

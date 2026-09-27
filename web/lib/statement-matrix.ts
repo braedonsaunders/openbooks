@@ -1,8 +1,8 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { calendarDaysBetween } from '@openbooks/engine/src/platform/business-date.ts'
-import { addDays, addMonthsIso, declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
+import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from '@openbooks/engine/src/platform/business-date.ts'
+import { declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr, type ActivityBoundary } from './gl-summary'
 import { MissingRatesError } from './consolidation'
@@ -190,12 +190,6 @@ type AmountColumn = {
   group?: string
 }
 
-function daysBetween(from: string, to: string): number {
-  // calendarDaysBetween parses the ISO strings (exact for years 0001-0099)
-  // instead of Date.UTC, which would remap years 0-99 onto 1900-1999.
-  return calendarDaysBetween(from, to)
-}
-
 /** Report-level dimension filter as a SQL fragment (AND-combined). */
 function dimFilterSql(dims: StatementDimFilter | undefined, subsidiary?: StatementSubsidiaryContext): SQL {
   let w = sql`true`
@@ -260,7 +254,7 @@ function assertRateCoverage(
       previous = w;
       const last = merged[merged.length - 1];
       // +1 day: consecutive accounting periods share no dates but abut.
-      if (last && addDays(last.to, 1) >= w.periodFrom) {
+      if (last && addCalendarDays(last.to, 1) >= w.periodFrom) {
         if (w.periodTo > last.to) last.to = w.periodTo;
       } else {
         merged.push({ from: w.periodFrom, to: w.periodTo });
@@ -593,7 +587,7 @@ export async function priorAccountingWindow(
      where p.org_id = ${orgId} and fc.is_default and fc.is_active and not p.is_adjustment
      order by p.starts_on, p.ends_on
   `)).rows
-  const abuts = (i: number) => periods[i + 1]?.starts_on === addDays(periods[i]!.ends_on, 1)
+  const abuts = (i: number) => periods[i + 1]?.starts_on === addCalendarDays(periods[i]!.ends_on, 1)
   const first = periods.findIndex((p) => p.starts_on === period.from)
   if (first >= 0) {
     // Walk forward through abutting periods until one ends on `period.to`.
@@ -608,8 +602,8 @@ export async function priorAccountingWindow(
       if (contiguous) return { from: periods[priorFirst]!.starts_on, to: periods[first - 1]!.ends_on, aligned: true }
     }
   }
-  const priorTo = addDays(period.from, -1)
-  const priorFrom = addDays(priorTo, -daysBetween(period.from, period.to))
+  const priorTo = addCalendarDays(period.from, -1)
+  const priorFrom = addCalendarDays(priorTo, -calendarDaysBetween(period.from, period.to))
   return { from: priorFrom, to: priorTo, aligned: false }
 }
 
@@ -626,7 +620,7 @@ async function comparePeriods(
   const current = { key: 'current', label: compare === 'none' ? periodLabel : 'Current', from: period.from, to: period.to }
   if (compare === 'none') return [current]
   if (compare === 'prior_year') {
-    return [current, { key: 'prior', label: 'Prior year', from: addMonthsIso(period.from, -12), to: addMonthsIso(period.to, -12) }]
+    return [current, { key: 'prior', label: 'Prior year', from: addMonthsClamped(period.from, -12), to: addMonthsClamped(period.to, -12) }]
   }
   const prior = await priorAccountingWindow(orgId, period)
   return [current, { key: 'prior', label: prior.aligned ? 'Prior period' : 'Prior period (equal length)', from: prior.from, to: prior.to }]

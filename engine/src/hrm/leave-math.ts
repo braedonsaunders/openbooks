@@ -1,3 +1,4 @@
+import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from "../platform/civil-date.ts";
 import { parseCivilDate } from "./temporal.ts";
 
 /**
@@ -61,41 +62,6 @@ export function subHours(a: string, b: string): string {
   return formatCents(parseHoursToCents(a) - parseHoursToCents(b));
 }
 
-interface CivilParts {
-  year: number;
-  month: number;
-  day: number;
-}
-
-function splitParts(date: string): CivilParts {
-  parseCivilDate(date);
-  return {
-    year: Number(date.slice(0, 4)),
-    month: Number(date.slice(5, 7)),
-    day: Number(date.slice(8, 10)),
-  };
-}
-
-function isLeapYear(year: number): boolean {
-  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-}
-
-function daysInMonth(year: number, month: number): number {
-  if (month === 2) return isLeapYear(year) ? 29 : 28;
-  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
-}
-
-function formatParts(parts: CivilParts): string {
-  return `${String(parts.year).padStart(4, "0")}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
-}
-
-function nextDay(date: string): string {
-  const parts = splitParts(date);
-  if (parts.day < daysInMonth(parts.year, parts.month)) return formatParts({ ...parts, day: parts.day + 1 });
-  if (parts.month < 12) return formatParts({ year: parts.year, month: parts.month + 1, day: 1 });
-  return formatParts({ year: parts.year + 1, month: 1, day: 1 });
-}
-
 /** Every civil day in [start, end], inclusive, as YYYY-MM-DD text. */
 export function eachDayOfRange(start: string, end: string): string[] {
   parseCivilDate(start);
@@ -112,7 +78,7 @@ export function eachDayOfRange(start: string, end: string): string[] {
   for (;;) {
     days.push(cursor);
     if (cursor === end) break;
-    cursor = nextDay(cursor);
+    cursor = addCalendarDays(cursor, 1);
     if (days.length > 3700) {
       throw new LeaveMathError(
         `leave range ${start} to ${end} exceeds ten years — file separate requests per accrual year`,
@@ -236,7 +202,7 @@ export function accrualEarnedAcrossSegments(
   if (windowed.some((seg) => seg.rule.kind === "unlimited")) return null;
   // Day-number grid of the accrual year for slice-start vesting below.
   // Built once: every segment of the call shares the year's civil grid.
-  const yearEnd = prevDay(addYears(yearStart, 1));
+  const yearEnd = addCalendarDays(addMonthsClamped(yearStart, 12), -1);
   const yearDates = eachDayOfRange(yearStart, yearEnd);
   const yearDays = yearDates.length;
   const dayIndex = new Map(yearDates.map((day, index) => [day, index]));
@@ -324,7 +290,7 @@ export function selectReigns<T extends PolicyCandidate & { rule: AccrualRule }>(
     const pick = selectPolicy(policies, scope, day);
     if (pick?.id !== openId) {
       if (openId !== null && openRule !== null) {
-        reigns.push({ rule: openRule, from: openFrom, to: prevDay(day) });
+        reigns.push({ rule: openRule, from: openFrom, to: addCalendarDays(day, -1) });
       }
       openId = pick?.id ?? null;
       openRule = pick?.rule ?? null;
@@ -335,16 +301,6 @@ export function selectReigns<T extends PolicyCandidate & { rule: AccrualRule }>(
     reigns.push({ rule: openRule, from: openFrom, to });
   }
   return reigns;
-}
-
-function prevDay(date: string): string {
-  const parts = splitParts(date);
-  if (parts.day > 1) return formatParts({ ...parts, day: parts.day - 1 });
-  if (parts.month > 1) {
-    const month = parts.month - 1;
-    return formatParts({ year: parts.year, month, day: daysInMonth(parts.year, month) });
-  }
-  return formatParts({ year: parts.year - 1, month: 12, day: 31 });
 }
 
 /** Whole accrual slices completed in [yearStart, asOf]: 0..periodsPerYear. */
@@ -358,30 +314,13 @@ export function wholePeriodsElapsed(
   // Exclusive-end day counts: the accrual year is [yearStart, next anniversary),
   // elapsed is [yearStart, day after asOf). Inclusive double-counting made a
   // 365-day year read 366 and stole the year's last slice.
-  const yearEndExclusive = addYears(yearStart, 1);
-  const cappedExclusive = asOf >= yearEndExclusive ? yearEndExclusive : nextDay(asOf);
-  const elapsedDays = cappedExclusive <= yearStart ? 0 : eachDayOfRange(yearStart, prevDay(cappedExclusive)).length;
-  const yearDays = eachDayOfRange(yearStart, prevDay(yearEndExclusive)).length;
+  const yearEndExclusive = addMonthsClamped(yearStart, 12);
+  const cappedExclusive = asOf >= yearEndExclusive ? yearEndExclusive : addCalendarDays(asOf, 1);
+  const elapsedDays = cappedExclusive <= yearStart ? 0 : eachDayOfRange(yearStart, addCalendarDays(cappedExclusive, -1)).length;
+  const yearDays = eachDayOfRange(yearStart, addCalendarDays(yearEndExclusive, -1)).length;
   // Slice length in days, fractional slices never credit: floor only.
   const elapsed = Math.floor((elapsedDays * periodsPerYear) / yearDays);
   return Math.min(periodsPerYear, Math.max(0, elapsed));
-}
-
-function daysBetweenInclusive(start: string, end: string): number {
-  return eachDayOfRange(start, end).length;
-}
-
-function addYears(date: string, years: number): string {
-  const y = Number(date.slice(0, 4)) + years;
-  const rest = date.slice(4);
-  const candidate = `${String(y).padStart(4, "0")}${rest}`;
-  // Feb 29 lands on Feb 28 outside leap years — the accrual year still ends.
-  try {
-    parseCivilDate(candidate);
-    return candidate;
-  } catch {
-    return `${String(y).padStart(4, "0")}-02-28`;
-  }
 }
 
 /**
@@ -401,7 +340,10 @@ export function carryoverApplied(
   if (unused <= 0n) return "0";
   if (rule.kind === "none") return "0";
   if (rule.expires_after_days != null) {
-    const daysIn = daysBetweenInclusive(yearStart, asOf) - 1;
+    if (asOf < yearStart) {
+      throw new LeaveMathError(`as-of ${asOf} is before the carryover year start ${yearStart}`);
+    }
+    const daysIn = calendarDaysBetween(yearStart, asOf);
     if (daysIn > rule.expires_after_days) return "0";
   }
   if (rule.kind === "carry_all") return formatCents(unused);

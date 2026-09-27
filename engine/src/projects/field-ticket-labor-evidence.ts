@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { db, withOrg } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 export type FieldTicketLaborEvidenceBasis =
   | "operational_time"
@@ -63,14 +64,12 @@ export interface FieldTicketLaborEvidenceResult {
 
 export class FieldTicketLaborEvidenceError extends Error {}
 
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DECIMAL = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const HASH = /^[0-9a-f]{64}$/i;
 
 function validateInput(args: CaptureFieldTicketLaborEvidenceArgs): void {
-  if (!UUID.test(args.orgId) || !UUID.test(args.fieldTicketId) || !UUID.test(args.actorId)) {
+  if (!isUuid(args.orgId) || !isUuid(args.fieldTicketId) || !isUuid(args.actorId)) {
     throw new FieldTicketLaborEvidenceError("invalid Field Ticket evidence identity");
   }
   if (!args.reason.trim()) {
@@ -93,11 +92,11 @@ function validateInput(args: CaptureFieldTicketLaborEvidenceArgs): void {
   const timeEntryIds = new Set<string>();
   const sourceRefs = new Set<string>();
   for (const [index, line] of args.lines.entries()) {
-    if (!UUID.test(line.employeePartyId) || !line.employeeName.trim()) {
+    if (!isUuid(line.employeePartyId) || !line.employeeName.trim()) {
       throw new FieldTicketLaborEvidenceError(`labor line ${index + 1} needs an employee`);
     }
     for (const value of [line.itemId, line.timeTypeId, line.projectTaskId, line.timeEntryId]) {
-      if (value != null && !UUID.test(value)) {
+      if (value != null && !isUuid(value)) {
         throw new FieldTicketLaborEvidenceError(`labor line ${index + 1} has an invalid reference`);
       }
     }

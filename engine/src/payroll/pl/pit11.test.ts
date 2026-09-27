@@ -31,10 +31,10 @@ test("the PIT-11 row grammar refuses what its population never builds", () => {
   }
 });
 
-test("the local UUID copy agrees with the canonical helper on every shape", () => {
-  // pit11.ts carries its own copy of the row-id UUID shape to stay out of
-  // the packs import cycle (see the comment beside PIT11_ROW_UUID_RE). A
-  // copy that drifts 404s real rows or admits foreign ones — so this pins
+test("the PIT-11 row-id check agrees with the canonical helper on every shape", () => {
+  // pit11.ts checks row ids with the platform isUuid rather than importing
+  // the registry helper (that edge is a packs import cycle). A check that
+  // drifts from it 404s real rows or admits foreign ones — so this pins
   // null-ness parity on a battery of realistic and adversarial strings.
   const cases = [
     EMP,

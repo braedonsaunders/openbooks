@@ -19,6 +19,7 @@ import {
   parseCivilDate,
   resolveAsOf,
 } from "./temporal.ts";
+import { inputGuards } from "./input-guards.ts";
 
 /**
  * Canonical as-of position READ service (no mutations).
@@ -46,6 +47,8 @@ import {
  * referenced subsidiary or department with no name row is a refusal:
  * vacancy must never be misattributed.
  */
+
+const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new HrmPositionError("INVALID_INPUT", message));
 
 async function assertPositionFeature(exec: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
@@ -522,13 +525,8 @@ async function namesById(
  * half (grant + employer-subsidiary scope).
  */
 export async function loadVacancyAsOf(exec: SqlExecutor, query: VacancyQuery): Promise<VacancyDTO> {
-  const orgId = query.orgId;
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new HrmPositionError("INVALID_INPUT", "orgId must be a non-empty string");
-  }
-  if (typeof query.actorId !== "string" || query.actorId.length === 0) {
-    throw new HrmPositionError("INVALID_INPUT", "actorId must be a non-empty string");
-  }
+  const orgId = requireOrgId(query.orgId);
+  requireActorId(query.actorId);
   const allowed = await requireAggregatePositionRead(exec, orgId, query.actorId);
   const positions = await resolveRows(exec, orgId, allowed, query);
   const subsidiaryIds = [...new Set(positions.map((row) => row.version.employerSubsidiaryId))];
@@ -637,10 +635,7 @@ export async function loadVacancyAsOf(exec: SqlExecutor, query: VacancyQuery): P
  * only: no mutations, no payroll fanout.
  */
 export async function getVacancyAsOf(query: VacancyQuery): Promise<VacancyDTO> {
-  const orgId = query.orgId;
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new HrmPositionError("INVALID_INPUT", "orgId must be a non-empty string");
-  }
+  const orgId = requireOrgId(query.orgId);
   return withOrgTransaction(orgId, async () => {
     await assertPositionFeature(db, orgId);
     return loadVacancyAsOf(db, query);
@@ -673,13 +668,8 @@ export interface PositionOptionDTO {
  * than leaking existence.
  */
 export async function listPositionOptions(query: PositionOptionsQuery): Promise<readonly PositionOptionDTO[]> {
-  const orgId = query.orgId;
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new HrmPositionError("INVALID_INPUT", "orgId must be a non-empty string");
-  }
-  if (typeof query.actorId !== "string" || query.actorId.length === 0) {
-    throw new HrmPositionError("INVALID_INPUT", "actorId must be a non-empty string");
-  }
+  const orgId = requireOrgId(query.orgId);
+  requireActorId(query.actorId);
   const limit = query.limit ?? 25;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
     throw new HrmPositionError("INVALID_INPUT", "limit must be an integer between 1 and 100");
@@ -756,13 +746,8 @@ export interface PositionAsOfQuery extends VacancyQuery {
  * where it is legitimately absent).
  */
 export async function getPositionAsOf(query: PositionAsOfQuery): Promise<PositionDetailDTO> {
-  const orgId = query.orgId;
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new HrmPositionError("INVALID_INPUT", "orgId must be a non-empty string");
-  }
-  if (typeof query.positionId !== "string" || query.positionId.length === 0) {
-    throw new HrmPositionError("INVALID_INPUT", "positionId must be a non-empty string");
-  }
+  const orgId = requireOrgId(query.orgId);
+  requireId(query.positionId, "positionId");
   return withOrgTransaction(orgId, async () => {
     await assertPositionFeature(db, orgId);
     // A point-in-time read is scoped by the version it resolves, not by the

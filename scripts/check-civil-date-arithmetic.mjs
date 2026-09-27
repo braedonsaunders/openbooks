@@ -13,11 +13,12 @@
  * dates in 0096 refused as "not real".
  *
  * The single civil-date definition lives in
- * engine/src/platform/business-date.ts (utcDateFromParts and friends, built
- * on the `new Date(0)` + setUTCFullYear idiom); database-free leaves carry
- * the same 3-line idiom locally with a pointer comment because db.ts creates
- * pools and reads .env at import; packages/reports shares one
- * utcCivilDate in fiscal-calendar.ts because it sits below the engine.
+ * engine/src/platform/civil-date.ts (utcDateFromParts and friends, built on
+ * the `new Date(0)` + setUTCFullYear idiom). It imports nothing that touches
+ * the database, so database-free leaves and client components import it
+ * directly; business-date.ts re-exports it for server code. packages/reports
+ * shares one utcCivilDate in fiscal-calendar.ts because it sits below the
+ * engine.
  *
  * A site violates when EITHER holds (AST-walked, never grepped — comments
  * and string literals mentioning Date.UTC do not count):
@@ -31,7 +32,7 @@
  *          from an instant or an ISO string is exact for years 0001-9999.
  *
  * The scan covers engine/src, web/lib and packages (.ts/.tsx, tests
- * included). engine/src/platform/business-date.ts itself is excluded: it
+ * included). engine/src/platform/civil-date.ts itself is excluded: it
  * OWNS the definition. e2e/ and scripts/ are out of scope: e2e specs pin
  * contemporary wall-clock years against live servers, and scripts/ is dev
  * tooling — neither ships civil-date arithmetic.
@@ -54,7 +55,7 @@ const ts = requireFromRoot("typescript");
 
 const SELF_PATH = "scripts/check-civil-date-arithmetic.mjs";
 export const ALLOWLIST_PATH = "scripts/check-civil-date-arithmetic.allowlist.json";
-const OWNER_PATH = "engine/src/platform/business-date.ts";
+const OWNER_PATH = "engine/src/platform/civil-date.ts";
 
 export function repoRoot() {
   return join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -231,8 +232,8 @@ export function checkTree(allowlist = loadAllowlist(), findings = scanTree()) {
       problems.push(
         `${finding.path}:${finding.line} [${finding.fn}] ${finding.kind}(${finding.arg}, …) builds a civil date with a non-literal year — ` +
         `Date.UTC/new Date map years 0-99 onto 1900-1999. Construct through ` +
-        `engine/src/platform/business-date.ts (utcDateFromParts / calendarDaysBetween / inclusiveCalendarDays), ` +
-        `or carry the setUTCFullYear idiom locally with a pointer comment when the module must stay db-free. ` +
+        `engine/src/platform/civil-date.ts (utcDateFromParts / calendarDaysBetween / inclusiveCalendarDays; ` +
+        `database-free, so any module may import it). ` +
         `A wall-clock site that provably cannot see a year below 100 may take an allow-list entry with its reason.`,
       );
     }

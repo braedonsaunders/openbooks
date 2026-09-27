@@ -8,6 +8,7 @@ import { CloseError, assertPeriodModulesOpen } from "../periods/period-policy.ts
 import { DepreciationRefusalError } from "./depreciation-errors.ts";
 import { computeUnitsOfProductionCharge, type DepreciationMethod } from "./depreciation-schedule-math.ts";
 import { assetDepreciationCalendar, primaryBookId } from "./depreciation-schedule-build.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /** Persist a manual/usage depreciation fact through exact decimal then ledger money. Fail closed. */
 function persistDepreciationInputValue(value: unknown): string {
@@ -57,9 +58,7 @@ export async function recordDepreciationInput(
     throw new DepreciationRefusalError("effective date is required");
   if (!memo) throw new DepreciationRefusalError("an accounting memo is required");
   if (
-    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      args.evidenceFileId,
-    )
+    !isUuid(args.evidenceFileId)
   ) {
     throw new DepreciationRefusalError("an attached evidence file is required");
   }

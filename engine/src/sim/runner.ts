@@ -15,7 +15,6 @@ import {
   readWorld,
   writeWorld,
   runDirFor,
-  addDays,
   isMonthEnd,
   recordCoverage,
   type RunManifest,
@@ -24,6 +23,7 @@ import type { SimContext } from "./context.ts";
 import type { SimOrg } from "./world.ts";
 import { autopilotDay } from "./autopilot.ts";
 import { reconcileDocumentSequences } from "../records/numbering.ts";
+import { addCalendarDays } from "../platform/civil-date.ts";
 
 /**
  * Day-loop primitives. The operator (Claude Code) drives the loop: `dayStart`
@@ -197,7 +197,7 @@ export async function dayStart(runDir: string): Promise<DayStartResult> {
     writeManifest(runDir, manifest);
     return { simDate: manifest.simDate, events: { billsArrived: 0, invoicesPrepared: 0, paymentsArrived: 0 }, done: true };
   }
-  const simDate = addDays(manifest.simDate, 1);
+  const simDate = addCalendarDays(manifest.simDate, 1);
   manifest.status = "running";
 
   const events = await withSimClock(simDate, () =>

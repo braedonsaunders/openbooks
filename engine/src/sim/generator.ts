@@ -3,7 +3,8 @@ import { db } from "../platform/db.ts";
 import { createPaymentDocument } from "../payments/payment-documents.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { add, cmp, mulDecimal, neg, sum } from "../money/money.ts";
-import { addDays, isWeekend, isMonthEnd, dayOfMonth } from "./manifest.ts";
+import { isWeekend, isMonthEnd, dayOfMonth } from "./manifest.ts";
+import { addCalendarDays } from "../platform/civil-date.ts";
 import { mark, nextNumber, type SimContext } from "./context.ts";
 import type { SimJob } from "./world.ts";
 import { createDraftDocument, collectibleOpenItems } from "./activities/documents.ts";
@@ -75,7 +76,7 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
       documentNumber: nextNumber(ctx, "BILL"),
       partyId: vendor.id,
       documentDate: ctx.simDate,
-      dueDate: addDays(ctx.simDate, vendor.termDays),
+      dueDate: addCalendarDays(ctx.simDate, vendor.termDays),
       createdBy: ctx.world.actors.apClerk,
       currency: ctx.world.currency,
       memo: `${category} from ${vendor.name}`,
@@ -114,9 +115,9 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
       const customer = r.pick(ctx.world.customers);
       const category = r.pick(customer.revenueCategories);
       const accountId = ctx.world.accounts[category] ?? ctx.world.accounts.revenueService!;
-      const dueDate = addDays(ctx.simDate, customer.termDays);
+      const dueDate = addCalendarDays(ctx.simDate, customer.termDays);
       const { behavior, delayDays, payFraction } = drawBehavior(r, customer);
-      const expectedPayDate = delayDays === null ? null : addDays(dueDate, delayDays);
+      const expectedPayDate = delayDays === null ? null : addCalendarDays(dueDate, delayDays);
       await createDraftDocument(ctx.world, {
         kind: "customer_invoice",
         documentNumber: nextNumber(ctx, "INV"),
@@ -312,7 +313,7 @@ async function generateExpenseReports(ctx: SimContext, rng: SimContext["rng"], w
       documentNumber: nextNumber(ctx, "EXP"),
       partyId: emp.id,
       documentDate: ctx.simDate,
-      dueDate: addDays(ctx.simDate, 14),
+      dueDate: addCalendarDays(ctx.simDate, 14),
       createdBy: ctx.world.actors.apClerk,
       currency: ctx.world.currency,
       memo: `Expense report — ${emp.name}`,
@@ -338,7 +339,7 @@ async function mkJobBill(
     documentNumber: nextNumber(ctx, "BILL"),
     partyId: vendor.id,
     documentDate: ctx.simDate,
-    dueDate: addDays(ctx.simDate, vendor.termDays),
+    dueDate: addCalendarDays(ctx.simDate, vendor.termDays),
     createdBy: ctx.world.actors.apClerk,
     currency: ctx.world.currency,
     memo: `${category} — ${job.name}`,

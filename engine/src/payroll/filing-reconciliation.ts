@@ -3,6 +3,7 @@ import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 export interface PayrollFilingReconciliation {
   stubId: string;
@@ -28,17 +29,15 @@ export async function reconcilePayrollFilingAccounts(input: {
       "Provide between 1 and 1000 reviewed payroll attribution rows.",
     );
   }
-  const uuid =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const seen = new Set<string>();
   for (const row of input.rows) {
     if (
       !row ||
       typeof row.stubId !== "string" ||
-      !uuid.test(row.stubId) ||
+      !isUuid(row.stubId) ||
       (row.filingAccountId !== null &&
         (typeof row.filingAccountId !== "string" ||
-          !uuid.test(row.filingAccountId))) ||
+          !isUuid(row.filingAccountId))) ||
       typeof row.reason !== "string" ||
       !row.reason.trim() ||
       typeof row.reference !== "string" ||

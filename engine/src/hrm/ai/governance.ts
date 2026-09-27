@@ -13,6 +13,7 @@ import { featureEnabled, type FeatureState } from "../../organization/feature-re
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmAuthorizationError, loadApprovalPerson, requireHrmSelfRead } from "../authorization.ts";
 import { AiRailsError } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 import { AI_CAPABILITIES, assertAutonomyAtOrBelowMax, requireCapability } from "./registry.ts";
 
 /**
@@ -24,14 +25,10 @@ import { AI_CAPABILITIES, assertAutonomyAtOrBelowMax, requireCapability } from "
  * one transaction, and a write matching zero rows fails, never succeeds.
  */
 
+const { requireOrgId, requireActorId } = inputGuards((message) => new AiRailsError("ai_invalid_input", message));
+
 function requireIds(orgId: unknown, actorId: unknown): { orgId: string; actorId: string } {
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new AiRailsError("ai_invalid_input", "orgId must be a non-empty string");
-  }
-  if (typeof actorId !== "string" || actorId.length === 0) {
-    throw new AiRailsError("ai_invalid_input", "actorId must be a non-empty string");
-  }
-  return { orgId, actorId };
+  return { orgId: requireOrgId(orgId), actorId: requireActorId(actorId) };
 }
 
 /** Engine-side feature gate: the ledger refuses while hrm itself is off. */

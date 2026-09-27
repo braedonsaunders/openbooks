@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { allocationScopeVisible } from "../organization/allocation-scope.ts";
 import type { AllocationRunStatus, AllocationRunTrigger, RunComputation } from "./types.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Run + lineage READS for the Runs tab and the lineage drill.
@@ -27,14 +28,12 @@ export class RunQueryError extends Error {
   }
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 function fail(code: RunQueryCode, message: string): never {
   throw new RunQueryError(code, message);
 }
 
 function asUuid(value: unknown, field: string): string {
-  if (typeof value !== "string" || !UUID_RE.test(value)) fail("validation", `${field} must be a uuid`);
+  if (!isUuid(value)) fail("validation", `${field} must be a uuid`);
   return value as string;
 }
 

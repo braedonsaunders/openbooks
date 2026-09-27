@@ -120,7 +120,7 @@ export async function prepareExpenseEdit(
   // different subsidiary than the report — reads as missing, exactly like
   // the picker that only offers visible employees.
   if (body.partyId !== undefined && body.partyId !== null) {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.partyId)) {
+    if (!isUuid(body.partyId)) {
       throw new DocumentEditError(404, 'party not found in this organization')
     }
     const owner = (await db.execute<{ id: string; subsidiary_id: string | null }>(
@@ -165,7 +165,7 @@ export async function prepareExpenseEdit(
   // 404 reveals nothing about another tenant's chart.
   if (body.lines !== undefined) {
     const accountIds = [...new Set(body.lines.map((l) => l.accountId).filter((v): v is string => typeof v === 'string' && v.length > 0))]
-    const malformed = accountIds.filter((v) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v))
+    const malformed = accountIds.filter((v) => !isUuid(v))
     const usable = malformed.length === 0 && accountIds.length > 0
       ? (await db.execute<{ id: string }>(sql`
           select id from accounts

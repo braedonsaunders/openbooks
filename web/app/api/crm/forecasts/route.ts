@@ -7,7 +7,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
-import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { addCalendarDays, addMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { calculateForecast } from '../../../../lib/crm'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams
   const today = await businessToday(gate.user.orgId)
   const defaultStart = startOfMonth(today)
-  const defaultEnd = addCalendarDays(addCalendarMonthsStart(defaultStart, 3), -1)
+  const defaultEnd = addCalendarDays(addMonthsStart(defaultStart, 3), -1)
   const periodStart = params.get('periodStart') ?? defaultStart
   const periodEnd = params.get('periodEnd') ?? defaultEnd
   const ownerUserId = params.get('ownerUserId')

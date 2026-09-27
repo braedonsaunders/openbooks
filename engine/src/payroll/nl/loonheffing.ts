@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { toCents } from "../../money/money.ts";
-import { daysInCivilMonth, isIsoCalendarDate } from "../../platform/business-date.ts";
+import { addMonthsClamped, isIsoCalendarDate } from "../../platform/business-date.ts";
 import { unsealSecret } from "../../platform/secrets.ts";
 import { PayrollError } from "../error.ts";
 import { isValidBsn } from "./bsn.ts";
@@ -681,18 +681,6 @@ async function nlProfileBsn(args: Pick<
   return sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
 }
 
-/** ISO date plus whole calendar months, clamping the day to the target month's length. */
-function addCalendarMonths(iso: string, months: number): string {
-  const year = Number(iso.slice(0, 4));
-  const monthIndex = Number(iso.slice(5, 7)) - 1 + months;
-  const day = Number(iso.slice(8, 10));
-  const targetYear = year + Math.floor(monthIndex / 12);
-  const targetMonth = monthIndex % 12;
-  const lastDay = daysInCivilMonth(targetYear, targetMonth + 1);
-  const clamped = Math.min(day, lastDay);
-  return `${targetYear}-${String(targetMonth + 1).padStart(2, "0")}-${String(clamped).padStart(2, "0")}`;
-}
-
 export async function computeNlStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
@@ -812,7 +800,7 @@ export async function computeNlStatutory(
           + "dates on the nl_contract certificate before running payroll",
         );
       }
-      if (terminated < addCalendarMonths(start, 2)) {
+      if (terminated < addMonthsClamped(start, 2)) {
         throw new PayrollError(
           `the NL low AWf rate revises to high retroactively: employment ended ${terminated}, within two `
           + `months of the contract start ${start} (Rekenvoorschriften chapter 12). The pack has no `

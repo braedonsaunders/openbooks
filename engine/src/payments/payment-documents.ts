@@ -12,6 +12,7 @@ import { paymentBookId } from "./payment-accounts.ts";
 import { openItemsForParty, loadPaymentDocument } from "./payment-queries.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
 import { isPaymentKind, lockEditablePaymentDocument } from "../payments-core/payment-document-lock.ts";
+import { isUuid } from "../platform/uuid.ts";
 export { isPaymentKind, lockEditablePaymentDocument };
 const NUMBER_PREFIX: Record<PaymentKind, string> = {
   vendor_payment: "PAY-",
@@ -170,9 +171,7 @@ export async function updateDraftPayment(
       controlAccountId,
       feeIncomeAccountId,
     ].filter((value): value is string => value !== null && value !== undefined);
-    const uuidPattern =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (paymentReferenceIds.some((value) => !uuidPattern.test(value))) {
+    if (paymentReferenceIds.some((value) => !isUuid(value))) {
       throw new PaymentError("payment accounting account must be a valid UUID");
     }
 

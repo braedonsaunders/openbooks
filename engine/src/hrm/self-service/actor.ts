@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../../platform/db.ts";
+import { inputGuards } from "../input-guards.ts";
 
 /**
  * Self-service actor resolution (HR-9).
@@ -23,12 +24,7 @@ export class SelfServiceError extends Error {
   }
 }
 
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new SelfServiceError("REFUSED", `${field} must be a non-empty string`);
-  }
-  return value;
-}
+const { requireId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
 
 /**
  * The person behind a login. Throws NO_LINK naming the remedy when the
@@ -40,8 +36,8 @@ export async function actorPartyOf(
   orgId: string,
   userId: string,
 ): Promise<string> {
-  const org = requireId("orgId", orgId);
-  const user = requireId("userId", userId);
+  const org = requireId(orgId, "orgId");
+  const user = requireId(userId, "userId");
   const row = (await exec.execute<{ partyId: string | null }>(sql`
     select party_id as "partyId" from users where org_id = ${org} and id = ${user}
   `)).rows[0];

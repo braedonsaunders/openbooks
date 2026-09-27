@@ -3,7 +3,7 @@ import { periodLockBlocksPosting } from "../periods/period-policy.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 import { averageSpotRate, lookupSpotRate } from "../fx/spot-rate.ts";
 import { db, orgContext, withOrgContext } from "../platform/db.ts";
-import { addCalendarDays } from "../platform/business-date.ts";
+import { addCalendarDays, isoDateOf } from "../platform/business-date.ts";
 import { PNL_TYPES } from "../records/account-types.ts";
 import { financialClosePeriodScope } from "../close/fx-revaluation.ts";
 import {
@@ -296,11 +296,11 @@ export async function runOwnershipConsolidationIn(
   const nextDay = (iso: string): string => addCalendarDays(iso, 1);
   // select * returns DATE columns as Date objects; the chain rows above are
   // ::text. Normalize before keying so the lookup cannot silently miss.
-  const isoDate = (value: string | Date): string =>
-    typeof value === "string" ? value : value.toISOString().slice(0, 10);
+  const dateKey = (value: string | Date): string =>
+    typeof value === "string" ? value : isoDateOf(value);
   for (const interest of interests.rows) {
     const group = byChain.get(
-      `${interest.subsidiary_id} ${isoDate(interest.acquisition_date)}`,
+      `${interest.subsidiary_id} ${dateKey(interest.acquisition_date)}`,
     );
     if (!group) continue;
     const idx = group.findIndex((row) => row.id === interest.id);

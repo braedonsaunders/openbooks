@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { withSimClock } from "./clock.ts";
 import {
-  addCalendarDays, addCalendarMonthsStart, businessTimeZone, businessToday, calendarQuarterBounds,
+  addCalendarDays, addMonthsStart, businessTimeZone, businessToday, calendarQuarterBounds,
   formatInZone, formatTimeInZone, formatTimestampInZone, mondayOfIsoWeek, startOfMonth, weekStartsEndingOn,
 } from "./business-date.ts";
 import { createScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
@@ -61,7 +61,7 @@ test("calendar helpers stay on the YYYY-MM-DD grid, not the host timezone", () =
     start: "2026-01-01", end: "2026-03-31",
   });
   assert.equal(addCalendarDays("2026-08-21", -7), "2026-08-14");
-  assert.equal(addCalendarMonthsStart("2026-08-21", -11), "2025-09-01");
+  assert.equal(addMonthsStart("2026-08-21", -11), "2025-09-01");
 });
 
 test("an unrecognized zone is refused, never silently misformatted", () => {

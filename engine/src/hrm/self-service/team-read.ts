@@ -9,6 +9,7 @@ import {
 } from "../authorization.ts";
 import { actorPartyOf, SelfServiceError } from "./actor.ts";
 import { loadMyEmploymentSummaries, type MyEmploymentSummary } from "./self-read.ts";
+import { inputGuards } from "../input-guards.ts";
 
 /**
  * Manager team reads (HR-9): exactly the actor's direct reports, one level.
@@ -34,19 +35,7 @@ async function assertHrmFeatureOn(exec: SqlExecutor, orgId: string): Promise<voi
   }
 }
 
-function requireOrgId(orgId: unknown): string {
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new SelfServiceError("REFUSED", "orgId must be a non-empty string");
-  }
-  return orgId;
-}
-
-function requireActorId(actorId: unknown): string {
-  if (typeof actorId !== "string" || actorId.length === 0) {
-    throw new SelfServiceError("REFUSED", "actorId must be a non-empty string");
-  }
-  return actorId;
-}
+const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
 
 /**
  * The actor's direct-report employment ids as of today. One level: rows
@@ -105,9 +94,7 @@ export async function findTeamEmploymentIdsForParty(query: {
 }): Promise<string[]> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  if (typeof query.workerPartyId !== "string" || query.workerPartyId.length === 0) {
-    throw new SelfServiceError("REFUSED", "workerPartyId must be a non-empty string");
-  }
+  const workerPartyId = requireId(query.workerPartyId, "workerPartyId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmSelfRead(db, orgId, actorId);
@@ -118,7 +105,7 @@ export async function findTeamEmploymentIdsForParty(query: {
       select e.id::text as id
         from worker_employments e
        where e.org_id = ${orgId}
-         and e.worker_party_id = ${query.workerPartyId}
+         and e.worker_party_id = ${workerPartyId}
          and e.id in (select jsonb_array_elements_text(${JSON.stringify([...reports])}::jsonb)::uuid)
        order by e.id
     `)).rows;

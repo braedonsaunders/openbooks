@@ -5,6 +5,7 @@ import { BUILTIN_FORMULAS, computeScheduleByFormula, exactRatio } from "./deprec
 import { bookConventionWindow } from "./depreciation-conventions.ts";
 import type { BookDepreciationConvention } from "@openbooks/schema";
 import { DepreciationRefusalError } from "./depreciation-errors.ts";
+import { addMonthsStart } from "../platform/civil-date.ts";
 
 // ---------------------------------------------------------------------------
 // Account resolution
@@ -127,15 +128,6 @@ export function monthStart(date: string): string {
   return `${date.slice(0, 7)}-01`;
 }
 
-/** Add n months to a YYYY-MM-01 string, returning YYYY-MM-01. */
-export function addMonths(monthStartDate: string, n: number): string {
-  const [y, m] = monthStartDate.split("-").map(Number);
-  const total = (y! * 12 + (m! - 1)) + n;
-  const ny = Math.floor(total / 12);
-  const nm = (total % 12) + 1;
-  return `${String(ny).padStart(4, "0")}-${String(nm).padStart(2, "0")}-01`;
-}
-
 /**
  * The reduced-charge window for a convention.
  *
@@ -172,7 +164,7 @@ export function computeSchedule(input: ScheduleInput): ScheduleLinePlan[] {
   const start = monthStart(input.inServiceOn);
   return rows.map((r) => ({
     sequence: r.sequence,
-    periodMonth: addMonths(start, r.sequence),
+    periodMonth: addMonthsStart(start, r.sequence),
     planned: r.planned,
     accumulated: r.accumulated,
     netBookValue: r.netBookValue,

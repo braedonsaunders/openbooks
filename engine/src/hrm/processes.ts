@@ -20,6 +20,8 @@ import {
 } from "./process-math.ts";
 import { parseCivilDate } from "./temporal.ts";
 import { isUniqueViolation } from "./field-time/errors.ts";
+import { isUuid } from "../platform/uuid.ts";
+import { inputGuards } from "./input-guards.ts";
 
 /**
  * Governed HRM onboarding / offboarding / transfer checklists (0193).
@@ -78,26 +80,7 @@ function requireKind(kind: unknown): ProcessKind {
   return kind as ProcessKind;
 }
 
-function requireOrgId(orgId: unknown): string {
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new HrmProcessError("REFUSED", "orgId must be a non-empty string");
-  }
-  return orgId;
-}
-
-function requireActorId(actorId: unknown): string {
-  if (typeof actorId !== "string" || actorId.length === 0) {
-    throw new HrmProcessError("REFUSED", "actorId must be a non-empty string");
-  }
-  return actorId;
-}
-
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new HrmProcessError("REFUSED", `${field} must be a non-empty string`);
-  }
-  return value;
-}
+const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new HrmProcessError("REFUSED", message));
 
 function requireNonBlank(field: string, value: unknown): string {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -223,7 +206,7 @@ export async function listProcessTemplates(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const kind = query.kind === undefined ? undefined : requireKind(query.kind);
-  const employmentId = query.employmentId === undefined ? undefined : requireId("employmentId", query.employmentId);
+  const employmentId = query.employmentId === undefined ? undefined : requireId(query.employmentId, "employmentId");
   if ((employmentId === undefined) !== (query.effectiveDate === undefined)) {
     throw new HrmProcessError(
       "REFUSED",
@@ -291,7 +274,7 @@ export async function getProcessTemplate(query: {
 }): Promise<ProcessTemplateDetail> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const templateId = requireId("templateId", query.templateId);
+  const templateId = requireId(query.templateId, "templateId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
@@ -320,8 +303,6 @@ export async function getProcessTemplate(query: {
     return { ...toTemplateDTO(row, steps.length), steps: steps.map(toTemplateStepDTO) };
   });
 }
-
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 /**
  * Scope half for template writes, over a LOCKED template row's applies_to:
@@ -414,7 +395,7 @@ async function assertAppliesToTargets(
   appliesTo: { employerSubsidiaryId: string | null; departmentId: string | null },
 ): Promise<void> {
   for (const value of [appliesTo.employerSubsidiaryId, appliesTo.departmentId]) {
-    if (value !== null && !UUID_RE.test(value)) {
+    if (value !== null && !isUuid(value)) {
       throw new HrmProcessError(
         "REFUSED",
         `applies_to carries ${JSON.stringify(value)}, which is not a uuid — pick the subsidiary and department by id, or null for all`,
@@ -475,7 +456,7 @@ async function assertAppliesToTargets(
 /** Prove a named owner party is visible in this org — never a dangling owner. */
 async function assertOwnerParty(exec: SqlExecutor, orgId: string, ownerPartyId: string | null): Promise<void> {
   if (ownerPartyId === null) return;
-  if (!UUID_RE.test(ownerPartyId)) {
+  if (!isUuid(ownerPartyId)) {
     throw new HrmProcessError(
       "REFUSED",
       `owner party ${JSON.stringify(ownerPartyId)} is not a uuid — name a party of this organization`,
@@ -585,7 +566,7 @@ export interface UpdateTemplateQuery {
 export async function updateProcessTemplate(query: UpdateTemplateQuery): Promise<ProcessTemplateDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const templateId = requireId("templateId", query.templateId);
+  const templateId = requireId(query.templateId, "templateId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
@@ -669,7 +650,7 @@ export async function deleteProcessTemplate(query: {
 }): Promise<void> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const templateId = requireId("templateId", query.templateId);
+  const templateId = requireId(query.templateId, "templateId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
@@ -727,7 +708,7 @@ export interface UpsertTemplateStepQuery {
 export async function upsertProcessTemplateStep(query: UpsertTemplateStepQuery): Promise<ProcessTemplateStepDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const templateId = requireId("templateId", query.templateId);
+  const templateId = requireId(query.templateId, "templateId");
   const position = query.position;
   if (!Number.isSafeInteger(position) || position < 0) {
     throw new HrmProcessError(
@@ -840,7 +821,7 @@ export async function reorderProcessTemplateSteps(query: {
 }): Promise<ProcessTemplateStepDTO[]> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const templateId = requireId("templateId", query.templateId);
+  const templateId = requireId(query.templateId, "templateId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
@@ -916,8 +897,8 @@ export async function deleteProcessTemplateStep(query: {
 }): Promise<void> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const templateId = requireId("templateId", query.templateId);
-  const stepId = requireId("stepId", query.stepId);
+  const templateId = requireId(query.templateId, "templateId");
+  const stepId = requireId(query.stepId, "stepId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     await requireHrmProcessConfig(db, orgId, actorId);
@@ -1104,7 +1085,7 @@ async function assertAttachmentReadable(
   actorId: string,
   attachmentId: string,
 ): Promise<void> {
-  if (!UUID_RE.test(attachmentId)) {
+  if (!isUuid(attachmentId)) {
     throw new HrmProcessError(
       "UNREADABLE_ATTACHMENT",
       `attachment ${JSON.stringify(attachmentId)} is not a file id — attach a file from this organization's File Cabinet`,
@@ -1341,7 +1322,7 @@ export interface OpenProcessQuery {
 export async function openProcess(query: OpenProcessQuery): Promise<ProcessDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const employmentId = requireId("employmentId", query.employmentId);
+  const employmentId = requireId(query.employmentId, "employmentId");
   const kind = requireKind(query.kind);
   let effectiveDate: string;
   try {
@@ -1352,7 +1333,7 @@ export async function openProcess(query: OpenProcessQuery): Promise<ProcessDTO> 
       `effective date ${JSON.stringify(query.effectiveDate)} is not a real YYYY-MM-DD calendar date — open the process on the employment event date`,
     );
   }
-  const templateId = query.templateId === undefined ? null : requireId("templateId", query.templateId);
+  const templateId = query.templateId === undefined ? null : requireId(query.templateId, "templateId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     // Authority first: denial (including unknown/other-org employment)
@@ -1524,7 +1505,7 @@ export interface CompleteStepQuery {
 export async function completeProcessStep(query: CompleteStepQuery): Promise<void> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const stepId = requireId("stepId", query.stepId);
+  const stepId = requireId(query.stepId, "stepId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     const step = await loadStepForUpdate(db, orgId, stepId);
@@ -1602,7 +1583,7 @@ export interface SkipStepQuery {
 export async function skipProcessStep(query: SkipStepQuery): Promise<void> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const stepId = requireId("stepId", query.stepId);
+  const stepId = requireId(query.stepId, "stepId");
   const reason = requireNonBlank("reason", query.reason);
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
@@ -1662,7 +1643,7 @@ export async function completeProcess(query: {
 }): Promise<void> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const processId = requireId("processId", query.processId);
+  const processId = requireId(query.processId, "processId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     const process = await loadProcessForUpdate(db, orgId, processId);
@@ -1711,7 +1692,7 @@ export async function cancelProcess(query: {
 }): Promise<void> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const processId = requireId("processId", query.processId);
+  const processId = requireId(query.processId, "processId");
   const reason = requireNonBlank("reason", query.reason);
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);

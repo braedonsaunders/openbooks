@@ -42,6 +42,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../../engine/src/platform/db.ts";
 import { isUuid } from "../../engine/src/platform/uuid.ts";
+import { addCalendarDays } from "../../engine/src/platform/civil-date.ts";
 import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../../engine/src/money/money.ts";
 import {
   emptyPopulationGate,
@@ -429,12 +430,6 @@ function parseFieldTicketHeaders(path: string): JsonRow[] | null {
     }));
 }
 
-function addDays(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
 function parseFieldTicketCrew(
   path: string,
   tickets: JsonRow[] | null,
@@ -462,7 +457,7 @@ function parseFieldTicketCrew(
           ticketId,
           columns[1] ?? "",
           columns[2] ?? "",
-          addDays(begin, day),
+          addCalendarDays(begin, day),
           kind,
         ].join("|");
         cells.set(key, (cells.get(key) ?? 0n) + hours);

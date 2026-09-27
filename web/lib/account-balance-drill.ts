@@ -1,12 +1,12 @@
 import { isPeriodPreset } from '@openbooks/reports'
 import { accountClassTypes } from './account-types'
 import type { ReportDrillTarget } from './report-drill'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 /** Every CoA balance drills the GL ledger, so callers may read the ledger
  *  fields (mode/from/to, accountIds/accountTypes) without narrowing first. */
 export type LedgerDrillTarget = Extract<ReportDrillTarget, { kind: 'ledger' }>
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 const ACCOUNT_TYPE = /^[a-z][a-z0-9_]{0,63}$/
 
@@ -45,7 +45,7 @@ export function accountBalanceDrill(opts: {
   period?: string
 }): LedgerDrillTarget | null {
   const label = opts.label.trim()
-  if (!UUID.test(opts.accountId) || !label || !ACCOUNT_TYPE.test(opts.type)) return null
+  if (!isUuid(opts.accountId) || !label || !ACCOUNT_TYPE.test(opts.type)) return null
   const window = ledgerWindow({ from: opts.from, to: opts.to, period: opts.period })
   if (!window) return null
   return { kind: 'ledger', label, accountIds: [opts.accountId], ...window }

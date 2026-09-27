@@ -2,11 +2,10 @@ import { NextResponse } from 'next/server'
 import { getAuthz } from '../../../../lib/authz'
 import { loadRelatedTransactionDrawerData } from '../../../../components/related-transaction-drawer'
 import { notFound } from "@/lib/api/responses";
-
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 export const runtime = 'nodejs'
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const KIND = /^[a-z][a-z0-9_]{0,63}$/
 
 export async function GET(request: Request) {
@@ -16,7 +15,7 @@ export async function GET(request: Request) {
   const id = url.searchParams.get('id') ?? ''
   const kind = url.searchParams.get('kind') ?? ''
   const formLayoutId = url.searchParams.get('form') || undefined
-  if (!UUID.test(id) || !KIND.test(kind) || (formLayoutId && !UUID.test(formLayoutId))) {
+  if (!isUuid(id) || !KIND.test(kind) || (formLayoutId && !isUuid(formLayoutId))) {
     return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
   }
   const data = await loadRelatedTransactionDrawerData({ id, kind, authz: gate, formLayoutId })

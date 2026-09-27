@@ -1,3 +1,5 @@
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+
 export type AssistantDocumentEntity = {
   id: string;
   kind: string;
@@ -26,8 +28,6 @@ export type AssistantPartyEntity = {
 
 type AnyRecord = Record<string, unknown>;
 
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KIND = /^[a-z][a-z0-9_]{0,63}$/;
 
 function record(value: unknown): AnyRecord | null {
@@ -44,7 +44,7 @@ function text(value: unknown): string | undefined {
 
 function uuid(value: unknown): string | undefined {
   const resolved = text(value);
-  return resolved && UUID.test(resolved) ? resolved : undefined;
+  return resolved && isUuid(resolved) ? resolved : undefined;
 }
 
 function resultData(output: unknown): AnyRecord | null {

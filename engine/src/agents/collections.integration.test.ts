@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import { defaultContinuousCloseDetectors } from "./continuous-close-config.ts";
 import { runContinuousCloseAgent } from "../continuous-close/continuous-close.ts";
 import { db, withBypass, withBypassContext } from "../platform/db.ts";
@@ -92,12 +92,6 @@ function minusDays(iso: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function plusDays(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
 async function seedParty(orgId: string, name: string): Promise<string> {
   const id = randomUUID();
   await withBypassContext(
@@ -152,7 +146,7 @@ test(
       const big = await seedParty(org.orgId, "Big Debtor");
       await seedInvoice(org, big, "INV-A1", minusDays(today, 45), "5000", minusDays(today, 20));
       await seedInvoice(org, big, "INV-A2", minusDays(today, 10), "500.00");
-      await seedInvoice(org, big, "INV-A3", plusDays(today, 30), "7000.00");
+      await seedInvoice(org, big, "INV-A3", addCalendarDays(today, 30), "7000.00");
 
       const small = await seedParty(org.orgId, "Small Debtor");
       await seedInvoice(org, small, "INV-B1", minusDays(today, 20), "10.00");
@@ -163,7 +157,7 @@ test(
       await seedInvoice(org, hold, "INV-C3", minusDays(today, 70), "2000.00");
 
       const current = await seedParty(org.orgId, "Current Payer");
-      await seedInvoice(org, current, "INV-D1", plusDays(today, 15), "9000.00");
+      await seedInvoice(org, current, "INV-D1", addCalendarDays(today, 15), "9000.00");
 
       const foreign = await seedParty(other.orgId, "Foreign Debtor");
       await seedInvoice(other, foreign, "INV-X1", minusDays(today, 100), "99999.00");

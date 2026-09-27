@@ -1,8 +1,9 @@
 import { db, type SqlExecutor } from "../../platform/db.ts";
-import { daysInCivilMonth } from "../../platform/business-date.ts";
+import { addCalendarDays } from "../../platform/civil-date.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { parseCivilDate } from "../temporal.ts";
 import { HrmQualificationError } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 
 /**
  * Shared qualification plumbing (HR-14, migration 0225): feature asserts
@@ -31,12 +32,7 @@ export async function assertQualificationsFeature(
   }
 }
 
-export function requireId(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new HrmQualificationError(`${field} must be a non-empty id string.`);
-  }
-  return value;
-}
+export const { requireId } = inputGuards((message) => new HrmQualificationError(message));
 
 export function requireDate(value: unknown, field: string): string {
   try {
@@ -80,12 +76,6 @@ export type DerivedQualificationStatus =
   | "expired"
   | "not_yet_effective";
 
-function addDaysUtc(ymd: string, days: number): string {
-  const dt = new Date(`${ymd}T00:00:00Z`);
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
-}
-
 /**
  * The derived-status projection (pure, unit-tested at the boundaries).
  *
@@ -112,7 +102,7 @@ export function projectDerivedStatus(args: {
   if (args.issuedOn != null && args.issuedOn > args.today) return "not_yet_effective";
   if (!args.expiresOn) return "valid";
   if (args.expiresOn < args.today) return "expired";
-  if (args.expiresOn <= addDaysUtc(args.today, Math.max(0, args.leadDays))) return "expiring";
+  if (args.expiresOn <= addCalendarDays(args.today, Math.max(0, args.leadDays))) return "expiring";
   return "valid";
 }
 
@@ -134,19 +124,4 @@ export function monthsBetween(fromYmd: string, toYmd: string): number {
   let months = (t.y - f.y) * 12 + (t.m - f.m);
   if (t.d < f.d) months -= 1;
   return months;
-}
-
-/** Add whole calendar months to a YYYY-MM-DD date, clamping the day. */
-export function addMonthsUtc(ymd: string, months: number): string {
-  const { y, m, d } = parseYmd(ymd);
-  const total = m - 1 + months;
-  const year = y + Math.floor(total / 12);
-  const month = (total % 12) + 1;
-  // daysInCivilMonth keeps literal years 0001-0099 that Date.UTC would remap
-  // onto 1900-1999; the year renders zero-padded so the YYYY-MM-DD contract
-  // holds below year 1000 too.
-  const lastDay = daysInCivilMonth(year, month);
-  const day = Math.min(d, lastDay);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${String(year).padStart(4, "0")}-${pad(month)}-${pad(day)}`;
 }

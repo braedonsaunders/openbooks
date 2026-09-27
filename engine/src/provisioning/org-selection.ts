@@ -3,6 +3,8 @@
  * silently operate on whatever org happens to sort first.
  */
 
+import { isUuid } from "../platform/uuid.ts";
+
 /** An org row as listed for refusal messages. */
 export type ListedOrg = { id: string; name: string };
 
@@ -17,7 +19,7 @@ export function requireExplicitOrgId(
   orgs: readonly ListedOrg[],
   scriptName: string,
 ): string {
-  if (arg && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(arg)) {
+  if (arg && isUuid(arg)) {
     return arg;
   }
   throw new Error(

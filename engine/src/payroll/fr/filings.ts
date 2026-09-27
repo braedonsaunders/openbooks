@@ -17,6 +17,7 @@ import type {
   PayrollPackFilings,
   PayrollYearEndFiling,
 } from "../filing-registry.ts";
+import { isUuid } from "../../platform/uuid.ts";
 
 /**
  * The FR pack's filing declaration: the annual récapitulatif of
@@ -45,14 +46,12 @@ import type {
  * runtime edges to `packs.ts` and `filing-registry.ts` at ZERO — `import
  * type` only. The year comes off the pack's own FR_TAX_YEARS declaration,
  * never through a generic lookup that would pull packs.ts in at runtime,
- * and the row-id grammar is local (the CA precedent).
+ * and the row-id grammar is local; its UUID legs use the platform `isUuid`,
+ * which imports nothing and so cannot re-enter pack evaluation.
  */
 
 /** Stable key of the FR annual filing within the pack. */
 export const FR_RECAP_FILING_KEY = "recapitulatif-annuel";
-
-/** Local row-id UUID shape (the CA precedent: owned here, never shared). */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Versement-month shape inside a row id. */
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -68,9 +67,9 @@ export function parseFrRecapRowId(rowId: string): PayrollFilingRowScope | null {
   const parts = rowId.split(":");
   if (parts.length !== 3) return null;
   const [employee, month, account] = parts as [string, string, string];
-  if (!UUID_RE.test(employee)) return null;
+  if (!isUuid(employee)) return null;
   if (!MONTH_RE.test(month)) return null;
-  if (account && !UUID_RE.test(account)) return null;
+  if (account && !isUuid(account)) return null;
   return { employees: [employee], accounts: account ? [account] : [] };
 }
 

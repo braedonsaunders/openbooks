@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { addDays, computeRecognitionSchedule, MAX_RECOGNITION_TERM_MONTHS, RevenueRecognitionError, type RecognitionInput } from './recognition.ts';
+import { computeRecognitionSchedule, shiftRecognitionDate, MAX_RECOGNITION_TERM_MONTHS, RevenueRecognitionError, type RecognitionInput } from './recognition.ts';
 
 const base: RecognitionInput = { total: '1200', method: 'straight_line_even', startOn: '2026-01-01', termPeriods: 12 };
 
@@ -17,12 +17,12 @@ test('recognition schedules reject invalid financial dates, intervals and method
   assert.throws(() => computeRecognitionSchedule({ ...base, method: 'unknown' as RecognitionInput['method'] }), RevenueRecognitionError);
   assert.throws(() => computeRecognitionSchedule({ ...base, startOffsetDays: 0.5 }), RevenueRecognitionError);
   assert.throws(() => computeRecognitionSchedule({ ...base, startOn: '9999-12-01', termPeriods: 2 }), RevenueRecognitionError);
-  assert.throws(() => addDays('0001-01-01', -1), RevenueRecognitionError);
+  assert.throws(() => shiftRecognitionDate('0001-01-01', -1), RevenueRecognitionError);
 });
 
 test('recognition preserves early Gregorian leap years and exact negative day offsets', () => {
-  assert.equal(addDays('0096-02-28', 1), '0096-02-29');
-  assert.equal(addDays('2026-03-01', -1), '2026-02-28');
+  assert.equal(shiftRecognitionDate('0096-02-28', 1), '0096-02-29');
+  assert.equal(shiftRecognitionDate('2026-03-01', -1), '2026-02-28');
   const plan = computeRecognitionSchedule({ ...base, method: 'straight_line_daily', startOn: '0096-02-01', endOn: '0096-03-01', total: '3000' });
   assert.deepEqual(plan.map(row => row.planned), ['2900.0000', '100.0000']);
 });

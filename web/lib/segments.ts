@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { loadSubsidiaryContext, restrictionAdmits, uuidArray } from '@openbooks/engine/src/organization/subsidiaries.ts'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 export type SegmentValueOption = {
   id: string
@@ -160,7 +161,7 @@ export async function extraDimsSubsidiaryError(
     return segment && id ? [{ key, id, segment }] : []
   })
   if (selected.length === 0) return null
-  if (selected.some((entry) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.id))) {
+  if (selected.some((entry) => !isUuid(entry.id))) {
     return 'invalid custom segment assignment'
   }
 

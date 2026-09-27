@@ -1,4 +1,5 @@
 import { XMLParser } from "fast-xml-parser";
+import { isIsoCalendarDate, isoDateOf, utcDateFromParts } from "../platform/civil-date.ts";
 
 export const QBXML_VERSION = "17.0";
 export const QBD_PAGE_SIZE = 1_000;
@@ -50,38 +51,18 @@ function listQuery(name: string): string {
   return qbxml(`<${name}QueryRq iterator="Start"><MaxReturned>${QBD_PAGE_SIZE}</MaxReturned></${name}QueryRq>`);
 }
 
-function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-/**
- * UTC-midnight Date for civil (year, monthIndex, day) parts. Local copy of
- * the platform/business-date.ts utcDateFromParts idiom (`new Date(0)` +
- * setUTCFullYear, which keeps literal years 0001-0099 that Date.UTC would
- * remap onto 1900-1999): this connector module loads no platform stack.
- */
-function utcCivilDate(year: number, monthIndex: number, day: number): Date {
-  const date = new Date(0);
-  date.setUTCFullYear(year, monthIndex, day);
-  return date;
-}
-
-function endOfMonth(year: number, month: number): Date {
-  return utcCivilDate(year, month + 1, 0);
-}
-
 export function calendarMonths(from: string, through: Date): Array<{ month: string; from: string; to: string }> {
   const start = new Date(`${from}T00:00:00.000Z`);
   if (Number.isNaN(start.getTime())) throw new Error(`invalid QuickBooks history start date: ${from}`);
-  const stop = utcCivilDate(through.getUTCFullYear(), through.getUTCMonth(), through.getUTCDate());
+  const stop = utcDateFromParts(through.getUTCFullYear(), through.getUTCMonth(), through.getUTCDate());
   if (start > stop) throw new Error("QuickBooks history start date is after the capture date");
   const out: Array<{ month: string; from: string; to: string }> = [];
   for (let y = start.getUTCFullYear(), m = start.getUTCMonth(); y < stop.getUTCFullYear() || (y === stop.getUTCFullYear() && m <= stop.getUTCMonth()); ) {
-    const first = utcCivilDate(y, m, 1);
-    const last = endOfMonth(y, m);
+    const first = utcDateFromParts(y, m, 1);
+    const last = utcDateFromParts(y, m + 1, 0);
     const rangeFrom = first < start ? start : first;
     const rangeTo = last > stop ? stop : last;
-    out.push({ month: isoDate(first).slice(0, 7), from: isoDate(rangeFrom), to: isoDate(rangeTo) });
+    out.push({ month: isoDateOf(first).slice(0, 7), from: isoDateOf(rangeFrom), to: isoDateOf(rangeTo) });
     m += 1;
     if (m === 12) { y += 1; m = 0; }
   }
@@ -94,7 +75,7 @@ function generalLedgerRequest(from: string, to: string): string {
 }
 
 function trialBalanceRequest(through: Date): string {
-  return qbxml(`<GeneralSummaryReportQueryRq><GeneralSummaryReportType>TrialBalance</GeneralSummaryReportType><ReportPeriod><ToReportDate>${isoDate(through)}</ToReportDate></ReportPeriod><ReportBasis>Accrual</ReportBasis><SummarizeColumnsBy>TotalOnly</SummarizeColumnsBy><IncludeAccounts>All</IncludeAccounts></GeneralSummaryReportQueryRq>`);
+  return qbxml(`<GeneralSummaryReportQueryRq><GeneralSummaryReportType>TrialBalance</GeneralSummaryReportType><ReportPeriod><ToReportDate>${isoDateOf(through)}</ToReportDate></ReportPeriod><ReportBasis>Accrual</ReportBasis><SummarizeColumnsBy>TotalOnly</SummarizeColumnsBy><IncludeAccounts>All</IncludeAccounts></GeneralSummaryReportQueryRq>`);
 }
 
 /**
@@ -156,32 +137,15 @@ export function continueRequestXml(requestXml: string, iteratorId: string): stri
  */
 export function parseQbdReportDate(value: unknown): string {
   const raw = String(value ?? "").trim();
-  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (iso) {
-    if (!isCalendarDate(Number(iso[1]), Number(iso[2]), Number(iso[3]))) {
-      throw new Error(`QuickBooks report date is not a calendar date: "${raw}"`);
-    }
-    return raw;
-  }
   const us = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (us) {
-    const year = Number(us[3]);
-    const month = Number(us[1]);
-    const day = Number(us[2]);
-    if (!isCalendarDate(year, month, day)) {
+  const iso = us ? `${us[3]}-${us[1]!.padStart(2, "0")}-${us[2]!.padStart(2, "0")}` : raw;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    if (!isIsoCalendarDate(iso)) {
       throw new Error(`QuickBooks report date is not a calendar date: "${raw}"`);
     }
-    return `${us[3]}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return iso;
   }
   throw new Error(`QuickBooks report date is not a recognized date: "${raw}"`);
-}
-
-function isCalendarDate(year: number, month: number, day: number): boolean {
-  if (!Number.isInteger(year) || year < 1 || year > 9999) return false;
-  if (!Number.isInteger(month) || month < 1 || month > 12) return false;
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]!;
-  return Number.isInteger(day) && day >= 1 && day <= days;
 }
 
 export interface QbdReportAmount {

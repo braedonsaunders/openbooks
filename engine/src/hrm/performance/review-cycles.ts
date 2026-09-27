@@ -4,6 +4,7 @@ import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HrmAuthorizationError, requireAggregatePerformanceManage } from "../authorization.ts";
 import { HEADCOUNT_STATUSES, HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, mathRefusal } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 import {
   parseAppliesScope,
   parseCivilDay,
@@ -40,14 +41,7 @@ export type CycleStatus = "draft" | "open" | "calibrating" | "closed";
 
 const CYCLE_STATUSES = ["draft", "open", "calibrating", "closed"] as const;
 
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || !UUID_RE.test(value)) {
-    throw new HrmPerformanceError("INVALID_INPUT", `${field} must be a uuid`);
-  }
-  return value;
-}
+const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 function requireText(field: string, value: unknown): string {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -188,9 +182,9 @@ async function loadCycle(exec: SqlExecutor, orgId: string, cycleId: string, forU
 
 /** A draft cycle: the run is declared but instantiates nothing yet. */
 export async function createCycle(input: CreateCycleInput): Promise<CycleDTO> {
-  const orgId = requireId("orgId", input.orgId);
-  const actorId = requireId("actorId", input.actorId);
-  const templateId = requireId("templateId", input.templateId);
+  const orgId = requireUuid(input.orgId, "orgId");
+  const actorId = requireUuid(input.actorId, "actorId");
+  const templateId = requireUuid(input.templateId, "templateId");
   const name = requireText("name", input.name);
   const periodStartOn = mathRefusal("INVALID_INPUT", () => parseCivilDay(input.periodStartOn, "period start"));
   const periodEndOn = mathRefusal("INVALID_INPUT", () => parseCivilDay(input.periodEndOn, "period end"));
@@ -452,9 +446,9 @@ export async function openCycle(args: {
   actorId: string;
   cycleId: string;
 }): Promise<{ cycle: CycleDTO; instantiated: number; managerReviews: number; gaps: number }> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const cycleId = requireId("cycleId", args.cycleId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const cycleId = requireUuid(args.cycleId, "cycleId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
@@ -604,9 +598,9 @@ export async function moveToCalibrating(args: {
   force?: boolean;
   forceReason?: string;
 }): Promise<CycleDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const cycleId = requireId("cycleId", args.cycleId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const cycleId = requireUuid(args.cycleId, "cycleId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
@@ -672,9 +666,9 @@ export async function closeCycle(args: {
   actorId: string;
   cycleId: string;
 }): Promise<CycleDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const cycleId = requireId("cycleId", args.cycleId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const cycleId = requireUuid(args.cycleId, "cycleId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
@@ -716,8 +710,8 @@ export async function listReviewTemplates(args: {
   orgId: string;
   actorId: string;
 }): Promise<ReviewTemplateOption[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     await requireAggregatePerformanceManage(db, orgId, actorId);

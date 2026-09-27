@@ -1,7 +1,7 @@
 import { CloseError, CLOSE_MODULES } from "../periods/period-policy.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { utcDateFromParts } from "../platform/business-date.ts";
+import { addCalendarDays, civilDateFromParts, endOfMonth, parseIsoDate } from "../platform/business-date.ts";
 import { periodScopeAdvisoryLock } from "../periods/period-locks.ts";
 type CalendarRow = {
   id: string;
@@ -26,26 +26,6 @@ type GeneratedPeriod = {
   endsOn: string;
   adjustment: boolean;
 };
-
-export function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-export function utcDate(value: string): Date {
-  return new Date(`${value}T00:00:00.000Z`);
-}
-
-export function addDays(date: Date, days: number): Date {
-  const out = new Date(date);
-  out.setUTCDate(out.getUTCDate() + days);
-  return out;
-}
-
-function endOfMonth(date: Date): Date {
-  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
-  // onto 1900-1999.
-  return utcDateFromParts(date.getUTCFullYear(), date.getUTCMonth() + 1, 0);
-}
 
 function fiscalStartYear(fiscalYear: number, startMonth: number): number {
   return startMonth === 1 ? fiscalYear : fiscalYear - 1;
@@ -73,18 +53,13 @@ function generatedPeriods(
   if (calendar.cadence === "monthly") {
     const startYear = fiscalStartYear(fiscalYear, calendar.year_start_month);
     for (let i = 0; i < 12; i++) {
-      // startYear is validated 1900-9999 above, so no civil year below 100
-      // can reach this construction; it still goes through the shared helper
-      // so the guard needs no exception.
-      const start = utcDateFromParts(
-        startYear, calendar.year_start_month - 1 + i, 1,
-      );
+      const startsOn = civilDateFromParts(startYear, calendar.year_start_month + i, 1);
       rows.push({
         fiscalYear,
         number: i + 1,
         name: periodName(i + 1, fiscalYear),
-        startsOn: isoDate(start),
-        endsOn: isoDate(endOfMonth(start)),
+        startsOn,
+        endsOn: endOfMonth(startsOn),
         adjustment: false,
       });
     }
@@ -123,18 +98,18 @@ function generatedPeriods(
       throw new CloseError("week-based calendars require an anchor date");
     const anchorFiscalYear = Number(
       calendar.config.anchorFiscalYear ??
-        utcDate(calendar.anchor_date).getUTCFullYear(),
+        parseIsoDate(calendar.anchor_date).getUTCFullYear(),
     );
     const leapWeekYears = new Set(
       Array.isArray(calendar.config.leapWeekYears)
         ? (calendar.config.leapWeekYears as unknown[]).map(Number)
         : [],
     );
-    let start = utcDate(calendar.anchor_date);
+    let start = calendar.anchor_date;
     const direction = fiscalYear >= anchorFiscalYear ? 1 : -1;
     for (let year = anchorFiscalYear; year !== fiscalYear; year += direction) {
       const measuredYear = direction > 0 ? year : year - 1;
-      start = addDays(
+      start = addCalendarDays(
         start,
         direction * (leapWeekYears.has(measuredYear) ? 371 : 364),
       );
@@ -152,16 +127,16 @@ function generatedPeriods(
     if (leapWeekYears.has(fiscalYear)) weeks[weeks.length - 1] += 1;
     let cursor = start;
     rows = weeks.map((weekCount, index) => {
-      const end = addDays(cursor, weekCount * 7 - 1);
+      const end = addCalendarDays(cursor, weekCount * 7 - 1);
       const row = {
         fiscalYear,
         number: index + 1,
         name: periodName(index + 1, fiscalYear),
-        startsOn: isoDate(cursor),
-        endsOn: isoDate(end),
+        startsOn: cursor,
+        endsOn: end,
         adjustment: false,
       };
-      cursor = addDays(end, 1);
+      cursor = addCalendarDays(end, 1);
       return row;
     });
   }

@@ -1208,7 +1208,7 @@ export async function applyDocumentEdit(
       } else {
         if (
           typeof override !== 'string' ||
-          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(override)
+          !isUuid(override)
         ) {
           throw new DocumentEditError(422, `${cfg?.fundingSource === 'card' ? 'card account' : 'funding bank'} must be a valid record reference`)
         }

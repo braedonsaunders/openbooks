@@ -12,7 +12,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { loadNumberSequenceKindOptions } from '../setup/number-sequence-kinds'
 import { SETUP_ENTITY_BY_KEY, toSnake } from '../setup/registry'
-import { coerceBoolean, idColumn, UUID_RE } from '../setup/coerce'
+import { coerceBoolean, idColumn } from '../setup/coerce'
 import {
   type CellValue,
   type ImportMode,
@@ -21,6 +21,7 @@ import {
   type ResourceRefTarget,
   type WriteOutcome,
 } from './types'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 /**
  * Shared export cap, error, and gate live in the dependency-free
@@ -197,7 +198,7 @@ export class RefResolver {
 
   /** Natural key (or UUID) → the party carrying the matching active role. */
   private async resolveRolePartyId(roleTable: string, value: string): Promise<string | null> {
-    if (UUID_RE.test(value)) {
+    if (isUuid(value)) {
       const owned = (await db.execute(sql`
         select p.id from parties p
           join ${sql.raw(roleTable)} r on r.party_id = p.id and r.org_id = p.org_id and r.is_active
@@ -225,7 +226,7 @@ export class RefResolver {
     const value = String(human ?? '').trim()
     if (!value) return null
     if (target.resource === 'number-sequence-kinds') {
-      if (UUID_RE.test(value)) return null
+      if (isUuid(value)) return null
       return (await this.loadSequenceKinds()).has(value) ? value : null
     }
     const roleTable = PARTY_ROLE_TABLE.get(target.resource)
@@ -237,7 +238,7 @@ export class RefResolver {
       return id
     }
     const spec = this.spec(target)
-    if (UUID_RE.test(value)) {
+    if (isUuid(value)) {
       // A UUID is only meaningful inside its owning tenant: an org-scoped
       // target must exist in THIS org, otherwise a file carrying another
       // tenant's id would silently attach to (or create) a foreign row.

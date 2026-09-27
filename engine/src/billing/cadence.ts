@@ -11,15 +11,7 @@
  * their own inputs and map the thrown Errors to their domain errors.
  */
 
-/** Last calendar day of a 1-based month. */
-export function lastDayOfMonth(year: number, month1: number): number {
-  // Local copy of the platform/business-date.ts utcDateFromParts idiom
-  // (`new Date(0)` + setUTCFullYear, which keeps literal years 0001-0099 that
-  // Date.UTC would remap onto 1900-1999): this module is import-free and stays so.
-  const end = new Date(0);
-  end.setUTCFullYear(year, month1, 0);
-  return end.getUTCDate();
-}
+import { daysInCivilMonth } from "../platform/civil-date.ts";
 
 /**
  * Advance (year, month1) by monthStep months, pinning the day to anchorDay
@@ -48,7 +40,7 @@ export function advanceAnchoredMonth(
     throw new Error("cadence advances outside the supported date range");
   }
   const targetMonth1 = ((targetMonthIndex % 12) + 12) % 12 + 1;
-  const day = Math.min(anchorDay, lastDayOfMonth(targetYear, targetMonth1));
+  const day = Math.min(anchorDay, daysInCivilMonth(targetYear, targetMonth1));
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${String(targetYear).padStart(4, "0")}-${pad(targetMonth1)}-${pad(day)}`;
 }

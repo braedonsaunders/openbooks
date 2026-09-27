@@ -15,6 +15,7 @@ import { PayrollPackError } from "../payroll-error.ts";
 import { payrollSupportedTaxYears } from "../tax-years.ts";
 import { PL_TAX_YEARS } from "./rates.ts";
 import { isValidPesel } from "./pesel.ts";
+import { isUuid } from "../../platform/uuid.ts";
 
 /**
  * The PL pack's PIT-11 builder: one employee information return per employee
@@ -174,17 +175,6 @@ export async function pit11Slips(orgId: string, taxYear: number): Promise<Pit11S
 }
 
 /**
- * The lax row-id UUID shape, byte-identical to the web layer's guard and
- * `isFilingRowUuid` in ../filing-registry.ts. A LOCAL copy — the Canada
- * precedent (canada/filings.ts `UUID_RE`) — because that module imports
- * ../packs.ts at load time, and this module loads underneath pl/pack.ts,
- * so that edge is a TDZ crash on `PAYROLL_COUNTRY_PACKS`. The parity test
- * in ./pit11.test.ts pins this copy to the canonical helper on a battery
- * of strings, so drift fails loudly instead of 404ing real rows.
- */
-const PIT11_ROW_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
  * The PIT-11 row grammar, as the inverse of pit11Population's bare employee
  * id construction (the ROE/RL-1 precedent: an information return is per
  * employee under the org's single NIP payer identity). Owned HERE, beside
@@ -192,7 +182,7 @@ const PIT11_ROW_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
  * never its own copy of this shape.
  */
 export function parsePit11RowId(rowId: string): PayrollFilingRowScope | null {
-  if (!PIT11_ROW_UUID_RE.test(rowId)) return null;
+  if (!isUuid(rowId)) return null;
   return { employees: [rowId], accounts: [] };
 }
 
@@ -348,7 +338,7 @@ export async function pit11ConfidentialFields(
   previous?: readonly { label: string; fingerprint: string }[],
 ): Promise<{ label: string; fingerprint: string }[]> {
   const employeePartyId = rowId;
-  if (!PIT11_ROW_UUID_RE.test(employeePartyId)) return [];
+  if (!isUuid(employeePartyId)) return [];
   const pesel = await loadValidPesel(orgId, employeePartyId);
   const label = "PESEL";
   // Same stored-key recompute as the T4 SIN: the snapshot names the key

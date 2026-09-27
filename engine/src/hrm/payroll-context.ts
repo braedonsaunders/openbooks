@@ -68,6 +68,7 @@ import {
   type EmploymentVersionRow,
 } from "./employment-read.ts";
 import { NoRevisionError, parseCivilDate, resolveAsOf } from "./temporal.ts";
+import { inputGuards } from "./input-guards.ts";
 
 /** Stable coded refusals of the employment-identity contract. */
 export type PayrollContextCode =
@@ -227,12 +228,7 @@ const RESOLVER_PERMISSION = "payroll.run" as const;
 /** How many ids a refusal names before summarizing the remainder. */
 const MAX_NAMED_IDS = 5;
 
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new Error(`${field} must be a non-empty id`);
-  }
-  return value;
-}
+const { requireId } = inputGuards((message) => new Error(message));
 
 function nameIds(ids: readonly string[]): string {
   const shown = ids.slice(0, MAX_NAMED_IDS).join(", ");
@@ -383,10 +379,10 @@ async function resolveStatusAsOf(args: {
 export async function resolveEmploymentForPayroll(
   query: ResolveEmploymentQuery,
 ): Promise<ResolvedPayrollEmployment> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
-  const partyId = requireId("partyId", query.partyId);
-  const subsidiaryId = requireId("subsidiaryId", query.subsidiaryId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  const partyId = requireId(query.partyId, "partyId");
+  const subsidiaryId = requireId(query.subsidiaryId, "subsidiaryId");
   // Malformed dates fail before any read or permission probe: the empty-chain
   // probe parses (effective, asKnown) and swallows the expected NoRevision.
   parseCivilDate(query.asOf);
@@ -438,9 +434,9 @@ export async function resolveEmploymentForPayroll(
 export async function resolveManagerForRouting(
   query: ResolveManagerQuery,
 ): Promise<ManagerRouting> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
-  const partyId = requireId("partyId", query.partyId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  const partyId = requireId(query.partyId, "partyId");
   parseCivilDate(query.asOf);
   return withOrgTransaction(orgId, async () => {
     await requirePayrollRun(orgId, actorId);
@@ -560,8 +556,8 @@ export function pickActiveManager(
  * pre-0186 ledger rows keep a null link and are counted in `unstampable`.
  */
 export async function stampEmploymentContext(options: StampOptions): Promise<StampReport> {
-  const orgId = requireId("orgId", options.orgId);
-  const actorId = requireId("actorId", options.actorId);
+  const orgId = requireId(options.orgId, "orgId");
+  const actorId = requireId(options.actorId, "actorId");
   const allowPartial = options.allowPartial ?? false;
   const dryRun = options.dryRun;
   try {

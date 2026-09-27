@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { addDays, dayOfMonth, isMonthEnd } from "./manifest.ts";
+import { dayOfMonth, isMonthEnd } from "./manifest.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { add, cmp, mulPercent, neg } from "../money/money.ts";
 import { parseQuantity } from "../money/brands.ts";
@@ -9,6 +9,7 @@ import { createObligationsFromInvoice, runRevenueRecognition } from "../revenue/
 import { runDunningForOrg } from "../receivables/dunning.ts";
 import type { SimOrg } from "./world.ts";
 import type { Profile } from "./profiles/index.ts";
+import { addCalendarDays } from "../platform/civil-date.ts";
 
 /**
  * The deterministic "RevOps autopilot" for a SaaS company — the mechanical stand-in
@@ -57,8 +58,8 @@ function bumpQuantity(stored: string, bump: number): string {
 async function stampCollectible(world: SimOrg, invoiceId: string, today: string): Promise<void> {
   await db.execute(sql`
     update documents
-       set due_date = coalesce(due_date, ${addDays(today, 30)}),
-           expected_pay_date = coalesce(expected_pay_date, ${addDays(today, 32)}),
+       set due_date = coalesce(due_date, ${addCalendarDays(today, 30)}),
+           expected_pay_date = coalesce(expected_pay_date, ${addCalendarDays(today, 32)}),
            custom = jsonb_set(
              jsonb_set(coalesce(custom, '{}'::jsonb), '{sim,payFraction}', '"1"'::jsonb, true),
              '{sim,obligated}', 'true'::jsonb, true)

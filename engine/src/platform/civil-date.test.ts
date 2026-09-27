@@ -1,16 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { formatInZone } from "./business-date.ts";
 import {
+  addMonthsClamped,
+  addMonthsStart,
   calendarDaysBetween,
   civilDateFromParts,
   civilDayIndex,
   daysInCivilMonth,
-  formatInZone,
+  endOfMonth,
   inclusiveCalendarDays,
+  isIsoCalendarDate,
+  isoDateOf,
   isoFromCivilDayIndex,
   parseIsoDate,
   utcDateFromParts,
-} from "./business-date.ts";
+} from "./civil-date.ts";
 
 /**
  * Civil-date arithmetic (the Date.UTC 0-99 → 1900-1999 remap class) plus the
@@ -127,4 +132,19 @@ test("civil helpers refuse garbage instead of indexing a neighbor", () => {
   assert.throws(() => civilDayIndex("0096-02-30"), RangeError);
   assert.throws(() => calendarDaysBetween("2026-08-01", "2026-02-30"), RangeError);
   assert.throws(() => isoFromCivilDayIndex(Number.NaN), RangeError);
+});
+
+test("month steps clamp to the target month's end and walk back across years", () => {
+  assert.equal(addMonthsClamped("2024-01-31", 1), "2024-02-29");
+  assert.equal(addMonthsClamped("2026-01-31", 1), "2026-02-28");
+  assert.equal(addMonthsClamped("2024-03-31", -1), "2024-02-29");
+  assert.equal(addMonthsClamped("2026-01-15", -13), "2024-12-15");
+  assert.equal(addMonthsClamped("0096-02-29", 12), "0097-02-28");
+  assert.equal(addMonthsStart("2026-01-31", -1), "2025-12-01");
+  assert.equal(endOfMonth("0096-02-10"), "0096-02-29");
+  assert.equal(isoDateOf(utcDateFromParts(96, 1, 29)), "0096-02-29");
+  assert.throws(() => addMonthsClamped("9999-12-31", 1), RangeError);
+  assert.equal(isIsoCalendarDate("2024-02-29"), true);
+  assert.equal(isIsoCalendarDate("2025-02-29"), false);
+  assert.equal(isIsoCalendarDate("0000-01-01"), false);
 });

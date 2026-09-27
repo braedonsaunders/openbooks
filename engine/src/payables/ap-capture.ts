@@ -4,6 +4,7 @@ import type { Money } from "../money/brands.ts";
 import { decimalNullCause, decimalNullRefusal, type DecimalNullCause } from "../money/decimal-refusal.ts";
 import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { guardedFetch, resolveVerifiedAddresses, type AddressLookup } from "../connectors/ssrf-guard.ts";
+import { isIsoCalendarDate } from "../platform/iso-date.ts";
 
 export type { AddressLookup };
 
@@ -240,20 +241,6 @@ function exactProduct(quantity: string, price: string): string {
 
 const MAX_NUMERIC_19_4_UNITS = 9_999_999_999_999_999_999n;
 
-function validIsoDate(value: string): boolean {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  // setUTCFullYear keeps literal years 0001-0099 that Date.UTC would remap
-  // onto 1900-1999 (the platform/business-date.ts utcDateFromParts idiom,
-  // copied here so this leaf module loads no platform stack).
-  const date = new Date(0);
-  date.setUTCFullYear(year, month - 1, day);
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-}
-
 function numeric19_4(value: string): boolean {
   const units = toUnits(value);
   return units >= -MAX_NUMERIC_19_4_UNITS && units <= MAX_NUMERIC_19_4_UNITS;
@@ -412,10 +399,10 @@ export function validateNormalizedCapture(
   for (const field of ["vendorName", "invoiceNumber", "invoiceDate", "total"] as const) {
     if (!capture[field]) issues.push({ code: "required_field", severity: "blocking", field });
   }
-  if (capture.invoiceDate && !validIsoDate(capture.invoiceDate)) {
+  if (capture.invoiceDate && !isIsoCalendarDate(capture.invoiceDate)) {
     issues.push({ code: "invalid_date", severity: "blocking", field: "invoiceDate" });
   }
-  if (capture.dueDate && !validIsoDate(capture.dueDate)) {
+  if (capture.dueDate && !isIsoCalendarDate(capture.dueDate)) {
     issues.push({ code: "invalid_date", severity: "blocking", field: "dueDate" });
   }
   // Membership in the shared ISO 4217 registry, not shape: an OCR misread

@@ -3,7 +3,7 @@ import { add, cmp, mulDecimal, neg, normalizeMoney, sum } from "../money/money.t
 import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../records/open-item-kinds.ts";
 import { appliedLegAmountExpr } from "../records/balance-due.ts";
 import { apOpenAccountScope, asOfPostedEntryLateral } from "../records/open-item-scopes.ts";
-import { addCalendarDays, businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday, calendarDaysBetween, parseIsoDate } from "../platform/business-date.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
@@ -29,19 +29,14 @@ import type { AgentFinding } from "./types.ts";
 
 const CASH_HREF = "/banking/cash";
 
-const MS_DAY = 86_400_000;
-const parseISO = (s: string): Date => new Date(`${s}T00:00:00Z`);
-const toISO = (d: Date): string => d.toISOString().slice(0, 10);
-const addDays = (d: Date, n: number): Date => new Date(d.getTime() + n * MS_DAY);
-const daysBetween = (a: Date, b: Date): number => Math.round((b.getTime() - a.getTime()) / MS_DAY);
-/** Sunday of the week (date − getDay()). */
-const weekStart = (d: Date): Date => addDays(d, -d.getUTCDay());
+/** Sunday of the week that contains `iso`. */
+const weekStart = (iso: string): string => addCalendarDays(iso, -parseIsoDate(iso).getUTCDay());
 /** Weekend → next business day (Sat +2, Sun +1). */
-const businessDay = (d: Date): Date => {
-  const day = d.getUTCDay();
-  if (day === 6) return addDays(d, 2);
-  if (day === 0) return addDays(d, 1);
-  return d;
+const businessDay = (iso: string): string => {
+  const day = parseIsoDate(iso).getUTCDay();
+  if (day === 6) return addCalendarDays(iso, 2);
+  if (day === 0) return addCalendarDays(iso, 1);
+  return iso;
 };
 
 /** The org's base (functional) currency — the consolidated presentation currency. */
@@ -172,8 +167,8 @@ type OpenItem = {
   docNumber: string | null;
   partyId: string | null;
   partyName: string;
-  tranDate: Date;
-  dueDate: Date | null;
+  tranDate: string;
+  dueDate: string | null;
   remaining: string;
 };
 
@@ -238,8 +233,8 @@ async function sideOpenItems(
     id: String(row.id),
     partyId: (row.party_id as string | null) ?? null,
     partyName: String(row.party_name),
-    tranDate: parseISO(String(row.tran_date)),
-    dueDate: row.due_date ? parseISO(String(row.due_date)) : null,
+    tranDate: String(row.tran_date),
+    dueDate: row.due_date ? String(row.due_date) : null,
     docKind: (row.doc_kind as string | null) ?? null,
     docNumber: (row.doc_number as string | null) ?? null,
     remaining: String(row.remaining),
@@ -324,18 +319,18 @@ type ForecastEntry = {
 /** Predict collection/payment date for one open item. */
 function predictItem(
   item: OpenItem,
-  asOf: Date,
+  asOf: string,
   stats: SettlementStats,
-): { date: Date; method: string } {
-  let date: Date;
+): { date: string; method: string } {
+  let date: string;
   let method = "Global avg";
   const s = item.partyId ? stats.map.get(item.partyId) : undefined;
   if (s) {
     const buffer = s.sd ? Math.ceil(s.sd * 0.5) : 0;
-    date = addDays(item.tranDate, Math.round(s.avg) + buffer);
+    date = addCalendarDays(item.tranDate, Math.round(s.avg) + buffer);
     method = "Statistical";
   } else {
-    date = addDays(item.tranDate, stats.globalAvg);
+    date = addCalendarDays(item.tranDate, stats.globalAvg);
   }
   // Floor at due date.
   if (item.dueDate && date < item.dueDate) {
@@ -344,9 +339,9 @@ function predictItem(
   }
   // Overdue → push forward.
   if (date < asOf) {
-    const overdue = daysBetween(date, asOf);
+    const overdue = calendarDaysBetween(date, asOf);
     const push = overdue > 60 ? 28 : overdue > 30 ? 14 : 7;
-    date = addDays(asOf, push);
+    date = addCalendarDays(asOf, push);
     method = "Overdue push";
   }
   return { date: businessDay(date), method };
@@ -360,19 +355,19 @@ function predictItem(
 function scheduleByWeek(
   items: OpenItem[],
   stats: SettlementStats,
-  asOf: Date,
-  start: Date,
-  end: Date,
+  asOf: string,
+  start: string,
+  end: string,
 ): Map<string, ForecastEntry[]> {
   const byWeek = new Map<string, ForecastEntry[]>();
   for (const item of items) {
     const { date, method } = predictItem(item, asOf, stats);
     if (date < start || date > end) continue;
-    const wk = toISO(weekStart(date));
+    const wk = weekStart(date);
     const entry: ForecastEntry = {
       amount: item.remaining,
-      dueDate: item.dueDate ? toISO(item.dueDate) : null,
-      predictedDate: toISO(date),
+      dueDate: item.dueDate,
+      predictedDate: date,
       weekStart: wk,
       method,
       docKind: item.docKind,
@@ -544,7 +539,7 @@ export async function cashFindings(
     const horizon = addCalendarDays(today, crunchPolicy.parameters.dueWithinDays!);
     // Payables due inside the window (undated items count from their
     // transaction date, like the forecast's prediction input).
-    const due = apItems.filter((item) => toISO(item.dueDate ?? item.tranDate) <= horizon);
+    const due = apItems.filter((item) => (item.dueDate ?? item.tranDate) <= horizon);
     const dueTotal = sum(due.map((item) => item.remaining));
     if (cmp(dueTotal, startingCash) > 0) {
       const excess = add(dueTotal, neg(startingCash));
@@ -587,7 +582,7 @@ export async function cashFindings(
                   docNumber: item.docNumber,
                   party: item.partyName,
                   amount: item.remaining,
-                  dueDate: item.dueDate ? toISO(item.dueDate) : null,
+                  dueDate: item.dueDate,
                 })),
                 measuredAt: today,
               },
@@ -601,11 +596,11 @@ export async function cashFindings(
   if (forecastPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(forecastPolicy, agentThreshold);
     const horizonWeeks = forecastPolicy.parameters.forecastWeeks!;
-    const asOf = parseISO(today);
+    const asOf = today;
     const start = weekStart(asOf);
-    const end = addDays(start, horizonWeeks * 7 - 1);
+    const end = addCalendarDays(start, horizonWeeks * 7 - 1);
     const weekStarts: string[] = [];
-    for (let cur = new Date(start); cur <= end; cur = addDays(cur, 7)) weekStarts.push(toISO(cur));
+    for (let cur = start; cur <= end; cur = addCalendarDays(cur, 7)) weekStarts.push(cur);
     const [arStats, apStats, settings] = await Promise.all([
       settlementStats(orgId, "ar", today),
       settlementStats(orgId, "ap", today),

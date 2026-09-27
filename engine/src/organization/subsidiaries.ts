@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import type { db } from "../platform/db.ts";
 import { add, fromUnits, isZero, mulRate, normalizeDecimal, roundDiv, toUnits } from "../money/money.ts";
 import { addMoney, mulMoneyRate, negMoney, type Money } from "../money/brands.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Subsidiary context for the posting engine (a multi-entity model inside
@@ -33,12 +34,9 @@ export interface SubsidiaryContext {
 export class SubsidiaryError extends Error {}
 
 /** Bind a uuid list as ONE pg-array param — drizzle expands raw JS arrays. */
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export function uuidArray(ids: readonly unknown[]): string {
   for (const [index, id] of ids.entries()) {
-    if (typeof id !== "string" || !UUID_RE.test(id)) {
+    if (!isUuid(id)) {
       throw new SubsidiaryError(
         `uuid array element ${index + 1} is not a valid UUID`,
       );

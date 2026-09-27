@@ -2,8 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { BenefitsError } from "./errors.ts";
 import {
-  addDaysCivil,
-  daysInMonth,
   enrollmentTouchesMonth,
   monthBounds,
   monthlyFromBasis,
@@ -108,11 +106,8 @@ test("daily scales by covered days over days in month", () => {
 });
 
 test("civil dates reject impossible days and cross year boundaries", () => {
-  assert.equal(daysInMonth(2024, 2), 29);
-  assert.equal(daysInMonth(2026, 2), 28);
-  assert.equal(addDaysCivil("2026-12-31", 1), "2027-01-01");
-  assert.equal(addDaysCivil("2026-01-01", -1), "2025-12-31");
-  const bad = refused(() => addDaysCivil("2026-02-30", 0));
+  assert.equal(waitingEligibleDate("2026-12-31", 1), "2027-01-01");
+  const bad = refused(() => waitingEligibleDate("2026-02-30", 0));
   assert.match(bad, /has 28 days/);
   const month = refused(() => monthBounds("2026-13"));
   assert.match(month, /use YYYY-MM/);

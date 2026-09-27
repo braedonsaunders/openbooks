@@ -14,6 +14,7 @@ import {
   parseCivilDate,
   resolveAsOf,
 } from "./temporal.ts";
+import { inputGuards } from "./input-guards.ts";
 
 /**
  * Canonical HRM position WRITE service: the funded establishment behind the
@@ -367,12 +368,7 @@ function requireTitle(title: unknown): string {
   return title.trim();
 }
 
-function requireUuid(field: string, value: unknown): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new HrmPositionError("INVALID_INPUT", `${field} must be a non-empty string`);
-  }
-  return value;
-}
+const { requireId } = inputGuards((message) => new HrmPositionError("INVALID_INPUT", message));
 
 function requireReason(reason: unknown): string {
   if (typeof reason !== "string" || reason.trim().length === 0) {
@@ -626,13 +622,13 @@ export interface CreatePositionQuery {
  * yet, so there is no subject to load.
  */
 export async function createPosition(query: CreatePositionQuery): Promise<PositionDTO> {
-  const orgId = requireUuid("orgId", query.orgId);
-  const actorId = requireUuid("actorId", query.actorId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
   const positionCode = requireCode(query.positionCode);
   const title = requireTitle(query.title);
-  const departmentId = query.departmentId === undefined || query.departmentId === null ? null : requireUuid("departmentId", query.departmentId);
-  const locationId = query.locationId === undefined || query.locationId === null ? null : requireUuid("locationId", query.locationId);
-  const employerSubsidiaryId = requireUuid("employerSubsidiaryId", query.employerSubsidiaryId);
+  const departmentId = query.departmentId === undefined || query.departmentId === null ? null : requireId(query.departmentId, "departmentId");
+  const locationId = query.locationId === undefined || query.locationId === null ? null : requireId(query.locationId, "locationId");
+  const employerSubsidiaryId = requireId(query.employerSubsidiaryId, "employerSubsidiaryId");
   const jobGrade =
     query.jobGrade === undefined || query.jobGrade === null
       ? null
@@ -738,9 +734,9 @@ export interface RevisePositionQuery {
  * itself as the remedy.
  */
 export async function revisePosition(query: RevisePositionQuery): Promise<PositionDTO> {
-  const orgId = requireUuid("orgId", query.orgId);
-  const actorId = requireUuid("actorId", query.actorId);
-  const positionId = requireUuid("positionId", query.positionId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  const positionId = requireId(query.positionId, "positionId");
   const reason = requireReason(query.reason);
   const status = query.status === undefined ? undefined : requirePositionStatus(query.status);
   if (status === "closed") {
@@ -797,13 +793,13 @@ export async function revisePosition(query: RevisePositionQuery): Promise<Positi
     }
     const base = overlapping.reduce((a, b) => (a.version_no > b.version_no ? a : b));
     const departmentId =
-      query.departmentId === undefined ? base.department_id : query.departmentId === null ? null : requireUuid("departmentId", query.departmentId);
+      query.departmentId === undefined ? base.department_id : query.departmentId === null ? null : requireId(query.departmentId, "departmentId");
     const locationId =
-      query.locationId === undefined ? base.location_id : query.locationId === null ? null : requireUuid("locationId", query.locationId);
+      query.locationId === undefined ? base.location_id : query.locationId === null ? null : requireId(query.locationId, "locationId");
     const employerSubsidiaryId =
       query.employerSubsidiaryId === undefined
         ? base.employer_subsidiary_id
-        : requireUuid("employerSubsidiaryId", query.employerSubsidiaryId);
+        : requireId(query.employerSubsidiaryId, "employerSubsidiaryId");
     await assertPositionRefs(db, {
       orgId,
       departmentId,
@@ -943,9 +939,9 @@ export interface ClosePositionQuery {
  * writing) cannot slip a holder in under the check.
  */
 export async function closePosition(query: ClosePositionQuery): Promise<PositionDTO> {
-  const orgId = requireUuid("orgId", query.orgId);
-  const actorId = requireUuid("actorId", query.actorId);
-  const positionId = requireUuid("positionId", query.positionId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  const positionId = requireId(query.positionId, "positionId");
   const effectiveDate: string = parseCivilDate(query.effectiveDate);
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
@@ -1129,15 +1125,15 @@ function toFundingDTO(row: FundingRow): PositionFundingDTO {
  * comparison travels in the result — computed, named, and never silent.
  */
 export async function writePositionFunding(query: WritePositionFundingQuery): Promise<FundingWriteResult> {
-  const orgId = requireUuid("orgId", query.orgId);
-  const actorId = requireUuid("actorId", query.actorId);
-  const positionId = requireUuid("positionId", query.positionId);
-  const periodId = requireUuid("periodId", query.periodId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  const positionId = requireId(query.positionId, "positionId");
+  const periodId = requireId(query.periodId, "periodId");
   const fundedFte = formatFte(parseFte(query.fundedFte));
   const fundingSourceId =
     query.fundingSourceId === undefined || query.fundingSourceId === null
       ? null
-      : requireUuid("fundingSourceId", query.fundingSourceId);
+      : requireId(query.fundingSourceId, "fundingSourceId");
   const amountRaw = query.amount === undefined || query.amount === null ? null : query.amount;
   const currencyRaw = query.currency === undefined || query.currency === null ? null : query.currency;
   if ((amountRaw === null) !== (currencyRaw === null)) {

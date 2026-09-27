@@ -102,12 +102,6 @@ export function orgCivilDate(now: Date, timezone: string): string {
   return parts;
 }
 
-export function addDaysCivil(dateISO: string, days: number): string {
-  // addCalendarDays parses the ISO string (exact for years 0001-0099) instead
-  // of Date.UTC, which would remap years 0-99 onto 1900-1999.
-  return addCalendarDays(dateISO, days);
-}
-
 async function orgTimezone(orgId: string): Promise<string> {
   const rows = await db.execute<{ settings: Record<string, unknown> | null }>(sql`
     select settings from orgs where id = ${orgId} limit 1
@@ -304,8 +298,8 @@ async function fireDateRelative(
   // direction before + offset 3 on target T means T is 3 days AFTER today:
   // match rows whose date equals today + offset (before) or today - offset (after).
   const matchDate = trigger.direction === "before"
-    ? addDaysCivil(today, trigger.offsetDays)
-    : addDaysCivil(today, -trigger.offsetDays);
+    ? addCalendarDays(today, trigger.offsetDays)
+    : addCalendarDays(today, -trigger.offsetDays);
   const outcome = { fired: 0, failed: 0, errors: [] as string[] };
   const actorId = await tickActorFor(automation);
   const dateRelativeScope = await actorAllowedSubsidiaryIds(db, automation.orgId, actorId);

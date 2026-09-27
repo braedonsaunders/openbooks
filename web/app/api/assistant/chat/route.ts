@@ -53,6 +53,7 @@ import {
   recentMessages,
 } from "../../../../lib/ai-conversations";
 import { loadFindingContext } from "../../../../lib/agents/finding-context";
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 /**
  * The agentic turn endpoint.
@@ -68,7 +69,6 @@ export const maxDuration = 300;
 
 const SCOPE = "assistant";
 const MAX_PROMPT_CHARS = 32_000;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TURN_FAILURE_MESSAGE = "The assistant could not complete this response. Please try again.";
 
 function conversationResponse(
@@ -103,7 +103,7 @@ export async function POST(req: Request): Promise<Response> {
   // unreadable findings change nothing about the turn.
   let findingId: string | null = null;
   if (input.findingId !== undefined && input.findingId !== null) {
-    if (typeof input.findingId !== "string" || !UUID_RE.test(input.findingId)) {
+    if (!isUuid(input.findingId)) {
       return new Response("Bad request", { status: 400 });
     }
     findingId = input.findingId;
@@ -125,7 +125,7 @@ export async function POST(req: Request): Promise<Response> {
   // Resolve / create the conversation. Only the OWNER may send a turn.
   let conversationId = (input.conversationId as string | undefined) ?? null;
   if (conversationId) {
-    if (!UUID_RE.test(conversationId)) return new Response("Bad request", { status: 400 });
+    if (!isUuid(conversationId)) return new Response("Bad request", { status: 400 });
     if (!(await ownsConversation(authz, conversationId, SCOPE))) {
       return new Response("Forbidden", { status: 403 });
     }

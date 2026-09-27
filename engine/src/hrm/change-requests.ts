@@ -34,6 +34,7 @@ import {
   type ProfileChangePayload,
 } from "./self-service/profile-schema.ts";
 import { loadMyAddress } from "./self-service/self-read.ts";
+import { inputGuards } from "./input-guards.ts";
 
 /**
  * Governed HRM employment change-request service (slice A).
@@ -475,26 +476,7 @@ const REQUEST_COLUMNS = sql`
   created_at, created_by, updated_at, updated_by
 `;
 
-function requireOrgId(orgId: unknown): string {
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new HrmChangeRequestError("REFUSED", "orgId must be a non-empty string");
-  }
-  return orgId;
-}
-
-function requireActorId(actorId: unknown): string {
-  if (typeof actorId !== "string" || actorId.length === 0) {
-    throw new HrmChangeRequestError("REFUSED", "actorId must be a non-empty string");
-  }
-  return actorId;
-}
-
-function requireRequestId(requestId: unknown): string {
-  if (typeof requestId !== "string" || requestId.length === 0) {
-    throw new HrmChangeRequestError("REFUSED", "requestId must be a non-empty string");
-  }
-  return requestId;
-}
+const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new HrmChangeRequestError("REFUSED", message));
 
 function requireReason(reason: unknown): string {
   if (typeof reason !== "string" || reason.trim().length === 0) {
@@ -697,7 +679,7 @@ export interface CreateChangeRequestQuery {
 export async function createChangeRequestDraft(query: CreateChangeRequestQuery): Promise<ChangeRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const employmentId = requireRequestId(query.employmentId);
+  const employmentId = requireId(query.employmentId, "employmentId");
   const payload = validateChangePayload(query.payload);
   return withOrgTransaction(orgId, async () => {
     // Authority first: denial (including unknown/other-org employment)
@@ -747,7 +729,7 @@ export async function updateChangeRequestPayload(
 ): Promise<ChangeRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const requestId = requireRequestId(query.requestId);
+  const requestId = requireId(query.requestId, "requestId");
   const payload = validateChangePayload(query.payload);
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);
@@ -822,7 +804,7 @@ export interface SubmitChangeRequestQuery {
 export async function submitChangeRequest(query: SubmitChangeRequestQuery): Promise<ChangeRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const requestId = requireRequestId(query.requestId);
+  const requestId = requireId(query.requestId, "requestId");
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
     // The row lock serializes a double-click or replayed submit against the
@@ -924,7 +906,7 @@ export async function withdrawChangeRequest(
 ): Promise<ChangeRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const requestId = requireRequestId(query.requestId);
+  const requestId = requireId(query.requestId, "requestId");
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);
@@ -999,7 +981,7 @@ export interface GetChangeRequestQuery {
 export async function getChangeRequest(query: GetChangeRequestQuery): Promise<ChangeRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const requestId = requireRequestId(query.requestId);
+  const requestId = requireId(query.requestId, "requestId");
   return withOrgTransaction(orgId, async () => {
     const rows = (await db.execute<RequestRow>(sql`
       select ${REQUEST_COLUMNS} from hrm_employment_change_requests
@@ -1212,7 +1194,7 @@ export async function releaseHrmChangeRequest(
 ): Promise<ReleaseChangeRequestResult> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const requestId = requireRequestId(query.requestId);
+  const requestId = requireId(query.requestId, "requestId");
   // withOrgTransaction joins the caller's ambient tenant transaction (the
   // decide savepoint) instead of opening a nested one, so everything below
   // commits or rolls back with the decision.

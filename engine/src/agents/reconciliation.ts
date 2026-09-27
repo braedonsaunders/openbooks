@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { reconciliationTotals, SYSTEM_ACTOR_ID } from "../banking/banking.ts";
-import { businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import {
@@ -38,12 +38,6 @@ export const RECONCILIATION_DETECTOR_KEYS = [
   "stale_reconciliation",
   "never_reconciled_account",
 ] as const;
-
-const DAY_MS = 86_400_000;
-
-function absDaysBetween(a: string, b: string): number {
-  return Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / DAY_MS;
-}
 
 export type UnmatchedLineRow = {
   lineId: string;
@@ -95,7 +89,7 @@ export function pairMatchCandidates(
     let bestIdx = -1;
     let bestDays = Infinity;
     for (let index = 0; index < candidates.length; index++) {
-      const days = absDaysBetween(line.postedOn, candidates[index]!.date);
+      const days = Math.abs(calendarDaysBetween(line.postedOn, candidates[index]!.date));
       if (days < bestDays) {
         bestDays = days;
         bestIdx = index;
@@ -316,12 +310,6 @@ export const productionReconciliationLoaders: ReconciliationLoaders = {
   neverReconciled: loadNeverReconciled,
 };
 
-function shiftDaysIso(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
 export async function reconciliationFindings(
   orgId: string,
   agentThreshold: string,
@@ -407,7 +395,7 @@ export async function reconciliationFindings(
   const stalePolicy = byKey.get("stale_reconciliation");
   if (stalePolicy?.enabled) {
     // No materiality floor: an abandoned session is a process failure at any balance.
-    const cutoff = `${shiftDaysIso(today, -(stalePolicy.parameters.staleAfterDays!))}T00:00:00Z`;
+    const cutoff = `${addCalendarDays(today, -(stalePolicy.parameters.staleAfterDays!))}T00:00:00Z`;
     const sessions = await loaders.staleSessions(orgId, cutoff);
     for (const session of sessions) {
       const balanced = toUnits(session.difference) === 0n;
@@ -459,7 +447,7 @@ export async function reconciliationFindings(
   const neverPolicy = byKey.get("never_reconciled_account");
   if (neverPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(neverPolicy, agentThreshold);
-    const lookbackStart = shiftDaysIso(today, -(neverPolicy.parameters.lookbackDays!));
+    const lookbackStart = addCalendarDays(today, -(neverPolicy.parameters.lookbackDays!));
     const accounts = await loaders.neverReconciled(orgId, lookbackStart);
     for (const account of accounts) {
       if (absoluteUnits(account.activityTotal) < absoluteUnits(threshold)) continue;

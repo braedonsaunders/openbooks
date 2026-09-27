@@ -1,6 +1,7 @@
 import { randomBytes, scryptSync } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Create (or reset) an app user in one explicitly named production org:
@@ -26,8 +27,6 @@ export type SeedUserResult = {
   orgName: string;
 };
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function seedUser(input: SeedUserInput): Promise<SeedUserResult> {
   const role = input.role ?? "admin";
   if (!input.password) {
@@ -40,7 +39,7 @@ export async function seedUser(input: SeedUserInput): Promise<SeedUserResult> {
   if (!input.name?.trim()) {
     throw new Error("refusing to seed a user with an empty name: pass an explicit <name>");
   }
-  if (!UUID_RE.test(input.orgId ?? "")) {
+  if (!isUuid(input.orgId ?? "")) {
     throw new Error(
       `unknown organization ${JSON.stringify(input.orgId)}: pass the production org id (uuid) as the first argument to seed-user.ts`,
     );

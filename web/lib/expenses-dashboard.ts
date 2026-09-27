@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { addCalendarMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/src/platform/business-date.ts'
+import { addMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { fromUnits, roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
@@ -151,8 +151,8 @@ export async function expensesDashboard(
 ): Promise<ExpensesDashboardData> {
   const to = await businessToday(orgId)
   const monthStart = startOfMonth(to)
-  const from = addCalendarMonthsStart(to, -11)
-  const priorFrom = addCalendarMonthsStart(to, -23)
+  const from = addMonthsStart(to, -11)
+  const priorFrom = addMonthsStart(to, -23)
 
   const [pipeRes, spenderRes, spenderKpiRes, catRes, categoryKpiRes, trendRes, queueRes] = (await Promise.all([
     // Approval pipeline — live counts/values by status + posted this month.

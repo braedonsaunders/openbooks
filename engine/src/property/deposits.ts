@@ -8,8 +8,9 @@ import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRe
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { cmp, neg } from "../money/money.ts";
-import { assertEnabled, assertLockedSubsidiaryInScope, audit, DEPOSIT_OFFSET_EXCLUDED_TYPES, exactMoney, PropertyManagementError, UUID_RE, validDate, type DepositContextRow, type DepositReversalRow } from "./management-foundation.ts";
+import { assertEnabled, assertLockedSubsidiaryInScope, audit, DEPOSIT_OFFSET_EXCLUDED_TYPES, exactMoney, PropertyManagementError, validDate, type DepositContextRow, type DepositReversalRow } from "./management-foundation.ts";
 import { depositBalance, depositPostingShape, depositReversalKind, isSecurityDepositImportConflict } from "./management-foundation.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 export async function recordSecurityDeposit(input: { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null; importKey?: string | null }): Promise<{ id: string; entryId: string; balance: string }> {
   const shape = depositPostingShape(input.kind);
@@ -108,7 +109,7 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     let targetLineId: string | null = null;
     let offsetId: string | null = applied ? null : cashKind ? bankId : input.offsetAccountId ?? null;
     if (!applied && !cashKind && offsetId) {
-      if (!UUID_RE.test(offsetId)) throw new PropertyManagementError("Offset account is invalid");
+      if (!isUuid(offsetId)) throw new PropertyManagementError("Offset account is invalid");
       const offset = (await tx.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
         select type,is_active,is_summary from accounts where org_id=${input.orgId} and id=${offsetId} for share`)).rows[0];
       if (!offset) throw new PropertyManagementError("Offset account not found");

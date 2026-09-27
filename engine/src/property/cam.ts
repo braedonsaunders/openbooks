@@ -2,13 +2,12 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday, inclusiveCalendarDays } from "../platform/business-date.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { createSubscriptionInvoice } from "../billing/subscription-billing.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { arePeriodModulesOpen } from "../periods/period-policy.ts";
 import { add, cmp, mulPercent, mulRatio, neg, sum, toUnits } from "../money/money.ts";
-import { addDays, dayCount } from "./management-foundation.ts";
 import { assertEnabled, assertLockedSubsidiaryInScope, audit, exactMoney, lockPropertyInScope, PropertyManagementError, validDate, type CamAllocationDbRow, type CamLeaseRow, type CamPoolDbRow } from "./management-foundation.ts";
 import { overlapDayCount } from "./management-foundation.ts";
 import { propertyBillingGeneration } from "./rent-billing.ts";
@@ -282,7 +281,7 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
         and coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on})>=${pool.period_starts_on}
       order by l.id`));
     if (!leases.rows.length) throw new PropertyManagementError("No pro-rata CAM leases overlap this period");
-    const poolDays = dayCount(pool.period_starts_on, pool.period_ends_on);
+    const poolDays = inclusiveCalendarDays(pool.period_starts_on, pool.period_ends_on);
     // Lease-id order everywhere below: the allocation, the rounding residual,
     // and the fingerprint are pure functions of the sources, never of the
     // physical row order the planner happens to return.
@@ -420,7 +419,7 @@ export async function billCamReconciliation(orgId: string, actorId: string, allo
         const generated = await createSubscriptionInvoice({ orgId, actorId, customerId: row.tenant_id, subsidiaryId: row.subsidiary_id, locationId: row.location_id,
           currency: row.currency, incomeAccountId: row.cam_income_account_id, itemId: null, taxCodeId: null, description: `${row.name} CAM reconciliation`,
           quantity: "1", unitPrice: amount, memo: `${row.lease_number} · ${row.name}`, invoiceDate: date,
-          dueDate: credit ? null : addDays(date, row.payment_terms_days), autoPost: false, applyTax: false, documentKind: credit ? "customer_credit" : "customer_invoice",
+          dueDate: credit ? null : addCalendarDays(date, row.payment_terms_days), autoPost: false, applyTax: false, documentKind: credit ? "customer_credit" : "customer_invoice",
           custom: { propertyManagement: { billingKey: generation.generationKey, originalBillingKey: key,
             ...(generation.predecessorId ? { predecessorInvoiceId: generation.predecessorId } : {}),
             poolId, allocationId: row.id, leaseId: row.lease_id, kind: "cam_reconciliation" } } });

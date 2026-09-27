@@ -12,6 +12,7 @@ import {
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Employment change requests as a native flow subject.
@@ -78,6 +79,7 @@ type RequestRow = {
 };
 
 async function loadRequest(subjectId: string): Promise<RequestRow | null> {
+  if (!isUuid(subjectId)) return null;
   // No ambient-tenant requirement and no org predicate here, by adapter
   // parity (documents, budget, timesheet): decideGate's pre-flight resolves
   // the submitter outside withOrg, and every caller scopes the subject

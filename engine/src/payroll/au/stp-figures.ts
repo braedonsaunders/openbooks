@@ -10,6 +10,7 @@
 import { add, neg } from "../../money/money.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import { AU_TAX_YEARS } from "./rates.ts";
+import { isUuid } from "../../platform/uuid.ts";
 
 /** One employee's STP year-to-date figures. All money is decimal strings. */
 export interface AuStpFinalisationRow {
@@ -49,14 +50,10 @@ export function stpReportableGross(row: Pick<
 /**
  * The row-id grammar, as the inverse of the population's bare-employee-id
  * construction. Owned HERE, beside the builder — the subsidiary-scope guard
- * parses through the declaration, never its own copy of this shape. Local
- * regex, not a shared import.
+ * parses through the declaration, never its own copy of this shape.
  */
-const AU_STP_ROW_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export function parseStpFinalisationRowId(rowId: string): { employees: string[]; accounts: string[] } | null {
-  if (!AU_STP_ROW_UUID_RE.test(rowId)) return null;
+  if (!isUuid(rowId)) return null;
   return { employees: [rowId], accounts: [] };
 }
 

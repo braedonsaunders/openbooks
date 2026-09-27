@@ -11,9 +11,10 @@ import { stockLocationDim, postInventoryEntry, type JournalLineInput } from "./j
 import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney } from "./position.ts";
 import { consumeLayers, recordConsumptions } from "./cost-layers.ts";
 import { type MovementResult } from "./movements.ts";
-import { loadDocumentInventoryLines, inventoryPostingEffectKey, UUID_RE, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
+import { loadDocumentInventoryLines, inventoryPostingEffectKey, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
 import { liveReceiptQuantity, postedReturnQuantity } from "./return-quantities.ts";
 import { PURCHASE_RECEIPT_DOCUMENT_KIND } from "./documents-purchasing.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 export interface VendorCreditInventoryReturnSelection {
   /** Posted receipt movement whose purchase/physical provenance is returned. */
@@ -46,20 +47,20 @@ export function parseVendorCreditInventoryReturnSelection(
   const serialId = evidence.serialId ?? null;
   if (
     typeof sourceReceiptMovementId !== "string" ||
-    !UUID_RE.test(sourceReceiptMovementId)
+    !isUuid(sourceReceiptMovementId)
   ) {
     throw new InventoryError(
       `${lineLabel} requires a valid inventoryReturn.sourceReceiptMovementId`,
     );
   }
-  if (lotId !== null && (typeof lotId !== "string" || !UUID_RE.test(lotId))) {
+  if (lotId !== null && !isUuid(lotId)) {
     throw new InventoryError(
       `${lineLabel} inventoryReturn.lotId must be a UUID`,
     );
   }
   if (
     serialId !== null &&
-    (typeof serialId !== "string" || !UUID_RE.test(serialId))
+    !isUuid(serialId)
   ) {
     throw new InventoryError(
       `${lineLabel} inventoryReturn.serialId must be a UUID`,

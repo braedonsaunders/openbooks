@@ -19,6 +19,7 @@ import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { PAYMENT_SYSTEM_CUSTOM_FIELD_SET } from "../platform/payment-system-fields.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * User scripting: REAL JavaScript (ES2023), executed in a QuickJS sandbox —
@@ -1764,8 +1765,6 @@ export async function runCustomGlLineScripts(
   return out;
 }
 
-const CUSTOM_GL_LINE_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 interface ParsedCustomGlLine {
   accountId?: string;
   accountCode?: string;
@@ -1786,7 +1785,7 @@ function customGlLineId(
   value: unknown,
 ): string | null {
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" || !CUSTOM_GL_LINE_UUID_RE.test(value)) {
+  if (!isUuid(value)) {
     throw new CustomGlLinesError(
       `custom_gl_lines script "${scriptName}" line ${index + 1}: invalid ${field}`,
     );

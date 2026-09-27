@@ -6,8 +6,7 @@ import { nextDocumentNumber } from "./bills.ts";
 import { resolveOrgId } from './org-scope'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { allowedSubsidiaryIds as resolveAllowedSubsidiaryIds } from './subsidiaries'
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 export interface CreateDraftJournalOptions {
   /** Explicit legal entity requested by the caller (omitted = choose a default). */
@@ -53,7 +52,7 @@ export async function createDraftJournal(
   let subsidiary: { id: string; base_currency: string } | undefined
 
   if (requestedSubsidiaryId !== undefined && requestedSubsidiaryId !== null) {
-    if (!UUID_RE.test(requestedSubsidiaryId)) {
+    if (!isUuid(requestedSubsidiaryId)) {
       throw new DraftJournalScopeError('invalid_subsidiary', 'invalid subsidiary')
     }
     const normalizedSubsidiaryId = requestedSubsidiaryId.toLowerCase()
@@ -71,7 +70,7 @@ export async function createDraftJournal(
   } else if (scope !== null) {
     // A restricted caller may auto-select only when the database confirms
     // exactly one active, non-elimination legal entity in its allowed set.
-    const ids = [...scope].filter((id) => UUID_RE.test(id))
+    const ids = [...scope].filter((id) => isUuid(id))
     if (ids.length === 0) {
       throw new DraftJournalScopeError('no_available_subsidiary', 'no available subsidiary')
     }
@@ -123,7 +122,7 @@ export async function loadJournalDoc(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ) {
-  if (!UUID_RE.test(id)) return null
+  if (!isUuid(id)) return null
   const resolvedOrgId = await resolveOrgId(orgId)
   return withOrgTransaction(resolvedOrgId, async () => {
     // Scope and lock the journal header before reading detail, keeping both

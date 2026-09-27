@@ -4,6 +4,7 @@ import { fromUnits, normalizeDecimal, toUnits } from "../money/money.ts";
 import type {
   MigrationSource,
 } from "./source.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 export interface ProjectFinancialInputSyncResult {
   sourceTimeEntries: number;
@@ -505,9 +506,7 @@ export async function syncProjectFinancialInputs(
 
   const actorId =
     options.actorId &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-      options.actorId,
-    )
+    isUuid(options.actorId)
       ? options.actorId
       : null;
   const BATCH = 1_000;

@@ -16,7 +16,7 @@ import { publishOverheadRates } from '../../../../../lib/overhead-publish'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
-import { isCalendarDate } from '../../../../../lib/setup/coerce'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
 
   if (body.action === 'publish') {
     const effectiveFrom = typeof body.effectiveFrom === 'string' ? body.effectiveFrom : ''
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? '') || !isCalendarDate(effectiveFrom)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? '') || !isIsoCalendarDate(effectiveFrom)) {
       return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 400 })
     }
     const rates: { departmentId: string; ratePerHour: string }[] = []
@@ -176,7 +176,7 @@ export async function POST(req: Request) {
     if (!typeIds.length || !overhead?.method) {
       return NextResponse.json({ error: 'projectTypeIds + overhead required' }, { status: 400 })
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) || !isCalendarDate(effectiveFrom)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom) || !isIsoCalendarDate(effectiveFrom)) {
       return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 400 })
     }
     if (typeIds.some((id) => !isUuid(id))) {

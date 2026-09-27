@@ -5,6 +5,7 @@ import { businessToday } from "../../platform/business-date.ts";
 import { requireHrmPerformanceOnEmployment, requireHrmRetentionRead } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, isUniqueViolationOn, mathRefusal } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 import { parseCivilDay } from "./performance-math.ts";
 import { employerSubsidiaryScope } from "./subsidiary-scope.ts";
 
@@ -49,14 +50,7 @@ const EXIT_REASONS = [
   "other",
 ] as const;
 
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || !UUID_RE.test(value)) {
-    throw new HrmPerformanceError("INVALID_INPUT", `${field} must be a uuid`);
-  }
-  return value;
-}
+const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 async function assertPerformanceFeature(exec: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
@@ -267,9 +261,9 @@ export interface RecordExitInput {
 
 /** Record the exit for a terminated employment. One per employment. */
 export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO> {
-  const orgId = requireId("orgId", input.orgId);
-  const actorId = requireId("actorId", input.actorId);
-  const employmentId = requireId("employmentId", input.employmentId);
+  const orgId = requireUuid(input.orgId, "orgId");
+  const actorId = requireUuid(input.actorId, "actorId");
+  const employmentId = requireUuid(input.employmentId, "employmentId");
   if (!(EXIT_REASONS as readonly string[]).includes(input.reasonKind)) {
     throw new HrmPerformanceError(
       "INVALID_INPUT",
@@ -284,7 +278,7 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
       ? null
       : mathRefusal("INVALID_INPUT", () => parseCivilDay(input.interviewHeldOn as string, "interview date"));
   const interviewerPartyId =
-    input.interviewerPartyId == null ? null : requireId("interviewerPartyId", input.interviewerPartyId);
+    input.interviewerPartyId == null ? null : requireUuid(input.interviewerPartyId, "interviewerPartyId");
   // The interview is a pair (held date with interviewer): a date without a
   // named interviewer, or an interviewer without a date, is refused by name
   // before storage pins it.
@@ -295,7 +289,7 @@ export async function recordExit(input: RecordExitInput): Promise<ExitRecordDTO>
     );
   }
   const terminationChangeId =
-    input.terminationChangeId == null ? null : requireId("terminationChangeId", input.terminationChangeId);
+    input.terminationChangeId == null ? null : requireUuid(input.terminationChangeId, "terminationChangeId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     await requireHrmPerformanceOnEmployment(db, orgId, actorId, employmentId, "hrm.performance.manage");
@@ -420,9 +414,9 @@ export interface UpdateExitInput {
  * correction appends its audit event in the same transaction.
  */
 export async function updateExitRecord(input: UpdateExitInput): Promise<ExitRecordDTO> {
-  const orgId = requireId("orgId", input.orgId);
-  const actorId = requireId("actorId", input.actorId);
-  const exitId = requireId("exitId", input.exitId);
+  const orgId = requireUuid(input.orgId, "orgId");
+  const actorId = requireUuid(input.actorId, "actorId");
+  const exitId = requireUuid(input.exitId, "exitId");
   if (!Number.isInteger(input.expectedRevision) || input.expectedRevision < 1) {
     throw new HrmPerformanceError(
       "INVALID_INPUT",
@@ -458,7 +452,7 @@ export async function updateExitRecord(input: UpdateExitInput): Promise<ExitReco
         ? current.interviewerPartyId
         : input.interviewerPartyId == null
           ? null
-          : requireId("interviewerPartyId", input.interviewerPartyId);
+          : requireUuid(input.interviewerPartyId, "interviewerPartyId");
     if ((interviewHeldOn === null) !== (interviewerPartyId === null)) {
       throw new HrmPerformanceError(
         "REFUSED",
@@ -517,9 +511,9 @@ export async function getExitRecord(args: {
   actorId: string;
   exitId: string;
 }): Promise<ExitRecordDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const exitId = requireId("exitId", args.exitId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const exitId = requireUuid(args.exitId, "exitId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireHrmRetentionRead(db, orgId, actorId);
@@ -539,10 +533,10 @@ export async function listExitRecords(args: {
   actorId: string;
   employmentId?: string;
 }): Promise<ExitRecordDTO[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   const employmentId =
-    args.employmentId == null ? null : requireId("employmentId", args.employmentId);
+    args.employmentId == null ? null : requireUuid(args.employmentId, "employmentId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireHrmRetentionRead(db, orgId, actorId);

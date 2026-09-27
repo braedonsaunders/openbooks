@@ -1,7 +1,8 @@
 /** Pure recognition-schedule computation. Split from revenue/recognition.ts (pure moves only). */
 import { apportion, cmp, fromUnits, mulPercent, toUnits } from "../money/money.ts";
 import { MAX_RECOGNITION_INITIAL_PERCENT, MAX_RECOGNITION_TERM_MONTHS, MIN_RECOGNITION_INITIAL_PERCENT } from "./recognition-limits.ts";
-import { addDays, addMonths, daysInMonth, epochDay, eventMonth, inclusiveDays, monthEnd, monthStart, recognitionDate, recognitionInteger } from "./recognition-dates.ts";
+import { eventMonth, onRecognitionCalendar, recognitionDate, recognitionInteger, shiftRecognitionDate } from "./recognition-dates.ts";
+import { addMonthsStart, calendarDaysBetween, endOfMonth, inclusiveCalendarDays, startOfMonth } from "../platform/civil-date.ts";
 import { RevenueRecognitionError } from "./recognition-transaction-price.ts";
 
 export type RecognitionMethod =
@@ -63,13 +64,13 @@ export function pctOf(totalUnits: bigint, pct: string): bigint {
 function resolveEnd(startOn: string, input: RecognitionInput): string {
   if (input.endOn) return input.endOn;
   const term = recognitionInteger(input.termPeriods ?? 1, "recognition term", 1);
-  return monthEnd(addMonths(monthStart(startOn), term - 1));
+  return onRecognitionCalendar(() => endOfMonth(addMonthsStart(startOn, term - 1)));
 }
 
 /** Whole calendar months a term spans, inclusive of first and last. */
 function monthSpan(startOn: string, endOn: string): number {
-  const [sy, sm] = monthStart(startOn).split("-").map(Number);
-  const [ey, em] = monthStart(endOn).split("-").map(Number);
+  const [sy, sm] = startOfMonth(startOn).split("-").map(Number);
+  const [ey, em] = startOfMonth(endOn).split("-").map(Number);
   return ey! * 12 + (em! - 1) - (sy! * 12 + (sm! - 1)) + 1;
 }
 
@@ -83,7 +84,7 @@ function spreadWithInitial(input: RecognitionInput, start: string, weights: numb
   const initialUnits = pctOf(totalUnits, input.initialAmountPercent ?? "0");
   const parts = apportion(totalUnits - initialUnits, weights.map(BigInt));
   if (weights.length > 0) parts[0]! += initialUnits;
-  return parts.map((units, i) => ({ month: addMonths(start, i), units }));
+  return parts.map((units, i) => ({ month: addMonthsStart(start, i), units }));
 }
 
 /**
@@ -108,8 +109,8 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
       `period offset must be a whole number from 0 through ${MAX_RECOGNITION_TERM_MONTHS}`,
     );
   }
-  const rawStart = addDays(input.startOn, input.startOffsetDays ?? 0);
-  const start = monthStart(rawStart);
+  const rawStart = shiftRecognitionDate(input.startOn, input.startOffsetDays ?? 0);
+  const start = startOfMonth(rawStart);
 
   // Fail closed on an inverted term by name: end-before-start yields
   // non-positive day weights, which apportion() refuses only generically.
@@ -119,7 +120,7 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
     input.method === "straight_line_daily"
   ) {
     const end = resolveEnd(rawStart, input);
-    if (epochDay(end) < epochDay(rawStart)) {
+    if (calendarDaysBetween(rawStart, end) < 0) {
       throw new RevenueRecognitionError(`recognition end (${end}) precedes the recognition start (${rawStart})`);
     }
     // Cap explicit endOn spans too: without this, a centuries-wide date
@@ -162,11 +163,11 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
         const n = Math.max(1, monthSpan(rawStart, end));
         const weights: number[] = [];
         for (let i = 0; i < n; i++) {
-          const m = addMonths(start, i);
-          if (n === 1) weights.push(inclusiveDays(rawStart, end));
-          else if (i === 0) weights.push(inclusiveDays(rawStart, monthEnd(rawStart)));
-          else if (i === n - 1) weights.push(inclusiveDays(m, end));
-          else weights.push(daysInMonth(m));
+          const m = addMonthsStart(start, i);
+          if (n === 1) weights.push(inclusiveCalendarDays(rawStart, end));
+          else if (i === 0) weights.push(inclusiveCalendarDays(rawStart, endOfMonth(rawStart)));
+          else if (i === n - 1) weights.push(inclusiveCalendarDays(m, end));
+          else weights.push(inclusiveCalendarDays(m, endOfMonth(m)));
         }
         return spreadWithInitial(input, start, weights);
       }
@@ -176,10 +177,10 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
         const n = Math.max(1, monthSpan(rawStart, end));
         const weights: number[] = [];
         for (let i = 0; i < n; i++) {
-          const m = addMonths(start, i);
+          const m = addMonthsStart(start, i);
           const segStart = i === 0 ? rawStart : m;
-          const segEnd = i === n - 1 ? end : monthEnd(m);
-          weights.push(inclusiveDays(segStart, segEnd));
+          const segEnd = i === n - 1 ? end : endOfMonth(m);
+          weights.push(inclusiveCalendarDays(segStart, segEnd));
         }
         return spreadWithInitial(input, start, weights);
       }
@@ -194,7 +195,7 @@ export function computeRecognitionSchedule(input: RecognitionInput): Recognition
     cumulative += l.units;
     return {
       sequence: idx,
-      periodMonth: addMonths(l.month, periodOffset),
+      periodMonth: onRecognitionCalendar(() => addMonthsStart(l.month, periodOffset)),
       planned: fromUnits(l.units),
       cumulative: fromUnits(cumulative),
     };

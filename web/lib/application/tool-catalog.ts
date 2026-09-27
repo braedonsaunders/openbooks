@@ -58,6 +58,7 @@ import type { ToolTier } from "../assistant/types";
 import { orgVitals } from "./vitals";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { UUID_RE } from "@openbooks/engine/src/platform/uuid.ts";
 import { FEATURES, featureEnabled, resolvedFeatureState } from "../features";
 import { applyFeatureChanges, normalizeFeatureChanges } from "../features-admin";
 import { readCompanySettings, updateCompanySettings } from "../company-settings";
@@ -91,10 +92,10 @@ export interface ApplicationToolDefinition {
  * Stable-UUID tool input. A plain regex (not `.uuid()`) on purpose: `.uuid()`
  * emits `format: uuid` into the provider JSON Schema, which strict providers
  * reject, while the equivalent `pattern` is accepted. The class is written
- * without a case-insensitive flag because JSON Schema patterns carry no
- * flags (same rule as web/lib/assistant/tools-shared.ts UUID_RE).
+ * through the house UUID_RE, which carries no case-insensitive flag because
+ * JSON Schema patterns carry no flags.
  */
-const UUID = z.string().regex(/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/)
+const UUID = z.string().regex(UUID_RE)
   .describe("UUID copied from a list_, find_, or get_ tool; never invent one.");
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
   .describe("Calendar date (YYYY-MM-DD).");

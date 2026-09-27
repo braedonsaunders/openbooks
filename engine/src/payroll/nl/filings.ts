@@ -21,6 +21,7 @@ import { NL_CERTIFICATES } from "./certificates.ts";
 import { isValidBsn } from "./bsn.ts";
 import { nlRatesForTaxYear } from "./loonheffing.ts";
 import type { NlAgeClass } from "./rates.ts";
+import { isUuid } from "../../platform/uuid.ts";
 
 /**
  * The NL pack's filing declaration: the jaaropgaaf population, slip and row
@@ -227,17 +228,6 @@ async function employerName(orgId: string): Promise<string> {
 // ---------------------------------------------------------------------------
 
 /**
- * The row-id UUID shape, verbatim the registry's (`isFilingRowUuid` in
- * engine/src/payroll/filing-registry.ts) but LOCAL: importing the registry at
- * runtime pulls engine/src/payroll/packs.ts into this module's evaluation,
- * and packs.ts dereferences this pack's const while it is still initializing
- * (the Canada filings module keeps the same local copy for the same reason).
- * The unit agreement test in filings.test.ts pins the two predicates
- * together, so a drift that 404s real rows fails loudly.
- */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
  * The statement's row identity: the dienstbetrekking, not the employee.
  * A stamped statement is `employeePartyId:employmentId` (both UUIDs); an
  * unstamped legacy statement keeps the bare employee UUID, which is the
@@ -263,8 +253,8 @@ export function jaaropgaafRowId(slip: Pick<JaaropgaafSlip, "employeePartyId" | "
  */
 export function parseJaaropgaafRowId(rowId: string): PayrollFilingRowScope | null {
   const parts = rowId.split(":");
-  if (parts.length === 1 && UUID_RE.test(parts[0]!)) return { employees: [parts[0]!], accounts: [] };
-  if (parts.length === 2 && UUID_RE.test(parts[0]!) && UUID_RE.test(parts[1]!)) {
+  if (parts.length === 1 && isUuid(parts[0]!)) return { employees: [parts[0]!], accounts: [] };
+  if (parts.length === 2 && isUuid(parts[0]!) && isUuid(parts[1]!)) {
     return { employees: [parts[0]!], accounts: [] };
   }
   return null;

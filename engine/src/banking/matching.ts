@@ -5,15 +5,12 @@ import { type ReconciliationRow, firstReconciliationCarry, type ReconciliationTo
 import { sql } from "drizzle-orm"
 import { db, inDbTransaction, schema, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts"
 import { fromUnits, sum, toUnits } from "../money/money.ts"
+import { calendarDaysBetween } from "../platform/civil-date.ts"
 import { lockScopeRows, ScopeNotFoundError } from "../organization/subsidiary-scope.ts"
 
 // ---------------------------------------------------------------------------
 // Matching
 // ---------------------------------------------------------------------------
-
-const DAY_MS = 86_400_000;
-const daysBetween = (a: string, b: string) =>
-  Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / DAY_MS;
 
 export interface AutoMatchResult {
   matched: number;
@@ -94,7 +91,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
       let bestIdx = -1;
       let bestDays = Infinity;
       for (let i = 0; i < candidates.length; i++) {
-        const days = daysBetween(line.posted_on, candidates[i]!.date);
+        const days = Math.abs(calendarDaysBetween(line.posted_on, candidates[i]!.date));
         if (days < bestDays) {
           bestDays = days;
           bestIdx = i;

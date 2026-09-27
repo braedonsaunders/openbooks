@@ -3,7 +3,6 @@ import test from "node:test";
 import {
   activationBillingCursors,
   AdvancedSubscriptionError,
-  addMonths,
   arrearsLinesForInterval,
   assertCotermAllowed,
   assertIdempotentReplay,
@@ -87,7 +86,6 @@ test("renewal boundary respects invoice timing and policy", () => {
   assert.equal(renewalAction({ billingTiming: "advance", dueOn: "2027-01-01", termEndsOn: "2027-01-01", policy: "auto" }), "renew");
   assert.equal(renewalAction({ billingTiming: "arrears", dueOn: "2027-01-01", termEndsOn: "2027-01-01", policy: "auto" }), "bill");
   assert.equal(renewalAction({ billingTiming: "arrears", dueOn: "2027-02-01", termEndsOn: "2027-01-01", policy: "manual" }), "stop");
-  assert.equal(addMonths("2026-01-31", 1), "2026-02-28");
 });
 
 test("multi-component invoice total preserves ledger precision", () => {
@@ -320,16 +318,14 @@ test('subscription date arithmetic rejects malformed dates, intervals, and fract
   const { advanceLifecycleDate } = await import('./advanced-subscriptions.ts');
   for (const count of [0, -1, 1.5, NaN, Infinity, 2147483648]) {
     assert.throws(() => advanceLifecycleDate('2026-01-31', 'monthly', count), AdvancedSubscriptionError);
-    assert.throws(() => addMonths('2026-01-31', count), AdvancedSubscriptionError);
   }
   for (const date of ['2026-02-30', '2026-13-01', '0000-01-01', '2026-1-1', '']) {
     assert.throws(() => advanceLifecycleDate(date, 'monthly'), AdvancedSubscriptionError);
-    assert.throws(() => addMonths(date, 1), AdvancedSubscriptionError);
   }
   assert.throws(() => advanceLifecycleDate('2026-01-01', 'typo' as 'monthly'), AdvancedSubscriptionError);
-  assert.throws(() => addMonths('9999-12-31', 1), AdvancedSubscriptionError);
   assert.equal(advanceLifecycleDate('2026-01-31', 'monthly', 2), '2026-03-31');
   assert.equal(advanceLifecycleDate('2028-02-29', 'annually'), '2029-02-28');
   assert.equal(advanceLifecycleDate('0096-02-28', 'weekly'), '0096-03-06');
-  assert.equal(addMonths('0096-01-31', 1), '0096-02-29');
+  assert.equal(advanceLifecycleDate('0096-01-31', 'monthly'), '0096-02-29');
+  assert.throws(() => advanceLifecycleDate('9999-12-31', 'monthly'), AdvancedSubscriptionError);
 });

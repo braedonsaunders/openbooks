@@ -22,6 +22,7 @@ import {
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { employerSubsidiaryScope } from "./subsidiary-scope.ts";
 import { HrmPerformanceError, isUniqueViolationOn } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 
 /**
  * Governed HRM 1:1s (0228, HR-17): schedule, hold, skip, cancel, agenda
@@ -62,14 +63,7 @@ export type OneOnOneItemKind = "talking_point" | "action_item" | "note";
 export type OneOnOneItemVisibility = "shared" | "private";
 export type OneOnOneItemStatus = "open" | "done" | "carried";
 
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || !UUID_RE.test(value)) {
-    throw new HrmPerformanceError("INVALID_INPUT", `${field} must be a uuid`);
-  }
-  return value;
-}
+const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 async function assertContinuousFeature(db: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
@@ -365,10 +359,10 @@ export async function scheduleOneOnOne(args: {
   scheduledAt: string;
   recurrence?: { every_weeks: number; weekday: number; time?: string } | null;
 }): Promise<OneOnOneDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const managerEmploymentId = requireId("managerEmploymentId", args.managerEmploymentId);
-  const reportEmploymentId = requireId("reportEmploymentId", args.reportEmploymentId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const managerEmploymentId = requireUuid(args.managerEmploymentId, "managerEmploymentId");
+  const reportEmploymentId = requireUuid(args.reportEmploymentId, "reportEmploymentId");
   if (managerEmploymentId === reportEmploymentId) {
     throw new HrmPerformanceError("INVALID_INPUT", "a 1:1 needs two different employments — manager and report cannot be the same person");
   }
@@ -488,9 +482,9 @@ async function nextOccurrenceAt(
 }
 
 export async function holdOneOnOne(args: { orgId: string; actorId: string; id: string }): Promise<OneOnOneDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const id = requireId("id", args.id);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const id = requireUuid(args.id, "id");
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
     await lockOneOnOneReport(db, orgId, actorId, id);
@@ -575,9 +569,9 @@ export async function skipOneOnOne(args: {
   id: string;
   reason: string;
 }): Promise<OneOnOneDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const id = requireId("id", args.id);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const id = requireUuid(args.id, "id");
   if (typeof args.reason !== "string" || args.reason.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "skipping a 1:1 needs a reason — say why this occurrence is skipped");
   }
@@ -619,9 +613,9 @@ export async function skipOneOnOne(args: {
 }
 
 export async function cancelOneOnOne(args: { orgId: string; actorId: string; id: string }): Promise<void> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const id = requireId("id", args.id);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const id = requireUuid(args.id, "id");
   await withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
     await lockOneOnOneReport(db, orgId, actorId, id);
@@ -652,9 +646,9 @@ export async function addOneOnOneItem(args: {
   assigneePartyId?: string | null;
   dueOn?: string | null;
 }): Promise<OneOnOneItemDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const oneOnOneId = requireId("oneOnOneId", args.oneOnOneId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const oneOnOneId = requireUuid(args.oneOnOneId, "oneOnOneId");
   if (!["talking_point", "action_item", "note"].includes(args.kind)) {
     throw new HrmPerformanceError("INVALID_INPUT", "item kind must be talking_point, action_item, or note");
   }
@@ -711,10 +705,10 @@ export async function setOneOnOneItemDone(args: {
   itemId: string;
   done: boolean;
 }): Promise<void> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const oneOnOneId = requireId("oneOnOneId", args.oneOnOneId);
-  const itemId = requireId("itemId", args.itemId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const oneOnOneId = requireUuid(args.oneOnOneId, "oneOnOneId");
+  const itemId = requireUuid(args.itemId, "itemId");
   await withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
     await lockOneOnOneReport(db, orgId, actorId, oneOnOneId);
@@ -746,8 +740,8 @@ export async function listOneOnOneDirectory(args: {
   orgId: string;
   actorId: string;
 }): Promise<{ employments: readonly { id: string; name: string; mine: boolean }[] }> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
     const readScope = await performanceReadScope(db, orgId, actorId);
@@ -807,9 +801,9 @@ export async function listOneOnOneDirectory(args: {
 }
 
 export async function getOneOnOne(args: { orgId: string; actorId: string; id: string }): Promise<OneOnOneDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const id = requireId("id", args.id);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const id = requireUuid(args.id, "id");
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
     await lockOneOnOneReport(db, orgId, actorId, id);
@@ -830,8 +824,8 @@ export async function listOneOnOnes(args: {
   employmentId?: string;
   status?: OneOnOneStatus;
 }): Promise<readonly OneOnOneDTO[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertOneOnOnesFeature(db, orgId);
     const readScope = await performanceReadScope(db, orgId, actorId);

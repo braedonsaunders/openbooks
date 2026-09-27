@@ -48,7 +48,7 @@ import {
 import { isFeatureEnabled } from "../../../lib/features";
 import { guardPropertyManagementFeature } from "../../../lib/property-management-gate";
 import { notFound } from "@/lib/api/responses";
-
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,8 +116,6 @@ const knownActions = new Set([
   "finalizeCam",
   "billCam",
 ]);
-const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
 
 function persistMoney(value: unknown): string | null {
@@ -167,7 +165,7 @@ async function guardSubsidiaryAccess(
       body.poolId ??
       "",
   );
-  if (action !== "createProperty" && !UUID.test(recordId)) {
+  if (action !== "createProperty" && !isUuid(recordId)) {
     return NextResponse.json(
       { error: "Property-management record not found" },
       { status: 404 },
@@ -237,7 +235,7 @@ async function guardSubsidiaryAccess(
       // A draft lease may move to another property: the target must be
       // visible to the caller too, and a hidden target reads as missing.
       const targetId = String(body.propertyId ?? "");
-      const target = UUID.test(targetId)
+      const target = isUuid(targetId)
         ? (await db.execute<{ subsidiaryId: string | null }>(
             sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${targetId}`,
           )).rows[0]?.subsidiaryId ?? null

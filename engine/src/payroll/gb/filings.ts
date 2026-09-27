@@ -27,6 +27,7 @@ import type { PayrollFilingData, PayrollFilingRowScope, PayrollFilingSlipData, P
 import { PayrollError } from "../error.ts";
 import { filingAccountRef, filingAccountsById } from "../filing.ts";
 import type { GbYearStatement } from "../yearend.ts";
+import { isUuid } from "../../platform/uuid.ts";
 
 /**
  * yearend.ts reaches the pack REGISTRY (packs.ts), and the registry builds its
@@ -38,17 +39,6 @@ import type { GbYearStatement } from "../yearend.ts";
  * async, so load it on first use instead.
  */
 const gbYearEnd = () => import("../yearend.ts");
-
-/**
- * The row-id UUID shape, owned locally (the de/filings.ts and canada/filings.ts
- * precedent) rather than imported from filing-registry.ts: that module imports
- * packs.ts at evaluation time, so a pack-tree module reaching it puts its own
- * pack object mid-flight when packs.ts evaluates PAYROLL_COUNTRY_PACKS --
- * `Cannot access 'GB_PACK' before initialization` for any entry starting at
- * gb/pack.ts.
- */
-const ROW_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const isFilingRowUuid = (value: string): boolean => ROW_UUID_RE.test(value);
 
 /**
  * The `employee:account` row grammar, as the inverse of the P60/P45
@@ -63,8 +53,8 @@ export function parseGbStatementRowId(rowId: string): PayrollFilingRowScope | nu
   const parts = rowId.split(":");
   const employee = parts[0] ?? "";
   const account = parts[1] ?? "";
-  if (parts.length !== 2 || !isFilingRowUuid(employee)) return null;
-  if (account && !isFilingRowUuid(account)) return null;
+  if (parts.length !== 2 || !isUuid(employee)) return null;
+  if (account && !isUuid(account)) return null;
   return { employees: [employee], accounts: account ? [account] : [] };
 }
 

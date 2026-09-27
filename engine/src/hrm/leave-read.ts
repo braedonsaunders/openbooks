@@ -27,6 +27,7 @@ import {
   type CarryoverRule,
   type PolicyCandidate,
 } from "./leave-math.ts";
+import { inputGuards } from "./input-guards.ts";
 
 /**
  * HRM leave reads (HR-5). Two balances, never conflated in code or copy:
@@ -40,6 +41,8 @@ import {
  *   module only carries the display label. Labelled as value everywhere it
  *   surfaces.
  */
+
+const { requireOrgId, requireActorId } = inputGuards((message) => new EmploymentReadError(message));
 
 export interface PolicyScope {
   readonly employmentId: string;
@@ -380,14 +383,8 @@ async function loadLeaveFilingEmploymentOptions(
   exec: SqlExecutor,
   query: LeaveFilingEmploymentOptionsQuery,
 ): Promise<readonly LeaveFilingEmploymentOption[]> {
-  const orgId = query.orgId;
-  const actorId = query.actorId;
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new EmploymentReadError("orgId must be a non-empty string");
-  }
-  if (typeof actorId !== "string" || actorId.length === 0) {
-    throw new EmploymentReadError("actorId must be a non-empty string");
-  }
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
   const limit = query.limit ?? 25;
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
     throw new EmploymentReadError(

@@ -10,6 +10,7 @@
  * The period math is pure (no database, no clock) so it is fully unit-tested;
  * the DB-backed loader wraps it.
  */
+import { civilDateFromParts, daysInCivilMonth } from "../platform/civil-date.ts";
 
 export type FilingFrequency =
   | "monthly"
@@ -32,22 +33,6 @@ export interface FilingPeriod {
   periodStart: string;
   /** Inclusive last day, "YYYY-MM-DD". */
   periodEnd: string;
-}
-
-function iso(year: number, month1: number, day: number): string {
-  return `${year.toString().padStart(4, "0")}-${month1
-    .toString()
-    .padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
-}
-
-/** Last calendar day of a 1-based month, honoring leap years. */
-function lastDayOfMonth(year: number, month1: number): number {
-  // Local copy of the platform/business-date.ts utcDateFromParts idiom
-  // (`new Date(0)` + setUTCFullYear, which keeps literal years 0001-0099 that
-  // Date.UTC would remap onto 1900-1999): this module is import-free and stays so.
-  const end = new Date(0);
-  end.setUTCFullYear(year, month1, 0);
-  return end.getUTCDate();
 }
 
 /**
@@ -82,8 +67,8 @@ export function filingPeriods(
     const endYear = year + Math.floor((endMonthAbsolute - 1) / 12);
     const endMonth = ((endMonthAbsolute - 1) % 12) + 1;
 
-    const periodStart = iso(year, startMonth, 1);
-    const periodEnd = iso(endYear, endMonth, lastDayOfMonth(endYear, endMonth));
+    const periodStart = civilDateFromParts(year, startMonth, 1);
+    const periodEnd = civilDateFromParts(endYear, endMonth, daysInCivilMonth(endYear, endMonth));
     const startDate = new Date(`${periodStart}T00:00:00Z`);
 
     if (startDate > to) break;

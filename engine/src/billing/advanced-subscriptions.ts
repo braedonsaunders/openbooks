@@ -281,10 +281,6 @@ function nonNegativeMoney(value: string | undefined, label: string): string {
   return normalized;
 }
 
-export function addMonths(isoDate: string, months: number): string {
-  return advanceLifecycleDate(isoDate, "monthly", months);
-}
-
 /** First invoice date for a trial-aware advance/arrears contract. */
 export function firstLifecycleBillOn(input: {
   termStartsOn: string;
@@ -970,7 +966,7 @@ export async function applyAmendment(orgId: string, actorId: string | null, requ
     if (request.type === "renew") {
       const months = subscriptionPeriodCount(request.renewalTermMonths ?? before.lifecycle.renewalTermMonths ?? 12, "renewal term");
       if (months < 1 || !before.lifecycle.termEndsOn) throw new AdvancedSubscriptionError("renewal requires a current term end and positive renewal term");
-      const nextEnd = addMonths(before.lifecycle.termEndsOn, months);
+      const nextEnd = advanceLifecycleDate(before.lifecycle.termEndsOn, "monthly", months);
       await db.execute(sql`update subscription_lifecycles set term_starts_on = ${before.lifecycle.termEndsOn}, term_ends_on = ${nextEnd}, renewal_on = ${nextEnd}, renewal_term_months = ${months}, updated_at = now(), updated_by = ${attributedBy} where org_id = ${orgId} and subscription_id = ${request.subscriptionId}`);
     }
     if (request.type === "coterm") {
@@ -1089,19 +1085,6 @@ export interface ComponentWindow extends AdvancedBillingLine, Record<string, unk
 }
 
 /**
- * Window overlap arithmetic goes through the single civil-date definition in
- * platform/business-date.ts (civilDayIndex / isoFromCivilDayIndex), which
- * keeps literal years 0001-0099 instead of remapping them onto 1900-1999.
- */
-function dayIndex(isoDate: string): number {
-  return civilDayIndex(isoDate);
-}
-
-function isoFromDayIndex(day: number): string {
-  return isoFromCivilDayIndex(day);
-}
-
-/**
  * Price arrears components over the actual SERVICE interval
  * [periodStartsOn, periodEndsOn), end-exclusive. Stored component windows are
  * inclusive on both ends (an amendment closes the prior window on
@@ -1120,7 +1103,7 @@ export function arrearsLinesForInterval(
   periodEndsOn: string,
   windows: ComponentWindow[],
 ): AdvancedBillingLine[] {
-  const totalDays = dayIndex(periodEndsOn) - dayIndex(periodStartsOn);
+  const totalDays = civilDayIndex(periodEndsOn) - civilDayIndex(periodStartsOn);
   if (!(totalDays > 0)) return [];
   const byKey = new Map<string, ComponentWindow[]>();
   for (const window of windows) {
@@ -1133,9 +1116,9 @@ export function arrearsLinesForInterval(
     const ordered = [...rows].sort((left, right) => (left.effectiveFrom < right.effectiveFrom ? -1 : left.effectiveFrom > right.effectiveFrom ? 1 : 0));
     const overlaps = ordered.flatMap((row) => {
       const windowStartsOn = row.effectiveFrom > periodStartsOn ? row.effectiveFrom : periodStartsOn;
-      const rowEndsExclusive = row.effectiveTo === null ? periodEndsOn : isoFromDayIndex(dayIndex(row.effectiveTo) + 1);
+      const rowEndsExclusive = row.effectiveTo === null ? periodEndsOn : isoFromCivilDayIndex(civilDayIndex(row.effectiveTo) + 1);
       const windowEndsOn = rowEndsExclusive < periodEndsOn ? rowEndsExclusive : periodEndsOn;
-      const coveredDays = dayIndex(windowEndsOn) - dayIndex(windowStartsOn);
+      const coveredDays = civilDayIndex(windowEndsOn) - civilDayIndex(windowStartsOn);
       return coveredDays > 0 ? [{ row, windowStartsOn, windowEndsOn, coveredDays }] : [];
     });
     // No change inside the interval (a successor starting exactly on the
@@ -1153,7 +1136,7 @@ export function arrearsLinesForInterval(
           taxCodeId: row.taxCodeId,
         });
       } else {
-        const windowEndsInclusive = isoFromDayIndex(dayIndex(windowEndsOn) - 1);
+        const windowEndsInclusive = isoFromCivilDayIndex(civilDayIndex(windowEndsOn) - 1);
         lines.push({
           description: `${row.description} (${windowStartsOn} → ${windowEndsInclusive})`,
           quantity: "1",

@@ -2,10 +2,9 @@ import "server-only";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { REVENUE_TYPES } from "../reports/statements";
-import { addMonthsIso } from "@openbooks/reports";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { addMonthsClamped, businessToday, calendarDaysBetween } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig } from "./config";
 import { englishCustomerStrings, type CustomerStrings } from "./customer-strings";
@@ -554,10 +553,6 @@ export async function customerProfitability(
 }
 
 /* -------------------------------------------------------------- utilities */
-function daysBetween(a: string, b: string): number {
-  return Math.round((new Date(b + "T00:00:00Z").getTime() - new Date(a + "T00:00:00Z").getTime()) / 86_400_000);
-}
-
 /** the percentile: value at fraction p of a pre-sorted ascending array. */
 function percentile(sorted: number[], p: number): number {
   if (!sorted.length) return 0;
@@ -565,7 +560,7 @@ function percentile(sorted: number[], p: number): number {
 }
 
 function priorYearIso(iso: string): string {
-  return addMonthsIso(iso, -12);
+  return addMonthsClamped(iso, -12);
 }
 
 /* ------------------------------------------------------------------- main */
@@ -1028,8 +1023,8 @@ export async function customerData(
       avgValue: c.txns > 0 ? invoicedRevenue / c.txns : 0,
       first: c.first,
       last: c.last,
-      recency: c.last ? Math.max(0, daysBetween(c.last, ref)) : 9999,
-      tenure: c.first && c.last ? daysBetween(c.first, c.last) : 0,
+      recency: c.last ? Math.max(0, calendarDaysBetween(c.last, ref)) : 9999,
+      tenure: c.first && c.last ? calendarDaysBetween(c.first, c.last) : 0,
     };
   });
 

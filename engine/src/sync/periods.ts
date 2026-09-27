@@ -1,3 +1,4 @@
+import { addCalendarDays, addMonthsClamped, civilDateFromParts, daysInCivilMonth, parseIsoDate } from "../platform/civil-date.ts";
 import type { SourceEntity } from "./source.ts";
 
 export type ImportedLockState = "open" | "soft_closed" | "closed";
@@ -10,28 +11,6 @@ export interface SourceFiscalYear {
   endsOn: string;
 }
 
-const iso = (date: Date) => date.toISOString().slice(0, 10);
-const utc = (value: string) => new Date(`${value}T00:00:00Z`);
-/**
- * UTC-midnight Date for civil (year, monthIndex, day) parts. Local copy of
- * the platform/business-date.ts utcDateFromParts idiom (`new Date(0)` +
- * setUTCFullYear, which keeps literal years 0001-0099 that Date.UTC would
- * remap onto 1900-1999): this source-mapping module loads no platform stack.
- */
-function utcCivilDate(year: number, monthIndex: number, day: number): Date {
-  const date = new Date(0);
-  date.setUTCFullYear(year, monthIndex, day);
-  return date;
-}
-const addMonths = (date: Date, months: number) => {
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth() + months;
-  const day = date.getUTCDate();
-  const lastDay = utcCivilDate(year, month + 1, 0).getUTCDate();
-  return utcCivilDate(year, month, Math.min(day, lastDay));
-};
-const dayBefore = (date: Date) => new Date(date.getTime() - 86_400_000);
-
 /** Build exact monthly posting periods inside source fiscal-year boundaries. */
 export function monthlySourcePeriods(
   prefix: string,
@@ -40,15 +19,15 @@ export function monthlySourcePeriods(
 ): SourceEntity[] {
   const out: SourceEntity[] = [];
   for (const year of years) {
-    let cursor = utc(year.startsOn);
-    const fiscalEnd = utc(year.endsOn);
+    let cursor = year.startsOn;
+    const fiscalEnd = year.endsOn;
     let periodNumber = 0;
     while (cursor <= fiscalEnd) {
       periodNumber++;
-      const next = addMonths(cursor, 1);
-      const periodEnd = dayBefore(next) < fiscalEnd ? dayBefore(next) : fiscalEnd;
-      const startsOn = iso(cursor);
-      const endsOn = iso(periodEnd);
+      const next = addMonthsClamped(cursor, 1);
+      const lastDay = addCalendarDays(next, -1);
+      const startsOn = cursor;
+      const endsOn = lastDay < fiscalEnd ? lastDay : fiscalEnd;
       out.push({
         sourceRef: `${prefix}:${year.key}:${periodNumber}`,
         fields: {
@@ -70,17 +49,17 @@ export function monthlySourcePeriods(
 
 /** Build fiscal-year ranges covering a source's known operating date span. */
 export function fiscalYearsForRange(start: string, end: string, startMonth: number): SourceFiscalYear[] {
-  const first = utc(start);
-  const last = utc(end);
+  const first = parseIsoDate(start);
+  parseIsoDate(end);
   const years: SourceFiscalYear[] = [];
   let startYear = first.getUTCFullYear();
   if (first.getUTCMonth() + 1 < startMonth) startYear--;
   for (;;) {
-    const starts = utcCivilDate(startYear, startMonth - 1, 1);
-    const ends = dayBefore(utcCivilDate(startYear + 1, startMonth - 1, 1));
-    if (starts > last) break;
+    const startsOn = civilDateFromParts(startYear, startMonth, 1);
+    const endsOn = addCalendarDays(civilDateFromParts(startYear + 1, startMonth, 1), -1);
+    if (startsOn > end) break;
     const fiscalYear = startMonth === 1 ? startYear : startYear + 1;
-    years.push({ key: String(fiscalYear), fiscalYear, startsOn: iso(starts), endsOn: iso(ends) });
+    years.push({ key: String(fiscalYear), fiscalYear, startsOn, endsOn });
     startYear++;
   }
   return years;
@@ -92,18 +71,15 @@ export function fiscalYearsForEndingRule(
   endMonth: number,
   endDay: number,
 ): SourceFiscalYear[] {
-  const rangeStart = utc(start);
-  const rangeEnd = utc(end);
+  const rangeStartYear = parseIsoDate(start).getUTCFullYear();
+  const rangeEndYear = parseIsoDate(end).getUTCFullYear();
   const years: SourceFiscalYear[] = [];
-  const endFor = (year: number) => {
-    const lastDay = utcCivilDate(year, endMonth, 0).getUTCDate();
-    return utcCivilDate(year, endMonth - 1, Math.min(endDay, lastDay));
-  };
-  for (let fiscalYear = rangeStart.getUTCFullYear() - 1; fiscalYear <= rangeEnd.getUTCFullYear() + 2; fiscalYear++) {
-    const ends = endFor(fiscalYear);
-    const starts = new Date(endFor(fiscalYear - 1).getTime() + 86_400_000);
-    if (ends < rangeStart || starts > rangeEnd) continue;
-    years.push({ key: String(fiscalYear), fiscalYear, startsOn: iso(starts), endsOn: iso(ends) });
+  const endFor = (year: number) => civilDateFromParts(year, endMonth, Math.min(endDay, daysInCivilMonth(year, endMonth)));
+  for (let fiscalYear = rangeStartYear - 1; fiscalYear <= rangeEndYear + 2; fiscalYear++) {
+    const endsOn = endFor(fiscalYear);
+    const startsOn = addCalendarDays(endFor(fiscalYear - 1), 1);
+    if (endsOn < start || startsOn > end) continue;
+    years.push({ key: String(fiscalYear), fiscalYear, startsOn, endsOn });
   }
   return years;
 }

@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   addCalendarDays,
-  addCalendarMonthsStart,
+  addMonthsStart,
   businessToday,
   isIsoCalendarDate,
   startOfMonth,
@@ -610,7 +610,7 @@ const crmForecast: AssistantToolDef = {
     // Same window defaults as GET /api/crm/forecasts: this month plus two.
     const today = await businessToday(authz.user.orgId);
     const periodStart = a.periodStart ?? startOfMonth(today);
-    const periodEnd = a.periodEnd ?? addCalendarDays(addCalendarMonthsStart(startOfMonth(today), 3), -1);
+    const periodEnd = a.periodEnd ?? addCalendarDays(addMonthsStart(startOfMonth(today), 3), -1);
     if (!isIsoCalendarDate(periodStart) || !isIsoCalendarDate(periodEnd) || periodEnd < periodStart) {
       return { ok: false, error: "invalid_forecast_period" };
     }

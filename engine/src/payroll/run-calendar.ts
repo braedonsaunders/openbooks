@@ -1,4 +1,5 @@
 import { PayrollError } from "./error.ts";
+import { daysInCivilMonth, utcDateFromParts } from "../platform/civil-date.ts";
 export type ScheduleRow = {
   id: string; frequency: string; periods_per_year: number;
   anchor_period_end: string; pay_date_offset_days: number;
@@ -24,21 +25,6 @@ export interface SemiMonthlyBoundaries {
 
 
 
-/**
- * UTC-midnight Date for civil (year, monthIndex, day) parts. Local copy of
- * the platform/business-date.ts utcDateFromParts idiom (`new Date(0)` +
- * setUTCFullYear, which keeps literal years 0001-0099 that Date.UTC would
- * remap onto 1900-1999): this schedule module is database-free and must not
- * load the db-backed platform stack.
- */
-function utcCivilDate(year: number, monthIndex: number, day: number): Date {
-  const date = new Date(0);
-  date.setUTCFullYear(year, monthIndex, day);
-  return date;
-}
-
-const monthLengthOf = (d: Date): number =>
-  utcCivilDate(d.getUTCFullYear(), d.getUTCMonth() + 1, 0).getUTCDate();
 
 /**
  * Why an anchor cannot name a semi-monthly schedule, or null if it can.
@@ -67,7 +53,7 @@ export function semiMonthlyAnchorProblem(anchorPeriodEnd: string): string | null
     return `"${anchorPeriodEnd}" is not a date, so no semi-monthly period can be derived from it`;
   }
   const day = anchor.getUTCDate();
-  const monthLength = monthLengthOf(anchor);
+  const monthLength = daysInCivilMonth(anchor.getUTCFullYear(), anchor.getUTCMonth() + 1);
   if (day === 28 && monthLength === 28) {
     return "a semi-monthly schedule anchored on the last day of February cannot be read: the 28th "
       + "is both a day every month has (periods would end on the 13th and the 28th) and February's "
@@ -148,9 +134,9 @@ export function semiMonthlyBoundaries(anchorPeriodEnd: string): SemiMonthlyBound
 function semiMonthlyEndsIn(
   boundaries: SemiMonthlyBoundaries, year: number, month: number,
 ): [Date, Date] {
-  const lastDay = utcCivilDate(year, month + 1, 0).getUTCDate();
+  const lastDay = utcDateFromParts(year, month + 1, 0).getUTCDate();
   const second = boundaries.secondDay === "month_end" ? lastDay : boundaries.secondDay;
-  return [utcCivilDate(year, month, boundaries.firstDay), utcCivilDate(year, month, second)];
+  return [utcDateFromParts(year, month, boundaries.firstDay), utcDateFromParts(year, month, second)];
 }
 
 /** Period boundaries for a schedule: [start, end] containing/after `from`. */
@@ -188,10 +174,10 @@ export function nextPeriodAfter(
     // across a month boundary, where it lives in the previous month.
     // Seeded from the month before the cursor's, both of whose boundaries are
     // necessarily on or before the cursor.
-    const seed = utcCivilDate(cursor.getUTCFullYear(), cursor.getUTCMonth() - 1, 1);
+    const seed = utcDateFromParts(cursor.getUTCFullYear(), cursor.getUTCMonth() - 1, 1);
     let previous = semiMonthlyEndsIn(boundaries, seed.getUTCFullYear(), seed.getUTCMonth())[1];
     for (let m = 0; m < 26; m++) {
-      const base = utcCivilDate(cursor.getUTCFullYear(), cursor.getUTCMonth() + m, 1);
+      const base = utcDateFromParts(cursor.getUTCFullYear(), cursor.getUTCMonth() + m, 1);
       for (const end of semiMonthlyEndsIn(boundaries, base.getUTCFullYear(), base.getUTCMonth())) {
         if (end.getTime() > cursor.getTime()) {
           return { periodStart: iso(new Date(previous.getTime() + DAY)), periodEnd: iso(end) };
@@ -207,11 +193,11 @@ export function nextPeriodAfter(
   for (let m = 0; m < 14; m++) {
     const y = cursor.getUTCFullYear();
     const mo = cursor.getUTCMonth() + m;
-    const lastDay = utcCivilDate(y, mo + 1, 0).getUTCDate();
-    const end = utcCivilDate(y, mo, Math.min(anchorDay, lastDay));
+    const lastDay = utcDateFromParts(y, mo + 1, 0).getUTCDate();
+    const end = utcDateFromParts(y, mo, Math.min(anchorDay, lastDay));
     if (end.getTime() > cursor.getTime()) {
-      const prevLast = utcCivilDate(y, mo, 0).getUTCDate();
-      const start = utcCivilDate(y, mo - 1, Math.min(anchorDay, prevLast) + 1);
+      const prevLast = utcDateFromParts(y, mo, 0).getUTCDate();
+      const start = utcDateFromParts(y, mo - 1, Math.min(anchorDay, prevLast) + 1);
       return { periodStart: iso(start), periodEnd: iso(end) };
     }
   }

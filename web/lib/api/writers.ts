@@ -62,6 +62,7 @@ import {
   type ApiField,
   type ResolvedApiType,
 } from "./schema-registry";
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 /**
  * The generic write engine behind /api/v1/records. Every writer reuses the
@@ -612,9 +613,6 @@ const RECORD_REFERENCE_TABLES: Record<string, string> = {
   gl_account: "accounts",
 };
 
-const RECORD_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** Field ids in `data` whose picker value is not owned by `orgId` (callers map to a tenant-opaque 404). */
 async function findUnownedRecordReferences(
   orgId: string,
@@ -626,7 +624,7 @@ async function findUnownedRecordReferences(
     const refTable = RECORD_REFERENCE_TABLES[fieldType];
     // Empty clears the field; shape-invalid values are refused upstream by
     // validateRecordData — only well-formed present values need an owner.
-    if (!refTable || typeof raw !== "string" || !RECORD_UUID_RE.test(raw)) return;
+    if (!refTable || !isUuid(raw)) return;
     const list = wanted.get(refTable) ?? [];
     list.push({ field: fieldId, value: raw });
     wanted.set(refTable, list);

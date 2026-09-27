@@ -18,6 +18,7 @@ import { BR_TAX_YEARS } from "./rates.ts";
 import { BR_2024_DEPENDENTE } from "./tax-year-2024.ts";
 import { BR_2025_DEPENDENTE } from "./tax-year-2025.ts";
 import { BR_2026_DEPENDENTE } from "./tax-year-2026.ts";
+import { isUuid } from "../../platform/uuid.ts";
 
 /**
  * The BR pack's year-end builders: the Comprovante de Rendimentos Pagos e de
@@ -103,15 +104,6 @@ export function brInformeChannelNote(taxYear: number): string {
 }
 
 /**
- * The row-id UUID shape, LOCAL to this module (the CA precedent): a value
- * import of the registry's shared helper would close a module-evaluation
- * cycle (registry → packs → br/pack → here → registry) and read
- * BR_PAYROLL_PACK before initialisation. Type imports are erased and cost
- * nothing.
- */
-const INFORME_ROW_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/**
  * The informe row grammar, as the inverse of brInformeRows'
  * `employee:account` construction (the account empty for the unassigned
  * aggregate — the W-2 grammar's shape, owned HERE beside the builder).
@@ -120,8 +112,8 @@ export function parseBrInformeRowId(rowId: string): PayrollFilingRowScope | null
   const parts = rowId.split(":");
   const employee = parts[0] ?? "";
   const account = parts[1] ?? "";
-  if (parts.length !== 2 || !INFORME_ROW_UUID_RE.test(employee)) return null;
-  if (account && !INFORME_ROW_UUID_RE.test(account)) return null;
+  if (parts.length !== 2 || !isUuid(employee)) return null;
+  if (account && !isUuid(account)) return null;
   return { employees: [employee], accounts: account ? [account] : [] };
 }
 

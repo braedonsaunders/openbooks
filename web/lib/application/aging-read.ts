@@ -1,5 +1,5 @@
 import "server-only";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { can } from "../authz";
 import { normalizeMoneyValue } from "../cash/core";
 import { clamp, isUuid } from "../list-params";
@@ -35,8 +35,8 @@ type AgingBuckets = {
   total: ExactDecimal;
 };
 
-function isoDate(value: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) throw invalidInput("asOf must be YYYY-MM-DD");
+function requireAsOf(value: string): string {
+  if (!isIsoCalendarDate(value)) throw invalidInput("asOf must be YYYY-MM-DD");
   return value;
 }
 
@@ -73,7 +73,7 @@ function sliceOf(row: AgingBuckets, bucket: string | undefined): ExactDecimal {
 }
 
 async function agingAsOf(context: ApplicationContext, asOf?: string): Promise<string> {
-  return asOf ? isoDate(asOf) : businessToday(context.authz.user.orgId);
+  return asOf ? requireAsOf(asOf) : businessToday(context.authz.user.orgId);
 }
 
 function agingFailure(error: unknown): never {

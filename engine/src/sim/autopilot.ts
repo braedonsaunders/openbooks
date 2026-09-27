@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp } from "../money/money.ts";
-import { addDays, dayOfMonth, isMonthEnd, recordCoverage } from "./manifest.ts";
+import { dayOfMonth, isMonthEnd, recordCoverage } from "./manifest.ts";
+import { addCalendarDays } from "../platform/civil-date.ts";
 import * as observe from "./observe.ts";
 import * as ops from "./ops.ts";
 import * as opsTm from "./ops-tm.ts";
@@ -41,7 +42,7 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
     await db.execute(sql`
       update documents
          set document_date = ${today},
-             due_date = case when due_date is null or due_date < ${today} then ${addDays(today, 30)} else due_date end
+             due_date = case when due_date is null or due_date < ${today} then ${addCalendarDays(today, 30)} else due_date end
        where id = ${bill.id} and org_id = ${world.orgId} and status = 'draft' and document_date < ${today}`);
     try {
       await ops.postBill(world, bill.id);
@@ -51,7 +52,7 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
   }
 
   const open = (await observe.apOpen(world)) as { vendorId: string; lineId: string; dueDate: string | null }[];
-  const horizon = addDays(today, 7);
+  const horizon = addCalendarDays(today, 7);
   const byVendor = new Map<string, string[]>();
   for (const item of open) {
     if (item.dueDate === null || item.dueDate <= horizon) {
@@ -101,8 +102,8 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
     await db.execute(sql`
       update documents
          set document_date = ${today},
-             due_date = case when due_date is null or due_date < ${today} then ${addDays(today, 30)} else due_date end,
-             expected_pay_date = case when expected_pay_date is null or expected_pay_date < ${today} then ${addDays(today, 38)} else expected_pay_date end
+             due_date = case when due_date is null or due_date < ${today} then ${addCalendarDays(today, 30)} else due_date end,
+             expected_pay_date = case when expected_pay_date is null or expected_pay_date < ${today} then ${addCalendarDays(today, 38)} else expected_pay_date end
        where id = ${inv.id} and org_id = ${world.orgId} and status = 'draft' and document_date < ${today}`);
     try {
       await ops.issueInvoice(world, inv.id);
@@ -165,7 +166,7 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
 
   // --- Controller: close the prior month on the close day ----------------
   if (dayOfMonth(today) === profile.cadence.closeDayOfMonth) {
-    const priorMonthEnd = addDays(`${today.slice(0, 7)}-01`, -1); // last day of previous month
+    const priorMonthEnd = addCalendarDays(`${today.slice(0, 7)}-01`, -1); // last day of previous month
     const priorName = priorMonthEnd.slice(0, 7);
     const period = world.periods.find((p) => p.name === priorName);
     if (period) {

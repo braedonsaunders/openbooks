@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { CUSTOM_FIELD_REFERENCE_TABLES } from "@openbooks/customization";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Ownership + shape fence for document mutations that write AROUND
@@ -32,9 +33,6 @@ const DATE_FIELDS: ReadonlySet<string> = new Set([
 const REFERENCE_OWNER_TABLES: ReadonlySet<string> = new Set(
   CUSTOM_FIELD_REFERENCE_TABLES as readonly string[],
 );
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A mutation-supplied reference the caller's org does not own (callers surface the message opaquely). */
 export class DocumentMutationReferenceError extends Error {
@@ -121,7 +119,7 @@ export async function assertDocumentMutationRefsOwned(
       // every other present value needs a shape and an owner. Shape is
       // refused here (the HTTP writers 422 malformed ids) so a script typo
       // surfaces readably instead of as a raw storage error.
-      if (typeof value !== "string" || !UUID_RE.test(value)) {
+      if (!isUuid(value)) {
         throw new DocumentMutationReferenceError(
           field,
           `${field} must be a valid record reference`,
@@ -133,7 +131,7 @@ export async function assertDocumentMutationRefsOwned(
     if (field === "custom") {
       if (typeof value !== "object" || Array.isArray(value)) continue;
       for (const [key, cell] of Object.entries(value as Record<string, unknown>)) {
-        if (typeof cell !== "string" || !UUID_RE.test(cell)) {
+        if (!isUuid(cell)) {
           // Shape-invalid custom values are the validator's job on the HTTP
           // path; here only well-formed ids on reference defs can become a
           // cross-tenant pointer, and anything else stores exactly as the
@@ -159,7 +157,7 @@ export async function assertDocumentMutationRefsOwned(
     // time after verifying the def exists). Native columns outside the
     // whitelists above cannot arrive here — the script MUTABLE_FIELDS gate and
     // the flow WRITABLE_DOCUMENT_FIELDS gate already refused them.
-    if (typeof value === "string" && UUID_RE.test(value)) {
+    if (isUuid(value)) {
       const def = await referenceDef(field);
       if (def) need(def.referenceTable, field, value);
     }

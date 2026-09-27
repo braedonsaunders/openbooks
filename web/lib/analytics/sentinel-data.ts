@@ -1,12 +1,12 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { addMonthsIso } from "@openbooks/reports";
 import { analyticsConfig } from "./config";
 import { presentationCurrency } from "../fx-presentation";
 import { ForbiddenError, type Authz } from "../authz";
 import { sentinelAccessDenied } from "./sentinel-access";
 import { auditEventArgs, englishSentinelStrings, type ConformityCode, type SentinelStrings } from "./sentinel-strings";
+import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from "@openbooks/engine/src/platform/business-date.ts";
 
 /**
  * Sentinel — transaction integrity forensics re-engineered for scale.
@@ -236,7 +236,7 @@ const conformity2D = (mad: number): ConformityCode =>
 
 /** Return the inclusive start of the 36-month vendor-statistics baseline. */
 export function sentinelBaselineFrom(to: string): string {
-  return addMonthsIso(to, -36);
+  return addMonthsClamped(to, -36);
 }
 
 // ---- main -------------------------------------------------------------------
@@ -269,13 +269,8 @@ export async function sentinelData(
   // equivalent and keeps the self-join off the whole document history.
   // (Computed here rather than as `${from}::date - ${days}` — an untyped bind
   // parameter on the right of a date subtraction does not resolve.)
-  const shiftDays = (iso: string, days: number) => {
-    const d = new Date(iso + "T00:00:00Z");
-    d.setUTCDate(d.getUTCDate() + days);
-    return d.toISOString().slice(0, 10);
-  };
-  const DUPLICATE_SCAN_FROM = shiftDays(from, -DUPLICATE_THRESHOLD_DAYS);
-  const DUPLICATE_SCAN_TO = shiftDays(to, DUPLICATE_THRESHOLD_DAYS);
+  const DUPLICATE_SCAN_FROM = addCalendarDays(from, -DUPLICATE_THRESHOLD_DAYS);
+  const DUPLICATE_SCAN_TO = addCalendarDays(to, DUPLICATE_THRESHOLD_DAYS);
   const SEQUENTIAL_MIN = cfg.sequentialMinCount!;
   const SEQUENTIAL_MIN_DAYS_FOR_FLAG = cfg.sequentialMinDays!;
 
@@ -790,15 +785,13 @@ export async function sentinelData(
   // another team): every within-group ordered pair, so pair-shaped readers
   // keep working. Same-currency and same-reference by construction — the
   // cross-currency false positive cannot appear here either.
-  const dayDiff = (a: string, b: string) =>
-    Math.abs(Math.round((new Date(a + "T00:00:00Z").getTime() - new Date(b + "T00:00:00Z").getTime()) / 86_400_000));
   const dupPairs: DuplicatePair[] = [];
   for (const g of dupGroups) {
     const ms = g.members;
     for (let i = 0; i < ms.length; i++) {
       for (let j = i + 1; j < ms.length; j++) {
         const a = ms[i]!, b = ms[j]!;
-        const days = dayDiff(a.date, b.date);
+        const days = Math.abs(calendarDaysBetween(a.date, b.date));
         const sameMemo = a.memo !== null && a.memo === b.memo;
         let score = 50;
         if (g.amount >= CRITICAL_RISK_AMOUNT) score += 25;

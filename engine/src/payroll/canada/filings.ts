@@ -16,6 +16,7 @@ import type {
   PayrollYearEndFiling,
 } from "../filing-registry.ts";
 import { rl1Filing } from "./quebec/rl1-filing.ts";
+import { isUuid } from "../../platform/uuid.ts";
 
 /**
  * The CA pack's filing declaration: what Canada files, under which program
@@ -29,8 +30,6 @@ import { rl1Filing } from "./quebec/rl1-filing.ts";
  * until then engine/src/payroll/filing-registry.ts serves it as a built-in.
  */
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * The T4 row grammar, as the inverse of t4Population's
  * `employee:province:account` construction. Owned HERE, beside the builder —
@@ -41,8 +40,8 @@ export function parseT4RowId(rowId: string): PayrollFilingRowScope | null {
   const parts = rowId.split(":");
   const employee = parts[0] ?? "";
   const account = parts[2] ?? "";
-  if (parts.length !== 3 || !UUID_RE.test(employee)) return null;
-  if (account && !UUID_RE.test(account)) return null;
+  if (parts.length !== 3 || !isUuid(employee)) return null;
+  if (account && !isUuid(account)) return null;
   return { employees: [employee], accounts: account ? [account] : [] };
 }
 
@@ -51,7 +50,7 @@ export function parseT4RowId(rowId: string): PayrollFilingRowScope | null {
  * Owned here for the same reason as the T4's.
  */
 export function parseRoeRowId(rowId: string): PayrollFilingRowScope | null {
-  if (!UUID_RE.test(rowId)) return null;
+  if (!isUuid(rowId)) return null;
   return { employees: [rowId], accounts: [] };
 }
 
@@ -252,7 +251,7 @@ export function parseRoeIssueParam(raw: string): RoeIssueInput[] {
   const issues: RoeIssueInput[] = [];
   for (const entry of raw.split(",").filter(Boolean)) {
     const [employeePartyId, reasonCode, ...comment] = entry.split(":");
-    if (!UUID_RE.test(employeePartyId ?? "")
+    if (!isUuid(employeePartyId ?? "")
       || !(ROE_REASON_CODES as readonly string[]).includes(reasonCode ?? "")) {
       throw new PayrollError("invalid employee selection");
     }
@@ -421,7 +420,7 @@ async function t4ConfidentialFields(
   previous?: readonly { label: string; fingerprint: string }[],
 ): Promise<{ label: string; fingerprint: string }[]> {
   const employeePartyId = rowId.split(":")[0] ?? "";
-  if (!UUID_RE.test(employeePartyId)) return [];
+  if (!isUuid(employeePartyId)) return [];
   const rows = (await db.execute<{ sin_encrypted: string | null }>(sql`
     select sin_encrypted from employee_payroll_profiles
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}

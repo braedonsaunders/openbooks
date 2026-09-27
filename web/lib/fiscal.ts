@@ -1,8 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { addCalendarDays, businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { addDays, fiscalContextFor, fiscalYearOf, fiscalYearStartOn, type FiscalContext, type FiscalPeriod } from '@openbooks/reports'
+import { fiscalContextFor, fiscalYearOf, fiscalYearStartOn, type FiscalContext, type FiscalPeriod } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 
 /**
@@ -122,7 +122,7 @@ export async function priorFiscalYearEndOnDate(
   asOf: string,
   orgId?: string,
 ): Promise<string> {
-  return addDays(await fiscalYearStartOnDate(asOf, orgId), -1)
+  return addCalendarDays(await fiscalYearStartOnDate(asOf, orgId), -1)
 }
 
 /** The current fiscal year (end year) for today, per the org's start month. */

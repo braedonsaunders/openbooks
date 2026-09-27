@@ -9,10 +9,12 @@
  */
 
 import { normalizeDecimal, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts'
 import { SETUP_ENTITY_BY_KEY, setupFieldOptions, setupFieldVisible, toSnake, type SetupEntity, type SetupField } from './registry'
 import { coveredSlotFields } from './hrm-rule-slots'
 import { normalizeCountryCode } from '../countries'
 import { canonicalDecimal, compareDecimal } from '../exact-decimal'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 /** Setup decimals include FX rates (numeric(19,10)) as well as ledger money. */
 export const SETUP_DECIMAL_SCALE = 10
@@ -33,27 +35,6 @@ export function taxRatePercentProblem(raw: unknown): string | null {
     return 'invalid-tax-rate'
   }
   return null
-}
-
-export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-/**
- * Strict YYYY-MM-DD calendar check: shape alone admits impossible dates
- * ('2024-02-30', month 13) that PostgreSQL then refuses with a driver error
- * instead of the field's documented client error. Same boundary as the
- * custom-field date validator (isIsoCalendarDate) and the forms-core response
- * validator. Pure — this module must stay free of db imports.
- */
-export function isCalendarDate(value: string): boolean {
-  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-  if (!match) return false
-  const year = Number(match[1])
-  const month = Number(match[2])
-  const day = Number(match[3])
-  if (year < 1 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) return false
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
-  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]!
-  return day <= daysInMonth
 }
 
 export type Coerced = { column: string; value: unknown }
@@ -134,7 +115,7 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
     case 'date': {
       if (!present) return { column, value: null }
       const s = String(raw)
-      if (!isCalendarDate(s)) return { error: `${field.key} must be a date` }
+      if (!isIsoCalendarDate(s)) return { error: `${field.key} must be a date` }
       return { column, value: s }
     }
     case 'select': {
@@ -160,7 +141,7 @@ export function coerceField(field: SetupField, raw: unknown, fieldVisible = true
       const naturalKeyed = field.ref === 'number-sequence-kinds'
         || (target != null && (target.idColumn ?? 'id') !== 'id')
         || (target != null && target.refValue != null)
-      if (!naturalKeyed && !UUID_RE.test(s)) return { error: `${field.key} must reference a valid record` }
+      if (!naturalKeyed && !isUuid(s)) return { error: `${field.key} must reference a valid record` }
       return { column, value: s }
     }
     case 'stringArray': {

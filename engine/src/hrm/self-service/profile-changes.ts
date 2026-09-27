@@ -13,6 +13,7 @@ import {
   type ProfileAddress,
   type ProfileChangePayload,
 } from "./profile-schema.ts";
+import { inputGuards } from "../input-guards.ts";
 
 /**
  * Self-service profile changes (HR-9).
@@ -35,26 +36,7 @@ import {
 export type { ProfileAddress, ProfileChangePayload };
 export { profileChangePayloadSchema };
 
-function requireOrgId(orgId: unknown): string {
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new SelfServiceError("REFUSED", "orgId must be a non-empty string");
-  }
-  return orgId;
-}
-
-function requireActorId(actorId: unknown): string {
-  if (typeof actorId !== "string" || actorId.length === 0) {
-    throw new SelfServiceError("REFUSED", "actorId must be a non-empty string");
-  }
-  return actorId;
-}
-
-function requireEmploymentId(employmentId: unknown): string {
-  if (typeof employmentId !== "string" || employmentId.length === 0) {
-    throw new SelfServiceError("REFUSED", "employmentId must be a non-empty string");
-  }
-  return employmentId;
-}
+const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
 
 function requireReason(reason: unknown): string {
   if (typeof reason !== "string" || reason.trim().length === 0) {
@@ -115,7 +97,7 @@ export async function fileProfileChangeRequest(
 ): Promise<FileProfileChangeResult> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const employmentId = requireEmploymentId(query.employmentId);
+  const employmentId = requireId(query.employmentId, "employmentId");
   const changes = validateProfileChange(query.changes);
   const reason = requireReason(query.reason);
   return withOrgTransaction(orgId, async () => {

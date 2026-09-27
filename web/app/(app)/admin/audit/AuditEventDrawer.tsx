@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
 import { Badge, Drawer, UrlDrawer, cn } from '@openbooks/ui'
 import { Braces, Clock3, Database, Fingerprint, History, UserRound } from 'lucide-react'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 import { auditEventDiffs, type AuditDiffRow } from '../../../../lib/audit-diff'
 import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
 
@@ -73,8 +74,7 @@ function CompactValue({ value, exactNumbers = false }: { value: unknown; exactNu
   if (typeof value === 'boolean') return <Badge variant={value ? 'success' : 'outline'}>{value ? t('yes') : t('no')}</Badge>
   if (typeof value === 'number') return <span className="tabular-nums">{exactNumbers ? String(value) : format.number(value, { maximumFractionDigits: 4 })}</span>
   const text = String(value)
-  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(text)
-  return <span className={cn('break-words', isUuid && 'font-mono text-xs text-slate-600 dark:text-slate-300')}>{text}</span>
+  return <span className={cn('break-words', isUuid(text) && 'font-mono text-xs text-slate-600 dark:text-slate-300')}>{text}</span>
 }
 
 export function JsonValue({ value, depth = 0, exactNumbers = false }: { value: unknown; depth?: number; exactNumbers?: boolean }) {

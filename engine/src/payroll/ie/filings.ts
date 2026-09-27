@@ -9,6 +9,7 @@ import type {
   PayrollFilingRowScope,
   PayrollYearEndFiling,
 } from "../filing-registry.ts";
+import { isUuid } from "../../platform/uuid.ts";
 
 /**
  * The IE pack's filing declaration: the PAYE Modernisation reconciliation.
@@ -35,7 +36,8 @@ import type {
  * Import discipline (the ES TDZ lesson, following the CA precedent): this
  * module takes NO runtime edge to ../packs.ts or ../filing-registry.ts —
  * both are `import type` only, erased at compile time — and carries its own
- * row-id grammar rather than importing a shared helper. The uncovered-year
+ * row-id grammar rather than importing the registry's helper (its UUID legs
+ * use the platform `isUuid`, which imports nothing). The uncovered-year
  * refusal needs no lookup here either: the generic enumeration
  * (`orgYearEndFilings`) refuses a year the pack does not publish uniformly
  * before `population` is ever called.
@@ -161,19 +163,14 @@ export async function iePayeReconciliation(
  * The row grammar, as the inverse of `iePopulation`'s
  * `employee:account` construction (the account empty for the unassigned
  * aggregate). Owned HERE, beside the builder — the subsidiary-scope guard
- * parses through the declaration, never its own copy of this shape. The UUID
- * shape mirrors `isFilingRowUuid` in ../filing-registry.ts (the canonical
- * definition); the copy is deliberate, per the CA precedent — a runtime
- * import of the registry from a pack module is a module-evaluation cycle.
+ * parses through the declaration, never its own copy of this shape.
  */
-const IE_ROW_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export function parseIeReconciliationRowId(rowId: string): PayrollFilingRowScope | null {
   const parts = rowId.split(":");
   const employee = parts[0] ?? "";
   const account = parts[1] ?? "";
-  if (parts.length !== 2 || !IE_ROW_UUID_RE.test(employee)) return null;
-  if (account && !IE_ROW_UUID_RE.test(account)) return null;
+  if (parts.length !== 2 || !isUuid(employee)) return null;
+  if (account && !isUuid(account)) return null;
   return { employees: [employee], accounts: account ? [account] : [] };
 }
 

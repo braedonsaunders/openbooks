@@ -37,12 +37,12 @@ import {
   type RevenueModificationTreatment,
 } from "./contract-modification-measurement.ts";
 import {
-  addDays,
   buildRecognitionScheduleOn,
   lockRevenueContract,
   recognitionUnearnedRemaining,
   runRevenueRecognition,
   recognitionProgressTarget,
+  shiftRecognitionDate,
   type RecognitionMethod,
   type RevenueChangeBasis,
 } from "./recognition.ts";
@@ -273,7 +273,7 @@ function recognized(lines: PlanLine[]) {
  * It posts separately before the amendment, never under the revised price.
  *
  * The stub is measured from the OLD rule's effective start — the recognition
- * start shifted by the rule's start_offset_days through the same addDays
+ * start shifted by the rule's start_offset_days through the same shiftRecognitionDate
  * helper the schedule builder uses — never from the unshifted contract or
  * period start. A point-in-time promise earns nothing before its event date
  * and the full amount on or after it; a straight-line promise earns only the
@@ -311,7 +311,7 @@ function accruedBeforeChange(
   const offset = basis ? 0 : (oldPolicy?.startOffsetDays ?? 0);
   return sum(
     rows.map((l) => {
-      const ruleStart = anchor ? addDays(anchor, offset) : null;
+      const ruleStart = anchor ? shiftRecognitionDate(anchor, offset) : null;
       const start =
         ruleStart && ruleStart > l.starts_on ? ruleStart : l.starts_on;
       const end =

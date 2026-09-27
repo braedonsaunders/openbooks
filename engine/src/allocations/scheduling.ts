@@ -7,6 +7,7 @@ import {
   type AllocationRunRecord,
   type PreviewAllocationRunOptions,
 } from "./period-run.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Allocation scheduling: the scheduler-outbox kind
@@ -44,9 +45,6 @@ export interface RunAllocationConfig {
   post: boolean;
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** Close-automation `run_allocation` config. Fails closed on any shape it does not recognize. */
 export function parseRunAllocationConfig(config: unknown): RunAllocationConfig {
   if (!config || typeof config !== "object" || Array.isArray(config)) {
@@ -61,7 +59,7 @@ export function parseRunAllocationConfig(config: unknown): RunAllocationConfig {
       throw new Error("run_allocation config ruleIds must be 'all' or a non-empty uuid array");
     }
     for (const id of ruleIds) {
-      if (typeof id !== "string" || !UUID_RE.test(id)) {
+      if (!isUuid(id)) {
         throw new Error(`run_allocation config ruleIds must be uuids, got ${JSON.stringify(id)}`);
       }
     }

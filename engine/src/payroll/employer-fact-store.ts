@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "../platform/db.ts";
-import { employerFact, isValidEmployerFactEffectiveDate, resolveEmployerFact } from "./employer-facts.ts";
+import { isIsoCalendarDate } from "../platform/iso-date.ts";
+import { employerFact, resolveEmployerFact } from "./employer-facts.ts";
 import { PayrollPackError } from "./payroll-error.ts";
 
 export type StoredPayrollEmployerFact = Record<string, unknown> & {
@@ -112,7 +113,7 @@ export async function upsertPayrollEmployerFact(input: {
   value: string;
   changeReason: string;
 }): Promise<StoredPayrollEmployerFact> {
-  if (!isValidEmployerFactEffectiveDate(input.effectiveFrom)) {
+  if (!isIsoCalendarDate(input.effectiveFrom)) {
     throw new PayrollPackError("employer fact effective date must be a real ISO calendar date");
   }
   const reason = input.changeReason.trim();
@@ -141,7 +142,7 @@ export async function upsertPayrollEmployerFact(input: {
   if (needsEndDate && !input.effectiveThrough) {
     throw new PayrollPackError(`${declaration.label} must include the inclusive final date approved by the authority`);
   }
-  if (input.effectiveThrough && !isValidEmployerFactEffectiveDate(input.effectiveThrough)) {
+  if (input.effectiveThrough && !isIsoCalendarDate(input.effectiveThrough)) {
     throw new PayrollPackError("employer fact effective-through date must be a real ISO calendar date");
   }
   if (input.effectiveThrough && input.effectiveThrough < input.effectiveFrom) {

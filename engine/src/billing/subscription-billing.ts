@@ -391,25 +391,14 @@ function resolveBillingSubsidiary(row: Pick<SubRow, "trustedSubsidiaryId" | "cus
 }
 
 /**
- * Whole-day count b − a (both ISO). The single civil-date definition lives in
- * platform/business-date.ts: Date.UTC remaps years 0-99 onto 1900-1999, which
- * made a cross-century billing period NEGATIVE, so prorate returned 0.0000
- * and the change-proration and first-proration callers below skipped the
- * adjustment or charged nothing.
- */
-function dayDiff(a: string, b: string): number {
-  return calendarDaysBetween(a, b);
-}
-
-/**
  * Exact prorated amount of `fullAmount` for the slice [asOf, periodEnd] of the
  * period [periodStart, periodEnd] — full × remainingDays / totalDays, rounded to
  * ledger precision. Pure — unit-tested. Zero when the period is degenerate.
  */
 export function prorate(fullAmount: string, periodStart: string, periodEnd: string, asOf: string): string {
-  const total = dayDiff(periodStart, periodEnd);
+  const total = calendarDaysBetween(periodStart, periodEnd);
   if (total <= 0) return "0.0000";
-  const remaining = Math.max(0, Math.min(total, dayDiff(asOf, periodEnd)));
+  const remaining = Math.max(0, Math.min(total, calendarDaysBetween(asOf, periodEnd)));
   return mulRatio(fullAmount, BigInt(remaining), BigInt(total));
 }
 

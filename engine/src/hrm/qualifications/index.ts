@@ -9,7 +9,6 @@ export {
   HRM_CERTIFICATIONS_FEATURE,
   HRM_DISPATCH_GATING_FEATURE,
   HRM_EQUIPMENT_QUALIFICATIONS_FEATURE,
-  addMonthsUtc,
   monthsBetween,
   projectDerivedStatus,
   type DerivedQualificationStatus,

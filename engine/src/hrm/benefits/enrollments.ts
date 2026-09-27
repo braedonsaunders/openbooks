@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { businessToday } from "../../platform/business-date.ts";
+import { addCalendarDays, businessToday } from "../../platform/business-date.ts";
 import {
   requireHrmBenefitsManage,
   requireHrmBenefitsManageOnEmployment,
@@ -10,7 +10,6 @@ import {
   type TrustedEmploymentSubject,
 } from "../authorization.ts";
 import { BenefitsError } from "./errors.ts";
-import { addDaysCivil } from "./benefits-math.ts";
 import {
   loadBenefitPlan,
   loadBenefitPlanLevels,
@@ -340,7 +339,7 @@ async function requireWaitingSatisfied(
 ): Promise<void> {
   if (plan.waitingPeriodDays <= 0) return;
   const start = hireStart(versions);
-  const eligible = addDaysCivil(start, plan.waitingPeriodDays);
+  const eligible = addCalendarDays(start, plan.waitingPeriodDays);
   if (effectiveFrom < eligible) {
     throw new BenefitsError(
       "REFUSED",
@@ -674,7 +673,7 @@ export async function changeEnrollment(query: ChangeEnrollmentQuery): Promise<En
       coverageLevelKey === undefined ? current.coverageLevelKey : coverageLevelKey,
     );
     await validateBenefitPlanComponents(db, orgId, plan, levels);
-    const endedDay = addDaysCivil(changeDate, -1);
+    const endedDay = addCalendarDays(changeDate, -1);
     const closed = requireOneRow(
       (
         await db.execute<Record<string, unknown>>(sql`
@@ -834,7 +833,7 @@ export async function endEnrollmentsForTermination(
   },
 ): Promise<number> {
   const { orgId, actorId, employmentId, terminatedOn } = args;
-  const lastCovered = addDaysCivil(terminatedOn, -1);
+  const lastCovered = addCalendarDays(terminatedOn, -1);
   // Only rows still covering at termination: already-lapsed rows keep
   // their history untouched.
   const live = (

@@ -9,6 +9,7 @@
 import { FieldTimeError } from "./errors.ts";
 import { canonicalTimeZone } from "../../platform/time-zone.ts";
 import { apportion } from "../../money/money.ts";
+import { utcDateFromParts } from "../../platform/civil-date.ts";
 
 export type RoundingMode = "nearest" | "up" | "down";
 
@@ -238,27 +239,6 @@ function requireTimeZone(timeZone: string): string {
  * (rather than importing the platform formatter) so this database-free
  * module never loads the db-backed platform stack in unit tests.
  */
-/**
- * UTC-midnight epoch milliseconds for civil (year, monthIndex, day[, time])
- * parts. Local copy of the platform/business-date.ts utcDateFromParts idiom
- * (`new Date(0)` + setUTCFullYear, which keeps literal years 0001-0099 that
- * Date.UTC would remap onto 1900-1999): this database-free module never loads
- * the db-backed platform stack in unit tests (see zoneDateParts below).
- */
-function utcCivilMs(
-  year: number,
-  monthIndex: number,
-  day: number,
-  hour = 0,
-  minute = 0,
-  second = 0,
-): number {
-  const date = new Date(0);
-  date.setUTCFullYear(year, monthIndex, day);
-  date.setUTCHours(hour, minute, second, 0);
-  return date.getTime();
-}
-
 function zoneDateParts(instantMs: number, timeZone: string): { y: number; mo: number; d: number; date: string } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone,
@@ -297,22 +277,22 @@ function zoneOffsetMs(instantMs: number, timeZone: string): number {
   const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
   // en-CA midnight formats as "24" on some runtimes; normalize to 00.
   const hour = value("hour") === "24" ? "00" : value("hour");
-  const asUTC = utcCivilMs(
+  const asUTC = utcDateFromParts(
     Number(value("year")),
     Number(value("month")) - 1,
     Number(value("day")),
     Number(hour),
     Number(value("minute")),
     Number(value("second")),
-  );
+  ).getTime();
   return asUTC - Math.floor(instantMs / 1000) * 1000;
 }
 
 /** Epoch milliseconds of 00:00 on a zone-local date. Deterministic. */
 function startOfZoneDayMs(y: number, mo: number, d: number, timeZone: string): number {
-  let guess = utcCivilMs(y, mo - 1, d, 12);
+  let guess = utcDateFromParts(y, mo - 1, d, 12).getTime();
   for (let i = 0; i < 4; i++) {
-    const next = utcCivilMs(y, mo - 1, d) - zoneOffsetMs(guess, timeZone);
+    const next = utcDateFromParts(y, mo - 1, d).getTime() - zoneOffsetMs(guess, timeZone);
     if (next === guess) return next;
     guess = next;
   }
@@ -343,7 +323,7 @@ export function splitZoneDays(fromMs: number, toMs: number, timeZone: string): D
   const end = Math.floor(toMs);
   while (cursor < end) {
     const here = zoneDateParts(cursor, zone);
-    const morrow = new Date(utcCivilMs(here.y, here.mo - 1, here.d) + 86_400_000);
+    const morrow = new Date(utcDateFromParts(here.y, here.mo - 1, here.d).getTime() + 86_400_000);
     const nextMidnight = startOfZoneDayMs(
       morrow.getUTCFullYear(), morrow.getUTCMonth() + 1, morrow.getUTCDate(), zone,
     );

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts";
-import { businessToday } from "../../platform/business-date.ts";
+import { businessToday, calendarDaysBetween } from "../../platform/business-date.ts";
 import { requireAggregateCertificationsRead } from "../authorization.ts";
 import { HrmQualificationError } from "./errors.ts";
 import {
@@ -135,7 +135,7 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
          and q.expires_on is not null
     `)).rows;
     for (const row of due) {
-      const daysLeft = daysBetween(today, row.expires_on);
+      const daysLeft = calendarDaysBetween(today, row.expires_on);
       if (daysLeft < 0) {
         // Crossed expiry: one expired_noticed event, then one notice.
         const noticed = (await tx.execute<{ id: string }>(sql`
@@ -202,11 +202,6 @@ async function scanOneOrg(orgId: string, now: Date): Promise<AlertScanSummary> {
     void now;
     return { orgId, alertsWritten, notificationsWritten, expiredNoticed };
   });
-}
-
-function daysBetween(todayYmd: string, laterYmd: string): number {
-  const ms = Date.parse(`${laterYmd}T00:00:00Z`) - Date.parse(`${todayYmd}T00:00:00Z`);
-  return Math.round(ms / 86_400_000);
 }
 
 /**

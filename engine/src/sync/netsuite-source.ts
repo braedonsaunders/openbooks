@@ -95,7 +95,7 @@ export function normalizeNetSuiteClearedStates(
       docRef: String(row.transaction),
       lineRef: String(row.id),
       cleared,
-      clearedDate: cleared ? (isoDate(row.cleareddate) ?? isoDate(row.trandate)) : null,
+      clearedDate: cleared ? (usDateToIso(row.cleareddate) ?? usDateToIso(row.trandate)) : null,
     };
   });
 }
@@ -396,7 +396,7 @@ const moneyValue = (v: unknown): string | null => {
   return toUnits(normalized) === 0n ? null : normalized;
 };
 /** MM/DD/YYYY → ISO YYYY-MM-DD (NetSuite date columns come back US-formatted). */
-const isoDate = (v: unknown): string | null => {
+const usDateToIso = (v: unknown): string | null => {
   const t = s(v);
   if (!t) return null;
   const [m, d, y] = t.split("/");
@@ -418,7 +418,7 @@ export function normalizeNetSuiteTimeEntry(
       departmentRef: s(tb.department),
       timeTypeRef: s(tb.timetype),
       fieldTicketNumber: s(tb.fieldticketnumber),
-      workedOn: isoDate(tb.trandate),
+      workedOn: usDateToIso(tb.trandate),
       hours: s(tb.hours) ?? "0",
       costRate: s(tb.laborcost),
       billRate: s(tb.rate),
@@ -459,14 +459,14 @@ export function normalizeNetSuiteAccountingPeriods(
   const years = rows
     .filter((row) => isT(row.isyear))
     .map((row) => ({
-      start: isoDate(row.startdate)!,
-      end: isoDate(row.enddate)!,
+      start: usDateToIso(row.startdate)!,
+      end: usDateToIso(row.enddate)!,
       year: Number(s(row.periodname)?.match(/\d{4}/)?.[0] ?? 0),
     }))
     .filter((row) => row.start && row.end && row.year > 0);
   const posting = rows
     .filter((row) => isT(row.isposting))
-    .map((row) => ({ row, start: isoDate(row.startdate), end: isoDate(row.enddate) }))
+    .map((row) => ({ row, start: usDateToIso(row.startdate), end: usDateToIso(row.enddate) }))
     .filter((item): item is { row: Record<string, string>; start: string; end: string } =>
       Boolean(item.start && item.end),
     );
@@ -489,7 +489,7 @@ export function normalizeNetSuiteAccountingPeriods(
         allLocked: isT(row.alllocked),
         apLocked: isT(row.aplocked),
         arLocked: isT(row.arlocked),
-        closedAt: isoDate(row.closedondate),
+        closedAt: usDateToIso(row.closedondate),
       },
     };
   });
@@ -953,8 +953,8 @@ export class NetSuiteSource implements MigrationSource {
         foremanRef: s(j.foreman),
         managerRef: s(j.projectmanager),
         customerPoNumber: s(j.ponumber),
-        startsOn: isoDate(j.startdate),
-        endsOn: isoDate(j.enddate),
+        startsOn: usDateToIso(j.startdate),
+        endsOn: usDateToIso(j.enddate),
       },
     }));
   }
@@ -1106,7 +1106,7 @@ export class NetSuiteSource implements MigrationSource {
           subsidiaryRef: s(e.subsidiary),
           employeeRole: {
             employeeNumber: s(e.initials), departmentRef: s(e.department), supervisorRef: s(e.supervisor),
-            hiredOn: isoDate(e.hiredate), terminatedOn: isoDate(e.releasedate), hasBenefits: isT(e.benefits),
+            hiredOn: usDateToIso(e.hiredate), terminatedOn: usDateToIso(e.releasedate), hasBenefits: isT(e.benefits),
           },
         },
       });

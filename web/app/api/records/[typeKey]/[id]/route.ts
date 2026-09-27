@@ -53,9 +53,6 @@ const RECORD_REFERENCE_TABLES: Record<string, string> = {
   gl_account: 'accounts',
 }
 
-const RECORD_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 /**
  * Same ownership fence as web/lib/api/writers.ts findUnownedRecordReferences:
  * party → parties.id and gl_account → accounts.id must belong to this org.
@@ -69,7 +66,7 @@ async function findUnownedRecordReferences(
   const wanted = new Map<string, { field: string; value: string }[]>()
   const collect = (fieldId: string, fieldType: string, raw: unknown) => {
     const refTable = RECORD_REFERENCE_TABLES[fieldType]
-    if (!refTable || typeof raw !== 'string' || !RECORD_UUID_RE.test(raw)) return
+    if (!refTable || !isUuid(raw)) return
     const list = wanted.get(refTable) ?? []
     list.push({ field: fieldId, value: raw })
     wanted.set(refTable, list)

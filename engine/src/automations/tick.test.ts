@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addDaysCivil, orgCivilDate } from "./tick.ts";
+import { orgCivilDate } from "./tick.ts";
 
 /**
  * HR-16 date math: the date_relative scan compares civil dates in the
@@ -27,13 +27,6 @@ test("fall back: the repeated hour does not duplicate the civil date", () => {
   assert.equal(orgCivilDate(new Date("2026-11-01T05:59:59Z"), "America/Toronto"), "2026-11-01");
   assert.equal(orgCivilDate(new Date("2026-11-01T06:00:01Z"), "America/Toronto"), "2026-11-01");
   assert.equal(orgCivilDate(new Date("2026-11-02T04:59:59Z"), "America/Toronto"), "2026-11-01");
-});
-
-test("offset arithmetic is civil-day based", () => {
-  assert.equal(addDaysCivil("2026-03-08", 3), "2026-03-11");
-  assert.equal(addDaysCivil("2026-03-08", -3), "2026-03-05");
-  assert.equal(addDaysCivil("2026-11-01", 1), "2026-11-02");
-  assert.equal(addDaysCivil("2026-02-28", 1), "2026-03-01");
 });
 
 test("invalid timezones fall back to UTC rather than throwing the scan", () => {

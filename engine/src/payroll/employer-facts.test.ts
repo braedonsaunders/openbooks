@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isValidEmployerFactEffectiveDate, registerEmployerFacts, resolveEmployerFact } from "./employer-facts.ts";
+import { registerEmployerFacts, resolveEmployerFact } from "./employer-facts.ts";
 import { PayrollPackError } from "./payroll-error.ts";
 
 const country = "ZZ";
@@ -36,18 +36,4 @@ test("required facts refuse by the operator-facing name and legal remedy", () =>
       && /CSS L.130-1/.test(error.message)
       && /Payroll Setup → Employer facts/.test(error.message),
   );
-});
-
-test("employer fact effective dates reject calendar rollover dates", () => {
-  for (const [year, februaryDays] of [[2024, 29], [2025, 28]] as const) {
-    for (const [month, lastDay] of [
-      [1, 31], [2, februaryDays], [3, 31], [4, 30], [5, 31], [6, 30],
-      [7, 31], [8, 31], [9, 30], [10, 31], [11, 30], [12, 31],
-    ] as const) {
-      const prefix = `${year}-${String(month).padStart(2, "0")}`;
-      assert.equal(isValidEmployerFactEffectiveDate(`${prefix}-${String(lastDay).padStart(2, "0")}`), true);
-      assert.equal(isValidEmployerFactEffectiveDate(`${prefix}-${String(lastDay + 1).padStart(2, "0")}`), false);
-    }
-  }
-  assert.equal(isValidEmployerFactEffectiveDate("0000-01-01"), false);
 });

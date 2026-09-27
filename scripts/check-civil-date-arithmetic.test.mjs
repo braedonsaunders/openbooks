@@ -33,7 +33,7 @@ test("the refusal names the file, the function, and the remedy", () => {
   assert.match(problems[0], /engine\/src\/payroll\/sample\.ts:\d+/); // source-path: synthetic
   assert.match(problems[0], /inclusiveDays/);
   assert.match(problems[0], /years 0-99 onto 1900-1999/);
-  assert.match(problems[0], /platform\/business-date\.ts/);
+  assert.match(problems[0], /platform\/civil-date\.ts/);
   assert.match(problems[0], /utcDateFromParts/);
 });
 

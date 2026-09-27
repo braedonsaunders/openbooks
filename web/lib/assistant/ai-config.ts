@@ -33,6 +33,7 @@ import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
 } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 /**
  * AI provider configuration for OpenBooks' organization-scoped tenancy model. The config
@@ -96,8 +97,6 @@ export interface AgentNotificationSettings {
   userIds: string[];
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * Canonicalize untrusted notification routing. Returns `undefined` when the
  * caller sent no routing (leave stored), `null` on explicit clear, and throws
@@ -118,7 +117,7 @@ export function normalizeAgentNotificationSettings(raw: unknown): AgentNotificat
     if (!Array.isArray(value) || value.length > 100) throw new Error(`invalid agent notification ${field}`);
     const seen = new Set<string>();
     for (const entry of value) {
-      if (typeof entry !== 'string' || !UUID_RE.test(entry)) throw new Error(`invalid agent notification ${field}`);
+      if (!isUuid(entry)) throw new Error(`invalid agent notification ${field}`);
       seen.add(entry.toLowerCase());
     }
     return [...seen];

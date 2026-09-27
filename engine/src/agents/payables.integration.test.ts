@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import { defaultContinuousCloseDetectors } from "./continuous-close-config.ts";
 import { db, withBypass, withBypassContext } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
@@ -16,12 +16,6 @@ import { payablesFindings } from "./payables.ts";
  */
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
-
-function shiftDays(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
 
 async function seedPostedEntry(org: { orgId: string; bookId: string; subsidiaryId: string; periodId: string; date: string; accounts: Record<string, string> }): Promise<string> {
   const id = randomUUID();
@@ -97,39 +91,39 @@ test(
       ).then((result) => (result.rows[0] as { id: string }).id);
 
       // Open/open duplicate: same vendor, kind, amount, 4 days apart.
-      await seedBill(org, entry, vendor, "BILL-D1", shiftDays(today, -30), shiftDays(today, 60), "1200.00");
-      await seedBill(org, entry, vendor, "BILL-D1B", shiftDays(today, -26), shiftDays(today, 60), "1200.00");
+      await seedBill(org, entry, vendor, "BILL-D1", addCalendarDays(today, -30), addCalendarDays(today, 60), "1200.00");
+      await seedBill(org, entry, vendor, "BILL-D1B", addCalendarDays(today, -26), addCalendarDays(today, 60), "1200.00");
       // Open/paid duplicate: the paid leg stays as evidence of double payment.
-      await seedBill(org, entry, vendor, "BILL-D2", shiftDays(today, -20), shiftDays(today, 60), "1500.00");
-      await seedBill(org, entry, vendor, "BILL-D2B", shiftDays(today, -18), shiftDays(today, -5), "1500.00", { open: "0" });
+      await seedBill(org, entry, vendor, "BILL-D2", addCalendarDays(today, -20), addCalendarDays(today, 60), "1500.00");
+      await seedBill(org, entry, vendor, "BILL-D2B", addCalendarDays(today, -18), addCalendarDays(today, -5), "1500.00", { open: "0" });
       // Same amount but a credit memo: never a duplicate.
       await withBypassContext(() => db.execute(sql`
         insert into documents (id, org_id, kind, status, document_number, document_date, due_date,
           currency, subtotal, tax_total, total, open_balance, party_id, posted_entry_id, posting_period_id)
-        values (${randomUUID()}, ${org.orgId}, 'vendor_credit', 'posted', 'BILL-C1', ${shiftDays(today, -28)}, ${shiftDays(today, 60)},
+        values (${randomUUID()}, ${org.orgId}, 'vendor_credit', 'posted', 'BILL-C1', ${addCalendarDays(today, -28)}, ${addCalendarDays(today, 60)},
           'CAD', '1200.00', '0', '1200.00', '1200.00', ${vendor}, ${entry}, ${org.periodId})`));
 
       // Pay-run horizon (7 days): two due, one far out.
-      await seedBill(org, entry, vendor, "BILL-P1", shiftDays(today, -2), shiftDays(today, 3), "700.00");
-      await seedBill(org, entry, vendor, "BILL-P2", shiftDays(today, -1), shiftDays(today, 1), "300.00");
-      await seedBill(org, entry, vendor, "BILL-P3", shiftDays(today, -1), shiftDays(today, 60), "400.00");
+      await seedBill(org, entry, vendor, "BILL-P1", addCalendarDays(today, -2), addCalendarDays(today, 3), "700.00");
+      await seedBill(org, entry, vendor, "BILL-P2", addCalendarDays(today, -1), addCalendarDays(today, 1), "300.00");
+      await seedBill(org, entry, vendor, "BILL-P3", addCalendarDays(today, -1), addCalendarDays(today, 60), "400.00");
 
       // Discount window open: 2/10 terms, invoiced 2 days ago.
       await withBypassContext(() => db.execute(sql`
         insert into payment_terms (id, org_id, name, net_days, discount_days, discount_percent, is_active)
         values (${randomUUID()}, ${org.orgId}, '2/10 net 30', 30, 10, '2.0000', true)`));
-      await seedBill(org, entry, vendor, "BILL-T1", shiftDays(today, -2), shiftDays(today, 40), "50000.00");
+      await seedBill(org, entry, vendor, "BILL-T1", addCalendarDays(today, -2), addCalendarDays(today, 40), "50000.00");
 
       // Stalled approval: draft from 10 days ago.
-      await seedBill(org, entry, vendor, "BILL-S1", shiftDays(today, -10), shiftDays(today, 20), "4000.00", { status: "draft", open: "0" });
+      await seedBill(org, entry, vendor, "BILL-S1", addCalendarDays(today, -10), addCalendarDays(today, 20), "4000.00", { status: "draft", open: "0" });
 
       // Another tenant with its own duplicate pair: must not leak in.
       const otherEntry = await seedPostedEntry(other);
       const otherVendor = await withBypassContext(() =>
         db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${randomUUID()}, ${other.orgId}, 'vendor', 'Foreign Vendor') returning id`),
       ).then((result) => (result.rows[0] as { id: string }).id);
-      await seedBill(other, otherEntry, otherVendor, "BILL-F1", shiftDays(today, -9), shiftDays(today, 60), "80000.00");
-      await seedBill(other, otherEntry, otherVendor, "BILL-F1B", shiftDays(today, -8), shiftDays(today, 60), "80000.00");
+      await seedBill(other, otherEntry, otherVendor, "BILL-F1", addCalendarDays(today, -9), addCalendarDays(today, 60), "80000.00");
+      await seedBill(other, otherEntry, otherVendor, "BILL-F1B", addCalendarDays(today, -8), addCalendarDays(today, 60), "80000.00");
 
       const findings = await withBypassContext(() =>
         payablesFindings(org.orgId, "1000.0000", defaultContinuousCloseDetectors("payables")),

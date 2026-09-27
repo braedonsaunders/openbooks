@@ -1,3 +1,5 @@
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+
 export type ParsedSessionToken = {
   sessionId: string;
   userId: string;
@@ -14,8 +16,6 @@ export type ParsedChallengeToken = {
   signature: string;
 };
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 export function parseSessionTokenFormat(token: string | undefined): ParsedSessionToken | null {
   if (!token || token.length > 512) return null;
   const parts = token.split(".");
@@ -25,7 +25,7 @@ export function parseSessionTokenFormat(token: string | undefined): ParsedSessio
   const rawExpires = parts[3]!;
   const signature = parts[4]!;
   const expiresEpoch = Number(rawExpires);
-  if (!UUID.test(sessionId) || !UUID.test(userId) || !Number.isSafeInteger(expiresEpoch) || !signature) return null;
+  if (!isUuid(sessionId) || !isUuid(userId) || !Number.isSafeInteger(expiresEpoch) || !signature) return null;
   return {
     sessionId,
     userId,
@@ -44,7 +44,7 @@ export function parseChallengeTokenFormat(token: string | undefined): ParsedChal
   const rawExpires = parts[3]!;
   const signature = parts[4]!;
   const expiresEpoch = Number(rawExpires);
-  if (!UUID.test(challengeId) || !UUID.test(userId) || !Number.isSafeInteger(expiresEpoch) || !signature) return null;
+  if (!isUuid(challengeId) || !isUuid(userId) || !Number.isSafeInteger(expiresEpoch) || !signature) return null;
   return {
     challengeId,
     userId,

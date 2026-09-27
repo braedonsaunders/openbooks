@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { businessTimeZone, businessToday, formatInZone } from "../platform/business-date.ts";
+import { businessTimeZone, businessToday, calendarDaysBetween, formatInZone } from "../platform/business-date.ts";
 import { add, cmp, neg } from "../money/money.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 
@@ -173,11 +173,11 @@ export function revocationLocalDate(revokedAt: string | Date, timeZone: string):
  */
 export function waiverInForceOn(w: Pick<WaiverRecord, "effectiveFrom" | "expiresOn" | "approvedAt" | "revokedAt" | "revokedOn">, asOf: string): boolean {
   if (w.approvedAt === null || (w.approvedAt as unknown) === undefined) return false;
-  if (daysBetween(w.effectiveFrom, asOf) < 0) return false;
-  if (daysBetween(asOf, w.expiresOn) < 0) return false;
+  if (calendarDaysBetween(w.effectiveFrom, asOf) < 0) return false;
+  if (calendarDaysBetween(asOf, w.expiresOn) < 0) return false;
   const local = "revokedOn" in w ? w.revokedOn : null;
   if (local !== null && local !== undefined) {
-    if (daysBetween(asOf, local) <= 0) return false;
+    if (calendarDaysBetween(asOf, local) <= 0) return false;
     return true;
   }
   if (w.revokedAt !== null && (w.revokedAt as unknown) !== undefined) {
@@ -185,7 +185,7 @@ export function waiverInForceOn(w: Pick<WaiverRecord, "effectiveFrom" | "expires
     // pg returns timestamptz as a Date, unit callers pass ISO strings.
     const raw = w.revokedAt as unknown as string | Date;
     const revokedDate = (raw instanceof Date ? raw.toISOString() : String(raw)).slice(0, 10);
-    if (daysBetween(asOf, revokedDate) <= 0) return false;
+    if (calendarDaysBetween(asOf, revokedDate) <= 0) return false;
   }
   return true;
 }
@@ -227,21 +227,6 @@ export interface VendorComplianceStatus {
 // ---------------------------------------------------------------------------
 // Pure evaluation
 // ---------------------------------------------------------------------------
-
-/** Whole days from `from` to `to` (both ISO yyyy-mm-dd), calendar-exact in UTC. */
-export function daysBetween(from: string, to: string): number {
-  const a = Date.parse(`${from}T00:00:00Z`);
-  const b = Date.parse(`${to}T00:00:00Z`);
-  if (Number.isNaN(a) || Number.isNaN(b)) throw new ComplianceError(`invalid date in range ${from}..${to}`);
-  return Math.round((b - a) / 86_400_000);
-}
-
-/** ISO date `days` after `from`. */
-export function addDays(from: string, days: number): string {
-  const t = Date.parse(`${from}T00:00:00Z`);
-  if (Number.isNaN(t)) throw new ComplianceError(`invalid date ${from}`);
-  return new Date(t + days * 86_400_000).toISOString().slice(0, 10);
-}
 
 /**
  * The substantive checks on one certificate: limits and endorsements. Kept
@@ -318,7 +303,7 @@ function evaluateEvidence(
   if (record.status === "pending_review" || (policy.requiresVerification && !record.verifiedAt)) {
     return { state: "awaiting_verification", reasons: ["awaiting_verification", ...shortfalls], record };
   }
-  if (daysBetween(record.effectiveFrom, asOf) < 0) {
+  if (calendarDaysBetween(record.effectiveFrom, asOf) < 0) {
     return { state: "insufficient", reasons: ["not_yet_effective", ...shortfalls], record };
   }
   if (policy.requiresExpiry && record.expiresOn === null) {
@@ -327,7 +312,7 @@ function evaluateEvidence(
     return { state: "insufficient", reasons: ["expired", ...shortfalls], record };
   }
   if (record.expiresOn !== null) {
-    const daysLeft = daysBetween(asOf, record.expiresOn);
+    const daysLeft = calendarDaysBetween(asOf, record.expiresOn);
     if (daysLeft + policy.graceDays < 0) {
       return { state: "expired", reasons: ["expired", ...shortfalls], record };
     }
@@ -407,7 +392,7 @@ export function evaluateRequirement(args: {
     state,
     recordId: best.record?.id ?? null,
     expiresOn: best.record?.expiresOn ?? null,
-    daysToExpiry: best.record?.expiresOn ? daysBetween(asOf, best.record.expiresOn) : null,
+    daysToExpiry: best.record?.expiresOn ? calendarDaysBetween(asOf, best.record.expiresOn) : null,
     waiverId: waiver?.id ?? null,
     reasons: best.reasons,
     blocksPayment,

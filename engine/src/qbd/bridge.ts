@@ -4,6 +4,7 @@ import { businessToday } from "../platform/business-date.ts";
 import { db, schema, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { unsealJson } from "../platform/secrets.ts";
 import { assertQbdResponsePayload, buildCapturePlan, continueRequestXml, MalformedQbxmlResponseError, negotiateQbxmlVersion, requestIdFromRequestXml, responseElementForRequest, responseStatus, stampRequestId, type QbdRequestSpec } from "./qbxml.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 const CAPTURE_TTL_MS = 12 * 60 * 60 * 1_000;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1_000;
@@ -507,7 +508,7 @@ async function acknowledgeReplayedResponse(
   // completed request is found by exact id comparison — never by LIKE over a
   // client-supplied string, where '%' or '_' would match other requests. A
   // non-UUID id can match nothing and is refused below.
-  if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(replayed.requestId)) {
+  if (!isUuid(replayed.requestId)) {
     return null;
   }
   const prior = (await tx.execute<{
