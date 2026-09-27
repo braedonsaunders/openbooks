@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { PDF_RECORD_TYPES } from '../../../../lib/pdf-templates/catalog'
 
 // Route boundary suite for the template-editor preview. The preview renders a
@@ -124,7 +124,7 @@ const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 const { RendererUnavailableError: MockRendererUnavailableError } = (await import(mockUrl('pdf'))) as {
   RendererUnavailableError: new (executablePath: string) => Error
 }
-hooks.deregister()
+after(() => hooks.deregister())
 
 function reset(): void {
   state.granted = new Set()

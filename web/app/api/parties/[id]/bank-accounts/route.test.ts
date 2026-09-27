@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { NextResponse } from 'next/server'
 
 const PARTY_ID = '00000000-0000-4000-8000-000000000001'
@@ -223,7 +223,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?bank-accounts-route-test'
 const { PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function reset(operation: RouteState['operation']): void {
   state.operation = operation

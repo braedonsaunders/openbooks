@@ -192,12 +192,12 @@ test('GET hides an out-of-scope party exactly like a missing one', async () => {
   reset({ permissions: ['ar.read'], allowedSubsidiaryIds: new Set([SUB_A]), party: bParty })
   const denied = await get()
   assert.equal(denied.status, 404)
-  assert.deepEqual(await denied.json(), { error: 'record not found' })
+  assert.deepEqual(await denied.json(), { error: 'not_found' })
 
   reset({ permissions: ['ar.read'], allowedSubsidiaryIds: new Set([SUB_A]), party: null })
   const missing = await get()
   assert.equal(missing.status, 404)
-  assert.deepEqual(await missing.json(), { error: 'record not found' })
+  assert.deepEqual(await missing.json(), { error: 'not_found' })
 })
 
 test('GET still prefills an in-scope party', async () => {
@@ -220,7 +220,7 @@ test('POST never sends an out-of-scope party its statement', async () => {
   reset({ permissions: ['ar.create', 'reports.read'], allowedSubsidiaryIds: new Set([SUB_A]), party: bParty })
   const response = await send()
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'record not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
   assert.equal(statementState.renderCalls, 0)
   assert.equal(statementState.sendCalls, 0)
 })

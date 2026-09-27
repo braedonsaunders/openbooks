@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { NextResponse } from 'next/server'
 
 // Route boundary regression: a tax filing snapshot is
@@ -85,7 +85,7 @@ const hooks = registerHooks({
 })
 
 const { PATCH } = (await import('./route.ts')) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 const FILING_ID = '00000000-0000-4000-8000-00000000f001'
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { NextResponse } from 'next/server'
 
 // Route boundary suite for the tax filing surface (no test file existed for
@@ -201,7 +201,7 @@ const postRouteUrl = './route.ts?tax-filing-permission-test'
 const { POST, GET } = (await import(postRouteUrl)) as typeof import('./route.ts')
 const patchRouteUrl = './[id]/route.ts?tax-filing-permission-test'
 const { PATCH } = (await import(patchRouteUrl)) as typeof import('./[id]/route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function taxFilingError(code: string, message: string): unknown {
   const factory = (globalThis as { openbooksTaxFilingError?: (code: string, message: string) => unknown }).openbooksTaxFilingError

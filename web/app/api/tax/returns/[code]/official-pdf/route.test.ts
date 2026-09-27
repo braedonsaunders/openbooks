@@ -177,7 +177,7 @@ test("POST answers 404 with no audit and cleans up the orphan when the row vanis
   const response = await postPdf();
 
   assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { error: "tax return form not found" });
+  assert.deepEqual(await response.json(), { error: "not_found" });
   assert.equal(routeState.auditInserts.length, 0);
   // The uploaded bytes were stored before the linkage failed: the orphan
   // must not linger in the cabinet.
@@ -207,7 +207,7 @@ test("DELETE answers 404 with no audit and no file removal when nothing is attac
   const response = await del();
 
   assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { error: "no official PDF is attached to this return form" });
+  assert.deepEqual(await response.json(), { error: "not_found" });
   assert.equal(routeState.auditInserts.length, 0);
   assert.deepEqual(routeState.deletedFiles, []);
 });
