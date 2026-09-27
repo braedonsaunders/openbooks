@@ -83,9 +83,9 @@ const HRM_PERMISSION_MAP = {
 
 type HrmDomain = keyof typeof HRM_PERMISSION_MAP;
 type HrmPermission<D extends HrmDomain> = keyof (typeof HRM_PERMISSION_MAP)[D];
-type HrmPermissionName<D extends HrmDomain> = {
-  [P in HrmPermission<D>]: (typeof HRM_PERMISSION_MAP)[D][P][0];
-}[HrmPermission<D>];
+type HrmDomainEntry<D extends HrmDomain> = (typeof HRM_PERMISSION_MAP)[D][keyof (typeof HRM_PERMISSION_MAP)[D]];
+type PermissionName<T> = T extends readonly [infer Permission extends string, string] ? Permission : never;
+type HrmPermissionName<D extends HrmDomain> = PermissionName<HrmDomainEntry<D>>;
 
 /** Create the standard permission gate for a domain and its declared key. */
 export function requireHrm<D extends HrmDomain, P extends HrmPermission<D>>(
