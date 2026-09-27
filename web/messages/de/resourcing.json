@@ -1,5 +1,39 @@
 {
   "prefill": { "badge": "Geplant: {hours} Std." },
+  "requests": {
+    "title": "Personalbedarf",
+    "description": "Beantragen Sie Projektpersonal und leiten Sie jeden Vorschlag zur Genehmigung weiter.",
+    "newRequest": "Neue Anfrage",
+    "drawer": {
+      "title": "Personalbedarf",
+      "newTitle": "Neue Personalbedarfsmeldung",
+      "description": "Vorschlag zur Projektbesetzung und Genehmigungsverlauf.",
+      "unsaved": "Ungespeicherte Änderungen",
+      "requestFailed": "Die Anfrage konnte nicht gespeichert werden. Prüfen Sie die Angaben und versuchen Sie es erneut.",
+      "decisionComment": "Entscheidungskommentar",
+      "tabs": { "label": "Abschnitte der Personalbedarfsmeldung", "details": "Angaben", "weeks": "Wochen", "approval": "Genehmigung" },
+      "status": { "draft": "Entwurf", "submitted": "Eingereicht", "approved": "Genehmigt", "rejected": "Abgelehnt", "cancelled": "Storniert" },
+      "fields": {
+        "project": "Projekt", "person": "Person", "jobTitle": "Berufsbezeichnung", "requestFor": "Angefragt für",
+        "firstWeek": "Erste Woche", "lastWeek": "Letzte Woche", "hoursPerWeek": "Stunden pro Woche",
+        "billable": "Abrechenbar", "billItem": "Abrechnungsposition", "reason": "Begründung", "choose": "Auswahl treffen",
+        "yes": "Ja", "no": "Nein", "noBillItem": "Keine Abrechnungsposition"
+      },
+      "weeks": {
+        "week": "Woche ab", "requested": "Angefragte Stunden", "netCapacity": "Verfügbare Kapazität",
+        "bookedHard": "Fest gebuchte Stunden", "overallocation": "Überlastung", "unknown": "Unbekannt",
+        "over": "Kapazität überschritten", "within": "Innerhalb der Kapazität", "empty": "Es wurden keine Wochen angefragt.",
+        "saveFirst": "Speichern Sie den Entwurf, um die Wochenkapazität zu prüfen."
+      },
+      "approval": { "saveFirst": "Speichern Sie den Entwurf, bevor Sie den Genehmigungsverlauf öffnen." },
+      "actions": { "save": "Speichern", "saving": "Wird gespeichert …", "submit": "Zur Genehmigung einreichen", "cancelRequest": "Anfrage stornieren" },
+      "cancelReasonTitle": "Personalbedarf stornieren",
+      "cancelReasonLabel": "Grund der Stornierung",
+      "cancelConfirmTitle": "Stornierung bestätigen",
+      "cancelConfirmMessage": "Die Anfrage wird storniert und der Grund wird protokolliert.",
+      "continue": "Weiter"
+    }
+  },
   "demand": {
     "basis": {
       "manual": "Manuelle Eingabe",

@@ -1,5 +1,39 @@
 {
   "prefill": { "badge": "Planned {hours} h" },
+  "requests": {
+    "title": "Resource requests",
+    "description": "Request project staffing and route each proposal through approval.",
+    "newRequest": "New request",
+    "drawer": {
+      "title": "Resource request",
+      "newTitle": "New resource request",
+      "description": "Project staffing proposal and approval history.",
+      "unsaved": "Unsaved changes",
+      "requestFailed": "The request could not be saved. Review the details and try again.",
+      "decisionComment": "Decision comment",
+      "tabs": { "label": "Resource request sections", "details": "Details", "weeks": "Weeks", "approval": "Approval" },
+      "status": { "draft": "Draft", "submitted": "Submitted", "approved": "Approved", "rejected": "Rejected", "cancelled": "Cancelled" },
+      "fields": {
+        "project": "Project", "person": "Person", "jobTitle": "Job title", "requestFor": "Request for",
+        "firstWeek": "First week", "lastWeek": "Last week", "hoursPerWeek": "Hours per week",
+        "billable": "Billable", "billItem": "Bill item", "reason": "Reason", "choose": "Choose an option",
+        "yes": "Yes", "no": "No", "noBillItem": "No bill item"
+      },
+      "weeks": {
+        "week": "Week starting", "requested": "Requested hours", "netCapacity": "Net capacity",
+        "bookedHard": "Booked hard hours", "overallocation": "Overallocation", "unknown": "Unknown",
+        "over": "Over capacity", "within": "Within capacity", "empty": "There are no requested weeks.",
+        "saveFirst": "Save the draft to review its weekly capacity."
+      },
+      "approval": { "saveFirst": "Save the draft before opening its approval history." },
+      "actions": { "save": "Save", "saving": "Saving…", "submit": "Submit for approval", "cancelRequest": "Cancel request" },
+      "cancelReasonTitle": "Cancel resource request",
+      "cancelReasonLabel": "Reason for cancellation",
+      "cancelConfirmTitle": "Confirm cancellation",
+      "cancelConfirmMessage": "The request will be cancelled and its reason recorded.",
+      "continue": "Continue"
+    }
+  },
   "demand": {
     "basis": {
       "manual": "Manual",

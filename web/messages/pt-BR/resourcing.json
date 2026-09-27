@@ -1,5 +1,39 @@
 {
   "prefill": { "badge": "Planejado: {hours} h" },
+  "requests": {
+    "title": "Solicitações de recursos",
+    "description": "Solicite profissionais para projetos e encaminhe cada proposta para aprovação.",
+    "newRequest": "Nova solicitação",
+    "drawer": {
+      "title": "Solicitação de recursos",
+      "newTitle": "Nova solicitação de recursos",
+      "description": "Proposta de equipe para o projeto e histórico de aprovações.",
+      "unsaved": "Alterações não salvas",
+      "requestFailed": "Não foi possível salvar a solicitação. Confira os dados e tente novamente.",
+      "decisionComment": "Comentário da decisão",
+      "tabs": { "label": "Seções da solicitação de recursos", "details": "Detalhes", "weeks": "Semanas", "approval": "Aprovação" },
+      "status": { "draft": "Rascunho", "submitted": "Enviada", "approved": "Aprovada", "rejected": "Rejeitada", "cancelled": "Cancelada" },
+      "fields": {
+        "project": "Projeto", "person": "Pessoa", "jobTitle": "Cargo", "requestFor": "Solicitar para",
+        "firstWeek": "Primeira semana", "lastWeek": "Última semana", "hoursPerWeek": "Horas por semana",
+        "billable": "Faturável", "billItem": "Item de cobrança", "reason": "Motivo", "choose": "Selecione uma opção",
+        "yes": "Sim", "no": "Não", "noBillItem": "Sem item de cobrança"
+      },
+      "weeks": {
+        "week": "Semana com início em", "requested": "Horas solicitadas", "netCapacity": "Capacidade líquida",
+        "bookedHard": "Horas já alocadas firmemente", "overallocation": "Excesso de alocação", "unknown": "Indeterminada",
+        "over": "Acima da capacidade", "within": "Dentro da capacidade", "empty": "Nenhuma semana foi solicitada.",
+        "saveFirst": "Salve o rascunho para consultar a capacidade semanal."
+      },
+      "approval": { "saveFirst": "Salve o rascunho antes de abrir o histórico de aprovações." },
+      "actions": { "save": "Salvar", "saving": "Salvando…", "submit": "Enviar para aprovação", "cancelRequest": "Cancelar solicitação" },
+      "cancelReasonTitle": "Cancelar solicitação de recursos",
+      "cancelReasonLabel": "Motivo do cancelamento",
+      "cancelConfirmTitle": "Confirmar cancelamento",
+      "cancelConfirmMessage": "A solicitação será cancelada e o motivo ficará registrado.",
+      "continue": "Continuar"
+    }
+  },
   "demand": {
     "basis": {
       "manual": "Lançamento manual",
