@@ -44,19 +44,4 @@
     "fn": "(top-level)",
     "reason": "machine canonicalization (useGrouping:false, significant digits) for import comparison against CSV/JSON export vocabulary — localizing breaks the round-trip, not a viewer label"
   },
-  {
-    "path": "web/lib/information-return-format.ts",
-    "fn": "formatBoxAmount",
-    "reason": "government form print format ('Money as the form prints it', two decimals with thousands separators) — localizing corrupts the filing worksheet/facsimile"
-  },
-  {
-    "path": "web/lib/lien-waiver-form.ts",
-    "fn": "formatWaiverAmount",
-    "reason": "printed legal-document amounts kept as exact decimal text through Intl — localizing changes the operative release instrument"
-  },
-  {
-    "path": "web/lib/tax-form-facsimile-html.ts",
-    "fn": "formatExactFacsimileValue",
-    "reason": "government facsimile convention (2-decimal amounts with thousands separators, negatives in parentheses) — localizing breaks facsimile fidelity"
-  }
 ]
