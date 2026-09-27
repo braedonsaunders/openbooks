@@ -43,5 +43,5 @@
     "path": "web/lib/data-io/record-resources.ts",
     "fn": "(top-level)",
     "reason": "machine canonicalization (useGrouping:false, significant digits) for import comparison against CSV/JSON export vocabulary — localizing breaks the round-trip, not a viewer label"
-  },
+  }
 ]
