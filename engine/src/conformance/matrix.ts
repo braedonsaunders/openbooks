@@ -25,10 +25,12 @@ import { LONG_LIVED_ASSET_CASES } from "./cases/long-lived-assets.ts";
 import { PROVISION_CASES } from "./cases/provisions.ts";
 import { REVENUE_CASES } from "./cases/revenue.ts";
 import { RESOURCING_CASES } from "./cases/resourcing.ts";
+import { NONPROFIT_GRANT_CASES } from "./cases/nonprofit-grants.ts";
 import type { ConformanceCase } from "./types.ts";
 
 export const CONFORMANCE_CORPUS: readonly ConformanceCase[] = [
   ...REVENUE_CASES,
+  ...NONPROFIT_GRANT_CASES,
   ...LEASE_CASES,
   ...FOREIGN_CURRENCY_CASES,
   ...FX_SETTLEMENT_CASES,

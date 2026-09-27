@@ -81,6 +81,7 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["field_ticket_policies", "customer_party_id"],
   ["field_tickets", "foreman_party_id"],
   ["fixed_assets", "custodian_party_id"],
+  ["grants", "sponsor_party_id"],
   ["item_price_schedules", "customer_id"],
   ["item_rate_book_assignments", "customer_id"],
   ["lien_waivers", "party_id"],

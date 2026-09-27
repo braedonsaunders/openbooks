@@ -9,6 +9,9 @@ export const ROLES: readonly Role[] = [
   "deferredRevenue",
   "recognizedRevenue",
   "contractAsset",
+  "grantReceivable",
+  "refundableAdvance",
+  "grantRevenue",
   "inventory",
   "cogs",
   "inventoryAdjustment",
@@ -52,4 +55,3 @@ export function syntheticRoles(): Record<Role, string> {
   for (const role of ROLES) map[role] = `role:${role}`;
   return map;
 }
-

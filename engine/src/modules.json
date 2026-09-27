@@ -144,6 +144,7 @@
         "journal",
         "ledger",
         "money",
+        "nonprofit",
         "payments",
         "payroll",
         "platform",
@@ -337,7 +338,9 @@
         "journal",
         "money",
         "organization",
-        "platform"
+        "periods",
+        "platform",
+        "records"
       ]
     },
     "organization": {
