@@ -12,7 +12,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import test from "node:test";
 
-const root = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "")).href;
+// The repository root, with its trailing slash: `@/x` resolves to `web/x`.
+const root = pathToFileURL(join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "/")).href;
 const { stubModules } = await import("../../../testing/stub-modules");
 stubModules({ navigation: "export function redirect(){throw new Error('redirect')}export function useRouter(){return {push(){},refresh(){}}}export function usePathname(){return '/hrm'}export function useSearchParams(){return new URLSearchParams()}", intl: true });
 registerHooks({
