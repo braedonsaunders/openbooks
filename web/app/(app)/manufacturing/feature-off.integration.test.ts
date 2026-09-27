@@ -123,7 +123,7 @@ test("manufacturing feature row lock orders posting against disable", { skip: !D
     } finally {
       const first = ordering === "poster-first" ? poster : admin, second = ordering === "poster-first" ? admin : poster;
       await first.query("rollback").catch(() => undefined); await second.query("rollback").catch(() => undefined);
-      await Promise.allSettled([pendingPost, pendingDisable].filter((pending): pending is Promise<unknown> => pending !== undefined));
+      await Promise.allSettled([pendingPost, pendingDisable].filter((pending): pending is NonNullable<typeof pending> => pending !== undefined));
       await poster.end().catch(() => undefined); await admin.end().catch(() => undefined); await dropScratchOrg(org.orgId);
     }
   }

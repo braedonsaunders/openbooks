@@ -28,7 +28,6 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { guardProjectsFeature } from '../../../../../../lib/projects-gate'
 import { renderGeneralLedgerPaperPdf } from '../../../../../../lib/general-ledger-pdf'
-import { notFound } from "@/lib/api/responses";
 
 
 export const runtime = 'nodejs'
