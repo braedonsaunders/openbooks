@@ -24,6 +24,7 @@ import { LEASE_CASES } from "./cases/leases.ts";
 import { LONG_LIVED_ASSET_CASES } from "./cases/long-lived-assets.ts";
 import { PROVISION_CASES } from "./cases/provisions.ts";
 import { REVENUE_CASES } from "./cases/revenue.ts";
+import { RESOURCING_CASES } from "./cases/resourcing.ts";
 import type { ConformanceCase } from "./types.ts";
 
 export const CONFORMANCE_CORPUS: readonly ConformanceCase[] = [
@@ -39,6 +40,7 @@ export const CONFORMANCE_CORPUS: readonly ConformanceCase[] = [
   ...CONSTRUCTION_CASES,
   ...PROVISION_CASES,
   ...CONSOLIDATION_CASES,
+  ...RESOURCING_CASES,
 ];
 
 /**
