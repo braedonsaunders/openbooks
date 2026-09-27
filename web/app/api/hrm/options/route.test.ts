@@ -125,7 +125,7 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/hrm/leave-read.ts", "mock:leave-read"],
 ]);
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, _context, nextResolve) {
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
@@ -139,7 +139,6 @@ const hooks = registerHooks({
 });
 const routeUrl = "./route.ts?hrm-options";
 const optionsRoute = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
