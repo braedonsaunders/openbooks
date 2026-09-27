@@ -24,22 +24,28 @@ export const DEFAULT_MANUFACTURING_POLICIES: ManufacturingPolicies = {
 };
 
 function readSettings(value: unknown): ManufacturingPolicies {
-  const stored = value && typeof value === "object" && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {};
-  const shortagePolicy = stored.shortagePolicy ?? DEFAULT_MANUFACTURING_POLICIES.shortagePolicy;
-  const tolerance = stored.completionTolerancePct ?? DEFAULT_MANUFACTURING_POLICIES.completionTolerancePct;
-  const threshold = stored.abnormalScrapApprovalThreshold ?? DEFAULT_MANUFACTURING_POLICIES.abnormalScrapApprovalThreshold;
+  if (value != null && (typeof value !== "object" || Array.isArray(value))) {
+    throw new ManufacturingError("Stored manufacturing policies must be an object.", {
+      code: "invalid_stored_policy", remedy: "Replace manufacturing policies with the fields in Manufacturing setup.",
+    });
+  }
+  const stored = value as Record<string, unknown> | null | undefined;
+  const shortagePolicy = stored && Object.hasOwn(stored, "shortagePolicy")
+    ? stored.shortagePolicy : DEFAULT_MANUFACTURING_POLICIES.shortagePolicy;
+  const tolerance = stored && Object.hasOwn(stored, "completionTolerancePct")
+    ? stored.completionTolerancePct : DEFAULT_MANUFACTURING_POLICIES.completionTolerancePct;
+  const threshold = stored && Object.hasOwn(stored, "abnormalScrapApprovalThreshold")
+    ? stored.abnormalScrapApprovalThreshold : DEFAULT_MANUFACTURING_POLICIES.abnormalScrapApprovalThreshold;
   if (shortagePolicy !== "warn" && shortagePolicy !== "refuse") {
     throw new ManufacturingError("Stored manufacturing shortage policy is invalid.", { code: "invalid_stored_policy", remedy: "Set shortage policy to warn or refuse in manufacturing setup." });
   }
-  const completionTolerancePct = decimalValue(String(tolerance), "completionTolerancePct", "Set a percentage from 0 through 100.");
+  const completionTolerancePct = decimalValue(tolerance, "completionTolerancePct", "Set a percentage from 0 through 100.");
   if (compareDecimal(completionTolerancePct, "100") > 0) {
     throw new ManufacturingError("Stored completion tolerance must be from 0 through 100.", { code: "invalid_stored_policy", field: "completionTolerancePct", remedy: "Set a percentage from 0 through 100 in manufacturing setup." });
   }
   let abnormalScrapApprovalThreshold: Money | null = null;
   if (threshold !== null) {
-    const amount = decimalValue(String(threshold), "abnormalScrapApprovalThreshold", "Enter a non-negative amount or clear the threshold.");
+    const amount = decimalValue(threshold, "abnormalScrapApprovalThreshold", "Enter a non-negative amount or clear the threshold.");
     try { abnormalScrapApprovalThreshold = parseMoney(amount); }
     catch {
       throw new ManufacturingError("Stored manufacturing approval threshold is not a monetary amount.", {

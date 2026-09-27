@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { registerHooks } from "node:module";
 import test from "node:test";
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
@@ -13,7 +14,29 @@ import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } 
 import { waitForLockWaiter } from "@openbooks/engine/src/testing/lock-wait.ts";
 import { JOURNAL_ENTRY_TABLE } from "@/lib/customization/entity-list-query/journal-entries";
 
-const DB = Boolean(process.env.OPENBOOKS_DB_URL), evidence = { workOrderNumber: "WO-200", bomRevision: "BOM-1", routingVersion: "RT-1" };
+const DB = Boolean(process.env.OPENBOOKS_DB_URL);
+const evidence = { workOrderNumber: "WO-200", bomRevision: "BOM-1", routingVersion: "RT-1" };
+const routeState: { gate: { user: { id: string; orgId: string }; permissions: Set<string>; allowedSubsidiaryIds: null } | null } = { gate: null };
+Object.assign(globalThis, { __manufacturingFeatureOff: routeState });
+const authzStub = `export async function guardPermission(){return globalThis.__manufacturingFeatureOff.gate}
+export async function requirePermission(){return globalThis.__manufacturingFeatureOff.gate}
+export function guardSubsidiaryScope(){return null}
+export async function guardRootSubsidiaryScope(){return false}
+export function guardUnrestrictedScope(){return null}
+export async function getAuthz(){return globalThis.__manufacturingFeatureOff.gate}`;
+registerHooks({ resolve(specifier, context, next) {
+  const parent = context.parentURL ?? "";
+  const routeCaller = ["/api/admin/setup/", "/api/manufacturing/", "/lib/api/route.ts", "/lib/feature-gates.ts", "/admin/setup/manufacturing/view.ts"]
+    .some((path) => parent.includes(path));
+  if (routeCaller && (specifier.endsWith("/lib/authz") || (parent.includes("/lib/feature-gates.ts") && specifier === "./authz"))) {
+    return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(authzStub)}` };
+  }
+  return next(specifier, context);
+} });
+const { POST: setupPost } = await import("../../api/admin/setup/[entity]/route");
+const { POST: manufacturingPost } = await import("../../api/manufacturing/work-centers/route");
+const { loadManufacturingSetup } = await import("../admin/setup/manufacturing/view");
+
 async function features(orgId: string, state: Record<string, boolean>) {
   await withBypassContext(async () => assert.equal((await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||${JSON.stringify(state)}::jsonb) where id=${orgId} returning id`)).rows.length, 1));
 }
@@ -22,19 +45,52 @@ async function post(org: ScratchOrg, actorId: string) { return withBypassContext
 async function snapshot(orgId: string, id: string) { return withBypassContext(async () => ({ entry: (await db.execute(sql`select * from journal_entries where org_id=${orgId} and id=${id}`)).rows[0], lines: (await db.execute(sql`select * from journal_lines where org_id=${orgId} and entry_id=${id} order by line_number`)).rows })); }
 async function listed(orgId: string, id: string) { return withBypassContext(async () => (await db.execute(sql`select e.id from ${sql.raw(JOURNAL_ENTRY_TABLE)} e where e.org_id=${orgId} and e.id=${id}`)).rows.map((row) => row.id)); }
 async function refuses(posting: Promise<unknown>) { await assert.rejects(posting, (error: unknown) => error instanceof ManufacturingFeatureDisabledError && /manufacturing/i.test(error.message) && error.message.includes("Turn it on in Company Settings → Features")); }
+function setupWrite(entity: string, body: Record<string, unknown>) {
+  return setupPost(new Request(`http://audit.local/api/admin/setup/${entity}`, {
+    method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() }, body: JSON.stringify(body),
+  }), { params: Promise.resolve({ entity }) });
+}
+function manufacturingWrite(_orgId: string) {
+  return manufacturingPost(new Request("http://audit.local/api/manufacturing/work-centers", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+  }), { params: Promise.resolve({}) });
+}
 
 test("manufacturing is off by default, parent-fenced, and preserves posted history", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Shop lead", "admin")); assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturing")), false); await refuses(post(org, actorId));
     await features(org.orgId, { manufacturing: true, inventory: false });
-    assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturing")), false); await refuses(post(org, actorId));
-    assert.equal(await withBypassContext(async () => (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`)).rows[0]!.n), 0);
-    await features(org.orgId, { manufacturing: true, inventory: true }); const first = await post(org, actorId), original = await snapshot(org.orgId, first);
-    assert.deepEqual(await listed(org.orgId, first), [first]); await features(org.orgId, { manufacturing: false }); await refuses(post(org, actorId));
-    assert.deepEqual(await snapshot(org.orgId, first), original); assert.deepEqual(await listed(org.orgId, first), [first]);
-    await features(org.orgId, { manufacturing: true }); assert.deepEqual(await snapshot(org.orgId, first), original);
-    const second = await post(org, actorId); assert.notEqual(second, first); assert.deepEqual(await listed(org.orgId, second), [second]);
+    assert.equal(await withBypassContext(() => manufacturingFeatureEnabled(org.orgId, "manufacturing")), false);
+    await refuses(post(org, actorId));
+    const refusedCount = await withBypassContext(async () => (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`)).rows[0]!.n);
+    assert.equal(refusedCount, 0);
+    await features(org.orgId, { manufacturing: true, inventory: true });
+    routeState.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["admin.setup.manage"]), allowedSubsidiaryIds: null };
+    const scrap = await setupWrite("mfg-scrap-reasons", { code: "NORMAL", name: "Normal trim loss", classification: "normal", isActive: true });
+    assert.equal(scrap.status, 200, await scrap.clone().text());
+    const scrapId = String((await scrap.json()).id);
+    const first = await post(org, actorId); const original = await snapshot(org.orgId, first);
+    assert.deepEqual(await listed(org.orgId, first), [first]);
+    await features(org.orgId, { manufacturing: false });
+    await refuses(post(org, actorId));
+    const fencedSetup = await setupWrite("mfg-scrap-reasons", { code: "OFF", name: "Unavailable reason", classification: "normal", isActive: true });
+    assert.equal(fencedSetup.status, 404);
+    const fencedManufacturing = await manufacturingWrite(org.orgId);
+    const unavailable = await fencedManufacturing.json();
+    assert.equal(fencedManufacturing.status, 404);
+    assert.doesNotMatch(JSON.stringify(unavailable), /manufacturing/i);
+    await assert.rejects(loadManufacturingSetup(), (error: unknown) => error instanceof Error && /NEXT_REDIRECT/.test(error.message));
+    const preservedScrap = await withBypassContext(async () => db.execute(sql`select id from mfg_scrap_reasons where org_id=${org.orgId} and id=${scrapId}`));
+    assert.equal(preservedScrap.rows.length, 1);
+    assert.deepEqual(await snapshot(org.orgId, first), original);
+    assert.deepEqual(await listed(org.orgId, first), [first]);
+    await features(org.orgId, { manufacturing: true });
+    assert.deepEqual(await snapshot(org.orgId, first), original);
+    assert.equal((await setupWrite("mfg-scrap-reasons", { code: "RETURNED", name: "Available after re-enable", classification: "normal", isActive: true })).status, 200);
+    const second = await post(org, actorId);
+    assert.notEqual(second, first);
+    assert.deepEqual(await listed(org.orgId, second), [second]);
   } finally { await dropScratchOrg(org.orgId); }
 });
 

@@ -13,6 +13,10 @@ export interface RoutingOperationInput {
   sequence: number; name: string; workCenterId: string; setupMinutes: string; runMinutesPerUnit: string;
   laborMinutesPerUnit?: string | null; backflushAt?: "none" | "start" | "finish"; qualityGate?: "none" | "measure";
 }
+export interface RoutingSubsidiaryScope {
+  producedItemSubsidiaryId: string | null;
+  operations: Array<{ workCenterSubsidiaryId: string | null }>;
+}
 
 const routingColumns = sql`id, org_id as "orgId", produced_item_id as "producedItemId", code, name, version, status,
   effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
@@ -29,7 +33,7 @@ const operationReadColumns = sql`operation.id, operation.org_id as "orgId", oper
 
 function headerInput(input: RoutingInput): RoutingInput {
   if (!input || !input.producedItemId || !input.code?.trim() || !input.name?.trim()) {
-    refused("Produced item, routing code, and routing name are required.", "invalid_routing");
+    refused("Produced item, routing code, and routing name are required.", "invalid_routing", "producedItemId", "Choose a produced item and enter a routing code and name.");
   }
   if (!["labor_hours", "machine_hours", "units"].includes(input.overheadBasis)) {
     refused("Choose a valid overhead basis for the routing.", "invalid_overhead_basis", "overheadBasis", "Choose labor hours, machine hours, or units.");
@@ -105,22 +109,32 @@ export async function createNextRoutingVersion(tx: SqlExecutor, orgId: string, a
   const after = created.rows[0];
   if (!after) throw new ManufacturingError("The next routing version was not created.", { code: "write_failed", remedy: "Retry the save." });
   await auditChange(tx, { orgId, actorId, table: "mfg_routings", rowId: String(after.id), action: "insert", before: null, after: { ...after, copiedFromRoutingId: latest.id }, requestId: idempotency?.requestId, match: idempotency?.match });
-  const copies = await tx.execute<Record<string, unknown>>(sql`
-    insert into mfg_routing_operations (org_id, routing_id, sequence, name, work_center_id, setup_minutes,
-      run_minutes_per_unit, labor_minutes_per_unit, backflush_at, quality_gate, created_by, updated_by)
-    select org_id, ${String(after.id)}, sequence, name, work_center_id, setup_minutes,
-      run_minutes_per_unit, labor_minutes_per_unit, backflush_at, quality_gate, ${actorId}, ${actorId}
-      from mfg_routing_operations where org_id=${orgId} and routing_id=${String(latest.id)}
-      order by sequence returning ${operationColumns}`);
-  for (const operation of copies.rows) await auditChange(tx, { orgId, actorId, table: "mfg_routing_operations", rowId: String(operation.id), action: "insert", before: null, after: { ...operation, copiedFromRoutingId: latest.id } });
-  return { ...after, operations: copies.rows };
+  const sourceOperations = await tx.execute<{ id: string }>(sql`select id from mfg_routing_operations where org_id=${orgId} and routing_id=${String(latest.id)} order by sequence`);
+  let copiedOperations: Record<string, unknown>[] = [];
+  if (sourceOperations.rows.length > 0) {
+    const copies = await tx.execute<Record<string, unknown>>(sql`
+      insert into mfg_routing_operations (org_id, routing_id, sequence, name, work_center_id, setup_minutes,
+        run_minutes_per_unit, labor_minutes_per_unit, backflush_at, quality_gate, created_by, updated_by)
+      select org_id, ${String(after.id)}, sequence, name, work_center_id, setup_minutes,
+        run_minutes_per_unit, labor_minutes_per_unit, backflush_at, quality_gate, ${actorId}, ${actorId}
+        from mfg_routing_operations where org_id=${orgId} and routing_id=${String(latest.id)}
+        order by sequence returning ${operationColumns}`);
+    if (copies.rows.length !== sourceOperations.rows.length) {
+      throw new ManufacturingError("The next routing version did not copy every operation.", {
+        code: "write_failed", remedy: "Retry creating the routing version; contact an administrator if it continues.",
+      });
+    }
+    copiedOperations = copies.rows;
+  }
+  for (const operation of copiedOperations) await auditChange(tx, { orgId, actorId, table: "mfg_routing_operations", rowId: String(operation.id), action: "insert", before: null, after: { ...operation, copiedFromRoutingId: latest.id } });
+  return { ...after, operations: copiedOperations };
 }
 
-export async function getRouting(tx: SqlExecutor, orgId: string, id: string) {
+export async function getRouting(tx: SqlExecutor, orgId: string, id: string): Promise<(Record<string, unknown> & RoutingSubsidiaryScope) | null> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   const row = await routing(tx, orgId, id);
   if (!row) return null;
-  const operations = await tx.execute<Record<string, unknown>>(sql`
+  const operations = await tx.execute<Record<string, unknown> & { workCenterSubsidiaryId: string | null }>(sql`
     select ${operationReadColumns}, center.subsidiary_id as "workCenterSubsidiaryId"
       from mfg_routing_operations operation
       join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id
@@ -168,10 +182,10 @@ function operationInput(input: RoutingOperationInput): RoutingOperationInput {
 }
 
 async function validateOperation(tx: SqlExecutor, orgId: string, routingId: string, input: RoutingOperationInput, existingId?: string) {
-  const center = await tx.execute<{ id: string }>(sql`select id from mfg_work_centers where org_id=${orgId} and id=${input.workCenterId} and is_active`);
+  const center = await tx.execute<{ id: string }>(sql`select id from mfg_work_centers where org_id=${orgId} and id=${input.workCenterId} and is_active for share`);
   if (!center.rows.length) refused("The operation work center is not active in this organization.", "invalid_work_center", "workCenterId", "Choose an active work center.");
-  const duplicate = await tx.execute<{ id: string; sequence: number }>(sql`select id, sequence from mfg_routing_operations where org_id=${orgId} and routing_id=${routingId} and sequence=${input.sequence} and id is distinct from ${existingId ?? null} limit 1`);
-  if (duplicate.rows[0]) refused(`Operation sequence ${input.sequence} is already used by another operation in this routing.`, "operation_sequence_duplicate", "sequence", "Choose a sequence not used by another operation.");
+  const duplicate = await tx.execute<{ id: string; sequence: number; name: string }>(sql`select id, sequence, name from mfg_routing_operations where org_id=${orgId} and routing_id=${routingId} and sequence=${input.sequence} and id is distinct from ${existingId ?? null} limit 1`);
+  if (duplicate.rows[0]) refused(`Operation sequence ${input.sequence} is already used by operation ${duplicate.rows[0].name} in this routing.`, "operation_sequence_duplicate", "sequence", "Choose a sequence not used by another operation.");
 }
 
 export async function createRoutingOperation(tx: SqlExecutor, orgId: string, actorId: string, routingId: string, raw: RoutingOperationInput, idempotency?: { id: string; requestId: string; match: Record<string, unknown> }) {
@@ -236,14 +250,21 @@ async function overlappingActiveRouting(tx: SqlExecutor, orgId: string, itemId: 
 
 function routingOverlapRefusal(row?: { code: string; version: number; effective_from: string; effective_to: string | null }): never {
   const other = row ? `${row.code} version ${row.version} (${row.effective_from} to ${row.effective_to ?? "open-ended"})` : "another active version";
-  return refused(`This routing overlaps active ${other}.`, "routing_version_overlap", "effectiveFrom", "Change the draft dates or archive the overlapping active version.");
+  return refused(`This routing overlaps active ${other}.`, "routing_version_overlap", "effectiveFrom", "Change the draft effective dates so they do not overlap the named version.");
 }
 
 export async function activateRouting(tx: SqlExecutor, orgId: string, actorId: string, id: string) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
+  const identity = await routing(tx, orgId, id);
+  if (!identity) throw new ManufacturingNotFoundError();
+  await tx.execute(sql`select id from items where org_id=${orgId} and id=${identity.producedItemId} for update`);
   const before = await assertDraft(tx, orgId, id);
-  const operations = await tx.execute(sql`select 1 from mfg_routing_operations where org_id=${orgId} and routing_id=${id} limit 1`);
-  if (!operations.rows.length) refused("A routing needs at least one operation before it can be activated.", "routing_operations_required", "operations", "Add an operation with an active work center.");
+  const centerLocks = await tx.execute(sql`
+    select center.id from mfg_routing_operations operation
+      join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id
+     where operation.org_id=${orgId} and operation.routing_id=${id}
+     order by center.id for share of center`);
+  if (centerLocks.rows.length === 0) refused("A routing needs at least one operation before it can be activated.", "routing_operations_required", "operations", "Add an operation with an active work center.");
   const inactiveCenters = await tx.execute<{ name: string; code: string }>(sql`
     select operation.name, center.code from mfg_routing_operations operation
       join mfg_work_centers center on center.org_id=operation.org_id and center.id=operation.work_center_id
@@ -284,7 +305,7 @@ export async function archiveRouting(tx: SqlExecutor, orgId: string, actorId: st
       and status in ('draft', 'released', 'in_progress', 'on_hold') order by number`);
   if (openOrders.rows.length) {
     const numbers = openOrders.rows.map((row) => row.number).join(", ");
-    refused(`Routing cannot be archived while work orders ${numbers} remain open.`, "routing_in_use", "routingId", "Complete or cancel the listed work orders, then retry the archive.");
+    refused(`Routing cannot be archived while work orders ${numbers} remain open.`, "routing_in_use", "routingId", "Leave this routing active while the listed work orders reference it.");
   }
   if (prior.status === "archived") return prior;
   const result = await tx.execute<Record<string, unknown>>(sql`update mfg_routings set status='archived', updated_by=${actorId}, updated_at=now()

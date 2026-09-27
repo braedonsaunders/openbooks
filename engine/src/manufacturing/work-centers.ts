@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { parseMoney, type Money } from "../money/brands.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { assertManufacturingFeature } from "./gate.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
@@ -17,10 +18,10 @@ const centerColumns = sql`id, org_id as "orgId", code, name, subsidiary_id as "s
   is_active as "isActive", deactivated_at as "deactivatedAt"`;
 
 function validateCenter(input: WorkCenterInput): WorkCenterInput {
-  if (!input || typeof input !== "object") refused("Work center details are required.", "invalid_work_center");
-  if (!input.code?.trim() || !input.name?.trim()) refused("Work center code and name are required.", "invalid_work_center");
-  if (!["machine", "labor", "cell"].includes(input.kind)) refused("Choose machine, labor, or cell for the work center kind.", "invalid_kind", "kind");
-  if (typeof input.absorbsOverhead !== "boolean") refused("Choose whether this work center absorbs overhead.", "required_field", "absorbsOverhead");
+  if (!input || typeof input !== "object") refused("Work center details are required.", "invalid_work_center", "workCenter", "Enter the work center details and save again.");
+  if (!input.code?.trim() || !input.name?.trim()) refused("Work center code and name are required.", "invalid_work_center", "code", "Enter a code and name for the work center.");
+  if (!["machine", "labor", "cell"].includes(input.kind)) refused("Choose machine, labor, or cell for the work center kind.", "invalid_kind", "kind", "Choose machine, labor, or cell.");
+  if (typeof input.absorbsOverhead !== "boolean") refused("Choose whether this work center absorbs overhead.", "required_field", "absorbsOverhead", "Choose Yes or No for overhead absorption.");
   const capacityHoursPerDay = decimalValue(input.capacityHoursPerDay, "capacityHoursPerDay", "Enter a non-negative decimal with no more than four decimal places.");
   const efficiencyPct = decimalValue(input.efficiencyPct, "efficiencyPct", "Enter an efficiency above zero and no greater than 100.");
   if (compareDecimal(efficiencyPct, "0") <= 0 || compareDecimal(efficiencyPct, "100") > 0) {
@@ -30,6 +31,23 @@ function validateCenter(input: WorkCenterInput): WorkCenterInput {
     refused(`A ${input.kind} work center needs an active department.`, "department_required", "departmentId", "Choose an active department in Company Settings → Departments.");
   }
   return { ...input, code: input.code.trim(), name: input.name.trim(), capacityHoursPerDay, efficiencyPct };
+}
+
+async function duplicateCode(tx: SqlExecutor, orgId: string, code: string, excludeId?: string) {
+  return (await tx.execute<{ id: string; name: string }>(sql`
+    select id, name from mfg_work_centers where org_id=${orgId} and code=${code}
+      and id is distinct from ${excludeId ?? null} limit 1`)).rows[0];
+}
+
+function duplicateCodeRefusal(code: string, existingName?: string): never {
+  refused(`Work center code ${code} already belongs to ${existingName ? `work center ${existingName}` : "another work center"}.`,
+    "work_center_code_conflict", "code", "Choose a code not used by another work center.");
+}
+
+function storageConstraint(error: unknown): string | undefined {
+  return typeof error === "object" && error !== null && "constraint" in error
+    ? String((error as { constraint?: unknown }).constraint)
+    : undefined;
 }
 
 async function validateReferences(tx: SqlExecutor, orgId: string, input: WorkCenterInput): Promise<void> {
@@ -50,21 +68,35 @@ export async function createWorkCenter(
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   const input = validateCenter(raw);
   await validateReferences(tx, orgId, input);
-  const inserted = await tx.execute<Record<string, unknown>>(sql`
+  const duplicate = await duplicateCode(tx, orgId, input.code);
+  if (duplicate) duplicateCodeRefusal(input.code, duplicate.name);
+  await tx.execute(sql`savepoint mfg_work_center_create`);
+  let row: Record<string, unknown> | undefined;
+  try {
+    row = (await tx.execute<Record<string, unknown>>(sql`
     insert into mfg_work_centers
       (id, org_id, code, name, subsidiary_id, kind, capacity_hours_per_day, efficiency_pct,
        department_id, absorbs_overhead, calendar_id, created_by, updated_by)
     values (coalesce(${idempotency?.id ?? null}::uuid, public.uuid_generate_v7()), ${orgId}, ${input.code}, ${input.name}, ${input.subsidiaryId ?? null}, ${input.kind},
       ${input.capacityHoursPerDay}, ${input.efficiencyPct}, ${input.departmentId ?? null},
       ${input.absorbsOverhead}, ${input.calendarId ?? null}, ${actorId}, ${actorId})
-    returning ${centerColumns}`);
-  const row = inserted.rows[0];
+    returning ${centerColumns}`)).rows[0];
+  } catch (error) {
+    await tx.execute(sql`rollback to savepoint mfg_work_center_create`);
+    await tx.execute(sql`release savepoint mfg_work_center_create`);
+    if (storageCode(error) === "23505" && storageConstraint(error) === "mfg_work_centers_org_code_unique") {
+      duplicateCodeRefusal(input.code, (await duplicateCode(tx, orgId, input.code))?.name);
+    }
+    throw error;
+  }
+  await tx.execute(sql`release savepoint mfg_work_center_create`);
   if (!row) throw new ManufacturingError("The work center was not created.", { code: "write_failed", remedy: "Retry the save.", field: "workCenter" });
   await auditChange(tx, { orgId, actorId, table: "mfg_work_centers", rowId: String(row.id), action: "insert", before: null, after: row, requestId: idempotency?.requestId, match: idempotency?.match });
   return row;
 }
 
 export async function getWorkCenter(tx: SqlExecutor, orgId: string, id: string) {
+  await assertManufacturingFeature(tx, orgId, "manufacturing");
   const result = await tx.execute<Record<string, unknown>>(sql`select ${centerColumns} from mfg_work_centers where org_id=${orgId} and id=${id}`);
   return result.rows[0] ?? null;
 }
@@ -88,13 +120,26 @@ export async function updateWorkCenter(
     calendarId: patch.calendarId === undefined ? before.calendarId as string | null : patch.calendarId,
   });
   await validateReferences(tx, orgId, merged);
-  const written = await tx.execute<Record<string, unknown>>(sql`
+  const duplicate = await duplicateCode(tx, orgId, merged.code, id);
+  if (duplicate) duplicateCodeRefusal(merged.code, duplicate.name);
+  await tx.execute(sql`savepoint mfg_work_center_update`);
+  let after: Record<string, unknown> | undefined;
+  try {
+    after = (await tx.execute<Record<string, unknown>>(sql`
     update mfg_work_centers set code=${merged.code}, name=${merged.name}, subsidiary_id=${merged.subsidiaryId ?? null},
       kind=${merged.kind}, capacity_hours_per_day=${merged.capacityHoursPerDay}, efficiency_pct=${merged.efficiencyPct},
       department_id=${merged.departmentId ?? null}, absorbs_overhead=${merged.absorbsOverhead},
       calendar_id=${merged.calendarId ?? null}, updated_by=${actorId}, updated_at=now()
-     where org_id=${orgId} and id=${id} returning ${centerColumns}`);
-  const after = written.rows[0];
+     where org_id=${orgId} and id=${id} returning ${centerColumns}`)).rows[0];
+  } catch (error) {
+    await tx.execute(sql`rollback to savepoint mfg_work_center_update`);
+    await tx.execute(sql`release savepoint mfg_work_center_update`);
+    if (storageCode(error) === "23505" && storageConstraint(error) === "mfg_work_centers_org_code_unique") {
+      duplicateCodeRefusal(merged.code, (await duplicateCode(tx, orgId, merged.code, id))?.name);
+    }
+    throw error;
+  }
+  await tx.execute(sql`release savepoint mfg_work_center_update`);
   if (!after) throw new ManufacturingNotFoundError();
   await auditChange(tx, { orgId, actorId, table: "mfg_work_centers", rowId: id, action: "update", before, after });
   return after;
@@ -128,7 +173,7 @@ export async function addWorkCenterRate(
   const center = await tx.execute<{ kind: WorkCenterKind }>(sql`select kind from mfg_work_centers where org_id=${orgId} and id=${workCenterId} and is_active for share`);
   if (!center.rows[0]) throw new ManufacturingNotFoundError();
   if (center.rows[0].kind === "labor") refused("Machine rates apply only to machine or cell work centers.", "rate_not_applicable", "workCenterId", "Choose a machine or cell work center.");
-  const amount = decimalValue(input.machineRatePerHour, "machineRatePerHour", "Enter a non-negative rate with no more than four decimal places.");
+  const amount: Money = parseMoney(decimalValue(input.machineRatePerHour, "machineRatePerHour", "Enter a non-negative rate with no more than four decimal places."));
   const from = isoDate(input.effectiveFrom, "effectiveFrom");
   const to = input.effectiveTo == null ? null : isoDate(input.effectiveTo, "effectiveTo");
   if (to !== null && to <= from) refused("The rate end date must be after its start date.", "invalid_rate_range", "effectiveTo", "Choose an end date after the start date.");
