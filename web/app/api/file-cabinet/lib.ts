@@ -62,6 +62,8 @@ const DOCUMENT_ATTACHMENT_WRITE_PERMS: Record<string, string> = {
   quote: 'ar.create',
   expense_report: 'expenses.create',
   field_ticket: 'time.manage',
+  pick_list: 'orders.fulfill',
+  shipment: 'orders.fulfill',
   project_charge: 'projects.manage',
   pay_run: 'payroll.run',
   journal: 'gl.post',

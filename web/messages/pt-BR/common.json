@@ -88,7 +88,13 @@
     "projectCharge": "Apropriação de projeto",
     "projectChargeShort": "Apropriação",
     "fieldTicket": "Boletim de campo",
-    "fieldTicketShort": "Boletim"
+    "fieldTicketShort": "Boletim",
+    "pickList": "Lista de separação",
+    "pickListShort": "Separação",
+    "shipment": "Remessa",
+    "shipmentShort": "Remessa",
+    "fulfillment": "Atendimento",
+    "fulfillmentShort": "Atend."
   },
   "labels": {
     "name": "Nome",

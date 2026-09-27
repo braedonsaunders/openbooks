@@ -274,7 +274,7 @@ function targetHref(kind: string, id: string): string {
     case 'quote':
       return `/estimates?estimate=${id}&mode=edit`
     case 'sales_fulfillment':
-      // Shipments are immutable evidence on the order they fulfil; the
+      // Fulfilments are immutable evidence on the order they fulfil; the
       // inventory ledger is where their movements are inspected (docHref).
       return '/inventory'
     default:
@@ -301,6 +301,10 @@ function docHref(kind: string, id: string): string {
       return '/inventory'
     case 'sales_fulfillment':
       return '/inventory'
+    case 'pick_list':
+      return `/picks?pick=${id}`
+    case 'shipment':
+      return `/shipments?shipment=${id}`
     default:
       return '/'
   }
@@ -414,6 +418,7 @@ export function OrderDrawer({
   createMode = false,
   closeHref,
   backorders = false,
+  pickLists = false,
 }: {
   order: OrderPayload
   initialMode?: DrawerMode
@@ -447,10 +452,15 @@ export function OrderDrawer({
   /** Show the Backorders tab: the page resolved Fulfillment on and the
    *  fulfil-orders permission. The tab's route enforces both again. */
   backorders?: boolean
+  /** Offer Create pick list on an issued sales order: the page resolved
+   *  Fulfillment on and the fulfil-orders permission. The pick-list form and
+   *  its routes enforce both again. */
+  pickLists?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
   const tCommon = useTranslations('common')
+  const tFulfillment = useTranslations('fulfillment')
   const statusLabel = (status: string) => {
     const key = toStatusKey(String(status))
     return STATUS_LABEL_KEYS.has(key) ? tCommon(`status.${key}`) : String(status).replace('_', ' ')
@@ -1362,6 +1372,11 @@ export function OrderDrawer({
                   </Button>
                 ))
               : null}
+            {pickLists && kind === 'sales_order' && isApproved ? (
+              <Button disabled={busy} onClick={() => router.push(`/picks?pickFrom=${encodeURIComponent(String(doc.id))}`)}>
+                {tFulfillment('pick.createFromOrder')}
+              </Button>
+            ) : null}
             {isApproved ? (
               <Button variant="outline" disabled={busy} onClick={voidOrder}>
                 {tCommon('actions.void')}

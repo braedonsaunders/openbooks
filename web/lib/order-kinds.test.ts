@@ -9,14 +9,14 @@ import { CONVERSION_TARGETS } from './order-kinds.ts'
 // control existed anywhere. A sales order must offer the shipment first,
 // mirroring the purchase-order goods-receipt target (same link, same
 // remainder semantics, same SHIP- numbering the engine already issues).
-test('sales orders convert to a shipment before they bill', () => {
+test('sales orders convert to a fulfillment before they bill', () => {
   assert.deepEqual(
     CONVERSION_TARGETS.sales_order.map((target) => target.kind),
     ['sales_fulfillment', 'customer_invoice'],
   )
   assert.deepEqual(CONVERSION_TARGETS.sales_order[0], {
     kind: 'sales_fulfillment',
-    labelKey: 'kinds.shipment',
+    labelKey: 'kinds.fulfillment',
     prefix: 'SHIP-',
     link: 'fulfills',
   })

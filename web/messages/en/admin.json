@@ -2108,6 +2108,11 @@
         "singular": "Warehouse",
         "description": "Name, address and lifecycle of each warehouse-kind stock location."
       },
+      "carriers": {
+        "title": "Carriers",
+        "singular": "Carrier",
+        "description": "Carriers you ship with, the service levels each offers, and an optional tracking link."
+      },
       "putaway-rules": {
         "title": "Putaway Rules",
         "singular": "Putaway Rule",
@@ -2672,6 +2677,8 @@
       "strategy": "Strategy",
       "targetLocationId": "Target location",
       "capacityQuantity": "Capacity",
+      "services": "Services",
+      "trackingUrlTemplate": "Tracking link template",
       "accountId": "Account",
       "code": "Code",
       "name": "Name",
@@ -3064,6 +3071,9 @@
     "fieldHelp": {
       "putawayItem": "Leave blank to apply the rule to every item.",
       "putawayCapacity": "The most the target may hold of the item. Required for a bulk zone; leave blank on a fixed bin for no limit.",
+      "carrierServices": "The service levels this carrier offers, such as Ground or Overnight. A shipment chooses one of them.",
+      "carrierTrackingUrlTemplate": "The carrier's tracking page address with '{tracking}' where the tracking number goes, for example https://carrier.example/track?number='{tracking}'. Leave blank if the carrier has no tracking link.",
+      "carrierActive": "Clear Active for a carrier you no longer use. An inactive carrier cannot be chosen on a shipment; shipments that already name it keep it.",
       "recognitionRulePolicy": "Changing the method, term, dates, offsets, percent, or accounts on a rule already used by revenue creates a new version; existing obligations keep the old version.",
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
       "lienWaiverEnforcement": "Block means a bill for this class cannot be paid until a signed waiver covers it.",

@@ -3,6 +3,8 @@ import { useTranslations } from 'next-intl'
 import {
   ClipboardList,
   ClipboardCheck,
+  ListChecks,
+  Truck,
   BookOpen,
   Banknote,
   ArrowLeftRight,
@@ -78,6 +80,9 @@ export const DOC_TYPE_META: Record<string, DocTypeMeta> = {
   card_refund: meta('cardRefund', 'cardRefundShort', <CreditCard className={ICON} />, P.pink),
   project_charge: meta('projectCharge', 'projectChargeShort', <ReceiptText className={ICON} />, P.indigo),
   field_ticket: meta('fieldTicket', 'fieldTicketShort', <ClipboardCheck className={ICON} />, P.cyan),
+  pick_list: meta('pickList', 'pickListShort', <ListChecks className={ICON} />, P.teal),
+  shipment: meta('shipment', 'shipmentShort', <Truck className={ICON} />, P.sky),
+  sales_fulfillment: meta('fulfillment', 'fulfillmentShort', <Truck className={ICON} />, P.slate),
 }
 
 const humanize = (kind: string) => kind.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())

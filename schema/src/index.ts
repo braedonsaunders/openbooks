@@ -7,6 +7,7 @@ export * from "./parties";
 export * from "./ledger";
 export * from "./documents";
 export * from "./backorders";
+export * from "./fulfillment";
 export * from "./tax";
 export * from "./depreciation-conventions";
 export * from "./extension";

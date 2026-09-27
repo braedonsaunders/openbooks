@@ -211,6 +211,9 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'hrm-surveys-drawer',
   'new-warehouse-button',
   'new-warehouse-drawer',
+  'pick-list-drawer',
+  'new-pick-list-drawer',
+  'shipment-drawer',
   'org-chart-tree',
   // HR-19 end
   'hrm-comp-cycle-dialog',

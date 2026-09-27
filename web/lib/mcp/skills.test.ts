@@ -55,6 +55,7 @@ const TOOL_NAMES = toolNamesFrom(
   "../assistant/tools-files.ts",
   "../assistant/tools-ops.ts",
   "../assistant/tools-inventory.ts",
+  "../assistant/tools-fulfillment.ts",
   "../assistant/tools-orders.ts",
   "../assistant/tools-assets.ts",
   "../assistant/tools-equipment.ts",

@@ -317,6 +317,49 @@ export function scaleShapeCheckRefusal(
   }
 }
 
+const CARRIER_TRACKING_EXAMPLE = 'https://carrier.example/track?number={tracking}'
+
+/**
+ * A carrier's tracking-link template, checked as it will be stored: blank
+ * means no tracking link; otherwise a web address (it becomes a link on the
+ * shipment and in the customer's tracking email) holding `{tracking}` where
+ * the tracking number is substituted. Returns the refusal, or null.
+ */
+export function carrierTrackingTemplateProblem(raw: unknown): string | null {
+  if (raw === undefined || raw === null || raw === '') return null
+  const template = String(raw)
+  if (!/^https?:\/\/\S+$/i.test(template)) {
+    return `A tracking link template must be a web address starting with https:// or http://, for example ${CARRIER_TRACKING_EXAMPLE}`
+  }
+  if (!template.includes('{tracking}')) {
+    return `A tracking link template must contain {tracking} where the tracking number goes, for example ${CARRIER_TRACKING_EXAMPLE}`
+  }
+  return null
+}
+
+const CARRIER_CHECK_REFUSALS: Record<string, string> = {
+  carriers_services_check: 'A carrier needs at least one service: enter the service levels it offers, such as Ground',
+  carriers_tracking_url_template_check:
+    `A tracking link template must contain {tracking} where the tracking number goes, for example ${CARRIER_TRACKING_EXAMPLE}`,
+  carriers_code_check: 'A carrier needs a code',
+  carriers_name_check: 'A carrier needs a name',
+}
+
+/**
+ * Residual storage refusal for carriers. The coercer and the integrity check
+ * name these before the write; reaching a CHECK means a defense layer was
+ * bypassed or drifted, and the answer is still the named refusal rather
+ * than the raw constraint text.
+ */
+export function carrierCheckRefusal(
+  entityKey: string,
+  e: unknown,
+): { status: 400; body: { error: string; code: 'invalid' } } | null {
+  if (entityKey !== 'carriers' || pgErrorCode(e) !== '23514') return null
+  const message = CARRIER_CHECK_REFUSALS[pgErrorConstraint(e) ?? '']
+  return message ? { status: 400, body: { error: message, code: 'invalid' } } : null
+}
+
 /** Translate a few common Postgres error codes into stable, client-friendly strings. */
 export function describeDbError(e: unknown): string {
   const code = pgErrorCode(e)

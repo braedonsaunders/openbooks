@@ -162,6 +162,13 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
       "HR file data.",
   },
   {
+    table: "fulfillment_documents",
+    reason:
+      "same finance-owned document store as documents (pick lists and " +
+      "shipments); the ship-to address snapshot follows its document's remit " +
+      "decision.",
+  },
+  {
     table: "journal_lines",
     reason:
       "general ledger; finance remit. Payroll postings derive from gathered pay stubs.",

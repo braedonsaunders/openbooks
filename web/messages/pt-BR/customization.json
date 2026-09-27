@@ -39,7 +39,9 @@
     "vendor": "Fornecedor",
     "employee": "Funcionário",
     "pay_run": "Folha de pagamento",
-    "field_ticket": "Boletim de campo"
+    "field_ticket": "Boletim de campo",
+    "pick_list": "Lista de separação",
+    "shipment": "Remessa"
   },
   "property": {
     "tabs": {

@@ -88,7 +88,13 @@
     "projectCharge": "Cargo de proyecto",
     "projectChargeShort": "Cargo",
     "fieldTicket": "Parte de obra",
-    "fieldTicketShort": "Parte"
+    "fieldTicketShort": "Parte",
+    "pickList": "Lista de preparación",
+    "pickListShort": "Prep.",
+    "shipment": "Envío",
+    "shipmentShort": "Envío",
+    "fulfillment": "Cumplimiento",
+    "fulfillmentShort": "Cumpl."
   },
   "labels": {
     "name": "Nombre",

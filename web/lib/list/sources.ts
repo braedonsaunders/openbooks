@@ -5,6 +5,7 @@ import type { ListViewConfig } from '@openbooks/customization'
 import { AP_KINDS, AR_KINDS } from '../document-kinds'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import {
+  DISPLAY_DOCUMENT_NUMBER_EXPR,
   DOCUMENT_BUILT_IN_EXPR,
   DOCUMENT_SORTS,
   PAYMENT_BANK_ID_EXPR,
@@ -12,9 +13,11 @@ import {
   PAYMENT_SORTS,
   BANK_TRANSACTION_ACCOUNT_MATCH,
   bankTransactionWhere,
+  fulfillmentWhere,
   payRunWhere,
   type AdhocFilters,
 } from '../customization/list-query'
+import { isRecordTypeEnabled } from '../customization/gates'
 
 /**
  * Document-list data sources — the SQL half of the universal list page. Every
@@ -115,6 +118,71 @@ function documentSource(cfg: {
   }
 }
 
+/**
+ * Pick lists and shipments: the stage, warehouse and carrier live on the 1:1
+ * fulfillment_documents row, and the sales order is the upstream document
+ * linked `reserves` (pick list) or `ships` (shipment). The warehouse options
+ * are the organization's warehouses; the where function keeps its stage and
+ * warehouse predicates EXISTS-based so the joinless count queries stay valid.
+ */
+function fulfillmentSource(recordType: 'pick_list' | 'shipment', drawerParam: string): DocListSource {
+  return {
+    recordType,
+    kinds: [recordType],
+    drawerParam,
+    joins: sql`join fulfillment_documents fd on fd.document_id = d.id and fd.org_id = d.org_id
+               join stock_locations fwl on fwl.id = fd.warehouse_id and fwl.org_id = fd.org_id
+               left join carriers fc on fc.id = fd.carrier_id and fc.org_id = fd.org_id
+               left join lateral (
+                 select so.id, so.document_number
+                   from document_links l
+                   join documents so on so.id = l.from_document_id and so.org_id = l.org_id
+                  where l.org_id = d.org_id and l.to_document_id = d.id and l.link_type in ('reserves', 'ships')
+                  limit 1
+               ) fso on true`,
+    builtInExpr: {
+      document_number: DISPLAY_DOCUMENT_NUMBER_EXPR,
+      party_name: sql`p.display_name`,
+      document_date: sql`d.document_date`,
+      sales_order_number: sql`fso.document_number`,
+      warehouse_code: sql`fwl.code`,
+      carrier_name: sql`fc.name`,
+      tracking_number: sql`fd.tracking_number`,
+      fulfillment_stage: sql`fd.stage`,
+      status: sql`d.status`,
+    },
+    sorts: {
+      ...DOCUMENT_SORTS,
+      salesOrder: sql`fso.document_number`,
+      warehouse: sql`fwl.code`,
+      carrier: sql`fc.name`,
+      stage: sql`fd.stage`,
+    },
+    extraSelect: sql`d.party_id, fso.id as sales_order_id`,
+    links: {
+      party_name: partyLink('customer'),
+      sales_order_number: (row) => (row.sales_order_id ? `/sales-orders?order=${row.sales_order_id}` : null),
+    },
+    where: fulfillmentWhere,
+    quickFilters: [
+      { paramKey: 'stage', filterKey: 'fulfillment_stage' },
+      {
+        paramKey: 'warehouse',
+        filterKey: 'warehouse_id',
+        loadOptions: async (orgId) => {
+          const result = await db.execute<{ value: string; label: string } & Record<string, unknown>>(sql`
+            select w.stock_location_id::text as value, concat_ws(' · ', sl.code, w.name) as label
+              from warehouses w
+              join stock_locations sl on sl.id = w.stock_location_id and sl.org_id = w.org_id
+             where w.org_id = ${orgId}
+             order by sl.code`)
+          return result.rows
+        },
+      },
+    ],
+  }
+}
+
 const SOURCES: Record<string, DocListSource> = {
   vendor_bill: documentSource({
     recordType: 'vendor_bill',
@@ -194,6 +262,9 @@ const SOURCES: Record<string, DocListSource> = {
     },
   }),
   purchase_order: documentSource({ recordType: 'purchase_order', kinds: ['purchase_order'], drawerParam: 'order', partyRole: 'vendor' }),
+  // Fulfillment — pick lists and shipments, each opened in its own drawer.
+  pick_list: fulfillmentSource('pick_list', 'pick'),
+  shipment: fulfillmentSource('shipment', 'shipment'),
   // Pay runs — 1:1 pay_runs extension joined for period/totals columns; the
   // status column merges the run lifecycle with the document's posted state.
   // Rows open the pay-run wizard (a full page), not a drawer, via the links
@@ -309,6 +380,19 @@ const SOURCES: Record<string, DocListSource> = {
 
 export function listSource(recordType: string): DocListSource | undefined {
   return SOURCES[recordType]
+}
+
+/**
+ * The list source for a record type the organization may list right now:
+ * null when no source is registered, or when the record type belongs to a
+ * Features switch that is off (Company Settings → Features). A list page
+ * refuses on null instead of reading documents its module has hidden.
+ */
+export async function enabledListSource(orgId: string, recordType: string): Promise<DocListSource | null> {
+  const source = SOURCES[recordType]
+  if (!source) return null
+  if (!(await isRecordTypeEnabled(orgId, recordType))) return null
+  return source
 }
 
 /**

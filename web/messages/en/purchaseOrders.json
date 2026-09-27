@@ -15,9 +15,9 @@
       "invoice": "Invoice",
       "bill": "Bill",
       "receipt": "Goods receipt",
-      "shipment": "Shipment"
+      "fulfillment": "Fulfillment"
     },
-    "docKind": "{kind, select, quote {Estimate} sales_order {Sales order} purchase_order {Purchase order} customer_invoice {Invoice} vendor_bill {Bill} purchase_receipt {Goods receipt} sales_fulfillment {Shipment} other {{kind}}}",
+    "docKind": "{kind, select, quote {Estimate} sales_order {Sales order} purchase_order {Purchase order} customer_invoice {Invoice} vendor_bill {Bill} purchase_receipt {Goods receipt} sales_fulfillment {Fulfillment} pick_list {Pick list} shipment {Shipment} other {{kind}}}",
     "partyLabel": "{kind, select, purchase_order {Vendor} other {Customer}}",
     "selectPartyPlaceholder": "{kind, select, purchase_order {Select vendor…} other {Select customer…}}",
     "dateLabel": "{kind, select, quote {Estimate date} other {Order date}}",

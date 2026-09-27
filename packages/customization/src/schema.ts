@@ -496,6 +496,25 @@ const HEADER_SPAN_BY_TYPE: Record<string, Record<string, number>> = {
     reference_number: 1,
     memo: 3,
   },
+  pick_list: {
+    party_id: 2,
+    sales_order_id: 1,
+    warehouse_id: 1,
+    document_date: 1,
+    memo: 3,
+  },
+  shipment: {
+    party_id: 2,
+    sales_order_id: 1,
+    pick_list_id: 1,
+    warehouse_id: 1,
+    document_date: 1,
+    carrier_id: 1,
+    carrier_service: 1,
+    tracking_number: 2,
+    ship_to_address: 2,
+    memo: 4,
+  },
 }
 
 /**

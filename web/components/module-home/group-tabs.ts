@@ -39,10 +39,13 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     { href: '/ap', ns: 'nav', key: 'modules.ap' },
     { href: '/expenses', ns: 'nav', key: 'modules.expenses' },
   ],
-  // The warehouse cockpit beside the inventory workspace it moves stock for.
+  // The warehouse cockpit beside the inventory workspace it moves stock for,
+  // then the pick lists and shipments that take stock out of its bins.
   warehouse: [
     { href: '/warehouse', ns: 'warehouse', key: 'home.title' },
     { href: '/inventory', ns: 'nav', key: 'modules.inventory' },
+    { href: '/picks', ns: 'nav', key: 'modules.picks' },
+    { href: '/shipments', ns: 'nav', key: 'modules.shipments' },
   ],
   banking: [
     { href: '/banking', ns: 'banking', key: 'home.title' },
@@ -136,6 +139,8 @@ const TAB_FEATURE: Record<string, string> = {
   '/close': 'continuousClose',
   '/warehouse': 'warehousing',
   '/inventory': 'inventory',
+  '/picks': 'fulfillment',
+  '/shipments': 'fulfillment',
 }
 
 /**
@@ -199,6 +204,31 @@ export async function customerGroupTabs(
     .filter(([, permission]) => !can(authz, permission))
     .map(([href]) => href)
   return groupTabs('customers', activeHref, { ...opts, exclude, orgId: authz.user.orgId })
+}
+
+/** The permission each Warehouse-strip destination enforces. */
+const WAREHOUSE_TAB_PERMISSION: Record<string, string> = {
+  '/warehouse': 'items.read',
+  '/inventory': 'items.read',
+  '/picks': 'orders.fulfill',
+  '/shipments': 'orders.fulfill',
+}
+
+/**
+ * The Warehouse strip with permission exclusions already applied. Stock
+ * pages need items.read while pick lists and shipments need orders.fulfill,
+ * so a warehouse clerk and a shipping clerk each see only the tabs they can
+ * open. Every page in the group calls this instead of `groupTabs` directly.
+ */
+export async function warehouseGroupTabs(
+  authz: Authz,
+  activeHref: string,
+  opts: { subQs?: string } = {},
+): Promise<ModuleHomeTab[]> {
+  const exclude = Object.entries(WAREHOUSE_TAB_PERMISSION)
+    .filter(([, permission]) => !can(authz, permission))
+    .map(([href]) => href)
+  return groupTabs('warehouse', activeHref, { ...opts, exclude, orgId: authz.user.orgId })
 }
 
 /** The permission each HRM-strip destination enforces. Hiring and Rewards

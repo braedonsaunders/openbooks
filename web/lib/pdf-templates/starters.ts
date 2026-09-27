@@ -371,11 +371,82 @@ function fieldTicketStarter(meta: PdfRecordTypeMeta, accent: string): StarterTem
   }
 }
 
+/**
+ * Packing-slip starter for shipments: ship-to and carrier up top, then the
+ * packed lines by carton. A packing slip travels in the box, so it carries
+ * quantities and cartons and never prices.
+ */
+function packingSlipStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate {
+  const sourceHtml =
+    `<div style="${FONT}color:${INK};">` +
+    // ---- Brand band ----
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 6px;"><tbody><tr>` +
+    `<td style="vertical-align:bottom;">` +
+    `<div style="font-size:19px;font-weight:800;letter-spacing:-.01em;color:${accent};">{{org_name}}</div>` +
+    `<div style="font-size:10.5px;color:${MUTED};padding-top:2px;">{{warehouse_name}}</div>` +
+    `</td>` +
+    `<td style="vertical-align:bottom;text-align:right;">` +
+    `<div style="font-size:26px;font-weight:800;letter-spacing:.02em;color:${INK};text-transform:uppercase;">${meta.docTitle}</div>` +
+    `<div style="font-size:12px;color:${MUTED};padding-top:2px;">{{document_number}}</div>` +
+    `</td>` +
+    `</tr></tbody></table>` +
+    `<div style="height:3px;background:${accent};margin:0 0 22px;"></div>` +
+    // ---- Ship-to + meta ----
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 18px;"><tbody><tr>` +
+    `<td style="vertical-align:top;">` +
+    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};padding-bottom:5px;">${meta.partyHeading ?? ''}</div>` +
+    `<div style="font-size:13.5px;color:${INK};font-weight:700;padding-bottom:2px;">{{ship_to_name}}</div>` +
+    `<div style="font-size:11px;color:${MUTED};line-height:1.55;">{{ship_to_address}}</div>` +
+    `<div style="font-size:11px;color:${MUTED};line-height:1.55;">{{party_phone}}</div>` +
+    `</td>` +
+    `<td style="vertical-align:top;text-align:right;">` +
+    `<table style="border-collapse:collapse;margin-left:auto;"><tbody><tr>` +
+    metaCell('Ship date', 'document_date') +
+    metaCell('Sales order', 'sales_order_number') +
+    metaCell('Customer', 'party_name') +
+    `</tr></tbody></table>` +
+    `</td>` +
+    `</tr></tbody></table>` +
+    // ---- Carrier band ----
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 22px;background:${WASH};border-radius:8px;"><tbody><tr>` +
+    `<td style="padding:12px 16px;">` +
+    `<table style="border-collapse:collapse;"><tbody><tr>` +
+    metaCell('Carrier', 'carrier_name') +
+    metaCell('Service', 'carrier_service') +
+    metaCell('Tracking number', 'tracking_number') +
+    metaCell('Cartons', 'carton_count') +
+    `</tr></tbody></table>` +
+    `</td></tr></tbody></table>` +
+    // ---- Packed lines ----
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 20px;"><tbody>` +
+    `<tr>${th('Item')}${th('Description')}${th('Carton', 'left', '80px')}${th('Qty', 'right', '64px')}${th('Unit', 'left', '52px')}</tr>` +
+    `<tr data-each="lines">${td('item_name')}${td('description')}${td('carton')}${td('quantity', 'right')}${td('unit')}</tr>` +
+    `</tbody></table>` +
+    `<div data-if="memo" style="font-size:11px;color:${MUTED};line-height:1.6;margin:0 0 20px;">` +
+    `<span style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};display:block;padding-bottom:3px;">Notes</span>{{memo}}</div>` +
+    // ---- Receipt ----
+    `<table style="width:100%;border-collapse:collapse;"><tbody><tr>` +
+    `<td style="width:50%;padding-right:20px;vertical-align:bottom;">` +
+    `<div style="border-top:1px solid ${INK};margin-top:36px;padding-top:4px;font-size:9.5px;color:${MUTED};">Received by</div>` +
+    `</td>` +
+    `<td style="width:50%;padding-left:20px;vertical-align:bottom;">` +
+    `<div style="border-top:1px solid ${INK};margin-top:36px;padding-top:4px;font-size:9.5px;color:${MUTED};">Date</div>` +
+    `</td></tr></tbody></table>` +
+    `</div>`
+
+  return {
+    sourceHtml,
+    headerHtml: '',
+    footerHtml: `{{org_name}} · ${meta.docTitle} {{document_number}} · Page {{page}} of {{pages}}`,
+  }
+}
+
 export function starterTemplate(meta: PdfRecordTypeMeta, accent?: string | null): StarterTemplate {
   const color = accent && /^#[0-9a-fA-F]{3,8}$/.test(accent) ? accent : '#0f766e'
   if (meta.key === 'journal_entry') return journalStarter(meta, color)
   if (meta.key === 'pay_stub') return payStubStarter(meta, color)
   if (meta.key === 'payroll_cheque') return chequeStarter(meta, color)
   if (meta.key === 'field_ticket') return fieldTicketStarter(meta, color)
+  if (meta.key === 'shipment') return packingSlipStarter(meta, color)
   return documentStarter(meta, color)
 }

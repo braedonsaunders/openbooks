@@ -16,6 +16,7 @@ import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveFormLayout } from '../lib/customization/resolve'
 import { isFeatureEnabled } from '../lib/features'
 import { loadFieldTicketDrawerData } from '../lib/field-ticket-drawer-data'
+import { loadFulfillmentDrawerData } from '../lib/fulfillment-drawer-data'
 import { DOC_KINDS, createPermission, postPermission, readPermission } from "../lib/document-kinds.ts";
 import { isDocKindEnabled, taxCodeOptions, taxGroupOptions } from "../lib/documents.ts";
 import { listScopedAccountOptions, listScopedCardOptions, listScopedPartyOptions } from '../lib/scoped-options'
@@ -153,6 +154,11 @@ export async function loadRelatedTransactionDrawerData({
   if (kind === 'field_ticket') {
     const props = await loadFieldTicketDrawerData({ authz, ticketId: id, formLayoutId })
     return props ? { type: 'fieldTicket', props } : null
+  }
+  if (kind === 'pick_list' || kind === 'shipment') {
+    const data = await loadFulfillmentDrawerData({ authz, kind, id, formLayoutId })
+    if (!data || (partyId && data.document.customer?.id !== partyId)) return null
+    return kind === 'pick_list' ? { type: 'pickList', props: { data } } : { type: 'shipment', props: { data } }
   }
   if (PAYMENT_KINDS.has(kind)) {
     const permission = kind === 'vendor_payment' ? 'ap.read' : 'ar.read'

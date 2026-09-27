@@ -495,3 +495,49 @@ export function payRunWhere(
   }
   return sql.join(parts, sql` `);
 }
+
+/** A pick list's or shipment's stage. `open` is work still to do, so a voided
+ * document is never open; `done` is a completed shipment and its pick list.
+ * An unknown stage matches nothing. EXISTS-based for the joinless count
+ * queries, like the pay-run stages above. */
+function fulfillmentStageMatch(stage: string): SQL {
+  if (stage !== "open" && stage !== "done") return sql`false`;
+  return sql`${stage === "open" ? sql`d.status <> 'voided' and ` : sql``}exists (
+    select 1 from fulfillment_documents fds
+     where fds.document_id = d.id and fds.org_id = d.org_id and fds.stage = ${stage})`;
+}
+
+function fulfillmentWarehouseMatch(warehouseId: string): SQL {
+  if (!isUuid(warehouseId)) return sql`false`;
+  return sql`exists (
+    select 1 from fulfillment_documents fdw
+     where fdw.document_id = d.id and fdw.org_id = d.org_id and fdw.warehouse_id = ${warehouseId})`;
+}
+
+/** Pick-list and shipment lists: the document filters plus the stage and
+ * warehouse held on fulfillment_documents, from a saved view or the quick
+ * filters. */
+export function fulfillmentWhere(
+  kinds: readonly string[],
+  view: ListViewConfig,
+  adhoc: AdhocFilters,
+  orgId: string,
+  allowedSubsidiaryIds?: Set<string> | null,
+): SQL {
+  const parts: SQL[] = [documentWhere(kinds, view, adhoc, orgId, allowedSubsidiaryIds)];
+  for (const clause of view.filters) {
+    const value = Array.isArray(clause.value) ? String(clause.value[0] ?? "") : String(clause.value ?? "");
+    const match =
+      clause.key === "fulfillment_stage" && value
+        ? fulfillmentStageMatch(value)
+        : clause.key === "warehouse_id" && value
+          ? fulfillmentWarehouseMatch(value)
+          : null;
+    if (!match) continue;
+    if (clause.operator === "eq") parts.push(sql`and (${match})`);
+    else if (clause.operator === "ne") parts.push(sql`and not (${match})`);
+  }
+  if (adhoc.filters?.fulfillment_stage) parts.push(sql`and (${fulfillmentStageMatch(adhoc.filters.fulfillment_stage)})`);
+  if (adhoc.filters?.warehouse_id) parts.push(sql`and (${fulfillmentWarehouseMatch(adhoc.filters.warehouse_id)})`);
+  return sql.join(parts, sql` `);
+}

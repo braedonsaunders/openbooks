@@ -31,7 +31,7 @@ export const CONVERSION_TARGETS: Record<
     { kind: 'customer_invoice', labelKey: 'kinds.invoice', prefix: 'INV-', link: 'bills' },
   ],
   sales_order: [
-    { kind: 'sales_fulfillment', labelKey: 'kinds.shipment', prefix: 'SHIP-', link: 'fulfills' },
+    { kind: 'sales_fulfillment', labelKey: 'kinds.fulfillment', prefix: 'SHIP-', link: 'fulfills' },
     { kind: 'customer_invoice', labelKey: 'kinds.invoice', prefix: 'INV-', link: 'bills' },
   ],
   purchase_order: [

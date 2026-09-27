@@ -6,7 +6,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { mergeHref, pickString, isUuid } from '../../../lib/list-params'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { can, requirePermission } from '../../../lib/authz'
+import { can, requirePermission, type Authz } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
 import { loadOrder } from '../../api/_order/lib'
@@ -67,6 +67,7 @@ export interface SalesOrderDrawer {
   canOverrideCredit: boolean
   layout: OrderDrawerProps['layout']
   backorders: boolean
+  pickLists: boolean
 }
 
 export interface SalesOrdersData {
@@ -93,6 +94,16 @@ export interface SalesOrdersData {
   drawer: SalesOrderDrawer | null
 }
 
+/**
+ * The order drawer's fulfilment actions — the Backorders tab and Create pick
+ * list — both need the fulfil-orders permission with Fulfillment on. The
+ * create form and the routes enforce both again.
+ */
+export async function orderFulfillmentActions(authz: Authz): Promise<{ backorders: boolean; pickLists: boolean }> {
+  const enabled = can(authz, 'orders.fulfill') && (await isFeatureEnabled(authz.user.orgId, 'fulfillment'))
+  return { backorders: enabled, pickLists: enabled }
+}
+
 export async function loadSalesOrders(
   sp: Record<string, string | string[] | undefined>,
 ): Promise<SalesOrdersData> {
@@ -100,7 +111,7 @@ export async function loadSalesOrders(
   await requireFeatureEnabled(authz.user.orgId, 'orders')
   const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
   const canManage = can(authz, 'ar.create')
-  const backorders = can(authz, 'orders.fulfill') && (await isFeatureEnabled(authz.user.orgId, 'fulfillment'))
+  const { backorders, pickLists } = await orderFulfillmentActions(authz)
   const t = await getTranslations('salesOrders')
   const openId = pickString(sp[PARAM])
   // Only a real document id may reach the uuid comparison: the create view
@@ -225,6 +236,7 @@ export async function loadSalesOrders(
           canOverrideCredit: can(authz, 'ar.approve'),
           layout: resolvedForm?.layout,
           backorders,
+          pickLists,
         }
       : null
 

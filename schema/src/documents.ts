@@ -565,7 +565,7 @@ export const documentLinks = pgTable(
     fromDocumentId: uuid("from_document_id").notNull(),
     toDocumentId: uuid("to_document_id").notNull(),
     linkType: text("link_type", {
-      enum: ["created_from", "fulfills", "bills", "pays", "reverses", "renews"],
+      enum: ["created_from", "fulfills", "bills", "pays", "reverses", "renews", "reserves", "ships"],
     }).notNull(),
     /** Mandatory, immutable controller evidence for a correction edge. */
     reason: text("reason"),

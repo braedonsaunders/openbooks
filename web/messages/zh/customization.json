@@ -39,7 +39,9 @@
     "vendor": "供应商",
     "employee": "员工",
     "pay_run": "工资核算",
-    "field_ticket": "现场工单"
+    "field_ticket": "现场工单",
+    "pick_list": "拣货单",
+    "shipment": "发运单"
   },
   "property": {
     "tabs": {

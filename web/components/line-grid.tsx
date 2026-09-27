@@ -46,6 +46,13 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
   decimalScale?: number
   align?: 'left' | 'right'
   options?: LineGridOption[]
+  /**
+   * Per-row choices for `select` / `search-select` columns whose valid values
+   * depend on the line (the bins that hold a line's item). When present it
+   * replaces `options` for that row, in both the control and the read-only
+   * label lookup.
+   */
+  optionsFor?: (row: Row, index: number) => LineGridOption[]
   placeholder?: string
   required?: boolean
   /**
@@ -880,7 +887,7 @@ function RowCells<Row extends Record<string, unknown>>({
             )
           } else if (c.render) display = c.render(row, i)
           else if ((c.type === 'select' || c.type === 'search-select') && value)
-            display = c.options?.find((o) => o.value === value)?.label ?? ''
+            display = (c.optionsFor?.(row, i) ?? c.options)?.find((o) => o.value === value)?.label ?? ''
           else if (c.type === 'decimal')
             display = displayLineDecimal(value, c.decimalScale ?? 8)
           else if (c.type === 'amount')
@@ -912,7 +919,7 @@ function RowCells<Row extends Record<string, unknown>>({
           >
             {c.type === 'search-select' ? (
               <SearchSelect
-                options={c.options ?? []}
+                options={c.optionsFor?.(row, i) ?? c.options ?? []}
                 ariaLabelledBy={ariaLabelledBy}
                 value={(value as string) ?? ''}
                 onChange={(v) => commitCell(rowKey, c.key, v ?? '')}
@@ -927,7 +934,7 @@ function RowCells<Row extends Record<string, unknown>>({
                 onChange={(e) => commitCell(rowKey, c.key, e.target.value)}
                 className="w-full border-0 bg-transparent shadow-none"
               >
-                {(c.options ?? []).map((o) => (
+                {(c.optionsFor?.(row, i) ?? c.options ?? []).map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>

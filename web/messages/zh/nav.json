@@ -1,6 +1,8 @@
 {
   "modules": {
     "warehouses": "仓库",
+    "picks": "拣货单",
+    "shipments": "发货单",
     "accounts": "会计科目表",
     "assets": "固定资产",
     "equipment": "设备",

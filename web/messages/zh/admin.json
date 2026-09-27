@@ -2108,6 +2108,11 @@
         "singular": "仓库",
         "description": "每个仓库类库存地点的名称、地址和生命周期。"
       },
+      "carriers": {
+        "title": "承运商",
+        "singular": "承运商",
+        "description": "您发货使用的承运商、各承运商的服务级别以及可选的跟踪链接。"
+      },
       "putaway-rules": {
         "title": "上架规则",
         "singular": "上架规则",
@@ -2672,6 +2677,8 @@
       "strategy": "策略",
       "targetLocationId": "目标地点",
       "capacityQuantity": "容量",
+      "services": "服务级别",
+      "trackingUrlTemplate": "跟踪链接模板",
       "accountId": "科目",
       "code": "代码",
       "name": "名称",
@@ -3064,6 +3071,9 @@
     "fieldHelp": {
       "putawayItem": "留空则规则适用于所有物料。",
       "putawayCapacity": "目标位置可存放该物料的最大数量。批量区必填；固定库位留空表示不限。",
+      "carrierServices": "该承运商提供的服务级别，例如标准或次日达。每张发货单从中选择一个。",
+      "carrierTrackingUrlTemplate": "承运商跟踪页面的地址，在跟踪号所在位置写入 '{tracking}'，例如 https://carrier.example/track?number='{tracking}'。如承运商没有跟踪链接，请留空。",
+      "carrierActive": "不再使用的承运商请取消“启用”。停用的承运商不能在发货单上选择；已指定该承运商的发货单保持不变。",
       "recognitionRulePolicy": "更改已用于收入的规则的方法、期限、日期、偏移、百分比或科目会创建新版本；现有履约义务保留旧版本。",
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
       "lienWaiverEnforcement": "“阻止”表示此类交易对方的账单在有签署的弃权书覆盖之前不得付款。",

@@ -88,7 +88,13 @@
     "projectCharge": "Project Charge",
     "projectChargeShort": "Charge",
     "fieldTicket": "Field Ticket",
-    "fieldTicketShort": "Ticket"
+    "fieldTicketShort": "Ticket",
+    "pickList": "Pick List",
+    "pickListShort": "Pick",
+    "shipment": "Shipment",
+    "shipmentShort": "Ship",
+    "fulfillment": "Fulfillment",
+    "fulfillmentShort": "Fulfill"
   },
   "labels": {
     "name": "Name",

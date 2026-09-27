@@ -45,6 +45,8 @@ export interface FlowSubjectPermissions {
  * - sales_order / quote: estimates require ar.read; void requires ar.create.
  * - purchase_order: void requires ap.create (reads ride the AP surface).
  * - field_ticket: /field-tickets requires time.read; writes time.manage.
+ * - pick_list / shipment: /picks and /shipments require orders.fulfill, and
+ *   every fulfilment write (release, ship, void) requires it too.
  */
 const NON_REGISTRY_DOCUMENT_PERMISSIONS: Record<string, FlowSubjectPermissions> = {
   journal: { read: 'gl.read', edit: 'gl.post', approve: 'gl.post' },
@@ -55,6 +57,8 @@ const NON_REGISTRY_DOCUMENT_PERMISSIONS: Record<string, FlowSubjectPermissions> 
   quote: { read: 'ar.read', edit: 'ar.create', approve: 'ar.create' },
   purchase_order: { read: 'ap.read', edit: 'ap.create', approve: 'ap.create' },
   field_ticket: { read: 'time.read', edit: 'time.manage', approve: 'time.manage' },
+  pick_list: { read: 'orders.fulfill', edit: 'orders.fulfill', approve: 'orders.fulfill' },
+  shipment: { read: 'orders.fulfill', edit: 'orders.fulfill', approve: 'orders.fulfill' },
 }
 
 /**

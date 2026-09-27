@@ -2063,6 +2063,11 @@
         "singular": "Almacén",
         "description": "Nombre, dirección y ciclo de vida de cada ubicación de existencias de tipo almacén."
       },
+      "carriers": {
+        "title": "Transportistas",
+        "singular": "Transportista",
+        "description": "Transportistas con los que envía, los niveles de servicio de cada uno y un enlace de seguimiento opcional."
+      },
       "putaway-rules": {
         "title": "Reglas de ubicación",
         "singular": "Regla de ubicación",
@@ -2627,6 +2632,8 @@
       "strategy": "Estrategia",
       "targetLocationId": "Ubicación de destino",
       "capacityQuantity": "Capacidad",
+      "services": "Servicios",
+      "trackingUrlTemplate": "Plantilla del enlace de seguimiento",
       "accountId": "Cuenta",
       "classAttribute": "Atributo de clase de activo",
       "countryCode": "País",
@@ -3019,6 +3026,9 @@
     "fieldHelp": {
       "putawayItem": "Déjelo en blanco para aplicar la regla a todos los artículos.",
       "putawayCapacity": "Lo máximo que el destino puede contener del artículo. Obligatorio en una zona a granel; déjelo en blanco en un hueco fijo para no poner límite.",
+      "carrierServices": "Los niveles de servicio que ofrece este transportista, como Terrestre o Urgente. Cada envío elige uno de ellos.",
+      "carrierTrackingUrlTemplate": "La dirección de la página de seguimiento del transportista con '{tracking}' donde va el número de seguimiento, por ejemplo https://carrier.example/track?number='{tracking}'. Déjelo en blanco si el transportista no tiene enlace de seguimiento.",
+      "carrierActive": "Desmarque Activo en un transportista que ya no utiliza. Un transportista inactivo no se puede elegir en un envío; los envíos que ya lo indican lo conservan.",
       "recognitionRulePolicy": "Cambiar el método, el plazo, las fechas, los desfases, el porcentaje o las cuentas de una regla ya utilizada en ingresos crea una nueva versión; las obligaciones existentes conservan la versión anterior.",
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
       "lienWaiverEnforcement": "Bloquear significa que una factura de esta clase no puede pagarse hasta que una renuncia firmada la cubra.",

@@ -39,7 +39,9 @@
     "project_charge": "Project charge",
     "field_ticket": "Field ticket",
     "fixed_asset": "Fixed asset",
-    "property": "Property"
+    "property": "Property",
+    "pick_list": "Pick list",
+    "shipment": "Shipment"
   },
   "property": {
     "tabs": {

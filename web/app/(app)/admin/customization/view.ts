@@ -340,6 +340,9 @@ export async function loadCustomization(
         case 'pay_schedule':
           result = await db.execute(sql`select id::text as value, name as label from pay_schedules where org_id=${authz.user.orgId} and is_active order by name`)
           break
+        case 'warehouse':
+          result = await db.execute(sql`select w.stock_location_id::text as value, concat_ws(' · ', sl.code, w.name) as label from warehouses w join stock_locations sl on sl.id = w.stock_location_id and sl.org_id = w.org_id where w.org_id=${authz.user.orgId} order by sl.code`)
+          break
         case 'fixed_asset':
           result = await db.execute(sql`select id::text as value, concat_ws(' · ', asset_number, name) as label from fixed_assets where org_id=${authz.user.orgId} order by asset_number`)
           break

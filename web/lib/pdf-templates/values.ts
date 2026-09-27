@@ -11,6 +11,8 @@ import { resolveLocale } from '../locale'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { PDF_RECORD_TYPE_BY_KEY, type PdfMergeField, type PdfRecordTypeMeta } from './catalog'
 import { loadFieldTicket } from '../field-tickets'
+import { canonicalDecimal } from '../exact-decimal'
+import type { FulfillmentDocumentView } from '@openbooks/engine/src/sales/fulfillment.ts'
 
 /**
  * The value loader — shapes a real record into the merge map a PDF template
@@ -493,7 +495,83 @@ export async function loadPdfRecordValues(
   if (meta.key === 'pay_stub') return loadPayStubValues(orgId, id, scope)
   if (meta.key === 'payroll_cheque') return loadPayrollChequeValues(orgId, id, scope)
   if (meta.key === 'field_ticket') return loadFieldTicketValues(orgId, id, scope)
+  if (meta.key === 'shipment') return loadShipmentValues(orgId, id, scope)
   return loadDocumentValues(meta, orgId, id, scope)
+}
+
+/**
+ * Packing-slip merge map for a shipment, read through the fulfilment engine
+ * (getFulfillmentDocument), which applies the caller's subsidiary scope in
+ * the load itself: a shipment outside it reads as not found. Quantities are
+ * exact numeric strings trimmed for print; a packing slip carries no prices.
+ */
+async function loadShipmentValues(
+  orgId: string,
+  id: string,
+  scope: ReadonlySet<string> | null,
+): Promise<PdfRecordValues | null> {
+  // Loaded on demand: the fulfilment engine brings the Flows and inventory
+  // graph with it, which no other record type's print needs.
+  const { FulfillmentRefusal, getFulfillmentDocument } = await import('@openbooks/engine/src/sales/fulfillment.ts')
+  let shipment: FulfillmentDocumentView | null
+  try {
+    shipment = await getFulfillmentDocument(db, orgId, id, scope)
+  } catch (error) {
+    // Fulfillment switched off between the route's gate and this load.
+    if (error instanceof FulfillmentRefusal && error.code === 'feature_disabled') return null
+    throw error
+  }
+  if (!shipment || shipment.kind !== 'shipment') return null
+  const [org, locale, party, customRow] = await Promise.all([
+    orgRow(orgId),
+    resolveLocale(),
+    shipment.customer
+      ? db.execute<{ email: string | null; phone: string | null }>(sql`
+          select email, phone from parties where org_id = ${orgId} and id = ${shipment.customer.id}`)
+      : null,
+    db.execute<{ custom: Record<string, unknown> | null }>(sql`
+      select custom from documents where org_id = ${orgId} and id = ${shipment.id}`),
+  ])
+  const format = createMoneyFormatter(locale, org.base_currency)
+  const address = shipment.shipToAddress
+  const cartons = new Set(shipment.lines.map((line) => line.carton).filter((carton): carton is string => Boolean(carton)))
+  const values: Record<string, unknown> = {
+    document_number: shipment.documentNumber,
+    document_date: fmtDate(shipment.documentDate, locale),
+    status: fmtStatus(shipment.stage === 'done' && shipment.status !== 'voided' ? 'completed' : shipment.status),
+    sales_order_number: shipment.salesOrder?.number ?? '',
+    pick_list_number: shipment.pickList?.number ?? '',
+    party_name: shipment.customer?.name ?? '',
+    party_email: party?.rows[0]?.email ?? '',
+    party_phone: party?.rows[0]?.phone ?? '',
+    ship_to_name: address?.label ?? shipment.customer?.name ?? '',
+    ship_to_address: address
+      ? [address.line1, address.line2, [address.city, address.region, address.postalCode].filter(Boolean).join(', '), address.country]
+          .filter(Boolean)
+          .join(', ')
+      : '',
+    warehouse_name: `${shipment.warehouse.code} · ${shipment.warehouse.name}`,
+    carrier_name: shipment.carrier?.name ?? '',
+    carrier_service: shipment.carrierService ?? '',
+    tracking_number: shipment.trackingNumber ?? '',
+    tracking_url: shipment.trackingUrl ?? '',
+    carton_count: cartons.size > 0 ? String(cartons.size) : '',
+    memo: shipment.memo ?? '',
+    org_name: org.name,
+    printed_date: fmtDate(await businessToday(orgId), locale),
+    lines: shipment.lines.map((line) => ({
+      line_number: String(line.lineNumber),
+      item_name: line.itemLabel,
+      description: line.description ?? '',
+      quantity: canonicalDecimal(line.quantity, 8) ?? line.quantity,
+      unit: line.unit ?? '',
+      carton: line.carton ?? '',
+      bin: line.binCode,
+      lot_serial: line.serialNumber ?? line.lotNumber ?? '',
+    })),
+    ...(await customFieldValues(orgId, 'documents', 'shipment', customRow.rows[0]?.custom ?? {}, format)),
+  }
+  return { values, reference: shipment.documentNumber }
 }
 
 
