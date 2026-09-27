@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { resolveScan } from '@openbooks/engine/src/inventory/item-identifiers.ts'
+import { resolveScanResult } from '@openbooks/engine/src/inventory/item-identifiers.ts'
 import { uuidId } from '@/lib/api/json'
 import { defineRoute } from '@/lib/api/route'
 
@@ -17,7 +17,7 @@ export const POST = defineRoute({
   permission: 'items.read',
   feature: 'barcodeScanning',
   body: bodySchema,
-  handler: async ({ authz, body }) => NextResponse.json({
-    resolution: await resolveScan(db, authz.user.orgId, { ...body, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }),
-  }),
+  handler: async ({ authz, body }) => NextResponse.json(
+    await resolveScanResult(db, authz.user.orgId, { ...body, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }),
+  ),
 })
