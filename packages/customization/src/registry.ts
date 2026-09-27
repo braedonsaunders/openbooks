@@ -244,6 +244,35 @@ const CUSTOMER_CREDIT: RecordTypeMeta = {
   listFilters: CUSTOMER_INVOICE.listFilters,
 };
 
+const RETURN_AUTHORIZATION: RecordTypeMeta = {
+  key: "rma",
+  labelKey: "customization.recordTypes.rma",
+  category: "transaction",
+  featureKey: "returnAuthorizations",
+  headerFields: [
+    { key: "party_id", labelKey: "common.labels.customer", level: "header", kind: "entity_ref", required: true, locked: true },
+    { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
+    { key: "reference_number", labelKey: "common.labels.reference", level: "header", kind: "text" },
+    { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+    ...COMMON_HEADER_EXTRAS,
+  ],
+  lineFields: ORDER_LINE_FIELDS,
+  listColumns: [
+    { key: "document_number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "party_name", labelKey: "common.labels.customer", kind: "text", sortable: true, sortKey: "party" },
+    { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
+    { key: "source_document_number", labelKey: "returns.list.columns.source", kind: "text", sortable: true, sortKey: "source" },
+    { key: "return_stage", labelKey: "returns.list.columns.stage", kind: "text", sortable: true, sortKey: "stage" },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    APPROVAL_STATUS_FILTER,
+    { key: "party_id", labelKey: "common.labels.customer", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "customer" },
+    DATE_FILTER,
+  ],
+};
+
 /** Banking card documents: no party — the card is the header anchor. */
 function cardRecordType(key: string): RecordTypeMeta {
   return {
@@ -2113,6 +2142,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   VENDOR_CREDIT,
   CUSTOMER_INVOICE,
   CUSTOMER_CREDIT,
+  RETURN_AUTHORIZATION,
   CARD_CHARGE,
   CARD_REFUND,
   PROJECT_CHARGE,

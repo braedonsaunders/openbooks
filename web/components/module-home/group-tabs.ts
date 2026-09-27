@@ -46,6 +46,7 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     { href: '/inventory', ns: 'nav', key: 'modules.inventory' },
     { href: '/picks', ns: 'nav', key: 'modules.picks' },
     { href: '/shipments', ns: 'nav', key: 'modules.shipments' },
+    { href: '/returns', ns: 'nav', key: 'modules.returns' },
   ],
   banking: [
     { href: '/banking', ns: 'banking', key: 'home.title' },
@@ -139,6 +140,7 @@ const TAB_FEATURE: Record<string, string> = {
   '/inventory': 'inventory',
   '/picks': 'fulfillment',
   '/shipments': 'fulfillment',
+  '/returns': 'returnAuthorizations',
 }
 
 /**
@@ -210,6 +212,7 @@ const WAREHOUSE_TAB_PERMISSION: Record<string, string> = {
   '/inventory': 'items.read',
   '/picks': 'orders.fulfill',
   '/shipments': 'orders.fulfill',
+  '/returns': 'orders.fulfill',
 }
 
 /**

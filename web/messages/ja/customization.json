@@ -45,7 +45,8 @@
     "pay_run": "給与計算",
     "field_ticket": "作業日報",
     "pick_list": "ピッキングリスト",
-    "shipment": "出荷"
+    "shipment": "出荷",
+    "rma": "返品承認"
   },
   "resourcing": {
     "fields": {

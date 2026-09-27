@@ -12,6 +12,7 @@ export { sealSecret, unsealSecret, unsealLegacyEmailSecret, type SealedSecret } 
 
 export type { EmailOut }
 export { shipmentTrackingEmail } from './shipment-tracking'
+export { returnReceivedEmail, returnDecisionEmail } from './return-authorization'
 
 // --- Flow / approval emails (engine/src/flows) -------------------------------
 //

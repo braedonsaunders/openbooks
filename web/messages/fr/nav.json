@@ -103,7 +103,8 @@
     "tax-provisions": "Impôt sur le résultat",
     "timesheets": "Feuilles de temps",
     "vendors": "Fournisseurs",
-    "wip-billing": "Travaux en cours et préfacturation"
+    "wip-billing": "Travaux en cours et préfacturation",
+    "returns": "Retours"
   },
   "modulesShort": {
     "ap": "Fournisseurs",

@@ -122,7 +122,7 @@ async function loadCustomerCreditInventoryReturnLines(
   return returns;
 }
 
-interface SourceIssueEvidence extends Record<string, unknown> {
+type SourceIssueEvidence = Record<string, unknown> & {
   id: string;
   subsidiary_id: string;
   item_id: string;
@@ -179,11 +179,10 @@ async function validateCustomerReturnSource(
   }
   if (
     source.item_id !== line.itemId ||
-    source.stock_location_id !== line.stockLocationId ||
     source.subsidiary_id !== subsidiaryId
   ) {
     throw new InventoryError(
-      `${label} source shipment must match its item, stock location, and legal entity`,
+      `${label} source shipment must match its item and legal entity`,
     );
   }
   // A shipment with no source document (manual adjustment) names no

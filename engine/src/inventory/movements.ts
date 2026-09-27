@@ -680,6 +680,8 @@ export interface AdjustInput {
   quantityDelta: string;
   subsidiaryId: string;
   date: string;
+  /** Stable identity for the adjustment effect, used when a caller must replay after a later transaction fails. */
+  idempotencyKey?: string | null;
   /** unit cost for a positive adjustment (defaults to current on-hand cost). */
   unitCost?: string;
   lotId?: string | null;
@@ -729,6 +731,7 @@ export async function adjustInventory(
         subsidiaryId: input.subsidiaryId,
         offsetAccountId: offset,
         date: input.date,
+        idempotencyKey: input.idempotencyKey,
         serialId: input.serialId,
         lotId: input.lotId,
         memo: input.memo ?? "Inventory adjustment",
@@ -748,6 +751,7 @@ export async function adjustInventory(
       subsidiaryId: input.subsidiaryId,
       offsetAccountId: offset,
       date: input.date,
+      idempotencyKey: input.idempotencyKey,
       serialId: input.serialId,
       lotId: input.lotId,
       memo: input.memo ?? "Inventory adjustment",

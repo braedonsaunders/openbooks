@@ -94,7 +94,9 @@
     "shipment": "Shipment",
     "shipmentShort": "Ship",
     "fulfillment": "Fulfillment",
-    "fulfillmentShort": "Fulfill"
+    "fulfillmentShort": "Fulfill",
+    "returnAuthorization": "Return authorization",
+    "returnAuthorizationShort": "RMA"
   },
   "labels": {
     "name": "Name",

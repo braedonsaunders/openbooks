@@ -94,7 +94,9 @@
     "shipment": "Envío",
     "shipmentShort": "Envío",
     "fulfillment": "Cumplimiento",
-    "fulfillmentShort": "Cumpl."
+    "fulfillmentShort": "Cumpl.",
+    "returnAuthorization": "Autorización de devolución",
+    "returnAuthorizationShort": "RMA"
   },
   "labels": {
     "name": "Nombre",

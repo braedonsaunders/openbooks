@@ -103,7 +103,8 @@
     "tax-provisions": "Income Tax",
     "timesheets": "Timesheets",
     "vendors": "Vendors",
-    "wip-billing": "WIP & Prebilling"
+    "wip-billing": "WIP & Prebilling",
+    "returns": "Returns"
   },
   "modulesShort": {
     "ap": "Payables",

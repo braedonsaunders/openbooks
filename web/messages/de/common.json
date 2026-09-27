@@ -94,7 +94,9 @@
     "shipment": "Sendung",
     "shipmentShort": "Sendung",
     "fulfillment": "Auftragserfüllung",
-    "fulfillmentShort": "Erfüllung"
+    "fulfillmentShort": "Erfüllung",
+    "returnAuthorization": "Rückgabegenehmigung",
+    "returnAuthorizationShort": "RMA"
   },
   "labels": {
     "name": "Name",

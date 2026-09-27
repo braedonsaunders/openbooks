@@ -63,6 +63,7 @@ import { propertyManagement } from './articles/property-management'
 import { distributionWarehouses } from './articles/distribution-warehouses'
 import { distributionAvailability } from './articles/distribution-availability'
 import { distributionPickShip } from './articles/distribution-pick-ship'
+import { distributionReturns } from './articles/distribution-returns'
 import { extensions } from './articles/extensions'
 import { apps } from './articles/apps'
 import { appBuilder } from './articles/app-builder'
@@ -253,6 +254,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'distribution-warehouses': 'transactions-daily',
   'distribution-availability': 'transactions-daily',
   'distribution-pick-ship': 'transactions-daily',
+  'distribution-returns': 'transactions-daily',
   'financial-reports': 'reporting-guides',
   'analytics-and-saved-views': 'reporting-guides',
   'agent-workbench': 'reporting-guides',
@@ -321,6 +323,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   distributionWarehouses,
   distributionAvailability,
   distributionPickShip,
+  distributionReturns,
   bankingAndReconciliation,
   periodClose,
   projectTypes, overheadCosting, laborCosting, laborPricing, manufacturingOverview, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance, compensationAndTransparency,

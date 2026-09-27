@@ -17,7 +17,7 @@
       "receipt": "入荷通知書",
       "fulfillment": "出荷実績"
     },
-    "docKind": "{kind, select, quote {見積} sales_order {受注} purchase_order {発注書} customer_invoice {請求書} vendor_bill {仕入請求書} purchase_receipt {入荷通知書} sales_fulfillment {出荷実績} pick_list {ピッキングリスト} shipment {出荷} other {{kind}}}",
+    "docKind": "{kind, select, quote {見積} sales_order {受注} purchase_order {発注書} customer_invoice {請求書} vendor_bill {仕入請求書} purchase_receipt {入荷通知書} sales_fulfillment {出荷実績} pick_list {ピッキングリスト} shipment {出荷} rma {返品承認} other {{kind}}}",
     "partyLabel": "{kind, select, purchase_order {仕入先} other {得意先}}",
     "selectPartyPlaceholder": "{kind, select, purchase_order {仕入先を選択…} other {得意先を選択…}}",
     "dateLabel": "{kind, select, quote {見積日} other {注文日}}",

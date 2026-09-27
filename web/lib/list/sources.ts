@@ -265,6 +265,22 @@ const SOURCES: Record<string, DocListSource> = {
   // Fulfillment — pick lists and shipments, each opened in its own drawer.
   pick_list: fulfillmentSource('pick_list', 'pick'),
   shipment: fulfillmentSource('shipment', 'shipment'),
+  rma: {
+    ...documentSource({ recordType: 'rma', kinds: ['rma'], drawerParam: 'doc', partyRole: 'customer' }),
+    joins: sql`left join rma_documents rd on rd.document_id = d.id and rd.org_id = d.org_id
+               left join documents source_doc on source_doc.id = rd.source_document_id and source_doc.org_id = rd.org_id`,
+    builtInExpr: {
+      ...DOCUMENT_BUILT_IN_EXPR,
+      return_stage: sql`rd.stage`,
+      source_document_number: sql`source_doc.document_number`,
+    },
+    sorts: {
+      ...DOCUMENT_SORTS,
+      stage: sql`rd.stage`,
+      source: sql`source_doc.document_number`,
+    },
+    extraSelect: sql`d.party_id, rd.stage as return_stage, rd.source_document_id`,
+  },
   // Pay runs — 1:1 pay_runs extension joined for period/totals columns; the
   // status column merges the run lifecycle with the document's posted state.
   // Rows open the pay-run wizard (a full page), not a drawer, via the links

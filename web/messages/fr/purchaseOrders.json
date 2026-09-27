@@ -17,7 +17,7 @@
       "receipt": "Réception de marchandises",
       "fulfillment": "Exécution de commande"
     },
-    "docKind": "{kind, select, quote {Soumission} sales_order {Commande client} purchase_order {Bon de commande} customer_invoice {Facture} vendor_bill {Facture fournisseur} purchase_receipt {Réception de marchandises} sales_fulfillment {Exécution de commande} pick_list {Liste de prélèvement} shipment {Expédition} other {{kind}}}",
+    "docKind": "{kind, select, quote {Soumission} sales_order {Commande client} purchase_order {Bon de commande} customer_invoice {Facture} vendor_bill {Facture fournisseur} purchase_receipt {Réception de marchandises} sales_fulfillment {Exécution de commande} pick_list {Liste de prélèvement} shipment {Expédition} rma {Autorisation de retour} other {{kind}}}",
     "partyLabel": "{kind, select, purchase_order {Fournisseur} other {Client}}",
     "selectPartyPlaceholder": "{kind, select, purchase_order {Sélectionner un fournisseur…} other {Sélectionner un client…}}",
     "dateLabel": "{kind, select, quote {Date de la soumission} other {Date de la commande}}",

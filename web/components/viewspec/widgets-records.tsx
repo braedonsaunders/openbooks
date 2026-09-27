@@ -23,6 +23,8 @@ import { ForecastKpiGroup, ForecastExcludedNote, ManageQuotasButton, QuotaEmptyA
 import { NewRecordButton } from '../../app/(app)/records/[typeKey]/NewRecordButton'
 import { RecordDrawer } from '../../app/(app)/records/[typeKey]/RecordDrawer'
 import { DocumentDrawer } from '../document-drawer'
+import { ReturnWorkflowPanel } from '../../app/(app)/returns/ReturnWorkflowPanel'
+import type { ReturnAuthorization } from '@openbooks/engine/src/sales/returns.ts'
 import { DocumentRowActions } from '../document-row-actions'
 import { NewDocumentButton } from '../new-document-button'
 import { PaymentLinksPanel } from '../payment-links-panel'
@@ -251,16 +253,20 @@ export const RECORDS_WIDGETS = {
             partyId: string | null
             canApply: boolean
           } | null
+          workflow?: ReturnAuthorization | null
+          workflowCanInspect?: boolean
+          workflowCanManage?: boolean
+          vendors?: { id: string; display_name: string }[]
         })
       | null
     if (!drawer) return null
-    const { remountKey, paymentLinks, appliedPayments, creditApplications, ...rest } = drawer
+    const { remountKey, paymentLinks, appliedPayments, creditApplications, workflow, workflowCanInspect, workflowCanManage, vendors, ...rest } = drawer
     return (
       <DocumentDrawer
         key={remountKey}
         {...rest}
         afterContent={
-          paymentLinks || appliedPayments || creditApplications ? (
+          paymentLinks || appliedPayments || creditApplications || workflow ? (
             <>
               {appliedPayments ? (
                 <AppliedPaymentsPanel payments={appliedPayments.payments} currency={appliedPayments.currency} />
@@ -275,6 +281,15 @@ export const RECORDS_WIDGETS = {
               ) : null}
               {paymentLinks ? (
                 <PaymentLinksPanel documentId={paymentLinks.documentId} canManage={paymentLinks.canManage} />
+              ) : null}
+              {workflow ? (
+                <ReturnWorkflowPanel
+                  authorization={workflow}
+                  canInspect={workflowCanInspect === true}
+                  canManage={workflowCanManage === true}
+                  stockLocations={rest.stockLocations ?? []}
+                  vendors={vendors ?? []}
+                />
               ) : null}
             </>
           ) : null

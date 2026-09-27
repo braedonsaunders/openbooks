@@ -108,6 +108,8 @@ interface ReturnableSourceOption {
   lotCode: string | null
   serialId: string | null
   serialCode: string | null
+  itemId: string
+  stockLocationId: string
 }
 
 interface LineRow extends Record<string, unknown> {
@@ -335,6 +337,36 @@ export function buildDocumentCreateRequest(
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
     body: { kind, ...payload },
+  }
+}
+
+/** Create an RMA with the same transaction form while keeping its source
+ * shipment selections out of the ordinary document line writer. */
+export function buildReturnCreateRequest(
+  payload: Record<string, unknown>,
+  key: string,
+): { path: string; method: 'POST'; headers: Record<string, string>; body: Record<string, unknown> } {
+  const lines = Array.isArray(payload.lines) ? payload.lines as Record<string, unknown>[] : []
+  const sourceSelections = lines.map((line, index) => {
+    const selection = line.inventoryReturnSource as { movementId?: unknown; lotId?: unknown; serialId?: unknown } | null | undefined
+    return {
+      lineNumber: index + 1,
+      sourceIssueMovementId: typeof selection?.movementId === 'string' ? selection.movementId : '',
+      lotId: typeof selection?.lotId === 'string' ? selection.lotId : null,
+      serialId: typeof selection?.serialId === 'string' ? selection.serialId : null,
+    }
+  })
+  const documentLines = lines.map((line) => Object.fromEntries(
+    Object.entries(line).filter(([key]) => key !== 'inventoryReturnSource'),
+  ))
+  return {
+    path: '/api/returns',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
+    body: {
+      document: { ...payload, lines: documentLines },
+      sourceSelections,
+    },
   }
 }
 
@@ -1003,6 +1035,8 @@ export interface DocumentDrawerProps {
    *  firing requests the server must refuse (console 404s in orgs without
    *  the feature). Undefined preserves the probe-and-hide behavior. */
   allocationsEntryEnabled?: boolean
+  /** RMA create link resolved by the invoice loader's permission and feature gates. */
+  returnAuthorizationHref?: string | null
 }
 
 export function DocumentDrawer({
@@ -1039,10 +1073,12 @@ export function DocumentDrawer({
   canCustomize,
   afterContent,
   allocationsEntryEnabled,
+  returnAuthorizationHref,
 }: DocumentDrawerProps) {
   const { money } = useMoney()
   const t = useTranslations(config.i18n)
   const tCommon = useTranslations('common')
+  const tReturns = useTranslations('returns')
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -1551,7 +1587,7 @@ export function DocumentDrawer({
   // The same reader answers this list and the save-time check, so the picker
   // cannot offer a source the save refuses.
   const returnSide =
-    recordType === 'vendor_credit' ? 'purchase' : recordType === 'customer_credit' ? 'sales' : null
+    recordType === 'vendor_credit' ? 'purchase' : recordType === 'customer_credit' || (recordType === 'rma' && isCreate) ? 'sales' : null
   const returnRowsKey = rows
     .map((row) => `${row.itemId}:${row.stockLocationId}`)
     .filter((key) => key !== ':')
@@ -1560,14 +1596,15 @@ export function DocumentDrawer({
   useEffect(() => {
     let cancelled = false
     const run = async (): Promise<void> => {
-      if (!returnSide || !partyId || returnRowsKey === '') {
+      if (!returnSide || !partyId || returnRowsKey === '' || (recordType === 'rma' && !subsidiaryId)) {
         if (!cancelled) setReturnSources([])
         return
       }
       try {
-        const res = await fetch(
-          `/api/inventory/returnable-sources?side=${returnSide}&partyId=${encodeURIComponent(partyId)}&limit=200`,
-        )
+        const sourcePath = recordType === 'rma'
+          ? `/api/returns/sources?partyId=${encodeURIComponent(partyId)}&subsidiaryId=${encodeURIComponent(subsidiaryId ?? '')}&limit=200`
+          : `/api/inventory/returnable-sources?side=${returnSide}&partyId=${encodeURIComponent(partyId)}&limit=200`
+        const res = await fetch(sourcePath)
         // Inventory off, credit kind off, or no permission: no picker, and no
         // console noise for a refusal the drawer already knows how to absorb.
         if (!res.ok) {
@@ -1584,7 +1621,7 @@ export function DocumentDrawer({
     return () => {
       cancelled = true
     }
-  }, [returnSide, partyId, returnRowsKey])
+  }, [returnSide, partyId, returnRowsKey, recordType, subsidiaryId])
   const showReturnPicker = returnSide !== null && returnSources.length > 0
   const returnSourceColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
     if (!showReturnPicker) return null
@@ -1606,6 +1643,17 @@ export function DocumentDrawer({
       // refuses one without both, so do not offer the choice before then.
       isCellEditable: (row) =>
         stockedItemIds.has(String(row.itemId ?? '')) && String(row.stockLocationId ?? '') !== '',
+      optionsFor: (row) => [
+        { value: '', label: t('drawer.returnsNone') },
+        ...returnSources
+          .filter((source) => source.itemId === String(row.itemId ?? '') && source.stockLocationId === String(row.stockLocationId ?? ''))
+          .map((source) => ({
+            value: source.movementId,
+            label: `${source.documentNumber ?? source.movedAt} · ${source.remaining}${
+              source.lotCode ? ` · ${source.lotCode}` : source.serialCode ? ` · ${source.serialCode}` : ''
+            }`,
+          })),
+      ],
     }
   }, [showReturnPicker, returnSide, returnSources, stockedItemIds, t])
 
@@ -1853,7 +1901,9 @@ export function DocumentDrawer({
     // currency gates as an edit above; the server runs the shared writer, so
     // validation, refusals, and audit match an edit exactly.
     if (isCreate) {
-      const create = buildDocumentCreateRequest(config.kind, payload_, idempotencyKey)
+      const create = config.kind === 'rma'
+        ? buildReturnCreateRequest(payload_ as Record<string, unknown>, idempotencyKey)
+        : buildDocumentCreateRequest(config.kind, payload_ as Record<string, unknown>, idempotencyKey)
       await execute(
         () =>
           fetchAction(create.path, {
@@ -2796,6 +2846,9 @@ export function DocumentDrawer({
             ))}
             {(doc.kind === 'customer_invoice' || doc.kind === 'customer_credit') && canCreate ? (
               <SendButton recordType={String(doc.kind)} recordId={String(doc.id)} />
+            ) : null}
+            {doc.kind === 'customer_invoice' && returnAuthorizationHref ? (
+              <Button variant="outline" asChild><Link href={returnAuthorizationHref}>{tReturns('actions.new')}</Link></Button>
             ) : null}
           </>
         )

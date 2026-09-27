@@ -419,6 +419,7 @@ export function OrderDrawer({
   closeHref,
   backorders = false,
   pickLists = false,
+  returnAuthorizations = false,
 }: {
   order: OrderPayload
   initialMode?: DrawerMode
@@ -456,11 +457,13 @@ export function OrderDrawer({
    *  Fulfillment on and the fulfil-orders permission. The pick-list form and
    *  its routes enforce both again. */
   pickLists?: boolean
+  returnAuthorizations?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
   const tCommon = useTranslations('common')
   const tFulfillment = useTranslations('fulfillment')
+  const tReturns = useTranslations('returns')
   const statusLabel = (status: string) => {
     const key = toStatusKey(String(status))
     return STATUS_LABEL_KEYS.has(key) ? tCommon(`status.${key}`) : String(status).replace('_', ' ')
@@ -1375,6 +1378,11 @@ export function OrderDrawer({
             {pickLists && kind === 'sales_order' && isApproved ? (
               <Button disabled={busy} onClick={() => router.push(`/picks?pickFrom=${encodeURIComponent(String(doc.id))}`)}>
                 {tFulfillment('pick.createFromOrder')}
+              </Button>
+            ) : null}
+            {returnAuthorizations && kind === 'sales_order' && isApproved ? (
+              <Button variant="outline" disabled={busy} onClick={() => router.push(`/returns?doc=new&kind=rma&sourceDocumentId=${encodeURIComponent(String(doc.id))}`)}>
+                {tReturns('actions.new')}
               </Button>
             ) : null}
             {isApproved ? (

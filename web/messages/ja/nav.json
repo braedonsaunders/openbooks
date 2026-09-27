@@ -136,7 +136,8 @@
     "automate": "自動化",
     "extend": "拡張",
     "records": "レコード",
-    "compliance": "コンプライアンス"
+    "compliance": "コンプライアンス",
+    "returns": "返品"
   },
   "modulesShort": {
     "ap": "買掛金",

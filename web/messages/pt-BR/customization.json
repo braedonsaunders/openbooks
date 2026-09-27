@@ -45,7 +45,8 @@
     "pay_run": "Folha de pagamento",
     "field_ticket": "Boletim de campo",
     "pick_list": "Lista de separação",
-    "shipment": "Remessa"
+    "shipment": "Remessa",
+    "rma": "Autorização de devolução"
   },
   "resourcing": {
     "fields": {

@@ -14,6 +14,7 @@ export type NumberSequenceKindOption = { value: string; label: string }
 const BUILT_IN_NUMBER_SEQUENCE_KINDS: NumberSequenceKindOption[] = [
   { value: 'customer_invoice', label: 'Customer invoice' },
   { value: 'customer_credit', label: 'Customer credit' },
+  { value: 'rma', label: 'Return authorization' },
   { value: 'sales_order', label: 'Sales order' },
   { value: 'pick_list', label: 'Pick list' },
   { value: 'shipment', label: 'Shipment' },

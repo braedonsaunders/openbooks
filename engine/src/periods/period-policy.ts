@@ -76,6 +76,7 @@ const DOCUMENT_CLOSE_MODULES = {
   quote: "ar",
   pick_list: "ar",
   shipment: "ar",
+  rma: "ar",
   journal: "gl",
 } as const satisfies Record<string, CloseModule>;
 
@@ -97,7 +98,7 @@ export const DOCUMENT_KINDS: readonly string[] = Object.keys(DOCUMENT_CLOSE_MODU
  * documents missing a posting period. A mirror tenant with hundreds of open
  * orders otherwise sees a permanent critical blocker it can never clear.
  */
-export const NON_POSTING_DOCUMENT_KINDS: readonly string[] = ["quote", "sales_order", "purchase_order", "pick_list", "shipment"];
+export const NON_POSTING_DOCUMENT_KINDS: readonly string[] = ["quote", "sales_order", "purchase_order", "pick_list", "shipment", "rma"];
 
 export function closeModuleForDocument(kind: string): CloseModule {
   const decided = (DOCUMENT_CLOSE_MODULES as Record<string, CloseModule>)[kind];
