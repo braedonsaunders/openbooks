@@ -1,39 +1,21 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import {
   resolveSourceDeletion,
   SourceDeletionResolutionError,
-  type SourceDeletionAction,
 } from "@openbooks/engine/src/sync/source-deletions.ts";
-import { guardPermission, guardUnrestrictedScope } from "../../../../../../../lib/authz";
 import { storageIdentityError } from "../../../_storage-identity";
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = "nodejs";
+const deletionBody = z.object({ action: z.enum(["retain", "void"]), note: z.string().optional() });
 
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string; ref: string }> },
-) {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
-  const { id, ref } = await params;
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    action?: SourceDeletionAction;
-    note?: string;
-  };
-  if (body.action !== "retain" && body.action !== "void") {
-    return NextResponse.json(
-      { error: "action must be retain or void" },
-      { status: 400 },
-    );
-  }
+export const POST = defineRoute({
+  permission: "admin.setup.manage", feature: { none: "Source-deletion decisions are controlled by connection setup permission and have no separate organization feature gate." },
+  scope: "unrestricted", params: z.object({ id: z.string().uuid(), ref: z.string().min(1) }), body: deletionBody,
+  handler: async ({ params: { id, ref }, body, authz: gate }) => {
   try {
     const result = await resolveSourceDeletion({
       orgId: gate.user.orgId,
@@ -53,4 +35,5 @@ export async function POST(
     }
     throw error;
   }
-}
+  },
+});

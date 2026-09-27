@@ -4,14 +4,14 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { defineRoute } from '@/lib/api/route'
 import { unprocessable } from '@/lib/api/responses'
-import { isUuid } from "../../../lib/list-params";
+import { uuidId } from "@/lib/api/json";
 
-const createBody = z.looseObject({
-  name: z.string().optional(),
-  path: z.string().optional(),
+const createBody = z.object({
+  name: z.string().trim().min(1),
+  path: z.string().regex(/^\/reports(?:\/|$)/),
   params: z.record(z.string(), z.string()).optional(),
 })
-const deleteBody = z.looseObject({ id: z.string().optional() })
+const deleteBody = z.object({ id: uuidId })
 
 export const POST = defineRoute({
   permission: 'reports.create',
@@ -19,7 +19,7 @@ export const POST = defineRoute({
   body: createBody,
   handler: async ({ body, authz }) => {
   const { name, path, params } = body
-  if (!name || typeof path !== "string" || !path.startsWith("/reports")) {
+  if (!name || !path.startsWith("/reports")) {
     return unprocessable("name and a /reports path required", { status: 400 });
   }
   await db.execute(sql`
@@ -36,7 +36,6 @@ export const DELETE = defineRoute({
   handler: async ({ body, authz }) => {
   const { user, permissions } = authz;
   const { id } = body;
-  if (!id || !isUuid(id)) return unprocessable("id required", { status: 400 });
   const deleted = await db.execute<{ id: string }>(sql`
     delete from saved_reports
      where id = ${id}

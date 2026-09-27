@@ -1,5 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
+import { defineRoute } from '@/lib/api/route'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { resolveDraftSubsidiary } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { createOrderDraft, OrderDraftError } from '../../../../lib/order-cycle'
@@ -18,9 +19,10 @@ export const runtime = 'nodejs'
  * request-controlled details is a 409, never the older order returned as
  * though it matched.
  */
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('ap.create', 'orders')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  authorize: () => guardFeaturePermission('ap.create', 'orders'),
+  feature: { none: 'The purchase-order draft guard combines ap.create with the orders feature.' },
+  handler: async ({ request: req, authz: gate }) => {
   const { user } = gate
   // The UI contract requires a UUID key (like the canonical order create);
   // opaque keys are a v1-only shape the factory hashes, never a drawer key.
@@ -48,4 +50,5 @@ export async function POST(req: Request) {
     }
     throw error
   }
-}
+  },
+})

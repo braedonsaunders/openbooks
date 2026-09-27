@@ -4,13 +4,15 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { conversionWouldCopyInventoryKinds } from '../../../../../lib/order-cycle'
 import { notFound } from "@/lib/api/responses";
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 
 
 export const runtime = 'nodejs'
 
 const convert = makeConvertPOST({ kind: 'purchase_order', readPerm: 'ap.read', createPerm: 'ap.create' })
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function convertPurchaseOrder(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('ap.create', 'orders')
   if (gate instanceof NextResponse) return gate
   const { id } = await ctx.params
@@ -23,3 +25,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   }
   return convert(req, ctx)
 }
+
+export const POST = defineRoute({
+  authorize: () => guardFeaturePermission('ap.create', 'orders'),
+  feature: { none: 'Purchase-order conversion is guarded by ap.create and the orders feature before dispatch.' },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, params }) => convertPurchaseOrder(request, { params: Promise.resolve(params) }),
+})

@@ -78,6 +78,22 @@ export interface PermissionRouteOptions<
   scope?: RouteScope;
 }
 
+/**
+ * Route-local authorization for endpoints whose permission depends on a
+ * route discriminator or on the record being addressed. The callback reads
+ * only what it needs to choose the guard; request bodies still pass through
+ * the route's declared schema before the handler runs. Feature and scope
+ * checks remain centralized here when declared as factory options.
+ */
+export interface AuthorizedRouteOptions<
+  P extends z.ZodType | undefined = undefined,
+  B extends z.ZodType | undefined = undefined,
+> extends CommonOptions<Authz, P, B> {
+  authorize: (ctx: { request: Request; params: unknown }) => Authz | NextResponse | Promise<Authz | NextResponse>;
+  feature: FeatureGate;
+  scope?: RouteScope;
+}
+
 // Implementation-only handler shape: `never` fields keep this signature
 // compatible with every overload's handler (never assigns both ways for
 // the call-site check below). Public overloads stay precise.
@@ -91,6 +107,7 @@ type LooseHandler = (ctx: {
 interface LooseOptions {
   public?: "token" | "session";
   permission?: string;
+  authorize?: AuthorizedRouteOptions<z.ZodType | undefined, z.ZodType | undefined>["authorize"];
   feature?: FeatureGate;
   scope?: RouteScope;
   params?: z.ZodType;
@@ -108,7 +125,7 @@ export function defineRoute<
   P extends z.ZodType | undefined = undefined,
   B extends z.ZodType | undefined = undefined,
 >(
-  options: SessionRouteOptions<P, B> | PermissionRouteOptions<P, B>,
+  options: SessionRouteOptions<P, B> | PermissionRouteOptions<P, B> | AuthorizedRouteOptions<P, B>,
 ): (request?: Request, context?: { params?: Promise<unknown> }) => Promise<Response>;
 export function defineRoute(options: LooseOptions) {
   return async (
@@ -145,6 +162,18 @@ export function defineRoute(options: LooseOptions) {
           // The type refuses an omitted feature; a plain-JS caller that
           // omits it anyway fails closed instead of running permission-only.
           throw new Error("defineRoute: feature is required for non-public routes");
+        }
+      } else if (options.authorize !== undefined) {
+        const routeParams = context?.params === undefined ? undefined : await context.params;
+        const gate = await options.authorize({ request, params: routeParams });
+        if (gate instanceof NextResponse) return gate;
+        authz = gate;
+        const feature = options.feature;
+        if (typeof feature === "string") {
+          const { isFeatureEnabled } = await import("@/lib/features");
+          if (!(await isFeatureEnabled(authz.user.orgId, feature))) return notFound("route");
+        } else if (feature === undefined) {
+          throw new Error("defineRoute: feature is required for authorized routes");
         }
       } else if (options.public === "token") {
         authz = null;

@@ -1,5 +1,7 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+import { exactMoney, nullableUuidId, uuidId } from "@/lib/api/json";
+import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -10,15 +12,25 @@ import { InventoryError, CostingPolicyChangeBlockedError } from "@openbooks/engi
 import { inventoryOffsetAccountProblem } from "@openbooks/engine/src/inventory/journal.ts";
 import { assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode, parseUnitConversions } from "@openbooks/engine/src/inventory/profile-policy.ts";
 import { revalueOpenLayersToStandardCost } from "@openbooks/engine/src/inventory/revaluation.ts";
-import { guardUnrestrictedScope } from '../../../../../lib/authz'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = 'nodejs'
+const itemParams = z.object({ id: z.string() })
+const costingBody = z.object({
+  costingMethod: z.enum(["fifo", "moving_average", "standard"]),
+  tracking: z.enum(["none", "lot", "serial"]),
+  recostingAuthorization: z.string().optional(), expectedUpdatedAt: z.string().nullable(),
+  assetAccountId: uuidId, cogsAccountId: uuidId,
+  adjustmentAccountId: nullableUuidId.optional(), varianceAccountId: nullableUuidId.optional(),
+  receivedNotBilledAccountId: nullableUuidId.optional(), standardCost: z.union([exactMoney(), z.null()]).optional(),
+  baseUnit: z.string().trim().min(1), unitConversions: z.record(z.string(), z.number()).nullable().optional(),
+  reorderPoint: z.union([exactMoney(), z.null()]).optional(), preferredStockLevel: z.union([exactMoney(), z.null()]).optional(),
+  allowNegativeInventory: z.boolean().optional(), negativeCostBasis: z.enum(["last_receipt", "standard", "configured"]).optional(),
+  provisionalUnitCost: z.union([exactMoney(), z.null()]).optional(),
+})
 
 /**
  * Per-item inventory costing profile (item_inventory_profiles) — one row per
@@ -50,10 +62,7 @@ async function loadItem(id: string, orgId: string) {
   return Boolean(item.rows[0])
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('items.read', 'inventory')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
+export const GET = defineRoute({ permission: 'items.read', feature: 'inventory', params: itemParams, handler: async ({ params: { id }, authz: gate }) => {
   if (!isUuid(id) || !(await loadItem(id, gate.user.orgId))) {
     return notFound("record")
   }
@@ -67,7 +76,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       from item_inventory_profiles
      where org_id = ${gate.user.orgId} and item_id = ${id}`)))
   return NextResponse.json({ profile: profile.rows[0] ?? null })
-}
+} })
 
 function accountRef(value: unknown): string | null {
   return value && isUuid(String(value)) ? String(value) : null
@@ -87,23 +96,17 @@ function moneyOrNull(value: unknown): string | null | 'invalid' {
   return normalizeMoney(exact)
 }
 
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('items.manage', 'inventory')
-  if (gate instanceof NextResponse) return gate
+export const PUT = defineRoute({
+  permission: 'items.manage', feature: 'inventory', scope: 'unrestricted', params: itemParams, body: costingBody,
+  handler: async ({ params: { id }, body, authz: gate }) => {
   // The costing profile is shared inventory policy (and can revalue layers
   // org-wide); only the in-transaction layer revaluation below stays
   // scoped to gate.allowedSubsidiaryIds.
-  const unrestricted = guardUnrestrictedScope(gate)
-  if (unrestricted) return unrestricted
   const { orgId, id: actorId } = gate.user
-  const { id } = await params
   if (!isUuid(id) || !(await loadItem(id, orgId))) {
     return notFound("record")
   }
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>
   const costingMethod = parseCostingMethod(body.costingMethod)
   if (!costingMethod) {
     return NextResponse.json(
@@ -360,4 +363,5 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
     return apiErrorResponse(e)
   }
-}
+  },
+})

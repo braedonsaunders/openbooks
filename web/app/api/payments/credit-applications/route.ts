@@ -15,6 +15,7 @@ import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse } from '../lib'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { notFound } from "@/lib/api/responses";
+import { defineRoute } from '@/lib/api/route'
 
 
 export const runtime = 'nodejs'
@@ -69,7 +70,7 @@ async function guardParty(
  * this so its remaining figure and the engine's open-balance check come from
  * the same rows.
  */
-export async function GET(req: Request) {
+async function getCreditApplications(req: Request) {
   const url = new URL(req.url)
   const side = url.searchParams.get('side')
   if (side !== 'ap' && side !== 'ar') {
@@ -103,7 +104,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+async function applyCredits(req: Request) {
   // One key, one settlement: a retried submit (network timeout, double
   // click) must resolve to the settlement it already wrote, never a second
   // one beside it — the deferred app_check_open trigger only stops a retry
@@ -147,7 +148,7 @@ export async function POST(req: Request) {
  * behind the void refusal "unapply them before voiding"; cash applications are
  * refused by name and pointed at the void that owns their evidence.
  */
-export async function DELETE(req: Request) {
+async function releaseCredits(req: Request) {
   const parsed = await parseJsonBody(req, releaseBody)
   if (!parsed.ok) return parsed.response
   const { applicationId, side } = parsed.data
@@ -189,3 +190,32 @@ export async function DELETE(req: Request) {
     return paymentErrorResponse(e)
   }
 }
+
+const sidePermission = async (request: Request, verb: 'read' | 'pay') => {
+  let side: unknown
+  try {
+    const value: unknown = request.method === 'GET'
+      ? new URL(request.url).searchParams.get('side')
+      : (await request.clone().json() as { side?: unknown }).side
+    side = value
+  } catch {
+    return NextResponse.json({ error: 'invalid request body' }, { status: 400 })
+  }
+  if (side !== 'ap' && side !== 'ar') {
+    return NextResponse.json({ error: 'side must be ap or ar' }, { status: 400 })
+  }
+  return guardPermission(side === 'ap' ? `ap.${verb}` : `ar.${verb}`)
+}
+const creditAppFeature = { none: 'The selected AP or AR permission gates each credit-application operation.' } as const
+export const GET = defineRoute({
+  authorize: ({ request }) => sidePermission(request, 'read'), feature: creditAppFeature,
+  handler: async ({ request }) => getCreditApplications(request),
+})
+export const POST = defineRoute({
+  authorize: ({ request }) => sidePermission(request, 'pay'), feature: creditAppFeature,
+  handler: async ({ request }) => applyCredits(request),
+})
+export const DELETE = defineRoute({
+  authorize: ({ request }) => sidePermission(request, 'pay'), feature: creditAppFeature,
+  handler: async ({ request }) => releaseCredits(request),
+})

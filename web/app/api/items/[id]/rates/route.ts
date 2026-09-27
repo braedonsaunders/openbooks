@@ -1,12 +1,12 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+import { exactMoney, nullableUuidId, uuidId } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { guardUnrestrictedScope } from '../../../../../lib/authz'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { parseItemRateDecimal } from '../../../../../lib/item-rate-numerics'
@@ -14,7 +14,12 @@ import { validateTimeTypeBillRates } from '../../../../../lib/item-rate-time-typ
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = 'nodejs'
+const itemParams = z.object({ id: uuidId })
+const itemRatesBody = z.object({
+  rateBookId: nullableUuidId.optional(), effectiveFrom: z.string(), baseUnit: z.string().trim().min(1),
+  pricingPolicy: z.enum(["capped_ladder", "lowest_cost"]), invoicePresentation: z.enum(["summary", "rate_components"]).optional(),
+  tiers: z.array(z.object({ unitCode: z.string().trim().min(1), unitName: z.string().trim().min(1), baseQuantity: exactMoney(), costRate: exactMoney(), billRate: exactMoney(), timeTypeBillRates: z.record(z.string(), exactMoney()).optional() })).min(1),
+})
 
 /**
  * Rate-version writes refuse with plain Errors (missing item/book, duplicate
@@ -33,10 +38,7 @@ const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 const POLICIES = ['capped_ladder', 'lowest_cost'] as const
 const PRESENTATIONS = ['summary', 'rate_components'] as const
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('items.read', 'projects')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
+export const GET = defineRoute({ permission: 'items.read', feature: 'projects', params: itemParams, handler: async ({ params: { id }, authz: gate }) => {
   if (!isUuid(id)) return notFound("record")
   const item = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`)))
   if (!item.rows[0]) return notFound("record")
@@ -60,18 +62,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     (db.execute(sql`select id, name, bill_multiplier from time_types where org_id = ${gate.user.orgId} and is_active order by bill_multiplier, name`)),
   ])
   return NextResponse.json({ books: books.rows, profile: profile.rows[0] ?? null, versions: versions.rows, timeTypes: timeTypes.rows })
-}
+} })
 
 interface TierInput { unitCode?: string; unitName?: string; baseQuantity?: string; costRate?: string; billRate?: string; timeTypeBillRates?: Record<string, string> }
 
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('items.manage', 'projects')
-  if (gate instanceof NextResponse) return gate
-  // Project billing rates are org-wide pricing policy.
-  const unrestricted = guardUnrestrictedScope(gate)
-  if (unrestricted) return unrestricted
-  const { id } = await params
+export const POST = defineRoute({
+  permission: 'items.manage', feature: 'projects', scope: 'unrestricted', params: itemParams, body: itemRatesBody,
+  handler: async ({ params: { id }, body, authz: gate }) => {
   if (!isUuid(id)) return notFound("record")
   // Stored rate lines stay. Turning Inventory off must 404 a save that would
   // persist new rates on an inventory / assembly / kit item.
@@ -90,12 +88,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (existing.rows[0] && existing.rows[0].kind === 'equipment_charge') {
       return notFound("record")
     }
-  }
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as {
-    rateBookId?: string | null; effectiveFrom?: string; baseUnit?: string;
-    pricingPolicy?: string; invoicePresentation?: string; tiers?: TierInput[]
   }
   if (!isIsoCalendarDate(body.effectiveFrom)) return NextResponse.json({ error: 'Effective date must be a real calendar date (YYYY-MM-DD)' }, { status: 422 })
   if (!body.baseUnit?.trim()) return NextResponse.json({ error: 'Base unit is required' }, { status: 422 })
@@ -268,4 +260,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } catch (error) {
     return apiErrorResponse(error)
   }
-}
+  },
+})

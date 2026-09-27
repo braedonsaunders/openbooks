@@ -12,6 +12,8 @@ import { resolvePdfTemplate } from "../../../../../lib/pdf-templates/store";
 import { loadPdfRecordValues } from "../../../../../lib/pdf-templates/values";
 import { loadRecordSubsidiaryScope } from "../../lib";
 import { notFound } from "@/lib/api/responses";
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 
 
 export const runtime = "nodejs";
@@ -20,7 +22,7 @@ export const runtime = "nodejs";
  * GET /api/records/[recordType]/[id]/pdf?template=<id> — print one record with
  * the chosen template (default: the org default, else the built-in starter).
  */
-export async function GET(
+async function renderRecordPdf(
   req: Request,
   { params }: { params: Promise<{ recordType: string; id: string }> },
 ) {
@@ -75,3 +77,16 @@ export async function GET(
     return unexpectedServerError('record-pdf', e);
   }
 }
+
+const pdfParams = z.object({ recordType: z.string(), id: z.string() })
+export const GET = defineRoute({
+  authorize: async ({ params }) => {
+    const recordType = (params as { recordType?: string } | undefined)?.recordType ?? ''
+    const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
+    if (!meta) return NextResponse.json({ error: 'unknown record type' }, { status: 400 })
+    return guardPermission(meta.readPermission)
+  },
+  feature: { none: 'Record-type availability is enforced by the document-kind gate in the PDF handler.' },
+  params: pdfParams,
+  handler: async ({ request, params }) => renderRecordPdf(request, { params: Promise.resolve(params) }),
+})

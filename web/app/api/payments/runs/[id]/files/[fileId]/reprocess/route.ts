@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { defineRoute } from "@/lib/api/route";
 import { generatePaymentFileArtifact } from '@openbooks/engine/src/payments/operations.ts'
 import { isUuid } from '@/lib/list-params'
 import { guardPaymentRunPermission, paymentErrorResponse } from '@/app/api/payments/lib'
@@ -6,7 +7,7 @@ import { notFound } from "@/lib/api/responses";
 
 
 export const runtime = 'nodejs'
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string; fileId: string }> }) {
+async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: string; fileId: string }> }) {
   const { id, fileId } = await params
   if (!isUuid(id) || !isUuid(fileId)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
@@ -14,3 +15,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   try { const file = await generatePaymentFileArtifact(id, gate.user.orgId, gate.user.id, { reprocessFileId: fileId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }); return NextResponse.json({ id: file.id, filename: file.filename }) }
   catch (e) { return paymentErrorResponse(e) }
 }
+
+export const POST = defineRoute({
+  authorize: async ({ params }) => {
+    const runId = String((params as { id?: string } | undefined)?.id ?? "");
+    return guardPaymentRunPermission(runId);
+  },
+  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
+  handler: async ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params as never) }),
+});

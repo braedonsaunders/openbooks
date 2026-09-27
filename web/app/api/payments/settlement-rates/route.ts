@@ -3,11 +3,12 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { defineRoute } from '@/lib/api/route'
 
 export const runtime = 'nodejs'
 
 /** Tenant-owned spot observations available as immutable settlement evidence. */
-export async function GET(req: Request) {
+async function listSettlementRates(req: Request) {
   const url = new URL(req.url)
   const side = url.searchParams.get('side')
   if (side !== 'ap' && side !== 'ar') {
@@ -44,3 +45,13 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ rates: result.rows })
 }
+
+export const GET = defineRoute({
+  authorize: async ({ request }) => {
+    const side = new URL(request.url).searchParams.get('side')
+    if (side !== 'ap' && side !== 'ar') return NextResponse.json({ error: 'side must be ap or ar' }, { status: 400 })
+    return guardPermission(side === 'ap' ? 'ap.pay' : 'ar.pay')
+  },
+  feature: { none: 'Settlement-rate evidence is available only to the payment permission matching its AP or AR side.' },
+  handler: async ({ request }) => listSettlementRates(request),
+})

@@ -2,18 +2,15 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
-import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import { defineRoute } from '@/lib/api/route'
+import { exactMoney, isoDate, uuidId } from '@/lib/api/json'
 import { inventoryErrorStatus } from '@/lib/api/inventory-errors'
-import { guardUnrestrictedScope } from '@/lib/authz'
-import { guardFeaturePermission } from '@/lib/feature-gates'
 import { isFeatureEnabled } from '@/lib/features'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
-
-
-export const runtime = 'nodejs'
+import { z } from 'zod'
 
 type ComponentInput = {
   componentItemId: string
@@ -25,6 +22,23 @@ type ComponentInput = {
   scrapPct: string | null
   isByproduct: boolean
 }
+
+const optionalDate = z.union([isoDate(), z.literal(''), z.null()]).optional()
+const optionalDecimal = z.union([exactMoney(), z.literal(''), z.null()]).optional()
+const bomBody = z.object({
+  assemblyItemId: uuidId,
+  expectedVersion: z.string().nullable(),
+  reason: z.string(),
+  components: z.array(z.object({
+    componentItemId: uuidId,
+    quantityPer: exactMoney(),
+    effectiveFrom: optionalDate,
+    effectiveTo: optionalDate,
+    operationSeq: z.union([z.number(), z.string(), z.null()]).optional(),
+    scrapPct: optionalDecimal,
+    isByproduct: z.union([z.boolean(), z.enum(['true', 'false']), z.null()]).optional(),
+  })),
+})
 
 function refusal(error: string, status = 422) {
   return NextResponse.json({ error }, { status })
@@ -88,39 +102,27 @@ function overlapRefusal(pair: readonly [ComponentInput, ComponentInput]) {
  * orgs-then-subject order as item costing saves — so a BOM replacement and a
  * costing save on the same item cannot deadlock each other.
  */
-export async function PUT(req: Request) {
-  const gate = await guardFeaturePermission('admin.setup.manage', 'inventory')
-  if (gate instanceof NextResponse) return gate
+export const PUT = defineRoute({
+  permission: 'admin.setup.manage',
+  feature: 'inventory',
+  scope: 'unrestricted',
+  body: bomBody,
+  handler: async ({ body, authz: gate }) => {
   // Bills of material are shared org-wide manufacturing policy.
-  const unrestricted = guardUnrestrictedScope(gate)
-  if (unrestricted) return unrestricted
-  const parsed = await parseJsonBody(req, jsonObject)
-  if (!parsed.ok) return parsed.response
-  const body = parsed.data as Record<string, unknown>
-
-  const assemblyItemId = typeof body.assemblyItemId === 'string' ? body.assemblyItemId : ''
-  const expectedVersion = body.expectedVersion === null
-    ? null
-    : typeof body.expectedVersion === 'string'
-      ? body.expectedVersion
-      : undefined
-  const reason = typeof body.reason === 'string' ? body.reason.trim() : ''
+  const assemblyItemId = body.assemblyItemId
+  const expectedVersion = body.expectedVersion
+  const reason = body.reason.trim()
   if (!isUuid(assemblyItemId)) return refusal('Choose a valid assembly item.')
-  if (expectedVersion === undefined) return refusal('The bill of materials revision is required.')
   if (!reason) return refusal('Explain why this bill of materials is changing.')
-  if (!Array.isArray(body.components) || body.components.length === 0) {
+  if (body.components.length === 0) {
     return refusal('A bill of materials requires at least one component line.')
   }
   if (body.components.length > 500) return refusal('A bill of materials cannot exceed 500 component lines.')
 
   const components: ComponentInput[] = []
   for (let index = 0; index < body.components.length; index += 1) {
-    const raw = body.components[index]
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-      return refusal(`Component line ${index + 1} is invalid.`)
-    }
-    const row = raw as Record<string, unknown>
-    const componentItemId = typeof row.componentItemId === 'string' ? row.componentItemId : ''
+    const row = body.components[index]!
+    const componentItemId = row.componentItemId
     const quantityPer = canonicalDecimal(row.quantityPer, 4)
     if (!isUuid(componentItemId)) return refusal(`Choose a valid item on component line ${index + 1}.`)
     if (componentItemId === assemblyItemId) return refusal('An assembly cannot contain itself as a component.')
@@ -341,14 +343,15 @@ export async function PUT(req: Request) {
     const message = error instanceof Error ? error.message : 'Bill of materials save failed.'
     return refusal(message, inventoryErrorStatus(error))
   }
-}
+  },
+})
 
-export async function GET(req: Request) {
-  const gate = await guardFeaturePermission('admin.setup.manage', 'inventory')
-  if (gate instanceof NextResponse) return gate
-  const unrestricted = guardUnrestrictedScope(gate)
-  if (unrestricted) return unrestricted
-  const assemblyItemId = new URL(req.url).searchParams.get('assemblyItemId')
+export const GET = defineRoute({
+  permission: 'admin.setup.manage',
+  feature: 'inventory',
+  scope: 'unrestricted',
+  handler: async ({ request, authz: gate }) => {
+  const assemblyItemId = new URL(request.url).searchParams.get('assemblyItemId')
   const manufacturingEnabled = await isFeatureEnabled(gate.user.orgId, 'manufacturing')
   if (!assemblyItemId) return NextResponse.json({ manufacturingEnabled })
   if (!isUuid(assemblyItemId)) return refusal('Choose a valid assembly item.')
@@ -395,4 +398,5 @@ export async function GET(req: Request) {
       isByproduct: manufacturingEnabled ? line.isByproduct : false,
     })),
   })
-}
+  },
+})

@@ -17,10 +17,10 @@ import { notFound } from "@/lib/api/responses";
  * override equivalent: it refreshes the project's revenue contract schedule,
  * and the central recognition run posts the catch-up. Nothing posts here.
  */
-const percentCompleteBody = z.looseObject({
-  percentComplete: z.unknown().optional(),
-  expectedPercentComplete: z.unknown().optional(),
-})
+const percentCompleteBody = z.object({
+  percentComplete: z.number().finite().nullable(),
+  expectedPercentComplete: z.number().finite().nullable(),
+}).strict()
 
 export const PUT = defineRoute({
   permission: 'projects.manage',

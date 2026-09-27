@@ -1,26 +1,19 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import {
   isContinuousCloseAgentKey,
   runContinuousCloseAgent,
 } from "@openbooks/engine/src/continuous-close/continuous-close.ts";
 import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { guardFeaturePermission } from "../../../../lib/feature-gates";
+const runBody = z.object({ agentKey: z.string().refine(isContinuousCloseAgentKey) });
 
-export const runtime = "nodejs";
-
-export async function POST(request: Request) {
-  const gate = await guardFeaturePermission("admin.ai.manage", "continuousClose");
-  if (gate instanceof NextResponse) return gate;
-  let body: Record<string, unknown>;
-  try {
-    const parsedBody = await parseJsonBody(request, jsonObject);
-    if (!parsedBody.ok) return parsedBody.response;
-    body = parsedBody.data;
-  } catch {
-    return NextResponse.json({ error: "bad_request" }, { status: 400 });
-  }
+export const POST = defineRoute({
+  permission: "admin.ai.manage",
+  feature: "continuousClose",
+  body: runBody,
+  handler: async ({ body, authz: gate }) => {
   if (!isContinuousCloseAgentKey(body.agentKey)) {
     return NextResponse.json({ error: "invalid_agent" }, { status: 422 });
   }
@@ -48,4 +41,5 @@ export async function POST(request: Request) {
     throw error;
   }
   return NextResponse.json(result, { status: result.status === "failed" ? 500 : result.status === "skipped" ? 409 : 200 });
-}
+  },
+});

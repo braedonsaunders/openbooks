@@ -1,5 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
+import { defineRoute } from '@/lib/api/route'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -97,7 +98,7 @@ async function gateForDocument(
   return { authz, kind }
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function getPayment(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const gate = await gateForDocument(id, null)
   if (gate instanceof NextResponse) return gate
@@ -114,7 +115,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
  * `updated_at` token it loaded, and the engine writes only when that token
  * still matches the row locked FOR UPDATE inside the write transaction — so
  * two concurrent saves can never silently overwrite one another. */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function patchPayment(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const gate = await gateForDocument(id, null)
   if (gate instanceof NextResponse) return gate
@@ -177,7 +178,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 /** Delete a payment/receipt (guarded: open period, no live applications). */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function deletePayment(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const gate = await gateForDocument(id, null)
   if (gate instanceof NextResponse) return gate
@@ -192,3 +193,23 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     throw e
   }
 }
+
+const paymentParams = z.object({ id: z.string() })
+const authorizePaymentRecord = async ({ params }: { request: Request; params: unknown }) => {
+  const id = (params as { id?: string } | undefined)?.id ?? ''
+  const gate = await gateForDocument(id, null)
+  return gate instanceof NextResponse ? gate : gate.authz
+}
+const paymentFeature = { none: 'The handler resolves AP or AR payment authority from the organization-scoped payment record.' } as const
+export const GET = defineRoute({
+  authorize: authorizePaymentRecord, feature: paymentFeature, params: paymentParams,
+  handler: async ({ request, params }) => getPayment(request, { params: Promise.resolve(params) }),
+})
+export const PATCH = defineRoute({
+  authorize: authorizePaymentRecord, feature: paymentFeature, params: paymentParams,
+  handler: async ({ request, params }) => patchPayment(request, { params: Promise.resolve(params) }),
+})
+export const DELETE = defineRoute({
+  authorize: authorizePaymentRecord, feature: paymentFeature, params: paymentParams,
+  handler: async ({ request, params }) => deletePayment(request, { params: Promise.resolve(params) }),
+})

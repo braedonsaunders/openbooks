@@ -1,8 +1,8 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { getAuthz, subsidiaryScopeAllows } from "../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../lib/features";
+import { subsidiaryScopeAllows } from "../../../../../../lib/authz";
 import { isUuid } from "../../../../../../lib/list-params";
 import {
   canReadContinuousCloseAgent,
@@ -10,23 +10,15 @@ import {
 } from "../../../../../../lib/continuous-close";
 import { notFound } from "@/lib/api/responses";
 
+const feedbackBody = z.object({ rating: z.enum(["helpful", "not_helpful"]), comment: z.string().optional() });
 
-export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!(await isFeatureEnabled(authz.user.orgId, 'continuousClose'))) {
-    return notFound("record");
-  }
-  const { id } = await params;
+export const PUT = defineRoute({
+  permission: "assistant.use",
+  feature: "continuousClose",
+  params: z.object({ id: z.string() }),
+  body: feedbackBody,
+  handler: async ({ authz, params: { id }, body }) => {
   if (!isUuid(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
-  let body: Record<string, unknown>;
-  try {
-    const parsedBody = await parseJsonBody(request, jsonObject);
-    if (!parsedBody.ok) return parsedBody.response;
-    body = parsedBody.data;
-  } catch {
-    return NextResponse.json({ error: "bad_request" }, { status: 400 });
-  }
   const rating = body.rating === "helpful" || body.rating === "not_helpful" ? body.rating : null;
   if (!rating) return NextResponse.json({ error: "invalid_rating" }, { status: 422 });
   const comment = typeof body.comment === "string" ? body.comment.trim().slice(0, 500) || null : null;
@@ -57,4 +49,5 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     );
   }
   return NextResponse.json({ ok: true, rating: result.rating });
-}
+  },
+});

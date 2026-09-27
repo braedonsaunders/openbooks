@@ -1,9 +1,10 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+import { exactMoney, nullableUuidId } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
+import { guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { loadProject } from '../_lib'
@@ -12,17 +13,28 @@ import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
-import { guardProjectsFeature } from '../../../../lib/projects-gate'
 import { listScopedPartyOptions } from '../../../../lib/scoped-options'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = 'nodejs'
-
-const nameBodySchema = z.looseObject({
+const projectParams = z.object({ id: z.string() })
+const projectPatchSchema = z.object({
   name: z.string().optional(),
-})
+  code: z.string().nullable().optional(), customerId: nullableUuidId.optional(),
+  foremanId: nullableUuidId.optional(), managerId: nullableUuidId.optional(),
+  status: z.string().optional(), projectTypeId: z.string().nullable().optional(),
+  invoicingPreference: z.object({
+    defaultBasis: z.enum(["date_range", "draw_amount", "time_selection", "milestone"]).nullable().optional(),
+    backupRequired: z.boolean().nullable().optional(),
+    backupType: z.enum(["costed_timesheets", "timesheets_purchases", "purchases", "purchases_shop_time", "quote_only", "none"]).nullable().optional(),
+  }).nullable().optional(),
+  customerPoNumber: z.string().nullable().optional(), startsOn: z.string().nullable().optional(),
+  endsOn: z.string().nullable().optional(), notes: z.string().nullable().optional(),
+  siteJurisdiction: z.string().nullable().optional(), contractValue: z.union([exactMoney(), z.null()]).optional(),
+  custom: z.record(z.string(), z.unknown()).optional(), subsidiaryId: nullableUuidId.optional(),
+  subsidiaryIncludeChildren: z.boolean().optional(), isActive: z.boolean().optional(), tasks: z.never().optional(),
+}).strict()
 
 const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
 
@@ -59,28 +71,6 @@ function moneyOrNull(v: unknown): string | null | 'invalid' {
   }
 }
 
-interface PatchBody {
-  name?: string
-  code?: string | null
-  customerId?: string | null
-  foremanId?: string | null
-  managerId?: string | null
-  status?: string
-  projectTypeId?: string | null
-  invoicingPreference?: Record<string, unknown> | null
-  customerPoNumber?: string | null
-  startsOn?: string | null
-  endsOn?: string | null
-  notes?: string | null
-  siteJurisdiction?: string | null
-  contractValue?: string | null
-  custom?: Record<string, unknown>
-  subsidiaryId?: string | null
-  subsidiaryIncludeChildren?: boolean
-  isActive?: boolean
-  tasks?: unknown
-}
-
 async function partyExists(id: string, orgId: string): Promise<boolean> {
   const r = (await db.execute(
     sql`select 1 from parties where id = ${id} and org_id = ${orgId}`,
@@ -88,12 +78,7 @@ async function partyExists(id: string, orgId: string): Promise<boolean> {
   return !!r.rows[0]
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('projects.read')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
-  if (feature) return feature
-  const { id } = await params
+export const GET = defineRoute({ permission: 'projects.read', feature: 'projects', params: projectParams, handler: async ({ authz: gate, params: { id } }) => {
   if (!isUuid(id)) return notFound("record")
   // The loader enforces the caller scope on the header and every
   // subordinate read inside one snapshot, so an out-of-scope project answers
@@ -101,7 +86,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const payload = await loadProject(id, gate.user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return notFound("record")
   return NextResponse.json(payload)
-}
+} })
 
 /**
  * Autosave for the project flyout: header fields, the party links, the contract
@@ -117,13 +102,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
  * disabled feature. The fence is the same one the disable path holds while it
  * re-evaluates its blockers, so exactly one side wins.
  */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('projects.manage')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
-  if (feature) return feature
+export const PATCH = defineRoute({
+  permission: 'projects.manage', feature: 'projects', params: projectParams, body: projectPatchSchema,
+  handler: async ({ params: { id }, body, authz: gate }) => {
   const user = gate.user
-  const { id } = await params
   if (!isUuid(id)) return notFound("record")
 
   const existing = (await db.execute<{
@@ -139,9 +121,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const existingDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiary_id)
   if (existingDenied) return existingDenied
 
-  const parsedBody = await parseJsonBody(req, nameBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as PatchBody
   if (body.tasks !== undefined) {
     return bad('Work breakdown tasks must be changed through the project task endpoint')
   }
@@ -421,4 +400,5 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const payload = await loadProject(id, user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return notFound("record")
   return NextResponse.json(payload)
-}
+  },
+})

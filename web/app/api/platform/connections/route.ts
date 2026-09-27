@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from '@/lib/api/route'
+import { z } from "zod";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, schema } from "@openbooks/engine/src/platform/db.ts";
@@ -20,6 +22,14 @@ import {
 } from "./_connector-guard";
 
 export const runtime = "nodejs";
+
+// Each connector manifest defines its own config keys and nested value types.
+const connectionCreateBody = z.object({
+  source: z.string().trim().min(1),
+  displayName: z.string().optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+  secrets: z.record(z.string(), z.string()).optional(),
+}).strict();
 
 /** Strip the sealed credential blob before anything leaves the server. */
 function toClient(c: Awaited<ReturnType<typeof listConnections>>[number]) {
@@ -49,7 +59,7 @@ function toClient(c: Awaited<ReturnType<typeof listConnections>>[number]) {
  * payload carries `canManage` so the console hides its Add/Edit/Delete
  * controls from run-only callers instead of letting every edit fail.
  */
-export async function GET() {
+async function listConnectionRoutes() {
   // Either grant reads the console: a configure caller passes the first
   // check, a run-only caller falls through to the second. Which check
   // passed is the `canManage` flag below — no wider permission helper is
@@ -152,7 +162,7 @@ export async function GET() {
 }
 
 /** Create a connection. Secrets are sealed at rest and never echoed back. */
-export async function POST(req: Request) {
+async function createConnectionRoute(req: Request) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   const scopeDenied = guardUnrestrictedScope(gate);
@@ -160,14 +170,9 @@ export async function POST(req: Request) {
   const orgId = gate.user.orgId;
   const actorId = gate.user.id;
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, connectionCreateBody);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    source?: string;
-    displayName?: string;
-    config?: Record<string, unknown>;
-    secrets?: Record<string, string>;
-  };
+  const body = parsedBody.data;
   const manifest = sourceType(String(body.source ?? ""));
   if (!manifest)
     return NextResponse.json({ error: "unknown source type" }, { status: 400 });
@@ -277,3 +282,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
+
+export const GET = defineRoute({
+  authorize: async () => {
+    const configure = await guardPermission('admin.setup.manage')
+    if (!(configure instanceof NextResponse)) return configure
+    return guardPermission('sync.run')
+  },
+  feature: { none: 'Connection setup and synchronization permissions provide the access boundary for this org-wide platform surface.' },
+  handler: async () => listConnectionRoutes(),
+})
+
+export const POST = defineRoute({
+  authorize: () => guardPermission('admin.setup.manage'),
+  feature: { none: 'Connection setup permission governs this org-wide platform configuration.' },
+  handler: async ({ request }) => createConnectionRoute(request),
+})

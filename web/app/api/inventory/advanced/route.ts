@@ -1,5 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from "@/lib/api/json";
+import { exactMoney, isoDate, nullableUuidId, uuidId } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -23,38 +24,37 @@ import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
 
-const advancedInventoryBody = z.looseObject({
-  action: z.string().optional(),
-  idempotencyKey: z.string().optional(),
-  id: uuidId.optional(),
-  itemId: uuidId.optional(),
-  subsidiaryId: uuidId.optional(),
-  fromStockLocationId: uuidId.optional(),
-  toStockLocationId: uuidId.optional(),
-  stockLocationId: nullableUuidId.optional(),
-  inTransitAccountId: nullableUuidId.optional(),
-  transitStockLocationId: nullableUuidId.optional(),
-  freightAccountId: uuidId.optional(),
-  sourceDocumentLineId: nullableUuidId.optional(),
-  orderedOn: isoDate().optional(),
-  voucherDate: isoDate().optional(),
-  date: isoDate().optional(),
-  expiresOn: isoDate().nullable().optional(),
-  amount: exactMoney().optional(),
-  basis: z.enum(["value", "quantity", "weight", "manual"]).optional(),
-  memo: z.string().nullable().optional(),
-  lotNumber: z.string().optional(),
-  serialNumber: z.string().optional(),
-  lines: z.array(z.looseObject({ itemId: uuidId, quantity: exactMoney(), lotId: nullableUuidId.optional(), serialId: nullableUuidId.optional() })).optional(),
-  targets: z.array(z.looseObject({ itemId: uuidId, stockLocationId: uuidId, manualAmount: exactMoney().nullable().optional() })).optional(),
-});
+const advancedInventoryBody = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("createTransfer"), idempotencyKey: z.string().min(1),
+    fromStockLocationId: uuidId, toStockLocationId: uuidId, subsidiaryId: uuidId.optional(),
+    orderedOn: isoDate().optional(), inTransitAccountId: nullableUuidId.optional(),
+    transitStockLocationId: nullableUuidId.optional(), memo: z.string().nullable().optional(),
+    lines: z.array(z.object({ itemId: uuidId, quantity: exactMoney(), lotId: nullableUuidId.optional(), serialId: nullableUuidId.optional() })).min(1),
+  }),
+  z.object({ action: z.literal("shipTransfer"), idempotencyKey: z.string().min(1), id: uuidId, date: isoDate().optional() }),
+  z.object({ action: z.literal("receiveTransfer"), idempotencyKey: z.string().min(1), id: uuidId, date: isoDate().optional() }),
+  z.object({
+    action: z.literal("postLandedVoucher"), idempotencyKey: z.string().min(1), freightAccountId: uuidId,
+    amount: exactMoney(), basis: z.enum(["value", "quantity", "weight", "manual"]).optional(),
+    subsidiaryId: uuidId.optional(), voucherDate: isoDate().optional(),
+    sourceDocumentLineId: nullableUuidId.optional(), memo: z.string().nullable().optional(),
+    targets: z.array(z.object({ itemId: uuidId, stockLocationId: uuidId, manualAmount: exactMoney().nullable().optional() })).min(1),
+  }),
+  z.object({ action: z.literal("reverseLandedVoucher"), idempotencyKey: z.string().min(1).optional(), id: z.string().optional(), date: z.string().optional(), memo: z.string().optional() }),
+  z.object({ action: z.literal("ensureLot"), itemId: uuidId, lotNumber: z.string().trim().min(1), expiresOn: isoDate().nullable().optional() }),
+  z.object({ action: z.literal("ensureSerial"), itemId: uuidId, serialNumber: z.string().trim().min(1), stockLocationId: nullableUuidId.optional() }),
+]);
 
-export async function GET(req: Request) {
-  const gate = await guardPermission("items.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "inventory"))) {
-    return NextResponse.json({ error: "feature disabled" }, { status: 404 });
-  }
+export const GET = defineRoute({
+  authorize: async () => {
+    const gate = await guardPermission('items.read')
+    if (gate instanceof NextResponse) return gate
+    if (!(await isFeatureEnabled(gate.user.orgId, 'inventory'))) return notFound('record')
+    return gate
+  },
+  feature: { none: 'The inventory read authorization checks the inventory feature before querying any advanced view.' },
+  handler: async ({ request: req, authz: gate }) => {
   const orgId = gate.user.orgId;
   const url = new URL(req.url);
   const view = url.searchParams.get("view") ?? "transfers";
@@ -199,31 +199,57 @@ export async function GET(req: Request) {
      limit 50
   `));
   return NextResponse.json({ transfers: transfers.rows });
-}
+  },
+});
 
-export async function POST(req: Request) {
-  const parsedBody = await parseJsonBody(req, advancedInventoryBody, { status: 422 });
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = ((parsedBody.data));
-  const action = typeof body?.action === "string" ? body.action : undefined;
+export const POST = defineRoute({
+  authorize: async ({ request }) => {
+    let action: string | undefined;
+    try {
+      const payload: unknown = await request.clone().json();
+      if (typeof payload === "object" && payload !== null && "action" in payload && typeof payload.action === "string") {
+        action = payload.action;
+      }
+    } catch {
+      // The shared parser returns the malformed-body response after auth.
+    }
+    const permission: CataloguePermission | undefined =
+      action === "ensureLot" || action === "ensureSerial"
+        ? "items.manage"
+        : action === undefined
+          ? undefined
+          : (INVENTORY_ADVANCED_ACTION_PERMISSIONS as Record<string, CataloguePermission | undefined>)[action];
+    let gate: Awaited<ReturnType<typeof guardPermission>>;
+    if (permission) {
+      gate = await guardPermission(permission);
+    } else {
+      let allowed: Awaited<ReturnType<typeof guardPermission>> | undefined;
+      let refused: NextResponse | undefined;
+      for (const candidate of ["items.manage", ...Object.values(INVENTORY_ADVANCED_ACTION_PERMISSIONS)] as CataloguePermission[]) {
+        const candidateGate = await guardPermission(candidate);
+        if (!(candidateGate instanceof NextResponse)) {
+          allowed = candidateGate;
+          break;
+        }
+        refused = candidateGate;
+      }
+      gate = allowed ?? refused ?? NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    if (gate instanceof NextResponse) return gate;
+    if (!(await isFeatureEnabled(gate.user.orgId, "inventory"))) {
+      return NextResponse.json({ error: "feature disabled" }, { status: 404 });
+    }
+    return gate;
+  },
+  feature: { none: "The action-specific inventory authorization checks the inventory feature before dispatch." },
+  body: advancedInventoryBody,
+  handler: async ({ body, authz: gate }) => {
   // ensureLot/ensureSerial only mint catalog identifiers (idempotent by
   // construction), so they keep the catalog-maintenance grant and stay outside
   // the replay boundary; every stock-moving verb demands the monetary
   // authority mapped in INVENTORY_ADVANCED_ACTION_PERMISSIONS AND executes
   // through the engine's canonical idempotency boundary, which fails closed
   // on a missing or malformed idempotencyKey.
-  const permission: CataloguePermission | undefined =
-    action === "ensureLot" || action === "ensureSerial"
-      ? "items.manage"
-      : (INVENTORY_ADVANCED_ACTION_PERMISSIONS as Record<string, CataloguePermission | undefined>)[
-          action as string
-        ];
-  if (!permission) return NextResponse.json({ error: "unknown action" }, { status: 400 });
-  const gate = await guardPermission(permission);
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "inventory"))) {
-    return NextResponse.json({ error: "feature disabled" }, { status: 404 });
-  }
   const orgId = gate.user.orgId;
   const userId = gate.user.id;
 
@@ -251,7 +277,7 @@ export async function POST(req: Request) {
   const idempotent = <T>(operation: string, request: unknown, execute: () => Promise<T>) =>
     executeIdempotentInventoryAction(orgId, userId, {
       operation,
-      idempotencyKey: body?.idempotencyKey,
+      idempotencyKey: "idempotencyKey" in body ? body.idempotencyKey : undefined,
       request,
       execute,
     });
@@ -399,8 +425,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ replayed, ...res }, { status: 201 });
       }
       case "reverseLandedVoucher": {
-        if (!body.id) return NextResponse.json({ error: "landed-cost voucher required" }, { status: 422 });
-        if (!body.date) {
+        if (!body.id || !isUuid(body.id)) return NextResponse.json({ error: "landed-cost voucher required" }, { status: 422 });
+        if (!body.date || !isoDate().safeParse(body.date).success) {
           return NextResponse.json({ error: "reversal date required" }, { status: 422 });
         }
         if (typeof body.memo !== "string" || body.memo.trim().length < 5 || body.memo.trim().length > 500) {
@@ -443,4 +469,5 @@ export async function POST(req: Request) {
     // 409, hidden records at 404, and validation refusals at 422.
     return apiErrorResponse(e, { safeStatus: inventoryErrorStatus(e) });
   }
-}
+  },
+});

@@ -1,5 +1,7 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from '@/lib/api/route'
+import { z } from "zod";
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
@@ -14,6 +16,12 @@ import { sftpStartupFailureText } from "../../../../../lib/sftp-daemon";
 import { guardSuperAdmin, lockSuperAdminActor, SuperAdminAuthorityError } from "../../../../../lib/super-admin";
 
 export const runtime = "nodejs";
+
+const daemonConfigBody = z.object({
+  enabled: z.boolean().optional(),
+  port: z.number().int().min(1).max(65535).optional(),
+  advertisedHost: z.string().nullable().optional(),
+}).strict();
 
 /**
  * audit_log.row_id is a uuid, but the daemon's singleton row is the text id
@@ -39,12 +47,12 @@ function daemonAuditRowId(): string {
  * commits does the listener reconcile — never binding a port the database no
  * longer says we own.
  */
-export async function PATCH(req: Request) {
+async function updateDaemonRoute(req: Request) {
   const gate = await guardSuperAdmin();
   if (gate instanceof NextResponse) return gate;
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, daemonConfigBody);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as { enabled?: boolean; port?: number; advertisedHost?: string | null };
+  const body = parsedBody.data;
   if (body.port !== undefined && (!Number.isInteger(body.port) || body.port < 1 || body.port > 65535)) {
     return NextResponse.json({ error: "port must be between 1 and 65535" }, { status: 400 });
   }
@@ -105,3 +113,9 @@ export async function PATCH(req: Request) {
   }
   return NextResponse.json({ ok: true, enabled: cfg.enabled, port: cfg.port, advertisedHost: cfg.advertisedHost });
 }
+
+export const PATCH = defineRoute({
+  authorize: () => guardSuperAdmin(),
+  feature: { none: 'The SFTP daemon is a platform-wide operator surface guarded by super-admin authority.' },
+  handler: async ({ request }) => updateDaemonRoute(request),
+})

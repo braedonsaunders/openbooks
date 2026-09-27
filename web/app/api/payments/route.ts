@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { defineRoute } from '@/lib/api/route'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -80,7 +81,7 @@ function trimOrNull(v: unknown): string | null {
  * once. The legacy draft factory stays for backward-compatible
  * integrations only.
  */
-export async function POST(request: Request) {
+async function createPayment(request: Request) {
   // Authenticate before parsing: the kind selects the permission, so no
   // schema oracle reaches an unauthenticated caller.
   const session = await getAuthz()
@@ -307,3 +308,21 @@ export async function POST(request: Request) {
   if (!payment) return bad('save_failed', undefined, 500)
   return NextResponse.json(payment, { status: created ? 201 : 200 })
 }
+
+export const POST = defineRoute({
+  authorize: async ({ request }) => {
+    const session = await getAuthz()
+    if (!session) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    let kind: unknown
+    try { kind = (await request.clone().json() as { kind?: unknown }).kind } catch { /* the real schema returns the malformed-body refusal */ }
+    if (kind === 'vendor_payment' || kind === 'customer_payment') {
+      const permission = paymentPermission(kind)
+      if (!can(session, permission)) {
+        return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
+      }
+    }
+    return session
+  },
+  feature: { none: 'Payment creation checks ap.pay or ar.pay from the validated payment kind.' },
+  handler: async ({ request }) => createPayment(request),
+})

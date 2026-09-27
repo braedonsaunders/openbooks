@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { defineRoute } from "@/lib/api/route";
 import { z } from 'zod'
 import { rollbackPaymentRun } from '@openbooks/engine/src/payments/operations.ts'
 import { isUuid } from '@/lib/list-params'
@@ -13,7 +14,7 @@ const rollbackBody = z.object({
   reason: z.string().default(''),
 })
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
@@ -23,3 +24,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try { await rollbackPaymentRun(id, gate.user.orgId, gate.user.id, parsed.data.reason); return NextResponse.json({ ok: true }) }
   catch (e) { return paymentErrorResponse(e) }
 }
+
+export const POST = defineRoute({
+  authorize: async ({ params }) => {
+    const runId = String((params as { id?: string } | undefined)?.id ?? "");
+    return guardPaymentRunPermission(runId);
+  },
+  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
+  handler: async ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params as never) }),
+});

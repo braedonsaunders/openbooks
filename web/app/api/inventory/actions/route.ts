@@ -1,5 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from "@/lib/api/json";
+import { exactMoney, isoDate, nullableUuidId, uuidId } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -22,23 +23,47 @@ import { notFound } from "@/lib/api/responses";
 
 export const runtime = 'nodejs'
 
-const inventoryActionBody = z.looseObject({
-  action: z.enum(['receive', 'issue', 'adjust', 'transfer', 'build', 'landed', 'reverse']),
-  idempotencyKey: z.string().optional(),
-  movementId: uuidId.optional(),
-  itemId: uuidId.optional(),
-  stockLocationId: uuidId.optional(),
-  toStockLocationId: uuidId.optional(),
-  subsidiaryId: uuidId.optional(),
-  offsetAccountId: nullableUuidId.optional(),
-  lotId: nullableUuidId.optional(),
-  serialId: nullableUuidId.optional(),
-  date: isoDate().optional(),
-  quantity: exactMoney().optional(),
-  unitCost: exactMoney().optional(),
-  basis: z.enum(['value', 'quantity']).optional(),
-  memo: z.string().nullable().optional(),
-})
+const inventoryActionBody = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('receive'), idempotencyKey: z.string().min(1), itemId: uuidId,
+    stockLocationId: uuidId, subsidiaryId: uuidId.optional(), offsetAccountId: uuidId,
+    lotId: nullableUuidId.optional(), serialId: nullableUuidId.optional(), date: isoDate().optional(),
+    quantity: exactMoney(), unitCost: exactMoney(), memo: z.string().nullable().optional(),
+  }),
+  z.object({
+    action: z.literal('issue'), idempotencyKey: z.string().min(1), itemId: uuidId,
+    stockLocationId: uuidId, subsidiaryId: uuidId.optional(), offsetAccountId: nullableUuidId.optional(),
+    lotId: nullableUuidId.optional(), serialId: nullableUuidId.optional(), date: isoDate().optional(),
+    quantity: exactMoney(), memo: z.string().nullable().optional(),
+  }),
+  z.object({
+    action: z.literal('adjust'), idempotencyKey: z.string().min(1), itemId: uuidId,
+    stockLocationId: uuidId, subsidiaryId: uuidId.optional(), lotId: nullableUuidId.optional(),
+    serialId: nullableUuidId.optional(), date: isoDate().optional(), quantity: exactMoney(),
+    unitCost: exactMoney().optional(), memo: z.string().nullable().optional(),
+  }),
+  z.object({
+    action: z.literal('transfer'), idempotencyKey: z.string().min(1), itemId: uuidId,
+    stockLocationId: uuidId, toStockLocationId: uuidId, subsidiaryId: uuidId.optional(),
+    lotId: nullableUuidId.optional(), serialId: nullableUuidId.optional(), date: isoDate().optional(),
+    quantity: exactMoney(), memo: z.string().nullable().optional(),
+  }),
+  z.object({
+    action: z.literal('build'), idempotencyKey: z.string().min(1), itemId: uuidId,
+    stockLocationId: uuidId, subsidiaryId: uuidId.optional(), date: isoDate().optional(),
+    quantity: exactMoney(), memo: z.string().nullable().optional(),
+  }),
+  z.object({
+    action: z.literal('landed'), idempotencyKey: z.string().min(1), itemId: uuidId,
+    stockLocationId: uuidId, subsidiaryId: uuidId.optional(), offsetAccountId: uuidId,
+    date: isoDate().optional(), quantity: exactMoney(), basis: z.enum(['value', 'quantity']).optional(),
+    memo: z.string().nullable().optional(),
+  }),
+  z.object({
+    action: z.literal('reverse'), idempotencyKey: z.string().min(1), movementId: uuidId,
+    date: isoDate(), memo: z.string().trim().min(5).max(500),
+  }),
+])
 
 /**
  * Post an inventory movement through the kernel: receive (DR inventory / CR
@@ -55,22 +80,47 @@ const inventoryActionBody = z.looseObject({
  * value-carrying movements demand the items.post monetary grant and reversal
  * demands items.reverse, so catalog maintenance never confers ledger power.
  */
-export async function POST(req: Request) {
-  const parsedBody = await parseJsonBody(req, inventoryActionBody, { status: 422 });
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data
-  const permission: CataloguePermission | undefined = (
-    INVENTORY_ACTION_PERMISSIONS as Record<string, CataloguePermission | undefined>
-  )[body?.action as string]
-  if (!body.action || !permission) {
-    return NextResponse.json({ error: 'invalid action' }, { status: 422 })
-  }
-  const gate = await guardPermission(permission)
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  authorize: async ({ request }) => {
+    let action: string | undefined;
+    try {
+      const payload: unknown = await request.clone().json();
+      if (typeof payload === "object" && payload !== null && "action" in payload && typeof payload.action === "string") {
+        action = payload.action;
+      }
+    } catch {
+      // Let the shared body parser return the malformed-body response after
+      // authentication; an unknown discriminator cannot authorize a write.
+    }
+    const permission = action === undefined
+      ? undefined
+      : (INVENTORY_ACTION_PERMISSIONS as Record<string, CataloguePermission | undefined>)[action];
+    let gate: Awaited<ReturnType<typeof guardPermission>>;
+    if (permission) {
+      gate = await guardPermission(permission);
+    } else {
+      let allowed: Awaited<ReturnType<typeof guardPermission>> | undefined;
+      let refused: NextResponse | undefined;
+      for (const candidate of Object.values(INVENTORY_ACTION_PERMISSIONS) as CataloguePermission[]) {
+        const candidateGate = await guardPermission(candidate);
+        if (!(candidateGate instanceof NextResponse)) {
+          allowed = candidateGate;
+          break;
+        }
+        refused = candidateGate;
+      }
+      gate = allowed ?? refused ?? NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    if (gate instanceof NextResponse) return gate;
+    if (!(await isFeatureEnabled(gate.user.orgId, "inventory"))) {
+      return NextResponse.json({ error: "feature disabled" }, { status: 404 });
+    }
+    return gate;
+  },
+  feature: { none: "The action-specific inventory authorization checks the inventory feature before dispatch." },
+  body: inventoryActionBody,
+  handler: async ({ body, authz: gate }) => {
   const user = gate.user
-  if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
-    return NextResponse.json({ error: 'feature disabled' }, { status: 404 })
-  }
 
   if (body.action === 'reverse') {
     if (!body.movementId || !isUuid(body.movementId)) {
@@ -326,4 +376,5 @@ export async function POST(req: Request) {
     // subsidiary permission gate above.
     return apiErrorResponse(e, { safeStatus: inventoryErrorStatus(e) })
   }
-}
+  },
+});

@@ -1,5 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from "@/lib/api/json";
+import { exactMoney, isoDate, nullableUuidId, uuidId } from "@/lib/api/json";
+import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -20,31 +21,39 @@ import { executeIdempotentInventoryAction } from '@openbooks/engine/src/inventor
 import { InventoryNotFoundError } from '@openbooks/engine/src/inventory/contracts.ts'
 import { inventoryErrorStatus } from '@/lib/api/inventory-errors'
 import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
-import { guardPermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-export const runtime = 'nodejs'
-
-const countLineBody = z.looseObject({
-  itemId: z.string().optional(),
-  stockLocationId: z.string().optional(),
+const countLineBody = z.object({
+  // Empty strings are accepted here so the route can return a row-specific
+  // refusal that points the operator at the incomplete count line.
+  itemId: z.string(),
+  stockLocationId: z.string(),
   lotId: nullableUuidId.optional(),
 })
 
-const stockCountBody = z.looseObject({
-  action: z.enum(['create', 'start', 'record', 'recount', 'submit', 'return', 'setDate', 'post', 'cancel']),
-  idempotencyKey: z.string().optional(),
-  countId: uuidId.optional(),
-  lineId: uuidId.optional(),
-  locationId: uuidId.optional(),
-  subsidiaryId: uuidId.optional(),
-  date: isoDate().optional(),
-  countedQuantity: exactMoney().optional(),
-  memo: z.string().nullable().optional(),
-  lines: z.array(countLineBody).optional(),
-})
+const stockCountBody = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('create'),
+    idempotencyKey: z.string(),
+    locationId: uuidId,
+    subsidiaryId: uuidId.optional(),
+    date: isoDate(),
+    memo: z.string().nullable().optional(),
+    lines: z.array(countLineBody).min(1),
+  }),
+  z.object({ action: z.literal('start'), idempotencyKey: z.string(), countId: uuidId }),
+  z.object({
+    action: z.literal('record'), idempotencyKey: z.string(), countId: uuidId,
+    lineId: uuidId, countedQuantity: exactMoney(), memo: z.string().nullable().optional(),
+  }),
+  z.object({ action: z.literal('recount'), idempotencyKey: z.string(), countId: uuidId, lineId: uuidId, memo: z.string().nullable().optional() }),
+  z.object({ action: z.literal('submit'), idempotencyKey: z.string(), countId: uuidId }),
+  z.object({ action: z.literal('return'), idempotencyKey: z.string(), countId: uuidId }),
+  z.object({ action: z.literal('setDate'), idempotencyKey: z.string(), countId: uuidId, date: isoDate() }),
+  z.object({ action: z.literal('post'), idempotencyKey: z.string().optional(), countId: uuidId }),
+  z.object({ action: z.literal('cancel'), idempotencyKey: z.string(), countId: uuidId }),
+])
 
 function refusal(e: unknown): Promise<NextResponse> {
   if (e instanceof InventoryNotFoundError) return Promise.resolve(notFound("record"))
@@ -55,13 +64,11 @@ function refusal(e: unknown): Promise<NextResponse> {
  * Cycle-count reader: the org's counts newest-first, or one count with its
  * lines when ?id= is given. Mirrors the counts page server loader.
  */
-export async function GET(req: Request) {
-  const gate = await guardPermission('items.read')
-  if (gate instanceof NextResponse) return gate
+export const GET = defineRoute({
+  permission: 'items.read',
+  feature: 'inventory',
+  handler: async ({ request: req, authz: gate }) => {
   const user = gate.user
-  if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
-    return NextResponse.json({ error: 'feature disabled' }, { status: 404 })
-  }
   try {
     const params = new URL(req.url).searchParams
     const id = params.get('id')
@@ -91,7 +98,8 @@ export async function GET(req: Request) {
   } catch (e: unknown) {
     return refusal(e)
   }
-}
+  },
+})
 
 /**
  * Stock-count lifecycle writes. Every mutation is monetary evidence on the
@@ -107,18 +115,13 @@ export async function GET(req: Request) {
  * Authority is items.post for every write: counting is the first half of a
  * stock-moving, journal-carrying act.
  */
-export async function POST(req: Request) {
-  const parsedBody = await parseJsonBody(req, stockCountBody, { status: 422 });
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data
-  if (!body.action) return NextResponse.json({ error: 'invalid action' }, { status: 422 })
-  const gate = await guardPermission('items.post')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  permission: 'items.post',
+  feature: 'inventory',
+  body: stockCountBody,
+  handler: async ({ body, authz: gate }) => {
   const user = gate.user
   const allowedSubsidiaryIds = gate.allowedSubsidiaryIds
-  if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
-    return NextResponse.json({ error: 'feature disabled' }, { status: 404 })
-  }
 
   async function countSubsidiary(countId: string): Promise<string | null> {
     const r = await db.execute<{ subsidiary_id: string }>(
@@ -319,4 +322,5 @@ export async function POST(req: Request) {
   } catch (e: unknown) {
     return refusal(e)
   }
-}
+  },
+})

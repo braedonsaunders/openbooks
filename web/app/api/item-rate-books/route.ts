@@ -2,9 +2,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { jsonObject, parseJsonBody } from '@/lib/api/json'
-import { guardUnrestrictedScope } from '@/lib/authz'
-import { guardFeaturePermission } from '@/lib/feature-gates'
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 import { isFeatureEnabled } from '@/lib/features'
 import { validateRateBookLines, type RateBookInputLine, type ValidRateBookLine } from '@/lib/item-rate-book-lines'
 import { validateTimeTypeBillRates } from '@/lib/item-rate-time-types'
@@ -14,7 +13,23 @@ import { resolveSetupEntity } from '@/lib/setup/write'
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = 'nodejs'
+const rateBookBody = z.object({
+  id: z.string().optional(),
+  code: z.string().trim().min(1),
+  name: z.string().trim().min(1),
+  currency: z.string().optional(),
+  isDefault: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  replaceRates: z.boolean().optional(),
+  confirmEmptyReplacement: z.boolean().optional(),
+  effectiveFrom: z.string().optional(),
+  lines: z.array(z.object({
+    itemId: z.string().optional(), unitCode: z.string().optional(), unitName: z.string().optional(),
+    baseQuantity: z.string().optional(), costRate: z.string().optional(), billRate: z.string().optional(),
+    baseUnit: z.string().optional(), pricingPolicy: z.string().optional(), invoicePresentation: z.string().optional(),
+    timeTypeBillRates: z.record(z.string(), z.string()).optional(),
+  })).optional(),
+})
 
 const INVENTORY_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
@@ -23,16 +38,14 @@ function databaseCode(error: unknown): string | undefined {
   return value.cause?.code ?? value.code
 }
 
-export async function POST(request: Request) {
-  const gate = await guardFeaturePermission('admin.setup.manage', 'projects')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  permission: 'admin.setup.manage',
+  feature: 'projects',
+  scope: 'unrestricted',
+  body: rateBookBody,
+  handler: async ({ body, authz: gate }) => {
   // Rate books and their versions price every entity with no subsidiary
   // lineage of their own: a restricted caller must not rewrite them.
-  const scopeDenied = guardUnrestrictedScope(gate)
-  if (scopeDenied) return scopeDenied
-  const parsed = await parseJsonBody(request, jsonObject)
-  if (!parsed.ok) return parsed.response
-  const body = parsed.data as Record<string, unknown>
   const id = body.id == null || body.id === '' ? null : String(body.id)
   if (id && !isUuid(id)) return NextResponse.json({ error: 'Rate book not found.' }, { status: 404 })
   const code = String(body.code ?? '').trim()
@@ -206,4 +219,5 @@ export async function POST(request: Request) {
     const status = message === 'not found' ? 404 : 422
     return NextResponse.json({ error: message === 'default-required' ? 'The default rate book must remain active and default. Make another active book the default first.' : message }, { status })
   }
-}
+  },
+})

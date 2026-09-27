@@ -1,9 +1,8 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../../lib/authz'
+import { z } from 'zod'
 import { isUuid } from '../../../../../lib/list-params'
-import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import {
   createWorkBreakdownTask,
   loadWorkBreakdownTasks,
@@ -15,7 +14,8 @@ import {
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = 'nodejs'
+const taskParams = z.object({ id: z.string() })
+const taskBody = z.object({ code: z.string().nullable().optional(), name: z.string().trim().min(1), status: z.enum(["open", "complete", "cancelled"]).optional(), estimatedHours: z.string().nullable().optional(), estimatedCost: z.string().nullable().optional() })
 
 async function errorResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof ProjectWorkBreakdownError) {
@@ -26,12 +26,9 @@ async function errorResponse(error: unknown): Promise<NextResponse> {
   throw error
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('projects.read')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
-  if (feature) return feature
-  const { id } = await params
+export const GET = defineRoute({
+  permission: 'projects.read', feature: 'projects', params: taskParams,
+  handler: async ({ authz: gate, params: { id } }) => {
   if (!isUuid(id)) return notFound("record")
 
   try {
@@ -41,20 +38,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   } catch (error) {
     return errorResponse(error)
   }
-}
+  },
+})
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('projects.manage')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
-  if (feature) return feature
-  const { id } = await params
+export const POST = defineRoute({
+  permission: 'projects.manage', feature: 'projects', params: taskParams, body: taskBody,
+  handler: async ({ authz: gate, params: { id }, body }) => {
   if (!isUuid(id)) return notFound("record")
 
   try {
-    const parsedBody = await parseJsonBody(request, jsonObject);
-    if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data
     const task = await createWorkBreakdownTask({
       orgId: gate.user.orgId,
       projectId: id,
@@ -66,4 +58,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } catch (error) {
     return errorResponse(error)
   }
-}
+  },
+})

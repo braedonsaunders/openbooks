@@ -5,10 +5,10 @@ import { runUserSql, validateUserSql } from "@openbooks/engine/src/platform/sqla
 import { defineRoute } from '@/lib/api/route'
 import { hasUnrestrictedQueryScope } from "../../../lib/query-console-access";
 
-const queryBody = z.looseObject({
-  sql: z.unknown().optional(),
-  maxRows: z.unknown().optional(),
-})
+const queryBody = z.object({
+  sql: z.string().trim().min(1),
+  maxRows: z.number().finite().optional(),
+}).strict()
 
 /**
  * Pure pre-validation failures (thrown as plain Errors by validateUserSql)

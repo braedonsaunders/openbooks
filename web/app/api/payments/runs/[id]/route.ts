@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { defineRoute } from "@/lib/api/route";
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -17,7 +18,7 @@ const cancelBody = z.object({
   reason: z.string().trim().min(1, 'a cancellation reason is required'),
 })
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
@@ -73,7 +74,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 /** Cancel a draft/exported run: deletes its draft payments, keeps the audit row. */
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyDELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
@@ -88,3 +89,20 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return paymentErrorResponse(e)
   }
 }
+
+export const GET = defineRoute({
+  authorize: async ({ params }) => {
+    const runId = String((params as { id?: string } | undefined)?.id ?? "");
+    return guardPaymentRunPermission(runId);
+  },
+  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
+  handler: async ({ request, params }) => legacyGET(request, { params: Promise.resolve(params as never) }),
+});
+export const DELETE = defineRoute({
+  authorize: async ({ params }) => {
+    const runId = String((params as { id?: string } | undefined)?.id ?? "");
+    return guardPaymentRunPermission(runId);
+  },
+  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
+  handler: async ({ request, params }) => legacyDELETE(request, { params: Promise.resolve(params as never) }),
+});

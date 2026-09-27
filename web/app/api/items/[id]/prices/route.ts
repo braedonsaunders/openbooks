@@ -6,7 +6,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission } from '@/lib/authz'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import { parseJsonBody, uuidId } from '@/lib/api/json'
 import { defineRoute } from '@/lib/api/route'
 import { conflict, created, notFound, unprocessable } from '@/lib/api/responses'
 import { isUuid } from '@/lib/list-params'
@@ -16,10 +16,28 @@ import { addCalendarDays, isIsoCalendarDate } from '@openbooks/engine/src/platfo
 import { normalizeMoney, cmp } from '@openbooks/engine/src/money/money.ts'
 import { auditSetupChange } from '@/lib/setup/audit'
 import { claimIdempotentCreate, resolveIdempotentReplay } from '@/lib/api/idempotency'
+import { z } from 'zod'
 
 export const runtime = 'nodejs'
 
 interface BreakInput { minimumQuantity?: unknown; unitPrice?: unknown }
+
+const priceScheduleBody = z.object({
+  priceLevelId: z.union([uuidId, z.literal('')]).optional(),
+  customerId: z.union([uuidId, z.literal('')]).optional(),
+  currency: z.string(),
+  quantityBasis: z.enum(['line_quantity', 'overall_item_quantity']).optional(),
+  effectiveFrom: z.string(),
+  effectiveTo: z.string().nullable().optional(),
+  isActive: z.boolean().optional(),
+  breaks: z.array(z.object({ minimumQuantity: z.string(), unitPrice: z.string() }).strict()).min(1),
+}).strict()
+
+const priceScheduleUpdateBody = priceScheduleBody.extend({
+  id: uuidId,
+  revision: z.number().int().nonnegative(),
+  reason: z.string().optional(),
+})
 
 async function itemExists(orgId: string, itemId: string) {
   return Boolean((await db.execute(sql`select 1 from items where org_id=${orgId} and id=${itemId}`)).rows[0])
@@ -141,14 +159,14 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 export const POST = defineRoute({
   permission: 'items.manage',
   feature: { none: 'Item price schedules are catalog data governed by items.manage; no feature key gates them.' },
-  body: jsonObject,
+  body: priceScheduleBody,
   handler: async ({ request, authz, params, body }) => {
   const gate = authz
   const { id } = (await params) as { id: string }
   if (!isUuid(id)) return notFound('item price schedule', id)
   const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
   if (!isUuid(requestId)) return unprocessable('invalid_idempotency_key', { status: 400 })
-  const parsed = parseSchedule(body as Record<string, unknown>)
+  const parsed = parseSchedule(body as unknown as Record<string, unknown>)
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
   try {
     const match = {
@@ -266,9 +284,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
-  const parsedBody = await parseJsonBody(request, jsonObject)
+  const parsedBody = await parseJsonBody(request, priceScheduleUpdateBody)
   if (!parsedBody.ok) return parsedBody.response
-  const body = parsedBody.data as Record<string, unknown>
+  const body = parsedBody.data as unknown as Record<string, unknown>
   const scheduleId = String(body.id ?? '')
   if (!isUuid(scheduleId)) return NextResponse.json({ error: 'Schedule id is required' }, { status: 400 })
   const expectedRevision = parseRevision(body.revision)

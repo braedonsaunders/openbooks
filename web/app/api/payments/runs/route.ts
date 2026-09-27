@@ -1,5 +1,6 @@
 import { paymentRunScopeSql } from '@/lib/payment-run-access'
 import { NextResponse } from 'next/server'
+import { defineRoute } from '@/lib/api/route'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -23,7 +24,7 @@ const createRunBody = z.object({
   selectionCriteria: z.record(z.string(), z.unknown()).optional(),
 })
 
-export async function GET() {
+async function listPaymentRuns() {
   const gate = await guardPermission('ap.pay')
   if (gate instanceof NextResponse) return gate
 
@@ -44,7 +45,7 @@ export async function GET() {
 }
 
 /** Create a payment run from selected posted, open vendor bills. */
-export async function POST(req: Request) {
+async function createPaymentRun(req: Request) {
   const gate = await guardPermission('ap.pay')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
@@ -85,3 +86,13 @@ export async function POST(req: Request) {
     return paymentErrorResponse(e)
   }
 }
+
+const runCollectionFeature = { none: 'Payment runs are governed by the AP payment permission and their record-specific scope checks.' } as const
+export const GET = defineRoute({
+  authorize: () => guardPermission('ap.pay'), feature: runCollectionFeature,
+  handler: async () => listPaymentRuns(),
+})
+export const POST = defineRoute({
+  authorize: () => guardPermission('ap.pay'), feature: runCollectionFeature,
+  handler: async ({ request }) => createPaymentRun(request),
+})

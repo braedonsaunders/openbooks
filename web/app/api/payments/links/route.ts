@@ -1,5 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
+import { defineRoute } from '@/lib/api/route'
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -49,7 +50,7 @@ async function denyOutsideDocumentScope(
   return guardSubsidiaryScope(authz, owned.rows[0].subsidiaryId);
 }
 
-export async function GET(req: Request) {
+async function listPaymentLinksRoute(req: Request) {
   const gate = await guardPermission("ar.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "onlinePayments"))) {
@@ -78,7 +79,7 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+async function createPaymentLinkRoute(req: Request) {
   const gate = await guardPermission("ar.create");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "onlinePayments"))) {
@@ -109,3 +110,13 @@ export async function POST(req: Request) {
     return apiErrorResponse(e);
   }
 }
+
+const paymentLinkFeature = { none: 'Payment-link handlers enforce the onlinePayments feature alongside the AP/AR permission and document scope.' } as const
+export const GET = defineRoute({
+  authorize: () => guardPermission('ar.read'), feature: paymentLinkFeature,
+  handler: async ({ request }) => listPaymentLinksRoute(request),
+})
+export const POST = defineRoute({
+  authorize: () => guardPermission('ar.create'), feature: paymentLinkFeature,
+  handler: async ({ request }) => createPaymentLinkRoute(request),
+})
