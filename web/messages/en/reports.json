@@ -2463,7 +2463,7 @@
     },
     "statement-of-financial-position": {
       "name": "Statement of financial position",
-      "description": "Posted balances by account, fund, and restriction class."
+      "description": "Posted balances by account, fund, base currency, and restriction class."
     },
     "statement-of-activities": {
       "name": "Statement of activities",

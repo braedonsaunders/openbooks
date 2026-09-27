@@ -2463,7 +2463,7 @@
     },
     "statement-of-financial-position": {
       "name": "財政状態計算書",
-      "description": "勘定、基金、制限クラス別の転記済み残高。"
+      "description": "勘定、基金、基準通貨、制限クラス別の転記済み残高。"
     },
     "statement-of-activities": {
       "name": "活動計算書",

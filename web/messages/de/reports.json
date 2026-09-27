@@ -2463,7 +2463,7 @@
     },
     "statement-of-financial-position": {
       "name": "Bilanz nach Vermögensklasse",
-      "description": "Gebuchte Salden nach Konto, Fonds und Beschränkungsklasse."
+      "description": "Gebuchte Salden nach Konto, Fonds, Basiswährung und Beschränkungsklasse."
     },
     "statement-of-activities": {
       "name": "Tätigkeitsrechnung",

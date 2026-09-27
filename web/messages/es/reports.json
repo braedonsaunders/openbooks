@@ -2443,7 +2443,7 @@
     },
     "statement-of-financial-position": {
       "name": "Estado de situación financiera",
-      "description": "Saldos registrados por cuenta, fondo y clase de restricción."
+      "description": "Saldos registrados por cuenta, fondo, moneda base y clase de restricción."
     },
     "statement-of-activities": {
       "name": "Estado de actividades",

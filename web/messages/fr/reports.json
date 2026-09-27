@@ -2443,7 +2443,7 @@
     },
     "statement-of-financial-position": {
       "name": "État de la situation financière",
-      "description": "Soldes comptabilisés par compte, fonds et classe de restriction."
+      "description": "Soldes comptabilisés par compte, fonds, devise de base et classe de restriction."
     },
     "statement-of-activities": {
       "name": "État des activités",

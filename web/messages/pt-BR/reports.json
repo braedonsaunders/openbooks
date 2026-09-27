@@ -2463,7 +2463,7 @@
     },
     "statement-of-financial-position": {
       "name": "Demonstração da posição financeira",
-      "description": "Saldos lançados por conta, fundo e classe de restrição."
+      "description": "Saldos lançados por conta, fundo, moeda base e classe de restrição."
     },
     "statement-of-activities": {
       "name": "Demonstração das atividades",
