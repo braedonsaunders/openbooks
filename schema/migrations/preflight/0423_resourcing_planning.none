@@ -1,0 +1,1 @@
+This migration creates only new empty planning tables, so no existing row can violate its constraints.
