@@ -9,7 +9,7 @@ import { AvailabilityRefusal } from "../inventory/availability.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { postManufacturingEntry } from "./journal.ts";
 import { ManufacturingError } from "./errors.ts";
-import { createWorkOrder, updateDraftWorkOrder, releaseWorkOrder, holdWorkOrder, startWorkOrder, cancelWorkOrder, startWorkOrderOperation, pauseWorkOrderOperation, resumeWorkOrderOperation } from "./work-orders.ts";
+import { createWorkOrder, getWorkOrder, updateDraftWorkOrder, releaseWorkOrder, holdWorkOrder, startWorkOrder, cancelWorkOrder, startWorkOrderOperation, pauseWorkOrderOperation, resumeWorkOrderOperation } from "./work-orders.ts";
 import { createWorkCenter } from "./work-centers.ts";
 import { activateRouting, createNextRoutingVersion, createRouting, createRoutingOperation, updateRouting } from "./routings.ts";
 import { updateManufacturingPolicies } from "./policies.ts";
@@ -56,7 +56,7 @@ async function order(f: Fixture, producedItemId = f.org.items.assembly, plannedS
 
 async function refuse(work: Promise<unknown>, code: string, text: string) {
   await assert.rejects(work, (error: unknown) => error instanceof ManufacturingError
-    && error.code === code && error.message.includes(text), `${code} should name its remedy and affected record`);
+    && error.code === code && error.message.includes(text) && Boolean(error.remedy?.trim()), `${code} should name its remedy and affected record`);
 }
 
 const cases: Case[] = [
@@ -113,8 +113,18 @@ const cases: Case[] = [
   } },
   { name: "hold blocks work-order start", run: async (f) => {
     await route(f, f.org.items.assembly); const draft = await order(f); await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
+    await refuse(run((tx) => updateDraftWorkOrder(tx, f.org.orgId, f.actorId, draft.id, { quantityOrdered: "2" })), "work_order_not_draft", "cannot be edited");
+    await refuse(run((tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, draft.id, " ")), "hold_reason_required", "required");
     await run((tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, draft.id, "Quality review"));
     await refuse(run((tx) => startWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), "work_order_on_hold", "Quality review");
+    const operation = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${draft.id}`)).rows[0]!);
+    await refuse(run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id)), "work_order_on_hold", "Quality review");
+    await refuse(run((tx) => pauseWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id, "Tool change")), "work_order_on_hold", "Quality review");
+    await refuse(run((tx) => resumeWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id)), "work_order_on_hold", "Quality review");
+    assert.equal((await run((tx) => resumeWorkOrder(tx, f.org.orgId, f.actorId, draft.id))).status, "released");
+    await run((tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, draft.id, "End of run"));
+    await refuse(run((tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), "cancel_reason_required", "requires a reason");
+    assert.equal((await run((tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, draft.id, "Stop after hold"))).status, "cancelled");
   } },
   { name: "configured release flow cannot be bypassed at the service", run: async (f) => {
     await route(f, f.org.items.assembly); const draft = await order(f);
@@ -134,12 +144,19 @@ const cases: Case[] = [
   } },
   { name: "cancel refuses a posted manufacturing entry by number", run: async (f) => {
     await route(f, f.org.items.assembly); const draft = await order(f); await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
+    await refuse(run((tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), "cancel_reason_required", "requires a reason");
     const entryNumber = `MFG-${randomUUID()}`;
     await run((tx) => postManufacturingEntry(tx, { orgId: f.org.orgId, bookId: f.org.bookId, subsidiaryId: f.org.subsidiaryId, actorId: f.actorId, currency: "CAD", periodId: f.org.periodId, date: f.org.date, entryNumber, memo: "Production cost", lines: [{ accountId: f.org.accounts.invAsset, amount: "10" }, { accountId: f.org.accounts.cogs, amount: "-10" }], custom: { workOrderNumber: draft.number, bomRevision: "test-revision", routingVersion: "1" } }));
     await refuse(run((tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, draft.id, "Cancel")), "work_order_has_postings", entryNumber);
   } },
   { name: "release, start, and operation start pause resume", run: async (f) => {
-    await route(f, f.org.items.assembly); const draft = await order(f); await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
+    await route(f, f.org.items.assembly);
+    const profile = await withBypassContext(async () => db.execute(sql`update item_inventory_profiles set costing_method='standard', standard_cost='12.34' where org_id=${f.org.orgId} and item_id=${f.org.items.assembly} returning item_id`));
+    assert.equal(profile.rows.length, 1);
+    const draft = await order(f); await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
+    const frozen = await run((tx) => getWorkOrder(tx, f.org.orgId, draft.id));
+    assert.equal(frozen?.routingVersion, 1); assert.match(frozen?.bomRevision ?? "", /^sha256:[0-9a-f]{64}$/);
+    assert.equal(frozen?.standardCostSnapshot, "12.3400");
     await run((tx) => startWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
     const operation = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${draft.id}`)).rows[0]!);
     await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id));
