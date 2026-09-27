@@ -5,12 +5,13 @@ import test from "node:test";
 import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
-import { db, env, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
+import { db, env, withBypassContext, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import { ManufacturingFeatureDisabledError } from "@openbooks/engine/src/manufacturing/errors.ts";
 import { manufacturingFeatureEnabled } from "@openbooks/engine/src/manufacturing/gate.ts";
 import { postManufacturingEntry } from "@openbooks/engine/src/manufacturing/journal.ts";
 import { featureGateLockKey } from "@openbooks/engine/src/organization/org-feature-lock.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, type ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { runRecordFlows } from "@openbooks/engine/src/flows/index.ts";
 import { waitForLockWaiter } from "@openbooks/engine/src/testing/lock-wait.ts";
 import { JOURNAL_ENTRY_TABLE } from "@/lib/customization/entity-list-query/journal-entries";
 
@@ -35,6 +36,7 @@ registerHooks({ resolve(specifier, context, next) {
 } });
 const { POST: setupPost } = await import("../../api/admin/setup/[entity]/route");
 const { POST: manufacturingPost } = await import("../../api/manufacturing/work-centers/route");
+const { POST: workOrderPost } = await import("../../api/manufacturing/work-orders/route");
 const { loadManufacturingSetup } = await import("../admin/setup/manufacturing/view");
 
 async function features(orgId: string, state: Record<string, boolean>) {
@@ -53,6 +55,11 @@ function setupWrite(entity: string, body: Record<string, unknown>) {
 function manufacturingWrite(_orgId: string) {
   return manufacturingPost(new Request("http://audit.local/api/manufacturing/work-centers", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+  }), { params: Promise.resolve({}) });
+}
+function workOrderWrite() {
+  return workOrderPost(new Request("http://audit.local/api/manufacturing/work-orders", {
+    method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() }, body: JSON.stringify({}),
   }), { params: Promise.resolve({}) });
 }
 
@@ -80,6 +87,23 @@ test("manufacturing is off by default, parent-fenced, and preserves posted histo
     const unavailable = await fencedManufacturing.json();
     assert.equal(fencedManufacturing.status, 404);
     assert.doesNotMatch(JSON.stringify(unavailable), /manufacturing/i);
+    const fencedWorkOrder = await workOrderWrite();
+    assert.equal(fencedWorkOrder.status, 404);
+    assert.doesNotMatch(await fencedWorkOrder.clone().text(), /manufacturing/i);
+    await seedApprovalFlow(org.orgId, {
+      subjectKind: "work_order", assignees: [{ type: "user", userId: actorId }], mode: "any",
+    });
+    const workOrderId = randomUUID();
+    await withBypassContext(async () => {
+      const seeded = await db.execute(sql`insert into mfg_work_orders
+        (id, org_id, number, produced_item_id, quantity_ordered, unit, status, source, subsidiary_id, created_by, updated_by)
+        values (${workOrderId}, ${org.orgId}, ${`WO-OFF-${workOrderId.slice(0, 8)}`}, ${org.items.assembly}, '1', 'ea', 'draft', 'manual', ${org.subsidiaryId}, ${actorId}, ${actorId}) returning id`);
+      assert.equal(seeded.rows.length, 1);
+    });
+    const offFlow = await withOrgTransaction(org.orgId, () => runRecordFlows(
+      { kind: "on_submit" }, "work_order", workOrderId, { orgId: org.orgId, userId: actorId },
+    ));
+    assert.equal(offFlow.runs.length, 0, "disabled manufacturing subjects do not dispatch Flows");
     await assert.rejects(loadManufacturingSetup(), (error: unknown) => error instanceof Error && /NEXT_REDIRECT/.test(error.message));
     const preservedScrap = await withBypassContext(async () => db.execute(sql`select id from mfg_scrap_reasons where org_id=${org.orgId} and id=${scrapId}`));
     assert.equal(preservedScrap.rows.length, 1);
