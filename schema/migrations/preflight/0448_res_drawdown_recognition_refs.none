@@ -1,0 +1,1 @@
+The retainer engine never wrote the single-event reference, and a drawdown can produce one event per calendar month. Monthly event evidence remains in recognition_events under its stable source reference, so the unused single-event column has no data conversion or preflight refusal.

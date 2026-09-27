@@ -186,7 +186,6 @@ export const resRetainerDrawdowns = pgTable(
     hours: money("hours").notNull(),
     amount: money("amount").notNull(),
     state: text("state", { enum: RES_RETAINER_DRAWDOWN_STATE_VALUES }).notNull().default("draft"),
-    recognitionEventId: uuid("recognition_event_id"),
     ...auditColumns,
   },
   (t) => [
