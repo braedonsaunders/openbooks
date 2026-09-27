@@ -270,7 +270,7 @@ test.describe("page layouts", () => {
 
       // The offending widget is NAMED. "Invalid" is not a message anyone can
       // act on, and an author who cannot see which widget is wrong will guess.
-      await expect(dialog.getByText(/no-such-widget/)).toBeVisible();
+      await expect(dialog.getByText('unknown widget "no-such-widget"', { exact: true })).toBeVisible();
 
       // A prop the widget does not read is refused too, and the message names
       // the near miss. Before the contracts this saved cleanly and then did
