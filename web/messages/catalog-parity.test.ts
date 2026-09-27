@@ -245,10 +245,17 @@ const COGNATES = new Set<string>([
   'de:admin.setup.agents.activity.statusColumn|Status',
   'de:admin.setup.agents.overview.columns.pack|Pack',
   'de:admin.setup.agents.overview.columns.status|Status',
+  // Person and Details are established German loanwords.
+  'de:resourcing.board.person|Person',
+  'de:resourcing.assignments.details|Details',
+  'de:resourcing.assignments.person|Person',
   'es:admin.features.scripts.title|Scripts',
   'es:admin.sandboxes.changeSets.tables.user_scripts|Scripts',
   'es:banking.bankFeeds.operational.providers.manual|Manual',
   'es:banking.bankFeeds.operational.statuses.error|Error',
+  // Manual is an established Spanish and Brazilian Portuguese loanword; Qualification is a French cognate.
+  'es:resourcing.board.manual|Manual',
+  'fr:resourcing.board.skills|Qualification',
   'fr:admin.features.scripts.title|Scripts',
   'fr:admin.sandboxes.changeSets.tables.user_scripts|Scripts',
   'fr:admin.setup.wizard.payroll.packs.ca.title|Canada',
@@ -267,6 +274,7 @@ const COGNATES = new Set<string>([
   'pt-BR:admin.setup.agents.activity.triggers.manual|Manual',
   'pt-BR:banking.bankFeeds.operational.providers.manual|Manual',
   'pt-BR:admin.setup.agents.overview.columns.status|Status',
+  'pt-BR:resourcing.board.manual|Manual',
   'zh:admin.features.apiAccess.title|REST API',
   // German and Brazilian Portuguese consulting use “Retainer” as a loanword for a prepaid engagement.
   'de:customization.recordTypes.retainer|Retainer',
