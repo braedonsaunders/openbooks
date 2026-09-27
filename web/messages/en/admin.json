@@ -4797,6 +4797,23 @@
       "title": "Fulfillment",
       "description": "Pick, pack, and ship sales orders from warehouse stock."
     },
+
+    "dropShipping": {
+      "title": "Drop shipping",
+      "description": "Fulfill sales orders directly from a supplier without receiving goods into your warehouse."
+    },
+    "returnAuthorizations": {
+      "title": "Return authorizations",
+      "description": "Authorize customer returns, track items received, and control the resulting credit or replacement."
+    },
+    "customerPartNumbers": {
+      "title": "Customer part numbers",
+      "description": "Map each customer’s item numbers to your products on quotes, orders, and invoices."
+    },
+    "barcodeScanning": {
+      "title": "Barcode scanning",
+      "description": "Scan item and location barcodes to identify products and record warehouse activity."
+    },
     "manufacturing": {
       "title": "Manufacturing",
       "description": "Bills of materials, routings, and work orders that build finished goods from components."

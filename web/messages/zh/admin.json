@@ -4797,6 +4797,23 @@
       "title": "订单履行",
       "description": "从仓库库存中拣货、包装并发运销售订单。"
     },
+
+    "dropShipping": {
+      "title": "供应商直发",
+      "description": "由供应商直接履行销售订单，无需将货物接收入库。"
+    },
+    "returnAuthorizations": {
+      "title": "退货授权",
+      "description": "批准客户退货、跟踪收到的商品，并管理退款或换货。"
+    },
+    "customerPartNumbers": {
+      "title": "客户物料编号",
+      "description": "在报价、订单和发票中，将客户物料编号映射到您的产品。"
+    },
+    "barcodeScanning": {
+      "title": "条码扫描",
+      "description": "扫描商品和库位条码，以识别产品并记录仓库作业。"
+    },
     "manufacturing": {
       "title": "生产制造",
       "description": "物料清单、工艺路线和生产工单，将组件制造为成品。"

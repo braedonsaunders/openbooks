@@ -4797,6 +4797,23 @@
       "title": "Atendimento de pedidos",
       "description": "Separe, embale e expeça pedidos de venda a partir do estoque do armazém."
     },
+
+    "dropShipping": {
+      "title": "Envio direto",
+      "description": "Atenda pedidos de venda diretamente pelo fornecedor, sem receber os produtos no seu armazém."
+    },
+    "returnAuthorizations": {
+      "title": "Autorizações de devolução",
+      "description": "Autorize devoluções de clientes, acompanhe os itens recebidos e controle créditos ou reposições."
+    },
+    "customerPartNumbers": {
+      "title": "Códigos de produtos do cliente",
+      "description": "Associe os códigos de cada cliente aos seus produtos em cotações, pedidos e faturas."
+    },
+    "barcodeScanning": {
+      "title": "Leitura de códigos de barras",
+      "description": "Leia códigos de produtos e locais para identificar itens e registrar operações de armazém."
+    },
     "manufacturing": {
       "title": "Manufatura",
       "description": "Listas de materiais, roteiros e ordens de produção que fabricam produtos acabados a partir de componentes."

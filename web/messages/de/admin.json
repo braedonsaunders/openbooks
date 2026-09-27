@@ -4929,6 +4929,23 @@
       "title": "Auftragsabwicklung",
       "description": "Kundenaufträge aus dem Lagerbestand kommissionieren, verpacken und versenden."
     },
+
+    "dropShipping": {
+      "title": "Direktversand",
+      "description": "Kundenaufträge direkt durch Lieferanten erfüllen, ohne Waren im eigenen Lager zu erfassen."
+    },
+    "returnAuthorizations": {
+      "title": "Rücksendegenehmigungen",
+      "description": "Kundenrücksendungen genehmigen, eingegangene Artikel verfolgen und Gutschriften oder Ersatzlieferungen steuern."
+    },
+    "customerPartNumbers": {
+      "title": "Kundenartikelnummern",
+      "description": "Artikelnummern der Kunden auf Angeboten, Aufträgen und Rechnungen Ihren Produkten zuordnen."
+    },
+    "barcodeScanning": {
+      "title": "Barcode-Erfassung",
+      "description": "Produkt- und Lagerplatz-Barcodes scannen, um Artikel zu identifizieren und Lagerbewegungen zu erfassen."
+    },
     "manufacturing": {
       "title": "Fertigung",
       "description": "Stücklisten, Arbeitspläne und Fertigungsaufträge, die Fertigerzeugnisse aus Komponenten herstellen."

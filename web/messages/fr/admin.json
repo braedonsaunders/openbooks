@@ -4789,6 +4789,23 @@
       "title": "Exécution des commandes",
       "description": "Préparez, emballez et expédiez les commandes clients depuis le stock de l’entrepôt."
     },
+
+    "dropShipping": {
+      "title": "Expédition directe",
+      "description": "Exécuter les commandes client directement depuis un fournisseur, sans réceptionner les marchandises dans votre entrepôt."
+    },
+    "returnAuthorizations": {
+      "title": "Autorisations de retour",
+      "description": "Autoriser les retours client, suivre les articles reçus et gérer les avoirs ou les remplacements."
+    },
+    "customerPartNumbers": {
+      "title": "Références article client",
+      "description": "Associer les références de chaque client à vos produits sur les devis, commandes et factures."
+    },
+    "barcodeScanning": {
+      "title": "Lecture de codes-barres",
+      "description": "Scanner les codes des articles et des emplacements pour identifier les produits et enregistrer les mouvements de stock."
+    },
     "manufacturing": {
       "title": "Fabrication",
       "description": "Nomenclatures, gammes et ordres de fabrication qui produisent des produits finis à partir de composants."
