@@ -23,8 +23,8 @@ import type { DrawerMode } from '../../../lib/drawer-mode'
  * `?ticket=` flyout resolution through the shared `loadFieldTicketDrawerData`
  * helper (one call — pickers, form layout and subsidiary scoping all live
  * inside it), and the New-button labels. Unlike the order pages there is no
- * `?<param>=new` redirect: the New button POSTs `/api/field-tickets/draft`
- * directly and navigates to the real id.
+ * `?<param>=new` redirect: the New button POSTs an empty draft to the
+ * collection endpoint and navigates to the real id.
  *
  * The drawer payload travels through the loader result and the widget renders
  * it keyless — the native page renders `<FieldTicketDrawer>` with no `key`,

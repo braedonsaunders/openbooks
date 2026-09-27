@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { guardPermission } from "../../../../../lib/authz";
+import { defineRoute } from "../../../../../lib/api/route";
 import { createDbOwnedRunStore } from "../../../../../lib/assistant/owned-runs-db";
+import { z } from "zod";
 import { notFound } from "@/lib/api/responses";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 export const runtime = "nodejs";
 
@@ -12,12 +12,14 @@ export const runtime = "nodejs";
  * conversation's owner. Poll while status is "running"; the persisted
  * transcript carries terminal turns.
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ runId: string }> }) {
-  const gate = await guardPermission("assistant.use");
-  if (gate instanceof NextResponse) return gate;
-  const { runId } = await params;
-  if (!isUuid(runId)) return NextResponse.json({ error: "bad request" }, { status: 400 });
-  const run = await createDbOwnedRunStore(gate).readRun(runId);
+export const GET = defineRoute({
+  permission: "assistant.use",
+  feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
+  params: z.object({ runId: z.string().uuid() }),
+  handler: async ({ authz, params }) => {
+  const { runId } = params;
+  const run = await createDbOwnedRunStore(authz).readRun(runId);
   if (!run) return notFound("record");
   return NextResponse.json({ run });
-}
+  },
+});

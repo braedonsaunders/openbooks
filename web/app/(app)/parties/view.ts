@@ -140,7 +140,6 @@ export interface PartiesData {
   perPage: number
   sort: string
   dir: string
-  showNewRedirect: boolean
   drawerOpen: boolean
   drawer: (Record<string, unknown> & { remountKey: string }) | null
   txnDrawerOpen: boolean
@@ -161,7 +160,7 @@ export async function loadParties(
   // row. The loader ships pickers plus an empty payload; opening writes
   // nothing, Cancel writes nothing, and the drawer's explicit Save is the
   // single idempotent POST. Gated on manage like the draft flow was.
-  const creating = pickString(sp.partyNew) === '1' && canManage
+  const creating = (pickString(sp.partyNew) === '1' || partyId === 'new') && canManage
   const partyTransactionId = pickString(sp.partyTxn)
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
@@ -250,7 +249,7 @@ export async function loadParties(
     partyId && partyId !== 'new' && isUuid(partyId)
       ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds)
       : null,
-    partyId || creating
+    (partyId && partyId !== 'new') || creating
       ? Promise.all([
           db.execute<ElementOf<PartyDrawerProps['paymentTerms']>>(
             sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`,
@@ -442,7 +441,6 @@ export async function loadParties(
     perPage: params.perPage,
     sort: params.sort,
     dir: params.dir,
-    showNewRedirect: partyId === 'new' && canManage,
     drawerOpen: Boolean(drawer),
     drawer,
     txnDrawerOpen: Boolean(txnDrawer),
@@ -538,7 +536,6 @@ export function partiesSpec(data: PartiesData): PageSpec {
         }),
         when: f('hasRows'),
       },
-      { ...widgetBlock('new-party-redirect', {}), when: f('showNewRedirect') },
       { ...widgetBlock('party-drawer', { drawer: data.drawer }), when: f('drawerOpen') },
       { ...widgetBlock('related-txn-drawer', { drawer: data.txnDrawer }), when: f('txnDrawerOpen') },
     ],

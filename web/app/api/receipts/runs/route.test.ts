@@ -7,6 +7,7 @@ const stateKey = Symbol.for('openbooks.receipts-runs-route-test')
 const SUB_A = '00000000-0000-4000-8000-00000000a001'
 const SUB_B = '00000000-0000-4000-8000-00000000b001'
 const PROFILE = '00000000-0000-4000-8000-00000000c001'
+const PROFILE_B = '00000000-0000-4000-8000-00000000c002'
 const INVOICE_A = '00000000-0000-4000-8000-00000000d001'
 const INVOICE_B = '00000000-0000-4000-8000-00000000e001'
 
@@ -39,6 +40,9 @@ const mockSources = new Map<string, string>([
           allowedSubsidiaryIds: state.allowedSubsidiaryIds,
         }
       }
+      export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds } }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
     `,
   ],
   [
@@ -145,7 +149,7 @@ test('an empty restricted scope fails closed before collection', async () => {
 test('an unrestricted scope preserves cross-subsidiary collection behavior', async () => {
   reset(null)
 
-  const response = await post([INVOICE_B], '00000000-0000-4000-8000-00000000c002')
+  const response = await post([INVOICE_B], PROFILE_B)
 
   assert.equal(response.status, 200)
   assert.equal(routeState.calls[0]?.allowedSubsidiaryIds, null)

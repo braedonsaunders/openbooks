@@ -7,9 +7,11 @@ Object.assign(globalThis, { __taxRateProviderRouteTestState: state });
 
 const mocks = new Map<string, string>([
   ["mock:authz", `
+    export async function getAuthz() { return { user: { orgId: "org-1", id: "user-1" } }; }
     export async function guardPermission() {
       return { user: { orgId: "org-1", id: "user-1" } };
     }
+    export function guardRootSubsidiaryScope() { return null; }
     export function guardUnrestrictedScope() { return null; }
   `],
   ["mock:rate-providers", `
@@ -24,7 +26,7 @@ const mocks = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../lib/authz") return { shortCircuit: true, url: "mock:authz" };
+    if (specifier === "../../../../lib/authz" || specifier === "@/lib/authz") return { shortCircuit: true, url: "mock:authz" };
     if (specifier === "@openbooks/engine/src/tax/rate-providers.ts") {
       return { shortCircuit: true, url: "mock:rate-providers" };
     }

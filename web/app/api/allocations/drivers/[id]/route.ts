@@ -1,8 +1,9 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../lib/api/json";
-import { guardAllocations } from "../../../../../lib/allocations-gate";
 import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
 import {
@@ -21,12 +22,14 @@ const driverPatchSchema = z.object({
   name: z.string().optional(),
   description: z.string().nullable().optional(),
   unit: z.string().nullable().optional(),
-  dimension: z.string().optional(),
+  dimension: z.string().regex(/^(department|location|class|project|subsidiary|extra:.+)$/).optional(),
   sourceKind: z.enum(DRIVER_SOURCE_KINDS).optional(),
-  config: z.record(z.string(), z.unknown()).optional(),
+  // Source-specific configuration is an opaque JSON value validated by the
+  // selected driver adapter in the allocation engine.
+  config: z.record(z.string(), z.json()).optional(),
   isActive: z.boolean().optional(),
-  expectedUpdatedAt: z.string().optional(),
-});
+  expectedUpdatedAt: z.string().min(1),
+}).strict();
 
 async function toResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof DriverAdminError) {
@@ -37,9 +40,9 @@ async function toResponse(error: unknown): Promise<NextResponse> {
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function GET(_req: Request, { params }: Ctx) {
-  const gate = await guardAllocations("allocations.read");
-  if (gate instanceof NextResponse) return gate;
+async function legacyGET(_req: Request, { params }: Ctx, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const { id } = await params;
   if (!isUuid(id)) return notFound("record");
   const driver = await getDriver(gate.user.orgId, id, undefined, gate.allowedSubsidiaryIds);
@@ -47,9 +50,9 @@ export async function GET(_req: Request, { params }: Ctx) {
   return NextResponse.json({ driver });
 }
 
-export async function PATCH(req: Request, { params }: Ctx) {
-  const gate = await guardAllocations("allocations.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyPATCH(req: Request, { params }: Ctx, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const scopeDenied = guardUnrestrictedScope(gate)
   if (scopeDenied) return scopeDenied
   const { id } = await params;
@@ -64,9 +67,9 @@ export async function PATCH(req: Request, { params }: Ctx) {
   }
 }
 
-export async function DELETE(_req: Request, { params }: Ctx) {
-  const gate = await guardAllocations("allocations.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyDELETE(_req: Request, { params }: Ctx, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const scopeDenied = guardUnrestrictedScope(gate)
   if (scopeDenied) return scopeDenied
   const { id } = await params;
@@ -78,3 +81,21 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     return toResponse(error);
   }
 }
+
+export const GET = defineRoute({
+  permission: "allocations.read", feature: "allocations",
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const PATCH = defineRoute({
+  permission: "allocations.manage", feature: "allocations",
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyPATCH(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const DELETE = defineRoute({
+  permission: "allocations.manage", feature: "allocations",
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyDELETE(request, { params: Promise.resolve(params) }, authz),
+});

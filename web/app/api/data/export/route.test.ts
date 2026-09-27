@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
+import { NextResponse } from 'next/server'
 import {
   subsidiaryReadFilter,
   subsidiaryReadFilterWithUnassigned,
@@ -25,6 +26,7 @@ const state: {
   } | null
 } = { authz: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
+;(globalThis as typeof globalThis & Record<string, unknown>).openbooksDataExportNextResponse = NextResponse
 
 const permissionsUrl = new URL('../../../../lib/permissions.ts', import.meta.url).href
 const subsidiaryScopeUrl = new URL(
@@ -50,18 +52,21 @@ const hooks = registerHooks({
         format: 'module',
         source: `import { permissionSetCovers } from '${permissionsUrl}'
           import { subsidiaryScopeAllows } from '${subsidiaryScopeUrl}'
+          const NextResponse = globalThis.openbooksDataExportNextResponse
           const state = globalThis[Symbol.for('openbooks.data-export-scope-test')]
           export function can(authz, permission) { return permissionSetCovers(authz.permissions, permission) }
           export { subsidiaryScopeAllows }
           export async function getAuthz() { return state.authz }
           export async function guardPermission(permission) {
             const authz = state.authz
-            if (!authz) return Response.json({ error: 'unauthorized' }, { status: 401 })
+            if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
             if (!permissionSetCovers(authz.permissions, permission)) {
-              return Response.json({ error: \`missing permission: \${permission}\` }, { status: 403 })
+              return NextResponse.json({ error: \`missing permission: \${permission}\` }, { status: 403 })
             }
             return authz
-          }`,
+          }
+          export function guardRootSubsidiaryScope() { return null }
+          export function guardUnrestrictedScope() { return null }`,
       }
     }
     return nextLoad(url, context)

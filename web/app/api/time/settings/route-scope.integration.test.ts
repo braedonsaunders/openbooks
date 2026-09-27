@@ -3,7 +3,7 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 
 /**
- * H-TIMESET: the field-time rules are org-wide policy with no subsidiary
+ * Field-time rules are org-wide policy with no subsidiary
  * lineage — rounding, breaks and auto-close govern every entity's clocks at
  * once. PUT needs unrestricted subsidiary scope: a restricted time.manage
  * holder gets the named 403 and stores nothing. GET stays open: the rules
@@ -119,7 +119,7 @@ test("an unrestricted caller writes them; restricted callers still read them", a
       photoRequired: false,
     });
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
-    const response = await GET();
+    const response = await GET(new Request('http://time.test'));
     assert.equal(response.status, 200);
     assert.deepEqual((await response.json()) as unknown, {
       settings: {

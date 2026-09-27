@@ -1,9 +1,10 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardUnrestrictedScope } from '../../../../lib/authz'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { validateFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
 import { fieldTimeSettingsBody, normalizeFieldTimeSettingsBody } from '../../../../lib/field-time/settings-body'
@@ -28,17 +29,15 @@ function bad(error: string, status = 422) {
  * rules are operational policy disclosing no per-subsidiary material, and
  * foremen need them to enter time.
  */
-export async function GET() {
-  const gate = await guardFeaturePermission('time.manage', 'fieldTime')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const row = (await db.execute<{ settings: unknown }>(sql`
     select settings->'fieldTime' as settings from orgs where id = ${gate.user.orgId}`)).rows[0]
   return NextResponse.json({ settings: row?.settings ?? null })
 }
 
-export async function PUT(req: Request) {
-  const gate = await guardFeaturePermission('time.manage', 'fieldTime')
-  if (gate instanceof NextResponse) return gate
+async function legacyPUT(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const { user } = gate
   const scopeDenied = guardUnrestrictedScope(gate)
   if (scopeDenied) return scopeDenied
@@ -72,3 +71,15 @@ export async function PUT(req: Request) {
     throw error
   }
 }
+
+export const GET = defineRoute({
+  permission: 'time.manage', feature: 'fieldTime',
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const PUT = defineRoute({
+  permission: 'time.manage', feature: 'fieldTime',
+
+  handler: ({ request, params, authz }) => legacyPUT(request, { params: Promise.resolve(params) }, authz),
+});

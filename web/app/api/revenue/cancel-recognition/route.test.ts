@@ -42,6 +42,14 @@ const mockSources = new Map<string, string>([
           allowedSubsidiaryIds: state.allowedSubsidiaryIds,
         }
       }
+      export async function getAuthz() {
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+        }
+      }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
       export function guardSubsidiaryScope(authz, subsidiaryId) {
         const allowed = authz.allowedSubsidiaryIds
         if (allowed === null) return null
@@ -53,8 +61,16 @@ const mockSources = new Map<string, string>([
   [
     'features',
     `
+      import { NextResponse } from 'next/server'
       const state = globalThis[Symbol.for('openbooks.cancel-recognition-route-test')]
       export async function isFeatureEnabled() { return state.featureEnabled }
+      export async function guardFeaturePermission() {
+        if (!state.featureEnabled) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+        }
+      }
     `,
   ],
   [
@@ -114,14 +130,16 @@ const selfUrl = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${selfUrl}?cancel-mock=${name}`
 const mockUrls = new Map<string, string>([
   ['../../../../lib/authz', mockUrl('authz')],
+  ['@/lib/authz', mockUrl('authz')],
   ['../../../../lib/features', mockUrl('features')],
+  ['@/lib/feature-gates', mockUrl('features')],
   ['../../../../lib/documents.ts', mockUrl('documents')],
   ['@openbooks/engine/src/ledger/revenue-recognition-cancellation.ts', mockUrl('revenue-recognition')],
   ['@openbooks/engine/src/ledger/document-void.ts', mockUrl('document-void')],
   ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, _context, nextResolve) {
     // The real business-date service owns calendar validation and reads its
     // timezone through the same DB seam as the route.
@@ -142,7 +160,6 @@ const hooks = registerHooks({
 
 const routeUrl = new URL('./route.ts?cancel-recognition-test', import.meta.url).href
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   state.featureEnabled = true

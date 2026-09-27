@@ -2,8 +2,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../lib/api/json";
-import { guardAllocations } from "../../../../../lib/allocations-gate";
-import { guardUnrestrictedScope } from "../../../../../lib/authz";
+import { defineRoute } from "../../../../../lib/api/route";
 import { isUuid } from "../../../../../lib/list-params";
 import {
   DriverAdminError,
@@ -29,15 +28,14 @@ async function toResponse(error: unknown): Promise<NextResponse> {
   throw error;
 }
 
-type Ctx = { params: Promise<{ id: string }> };
-
 /** End-date a value or correct it; the start date is immutable. */
-export async function PATCH(req: Request, { params }: Ctx) {
-  const gate = await guardAllocations("allocations.manage");
-  if (gate instanceof NextResponse) return gate;
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
-  const { id } = await params;
+export const PATCH = defineRoute({
+  permission: "allocations.manage",
+  feature: "allocations",
+  scope: "unrestricted",
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
+  const { id } = params;
   if (!isUuid(id)) return notFound("record");
   const parsedBody = await parseJsonBody(req, valuePatchSchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -47,14 +45,16 @@ export async function PATCH(req: Request, { params }: Ctx) {
   } catch (error) {
     return toResponse(error);
   }
-}
+  },
+});
 
-export async function DELETE(_req: Request, { params }: Ctx) {
-  const gate = await guardAllocations("allocations.manage");
-  if (gate instanceof NextResponse) return gate;
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
-  const { id } = await params;
+export const DELETE = defineRoute({
+  permission: "allocations.manage",
+  feature: "allocations",
+  scope: "unrestricted",
+  params: z.object({ id: z.string() }),
+  handler: async ({ authz: gate, params }) => {
+  const { id } = params;
   if (!isUuid(id)) return notFound("record");
   try {
     await deleteDriverValue(gate.user.orgId, gate.user.id, id);
@@ -62,4 +62,5 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   } catch (error) {
     return toResponse(error);
   }
-}
+  },
+});

@@ -15,15 +15,11 @@ import { UnsavedCreateButton } from '@/components/unsaved-create-button'
  *   pass `estimateNew`/`orderNew`): opens a URL-controlled unsaved drawer
  *   (`?<createParam>=1`) with zero writes — the order is persisted only by
  *   the drawer's explicit Save (one idempotent collection POST).
- * - Legacy instant-into-draft (`createParam` absent: field tickets still use
- *   this widget with its own `apiPath` until its own slice migrates it):
- *   creates the draft server-side, opens its flyout.
+ * - Instant draft (`createParam` absent: field tickets use this widget with
+ *   their collection `apiPath`): creates the draft server-side, opens its flyout.
  *
- * @deprecated The `apiPath` legacy branch exists ONLY for the field-tickets
- * caller. The Field Tickets unsaved-create slice owns its removal: give
- * field tickets their own button/route contract, then delete `apiPath`,
- * `createFailedMessage`, `createDraft`, and the final `fetch` below so this
- * component becomes URL-only.
+ * The `apiPath` branch is used only by field tickets, whose editor requires a
+ * persisted record before the operator can choose its project and period.
  *
  * `base`/`param` build the list route deep-link (e.g. /estimates);
  * `label` and `createFailedMessage` arrive pre-translated from the owning
@@ -48,14 +44,16 @@ export function NewOrderButton({
   const [busy, setBusy] = useState(false)
   const router = useRouter()
 
-  // DEPRECATED (see header): the last fetch in this file. The Field Tickets
-  // slice deletes this branch with the `apiPath` prop when it migrates.
   async function createDraft() {
     setBusy(true)
     // finally releases busy on every path; the catch turns a transport
     // throw into the same operator-visible refusal as a server refusal.
     try {
-      const res = await fetch(`${apiPath}/draft`, { method: 'POST' })
+      const res = await fetch(apiPath!, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
       if (!res.ok) {
         const data = await res.json().catch(() => null)
         toast.error((data as { error?: string } | null)?.error ?? createFailedMessage)

@@ -106,16 +106,17 @@ test('a non-uuid orgId is rejected before any org-scoped work runs', async () =>
   reset('worker-secret')
   for (const orgId of ['not-a-uuid', '', 42, null, { id: ORG_ID }, `${ORG_ID}'; drop table x;--`]) {
     const response = await post({ orgId, effectiveFrom: '2026-09-01' }, 'worker-secret')
-    assert.equal(response.status, 422, `orgId ${JSON.stringify(orgId)} must be refused`)
+    assert.equal(response.status, 400, `orgId ${JSON.stringify(orgId)} must be refused`)
   }
   assert.deepEqual(state.gateCalls, [], 'the feature gate never saw an unvalidated org id')
   assert.deepEqual(state.publishCalls, [], 'nothing was published')
 })
 
-test('a malformed effectiveFrom is still rejected with 422', async () => {
+test('a malformed effectiveFrom is rejected before any org-scoped work runs', async () => {
   reset('worker-secret')
   const response = await post({ orgId: ORG_ID, effectiveFrom: '2026/09/01' }, 'worker-secret')
-  assert.equal(response.status, 422)
+  assert.equal(response.status, 400)
+  assert.equal(state.gateCalls.length, 0)
   assert.equal(state.publishCalls.length, 0)
 })
 

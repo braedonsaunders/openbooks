@@ -1,3 +1,7 @@
+import { notFound } from "@/lib/api/responses";
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -5,7 +9,7 @@ import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-returns/return.ts'
-import { guardPermission, guardSubsidiaryScope } from '../../../../../../lib/authz'
+import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { parseReturnScopeQuery, returnScopeOpts } from '@/lib/tax-return-scope'
 import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
 import {
@@ -30,9 +34,8 @@ export const runtime = 'nodejs'
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 /** Export a computed tax return as a facsimile PDF (or CSV / XLSX). */
-export async function GET(req: Request, { params }: { params: Promise<{ code: string }> }) {
-  const gate = await guardPermission('reports.read')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(req: Request, { params }: { params: Promise<{ code: string }> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const { code } = await params
   const p = new URL(req.url).searchParams
   const from = p.get('from')
@@ -95,7 +98,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
         }
         throw err
       }
-      if (!blob) return NextResponse.json({ error: 'official PDF not found' }, { status: 404 })
+      if (!blob) return notFound("record")
       const { bytes, filled, unmatched } = await fillOfficialTaxPdf(new Uint8Array(blob.bytes), result.boxes)
       // A drifted upload (or a wrong form) leaves mapped fields unfilled:
       // returning the flattened PDF with a 200 would file a blank-looking
@@ -157,3 +160,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     return apiErrorResponse(e, { safeStatus: 422 })
   }
 }
+
+export const GET = defineRoute({
+  permission: 'reports.read', feature: { none: "This route is governed by its permission and service authorization." },
+  params: z.object({ "code": z.string() }),
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});

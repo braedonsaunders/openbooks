@@ -1,8 +1,9 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../lib/api/json";
-import { guardAllocations } from "../../../../../lib/allocations-gate";
 import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import {
   DriverAdminError,
@@ -31,9 +32,9 @@ const previewBodySchema = z.object({
  * activity, empty manual table, report refused) answer 422 with the
  * reason — never a guessed vector.
  */
-export async function POST(req: Request) {
-  const gate = await guardAllocations("allocations.read");
-  if (gate instanceof NextResponse) return gate;
+async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const scopeDenied = guardUnrestrictedScope(gate);
   if (scopeDenied) return scopeDenied;
   const parsedBody = await parseJsonBody(req, previewBodySchema);
@@ -79,3 +80,9 @@ export async function POST(req: Request) {
     throw error;
   }
 }
+
+export const POST = defineRoute({
+  permission: "allocations.read", feature: "allocations",
+
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

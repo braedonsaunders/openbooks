@@ -1,3 +1,5 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -19,7 +21,7 @@ function fieldTime(error: unknown) {
 }
 
 /** GET → batch list (?status=&projectId=). Time readers and foremen both land here. */
-export async function GET(req: Request) {
+async function legacyGET(req: Request) {
   const read = await guardFeaturePermission('time.read', 'fieldTimeCrewEntry')
   const gate = read instanceof NextResponse
     ? await guardFeaturePermission('time.crew.enter', 'fieldTimeCrewEntry')
@@ -48,9 +50,8 @@ const createSchema = z.object({
 })
 
 /** POST → open a batch for a foreman on a project day. */
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('time.crew.enter', 'fieldTimeCrewEntry')
-  if (gate instanceof NextResponse) return gate
+async function legacyPOST(req: Request, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const { user } = gate
 
   const parsedBody = await parseJsonBody(req, createSchema, { status: 422 });
@@ -71,3 +72,15 @@ export async function POST(req: Request) {
     return fieldTime(error)
   }
 }
+
+export const GET = defineRoute({
+  public: "session",
+
+  handler: ({ request }) => legacyGET(request),
+});
+
+export const POST = defineRoute({
+  permission: 'time.crew.enter', feature: 'fieldTimeCrewEntry',
+
+  handler: ({ request, authz }) => legacyPOST(request, authz),
+});

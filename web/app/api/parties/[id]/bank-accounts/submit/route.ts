@@ -1,11 +1,12 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { dispatchFailureReason } from '@openbooks/engine/src/flows/index.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
-import { guardPermission } from '../../../../../../lib/authz'
+import { defineRoute } from '../../../../../../lib/api/route'
 import { isUuid } from '../../../../../../lib/list-params'
 import { denyLockedOutsidePartyScope, denyOutsidePartyScope } from '../party-scope'
 import { notFound } from "@/lib/api/responses";
@@ -39,11 +40,13 @@ export const runtime = 'nodejs'
  * enabled flow listens, the submit refuses with a typed message and the row
  * stays pending.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('parties.manage')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  permission: 'parties.manage',
+  feature: { none: 'Party bank detail submission is governed by party permissions and approval flows.' },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
   const { user } = gate
-  const { id: partyId } = await params
+  const { id: partyId } = params
 
   const accountId = new URL(req.url).searchParams.get('accountId') ?? ''
   if (!isUuid(partyId) || !isUuid(accountId)) {
@@ -175,4 +178,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     throw e
   })
-}
+  },
+})

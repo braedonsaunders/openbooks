@@ -1,9 +1,11 @@
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { defineRoute } from "../../../../lib/api/route";
+import { can, type Authz } from "../../../../lib/authz";
 import { draftWithEvidence, DRAFT_KINDS } from "@openbooks/engine/src/hrm/ai/drafting.ts";
 import { markDecisionOutcome } from "@openbooks/engine/src/hrm/ai/governance.ts";
-import { aiRailsErrorResponse, requireAnyPerm } from "../../../../lib/ai-rails";
+import { aiRailsErrorResponse } from "../../../../lib/ai-rails";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { notFound } from "@/lib/api/responses";
 
@@ -21,6 +23,20 @@ const outcomeBody = z.object({
   note: z.string().max(500).optional(),
 });
 
+const DRAFT_PERMISSIONS = [
+  "hrm.self.read",
+  "hrm.performance.manage",
+  "hrm.recruiting.read",
+  "hrm.recruiting.manage",
+  "hrm.process.read",
+] as const;
+
+function missingDraftPermission(authz: Authz): NextResponse | null {
+  return DRAFT_PERMISSIONS.some((permission) => can(authz, permission))
+    ? null
+    : NextResponse.json({ error: `missing permission: one of ${DRAFT_PERMISSIONS.join(", ")}` }, { status: 403 });
+}
+
 /**
  * Evidence-grounded drafts. POST renders the outline from sources the
  * actor may read (unreadable sources refuse the whole draft) with bias
@@ -29,15 +45,11 @@ const outcomeBody = z.object({
  * are events, never edits. Nothing here files, submits, or stores the
  * draft text anywhere except the UI field the human fills.
  */
-export async function POST(req: Request) {
-  const gate = await requireAnyPerm([
-    "hrm.self.read",
-    "hrm.performance.manage",
-    "hrm.recruiting.read",
-    "hrm.recruiting.manage",
-    "hrm.process.read",
-  ]);
-  if (gate instanceof NextResponse) return gate;
+export const POST = defineRoute({
+  public: "session",
+  handler: async ({ request: req, authz: gate }) => {
+  const denied = missingDraftPermission(gate);
+  if (denied) return denied;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmDrafting"))) {
     return notFound("record");
   }
@@ -55,17 +67,14 @@ export async function POST(req: Request) {
   } catch (e) {
     return aiRailsErrorResponse(e);
   }
-}
+  },
+});
 
-export async function PATCH(req: Request) {
-  const gate = await requireAnyPerm([
-    "hrm.self.read",
-    "hrm.performance.manage",
-    "hrm.recruiting.read",
-    "hrm.recruiting.manage",
-    "hrm.process.read",
-  ]);
-  if (gate instanceof NextResponse) return gate;
+export const PATCH = defineRoute({
+  public: "session",
+  handler: async ({ request: req, authz: gate }) => {
+  const denied = missingDraftPermission(gate);
+  if (denied) return denied;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmDrafting"))) {
     return notFound("record");
   }
@@ -84,4 +93,5 @@ export async function PATCH(req: Request) {
   } catch (e) {
     return aiRailsErrorResponse(e);
   }
-}
+  },
+});

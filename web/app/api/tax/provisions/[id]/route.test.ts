@@ -22,24 +22,28 @@ const routeState: RouteState = { scope: null, calls: [] };
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksTaxProvisionNextResponse = NextResponse;
 
+const authzStub = `
+  const state = globalThis[Symbol.for('openbooks.tax-provision-route-test')]
+  const NextResponse = globalThis.openbooksTaxProvisionNextResponse
+  export async function getAuthz() {
+    return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.scope }
+  }
+  export async function guardPermission(permission) {
+    if (permission !== 'reports.read') return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+    return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.scope }
+  }
+  export function guardRootSubsidiaryScope() { return null }
+  export function guardUnrestrictedScope() { return null }
+`
+
 stubModules({
   navigation: false,
   intl: false,
   authz: false,
   features: false,
   extra: {
-    "../../../../../lib/authz": `
-      const state = globalThis[Symbol.for('openbooks.tax-provision-route-test')]
-      export async function guardPermission(permission) {
-        if (permission !== 'reports.read') {
-          return globalThis.openbooksTaxProvisionNextResponse.json({ error: 'forbidden' }, { status: 403 })
-        }
-        return {
-          user: { orgId: 'org-1', id: 'user-1' },
-          allowedSubsidiaryIds: state.scope,
-        }
-      }
-    `,
+    "../../../../../lib/authz": authzStub,
+    "@/lib/authz": authzStub,
     "@openbooks/engine/src/tax-returns/income-tax-provision.ts": `
       const state = globalThis[Symbol.for('openbooks.tax-provision-route-test')]
       export async function getProvisionRun(orgId, runId, allowedSubsidiaryIds) {

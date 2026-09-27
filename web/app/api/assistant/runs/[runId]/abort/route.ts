@@ -1,9 +1,8 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { guardPermission } from "../../../../../../lib/authz";
+import { defineRoute } from "../../../../../../lib/api/route";
 import { createDbOwnedRunStore } from "../../../../../../lib/assistant/owned-runs-db";
+import { z } from "zod";
 import { notFound } from "@/lib/api/responses";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 export const runtime = "nodejs";
 
@@ -12,14 +11,14 @@ export const runtime = "nodejs";
  * navigating away never stops them — only this endpoint (the Stop button)
  * or deleting the conversation does.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ runId: string }> }) {
-  const parsed = await parseJsonBody(req, jsonObject);
-  if (!parsed.ok) return parsed.response;
-  const gate = await guardPermission("assistant.use");
-  if (gate instanceof NextResponse) return gate;
-  const { runId } = await params;
-  if (!isUuid(runId)) return NextResponse.json({ error: "bad request" }, { status: 400 });
-  const aborted = await createDbOwnedRunStore(gate).requestAbort(runId);
+export const POST = defineRoute({
+  permission: "assistant.use",
+  feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
+  params: z.object({ runId: z.string().uuid() }),
+  handler: async ({ authz, params }) => {
+  const { runId } = params;
+  const aborted = await createDbOwnedRunStore(authz).requestAbort(runId);
   if (!aborted) return notFound("record");
   return NextResponse.json({ ok: true });
-}
+  },
+});

@@ -11,12 +11,12 @@ const state = {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[
   Symbol.for("revenue-modification-route")
 ] = state;
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, next) {
     // Resolve framework imports against this real file, not the virtual auth URL.
     if (specifier === "next/server" && context.parentURL?.startsWith("mock:"))
       return next(specifier, { ...context, parentURL: import.meta.url });
-    if (specifier === "@/lib/feature-gates")
+    if (specifier === "@/lib/feature-gates" || specifier === "@/lib/authz")
       return { shortCircuit: true, url: "mock:revenue-change-auth" };
     if (specifier === "@openbooks/engine/src/revenue/contract-modifications.ts")
       return { shortCircuit: true, url: "mock:revenue-change-command" };
@@ -37,7 +37,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `import {NextResponse} from 'next/server';export async function guardFeaturePermission(...args){const s=globalThis[Symbol.for('revenue-modification-route')];s.gateArgs=args;if(!s.allowed)return NextResponse.json({error:'missing permission'},{status:403});if(!s.featureEnabled)return NextResponse.json({error:'not_found'},{status:404});return {user:{id:'actor',orgId:'org'}}}`,
+        source: `import {NextResponse} from 'next/server';const authz=()=>({user:{id:'actor',orgId:'org'}});export async function getAuthz(){return authz()}export async function guardPermission(){return authz()}export function guardRootSubsidiaryScope(){return null}export function guardUnrestrictedScope(){return null}export async function guardFeaturePermission(...args){const s=globalThis[Symbol.for('revenue-modification-route')];s.gateArgs=args;if(!s.allowed)return NextResponse.json({error:'missing permission'},{status:403});if(!s.featureEnabled)return NextResponse.json({error:'not found'},{status:404});return authz()}`,
       };
     if (url === "mock:revenue-change-command")
       return {
@@ -49,7 +49,6 @@ const hooks = registerHooks({
   },
 });
 const route = await import("./route.ts");
-hooks.deregister();
 const id = "00000000-0000-4000-8000-000000000001";
 const valid = {
   effectiveOn: "2026-08-01",

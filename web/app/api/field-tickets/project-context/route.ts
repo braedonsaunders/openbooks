@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { guardSubsidiaryScope } from '../../../../lib/authz'
+import { defineRoute } from '../../../../lib/api/route'
 import { isUuid } from '../../../../lib/list-params'
 import { resolveTicketPeriod } from '../../../../lib/field-tickets'
 import { notFound } from "@/lib/api/responses";
@@ -11,12 +11,10 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = 'nodejs'
 
 /** Lightweight project context for the field-ticket project picker. */
-export async function GET(req: Request) {
-  const gate = await guardPermission('time.read')
-  if (gate instanceof NextResponse) return gate
-  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) {
-    return notFound("record")
-  }
+export const GET = defineRoute({
+  permission: 'time.read',
+  feature: 'fieldTickets',
+  handler: async ({ request: req, authz: gate }) => {
   const projectId = new URL(req.url).searchParams.get('projectId')
   if (!projectId || !isUuid(projectId)) return NextResponse.json({ error: 'invalid project' }, { status: 422 })
 
@@ -42,4 +40,5 @@ export async function GET(req: Request) {
     period: await resolveTicketPeriod(gate.user.orgId, projectId),
     tasks: tasks.rows,
   })
-}
+  },
+})

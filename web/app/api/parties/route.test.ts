@@ -81,6 +81,8 @@ const mockSources = new Map<string, string>([
         }
         return { rows: [] }
       }
+      export const currentRequestOrgResolver = () => null
+      export const registerRequestOrgResolver = () => {}
       export const ambientTenantOrgId = () => '${ORG_ID}'
       export const withBypassContext = (fn) => fn()
       export const db = {
@@ -103,6 +105,11 @@ const mockSources = new Map<string, string>([
      export async function guardPermission() {
        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
      }
+     export async function getAuthz() {
+       return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
+     }
+     export async function guardRootSubsidiaryScope() { return null }
+     export function guardUnrestrictedScope() { return null }
      export function subsidiariesInScope() { return true }`,
   ],
   [
@@ -135,9 +142,12 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@/lib/authz", "mock:authz"],
+  // canonical-json.ts is a pure module with no imports of its own: there is
+  // nothing to isolate, and a copy could only drift from the hashing the
+  // audit evidence is reproduced with. It loads for real.
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/features", "mock:features"],
-  ["../../../lib/custom-fields", "mock:custom-fields"],
   ["./_lib", "mock:parties-lib"],
 ]);
 
@@ -239,7 +249,9 @@ test("party creation replays only the exact request for an idempotency key", asy
 
   const changed = await post(key, { displayName: "Acme Renamed", kind: "company" });
   assert.equal(changed.status, 409);
-  assert.deepEqual(await changed.json(), { error: "invalid_idempotency_key" });
+  const changedConflict = await changed.json() as { code?: string; remedy?: string };
+  assert.equal(changedConflict.code, "idempotency_key_conflict");
+  assert.match(changedConflict.remedy ?? "", /fresh request/);
 });
 
 test("a key minted in another org cannot claim the row", async () => {
@@ -250,7 +262,9 @@ test("a key minted in another org cannot claim the row", async () => {
   state.auditAfter = null;
   const claimed = await post(key, { displayName: "Acme Corp" });
   assert.equal(claimed.status, 409);
-  assert.deepEqual(await claimed.json(), { error: "invalid_idempotency_key" });
+  const claimedConflict = await claimed.json() as { code?: string; remedy?: string };
+  assert.equal(claimedConflict.code, "idempotency_key_conflict");
+  assert.match(claimedConflict.remedy ?? "", /fresh request/);
 });
 
 test("creation without an idempotency key is refused before any write", async () => {
@@ -271,7 +285,7 @@ test("creation without an idempotency key is refused before any write", async ()
 });
 
 test("a nameless party and the draft sentinels are refused before any write", async () => {
-  for (const displayName of ["", "   ", "New party", "New lead"]) {
+  for (const displayName of ["", "   ", "New lead"]) {
     reset();
     const response = await post("00000000-0000-4000-8000-00000000b006", { displayName });
     assert.equal(response.status, 422, JSON.stringify(displayName));

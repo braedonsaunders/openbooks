@@ -1,6 +1,7 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { guardAllocations } from "../../../../lib/allocations-gate";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
 import { db } from "../../../../../engine/src/platform/db.ts";
 import { NATIVE_MEASURES } from "../../../../../engine/src/allocations/driver-admin.ts";
@@ -35,9 +36,9 @@ type SegmentOptions = {
  * subsidiary-aware kinds (null-subsidiary rows are org-wide; an empty scope
  * discloses none); items are organization-wide.
  */
-export async function GET() {
-  const gate = await guardAllocations("allocations.read");
-  if (gate instanceof NextResponse) return gate;
+async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const orgId = gate.user.orgId;
 
   const named = async (table: string, order: string, hasCode = true): Promise<Option[]> => {
@@ -168,3 +169,9 @@ export async function GET() {
     segments,
   });
 }
+
+export const GET = defineRoute({
+  permission: "allocations.read", feature: "allocations",
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});

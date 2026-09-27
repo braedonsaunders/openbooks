@@ -5,7 +5,8 @@ import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db, type SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
 import { RecurringError, runScheduleNow, recurringTemplateScopeFilter } from "@openbooks/engine/src/billing/recurring.ts";
-import { can, guardPermission, type Authz } from "../../../../lib/authz";
+import { can, type Authz } from "../../../../lib/authz";
+import { defineRoute } from "../../../../lib/api/route";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { notFound } from "@/lib/api/responses";
 
@@ -40,10 +41,12 @@ async function ownedEnabled(exec: SqlExecutor, authz: Authz, id: string) {
 }
 
 /** Toggle active, edit dates, or rename a schedule. */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await guardPermission("documents.manage");
-  if (authz instanceof NextResponse) return authz;
-  const { id } = await params;
+export const PATCH = defineRoute({
+  permission: "documents.manage",
+  feature: { none: "Recurring schedules are governed by document permissions and template kind availability." },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz, params }) => {
+  const { id } = params;
   if (!uuidId.safeParse(id).success) return notFound("record");
   const parsedBody = await parseJsonBody(req, patchSchema);
   if (!parsedBody.ok) return parsedBody.response;
@@ -83,12 +86,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     `);
   });
   return outcome ?? NextResponse.json({ ok: true });
-}
+  },
+});
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await guardPermission("documents.manage");
-  if (authz instanceof NextResponse) return authz;
-  const { id } = await params;
+export const DELETE = defineRoute({
+  permission: "documents.manage",
+  feature: { none: "Recurring schedules are governed by document permissions and template kind availability." },
+  params: z.object({ id: z.string() }),
+  handler: async ({ authz, params }) => {
+  const { id } = params;
   if (!uuidId.safeParse(id).success) return notFound("record");
   const outcome = await db.transaction(async (tx) => {
     // Snapshot first: deleting a schedule removes the only record of what was
@@ -126,13 +132,16 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     );
   }
   return NextResponse.json({ ok: true });
-}
+  },
+});
 
 /** Run now — force-generate a document from the template immediately. */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await guardPermission("documents.manage");
-  if (authz instanceof NextResponse) return authz;
-  const { id } = await params;
+export const POST = defineRoute({
+  permission: "documents.manage",
+  feature: { none: "Recurring schedules are governed by document permissions and template kind availability." },
+  params: z.object({ id: z.string() }),
+  handler: async ({ authz, params }) => {
+  const { id } = params;
   if (!uuidId.safeParse(id).success) return notFound("record");
   try {
     const existing = await db.transaction(tx => ownedEnabled(tx, authz, id));
@@ -145,4 +154,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (e instanceof RecurringError) return apiErrorResponse(e);
     return apiErrorResponse(e);
   }
-}
+  },
+});

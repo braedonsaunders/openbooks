@@ -1,8 +1,11 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { TaxFilingError, markTaxFilingFiled } from '@openbooks/engine/src/tax-returns/filing.ts'
-import { guardPermission, guardUnrestrictedScope } from '../../../../../lib/authz'
+import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { TAX_FILING_WRITE_PERMISSION } from '../../../../../lib/tax-filing-permission'
 import { notFound } from "@/lib/api/responses";
@@ -10,10 +13,11 @@ import { notFound } from "@/lib/api/responses";
 
 export const runtime = 'nodejs'
 
+const bodyObjectSchema = z.object({ filingReference: z.string().optional() }).strict();
+
 /** Record the one-way prepared → filed transition and government reference. */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission(TAX_FILING_WRITE_PERMISSION)
-  if (gate instanceof NextResponse) return gate
+async function legacyPATCH(req: Request, { params }: { params: Promise<{ id: string }> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
   // A tax filing snapshot is an organization-wide statutory position: the
@@ -24,7 +28,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // body parsing or engine call.
   const scope = guardUnrestrictedScope(gate)
   if (scope) return scope
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, bodyObjectSchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { filingReference?: unknown }
   const filingReference = typeof body.filingReference === 'string' ? body.filingReference.trim() : ''
@@ -50,3 +54,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'could not update filing' }, { status: 422 })
   }
 }
+
+export const PATCH = defineRoute({
+  permission: TAX_FILING_WRITE_PERMISSION, feature: { none: "This route is governed by its permission and service authorization." },
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyPATCH(request, { params: Promise.resolve(params) }, authz),
+});

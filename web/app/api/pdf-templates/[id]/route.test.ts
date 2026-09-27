@@ -41,6 +41,9 @@ const mockSources = new Map<string, string>([
       export async function guardPermission() {
         return { user: { id: 'user-1', orgId: 'org-1' }, permissions: new Set(['admin.customization.manage']), allowedSubsidiaryIds: null }
       }
+      export async function getAuthz() { return { user: { id: 'user-1', orgId: 'org-1' }, permissions: new Set(['admin.customization.manage']), allowedSubsidiaryIds: null } }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
     `,
   ],
   ['documents', `export async function isDocKindEnabled() { return true }`],
@@ -66,6 +69,7 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 
 const mockUrls = new Map<string, string>([
+  ['@/lib/authz', mockUrl('authz')],
   ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
   ['@openbooks/pdf', mockUrl('pdf')],
   ['../../../../lib/authz', mockUrl('authz')],

@@ -1,3 +1,5 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -8,8 +10,7 @@ import {
   ScopeNotFoundError,
   subsidiaryVisibleFilter,
 } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
 import { notFound } from "@/lib/api/responses";
@@ -73,9 +74,8 @@ const geofenceBody = z.union([
 ])
 
 /** GET → active geofences (?projectId=), visible only under the caller's subsidiaries. */
-export async function GET(req: Request) {
-  const gate = await guardFeaturePermission('time.manage', 'fieldTimeGeofence')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const url = new URL(req.url)
   const projectId = url.searchParams.get('projectId')
   // Only an explicit null is unrestricted — an absent (undefined) scope
@@ -103,9 +103,8 @@ export async function GET(req: Request) {
 }
 
 /** POST → declare a geofence. PUT/PATCH with id edits; DELETE with id retires. */
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('time.manage', 'fieldTimeGeofence')
-  if (gate instanceof NextResponse) return gate
+async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const { user } = gate
   // Only an explicit null is unrestricted — an absent (undefined) scope
   // fails closed to an empty set, so a caller that forgot to resolve the
@@ -219,3 +218,15 @@ export async function POST(req: Request) {
     throw error
   }
 }
+
+export const GET = defineRoute({
+  permission: 'time.manage', feature: 'fieldTimeGeofence',
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const POST = defineRoute({
+  permission: 'time.manage', feature: 'fieldTimeGeofence',
+
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

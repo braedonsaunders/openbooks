@@ -1,23 +1,29 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardPermission, guardSubsidiaryScope } from '../../../lib/authz'
+import { guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
-import { isFeatureEnabled } from '../../../lib/features'
 import { createFieldTicket, FieldTicketError, FieldTicketNotFoundError, TICKET_PERIODS, type TicketPeriod } from '../../../lib/field-tickets'
 import { notFound } from "@/lib/api/responses";
 
 
 export const runtime = 'nodejs'
+const createBody = z.object({
+  projectId: z.string().uuid().optional(),
+  period: z.enum(TICKET_PERIODS).optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+}).strict()
 
 /** GET → ticket list (filters: status, project). POST → create a draft. */
-export async function GET(req: Request) {
-  const gate = await guardPermission('time.read')
-  if (gate instanceof NextResponse) return gate
+export const GET = defineRoute({
+  permission: 'time.read',
+  feature: 'fieldTickets',
+  handler: async ({ request: req, authz: gate }) => {
   const orgId = gate.user.orgId
-  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return notFound("record")
 
   const url = new URL(req.url)
   const status = url.searchParams.get('status')
@@ -62,35 +68,36 @@ export async function GET(req: Request) {
      order by d.document_date desc, d.created_at desc
      limit 200`))
   return NextResponse.json({ tickets: rows.rows })
-}
+  },
+})
 
-export async function POST(req: Request) {
-  const gate = await guardPermission('time.manage')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  permission: 'time.manage',
+  feature: 'fieldTickets',
+  handler: async ({ request: req, authz: gate }) => {
   const orgId = gate.user.orgId
-  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return notFound("record")
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, createBody);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
-  if (typeof body.projectId !== 'string' || !isUuid(body.projectId)) return NextResponse.json({ error: 'projectId required' }, { status: 422 })
-  // Creating under a project is itself a subsidiary boundary — the ticket
-  // inherits the job's legal entity. Mirror the [id] route's project gate so
-  // a restricted caller cannot open a ticket under another subsidiary's job.
-  const scopedProject = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select p.subsidiary_id as "subsidiaryId"
-      from projects p
-     where p.id = ${body.projectId} and p.org_id = ${orgId} and p.is_active
-  `))
-  if (!scopedProject.rows[0]) return notFound("record")
-  const projectDenied = guardSubsidiaryScope(
-    gate.allowedSubsidiaryIds === undefined ? { ...gate, allowedSubsidiaryIds: null } : gate,
-    scopedProject.rows[0].subsidiaryId,
-  )
-  if (projectDenied) return projectDenied
-  if (body.period !== undefined && (typeof body.period !== 'string' || !TICKET_PERIODS.includes(body.period as TicketPeriod))) return NextResponse.json({ error: 'Invalid ticket period' }, { status: 422 })
+  if (typeof body.projectId === 'string') {
+    // Creating under a project is itself a subsidiary boundary — the ticket
+    // inherits the job's legal entity. A projectless draft has no subsidiary
+    // yet and receives the same scope check when its project is selected.
+    const scopedProject = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select p.subsidiary_id as "subsidiaryId"
+        from projects p
+       where p.id = ${body.projectId} and p.org_id = ${orgId} and p.is_active
+    `))
+    if (!scopedProject.rows[0]) return notFound("record")
+    const projectDenied = guardSubsidiaryScope(
+      gate.allowedSubsidiaryIds === undefined ? { ...gate, allowedSubsidiaryIds: null } : gate,
+      scopedProject.rows[0].subsidiaryId,
+    )
+    if (projectDenied) return projectDenied
+  }
   const period = body.period as TicketPeriod | undefined
-  const date = body.date as string | undefined
+  const date = body.date
   try {
     const created = await createFieldTicket(orgId, gate.user.id, { projectId: body.projectId, date, period, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
     return NextResponse.json(created)
@@ -100,4 +107,5 @@ export async function POST(req: Request) {
     }
     return apiErrorResponse(e)
   }
-}
+  },
+})

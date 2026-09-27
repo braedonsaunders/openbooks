@@ -22,6 +22,9 @@ const mockSources = new Map<string, string>([
       export async function getAuthz() {
         return { user: { homeUserId: 'user-1', orgId: 'org-1', name: 'Sara Lindqvist' } }
       }
+      export async function guardPermission() { return await getAuthz() }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
       export function can() {
         return true
       }

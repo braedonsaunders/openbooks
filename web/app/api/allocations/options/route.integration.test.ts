@@ -87,7 +87,7 @@ test("options returns every picker list; subsidiaries follow scope", async () =>
       insert into segment_values (id, org_id, segment_id, code, name, is_active)
       values (${regionEast}, ${org.orgId}, ${segmentId}, 'E', 'East', true),
              (${regionWest}, ${org.orgId}, ${segmentId}, 'W', 'West', false)`);
-    const res = await optionsRoute.GET();
+    const res = await optionsRoute.GET(new Request('http://allocations.test'));
     assert.equal(res.status, 200);
     const body = (await res.json()) as Record<string, { id: string }[]>;
     for (const key of ["accounts", "departments", "locations", "classes", "projects", "subsidiaries", "books", "periods", "rules", "reports", "measures", "parties", "items", "segments"]) {
@@ -120,7 +120,7 @@ test("options returns every picker list; subsidiaries follow scope", async () =>
       permissions: new Set(["allocations.read"]),
       allowedSubsidiaryIds: [],
     };
-    const scoped = (await (await optionsRoute.GET()).json()) as {
+    const scoped = (await (await optionsRoute.GET(new Request('http://allocations.test'))).json()) as {
       subsidiaries: unknown[];
       parties: unknown[];
       items: { id: string }[];

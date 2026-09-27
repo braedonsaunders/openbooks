@@ -2,12 +2,9 @@ import assert from 'node:assert/strict'
 import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 
-// H-CREWPOST: POST /api/time/crew-batches/[id] {action: 'post'} gated only
-// time.manage, then postBatch created APPROVED project_charge documents and
-// the route posted each to the GL — a time manager without gl.post posted
-// equipment charges, bypassing the posting duty. Posting now takes the
-// kind's postPermission (gl.post, the same map the generic actions route
-// enforces), refused by name BEFORE postBatch commits anything.
+// Posting a crew batch creates approved charge documents and writes ledger
+// entries. A caller therefore needs both time management and ledger posting
+// authority before the route commits the batch.
 interface CrewState {
   allowPost: boolean
   postBatchCalls: number
@@ -27,6 +24,14 @@ stubModules({
   authz: false,
   features: false,
   extra: {
+    "@/lib/authz": `
+      export async function getAuthz() {
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+      }
+      export function guardPermission() { return null }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
+    `,
     "../../../../../lib/authz": `
       const state = globalThis[Symbol.for('openbooks.crew-batch-post-test')]
       // Authorization-check double: time.manage always holds; gl.post only

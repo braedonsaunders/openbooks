@@ -1,8 +1,9 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { guardUnrestrictedScope } from '../../../../lib/authz'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { loadChain, saveChain, type ChainSubject } from '@openbooks/engine/src/hrm/field-time/stages.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
 
@@ -13,22 +14,23 @@ function bad(error: string, status = 422) {
 }
 
 /**
- * The chain body. The subject is closed here because only two subjects
- * have adapters; the stages stay unknown to this boundary because
- * validateStages in the engine is what names a bad stage, an unknown
- * approver kind or a role stage with no role.
+ * The engine still owns chain-specific role-stage semantics; this boundary
+ * validates every submitted field before those rules run.
  */
 const chainBody = z.object({
   subject: z.enum(['timesheet_week', 'crew_time_batch'], {
     error: 'Subject is timesheet_week or crew_time_batch',
   }),
-  stages: z.array(z.unknown()),
-})
+  stages: z.array(z.object({
+    order: z.number().int().positive(),
+    approverKind: z.enum(['supervisor', 'project_manager', 'payroll', 'role']),
+    roleKey: z.string().nullable().optional(),
+  }).strict()).min(1).max(5),
+}).strict()
 
 /** GET ?subject=timesheet_week|crew_time_batch → the declared chain (null = single approval stands). */
-export async function GET(req: Request) {
-  const gate = await guardFeaturePermission('time.manage', 'fieldTime')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const subject = new URL(req.url).searchParams.get('subject')
   if (subject !== 'timesheet_week' && subject !== 'crew_time_batch') {
     return bad('Subject is timesheet_week or crew_time_batch')
@@ -51,9 +53,8 @@ export async function GET(req: Request) {
  * time.manage holder: approvers need the chain to do their job, and it
  * discloses no per-subsidiary material.
  */
-export async function PUT(req: Request) {
-  const gate = await guardFeaturePermission('time.manage', 'fieldTime')
-  if (gate instanceof NextResponse) return gate
+async function legacyPUT(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const { user } = gate
   const scopeDenied = guardUnrestrictedScope(gate)
   if (scopeDenied) return scopeDenied
@@ -74,3 +75,15 @@ export async function PUT(req: Request) {
     throw error
   }
 }
+
+export const GET = defineRoute({
+  permission: 'time.manage', feature: 'fieldTime',
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const PUT = defineRoute({
+  permission: 'time.manage', feature: 'fieldTime',
+
+  handler: ({ request, params, authz }) => legacyPUT(request, { params: Promise.resolve(params) }, authz),
+});

@@ -1,9 +1,10 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { listEntryRulesInEffect, matchLine, selectRule } from '@openbooks/engine/src/allocations/match.ts'
 import type { LineCoordinate, RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
 import { resolveAccountGroups } from '@openbooks/engine/src/records/account-groups.ts'
-import { guardPermission } from '../../../../lib/authz'
 import { allocationRuleScopeVisible } from '../../../../lib/allocations-scope'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
@@ -64,9 +65,8 @@ function toCandidate(candidate: RuleInEffect, recommended: boolean): {
  * consulting the feature gates, so editors for out-of-domain kinds never
  * 404; kinds with candidates still refuse when entry is off.
  */
-export async function GET(request: Request): Promise<NextResponse> {
-  const gate = await guardPermission('allocations.read')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null): Promise<NextResponse> {
+  const gate = injectedGate as Authz;
   const { user } = gate
 
   const query = new URL(request.url).searchParams
@@ -185,3 +185,9 @@ export async function GET(request: Request): Promise<NextResponse> {
     rules: matched.map((entry) => toCandidate(entry.candidate, winner !== null && entry.candidate.rule.key === winner.rule.key)),
   })
 }
+
+export const GET = defineRoute({
+  permission: 'allocations.read', feature: { none: "This route is governed by its permission and service authorization." },
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});

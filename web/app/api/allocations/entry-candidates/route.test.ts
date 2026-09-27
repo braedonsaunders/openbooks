@@ -93,6 +93,19 @@ function cannedRule(
   };
 }
 
+const authzStub = `export async function guardPermission() {
+  const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
+  if (!state.authed) return globalThis[Symbol.for('openbooks.entry-candidates-route-denied')]()
+  return {
+    user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
+    allowedSubsidiaryIds: state.allowedSubsidiaryIds === null ? null : new Set(state.allowedSubsidiaryIds),
+  }
+}
+export async function getAuthz() { return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } } }
+export function guardRootSubsidiaryScope() { return null }
+export function guardUnrestrictedScope() { return null }
+`
+
 stubModules({
   navigation: false,
   intl: false,
@@ -109,16 +122,8 @@ stubModules({
         targetSubsidiaryIds: (rule.targets ?? []).map((t) => t.subsidiaryId),
       })
     }`,
-    "../../../../lib/authz": `export async function guardPermission() {
-       const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
-       if (!state.authed) {
-         return globalThis[Symbol.for('openbooks.entry-candidates-route-denied')]()
-       }
-       return {
-         user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
-         allowedSubsidiaryIds: state.allowedSubsidiaryIds === null ? null : new Set(state.allowedSubsidiaryIds),
-       }
-     }`,
+    "../../../../lib/authz": authzStub,
+    "@/lib/authz": authzStub,
     "../../../../lib/features": `export async function isFeatureEnabled(orgId, key) {
        const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
        if (orgId !== '${ORG_ID}') return false

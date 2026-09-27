@@ -1,10 +1,12 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { assertPrintablePage, compileTemplateHtml, PDF_MARGIN_MM_MAX, PDF_MARGIN_MM_MIN, sanitizeTokenizedFragment } from "@openbooks/pdf";
-import { guardPermission } from "../../../../lib/authz";
 import { describeDbError, pgErrorCode } from "../../../../lib/setup/coerce";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isUuid } from "../../../../lib/list-params";
@@ -15,12 +17,25 @@ import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
 
+const bodyObjectSchema = z.object({
+  name: z.string().optional(),
+  description: z.string().nullable().optional(),
+  sourceHtml: z.string().optional(),
+  headerHtml: z.string().nullable().optional(),
+  footerHtml: z.string().nullable().optional(),
+  paperSize: z.enum(['letter', 'a4', 'legal']).optional(),
+  orientation: z.enum(["landscape", "portrait"]).optional(),
+  marginMm: z.number().optional(),
+  isDefault: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+}).strict();
+
 type Params = { params: Promise<{ id: string }> };
 
 /** GET /api/pdf-templates/[id] — full template (editor payload). */
-export async function GET(_req: Request, { params }: Params) {
-  const gate = await guardPermission("admin.customization.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyGET(_req: Request, { params }: Params, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const { id } = await params;
   // A malformed id is indistinguishable from a missing template and never
   // reaches the uuid column.
@@ -31,9 +46,9 @@ export async function GET(_req: Request, { params }: Params) {
 }
 
 /** PATCH — save design/settings. Compiles + sanitizes sourceHtml server-side. */
-export async function PATCH(req: Request, { params }: Params) {
-  const gate = await guardPermission("admin.customization.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyPATCH(req: Request, { params }: Params, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const { user } = gate;
   const { id } = await params;
   if (!isUuid(id)) return notFound("record");
@@ -43,20 +58,9 @@ export async function PATCH(req: Request, { params }: Params) {
     return notFound("record");
   }
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, bodyObjectSchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    name?: string;
-    description?: string | null;
-    sourceHtml?: string;
-    headerHtml?: string | null;
-    footerHtml?: string | null;
-    paperSize?: string;
-    orientation?: string;
-    marginMm?: number;
-    isDefault?: boolean;
-    isActive?: boolean;
-  };
+  const body = parsedBody.data;
 
   const name = body.name?.trim() || existing.name;
   const source = body.sourceHtml ?? existing.sourceHtml;
@@ -168,9 +172,9 @@ export async function PATCH(req: Request, { params }: Params) {
 }
 
 /** DELETE — remove a template (records fall back to the org default/starter). */
-export async function DELETE(_req: Request, { params }: Params) {
-  const gate = await guardPermission("admin.customization.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyDELETE(_req: Request, { params }: Params, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const { user } = gate;
   const { id } = await params;
   if (!isUuid(id)) return notFound("record");
@@ -201,3 +205,21 @@ export async function DELETE(_req: Request, { params }: Params) {
   if (deleted === 'missing') return notFound("record");
   return NextResponse.json({ ok: true });
 }
+
+export const GET = defineRoute({
+  permission: "admin.customization.manage", feature: { none: "This route is governed by its permission and service authorization." },
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const PATCH = defineRoute({
+  permission: "admin.customization.manage", feature: { none: "This route is governed by its permission and service authorization." },
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyPATCH(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const DELETE = defineRoute({
+  permission: "admin.customization.manage", feature: { none: "This route is governed by its permission and service authorization." },
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyDELETE(request, { params: Promise.resolve(params) }, authz),
+});

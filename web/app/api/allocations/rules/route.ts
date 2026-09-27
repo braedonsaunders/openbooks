@@ -1,3 +1,5 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
@@ -6,7 +8,6 @@ import {
   listRuleHeads,
 } from '../../../../../engine/src/allocations/index.ts'
 import { businessToday } from '../../../../../engine/src/platform/business-date.ts'
-import { guardAllocations } from '../../../../lib/allocations-gate'
 import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { allocationErrorResponse } from '../_lib.ts'
 
@@ -22,9 +23,8 @@ const createRuleSchema = z.object({
 })
 
 /** Rules tab list + create. Read needs allocations.read; writes need allocations.manage. */
-export async function GET(_req: Request) {
-  const gate = await guardAllocations('allocations.read')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(_req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   try {
     return NextResponse.json({ rules: await listRuleHeads(gate.user.orgId, { allowedSubsidiaryIds: gate.allowedSubsidiaryIds }) })
   } catch (error) {
@@ -37,9 +37,8 @@ export async function GET(_req: Request) {
  * drawer always has a version to edit. A1's createRule is head-only; the
  * draft comes from createDraftVersion with no source.
  */
-export async function POST(req: Request) {
-  const gate = await guardAllocations('allocations.manage')
-  if (gate instanceof NextResponse) return gate
+async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const parsed = await parseJsonBody(req, createRuleSchema)
   if (!parsed.ok) return parsed.response
   // The initial draft names no subsidiaries, so it is org-wide policy from
@@ -73,3 +72,15 @@ export async function POST(req: Request) {
     return allocationErrorResponse(error)
   }
 }
+
+export const GET = defineRoute({
+  permission: 'allocations.read', feature: "allocations",
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const POST = defineRoute({
+  permission: 'allocations.manage', feature: "allocations",
+
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

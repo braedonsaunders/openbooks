@@ -1,12 +1,11 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../lib/api/json";
 import { guardAllocations } from "../../../../lib/allocations-gate";
 import { guardUnrestrictedScope } from "../../../../lib/authz";
-// NOTE (worktree): @openbooks/* resolves to the MAIN checkout through
-// the shared node_modules symlink, so worktree engine code is imported via
-// relative paths (the route-test precedent). Identical after cherry-pick.
 import {
   DRIVER_SOURCE_KINDS,
   DriverAdminError,
@@ -21,11 +20,13 @@ const driverBodySchema = z.object({
   name: z.string(),
   description: z.string().nullable().optional(),
   unit: z.string().nullable().optional(),
-  dimension: z.string(),
+  dimension: z.string().regex(/^(department|location|class|project|subsidiary|extra:.+)$/),
   sourceKind: z.enum(DRIVER_SOURCE_KINDS),
-  config: z.record(z.string(), z.unknown()).optional(),
+  // Source-specific configuration is an opaque JSON value validated by the
+  // selected driver adapter in the allocation engine.
+  config: z.record(z.string(), z.json()).optional(),
   isActive: z.boolean().optional(),
-});
+}).strict();
 
 async function toResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof DriverAdminError) {
@@ -39,9 +40,9 @@ async function toResponse(error: unknown): Promise<NextResponse> {
  * `allocations.manage`. Everything 404s while the `allocations` feature
  * switch is off.
  */
-export async function GET(req: Request) {
-  const gate = await guardAllocations("allocations.read");
-  if (gate instanceof NextResponse) return gate;
+async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const includeInactive = new URL(req.url).searchParams.get("includeInactive") === "1";
   if (includeInactive) {
     const manage = await guardAllocations("allocations.manage");
@@ -55,9 +56,9 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
-  const gate = await guardAllocations("allocations.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const scopeDenied = guardUnrestrictedScope(gate)
   if (scopeDenied) return scopeDenied
   const parsedBody = await parseJsonBody(req, driverBodySchema);
@@ -78,3 +79,15 @@ export async function POST(req: Request) {
     return toResponse(error);
   }
 }
+
+export const GET = defineRoute({
+  public: "session",
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const POST = defineRoute({
+  permission: "allocations.manage", feature: "allocations",
+
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

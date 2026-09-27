@@ -1,5 +1,7 @@
+import { notFound } from "@/lib/api/responses";
 import { NextResponse } from 'next/server'
-import { can, getAuthz } from '../../../../lib/authz'
+import { defineRoute } from '../../../../lib/api/route'
+import { can } from '../../../../lib/authz'
 import { getResource, listResources } from '../../../../lib/data-io/resources'
 
 export const runtime = 'nodejs'
@@ -11,9 +13,9 @@ export const runtime = 'nodejs'
  * through data.import alone see the importable subset filtered by write
  * permission, so an import-only role can still reach the import wizard.
  */
-export async function GET(req: Request) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+export const GET = defineRoute({
+  public: 'session',
+  handler: async ({ request: req, authz }) => {
   const admitsExport = can(authz, 'data.export')
   const admitsImport = can(authz, 'data.import')
   if (!admitsExport && !admitsImport) {
@@ -24,7 +26,7 @@ export async function GET(req: Request) {
 
   if (key) {
     const resource = await getResource(orgId, key)
-    if (!resource) return NextResponse.json({ error: 'unknown resource' }, { status: 404 })
+    if (!resource) return notFound("record")
     if (!can(authz, resource.descriptor.readPermission) &&
         !(admitsImport && can(authz, resource.descriptor.writePermission))) {
       return NextResponse.json({ error: 'forbidden' }, { status: 403 })
@@ -38,4 +40,5 @@ export async function GET(req: Request) {
     ? all.filter((d) => can(authz, d.readPermission))
     : all.filter((d) => d.supportsImport && can(authz, d.writePermission))
   return NextResponse.json({ resources: visible })
-}
+  },
+})

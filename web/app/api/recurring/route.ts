@@ -1,3 +1,4 @@
+import { notFound } from "@/lib/api/responses";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { isoDate, uuidId, parseJsonBody } from "@/lib/api/json";
 import { z } from "zod";
@@ -5,7 +6,8 @@ import { advanceCadence, recurringTemplateScopeFilter } from "@openbooks/engine/
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { can, guardPermission } from "../../../lib/authz";
+import { can } from "../../../lib/authz";
+import { defineRoute } from "../../../lib/api/route";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents.ts";
 
@@ -46,9 +48,10 @@ const createSchema = z.object({
  * additionally requires gl.post because the scheduler later posts due
  * documents as a system actor.
  */
-export async function GET() {
-  const authz = await guardPermission("documents.manage");
-  if (authz instanceof NextResponse) return authz;
+export const GET = defineRoute({
+  permission: "documents.manage",
+  feature: { none: "Recurring schedules are governed by document permissions and template kind availability." },
+  handler: async ({ authz }) => {
   const hidden = new Set(await disabledDocKinds(authz.user.orgId));
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select rs.id, rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
@@ -66,11 +69,13 @@ export async function GET() {
   return NextResponse.json({
     schedules: rows.rows.filter((row) => !hidden.has(String(row.templateKind))),
   });
-}
+  },
+});
 
-export async function POST(req: Request) {
-  const authz = await guardPermission("documents.manage");
-  if (authz instanceof NextResponse) return authz;
+export const POST = defineRoute({
+  permission: "documents.manage",
+  feature: { none: "Recurring schedules are governed by document permissions and template kind availability." },
+  handler: async ({ request: req, authz }) => {
   const parsedBody = await parseJsonBody(req, createSchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data;
@@ -136,7 +141,8 @@ export async function POST(req: Request) {
     `);
     return row.rows[0]!;
   });
-  if (!created) return NextResponse.json({ error: "template document not found" }, { status: 404 });
+  if (!created) return notFound("record");
   if (created === "ambiguous") return NextResponse.json({ error: "document number is ambiguous; select a template ID" }, { status: 400 });
   return NextResponse.json({ id: created.id }, { status: 201 });
-}
+  },
+});

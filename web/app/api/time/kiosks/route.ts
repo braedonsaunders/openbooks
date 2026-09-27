@@ -1,7 +1,8 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { registerKiosk, revokeKiosk, setWorkerPin } from '@openbooks/engine/src/hrm/field-time/kiosk.ts'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
 import { ScopeNotFoundError, UnrestrictedScopeError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
@@ -15,9 +16,8 @@ function bad(error: string, status = 422) {
 }
 
 /** GET → kiosk devices (never token hashes — those never leave the vault). */
-export async function GET() {
-  const gate = await guardFeaturePermission('time.kiosk.manage', 'fieldTimeKiosk')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const { db } = await import('@openbooks/engine/src/platform/db.ts')
   const { sql } = await import('drizzle-orm')
   const visibleProject = gate.allowedSubsidiaryIds === null
@@ -73,9 +73,8 @@ const kioskBody = z.union([
  * once and never stored. POST revoke {kioskId} retires the link.
  * POST set-pin {employeePartyId, pin} sets or resets a worker PIN.
  */
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('time.kiosk.manage', 'fieldTimeKiosk')
-  if (gate instanceof NextResponse) return gate
+async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const { user } = gate
 
   const parsedBody = await parseJsonBody(req, kioskBody, { status: 422 });
@@ -111,3 +110,15 @@ export async function POST(req: Request) {
     throw error
   }
 }
+
+export const GET = defineRoute({
+  permission: 'time.kiosk.manage', feature: 'fieldTimeKiosk',
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const POST = defineRoute({
+  permission: 'time.kiosk.manage', feature: 'fieldTimeKiosk',
+
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

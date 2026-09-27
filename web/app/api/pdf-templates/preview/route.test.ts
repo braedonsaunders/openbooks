@@ -49,6 +49,9 @@ const mockSources = new Map<string, string>([
         if (!covers(perm)) return NextResponse.json({ error: \`missing permission: \${perm}\` }, { status: 403 })
         return { user: { id: 'user-1', orgId: 'org-1' }, permissions: state.granted, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
       }
+      export async function getAuthz() { return { user: { id: 'user-1', orgId: 'org-1' }, permissions: state.granted, allowedSubsidiaryIds: state.allowedSubsidiaryIds } }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
       export function can(_authz, perm) { return covers(perm) }
     `,
   ],
@@ -88,6 +91,7 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 
 const mockUrls = new Map<string, string>([
+  ['@/lib/authz', mockUrl('authz')],
   ['@openbooks/pdf', mockUrl('pdf')],
   ['../../../../lib/authz', mockUrl('authz')],
   ['../../../../lib/documents.ts', mockUrl('documents')],

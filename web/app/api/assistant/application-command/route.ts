@@ -1,37 +1,44 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { ApplicationError } from "../../../../lib/application/errors";
 import { applicationContextFromSession } from "../../../../lib/application/context";
 import {
   applicationTool,
   executeApplicationTool,
 } from "../../../../lib/application/tool-catalog";
-import { guardPermission } from "../../../../lib/authz";
+import { defineRoute } from "../../../../lib/api/route";
 import { commitAppToolCommand } from "../../../../lib/apps/tools";
 import { verifyApplicationCommand } from "../../../../lib/assistant/application-proposals";
 
 export const runtime = "nodejs";
 const MAX_BODY_BYTES = 1_000_000;
+const applicationCommandBody = z.object({
+  toolName: z.string().min(1),
+  // Tool arguments have a per-tool schema resolved from toolName below.
+  input: z.json().optional(),
+  confirmToken: z.string().min(1),
+}).strict();
 
-export async function POST(request: Request): Promise<NextResponse> {
-  const gate = await guardPermission("assistant.write");
-  if (gate instanceof NextResponse) return gate;
+export const POST = defineRoute({
+  permission: "assistant.write",
+  feature: { none: "Assistant commands are controlled by assistant permissions and provider configuration." },
+  handler: async ({ request, authz: gate }) => {
 
-  let body: { toolName?: unknown; input?: unknown; confirmToken?: unknown };
+  let body: z.output<typeof applicationCommandBody>;
   try {
     const text = await request.text();
     if (Buffer.byteLength(text, "utf8") > MAX_BODY_BYTES) {
       return NextResponse.json({ error: "request_too_large" }, { status: 413 });
     }
-    body = JSON.parse(text) as typeof body;
+    const parsed = applicationCommandBody.safeParse(JSON.parse(text));
+    if (!parsed.success) return NextResponse.json({ error: "bad_request" }, { status: 400 });
+    body = parsed.data;
   } catch {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
 
-  if (typeof body.toolName !== "string" || typeof body.confirmToken !== "string") {
-    return NextResponse.json({ error: "bad_request" }, { status: 400 });
-  }
   const definition = applicationTool(body.toolName);
   if (!definition) {
     // App-declared mutating tools share this commit path and its HMAC
@@ -77,4 +84,5 @@ export async function POST(request: Request): Promise<NextResponse> {
     console.error(`[assistant/application-command] ${definition.name} failed`, error);
     return NextResponse.json({ error: "command_failed" }, { status: 500 });
   }
-}
+  },
+});

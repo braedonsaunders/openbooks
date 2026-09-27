@@ -1,6 +1,7 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
-import { guardAllocations } from "../../../../lib/allocations-gate";
 import { isUuid } from "../../../../lib/list-params";
 import { RunQueryError, queryLineage } from "../../../../../engine/src/allocations/run-queries.ts";
 
@@ -12,9 +13,9 @@ export const runtime = "nodejs";
  * Exactly one anchor; `allocations.read`. The LineagePanel component
  * renders this payload for the Runs tab, A5's journal drawer and A9.
  */
-export async function GET(req: Request) {
-  const gate = await guardAllocations("allocations.read");
-  if (gate instanceof NextResponse) return gate;
+async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const params = new URL(req.url).searchParams;
   const anchor = (name: "runId" | "journalEntryId" | "documentId"): string | undefined => {
     const raw = params.get(name);
@@ -54,3 +55,9 @@ export async function GET(req: Request) {
     throw error;
   }
 }
+
+export const GET = defineRoute({
+  permission: "allocations.read", feature: "allocations",
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});

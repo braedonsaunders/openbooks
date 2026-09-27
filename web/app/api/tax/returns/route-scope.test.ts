@@ -2,12 +2,8 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
-// H-TAXSETUP: POST /api/tax/provision and POST /api/tax/returns write
-// org-wide statutory packs, forms, and libraries used by every entity, but
-// gated only admin.setup.manage — a subsidiary-restricted setup manager
-// could install or reset them for the whole org. Both now require
-// unrestricted scope (the shared helper), refused by name before any
-// planning or provisioning runs.
+// Tax pack installation changes organization-wide statutory forms and
+// libraries, so subsidiary-restricted setup managers cannot install them.
 interface TaxSetupState {
   restricted: boolean
   provisionCalls: number
@@ -23,6 +19,12 @@ const mockSources = new Map<string, string>([
     'mock:authz',
     `
       const state = globalThis[Symbol.for('openbooks.tax-setup-scope-test')]
+      export async function getAuthz() {
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          allowedSubsidiaryIds: state.restricted ? new Set(['sub-a']) : null,
+        }
+      }
       export async function guardPermission() {
         return {
           user: { orgId: 'org-1', id: 'user-1' },
@@ -35,6 +37,7 @@ const mockSources = new Map<string, string>([
         if (authz.allowedSubsidiaryIds === null) return null
         return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
       }
+      export function guardRootSubsidiaryScope() { return null }
     `,
   ],
   [
@@ -79,7 +82,7 @@ const hooks = registerHooks({
     if (specifier === '@openbooks/engine/src/tax/seed-tax-forms.ts') {
       return { url: 'mock:seed-forms', shortCircuit: true }
     }
-    if (specifier.endsWith('/lib/authz')) return { url: 'mock:authz', shortCircuit: true }
+    if (specifier === '@/lib/authz' || specifier.endsWith('/lib/authz')) return { url: 'mock:authz', shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

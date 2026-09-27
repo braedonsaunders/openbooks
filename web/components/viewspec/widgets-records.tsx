@@ -30,7 +30,6 @@ import { AppliedPaymentsPanel, type AppliedPayment } from '../applied-payments-p
 import { CreditApplicationsPanel } from '../credit-applications-panel'
 import { DOC_KINDS } from '../../lib/document-kinds'
 import { NewPartyButton } from '../../app/(app)/parties/NewPartyButton'
-import { NewPartyRedirect } from '../../app/(app)/parties/NewPartyRedirect'
 import { PartyDrawer } from '../../app/(app)/parties/PartyDrawer'
 import { RelatedTxnSlot } from './related-txn-slot'
 import { Badge } from '@openbooks/ui'
@@ -131,13 +130,6 @@ export const RECORDS_WIDGETS = {
       label={str(props, 'label') ?? ''}
     />
   ),
-  'new-role-party-redirect': (props) => (
-    <NewPartyRedirect
-      basePath={str(props, 'basePath') ?? '/parties'}
-      role={(str(props, 'role') ?? 'customer') as 'customer' | 'vendor' | 'employee'}
-    />
-  ),
-
   /* --- timesheets ----------------------------------------------------------- */
   'new-timesheet': (props) => (
     <Link
@@ -327,7 +319,6 @@ export const RECORDS_WIDGETS = {
   },
 
   'new-party': () => <NewPartyButton />,
-  'new-party-redirect': () => <NewPartyRedirect />,
   'party-roles-cell': (props) => (
     <PartyRolesCell badges={(props.badges as ComponentProps<typeof PartyRolesCell>['badges']) ?? []} />
   ),

@@ -1,6 +1,8 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 import { NextResponse } from 'next/server'
 import { publishVersion } from '../../../../../../../../../engine/src/allocations/index.ts'
-import { guardAllocations } from '../../../../../../../../lib/allocations-gate'
 import { allocationWriteErrorResponse, requireRuleId } from '../../../../../_lib.ts'
 import { notFound } from "@/lib/api/responses";
 
@@ -12,12 +14,11 @@ export const runtime = 'nodejs'
  * inline as 422 with stable codes for the drawer), stamps the definition
  * hash, and points the rule's current version. Empty body.
  */
-export async function POST(
+async function legacyPOST(
   _req: Request,
-  { params }: { params: Promise<{ id: string; versionId: string }> },
+  { params }: { params: Promise<{ id: string; versionId: string }> }, injectedGate?: Authz | null,
 ) {
-  const gate = await guardAllocations('allocations.manage')
-  if (gate instanceof NextResponse) return gate
+  const gate = injectedGate as Authz;
   const { id, versionId } = await params
   const ruleId = requireRuleId(id)
   if (ruleId instanceof NextResponse) return ruleId
@@ -39,3 +40,9 @@ export async function POST(
     return allocationWriteErrorResponse(error)
   }
 }
+
+export const POST = defineRoute({
+  permission: 'allocations.manage', feature: "allocations",
+  params: z.object({ "id": z.string(), "versionId": z.string() }),
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

@@ -1,7 +1,10 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { computeTaxReturn } from '@openbooks/engine/src/tax-returns/return.ts'
-import { guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
+import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { parseReturnScopeQuery, returnScopeOpts } from '@/lib/tax-return-scope'
 import { AdjustmentParamError, parseAdjustments } from './tax-return-params'
 
@@ -14,9 +17,8 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
  *  `rateType`/`rateDate`) declares the translation policy. Restricted callers
  *  keep the historical org-wide denial unless every requested subsidiary is
  *  inside their allowed set. */
-export async function GET(req: Request, { params }: { params: Promise<{ code: string }> }) {
-  const gate = await guardPermission('reports.read')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(req: Request, { params }: { params: Promise<{ code: string }> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const { code } = await params
   const p = new URL(req.url).searchParams
   const from = p.get('from')
@@ -57,3 +59,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
     return apiErrorResponse(e, { safeStatus: 422 })
   }
 }
+
+export const GET = defineRoute({
+  permission: 'reports.read', feature: { none: "This route is governed by its permission and service authorization." },
+  params: z.object({ "code": z.string() }),
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});

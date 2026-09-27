@@ -1,7 +1,11 @@
+import { notFound } from "@/lib/api/responses";
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardPermission, guardUnrestrictedScope } from '../../../../../../lib/authz'
+import { guardUnrestrictedScope } from '../../../../../../lib/authz'
 import { createFile, deleteFile, ensureAttachmentsRoot } from '../../../../../../lib/file-cabinet'
 
 export const runtime = 'nodejs'
@@ -9,9 +13,8 @@ export const runtime = 'nodejs'
 const MAX_BYTES = 25 * 1024 * 1024
 
 /** Upload the tenant's official government PDF and attach it to the form. */
-export async function POST(req: Request, { params }: { params: Promise<{ code: string }> }) {
-  const gate = await guardPermission('admin.setup.manage')
-  if (gate instanceof NextResponse) return gate
+async function legacyPOST(req: Request, { params }: { params: Promise<{ code: string }> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   // The official government PDF is org-wide statutory material.
   const unrestricted = guardUnrestrictedScope(gate)
   if (unrestricted) return unrestricted
@@ -28,7 +31,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
 
   const exists = (await db.execute<{ id: string; official_pdf_file_id: string | null }>(sql`
     select id, official_pdf_file_id from tax_return_forms where org_id = ${orgId} and code = ${code} limit 1`))
-  if (exists.rows.length === 0) return NextResponse.json({ error: 'tax return form not found' }, { status: 404 })
+  if (exists.rows.length === 0) return notFound("record")
 
   const bytes = Buffer.from(await file.arrayBuffer())
   if (bytes.length === 0) return NextResponse.json({ error: 'file is empty' }, { status: 400 })
@@ -70,7 +73,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
     })
     if (linked === null) {
       await deleteFile(orgId, meta.id)
-      return NextResponse.json({ error: 'tax return form not found' }, { status: 404 })
+      return notFound("record")
     }
     linkedFileId = linked
   } catch (error) {
@@ -82,16 +85,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ code: s
 }
 
 /** Detach the official PDF (the facsimile remains available). */
-export async function DELETE(req: Request, { params }: { params: Promise<{ code: string }> }) {
-  const gate = await guardPermission('admin.setup.manage')
-  if (gate instanceof NextResponse) return gate
+async function legacyDELETE(req: Request, { params }: { params: Promise<{ code: string }> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const unrestricted = guardUnrestrictedScope(gate)
   if (unrestricted) return unrestricted
   const { code } = await params
   const old = (await db.execute<{ id: string; official_pdf_file_id: string | null }>(sql`
     select id, official_pdf_file_id from tax_return_forms
      where org_id = ${gate.user.orgId} and code = ${code} limit 1`))
-  if (!old.rows[0]) return NextResponse.json({ error: 'tax return form not found' }, { status: 404 })
+  if (!old.rows[0]) return notFound("record")
   // Lock the row and verify the unlink, same as the attach: a zero-row
   // UPDATE (or detaching when nothing is attached) audits nothing and
   // answers a named 404 instead of ok for a no-op.
@@ -112,11 +114,20 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ code:
     return current.official_pdf_file_id
   })
   if (detached === null) {
-    return NextResponse.json(
-      { error: 'no official PDF is attached to this return form' },
-      { status: 404 },
-    )
+    return notFound("record")
   }
   await deleteFile(gate.user.orgId, detached)
   return NextResponse.json({ ok: true })
 }
+
+export const POST = defineRoute({
+  permission: 'admin.setup.manage', feature: { none: "This route is governed by its permission and service authorization." },
+  params: z.object({ "code": z.string() }),
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const DELETE = defineRoute({
+  permission: 'admin.setup.manage', feature: { none: "This route is governed by its permission and service authorization." },
+  params: z.object({ "code": z.string() }),
+  handler: ({ request, params, authz }) => legacyDELETE(request, { params: Promise.resolve(params) }, authz),
+});

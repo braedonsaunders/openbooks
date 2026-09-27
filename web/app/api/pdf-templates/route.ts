@@ -1,10 +1,12 @@
+import type { Authz } from "@/lib/authz";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { assertPrintablePage, compileTemplateHtml, PDF_MARGIN_MM_MAX, PDF_MARGIN_MM_MIN, sanitizeTokenizedFragment } from "@openbooks/pdf";
-import { guardPermission } from "../../../lib/authz";
 import { describeDbError, pgErrorCode } from "../../../lib/setup/coerce";
 import { isDocKindEnabled } from "../../../lib/documents.ts";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../lib/pdf-templates/catalog";
@@ -16,10 +18,23 @@ import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
 
+const bodyObjectSchema = z.object({
+  recordType: z.string().min(1),
+  name: z.string().trim().min(1),
+  description: z.string().nullable().optional(),
+  sourceHtml: z.string().optional(),
+  headerHtml: z.string().nullable().optional(),
+  footerHtml: z.string().nullable().optional(),
+  paperSize: z.enum(['letter', 'a4', 'legal']).optional(),
+  orientation: z.enum(["landscape", "portrait"]).optional(),
+  marginMm: z.number().optional(),
+  isDefault: z.boolean().optional(),
+}).strict();
+
 /** GET /api/pdf-templates?recordType=customer_invoice — list org templates. */
-export async function GET(req: Request) {
-  const gate = await guardPermission("admin.customization.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const { user } = gate;
   const recordType = new URL(req.url).searchParams.get("recordType") ?? undefined;
   if (recordType && !PDF_RECORD_TYPE_BY_KEY[recordType])
@@ -50,32 +65,17 @@ export async function GET(req: Request) {
 
 /** POST — create a template. Body: { recordType, name, description?, sourceHtml?, … }.
  *  Omitted sourceHtml seeds the record type's starter design. */
-export async function POST(req: Request) {
-  const gate = await guardPermission("admin.customization.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const { user } = gate;
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, bodyObjectSchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    recordType?: string;
-    name?: string;
-    description?: string | null;
-    sourceHtml?: string;
-    headerHtml?: string | null;
-    footerHtml?: string | null;
-    paperSize?: string;
-    orientation?: string;
-    marginMm?: number;
-    isDefault?: boolean;
-  };
+  const body = parsedBody.data;
   const meta = body.recordType ? PDF_RECORD_TYPE_BY_KEY[body.recordType] : undefined;
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
   if (!(await isDocKindEnabled(user.orgId, meta.key))) {
     return notFound("record");
-  }
-  if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
-  if (body.isDefault !== undefined && typeof body.isDefault !== "boolean") {
-    return NextResponse.json({ error: "isDefault must be a boolean" }, { status: 400 });
   }
 
   const org = (await db.execute<{ brand_primary: string | null }>(sql`
@@ -137,7 +137,7 @@ export async function POST(req: Request) {
         insert into pdf_templates (org_id, record_type, name, description, paper_size, orientation,
                                    margin_mm, header_html, footer_html, source_html, compiled_html,
                                    is_default, created_by, updated_by)
-        values (${user.orgId}, ${body.recordType}, ${body.name!.trim()}, ${body.description ?? null},
+        values (${user.orgId}, ${body.recordType}, ${body.name.trim()}, ${body.description ?? null},
                 ${paperSize}, ${orientation}, ${marginMm}, ${header || null}, ${footer || null},
                 ${prettySource}, ${compiled.compiledHtml}, ${body.isDefault === true},
                 ${user.id}, ${user.id})
@@ -162,3 +162,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: describeDbError(e) }, { status: 500 });
   }
 }
+
+export const GET = defineRoute({
+  permission: "admin.customization.manage", feature: { none: "This route is governed by its permission and service authorization." },
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const POST = defineRoute({
+  permission: "admin.customization.manage", feature: { none: "This route is governed by its permission and service authorization." },
+
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

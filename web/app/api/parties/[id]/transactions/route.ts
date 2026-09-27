@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
+import { guardSubsidiaryScope } from '../../../../../lib/authz'
+import { defineRoute } from '../../../../../lib/api/route'
 import { DOC_KIND_FEATURE } from '../../../../../lib/document-kinds'
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { isUuid } from '../../../../../lib/list-params'
@@ -14,10 +16,12 @@ export const runtime = 'nodejs'
 const PAGE_SIZE = 15
 
 /** Searchable, filtered activity sublist for a party flyout. */
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('parties.read')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
+export const GET = defineRoute({
+  permission: 'parties.read',
+  feature: { none: 'Party activity lists are scoped by document kind availability instead of a route-level feature.' },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, authz: gate, params }) => {
+  const { id } = params
   if (!isUuid(id)) return notFound("record")
 
   // The party is the record boundary (null-subsidiary parties are org-wide);
@@ -80,4 +84,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     kinds: filters.rows[0]?.kinds ?? [],
     statuses: filters.rows[0]?.statuses ?? [],
   })
-}
+  },
+})
