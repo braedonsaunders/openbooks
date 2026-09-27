@@ -51,88 +51,12 @@ test("restricted assistant report tools refuse an empty subsidiary scope", async
 
 /** A fully-permissioned reader: every gate a read tool declares. A
  *  `forbidden` for this actor is a harness failure, never an expectation. */
-const READER_PERMS = [
-  "assistant.use",
-  "gl.read",
-  "ap.read",
-  "ar.read",
-  "expenses.read",
-  "payroll.read",
-  "payroll.manage",
-  "projects.read",
-  "parties.read",
-  "time.read",
-  "reports.read",
-  "budgets.read",
-  "close.read",
-  "banking.read",
-  "banking.reconcile",
-  "documents.read",
-  "documents.manage",
-  "items.read",
-  "assets.read",
-  "crm.opportunities.read",
-  "crm.accounts.read",
-  "crm.activities.read",
-  "crm.forecasts.read",
-  "close.reopen",
-  "periods.manage",
-  "admin.setup.manage",
-  "admin.audit.read",
-  "admin.users.manage",
-  "admin.roles.manage",
-  "api.keys.manage",
-  "data.export",
-  "data.import",
-  "admin.sandboxes.manage",
-  "admin.customization.manage",
-  "allocations.read",
-  "hrm.employment.read",
-  // The headcount plan (0192) has its own read grant; the harness reader
-  // holds every read grant so every read tool runs rather than refusing.
-  "hrm.position.read",
-  "hrm.process.read",
-  "hrm.leave.read",
-  // The funnel (0195) has its own read grant for the same reason.
-  "hrm.recruiting.read",
-  // HR-7 (0196) has its own read grants; the harness reader holds every
-  // read grant so every read tool runs rather than refusing.
-  "hrm.performance.read",
-  "hrm.retention.read",
-  // HR-17 begin: the calibration read tool rides the manage grant; the
-  // harness reader holds it so the tool runs rather than refusing.
-  "hrm.performance.manage",
-  // HR-17 end
-  // Benefits elections (0197) read through the benefits read service;
-  // the harness reader holds the grant so the read tool runs.
-  "hrm.benefits.read",
-  // HR-9 self-service: the harness reader holds the self read grant so
-  // the own-employment summary tool runs rather than refusing.
-  "hrm.self.read",
-  // HR-12 begin: compensation bands/cycles/plans and equity snapshots
-  // read through the compensation read grant at every surface.
-  "hrm.compensation.read",
-  // HR-12 end
-  // HR-16 begin: the harness reader holds the automations read grant so
-  // the automation status tool runs rather than refusing.
-  "automations.read",
-  // HR-16 end
-  // HR-13 begin: construction reads run through the construction read
-  // service; the harness reader holds the grant so both tools run.
-  "hrm.construction.read",
-  // HR-13 end
-  // HR-14 begin: the register and readiness tools run through the
-  // certifications read grant; the scratch org leaves the switches off
-  // so both refuse with the documented hrm_feature_disabled.
-  "hrm.certifications.read",
-  // HR-14 end
-  // HR-19: the survey results tool is gated on the MANAGE grant, the way
-  // HR-17's calibration read tool is -- aggregate engagement results are
-  // not a self-service read. The harness reader holds it so the tool
-  // reaches its feature gate and refuses with the documented
-  // hrm_feature_disabled instead of a bare "forbidden".
-  "hrm.surveys.manage",
-];
+const READ_TOOLS = ASSISTANT_TOOLS.filter((tool) => tool.category !== "write");
+const READER_PERMS = new Set<string>(["assistant.use"]);
+for (const tool of READ_TOOLS) {
+  if (tool.gate.mode === "public") continue;
+  for (const permission of tool.gate.perms) READER_PERMS.add(permission);
+}
 
 /** Empty-store refusals: stable error codes on an org with no transactions. */
 const EMPTY_STORE: Record<string, string> = {
@@ -180,6 +104,8 @@ const FEATURE_OFF = new Set([
   "bank_feeds_feature_disabled",
   "feature_disabled",
   "warehousing_feature_disabled",
+  "fulfillment_feature_disabled",
+  "returnAuthorizations_feature_disabled",
   "multi_currency_feature_disabled",
   "budgets_feature_disabled",
   "allocations_feature_disabled",
@@ -214,6 +140,16 @@ function readerAuthz(orgId: string): Authz {
   };
   return { user, permissions: new Set(READER_PERMS), allowedSubsidiaryIds: null };
 }
+
+test("contract reader holds every permission declared by read-tool gates", () => {
+  const authz = readerAuthz(randomUUID());
+  for (const tool of READ_TOOLS) {
+    if (tool.gate.mode === "public") continue;
+    for (const permission of tool.gate.perms) {
+      assert.ok(authz.permissions.has(permission), `${tool.name} gate is missing permission ${permission}`);
+    }
+  }
+});
 
 /** Fail on values the JSON transport silently drops or mangles (functions,
  *  symbols, bigints). `undefined` props and Dates have a stable wire reading
@@ -365,6 +301,9 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         get_subcontract: { id: randomUUID() },
         get_wip_prebill: { id: randomUUID() },
         get_warehouse: { id: randomUUID() },
+        get_pick_list: { id: randomUUID() },
+        get_shipment: { id: randomUUID() },
+        get_return_authorization: { id: randomUUID() },
         get_item_availability: { itemId: org.items.fifo },
         get_close_run_status: { runId: randomUUID() },
         hrm_employment_as_of: { employmentId: randomUUID(), asOf: "2026-06-15" },
@@ -377,9 +316,8 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         get_budget_workspace: { scenarioId: randomUUID() },
       };
 
-      const readTools = ASSISTANT_TOOLS.filter((tool) => tool.category !== "write");
-      assert.ok(readTools.length > 0, "the contract harness covers the read tools; an empty selection would vacate every tool check");
-      for (const tool of readTools) {
+      assert.ok(READ_TOOLS.length > 0, "the contract harness covers the read tools; an empty selection would vacate every tool check");
+      for (const tool of READ_TOOLS) {
         const args = inputs[tool.name] ?? {};
         await t.test(`${tool.name} honours the tool contract`, async () => {
           // Production validates inputs against the tool's own schema before
