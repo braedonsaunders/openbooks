@@ -82,6 +82,7 @@ export const journalEntries = pgTable(
         "revaluation",
         "revenue_recognition",
         "inventory",
+        "manufacturing",
         "lease",
         "allocation",
         "intercompany",

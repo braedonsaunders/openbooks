@@ -82,6 +82,7 @@ export async function postInventoryEntry(
     lines: JournalLineInput[];
     /** Immutable structured source evidence for this inventory operation. */
     custom?: Record<string, unknown>;
+    origin?: "inventory" | "manufacturing";
   },
 ): Promise<string> {
   const bal = sum(p.lines.map((l) => l.amount));
@@ -119,7 +120,7 @@ export async function postInventoryEntry(
     postingDate: p.date,
     periodId: p.periodId,
     memo: p.memo,
-    origin: "inventory",
+    origin: p.origin ?? "inventory",
     custom: p.custom ?? {},
     actorId: p.actorId,
     currency: p.currency,

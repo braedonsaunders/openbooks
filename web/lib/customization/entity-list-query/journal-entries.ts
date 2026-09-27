@@ -52,6 +52,7 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
   "translation",
   "intercompany",
   "inventory",
+  "manufacturing",
   "lease",
   "tax_provision",
   // Migration true-ups (TRUEUP-*) are standalone engine journals with no
