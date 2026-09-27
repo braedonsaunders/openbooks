@@ -55,7 +55,7 @@ const OUT_OF_SCOPE = /\.(?:test|spec)\.[cm]?[jt]sx?$|\.d\.[cm]?ts$|^engine\/src\
  * Untagged calls the allowlist may hold. Lower it as entries are converted;
  * never raise it.
  */
-export const ALLOWLIST_CEILING = 1
+export const ALLOWLIST_CEILING = 0
 
 /** The helpers whose callbacks run with tenant RLS lifted. */
 export const BYPASS_HELPERS = new Set(['withBypass', 'withBypassContext'])
@@ -70,6 +70,7 @@ export const BYPASS_REASONS = new Map([
   ['cross-org-by-design', 'the subject spans organizations: sandbox copies of production, platform administration and settings, installation-wide maintenance, isolation proofs'],
   ['connector-token', 'an inbound request authenticated by a connector credential, device or link token, or provider signature, whose organization is known only once that row is read'],
   ['user-keyed-lookup', 'a read keyed by the person rather than an organization: their preferences, memberships, and identity rows that may live in another organization'],
+  ['public-token-lookup', 'an anonymous request resolves the owning organization from one public identifier (a posting id, careers slug, or payment-link token) by reading one row, then performs all further reads and writes in that organization’s scope'],
 ])
 
 const TAG = /^\s*\/\/\s*bypass:\s*(.*)$/
@@ -182,6 +183,9 @@ export function auditSource(path, text) {
 export function loadAllowlist(readFile = (file) => readFileSync(join(ROOT, file), 'utf8')) {
   const entries = JSON.parse(readFile(ALLOWLIST_PATH))
   if (!Array.isArray(entries)) throw new Error(`${ALLOWLIST_PATH} must hold a JSON array`)
+  if (ALLOWLIST_CEILING === 0 && entries.length > 0) {
+    throw new Error(`${ALLOWLIST_PATH} must be empty when the allow-list ceiling is 0`)
+  }
   const seen = new Set()
   for (const entry of entries) {
     const key = `${entry?.path}::${entry?.fn}`

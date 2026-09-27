@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { auditSource, reconcile } from './check-bypass-justification.mjs'
+import { auditSource, loadAllowlist, reconcile } from './check-bypass-justification.mjs'
 
 // The gate fails silently in the dangerous direction if it stops seeing a
 // bypass call or starts accepting a tag it should refuse, so each test pins
@@ -76,4 +76,11 @@ test('the allowlist ratchet fails an unlisted call, a grown count, and a shrunk 
   )
   assert.deepEqual(unlisted, [site('stray', 5)])
   assert.deepEqual(miscounted.map((e) => [e.fn, e.calls, e.found]), [['grown', 1, 2], ['shrunk', 2, 1], ['gone', 1, 0]])
+})
+
+test('a zero allowlist ceiling refuses every entry', () => {
+  assert.throws(
+    () => loadAllowlist(() => '[{"path":"engine/src/a.ts","fn":"run","calls":1,"finding":"reason"}]'),
+    /must be empty when the allow-list ceiling is 0/,
+  )
 })
