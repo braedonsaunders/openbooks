@@ -267,15 +267,17 @@ template_matches_checkout() {
 # checkout's migration, or holding a newer one), and those reds read exactly
 # like product defects. So `new` refuses it; the remedies named here are the
 # ones this script implements.
+TEMPLATE_AHEAD=0
 report_template_mismatch() {
   local mine_n theirs_n
   mine_n=$(migration_count); theirs_n=$(template_meta migration_count)
+  [ "${mine_n:-0}" -lt "${theirs_n:-0}" ] && TEMPLATE_AHEAD=1
   echo "testdb: the template was built from a different schema than this checkout" >&2
   echo "testdb:   template ${TEMPLATE}: ${theirs_n} migrations   this checkout: ${mine_n} migrations" >&2
   if [ "${mine_n:-0}" -gt "${theirs_n:-0}" ]; then
     echo "testdb:   your migrations are NOT in the template." >&2
   elif [ "${mine_n:-0}" -lt "${theirs_n:-0}" ]; then
-    echo "testdb:   this checkout is behind the template. Rebase this checkout, or use a private template." >&2
+    echo "testdb:   this checkout is behind the template." >&2
   else
     echo "testdb:   the same number of migrations with different contents." >&2
   fi
@@ -295,10 +297,14 @@ print_bootstrap_onto_copy() {
 # databases. `reset` rebuilds the template every worktree on the machine copies
 # from, and on a shared box those belong to other people, so it comes last and
 # says so; `reset` itself also demands an acknowledgement for the shared name.
+# A template holding migrations this checkout lacks is one `reset` refuses to
+# rebuild backwards without --force, so the remedy names what would work.
 report_mismatch_remedies() {
   if [ "$TEMPLATE" != "$SHARED_TEMPLATE" ]; then
+    local force=""
+    [ "$TEMPLATE_AHEAD" = 1 ] && force=" --force"
     echo "testdb:   ${TEMPLATE} is a private template; rebuild it from this checkout:" >&2
-    echo "testdb:     OPENBOOKS_TESTDB_TEMPLATE=${TEMPLATE} scripts/testdb.sh reset" >&2
+    echo "testdb:     OPENBOOKS_TESTDB_TEMPLATE=${TEMPLATE} scripts/testdb.sh reset${force}" >&2
     return
   fi
   echo "testdb: remedies, safest first:" >&2
@@ -306,6 +312,11 @@ report_mismatch_remedies() {
   echo "testdb:        OPENBOOKS_TESTDB_TEMPLATE=openbooks_template_<suffix> scripts/testdb.sh new <name>" >&2
   echo "testdb:   2. take the stale copy anyway: pass --allow-stale (or OPENBOOKS_TESTDB_ALLOW_STALE=1)," >&2
   print_bootstrap_onto_copy
+  if [ "$TEMPLATE_AHEAD" = 1 ]; then
+    echo "testdb:   3. rebase this checkout. Do not reset: the SHARED template ${TEMPLATE} holds migrations this" >&2
+    echo "testdb:      checkout lacks, and rebuilding it would drop them for every worktree on this machine." >&2
+    return
+  fi
   echo "testdb:   3. LAST, and only if no other worktree on this machine runs tests: scripts/testdb.sh reset" >&2
   echo "testdb:      reset rebuilds the SHARED template ${TEMPLATE} from this checkout, for every worktree on this machine;" >&2
   echo "testdb:      every other worker's next 'new' then refuses or copies your schema." >&2
