@@ -60,3 +60,13 @@ export async function voidScratchDocument(args: {
   if (!voidedDate) throw new Error('the controlled void did not persist its event date')
   return { actorId, reversalEntryId: result.reversalEntryId, voidedDate }
 }
+
+export function voidReportDocument(orgId: string, documentId: string, reversalDate: string) {
+  return voidScratchDocument({
+    orgId,
+    documentId,
+    actorName: 'Report Void Operator',
+    reason: 'Document was entered in error',
+    reversalDate,
+  })
+}

@@ -25,6 +25,7 @@ const { dataDependentFeatureDefault } = await import(
   "@openbooks/engine/src/organization/feature-defaults.ts"
 );
 const { featureDisableStatuses, isFeatureEnabled, resolvedFeatureState } = await import("./features.ts");
+const { seedFeatureDisableBookScope } = await import("./test-report-fixtures.ts");
 import type { FeatureState } from "./features.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -95,47 +96,18 @@ test("multiSubsidiary data default agrees across layers", { skip: !DB }, async (
   }
 });
 
-test("multiSubsidiary stays off for a single-entity org", { skip: !DB }, async () => {
+test("feature defaults ignore secondary-book history", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     await withBypassContext(() => db.execute(sql`
       update orgs set settings = '{}'::jsonb where id = ${org.orgId}`));
     assert.equal(await withBypassContext(() => isFeatureEnabled(org.orgId, "multiSubsidiary")), false);
     assert.equal(await checkInTx(org.orgId, "multiSubsidiary"), false);
-  } finally {
-    await dropScratchOrg(org.orgId);
-  }
-});
-
-test("feature disable probes ignore secondary-book journal amounts", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
-  try {
-    const secondaryBook = randomUUID();
-    const secondSubsidiary = randomUUID();
-    const entry = randomUUID();
-    await withBypassContext(async () => {
-      await db.execute(sql`insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-        values (${secondaryBook}, ${org.orgId}, 'ALT', 'Alternate', false, true, true)`);
-      await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, is_elimination, is_active)
-        values (${secondSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'Second entity', 'CAD', 'CA', false, true)`);
-      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,retainageReceivable}', ${JSON.stringify(org.accounts.revenue)}::jsonb, true)
-        where id = ${org.orgId}`);
-      await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-        values (${entry}, ${org.orgId}, ${secondaryBook}, ${secondSubsidiary}, 'ALT-BOOK', ${org.date}, ${org.periodId}, 'draft', 'manual')`);
-      await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
-        values (${org.orgId}, ${entry}, 1, ${org.accounts.revenue}, ${secondSubsidiary}, '100', 'CAD', '80', '1.25'),
-               (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${secondSubsidiary}, '-100', 'CAD', '-80', '1.25'),
-               (${org.orgId}, ${entry}, 3, ${org.accounts.revenue}, ${org.subsidiaryId}, '50', 'CAD', '40', '1.25'),
-               (${org.orgId}, ${entry}, 4, ${org.accounts.bank}, ${org.subsidiaryId}, '-50', 'CAD', '-40', '1.25')`);
-      const posted = await db.execute(sql`update journal_entries set status = 'posted', posted_at = now()
-        where id = ${entry} and org_id = ${org.orgId} returning id`);
-      assert.equal(posted.rows.length, 1);
-    });
+    await seedFeatureDisableBookScope(org);
     const status = await withBypassContext(() => featureDisableStatuses(org.orgId, ['multiSubsidiary', 'multiCurrency', 'projects']));
     assert.equal(status.multiSubsidiary?.blocked, false);
     assert.equal(status.multiCurrency?.blocked, false);
     assert.ok(!status.projects?.impacts.some((impact) => impact.labelKey === 'outstandingRetainage'));
-
   } finally {
     await dropScratchOrg(org.orgId);
   }
