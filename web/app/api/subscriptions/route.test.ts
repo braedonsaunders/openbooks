@@ -101,21 +101,38 @@ function sqlText(query: unknown): string {
 stubModules({
   navigation: false,
   intl: false,
-  authz: false,
+  authz: `const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
+    export async function getAuthz() { return state.authz }
+    export async function guardPermission() { return state.authz }
+    export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {
+      const allowed = authz.allowedSubsidiaryIds
+      if (allowed === null || (subsidiaryId == null && opts.orgWideNull === true) || (subsidiaryId != null && allowed.has(subsidiaryId))) return null
+      return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 })
+    }
+    export function guardUnrestrictedScope(authz) {
+      try { state.assertUnrestrictedScope(authz.allowedSubsidiaryIds); return null }
+      catch (error) { if (!(error instanceof state.unrestrictedScopeError)) throw error; return new Response(JSON.stringify({ error: state.unrestrictedScopeRequired }), { status: 403 }) }
+    }
+    export async function guardRootSubsidiaryScope() { return null }
+    export function subsidiariesInScope(authz, ids) { return authz.allowedSubsidiaryIds === null || ids.every(id => authz.allowedSubsidiaryIds.has(id)) }
+    export function can() { return true }`,
   features: false,
   extra: {
+    "@/lib/feature-gates": `const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
+      export async function guardFeaturePermission() { return state.authz }
+    `,
     "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
       const sqlText = globalThis.openbooksSubscriptionSqlText
       const response = (query) => {
         const text = sqlText(query)
-        if (text.includes('insert into subscription_plans')) return { rows: [{ id: 'plan-1' }] }
-        if (text.includes('insert into subscriptions')) return { rows: [{ id: 'subscription-1' }] }
+        if (text.includes('insert into subscription_plans')) return { rows: [{ id: '00000000-0000-4000-8000-00000000c002' }] }
+        if (text.includes('insert into subscriptions')) return { rows: [{ id: '00000000-0000-4000-8000-00000000c003' }] }
         if (text.includes('select * from subscriptions where id =')) {
           return { rows: state.beforeSubscription ? [state.beforeSubscription] : [] }
         }
         if (text.includes('max(pi.period_ends_on)')) return { rows: [{ guardedThrough: state.guardedThrough }] }
-        if (text.includes('update subscriptions set')) return { rows: [{ id: 'subscription-1' }] }
+        if (text.includes('update subscriptions set')) return { rows: [{ id: '00000000-0000-4000-8000-00000000c003' }] }
         if (text.includes('insert into audit_log')) return { rows: [] }
         if (text.includes('from orgs') && text.includes('base_currency')) return { rows: [{ baseCurrency: state.orgCurrency }] }
         if (text.includes('from fx_rates')) return { rows: state.fxRate ? [{ rate: state.fxRate }] : [] }
@@ -139,6 +156,7 @@ stubModules({
           },
         }),
       }
+      export async function withBypassContext(work) { return work() }
     `,
     "@openbooks/engine/src/billing/subscription-billing.ts": `
       const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
@@ -167,24 +185,6 @@ stubModules({
       }
     `,
     "@openbooks/engine/src/platform/business-date.ts": "export async function businessToday() { return '2026-08-26' }",
-    "../../../lib/authz": `const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
-     export async function guardPermission() { return state.authz }
-     export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {
-       const allowed = authz.allowedSubsidiaryIds
-       if (allowed === null || (subsidiaryId == null && opts.orgWideNull === true) || (subsidiaryId != null && allowed.has(subsidiaryId))) {
-         return null
-       }
-       return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 })
-     }
-     export function guardUnrestrictedScope(authz) {
-       try {
-         state.assertUnrestrictedScope(authz.allowedSubsidiaryIds)
-         return null
-       } catch (error) {
-         if (!(error instanceof state.unrestrictedScopeError)) throw error
-         return new Response(JSON.stringify({ error: state.unrestrictedScopeRequired }), { status: 403 })
-       }
-     }`,
     "../../../lib/features": "export async function isFeatureEnabled() { return true }",
   },
 });
@@ -228,17 +228,22 @@ const validPlan = {
 };
 
 test("subscription API rejects invalid money, cadence, quantity, and periods before writes", async () => {
-  const cases: Array<{ body: Record<string, unknown>; message: RegExp }> = [
+  const cases: Array<{ body: Record<string, unknown>; message: RegExp; status?: number; issuePath?: string }> = [
     { body: { ...validPlan, amount: "-0.0001" }, message: /amount must be nonnegative/ },
     { body: { ...validPlan, amount: "1.00001" }, message: /amount allows at most 4 decimal places/ },
     { body: { ...validPlan, amount: "1000000000000000" }, message: /supported money range/ },
     { body: { ...validPlan, intervalCount: 0 }, message: /positive integer/ },
-    { body: { ...validPlan, interval: "sometimes" }, message: /interval must be/ },
+    {
+      body: { ...validPlan, interval: "sometimes" },
+      message: /Invalid option: expected one of "weekly"\|"monthly"\|"quarterly"\|"annually"/,
+      status: 400,
+      issuePath: "interval",
+    },
     {
       body: {
         action: "addSubscription",
-        customerId: "customer-1",
-        planId: "plan-1",
+        customerId: "00000000-0000-4000-8000-00000000c004",
+        planId: "00000000-0000-4000-8000-00000000c002",
         quantity: "0",
         startOn: "2026-08-26",
       },
@@ -247,8 +252,8 @@ test("subscription API rejects invalid money, cadence, quantity, and periods bef
     {
       body: {
         action: "addSubscription",
-        customerId: "customer-1",
-        planId: "plan-1",
+        customerId: "00000000-0000-4000-8000-00000000c004",
+        planId: "00000000-0000-4000-8000-00000000c002",
         quantity: "1",
         priceOverride: "-0.0001",
         startOn: "2026-08-26",
@@ -258,8 +263,8 @@ test("subscription API rejects invalid money, cadence, quantity, and periods bef
     {
       body: {
         action: "addSubscription",
-        customerId: "customer-1",
-        planId: "plan-1",
+        customerId: "00000000-0000-4000-8000-00000000c004",
+        planId: "00000000-0000-4000-8000-00000000c002",
         quantity: "1",
         startOn: "2026-08-26",
         firstBillOn: "2026-08-25",
@@ -268,11 +273,13 @@ test("subscription API rejects invalid money, cadence, quantity, and periods bef
     },
   ];
 
-  for (const { body, message } of cases) {
+  for (const { body, message, status = 422, issuePath } of cases) {
     reset();
     const response = await post(body);
-    assert.equal(response.status, 422, JSON.stringify(body));
-    assert.match(String((await response.json() as { error: string }).error), message);
+    assert.equal(response.status, status, JSON.stringify(body));
+    const refusal = await response.json() as { error: string; issues?: Array<{ path: string }> };
+    assert.match(refusal.error, message);
+    if (issuePath) assert.deepEqual(refusal.issues?.map((issue) => issue.path), [issuePath]);
     assert.deepEqual(routeState.transactionQueries, [], "validation must settle before a transaction starts");
   }
 });
@@ -292,8 +299,8 @@ test("subscription API preserves valid exact-decimal plan and subscription value
   reset();
   const subscriptionResponse = await post({
     action: "addSubscription",
-    customerId: "customer-1",
-    planId: "plan-1",
+    customerId: "00000000-0000-4000-8000-00000000c004",
+    planId: "00000000-0000-4000-8000-00000000c002",
     quantity: "1.2345",
     priceOverride: "0.0001",
     startOn: "2026-08-26",
@@ -332,7 +339,7 @@ test("subscription MRR translates each active plan into the organization currenc
     },
   ];
 
-  const response = await GET();
+  const response = await GET(new Request("http://openbooks.test/api/subscriptions"));
   assert.equal(response.status, 200);
   const body = await response.json() as { mrr: string };
   assert.equal(body.mrr, "235.0000", "CAD 100 + USD 100 at 1.35 must be CAD 235");
@@ -351,7 +358,7 @@ test("subscription MRR refuses a foreign plan when no dated spot rate exists", a
     planCurrency: "USD",
   }];
 
-  const response = await GET();
+  const response = await GET(new Request("http://openbooks.test/api/subscriptions"));
   assert.equal(response.status, 422);
   assert.match(String((await response.json() as { error: string }).error), /no spot rate/);
 });
@@ -363,8 +370,8 @@ test("subsidiary-restricted callers cannot create, list, or bill another custome
 
   const createDenied = await post({
     action: "addSubscription",
-    customerId: "customer-b",
-    planId: "plan-1",
+    customerId: "00000000-0000-4000-8000-00000000c006",
+    planId: "00000000-0000-4000-8000-00000000c002",
     startOn: "2026-08-26",
   });
   assert.equal(createDenied.status, 404);
@@ -375,8 +382,8 @@ test("subsidiary-restricted callers cannot create, list, or bill another custome
   routeState.customerSubsidiaryId = "subsidiary-a";
   const createAllowed = await post({
     action: "addSubscription",
-    customerId: "customer-a",
-    planId: "plan-1",
+    customerId: "00000000-0000-4000-8000-00000000c005",
+    planId: "00000000-0000-4000-8000-00000000c002",
     startOn: "2026-08-26",
   });
   assert.equal(createAllowed.status, 201, "in-scope customers remain manageable");
@@ -388,7 +395,7 @@ test("subsidiary-restricted callers cannot create, list, or bill another custome
   reset();
   routeState.authz.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
   routeState.subscriptionSubsidiaryId = "subsidiary-b";
-  const billDenied = await post({ action: "billNow", id: "subscription-b" });
+  const billDenied = await post({ action: "billNow", id: "00000000-0000-4000-8000-00000000c007" });
   assert.equal(billDenied.status, 404);
   assert.deepEqual(routeState.engineCalls, [], "out-of-scope subscriptions must not reach billing engines");
   assert.deepEqual(routeState.transactionQueries, [], "out-of-scope subscriptions must be rejected before writes");
@@ -396,7 +403,7 @@ test("subsidiary-restricted callers cannot create, list, or bill another custome
   reset();
   routeState.authz.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
   routeState.subscriptionSubsidiaryId = "subsidiary-b";
-  const listResponse = await GET();
+  const listResponse = await GET(new Request("http://openbooks.test/api/subscriptions"));
   assert.equal(listResponse.status, 200);
   assert.ok(
     routeState.queries.map(sqlText).some((text) => text.includes("c.subsidiary_id") && text.includes("any")),
@@ -407,8 +414,8 @@ test("subsidiary-restricted callers cannot create, list, or bill another custome
 test("subsidiary-restricted callers cannot change organization-wide subscription plans", async () => {
   const actions: Array<Record<string, unknown>> = [
     { ...validPlan, action: "addPlan" },
-    { action: "updatePlan", id: "plan-1", name: "Changed plan", amount: "30.00", interval: "monthly" },
-    { action: "deletePlan", id: "plan-1" },
+    { action: "updatePlan", id: "00000000-0000-4000-8000-00000000c002", name: "Changed plan", amount: "30.00", interval: "monthly" },
+    { action: "deletePlan", id: "00000000-0000-4000-8000-00000000c002" },
   ];
   for (const body of actions) {
     reset();
@@ -424,15 +431,15 @@ test("subsidiary-restricted callers cannot change organization-wide subscription
 test("first proration passes the restricted caller scope to the billing service", async () => {
   reset();
   routeState.authz.allowedSubsidiaryIds = new Set(["subsidiary-a"]);
-  const prorateResponse = await post({ action: "addSubscription", customerId: "customer-1", planId: "plan-1", startOn: "2026-08-26", firstBillOn: "2026-09-26", prorateFirstPeriod: true });
+  const prorateResponse = await post({ action: "addSubscription", customerId: "00000000-0000-4000-8000-00000000c004", planId: "00000000-0000-4000-8000-00000000c002", startOn: "2026-08-26", firstBillOn: "2026-09-26", prorateFirstPeriod: true });
   assert.equal(prorateResponse.status, 201);
-  assert.deepEqual(routeState.engineCalls, [{ fn: "prorateFirstInvoice", args: ["org-1", "subscription-1", "2026-09-26", undefined, { actorId: "user-1", allowedSubsidiaryIds: new Set(["subsidiary-a"]) }] }]);
+  assert.deepEqual(routeState.engineCalls, [{ fn: "prorateFirstInvoice", args: ["org-1", "00000000-0000-4000-8000-00000000c003", "2026-09-26", undefined, { actorId: "user-1", allowedSubsidiaryIds: new Set(["subsidiary-a"]) }] }]);
 });
 
 /** A plain subscription billed for [Mar 1, Apr 1): cursor Apr 1, one invoice. */
 function billedMarchSubscription(): void {
   routeState.beforeSubscription = {
-    id: "subscription-1",
+    id: "00000000-0000-4000-8000-00000000c003",
     start_on: "2026-03-01",
     current_period_start: "2026-03-01",
     next_bill_on: "2026-04-01",
@@ -466,7 +473,7 @@ test("updateSubscription refuses a next bill date inside the billed window", asy
   billedMarchSubscription();
   // Mar 15 passes the old only-check (>= current_period_start) and would
   // double-bill Mar 15 - Apr 1 under a different guard key.
-  const response = await post({ action: "updateSubscription", id: "subscription-1", nextBillOn: "2026-03-15" });
+  const response = await post({ action: "updateSubscription", id: "00000000-0000-4000-8000-00000000c003", nextBillOn: "2026-03-15" });
   assert.equal(response.status, 422);
   assert.match(
     String((await response.json() as { error: string }).error),
@@ -481,7 +488,7 @@ test("updateSubscription refuses a next bill date inside the billed window", asy
 test("updateSubscription refuses a forward jump without an explicit skip", async () => {
   reset();
   billedMarchSubscription();
-  const response = await post({ action: "updateSubscription", id: "subscription-1", nextBillOn: "2026-06-01" });
+  const response = await post({ action: "updateSubscription", id: "00000000-0000-4000-8000-00000000c003", nextBillOn: "2026-06-01" });
   assert.equal(response.status, 422);
   const error = String((await response.json() as { error: string }).error);
   assert.match(error, /skips unbilled service from 2026-04-01 to 2026-06-01/);
@@ -493,7 +500,7 @@ test("updateSubscription records a forward skip with its reason and shows the wi
   billedMarchSubscription();
   const response = await post({
     action: "updateSubscription",
-    id: "subscription-1",
+    id: "00000000-0000-4000-8000-00000000c003",
     nextBillOn: "2026-06-01",
     skipUnbilledService: true,
     skipReason: "tenant paused Apr-May",
@@ -524,7 +531,7 @@ test("updateSubscription records a forward skip with its reason and shows the wi
 test("updateSubscription accepts a next bill date exactly on the boundary", async () => {
   reset();
   billedMarchSubscription();
-  const response = await post({ action: "updateSubscription", id: "subscription-1", nextBillOn: "2026-04-01" });
+  const response = await post({ action: "updateSubscription", id: "00000000-0000-4000-8000-00000000c003", nextBillOn: "2026-04-01" });
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true });
 });

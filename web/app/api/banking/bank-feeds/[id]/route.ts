@@ -13,9 +13,13 @@ import {
 import { isUuid } from "../../../../../lib/list-params";
 import type { Authz } from "../../../../../lib/authz";
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ "action": z.string().optional() }).passthrough();
+const POSTBodySchema1 = z.object({ action: z.enum(['test', 'sync']) });
 
-const PATCHBodySchema1 = z.object({ "credentials": z.unknown().optional(), "externalAccountId": z.string().optional(), "isActive": z.boolean().optional(), "name": z.string().optional(), "syncCadence": z.string().optional(), "syncOverlapDays": z.unknown().optional() }).passthrough();
+const PATCHBodySchema1 = z.object({
+  credentials: z.record(z.string(), z.string()).nullable().optional(), externalAccountId: z.string().nullable().optional(),
+  isActive: z.boolean().optional(), name: z.string().trim().min(1).optional(),
+  syncCadence: z.enum(['manual', 'hourly', 'daily']).optional(), syncOverlapDays: z.number().int().min(0).max(90).nullable().optional(),
+});
 
 
 

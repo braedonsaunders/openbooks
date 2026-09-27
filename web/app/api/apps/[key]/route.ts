@@ -9,7 +9,7 @@ import {
   setAppStatus,
 } from '@/lib/apps/store'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "status": z.string().optional() }).passthrough();
+const PATCHBodySchema1 = z.object({ status: z.enum(['installed', 'disabled']) });
 
 
 
@@ -36,7 +36,7 @@ export const PATCH = defineRoute({
   permission: 'apps.manage',
   feature: 'apps',
   body: PATCHBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { key: string });
     const gate = routeAuthz;
     const { key } = await params

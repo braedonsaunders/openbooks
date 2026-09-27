@@ -17,7 +17,7 @@ export const runtime = "nodejs";
 const nlBody = z.object({
   action: z.enum(["preview", "save"]),
   question: z.string().min(1).max(1000),
-  definition: z.unknown(),
+  definition: z.json(),
 });
 
 /**
@@ -30,7 +30,7 @@ const nlBody = z.object({
 export const POST = defineRoute({
   public: 'session',
   body: nlBody,
-  handler: async ({ request: req , body: routeBody }) => {
+  handler: async ({ request: _req , body: routeBody }) => {
     const authz = await requireAnyPerm(["reports.read"]);
     if (authz instanceof NextResponse) return authz;
     if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
@@ -131,7 +131,7 @@ const nlTransitionBody = z.object({
 export const PATCH = defineRoute({
   public: 'session',
   body: nlTransitionBody,
-  handler: async ({ request: req , body: routeBody }) => {
+  handler: async ({ request: _req , body: routeBody }) => {
     const authz = await requireAnyPerm(["reports.read"]);
     if (authz instanceof NextResponse) return authz;
     if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {

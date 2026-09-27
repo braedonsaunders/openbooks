@@ -7,7 +7,12 @@ import { isUuid } from '../../../../lib/list-params'
 import { loadPrebill, transitionPrebill } from '../../../../lib/wip-billing'
 import { guardWipBillingFeature } from '../../../../lib/wip-billing-gate'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "action": z.unknown().optional(), "reason": z.unknown().optional() }).passthrough();
+const PATCHBodySchema1 = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('submit'), reason: z.string().optional() }),
+  z.object({ action: z.literal('return'), reason: z.string().optional() }),
+  z.object({ action: z.literal('approve'), reason: z.string().optional() }),
+  z.object({ action: z.literal('void'), reason: z.string().optional() }),
+]);
 
 
 
@@ -29,7 +34,7 @@ export const GET = defineRoute({
 export const PATCH = defineRoute({
   public: 'session',
   body: PATCHBodySchema1,
-  handler: async ({ request: req, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
 
     const body = (routeBody) as { action?: string; reason?: string } | null

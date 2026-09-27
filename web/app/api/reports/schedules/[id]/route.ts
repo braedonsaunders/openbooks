@@ -14,7 +14,13 @@ import { loadReportDefinition } from '../../../../../lib/custom-reports'
 import { canAccessReportArtifact, canAccessReportDefinition } from '../../../../../lib/report-execution-context'
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "cadence": z.unknown().optional(), "dayOfWeek": z.unknown().optional(), "dayOfMonth": z.unknown().optional(), "hour": z.unknown().optional(), "minute": z.unknown().optional(), "timezone": z.unknown().optional(), "recipientEmails": z.unknown().optional(), "active": z.boolean().optional(), "reason": z.unknown().optional() }).passthrough();
+const PATCHBodySchema1 = z.object({
+  cadence: z.enum(['daily', 'weekly', 'monthly']).optional(),
+  dayOfWeek: z.number().int().min(0).max(6).nullable().optional(), dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  hour: z.number().int().min(0).max(23).optional(), minute: z.number().int().min(0).max(59).optional(),
+  timezone: z.string().min(1).optional(), recipientEmails: z.array(z.string().email()).optional(),
+  active: z.boolean().optional(), reason: z.string().optional(),
+});
 
 
 
@@ -151,7 +157,7 @@ export const DELETE = defineRoute({
     let reason: unknown
     const raw = await req.text().catch(() => '')
     if (raw.trim().length > 0) {
-        const routeBodySchema2 = z.object({  }).passthrough();
+        const routeBodySchema2 = z.object({ reason: z.string().optional() });
     const parsedBody = await parseJsonBody(
           new Request('http://internal/schedule-delete', {
             method: 'POST',

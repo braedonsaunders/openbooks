@@ -7,7 +7,12 @@ import { resolveFeedSyncOverlapDays, sealCredentials } from "@openbooks/engine/s
 import { isUuid } from "../../../../lib/list-params";
 import { guardSubsidiaryScope } from "../../../../lib/authz";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
-const POSTBodySchema1 = z.object({ "name": z.string().optional(), "provider": z.string().optional(), "accountId": z.string().optional(), "externalAccountId": z.unknown().optional(), "syncCadence": z.string().optional(), "syncOverlapDays": z.unknown().optional(), "credentials": z.unknown().optional() }).passthrough();
+const POSTBodySchema1 = z.object({
+  name: z.string().trim().min(1), provider: z.enum(['manual', 'sftp', 'plaid', 'gocardless', 'truelayer']),
+  accountId: z.string().uuid(), externalAccountId: z.string().nullable().optional(),
+  syncCadence: z.enum(['manual', 'hourly', 'daily']).optional(), syncOverlapDays: z.number().int().min(0).max(90).nullable().optional(),
+  credentials: z.record(z.string(), z.string()).nullable().optional(),
+});
 
 
 export const runtime = "nodejs";

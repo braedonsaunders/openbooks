@@ -19,7 +19,14 @@ import { notFound, postingRefusal } from "@/lib/api/responses";
 const POSTBodySchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('submit'), documentId: z.string().uuid() }),
   z.object({ action: z.literal('post'), documentId: z.string().uuid() }),
-  z.object({ action: z.literal('retry-effects'), documentId: z.string().uuid(), reason: z.string().min(10).max(1000) }),
+  z.object({
+    action: z.literal('retry-effects'),
+    documentId: z.string().uuid(),
+    reason: z.string().max(1000, 'A 10–1000 character review reason is required to retry posting effects').refine(
+      (reason) => reason.trim().length >= 10,
+      'A 10–1000 character review reason is required to retry posting effects',
+    ),
+  }),
 ]);
 
 
@@ -60,7 +67,7 @@ async function attachPayRunEvidence(
 export const POST = defineRoute({
   public: 'session',
   body: POSTBodySchema,
-  handler: async ({ request: req , body: routeBody }) => {
+  handler: async ({ request: _req , body: routeBody }) => {
     const authz = await getAuthz()
     if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     const user = authz.user

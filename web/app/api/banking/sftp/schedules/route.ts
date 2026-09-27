@@ -13,7 +13,12 @@ import { normalizeExternalAccountId } from '@openbooks/engine/src/banking/bankin
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { randomUUID } from 'node:crypto'
 import { findSftpWatchFolderOverlap, normalizeSftpWatchFolder, sftpWatchFolderOverlapRefusal } from '@openbooks/engine/src/sftp/watch-folders.ts'
-const POSTBodySchema1 = z.object({ "sftpServerId": z.string().optional(), "accountId": z.string().optional(), "format": z.string().optional(), "folder": z.string().optional(), "csvMapping": z.unknown().optional(), "expectedExternalAccountId": z.unknown().optional() }).passthrough();
+const POSTBodySchema1 = z.object({
+  sftpServerId: z.string().uuid(), accountId: z.string().uuid(), format: z.enum(['auto', 'ofx', 'csv', 'camt053', 'bai2', 'mt940']).optional(),
+  folder: z.string().optional(),
+  csvMapping: z.object({ date: z.number().int().nonnegative(), amount: z.number().int().nonnegative(), description: z.number().int().nonnegative(), counterpartyRef: z.number().int().nonnegative().optional(), bankTransactionId: z.number().int().nonnegative().optional(), debitAmount: z.number().int().nonnegative().optional() }).nullable().optional(),
+  expectedExternalAccountId: z.string().nullable().optional(),
+});
 
 
 export const runtime = 'nodejs'

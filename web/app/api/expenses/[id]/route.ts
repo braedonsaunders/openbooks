@@ -14,9 +14,15 @@ import { documentRevisionCounterSql } from "../../../../../engine/src/records/re
 import { type ExpenseEditBody, persistExpenseEdit, prepareExpenseEdit } from '../../../../lib/expense-edit'
 import { loadExpenseReport } from '../../../../lib/expenses'
 import { notFound } from "@/lib/api/responses";
-const DELETEBodySchema1 = z.object({ "expectedUpdatedAt": z.string().optional() }).passthrough();
+const DELETEBodySchema1 = z.object({ expectedUpdatedAt: z.string().min(1) });
 
-const PATCHBodySchema1 = z.object({ "documentDate": z.unknown().optional(), "expectedUpdatedAt": z.unknown().optional(), "memo": z.unknown().optional(), "partyId": z.unknown().optional(), "paymentCardId": z.unknown().optional() }).passthrough();
+const nullableId = z.string().uuid().nullable();
+const PATCHBodySchema1 = z.object({
+  documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  expectedUpdatedAt: z.string().min(1).optional(),
+  memo: z.string().nullable().optional(),
+  partyId: nullableId.optional(), paymentCardId: nullableId.optional(),
+});
 
 
 
@@ -64,7 +70,7 @@ export const PATCH = defineRoute({
   permission: 'expenses.create',
   feature: 'expenses',
   body: PATCHBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const user = gate.user
@@ -198,7 +204,7 @@ export const DELETE = defineRoute({
   permission: 'expenses.create',
   feature: 'expenses',
   body: DELETEBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { id } = await params

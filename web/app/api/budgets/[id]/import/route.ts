@@ -100,7 +100,10 @@ export const POST = defineRoute({
     const user = gate.user
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
-    const routeBodySchema1 = z.object({ "base64": z.string().optional(), "commit": z.unknown().optional(), "expectedRevision": z.unknown().optional(), "format": z.unknown().optional(), "text": z.string().optional() }).passthrough();
+    const routeBodySchema1 = z.object({
+      base64: z.string().regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/).optional(),
+      commit: z.boolean(), expectedRevision: z.number().int().positive(), format: z.enum(['csv', 'xlsx']), text: z.string().optional(),
+    });
     const parsedBody = await parseJsonBody(req, routeBodySchema1, { maxBodyBytes: 10 * 1024 * 1024 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = (parsedBody.data) as Record<string, unknown>

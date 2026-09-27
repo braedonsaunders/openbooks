@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '../../../../testing/stub-modules'
+stubModules({ authz: true })
 
 // Route boundary suite: the real documents OCC primitives run against a
 // scripted database fake, pinning the exact-revision fence end to end.
@@ -112,10 +114,11 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/records/transaction-audit.ts', 'mock:transaction-audit'],
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
+  ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../../../lib/expenses', 'mock:expenses-loader'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as documents.test.ts).
     // Forward Next.js-style aliases to the real modules they point at.
@@ -134,7 +137,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?expense-occ-test'
 const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const STORED_REVISION = '2026-08-24T12:00:00.100001Z'
 const NEXT_REVISION = '2026-08-24T12:00:00.100002Z'

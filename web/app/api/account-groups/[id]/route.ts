@@ -6,7 +6,15 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "name": z.string().optional(), "color": z.unknown().optional(), "match": z.unknown().optional() }).passthrough();
+const PATCHBodySchema1 = z.object({
+  name: z.string().min(1).optional(),
+  color: z.string().nullable().optional(),
+  match: z.object({
+    accountTypes: z.array(z.string()).optional(),
+    numberPrefixes: z.array(z.string()).optional(),
+    namePattern: z.string().optional(),
+  }).nullable().optional(),
+});
 
 
 

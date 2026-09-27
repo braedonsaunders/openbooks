@@ -6,7 +6,13 @@ import { isUuid } from '../../../../../lib/list-params'
 import { previewRules } from '../../../../../lib/banking-rules'
 import { validateCriteria, validateOutcome } from '../../../../../lib/banking-rules-validate'
 import { bankRulePriority } from '../../../../../lib/banking-rule-priority'
-const POSTBodySchema1 = z.object({ "accountId": z.unknown().optional(), "criteria": z.unknown().optional(), "id": z.unknown().optional(), "limit": z.unknown().optional(), "onlyUnmatched": z.unknown().optional(), "outcome": z.unknown().optional(), "priority": z.unknown().optional(), "windowDays": z.unknown().optional() }).passthrough();
+const POSTBodySchema1 = z.object({
+  accountId: z.string().uuid(),
+  criteria: z.object({ version: z.literal(2), match: z.json(), accountScope: z.array(z.string().uuid()).optional() }).optional(),
+  id: z.string().uuid().optional(), limit: z.number().int().positive().max(200).optional(),
+  onlyUnmatched: z.boolean().optional(), outcome: z.json().optional(),
+  priority: z.number().int().optional(), windowDays: z.number().int().positive().max(730).optional(),
+});
 
 
 export const runtime = 'nodejs'
@@ -21,7 +27,7 @@ export const POST = defineRoute({
   permission: 'banking.reconcile',
   feature: 'banking',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
     const { user } = gate
 

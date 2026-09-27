@@ -4,7 +4,12 @@ import { NextResponse } from 'next/server'
 import { can } from '@/lib/authz'
 import { isUuid } from '@/lib/list-params'
 import { runBridgeMethod } from '@/lib/apps/store'
-const POSTBodySchema1 = z.object({ "method": z.string().optional(), "payload": z.unknown().optional(), "versionId": z.string().optional(), "invocationKey": z.unknown().optional() }).passthrough();
+const POSTBodySchema1 = z.object({
+  method: z.string().min(1),
+  payload: z.json().optional(),
+  versionId: z.string().uuid().optional(),
+  invocationKey: z.string().optional(),
+});
 
 
 export const runtime = 'nodejs'
@@ -24,7 +29,7 @@ export const POST = defineRoute({
   permission: 'apps.use',
   feature: 'apps',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { key: string });
     const gate = routeAuthz;
     const { key } = await params

@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { applicationContextFromSession } from '@/lib/application/context'
 import { runExtensionAction } from '@/lib/application/extension-actions'
 import { ApplicationError } from '@/lib/application/errors'
-const POSTBodySchema1 = z.object({  }).passthrough();
+const POSTBodySchema1 = z.record(z.string(), z.json());
 
 
 export const runtime = 'nodejs'
@@ -13,7 +13,7 @@ export const POST = defineRoute({
   permission: 'apps.use',
   feature: 'apps',
   body: POSTBodySchema1,
-  handler: async ({ request: request, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _request, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { key: string });
     const gate = routeAuthz;
 

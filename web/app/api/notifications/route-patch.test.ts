@@ -59,6 +59,8 @@ const mockSources = new Map<string, string>([
           return Promise.resolve({ rows: [] })
         },
       }
+      export async function withOrgTransaction(_orgId, work) { return work() }
+      export async function withBypassContext(work) { return work() }
     `,
   ],
   [
@@ -67,16 +69,29 @@ const mockSources = new Map<string, string>([
       export async function getAuthz() {
         return { user: { orgId: 'org-1', id: 'user-1' } }
       }
+      export async function guardPermission() { return getAuthz() }
+      export function guardUnrestrictedScope() { return null }
+      export async function guardRootSubsidiaryScope() { return null }
+      export function guardSubsidiaryScope() { return null }
+      export function subsidiariesInScope() { return [] }
     `,
+  ],
+  [
+    "mock:feature-gates",
+    `export async function guardFeaturePermission() {
+      return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+    }`,
   ],
 ]);
 
 const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/feature-gates", "mock:feature-gates"],
 ]);
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
@@ -101,7 +116,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?notifications-patch-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const KNOWN_ID = "00000000-0000-4000-8000-0000000000a1";
 const READ_ID = "00000000-0000-4000-8000-0000000000a2";

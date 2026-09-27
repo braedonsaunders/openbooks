@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '../../../../testing/stub-modules'
+stubModules({ authz: true })
 
 /**
  * Route boundary for the report builder's unsaved-create contract. The UI
@@ -193,7 +195,11 @@ const mockSources = new Map<string, string>([
          return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, permissions: new Set(['reports.create']) }
        }
        return new Response(null, { status: 403 })
-     }`,
+     }
+     export async function getAuthz() { return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, permissions: new Set(['reports.create']) } }
+     export function guardRootSubsidiaryScope() { return null }
+     export function guardUnrestrictedScope() { return null }
+     export async function guardFeaturePermission(permission) { return guardPermission(permission) }`,
   ],
   [
     'mock:catalog',
@@ -217,14 +223,16 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../../../lib/authz', 'mock:authz'],
+  ['@/lib/feature-gates', 'mock:authz'],
   ['@/lib/custom-record-report-catalog', 'mock:catalog'],
   ['../../../../lib/report-authz', 'mock:report-authz'],
   ['../../../../lib/custom-reports', 'mock:custom-reports'],
   ['@openbooks/engine/src/reports/ensure-report-definitions.ts', 'mock:ensure-definitions'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@/lib/api/json') {
       return { shortCircuit: true, url: new URL('../../../../lib/api/json.ts', import.meta.url).href }
@@ -248,7 +256,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?report-create-idempotency-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   state.requestKey = null

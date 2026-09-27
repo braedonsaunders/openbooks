@@ -20,13 +20,13 @@ const state: { user: { id: string; orgId: string } } = {
 };
 (globalThis as Record<symbol, unknown>)[stateKey] = state;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, next) {
     // Session/feature boundary only: every other module (validation, the
     // consolidation engine, storage) loads for real.
     if (specifier === "@/lib/authz")
       return { shortCircuit: true, url: "mock:consolidation-authz" };
-    if (specifier === "../../../lib/feature-gates")
+    if (specifier === "../../../lib/feature-gates" || specifier === "@/lib/feature-gates")
       return { shortCircuit: true, url: "mock:consolidation-gates" };
     if (specifier === "@/lib/api/json")
       return next(
@@ -45,7 +45,13 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `export function guardSubsidiaryScope() { return null }`,
+        source: `const state = globalThis[Symbol.for('openbooks.consolidation-route-test')]
+          export async function getAuthz() { return { user: state.user, allowedSubsidiaryIds: null, permissions: new Set(['*']) } }
+          export async function guardPermission() { return getAuthz() }
+          export function guardSubsidiaryScope() { return null }
+          export function guardUnrestrictedScope() { return null }
+          export async function guardRootSubsidiaryScope() { return null }
+          export function subsidiariesInScope() { return [] }`,
       };
     if (url === "mock:consolidation-gates")
       return {
@@ -59,7 +65,6 @@ const hooks = registerHooks({
 });
 const routeUrl = "./route.ts?consolidation-route";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db } = await import(
   "@openbooks/engine/src/platform/db.ts"

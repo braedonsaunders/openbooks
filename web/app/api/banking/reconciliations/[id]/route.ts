@@ -14,13 +14,14 @@ import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "throughDate": z.string().optional(), "statementBalance": z.string().optional() }).passthrough();
+const PATCHBodySchema1 = z.object({
+  throughDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), statementBalance: z.string().optional(),
+}).refine((body) => body.throughDate !== undefined || body.statementBalance !== undefined, { message: 'throughDate or statementBalance is required' });
 
 
 
 export const runtime = 'nodejs'
 
-type Params = { params: Promise<{ id: string }> }
 
 export const GET = defineRoute({
   permission: 'banking.read',
@@ -65,7 +66,7 @@ export const PATCH = defineRoute({
   permission: 'banking.reconcile',
   feature: 'banking',
   body: PATCHBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { user } = gate

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { stubModules } from "../../../../testing/stub-modules";
+stubModules({ authz: true });
 
 // An extension bundle rides this body as JSON (up to the 10 MB server-side
 // bundle cap), so the 11 MiB route ceiling is load-bearing: a real package
@@ -39,7 +41,7 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "@/lib/feature-gates") {
       return { url: "mock:feature-gates", shortCircuit: true };
@@ -59,7 +61,6 @@ const hooks = registerHooks({
 });
 
 const { POST, MAX_DRAFT_BODY_BYTES } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
 
 assert.equal(MAX_DRAFT_BODY_BYTES, 11 * 1024 * 1024);
 

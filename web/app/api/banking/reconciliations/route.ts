@@ -10,7 +10,9 @@ import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
-const POSTBodySchema1 = z.object({ "accountId": z.string().optional(), "throughDate": z.string().optional(), "statementBalance": z.string().optional() }).passthrough();
+const POSTBodySchema1 = z.object({
+  accountId: z.string().uuid(), throughDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), statementBalance: z.string(),
+});
 
 
 export const runtime = 'nodejs'
@@ -47,7 +49,7 @@ export const POST = defineRoute({
   permission: 'banking.reconcile',
   feature: 'banking',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
     const { user } = gate
 

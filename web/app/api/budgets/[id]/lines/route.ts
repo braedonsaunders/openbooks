@@ -9,7 +9,14 @@ import { isUuid } from '../../../../../lib/list-params'
 import { BudgetMutationError, saveBudgetCells, type BudgetCellInput } from '../../../../../lib/budget-mutations'
 import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../../../../../lib/budget-scope'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "expectedRevision": z.number().optional(), "cells": z.array(z.record(z.string(), z.unknown())).optional() }).passthrough();
+const PATCHBodySchema1 = z.object({
+  expectedRevision: z.number().int().positive(),
+  cells: z.array(z.object({
+    accountId: z.string().uuid(), periodId: z.string().uuid(), amount: z.string(), note: z.string().nullable().optional(),
+    subsidiaryId: z.string().uuid().nullable().optional(), departmentId: z.string().uuid().nullable().optional(),
+    projectId: z.string().uuid().nullable().optional(), locationId: z.string().uuid().nullable().optional(), classId: z.string().uuid().nullable().optional(),
+  })).min(1),
+});
 
 
 
@@ -19,7 +26,7 @@ export const PATCH = defineRoute({
   permission: 'budgets.manage',
   feature: 'budgets',
   body: PATCHBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { id } = await params

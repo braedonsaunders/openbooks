@@ -23,7 +23,17 @@ import { guardSubsidiaryScope, guardUnrestrictedScope, type Authz } from "../../
 import { isFeatureEnabled } from "../../../lib/features";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ "action": z.unknown().optional(), "amount": z.unknown().optional(), "autoPost": z.unknown().optional(), "currency": z.unknown().optional(), "customerId": z.unknown().optional(), "description": z.unknown().optional(), "firstBillOn": z.unknown().optional(), "id": z.unknown().optional(), "incomeAccountId": z.unknown().optional(), "interval": z.unknown().optional(), "intervalCount": z.unknown().optional(), "isActive": z.unknown().optional(), "itemId": z.unknown().optional(), "memo": z.unknown().optional(), "name": z.string().optional(), "nextBillOn": z.unknown().optional(), "planId": z.unknown().optional(), "priceOverride": z.unknown().optional(), "prorateFirstPeriod": z.unknown().optional(), "quantity": z.unknown().optional(), "skipReason": z.string().optional(), "skipUnbilledService": z.unknown().optional(), "startOn": z.unknown().optional(), "status": z.string().optional(), "taxCodeId": z.unknown().optional() }).passthrough();
+const intervalSchema = z.enum(['weekly', 'monthly', 'quarterly', 'annually']);
+const intervalCountSchema = z.union([z.number().int(), z.string().regex(/^\d+$/)]).optional();
+const POSTBodySchema1 = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('addPlan'), name: z.string().trim().min(1), description: z.string().nullable().optional(), amount: z.string().optional(), currency: z.string().nullable().optional(), interval: intervalSchema, intervalCount: intervalCountSchema, incomeAccountId: z.string().uuid().nullable().optional(), itemId: z.string().uuid().nullable().optional(), taxCodeId: z.string().uuid().nullable().optional() }),
+  z.object({ action: z.literal('updatePlan'), id: z.string().uuid(), name: z.string().trim().min(1), description: z.string().nullable().optional(), amount: z.string().optional(), currency: z.string().nullable().optional(), interval: intervalSchema, intervalCount: intervalCountSchema, incomeAccountId: z.string().uuid().nullable().optional(), itemId: z.string().uuid().nullable().optional(), taxCodeId: z.string().uuid().nullable().optional(), isActive: z.boolean().optional() }),
+  z.object({ action: z.literal('deletePlan'), id: z.string().uuid() }),
+  z.object({ action: z.literal('addSubscription'), customerId: z.string().uuid(), planId: z.string().uuid(), startOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), firstBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), prorateFirstPeriod: z.boolean().optional(), autoPost: z.boolean().optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), memo: z.string().nullable().optional() }),
+  z.object({ action: z.literal('changeSubscription'), id: z.string().uuid(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional() }),
+  z.object({ action: z.literal('updateSubscription'), id: z.string().uuid(), status: z.enum(['active', 'paused', 'canceled']).optional(), quantity: z.string().optional(), priceOverride: z.string().nullable().optional(), autoPost: z.boolean().optional(), nextBillOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), skipUnbilledService: z.boolean().optional(), skipReason: z.string().optional() }),
+  z.object({ action: z.literal('billNow'), id: z.string().uuid() }),
+]);
 
 
 
@@ -254,7 +264,7 @@ export const POST = defineRoute({
   permission: 'ar.create',
   feature: 'subscriptionBilling',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const authz = routeAuthz;
     const orgId = authz.user.orgId;
     const userId = authz.user.id;

@@ -19,7 +19,11 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ "action": z.union([z.literal("submit"), z.literal("post"), z.literal("recall")]), "documentId": z.string().optional(), "expectedUpdatedAt": z.string().optional() }).passthrough();
+const POSTBodySchema1 = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('submit'), documentId: z.string().uuid() }),
+  z.object({ action: z.literal('post'), documentId: z.string().uuid() }),
+  z.object({ action: z.literal('recall'), documentId: z.string().uuid(), expectedUpdatedAt: z.string().min(1) }),
+]);
 
 
 
@@ -171,7 +175,7 @@ async function recallExpenseReport(input: {
 export const POST = defineRoute({
   public: 'session',
   body: POSTBodySchema1,
-  handler: async ({ request: req , body: routeBody }) => {
+  handler: async ({ request: _req , body: routeBody }) => {
     const authz = await getAuthz()
     if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     const user = authz.user

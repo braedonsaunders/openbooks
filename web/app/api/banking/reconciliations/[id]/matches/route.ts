@@ -5,20 +5,19 @@ import { NextResponse } from 'next/server'
 import { createMatch, unmatchStatementLine } from '@openbooks/engine/src/banking/banking.ts'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ "statementLineId": z.string().optional(), "journalLineIds": z.array(z.string()).optional() }).passthrough();
+const POSTBodySchema1 = z.object({ statementLineId: z.string().uuid(), journalLineIds: z.array(z.string().uuid()).min(1) });
 
 
 
 export const runtime = 'nodejs'
 
-type Params = { params: Promise<{ id: string }> }
 
 /** Manual match: one statement line ↔ one or more journal lines. */
 export const POST = defineRoute({
   permission: 'banking.reconcile',
   feature: 'banking',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { user } = gate

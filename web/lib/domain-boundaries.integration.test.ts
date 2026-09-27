@@ -662,13 +662,13 @@ for (const boundary of [
               assert.equal((await amend(request(body))).status, 201)
               assert.equal((await amend(request(body))).status, 200)
               assert.equal(
-                (await (await subscriptions()).json()).lifecycles.length,
+                (await (await subscriptions(new Request('http://openbooks.test/api/subscriptions/advanced'))).json()).lifecycles.length,
                 1,
               )
               await restrict(org.orgId, [])
               assert.equal((await amend(request(body))).status, 404)
               assert.equal(
-                (await (await subscriptions()).json()).lifecycles.length,
+                (await (await subscriptions(new Request('http://openbooks.test/api/subscriptions/advanced'))).json()).lifecycles.length,
                 0,
               )
               await restrict(org.orgId, null)
@@ -694,7 +694,7 @@ for (const boundary of [
                 termStartsOn: org.date,
               })
               if (boundary === 'subscription read') {
-                const result = await (await subscriptions()).json()
+                const result = await (await subscriptions(new Request('http://openbooks.test/api/subscriptions/advanced'))).json()
                 assert.equal(result.lifecycles.length, 0)
               } else {
                 assert.equal(

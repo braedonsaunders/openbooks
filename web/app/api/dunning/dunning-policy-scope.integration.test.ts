@@ -51,7 +51,7 @@ async function fixture() {
   })
   const ownerUser = user(owner, 'Owner', 'owner@scratch.test')
   const scopedUser = user(scoped, 'Scoped clerk', 'clerk@scratch.test')
-  const get = () => withOrgContext(org.orgId, () => collection.GET())
+  const get = () => withOrgContext(org.orgId, () => collection.GET(new Request('http://audit.local/api/dunning')))
   const post = (body: unknown) =>
     withOrgContext(org.orgId, () => collection.POST(new Request('http://audit.local/api/dunning', {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),

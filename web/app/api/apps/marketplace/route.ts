@@ -15,7 +15,11 @@ import { applicationContextFromSession } from '@/lib/application/context'
 import { draftExtension } from '@/lib/application/extensions'
 import { ApplicationError } from '@/lib/application/errors'
 import { isUuid } from '@/lib/list-params'
-const POSTBodySchema1 = z.object({ "action": z.unknown().optional(), "key": z.string().optional(), "listingId": z.string().optional() }).passthrough();
+const POSTBodySchema1 = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('publish'), key: z.string().min(1) }),
+  z.object({ action: z.literal('unpublish'), key: z.string().min(1) }),
+  z.object({ action: z.literal('install'), listingId: z.string().uuid() }),
+]);
 
 
 export const runtime = 'nodejs'
@@ -32,7 +36,7 @@ export const POST = defineRoute({
   permission: 'apps.manage',
   feature: 'apps',
   body: POSTBodySchema1,
-  handler: async ({ request: request, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _request, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
 
     const body = routeBody

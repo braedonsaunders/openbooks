@@ -17,7 +17,15 @@ import {
   uniqueReportSlug,
 } from '../../../../../lib/custom-reports'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "name": z.string().optional(), "description": z.unknown().optional(), "query": z.unknown().optional(), "layout": z.unknown().optional(), "expectedUpdatedAt": z.unknown().optional() }).passthrough();
+const reportLayoutSchema = z.object({
+  paperSize: z.enum(['letter', 'legal', 'a4']).optional(),
+  orientation: z.enum(['portrait', 'landscape']).optional(), marginMm: z.number().finite().optional(),
+  showSummary: z.boolean().optional(), density: z.enum(['compact', 'standard']).optional(),
+}).nullable().optional();
+const PATCHBodySchema1 = z.object({
+  name: z.string().trim().min(1).optional(), description: z.string().nullable().optional(),
+  query: z.json().optional(), layout: reportLayoutSchema, expectedUpdatedAt: z.string().min(1).optional(),
+});
 
 
 
@@ -61,7 +69,7 @@ export const PATCH = defineRoute({
   permission: 'reports.create',
   feature: { none: "Updated query plans are checked for their entity feature access before they are saved." },
   body: PATCHBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { user } = gate

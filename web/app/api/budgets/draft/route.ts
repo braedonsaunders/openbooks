@@ -8,7 +8,11 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { isUuid } from '../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { BUDGET_KINDS } from '../../../../lib/budgets'
-const POSTBodySchema1 = z.object({ "bookId": z.string().optional(), "description": z.string().optional(), "fiscalYear": z.number().optional(), "kind": z.string().optional(), "name": z.string().optional(), "sourceScenarioId": z.string().optional() }).passthrough();
+const POSTBodySchema1 = z.object({
+  bookId: z.string().uuid().optional(), description: z.string().max(2000).optional(),
+  fiscalYear: z.number().int().min(1900).max(9999).optional(), kind: z.enum(['forecast', 'budget']).optional(),
+  name: z.string().max(200).optional(), sourceScenarioId: z.string().uuid().optional(),
+});
 
 
 export const runtime = 'nodejs'
@@ -31,7 +35,7 @@ export const POST = defineRoute({
   permission: 'budgets.manage',
   feature: 'budgets',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
     const user = gate.user
 

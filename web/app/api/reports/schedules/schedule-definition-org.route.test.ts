@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
+import { stubModules } from '../../../../testing/stub-modules'
+stubModules({ authz: true })
 
 /**
  * Creating a schedule must load the definition inside the caller's
@@ -56,6 +58,7 @@ const mockSources = new Map<string, string>([
         },
       }
       export async function withOrgTransaction(_orgId, work) { return work() }
+      export async function withBypassContext(work) { return work() }
     `,
   ],
   [
@@ -66,6 +69,12 @@ const mockSources = new Map<string, string>([
           user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
           permissions: new Set(['reports.schedule']),
         }
+      }
+      export async function getAuthz() { return guardPermission() }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
+      export async function guardFeaturePermission() {
+        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
       }
       export function can() { return true }
     `,
@@ -101,12 +110,14 @@ const mockSources = new Map<string, string>([
 const root = pathToFileURL(process.cwd() + '/').href
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../../../lib/authz', 'mock:authz'],
+  ['@/lib/feature-gates', 'mock:authz'],
   ['../../../../lib/custom-reports', 'mock:reports'],
   ['../../../../lib/report-execution-context', 'mock:reports'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
@@ -124,7 +135,6 @@ const hooks = registerHooks({
 
 const schedule_definition_orgUrl = './route.ts?schedule-definition-org'
 const { POST } = (await import(schedule_definition_orgUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function post(definitionId: string): Promise<Response> {
   return POST(
@@ -151,7 +161,7 @@ test('POST /api/reports/schedules refuses another organization definition id', a
   const response = await post(OTHER_DEF)
 
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'report not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
   assert.deepEqual(state.loads, [{ orgId: ORG_ID, id: OTHER_DEF }])
   assert.equal(state.inserts.length, 0, 'a foreign definition must never become a tenant schedule')
 })

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
+import { stubModules } from "../../../../../../testing/stub-modules";
+stubModules({ authz: true });
 
 const state = {
   enabled: true,
@@ -14,7 +16,7 @@ const state = {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[
   Symbol.for("control-loss-reversal-route")
 ] = state;
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/server" && context.parentURL?.startsWith("mock:"))
       return next(specifier, { ...context, parentURL: import.meta.url });
@@ -57,7 +59,6 @@ const hooks = registerHooks({
   },
 });
 const route = await import("./route.ts");
-hooks.deregister();
 const id = "00000000-0000-4000-8000-000000000001";
 const context = { params: Promise.resolve({ id }) };
 const request = (body: unknown) =>

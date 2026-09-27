@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '../../../../testing/stub-modules'
+stubModules({ authz: true })
 
 // Boundary suite for POST unpublish. The helper refuses an already-inactive
 // listing under FOR UPDATE. The route also refuses that by name (and key)
@@ -44,6 +46,8 @@ const mockSources = new Map<string, string>([
           return { rows: state.listingRows }
         },
       }
+      export async function withBypassContext(work) { return work() }
+      export async function withOrgTransaction(_orgId, work) { return work() }
     `,
   ],
   [
@@ -121,7 +125,7 @@ const mockUrls = new Map<string, string>([
   ['@/lib/application/errors', 'mock:errors'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
@@ -136,7 +140,6 @@ const hooks = registerHooks({
 
 const marketplace_unpublish_route_testUrl = './route.ts?marketplace-unpublish-route-test'
 const { POST } = (await import(marketplace_unpublish_route_testUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(listingRows: { is_active: boolean }[] = []): void {
   state.listingRows = listingRows

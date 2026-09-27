@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { decodeStatementSourceText as engineDecodeStatementSourceText } from '../../../../../engine/src/banking/banking.ts'
+import { stubModules } from '../../../../testing/stub-modules'
 
 interface ImportCall {
   options: {
@@ -23,6 +24,7 @@ interface ImportCall {
 }
 
 const stateKey = Symbol.for('openbooks.bank-import-route-test')
+stubModules({ authz: true })
 const importState = {
   calls: [] as ImportCall[],
   decoderInputs: [] as { content: unknown; source: string }[],
@@ -115,12 +117,15 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@openbooks/engine/src/banking/banking.ts') {
       return { url: 'mock:banking', shortCircuit: true }
     }
     if (specifier === '../../../../lib/feature-gates') {
+      return { url: 'mock:feature-gates', shortCircuit: true }
+    }
+    if (specifier === '@/lib/feature-gates') {
       return { url: 'mock:feature-gates', shortCircuit: true }
     }
     return nextResolve(specifier, context)
@@ -136,10 +141,9 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?mode-validation-test'
 const { POST } = await import(routeUrl) as typeof import('./route.ts')
-hooks.deregister()
 
 const validBody = {
-  accountId: 'account-1',
+  accountId: '00000000-0000-4000-8000-00000000c001',
   source: 'csv',
   text: 'date,amount,description\n2026-08-23,10.00,Deposit',
   mapping: { date: 0, amount: 1, description: 2 },
@@ -346,6 +350,8 @@ test('an invalid mode is rejected before persistence', async () => {
   const response = await postMode('unexpected')
 
   assert.equal(response.status, 400)
-  assert.deepEqual(await response.json(), { error: 'mode must be decode, columns, preview or import' })
+  const body = await response.json() as { error: string; issues: Array<{ path: string }> }
+  assert.equal(body.error, 'mode must be decode, columns, preview or import')
+  assert.deepEqual(body.issues.map((issue) => issue.path), ['mode'])
   assert.equal(importState.calls.length, 0)
 })

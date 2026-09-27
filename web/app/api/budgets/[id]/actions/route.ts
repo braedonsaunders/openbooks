@@ -10,7 +10,17 @@ import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { BudgetMutationError } from '../../../../../lib/budget-mutations'
 import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../../../../../lib/budget-scope'
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ "action": z.unknown().optional(), "expectedRevision": z.unknown().optional(), "fiscalYear": z.unknown().optional(), "sourceScenarioId": z.string().optional() }).passthrough();
+const revisionSchema = z.number().int().positive();
+const budgetDimensionsSchema = { subsidiaryId: z.string().uuid().nullable().optional(), departmentId: z.string().uuid().nullable().optional(), projectId: z.string().uuid().nullable().optional(), locationId: z.string().uuid().nullable().optional(), classId: z.string().uuid().nullable().optional() };
+const POSTBodySchema1 = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('archive'), expectedRevision: revisionSchema }),
+  z.object({ action: z.literal('copy'), expectedRevision: revisionSchema, fiscalYear: z.number().int().optional() }),
+  z.object({ action: z.literal('copy_prior_actuals'), expectedRevision: revisionSchema, ...budgetDimensionsSchema }),
+  z.object({ action: z.literal('apply_source'), expectedRevision: revisionSchema, sourceScenarioId: z.string().uuid() }),
+  z.object({ action: z.literal('submit'), expectedRevision: revisionSchema }),
+  z.object({ action: z.literal('approve'), expectedRevision: revisionSchema }),
+  z.object({ action: z.literal('reject'), expectedRevision: revisionSchema }),
+]);
 
 
 
@@ -45,7 +55,7 @@ export const POST = defineRoute({
   permission: 'budgets.read',
   feature: 'budgets',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const user = gate.user

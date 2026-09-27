@@ -12,7 +12,9 @@ import {
   loadReportDefinition,
   recordReportRun,
 } from '../../../../lib/custom-reports'
-const POSTBodySchema1 = z.object({ "query": z.unknown().optional(), "definitionId": z.string().optional(), "preview": z.boolean().optional() }).passthrough();
+const POSTBodySchema1 = z.object({
+  query: z.json().optional(), definitionId: z.string().uuid().optional(), preview: z.boolean().optional(),
+}).refine((body) => body.query !== undefined || body.definitionId !== undefined, { message: 'query or definitionId is required' });
 
 
 export const runtime = 'nodejs'
@@ -32,7 +34,7 @@ export const POST = defineRoute({
   permission: 'reports.read',
   feature: { none: "The requested report entity is checked for effective feature access before its query runs." },
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
     const { user } = gate
     const entityGate = (entityKey: unknown): Promise<NextResponse | null> =>

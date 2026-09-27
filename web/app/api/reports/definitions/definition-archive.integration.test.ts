@@ -152,7 +152,7 @@ test(
         assert.equal(Buffer.from(await download.arrayBuffer()).toString(), artifactBytes.toString());
 
         // The archived definition hides from lists and execution.
-        const listed = (await listDefinitions()) as Response;
+        const listed = (await listDefinitions(new Request("http://audit.local/api/reports/definitions"))) as Response;
         const catalog = (await listed.json()) as { definitions: { id: string }[] };
         assert.ok(!catalog.definitions.some((d) => d.id === definitionId));
 

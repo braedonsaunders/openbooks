@@ -13,7 +13,10 @@ import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { sftpImportScheduleRunLockKey } from '@openbooks/engine/src/sftp/import-job.ts'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "action": z.string().optional(), "isActive": z.boolean().optional() }).passthrough();
+const PATCHBodySchema1 = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('toggle'), isActive: z.boolean().optional() }),
+  z.object({ action: z.literal('rotate') }),
+]);
 
 
 
@@ -25,7 +28,7 @@ export const runtime = 'nodejs'
  * failed audit insert rolls the credential/state change back untouched.
  */
 
-const deleteBody = z.looseObject({
+const deleteBody = z.object({
   reason: z.string().trim().min(1, 'a deletion reason must be a non-empty string').max(500).optional(),
 })
 
@@ -49,7 +52,7 @@ export const PATCH = defineRoute({
   permission: 'admin.setup.manage',
   feature: 'bankFeeds',
   body: PATCHBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const unrestricted = guardUnrestrictedScope(gate)

@@ -116,7 +116,7 @@ interface BellPayload {
 }
 
 async function bellView(orgId: string): Promise<BellPayload> {
-  const res = await withOrgContext(orgId, () => GET());
+  const res = await withOrgContext(orgId, () => GET(new Request("http://openbooks.test/api/notifications/inbox")));
   assert.equal(res.status, 200);
   return (await res.json()) as BellPayload;
 }

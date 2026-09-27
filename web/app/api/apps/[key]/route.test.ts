@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '../../../../testing/stub-modules'
 
 // Route boundary for app status and uninstall. Helpers return this request's
 // affected-row count (or throw). {ok:true} is only returned when that count
@@ -32,6 +33,7 @@ const state: RouteState = {
   setCalls: [],
   deleteCalls: [],
 }
+stubModules({ authz: true })
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 const mockSources = new Map<string, string>([
@@ -88,7 +90,7 @@ const mockUrls = new Map<string, string>([
   ['@/lib/apps/store', 'mock:store'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     // parseJsonBody is a pure validator — use the real module, never a double.
     if (specifier === '@/lib/api/json') {
@@ -110,7 +112,6 @@ const { PATCH, DELETE } = (await import(app_key_route_testUrl)) as typeof import
 const store = (await import('@/lib/apps/store')) as {
   AppError: new (message: string, status?: number) => Error & { status: number }
 }
-hooks.deregister()
 
 function reset(): void {
   state.setAppStatus = async () => ({ affectedRows: 1 })

@@ -77,6 +77,7 @@ const mockSources = new Map<string, string>([
       export const schema = {}
       export const pool = {}
       export const env = {}
+      export async function withBypassContext(work) { return work() }
     `,
   ],
   [
@@ -85,6 +86,12 @@ const mockSources = new Map<string, string>([
       export async function guardPermission() {
         return { user: { orgId: 'org-1', id: 'user-1' } }
       }
+      export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' } } }
+      export async function guardFeaturePermission() { return { user: { orgId: 'org-1', id: 'user-1' } } }
+      export function guardUnrestrictedScope() { return null }
+      export async function guardRootSubsidiaryScope() { return null }
+      export function guardSubsidiaryScope() { return null }
+      export function subsidiariesInScope() { return [] }
     `,
   ],
   [
@@ -115,12 +122,14 @@ const mockUrls = new Map<string, string>([
   ["@/lib/custom-record-report-catalog", mockUrl("catalog")],
   ["@openbooks/engine/src/platform/db.ts", mockUrl("db")],
   ["../../../../../lib/authz", mockUrl("authz")],
+  ["@/lib/authz", mockUrl("authz")],
+  ["@/lib/feature-gates", mockUrl("authz")],
   ["../../../../../lib/report-authz", mockUrl("reports-authz")],
   ["../../../../../lib/report-execution-context", mockUrl("reports-authz")],
   ["../../../../../lib/custom-reports", mockUrl("custom-reports")],
 ]);
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };
@@ -139,7 +148,6 @@ const hooks = registerHooks({
 const routeUrl = new URL("./route.ts?report-definition-occ-test", import.meta.url).href;
 const { GET, PATCH } =
   (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const DEFINITION_ID = "00000000-0000-4000-8000-0000000000d1";
 const REVISION = "2026-08-24T12:00:00.300001Z";

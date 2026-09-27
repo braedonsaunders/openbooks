@@ -8,9 +8,14 @@ import { isUuid } from '../../../../lib/list-params'
 import { validateCriteria, validateOutcome } from '../../../../lib/banking-rules-validate'
 import { lockBankMatchRuleSet } from '../../../../lib/banking-rule-set-lock'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "id": z.string().optional(), "isActive": z.unknown().optional(), "name": z.unknown().optional() }).passthrough();
+const ruleFields = {
+  name: z.string().trim().min(1).max(200),
+  criteria: z.object({ version: z.literal(2), match: z.json(), accountScope: z.array(z.string().uuid()).optional() }),
+  outcome: z.json(), priority: z.number().int().optional(), isActive: z.boolean().optional(),
+};
+const PATCHBodySchema1 = z.object({ id: z.string().uuid(), ...ruleFields });
 
-const POSTBodySchema1 = z.object({ "isActive": z.unknown().optional(), "name": z.unknown().optional() }).passthrough();
+const POSTBodySchema1 = z.object(ruleFields);
 
 
 
@@ -40,7 +45,7 @@ export const POST = defineRoute({
   permission: 'banking.reconcile',
   feature: 'banking',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
     const unrestricted = guardUnrestrictedScope(gate)
     if (unrestricted) return unrestricted
@@ -79,7 +84,7 @@ export const PATCH = defineRoute({
   permission: 'banking.reconcile',
   feature: 'banking',
   body: PATCHBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
     const unrestricted = guardUnrestrictedScope(gate)
     if (unrestricted) return unrestricted
