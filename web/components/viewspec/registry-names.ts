@@ -322,7 +322,6 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'new-account',
   'new-api-key',
   'new-asset',
-  'new-asset-redirect',
   'new-bank-rule',
   'new-budget',
   'new-card',

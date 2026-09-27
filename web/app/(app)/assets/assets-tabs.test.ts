@@ -40,7 +40,7 @@ function assetsFixture(tabs: AssetsData['tabs']): AssetsData {
     onRegister: true, onTax: false, docLabel: 'Documentation', showActions: false,
     books: [], candidates: [], periods: [], equipmentLabel: 'Equipment', currentParams: {},
     canManage: false, canRun: false, canConfigure: false, regimes: [], defaultTaxYear: 0,
-    showNewRedirect: false, drawer: null,
+    drawer: null,
   }
 }
 

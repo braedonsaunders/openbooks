@@ -1,13 +1,18 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { canonicalJson } from "@openbooks/engine/src/platform/canonical-json.ts";
 import { cmp } from "@openbooks/engine/src/money/money.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { guardFeaturePermission } from "../../../lib/feature-gates";
+import { exactMoney, isoDate } from "../../../lib/api/json";
 import { isUuid } from "../../../lib/list-params";
+import {
+  claimIdempotentCreate,
+  resolveIdempotentReplay,
+  SetupCreateConflict,
+} from "../../../lib/api/idempotency";
+import { conflict } from "../../../lib/api/responses";
 import {
   FieldRefusal,
   lockAccountOverridesForAssetWrite,
@@ -27,45 +32,55 @@ import {
   parseTaxDepreciation,
   parseUnitsTotal,
   strOrNull,
+  ASSET_CONVENTIONS,
+  ASSET_METHODS,
 } from "./_fields";
 
-export const runtime = "nodejs";
+export { runtime } from "@/lib/api/route";
 
 // Typed collection body (never jsonObject: the financial-boundary ceiling
 // only shrinks). Shape-only here — every domain refusal below keeps its
 // stable snake code so the drawer can name the remedy. The field set mirrors
 // the drawer payload (same component, same layout, same custom fields in
 // create and edit), so nothing the operator fills in is silently dropped.
-const createAssetSchema = z.looseObject({
-  name: z.string().optional(),
-  assetNumber: z.string().optional().nullable(),
-  description: z.string().optional().nullable(),
-  categoryId: z.string().optional().nullable(),
-  subsidiaryId: z.string().optional().nullable(),
-  acquisitionCost: decimalString("acquisitionCost").optional().nullable(),
-  salvageValue: decimalString("salvageValue").optional().nullable(),
-  acquiredOn: z.string().optional().nullable(),
-  inServiceOn: z.string().optional().nullable(),
-  openingAccumulated: decimalString("openingAccumulated").optional().nullable(),
-  openingAsOf: z.string().optional().nullable(),
-  serialNumber: z.string().optional().nullable(),
-  method: z.string().optional().nullable(),
-  depreciationMethodId: z.string().optional().nullable(),
-  lifeMonths: z.union([z.string(), z.number()]).optional().nullable(),
-  ratePercent: decimalString("ratePercent").optional().nullable(),
-  unitsTotal: decimalString("unitsTotal").optional().nullable(),
-  convention: z.string().optional().nullable(),
-  assetAccountId: z.string().optional().nullable(),
-  accumulatedDepreciationAccountId: z.string().optional().nullable(),
-  depreciationExpenseAccountId: z.string().optional().nullable(),
-  custom: z.record(z.string(), z.unknown()).optional(),
-  taxDepreciation: z.record(z.string(), z.unknown()).optional(),
-  status: z.string().optional(),
+const amount = (field: string) =>
+  exactMoney(`${field} must be a decimal string; JSON numbers are refused`);
+const blankAmount = (field: string) => z.union([z.literal(""), amount(field)]);
+const nullableDate = (field: string) =>
+  z.union([isoDate(`${field} must be a valid calendar date`), z.literal("")]).nullable();
+const nullableId = z.string().uuid("must be a valid id").nullable();
+const taxElection = z.strictObject({
+  classCode: z.string().trim().nullable().optional(),
+  businessUsePercent: blankAmount("Business use percent").optional(),
+  bonusPercent: blankAmount("Bonus percent").optional(),
+  section179: blankAmount("Section 179 amount").optional(),
 });
-
-function decimalString(field: string) {
-  return z.string({ error: `${field} must be sent as a decimal string, not a JSON number` });
-}
+const createAssetSchema = z.strictObject({
+  name: z.string().trim().min(1, "name is required"),
+  assetNumber: z.string().trim().max(80).nullable().optional(),
+  description: z.string().nullable().optional(),
+  categoryId: z.string().uuid("categoryId must be a valid id"),
+  subsidiaryId: nullableId.optional(),
+  acquisitionCost: z.union([z.literal(""), amount("Acquisition cost")]).nullable().optional(),
+  salvageValue: z.union([z.literal(""), amount("Salvage value")]).nullable().optional(),
+  acquiredOn: nullableDate("acquiredOn").optional(),
+  inServiceOn: nullableDate("inServiceOn").optional(),
+  openingAccumulated: z.union([z.literal(""), amount("Opening accumulated depreciation")]).nullable().optional(),
+  openingAsOf: nullableDate("openingAsOf").optional(),
+  serialNumber: z.string().trim().max(200).nullable().optional(),
+  method: z.enum(ASSET_METHODS).nullable().optional(),
+  depreciationMethodId: nullableId.optional(),
+  lifeMonths: z.union([z.number().int(), z.string().regex(/^\d+$/, "lifeMonths must be a whole number")]).nullable().optional(),
+  ratePercent: z.union([z.literal(""), amount("Rate percent")]).nullable().optional(),
+  unitsTotal: z.union([z.literal(""), amount("Units total")]).nullable().optional(),
+  convention: z.enum(ASSET_CONVENTIONS).nullable().optional(),
+  assetAccountId: nullableId.optional(),
+  accumulatedDepreciationAccountId: nullableId.optional(),
+  depreciationExpenseAccountId: nullableId.optional(),
+  custom: z.record(z.string(), z.json()).optional(),
+  taxDepreciation: z.record(z.string().regex(/^[a-z][a-z0-9_]{0,62}$/), taxElection).optional(),
+  status: z.literal("draft").optional(),
+});
 
 function bad(error: string, field?: string, status = 422) {
   return NextResponse.json({ error, ...(field ? { field } : {}) }, { status });
@@ -113,184 +128,252 @@ const REFUSAL_FIELD: Record<string, string> = {
  * date plus useful life, schedule build) stays on PATCH /api/assets/[id],
  * so lifecycle semantics after creation are unchanged.
  */
-export async function POST(request: Request) {
-  const gate = await guardFeaturePermission("assets.manage", "fixedAssets");
-  if (gate instanceof NextResponse) return gate;
-  const user = gate.user;
+export const POST = defineRoute({
+  permission: "assets.manage",
+  feature: "fixedAssets",
+  body: createAssetSchema,
+  handler: async ({ request, authz: gate, body: routeBody }) => {
+    const user = gate.user;
 
-  const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
-  if (!isUuid(requestId)) return bad("invalid_idempotency_key", undefined, 400);
+    const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
+    if (!isUuid(requestId))
+      return bad("invalid_idempotency_key", undefined, 400);
 
-  const parsedBody = await parseJsonBody(request, createAssetSchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
+    const body = routeBody;
 
-  if (body.status !== undefined && body.status !== "draft") {
-    return bad("unsupported_status_transition", "status");
-  }
+    if (body.status !== undefined && body.status !== "draft") {
+      return bad("unsupported_status_transition", "status");
+    }
 
-  const name = body.name?.trim() ?? "";
-  if (!name) return bad("name_required", "name");
+    const name = body.name?.trim() ?? "";
+    if (!name) return bad("name_required", "name");
 
-  const categoryId = strOrNull(body.categoryId)?.toLowerCase() ?? null;
-  if (!categoryId) return bad("category_required", "categoryId");
-  if (!isUuid(categoryId)) return bad("invalid_category", "categoryId");
-  const category = await db.execute<{ id: string }>(sql`
+    const categoryId = strOrNull(body.categoryId)?.toLowerCase() ?? null;
+    if (!categoryId) return bad("category_required", "categoryId");
+    if (!isUuid(categoryId)) return bad("invalid_category", "categoryId");
+    const category = await db.execute<{ id: string }>(sql`
     select id from asset_categories
      where org_id = ${user.orgId} and is_active and id = ${categoryId}
   `);
-  if (!category.rows.some((row) => String(row.id).toLowerCase() === categoryId)) {
-    return bad("invalid_category", "categoryId");
-  }
+    if (
+      !category.rows.some((row) => String(row.id).toLowerCase() === categoryId)
+    ) {
+      return bad("invalid_category", "categoryId");
+    }
 
-  const suppliedSubsidiaryId = strOrNull(body.subsidiaryId)?.toLowerCase() ?? null;
-  if (
-    suppliedSubsidiaryId &&
-    (!isUuid(suppliedSubsidiaryId) ||
-      (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(suppliedSubsidiaryId)))
-  ) {
-    return bad("invalid_subsidiary", "subsidiaryId");
-  }
-  const subsidiaries = await db.execute<{ id: string }>(sql`
+    const suppliedSubsidiaryId =
+      strOrNull(body.subsidiaryId)?.toLowerCase() ?? null;
+    if (
+      suppliedSubsidiaryId &&
+      (!isUuid(suppliedSubsidiaryId) ||
+        (gate.allowedSubsidiaryIds &&
+          !gate.allowedSubsidiaryIds.has(suppliedSubsidiaryId)))
+    ) {
+      return bad("invalid_subsidiary", "subsidiaryId");
+    }
+    const subsidiaries = await db.execute<{ id: string }>(sql`
     select id from subsidiaries
      where org_id = ${user.orgId} and is_active and not is_elimination
        ${gate.allowedSubsidiaryIds ? sql`and id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
      order by (parent_id is null) desc, name
   `);
-  const subsidiaryId = suppliedSubsidiaryId
-    ? (subsidiaries.rows.some((row) => String(row.id).toLowerCase() === suppliedSubsidiaryId)
+    const subsidiaryId = suppliedSubsidiaryId
+      ? subsidiaries.rows.some(
+          (row) => String(row.id).toLowerCase() === suppliedSubsidiaryId,
+        )
         ? suppliedSubsidiaryId
-        : null)
-    : (subsidiaries.rows[0] ? String(subsidiaries.rows[0].id) : null);
-  if (suppliedSubsidiaryId && !subsidiaryId) {
-    return bad("invalid_subsidiary", "subsidiaryId");
-  }
-  if (!subsidiaryId) {
-    return NextResponse.json({ error: "no_available_subsidiary" }, { status: 409 });
-  }
-
-  const cost = moneyOrNull(body.acquisitionCost) ?? "0";
-  if (cost === "unreadable" || cost === "too-wide") return bad("acquisition_cost_invalid", "acquisitionCost");
-  if (cmp(cost, "0") < 0) return bad("acquisition_cost_negative", "acquisitionCost");
-  const salvage = moneyOrNull(body.salvageValue) ?? "0";
-  if (salvage === "unreadable" || salvage === "too-wide") return bad("salvage_value_invalid", "salvageValue");
-  if (cmp(salvage, "0") < 0) return bad("salvage_value_negative", "salvageValue");
-  if (cmp(salvage, cost) > 0) return bad("salvage_exceeds_cost", "salvageValue");
-
-  const acquiredOn = strOrNull(body.acquiredOn);
-  if (acquiredOn !== null && !isIsoCalendarDate(acquiredOn)) {
-    return bad("acquired_on_invalid", "acquiredOn");
-  }
-  const inServiceOn = strOrNull(body.inServiceOn);
-  if (inServiceOn !== null && !isIsoCalendarDate(inServiceOn)) {
-    return bad("in_service_on_invalid", "inServiceOn");
-  }
-
-  const description = strOrNull(body.description);
-  const serialNumber = strOrNull(body.serialNumber);
-  const suppliedNumber = strOrNull(body.assetNumber);
-
-  // Full drawer body, same rules as PATCH (shared ../_fields validators).
-  // Nothing the operator fills in is silently dropped: every submitted
-  // field is validated and stored, or its refusal names the remedy.
-  let method: string | null = null;
-  let depreciationMethodId: string | null = null;
-  let lifeMonths: number | null = null;
-  let ratePercent: string | null = null;
-  let unitsTotal: string | null = null;
-  let convention: string | null = null;
-  let openingAccumulated: string | null = null;
-  let openingAsOf: string | null = null;
-  let assetAccountId: string | null = null;
-  let accumAccountId: string | null = null;
-  let expenseAccountId: string | null = null;
-  let customBag: Record<string, unknown> = {};
-  try {
-    method = parseAssetMethod(body.method) ?? null;
-    depreciationMethodId = (await parseDepreciationMethodId(db, user.orgId, body.depreciationMethodId)) ?? null;
-    lifeMonths = parseLifeMonths(body.lifeMonths) ?? null;
-    ratePercent = parseRatePercent(body.ratePercent) ?? null;
-    unitsTotal = parseUnitsTotal(body.unitsTotal) ?? null;
-    convention = parseAssetConvention(body.convention) ?? null;
-    openingAccumulated = parseOpeningAmount(body.openingAccumulated) ?? null;
-    openingAsOf = parseOpeningAsOf(body.openingAsOf) ?? null;
-    checkOpeningPair(openingAccumulated, openingAsOf);
-    checkOpeningBasis(openingAccumulated, cost, salvage);
-    checkOpeningMonth(openingAccumulated, openingAsOf, inServiceOn);
-    assetAccountId = (await parseAccountOverride(db, user.orgId, subsidiaryId, body.assetAccountId, "invalid_asset_account")) ?? null;
-    accumAccountId =
-      (await parseAccountOverride(db, user.orgId, subsidiaryId, body.accumulatedDepreciationAccountId, "invalid_accumulated_account")) ?? null;
-    expenseAccountId =
-      (await parseAccountOverride(db, user.orgId, subsidiaryId, body.depreciationExpenseAccountId, "invalid_expense_account")) ?? null;
-    customBag = await parseCustomBag(user.orgId, body.custom);
-    const taxClean = await parseTaxDepreciation(db, user.orgId, body.taxDepreciation);
-    if (taxClean !== undefined) customBag.taxDepreciation = taxClean;
-  } catch (error) {
-    if (error instanceof FieldRefusal) {
-      return bad(error.code, REFUSAL_FIELD[error.code]);
+        : null
+      : subsidiaries.rows[0]
+        ? String(subsidiaries.rows[0].id)
+        : null;
+    if (suppliedSubsidiaryId && !subsidiaryId) {
+      return bad("invalid_subsidiary", "subsidiaryId");
     }
-    throw error;
-  }
+    if (!subsidiaryId) {
+      return NextResponse.json(
+        { error: "no_available_subsidiary" },
+        { status: 409 },
+      );
+    }
 
-  // The idempotency snapshot pins the request, not the allocator: an
-  // auto-assigned FA-#### is recomputed per attempt, so a legitimate retry
-  // after an allocator race still matches. A supplied number IS the request.
-  const snapshot = {
-    id: requestId,
-    org_id: user.orgId,
-    category_id: categoryId,
-    subsidiary_id: subsidiaryId,
-    asset_number: suppliedNumber,
-    name,
-    description,
-    acquisition_cost: cost,
-    salvage_value: salvage,
-    acquired_on: acquiredOn,
-    in_service_on: inServiceOn,
-    opening_accumulated_depreciation: openingAccumulated,
-    opening_accumulated_as_of: openingAsOf,
-    serial_number: serialNumber,
-    depreciation_method: method,
-    depreciation_method_id: depreciationMethodId,
-    useful_life_months: lifeMonths,
-    depreciation_rate_percent: ratePercent,
-    depreciation_units_total: unitsTotal,
-    depreciation_convention: convention,
-    asset_account_id: assetAccountId,
-    accumulated_depreciation_account_id: accumAccountId,
-    depreciation_expense_account_id: expenseAccountId,
-    custom: customBag,
-    status: "draft",
-  };
+    const cost = moneyOrNull(body.acquisitionCost) ?? "0";
+    if (cost === "unreadable" || cost === "too-wide")
+      return bad("acquisition_cost_invalid", "acquisitionCost");
+    if (cmp(cost, "0") < 0)
+      return bad("acquisition_cost_negative", "acquisitionCost");
+    const salvage = moneyOrNull(body.salvageValue) ?? "0";
+    if (salvage === "unreadable" || salvage === "too-wide")
+      return bad("salvage_value_invalid", "salvageValue");
+    if (cmp(salvage, "0") < 0)
+      return bad("salvage_value_negative", "salvageValue");
+    if (cmp(salvage, cost) > 0)
+      return bad("salvage_exceeds_cost", "salvageValue");
 
-  let createdId: string | null = null;
-  let replayed = false;
-  try {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      try {
-        const outcome = await db.transaction(async (tx) => {
-          await lockAccountOverridesForAssetWrite(tx, user.orgId, subsidiaryId, [
-            { id: assetAccountId, code: "invalid_asset_account" },
-            { id: accumAccountId, code: "invalid_accumulated_account" },
-            { id: expenseAccountId, code: "invalid_expense_account" },
-          ]);
-          // Same org-wide fence as the legacy draft factory and the
-          // equipment-capitalization path: max()+1 stays serialized across
-          // every allocator, and the unique constraint is the final
-          // authority for writers that take no fence.
-          await tx.execute(sql`
+    const acquiredOn = strOrNull(body.acquiredOn);
+    if (acquiredOn !== null && !isIsoCalendarDate(acquiredOn)) {
+      return bad("acquired_on_invalid", "acquiredOn");
+    }
+    const inServiceOn = strOrNull(body.inServiceOn);
+    if (inServiceOn !== null && !isIsoCalendarDate(inServiceOn)) {
+      return bad("in_service_on_invalid", "inServiceOn");
+    }
+
+    const description = strOrNull(body.description);
+    const serialNumber = strOrNull(body.serialNumber);
+    const suppliedNumber = strOrNull(body.assetNumber);
+
+    // Full drawer body, same rules as PATCH (shared ../_fields validators).
+    // Nothing the operator fills in is silently dropped: every submitted
+    // field is validated and stored, or its refusal names the remedy.
+    let method: string | null = null;
+    let depreciationMethodId: string | null = null;
+    let lifeMonths: number | null = null;
+    let ratePercent: string | null = null;
+    let unitsTotal: string | null = null;
+    let convention: string | null = null;
+    let openingAccumulated: string | null = null;
+    let openingAsOf: string | null = null;
+    let assetAccountId: string | null = null;
+    let accumAccountId: string | null = null;
+    let expenseAccountId: string | null = null;
+    let customBag: Record<string, unknown> = {};
+    try {
+      method = parseAssetMethod(body.method) ?? null;
+      depreciationMethodId =
+        (await parseDepreciationMethodId(
+          db,
+          user.orgId,
+          body.depreciationMethodId,
+        )) ?? null;
+      lifeMonths = parseLifeMonths(body.lifeMonths) ?? null;
+      ratePercent = parseRatePercent(body.ratePercent) ?? null;
+      unitsTotal = parseUnitsTotal(body.unitsTotal) ?? null;
+      convention = parseAssetConvention(body.convention) ?? null;
+      openingAccumulated = parseOpeningAmount(body.openingAccumulated) ?? null;
+      openingAsOf = parseOpeningAsOf(body.openingAsOf) ?? null;
+      checkOpeningPair(openingAccumulated, openingAsOf);
+      checkOpeningBasis(openingAccumulated, cost, salvage);
+      checkOpeningMonth(openingAccumulated, openingAsOf, inServiceOn);
+      assetAccountId =
+        (await parseAccountOverride(
+          db,
+          user.orgId,
+          subsidiaryId,
+          body.assetAccountId,
+          "invalid_asset_account",
+        )) ?? null;
+      accumAccountId =
+        (await parseAccountOverride(
+          db,
+          user.orgId,
+          subsidiaryId,
+          body.accumulatedDepreciationAccountId,
+          "invalid_accumulated_account",
+        )) ?? null;
+      expenseAccountId =
+        (await parseAccountOverride(
+          db,
+          user.orgId,
+          subsidiaryId,
+          body.depreciationExpenseAccountId,
+          "invalid_expense_account",
+        )) ?? null;
+      customBag = await parseCustomBag(user.orgId, body.custom);
+      const taxClean = await parseTaxDepreciation(
+        db,
+        user.orgId,
+        body.taxDepreciation,
+      );
+      if (taxClean !== undefined) customBag.taxDepreciation = taxClean;
+    } catch (error) {
+      if (error instanceof FieldRefusal) {
+        return bad(error.code, REFUSAL_FIELD[error.code]);
+      }
+      throw error;
+    }
+
+    // The idempotency snapshot pins the request, not the allocator: an
+    // auto-assigned FA-#### is recomputed per attempt, so a legitimate retry
+    // after an allocator race still matches. A supplied number IS the request.
+    const snapshot = {
+      id: requestId,
+      org_id: user.orgId,
+      category_id: categoryId,
+      subsidiary_id: subsidiaryId,
+      asset_number: suppliedNumber,
+      name,
+      description,
+      acquisition_cost: cost,
+      salvage_value: salvage,
+      acquired_on: acquiredOn,
+      in_service_on: inServiceOn,
+      opening_accumulated_depreciation: openingAccumulated,
+      opening_accumulated_as_of: openingAsOf,
+      serial_number: serialNumber,
+      depreciation_method: method,
+      depreciation_method_id: depreciationMethodId,
+      useful_life_months: lifeMonths,
+      depreciation_rate_percent: ratePercent,
+      depreciation_units_total: unitsTotal,
+      depreciation_convention: convention,
+      asset_account_id: assetAccountId,
+      accumulated_depreciation_account_id: accumAccountId,
+      depreciation_expense_account_id: expenseAccountId,
+      custom: customBag,
+      status: "draft",
+    };
+
+    let createdId: string | null = null;
+    let replayed = false;
+    try {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const outcome = await db.transaction(async (tx) => {
+            const claim = await claimIdempotentCreate(tx, {
+              orgId: user.orgId,
+              table: "fixed_assets",
+              key: requestId,
+            });
+            if (claim === "exists") {
+              const replay = await resolveIdempotentReplay(tx, {
+                orgId: user.orgId,
+                table: "fixed_assets",
+                key: requestId,
+                match: snapshot,
+              });
+              if (replay === "replay") return { id: requestId, replayed: true };
+              throw new SetupCreateConflict("changed-payload");
+            }
+            await lockAccountOverridesForAssetWrite(
+              tx,
+              user.orgId,
+              subsidiaryId,
+              [
+                { id: assetAccountId, code: "invalid_asset_account" },
+                { id: accumAccountId, code: "invalid_accumulated_account" },
+                { id: expenseAccountId, code: "invalid_expense_account" },
+              ],
+            );
+            // Same org-wide fence as the legacy draft factory and the
+            // equipment-capitalization path: max()+1 stays serialized across
+            // every allocator, and the unique constraint is the final
+            // authority for writers that take no fence.
+            await tx.execute(sql`
             select pg_advisory_xact_lock(
               hashtextextended(${"equipment-capitalization:" + user.orgId}, 0)
             )`);
-          let assetNumber = suppliedNumber;
-          if (!assetNumber) {
-            const nextRes = await tx.execute<{ n: number }>(sql`
+            let assetNumber = suppliedNumber;
+            if (!assetNumber) {
+              const nextRes = await tx.execute<{ n: number }>(sql`
               select coalesce(max((regexp_replace(asset_number, '\\D', '', 'g'))::int), 0) + 1 as n
                 from fixed_assets
                where org_id = ${user.orgId} and asset_number ~ '^FA-\\d+$'`);
-            assetNumber = `FA-${String(Number(nextRes.rows[0]?.n ?? 1)).padStart(4, "0")}`;
-          }
-          const inserted = await tx.execute<{ id: string }>(sql`
+              assetNumber = `FA-${String(Number(nextRes.rows[0]?.n ?? 1)).padStart(4, "0")}`;
+            }
+            // Another transaction may claim this key after the preflight read;
+            // a missing RETURNING row below is resolved from the immutable
+            // audit image as either an exact replay or a typed conflict.
+            const inserted = await tx.execute<{ id: string }>(sql`
             insert into fixed_assets
               (id, org_id, category_id, subsidiary_id, asset_number, name, description,
                status, acquisition_cost, salvage_value, acquired_on, in_service_on,
@@ -310,31 +393,17 @@ export async function POST(request: Request) {
                ${user.id}, ${user.id})
             on conflict (id) do nothing
             returning id`);
-          if (!inserted.rows[0]) {
-            const prior = await tx.execute<{ id: string }>(sql`
-              select id from fixed_assets
-               where id = ${requestId} and org_id = ${user.orgId}
-            `);
-            if (!prior.rows[0]) throw new Error("idempotency_key_conflict");
-            const original = (
-              await tx.execute<{ after: unknown }>(sql`
-                select changes->'after' as after
-                  from audit_log
-                 where org_id = ${user.orgId}
-                   and table_name = 'fixed_assets'
-                   and row_id = ${requestId}
-                   and action = 'insert'
-                   and request_id = ${requestId}
-                 order by at asc
-                 limit 1
-              `)
-            ).rows[0]?.after;
-            if (!original || canonicalJson(original) !== canonicalJson(snapshot)) {
-              throw new Error("idempotency_key_conflict");
+            if (!inserted.rows[0]) {
+              const replay = await resolveIdempotentReplay(tx, {
+                orgId: user.orgId,
+                table: "fixed_assets",
+                key: requestId,
+                match: snapshot,
+              });
+              if (replay === "replay") return { id: requestId, replayed: true };
+              throw new SetupCreateConflict("foreign-key");
             }
-            return { id: requestId, replayed: true };
-          }
-          await tx.execute(sql`
+            await tx.execute(sql`
             insert into audit_log
               (org_id, table_name, row_id, action, changes, actor_id, request_id)
             values
@@ -342,36 +411,46 @@ export async function POST(request: Request) {
                ${JSON.stringify({ before: null, after: snapshot })}::jsonb,
                ${user.id}, ${requestId})
           `);
-          // A fresh row is always a draft, and drafts own no postable schedules
-          // (only in-service assets do) — the schedule builds when the asset
-          // is placed in service through PATCH.
-          return { id: requestId, replayed: false };
-        });
-        createdId = outcome.id;
-        replayed = outcome.replayed;
-        break;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (message.includes("idempotency_key_conflict")) throw error;
-        const numberConflict = message.includes("fixed_assets_org_asset_number_unique");
-        if (!numberConflict) throw error;
-        // A supplied number names its remedy; an auto number recomputes
-        // once the winner is committed, then retries inside this same save.
-        if (suppliedNumber) return bad("asset_number_in_use", "assetNumber");
-        if (attempt >= 2) return bad("asset_number_in_use", "assetNumber");
+            // A fresh row is always a draft, and drafts own no postable schedules
+            // (only in-service assets do) — the schedule builds when the asset
+            // is placed in service through PATCH.
+            return { id: requestId, replayed: false };
+          });
+          createdId = outcome.id;
+          replayed = outcome.replayed;
+          break;
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          if (error instanceof SetupCreateConflict) throw error;
+          const numberConflict = message.includes(
+            "fixed_assets_org_asset_number_unique",
+          );
+          if (!numberConflict) throw error;
+          // A supplied number names its remedy; an auto number recomputes
+          // once the winner is committed, then retries inside this same save.
+          if (suppliedNumber) return bad("asset_number_in_use", "assetNumber");
+          if (attempt >= 2) return bad("asset_number_in_use", "assetNumber");
+        }
       }
+    } catch (error) {
+      if (error instanceof FieldRefusal) {
+        return bad(error.code, REFUSAL_FIELD[error.code]);
+      }
+      if (error instanceof SetupCreateConflict) {
+        return conflict(error.code, {
+          remedy:
+            "Close and reopen the asset drawer to retry with a fresh request key.",
+        });
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      throw error;
     }
-  } catch (error) {
-    if (error instanceof FieldRefusal) {
-      return bad(error.code, REFUSAL_FIELD[error.code]);
-    }
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("idempotency_key_conflict")) {
-      return bad("invalid_idempotency_key", undefined, 409);
-    }
-    throw error;
-  }
 
-  if (!createdId) return bad("save_failed", undefined, 500);
-  return NextResponse.json({ id: createdId }, { status: replayed ? 200 : 201 });
-}
+    if (!createdId) return bad("save_failed", undefined, 500);
+    return NextResponse.json(
+      { id: createdId },
+      { status: replayed ? 200 : 201 },
+    );
+  },
+});

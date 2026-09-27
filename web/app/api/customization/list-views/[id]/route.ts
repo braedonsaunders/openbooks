@@ -1,15 +1,24 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { dbWriteErrorResponse } from "@/lib/api/db-errors";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { getAuthz, can } from "../../../../../lib/authz";
-import { lockedListEntriesUnchanged, parseListView, stripSeededDefaultMark, type ListViewConfig } from "@openbooks/customization";
+import { can } from "../../../../../lib/authz";
+import {
+  lockedListEntriesUnchanged,
+  parseListView,
+  stripSeededDefaultMark,
+  type ListViewConfig,
+} from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
 import { isUuid } from "../../../../../lib/list-params";
-import { inactiveDefaultMessage, nextDefaultFlags, refuseInactiveDefault } from "../../../../../lib/customization/active-default";
+import {
+  inactiveDefaultMessage,
+  nextDefaultFlags,
+  refuseInactiveDefault,
+} from "../../../../../lib/customization/active-default";
 import {
   AmbiguousListViewDefaultError,
   InactiveListViewDefaultError,
@@ -20,19 +29,29 @@ import {
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = "nodejs";
+export { runtime } from "@/lib/api/route";
 
-const nameBodySchema = z.looseObject({
-  name: z.string().optional(),
-});
+const configBody = z.json().refine(
+  (value) => parseListView(value).success,
+  "config must match the saved list view schema",
+);
 
 async function loadOwn(orgId: string, userId: string, id: string) {
   if (!isUuid(id)) return null;
-  const r = (await db.execute<{ id: string; recordType: string; name: string; scope: string; ownerId: string | null; isDefault: boolean; isActive: boolean; config: unknown }>(sql`
+  const r = await db.execute<{
+    id: string;
+    recordType: string;
+    name: string;
+    scope: string;
+    ownerId: string | null;
+    isDefault: boolean;
+    isActive: boolean;
+    config: unknown;
+  }>(sql`
     select id, record_type as "recordType", name, scope, owner_id as "ownerId",
            is_default as "isDefault", is_active as "isActive", config
       from list_views where org_id = ${orgId} and id = ${id}
-  `));
+  `);
   const row = r.rows[0] ?? null;
   if (!row) return null;
   // org-scope rows are visible org-wide; user-scope only to the owner.
@@ -41,211 +60,313 @@ async function loadOwn(orgId: string, userId: string, id: string) {
 }
 
 /** GET — one saved view (owner or org-shared). */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
-  const row = await loadOwn(authz.user.orgId, authz.user.id, id);
-  if (!row) return notFound("record");
-  const refused = await refuseDisabledRecordType(authz.user.orgId, row.recordType);
-  if (refused) return refused;
-  return NextResponse.json(row);
-}
+export const GET = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: _req, authz, params }) => {
+    if (!authz)
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const { id } = await params;
+    if (!isUuid(id))
+      return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
+    const row = await loadOwn(authz.user.orgId, authz.user.id, id);
+    if (!row) return notFound("record");
+    const refused = await refuseDisabledRecordType(
+      authz.user.orgId,
+      row.recordType,
+    );
+    if (refused) return refused;
+    return NextResponse.json(row);
+  },
+});
 
 /** PATCH — update name/config/isDefault/isActive. Owner or admin only. */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const { user } = authz;
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
-  const existing = await loadOwn(user.orgId, user.id, id);
-  if (!existing) return notFound("record");
-  const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
-  if (refused) return refused;
-  const adminGated = can(authz, "admin.customization.manage");
-  if (existing.scope === "org" && !adminGated)
-    return NextResponse.json({ error: "missing permission: admin.customization.manage" }, { status: 403 });
-  if (existing.scope === "user" && existing.ownerId !== user.id)
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+export const PATCH = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string() }),
+  body: z
+    .strictObject({
+      name: z.string().trim().min(1, "name cannot be empty").max(200).optional(),
+      config: configBody.optional(),
+      isDefault: z.boolean().optional(),
+      isActive: z.boolean().optional(),
+    })
+    .refine((body) => Object.keys(body).length > 0, "provide at least one view field to update"),
+  handler: async ({ request: req, authz, params, body: routeBody }) => {
+    if (!authz)
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const { user } = authz;
+    const { id } = await params;
+    if (!isUuid(id))
+      return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
+    const existing = await loadOwn(user.orgId, user.id, id);
+    if (!existing)
+      return notFound("record");
+    const refused = await refuseDisabledRecordType(
+      user.orgId,
+      existing.recordType,
+    );
+    if (refused) return refused;
+    const adminGated = can(authz, "admin.customization.manage");
+    if (existing.scope === "org" && !adminGated)
+      return NextResponse.json(
+        { error: "missing permission: admin.customization.manage" },
+        { status: 403 },
+      );
+    if (existing.scope === "user" && existing.ownerId !== user.id)
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-  const parsedBody = await parseJsonBody(req, nameBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    name?: string;
-    config?: unknown;
-    isDefault?: boolean;
-    isActive?: boolean;
-  };
-  let proposedConfig: ListViewConfig | undefined;
-  const sets: ReturnType<typeof sql>[] = [];
-  const changes: Record<string, unknown> = {};
-  if (body.name !== undefined && typeof body.name !== "string") {
-    return NextResponse.json({ error: "name must be a string" }, { status: 400 });
-  }
-  // A supplied name is an explicit write. Collection POST already refuses
-  // !body.name?.trim(); dropping whitespace here would report
-  // {ok:true, changed:false} (or apply sibling fields) as if the operator
-  // asked for a no-op. Refuse by name instead.
-  if (body.name !== undefined && !body.name.trim()) {
-    return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
-  }
-  if (body.name !== undefined) {
-    const name = body.name.trim();
-    sets.push(sql`name = ${name}`);
-    changes.name = name;
-  }
-  if (body.config !== undefined) {
-    const parsed = parseListView(body.config);
-    if (!parsed.success)
-      return NextResponse.json({ error: "invalid view config", issues: parsed.issues }, { status: 400 });
-    if (parsed.data!.recordType !== existing.recordType)
-      return NextResponse.json({ error: "config.recordType does not match this view's record type" }, { status: 400 });
-    // The seed mark must never be re-stored through the designer: strip it
-    // explicitly here rather than relying on the parser dropping unknown
-    // keys, so a sort-only edit that passes the shape rule is still stored
-    // unmarked — and resolution keeps it instead of replacing it live.
-    proposedConfig = stripSeededDefaultMark(parsed.data!);
-    sets.push(sql`config = ${proposedConfig}`);
-    changes.config = true;
-  }
-  if (body.isDefault !== undefined) {
-    // A truthy non-boolean would otherwise reach the boolean column and
-    // either coerce silently ('yes'::boolean) or abort the update with an
-    // unhandled storage error surfaced as a 500. Collection POST and PATCH
-    // both refuse a value outside the boolean domain.
-    if (typeof body.isDefault !== 'boolean') {
-      return NextResponse.json({ error: 'isDefault must be a boolean' }, { status: 400 });
+    const body = routeBody as {
+      name?: string;
+      config?: unknown;
+      isDefault?: boolean;
+      isActive?: boolean;
+    };
+    let proposedConfig: ListViewConfig | undefined;
+    const sets: ReturnType<typeof sql>[] = [];
+    const changes: Record<string, unknown> = {};
+    if (body.name !== undefined && typeof body.name !== "string") {
+      return NextResponse.json(
+        { error: "name must be a string" },
+        { status: 400 },
+      );
     }
-    sets.push(sql`is_default = ${body.isDefault}`);
-    changes.isDefault = body.isDefault;
-  }
-  if (body.isActive !== undefined) {
-    if (typeof body.isActive !== 'boolean') {
-      return NextResponse.json({ error: 'isActive must be a boolean' }, { status: 400 });
+    // A supplied name is an explicit write. Collection POST already refuses
+    // !body.name?.trim(); dropping whitespace here would report
+    // {ok:true, changed:false} (or apply sibling fields) as if the operator
+    // asked for a no-op. Refuse by name instead.
+    if (body.name !== undefined && !body.name.trim()) {
+      return NextResponse.json(
+        { error: "name cannot be empty" },
+        { status: 400 },
+      );
     }
-    sets.push(sql`is_active = ${body.isActive}`);
-    changes.isActive = body.isActive;
-  }
-  // Request-complete contradiction needs no row snapshot. resolveListView
-  // filters is_active before picking isDefault, so default+inactive is a
-  // save no subsequent read can observe. Concurrent default+deactivate is
-  // decided from the locked row inside the write.
-  const requestFlags = nextDefaultFlags(existing, { isDefault: body.isDefault, isActive: body.isActive });
-  const requestRefusal = refuseInactiveDefault({ kind: "view", ...requestFlags });
-  if (!requestRefusal.ok) return NextResponse.json({ error: requestRefusal.error }, { status: 400 });
-  if (sets.length === 0) return NextResponse.json({ ok: true, changed: false });
+    if (body.name !== undefined) {
+      const name = body.name.trim();
+      sets.push(sql`name = ${name}`);
+      changes.name = name;
+    }
+    if (body.config !== undefined) {
+      const parsed = parseListView(body.config);
+      if (!parsed.success)
+        return NextResponse.json(
+          { error: "invalid view config", issues: parsed.issues },
+          { status: 400 },
+        );
+      if (parsed.data!.recordType !== existing.recordType)
+        return NextResponse.json(
+          { error: "config.recordType does not match this view's record type" },
+          { status: 400 },
+        );
+      // The seed mark must never be re-stored through the designer: strip it
+      // explicitly here rather than relying on the parser dropping unknown
+      // keys, so a sort-only edit that passes the shape rule is still stored
+      // unmarked — and resolution keeps it instead of replacing it live.
+      proposedConfig = stripSeededDefaultMark(parsed.data!);
+      sets.push(sql`config = ${proposedConfig}`);
+      changes.config = true;
+    }
+    if (body.isDefault !== undefined) {
+      // A truthy non-boolean would otherwise reach the boolean column and
+      // either coerce silently ('yes'::boolean) or abort the update with an
+      // unhandled storage error surfaced as a 500. Collection POST and PATCH
+      // both refuse a value outside the boolean domain.
+      if (typeof body.isDefault !== "boolean") {
+        return NextResponse.json(
+          { error: "isDefault must be a boolean" },
+          { status: 400 },
+        );
+      }
+      sets.push(sql`is_default = ${body.isDefault}`);
+      changes.isDefault = body.isDefault;
+    }
+    if (body.isActive !== undefined) {
+      if (typeof body.isActive !== "boolean") {
+        return NextResponse.json(
+          { error: "isActive must be a boolean" },
+          { status: 400 },
+        );
+      }
+      sets.push(sql`is_active = ${body.isActive}`);
+      changes.isActive = body.isActive;
+    }
+    // Request-complete contradiction needs no row snapshot. resolveListView
+    // filters is_active before picking isDefault, so default+inactive is a
+    // save no subsequent read can observe. Concurrent default+deactivate is
+    // decided from the locked row inside the write.
+    const requestFlags = nextDefaultFlags(existing, {
+      isDefault: body.isDefault,
+      isActive: body.isActive,
+    });
+    const requestRefusal = refuseInactiveDefault({
+      kind: "view",
+      ...requestFlags,
+    });
+    if (!requestRefusal.ok)
+      return NextResponse.json(
+        { error: requestRefusal.error },
+        { status: 400 },
+      );
+    if (sets.length === 0)
+      return NextResponse.json({ ok: true, changed: false });
 
-  const nextDefaultSql = body.isDefault !== undefined ? sql`${body.isDefault}` : sql`is_default`;
-  const nextActiveSql = body.isActive !== undefined ? sql`${body.isActive}` : sql`is_active`;
+    const nextDefaultSql =
+      body.isDefault !== undefined ? sql`${body.isDefault}` : sql`is_default`;
+    const nextActiveSql =
+      body.isActive !== undefined ? sql`${body.isActive}` : sql`is_active`;
 
-  try {
-    // db.execute goes through the pool (each statement may land on a different
-    // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
-    const updated = await db.transaction(async (tx) => {
-      const locked = (await tx.execute<{
-        id: string;
-        recordType: string;
-        scope: string;
-        ownerId: string | null;
-        isDefault: boolean;
-        isActive: boolean;
-        config: unknown;
-      }>(sql`
+    try {
+      // db.execute goes through the pool (each statement may land on a different
+      // connection), so BEGIN/COMMIT must use db.transaction to actually be atomic.
+      const updated = await db.transaction(async (tx) => {
+        const locked = (
+          await tx.execute<{
+            id: string;
+            recordType: string;
+            scope: string;
+            ownerId: string | null;
+            isDefault: boolean;
+            isActive: boolean;
+            config: unknown;
+          }>(sql`
         select id, record_type as "recordType", scope, owner_id as "ownerId",
                is_default as "isDefault", is_active as "isActive", config
           from list_views
          where id = ${id} and org_id = ${user.orgId}
-         for update`)).rows[0];
-      if (!locked) return { kind: "not_found" as const };
-      if (proposedConfig) {
-        const currentConfig = parseListView(locked.config);
-        if (!currentConfig.success || !lockedListEntriesUnchanged(currentConfig.data!, proposedConfig))
-          return { kind: "locked_entries" as const };
-      }
-      const nextFlags = nextDefaultFlags(locked, { isDefault: body.isDefault, isActive: body.isActive });
-      const inactiveDefault = refuseInactiveDefault({ kind: "view", ...nextFlags });
-      if (!inactiveDefault.ok) return { kind: "inactive_default" as const, error: inactiveDefault.error };
-      const defaultScope = {
-        orgId: user.orgId,
-        recordType: locked.recordType,
-        scope: locked.scope === "org" ? "org" as const : "user" as const,
-        ownerId: locked.scope === "user" ? user.id : null,
-        exceptId: id,
-      };
-      // Lock only — sibling clears wait until THIS update returns a row.
-      // Otherwise a concurrent delete can demote the live default, write
-      // audit, and still report {ok:true} for a view that is gone.
-      if (body.isDefault === true) await lockListViewDefaultScope(tx, defaultScope);
-      // Next-state default+inactive must match zero rows even if the JS
-      // refusal is skipped — refuse by name, never {ok:true}.
-      const written = (await tx.execute<{ id: string }>(sql`
+         for update`)
+        ).rows[0];
+        if (!locked) return { kind: "not_found" as const };
+        if (proposedConfig) {
+          const currentConfig = parseListView(locked.config);
+          if (
+            !currentConfig.success ||
+            !lockedListEntriesUnchanged(currentConfig.data!, proposedConfig)
+          )
+            return { kind: "locked_entries" as const };
+        }
+        const nextFlags = nextDefaultFlags(locked, {
+          isDefault: body.isDefault,
+          isActive: body.isActive,
+        });
+        const inactiveDefault = refuseInactiveDefault({
+          kind: "view",
+          ...nextFlags,
+        });
+        if (!inactiveDefault.ok)
+          return {
+            kind: "inactive_default" as const,
+            error: inactiveDefault.error,
+          };
+        const defaultScope = {
+          orgId: user.orgId,
+          recordType: locked.recordType,
+          scope: locked.scope === "org" ? ("org" as const) : ("user" as const),
+          ownerId: locked.scope === "user" ? user.id : null,
+          exceptId: id,
+        };
+        // Lock only — sibling clears wait until THIS update returns a row.
+        // Otherwise a concurrent delete can demote the live default, write
+        // audit, and still report {ok:true} for a view that is gone.
+        if (body.isDefault === true)
+          await lockListViewDefaultScope(tx, defaultScope);
+        // Next-state default+inactive must match zero rows even if the JS
+        // refusal is skipped — refuse by name, never {ok:true}.
+        const written = (
+          await tx.execute<{ id: string }>(sql`
         update list_views set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${user.id}
          where id = ${id} and org_id = ${user.orgId}
            and not (${nextDefaultSql} and not ${nextActiveSql})
-         returning id`)).rows[0];
-      if (!written) {
-        if (nextFlags.isDefault && !nextFlags.isActive) {
-          return { kind: "inactive_default" as const, error: inactiveDefaultMessage("view") };
+         returning id`)
+        ).rows[0];
+        if (!written) {
+          if (nextFlags.isDefault && !nextFlags.isActive) {
+            return {
+              kind: "inactive_default" as const,
+              error: inactiveDefaultMessage("view"),
+            };
+          }
+          return { kind: "not_found" as const };
         }
-        return { kind: "not_found" as const };
-      }
-      if (body.isDefault === true) {
-        await clearSiblingListViewDefaults(tx, defaultScope);
-        await assertSingleListViewDefault(tx, defaultScope);
-      }
-      await tx.execute(sql`
+        if (body.isDefault === true) {
+          await clearSiblingListViewDefaults(tx, defaultScope);
+          await assertSingleListViewDefault(tx, defaultScope);
+        }
+        await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${user.orgId}, 'list_views', ${id}, 'update', ${JSON.stringify(changes)}, ${user.id})`);
-      return { kind: "ok" as const };
-    });
-    if (updated.kind === "not_found") return notFound("record");
-    if (updated.kind === "locked_entries") return NextResponse.json({ error: "locked built-in columns cannot be changed" }, { status: 400 });
-    if (updated.kind === "inactive_default") return NextResponse.json({ error: updated.error }, { status: 400 });
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    if (e instanceof AmbiguousListViewDefaultError)
-      return apiErrorResponse(e, { safeStatus: 409 });
-    if (e instanceof InactiveListViewDefaultError)
-      return apiErrorResponse(e, { safeStatus: 400 });
-    return dbWriteErrorResponse(e, {
-      route: "customization:list-views",
-      uniqueConflicts: { list_views_org_scope_type_name: "A view with that name already exists" },
-    });
-  }
-}
+        return { kind: "ok" as const };
+      });
+      if (updated.kind === "not_found")
+        return notFound("record");
+      if (updated.kind === "locked_entries")
+        return NextResponse.json(
+          { error: "locked built-in columns cannot be changed" },
+          { status: 400 },
+        );
+      if (updated.kind === "inactive_default")
+        return NextResponse.json({ error: updated.error }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      if (e instanceof AmbiguousListViewDefaultError)
+        return apiErrorResponse(e, { safeStatus: 409 });
+      if (e instanceof InactiveListViewDefaultError)
+        return apiErrorResponse(e, { safeStatus: 400 });
+      return dbWriteErrorResponse(e, {
+        route: "customization:list-views",
+        uniqueConflicts: {
+          list_views_org_scope_type_name:
+            "A view with that name already exists",
+        },
+      });
+    }
+  },
+});
 
 /** DELETE — remove a saved view. Owner or admin only. */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const { user } = authz;
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
-  const existing = await loadOwn(user.orgId, user.id, id);
-  if (!existing) return notFound("record");
-  const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
-  if (refused) return refused;
-  const adminGated = can(authz, "admin.customization.manage");
-  if (existing.scope === "org" && !adminGated)
-    return NextResponse.json({ error: "missing permission: admin.customization.manage" }, { status: 403 });
-  if (existing.scope === "user" && existing.ownerId !== user.id)
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  // Delete + audit in one transaction so a failed audit insert rolls back the
-  // deletion instead of leaving an untraceable configuration change behind.
-  const deleted = await db.transaction(async (tx) => {
-    const result = (await tx.execute(sql`
+export const DELETE = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: _req, authz, params }) => {
+    if (!authz)
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const { user } = authz;
+    const { id } = await params;
+    if (!isUuid(id))
+      return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
+    const existing = await loadOwn(user.orgId, user.id, id);
+    if (!existing)
+      return notFound("record");
+    const refused = await refuseDisabledRecordType(
+      user.orgId,
+      existing.recordType,
+    );
+    if (refused) return refused;
+    const adminGated = can(authz, "admin.customization.manage");
+    if (existing.scope === "org" && !adminGated)
+      return NextResponse.json(
+        { error: "missing permission: admin.customization.manage" },
+        { status: 403 },
+      );
+    if (existing.scope === "user" && existing.ownerId !== user.id)
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    // Delete + audit in one transaction so a failed audit insert rolls back the
+    // deletion instead of leaving an untraceable configuration change behind.
+    const deleted = await db.transaction(async (tx) => {
+      const result = (await tx.execute(sql`
       delete from list_views
        where id = ${id} and org_id = ${user.orgId}
-       returning name, scope`)) as { rows: Array<{ name: string; scope: string }> };
-    const row = result.rows[0];
-    if (!row) return null;
-    await tx.execute(sql`
+       returning name, scope`)) as {
+        rows: Array<{ name: string; scope: string }>;
+      };
+      const row = result.rows[0];
+      if (!row) return null;
+      await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${user.orgId}, 'list_views', ${id}, 'delete', ${JSON.stringify({ name: row.name, scope: row.scope })}, ${user.id})`);
-    return row;
-  });
-  if (!deleted) return notFound("record");
-  return NextResponse.json({ ok: true });
-}
+      return row;
+    });
+    if (!deleted)
+      return notFound("record");
+    return NextResponse.json({ ok: true });
+  },
+});

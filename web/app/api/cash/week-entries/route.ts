@@ -1,7 +1,8 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { isUuid } from "../../../../lib/list-params";
-import { can, getAuthz } from "../../../../lib/authz";
+import { can } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { cashPosition } from "../../../../lib/cash/cash-position";
 import { normalizeMoneyValue } from "../../../../lib/cash/core";
@@ -9,7 +10,7 @@ import { analyticsConfig } from "../../../../lib/analytics/config";
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = "nodejs";
+export { runtime } from "@/lib/api/route";
 
 /**
  * One forecast week's transactions, at full detail.
@@ -20,79 +21,120 @@ export const runtime = "nodejs";
  * travel with the page so every summary renders immediately; this route
  * supplies the rows behind whichever week is actually opened.
  */
-export async function GET(req: Request) {
-  // The week drill rides inside the banking/cash cockpit (banking.read) and
-  // the AP/AR cockpits (ap.read / ar.read): any one of the embedding pages'
-  // read permissions opens it, and a caller with none gets a 403 naming the
-  // remedy. reports.read alone never sufficed — no embedding page declares
-  // it — so it is not in the set.
-  const gate = await getAuthz();
-  if (!gate) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!can(gate, "banking.read") && !can(gate, "ap.read") && !can(gate, "ar.read")) {
-    return NextResponse.json({ error: "missing permission: banking.read, ap.read or ar.read" }, { status: 403 });
-  }
-  if (!(await isFeatureEnabled(gate.user.orgId, "banking"))) {
-    return notFound("record");
-  }
-  const user = gate.user;
+export const GET = defineRoute({
+  public: "session",
+  handler: async ({ request: req, authz: gate }) => {
+    // The week drill rides inside the banking/cash cockpit (banking.read) and
+    // the AP/AR cockpits (ap.read / ar.read): any one of the embedding pages'
+    // read permissions opens it, and a caller with none gets a 403 naming the
+    // remedy. reports.read alone never sufficed — no embedding page declares
+    // it — so it is not in the set.
 
-  const url = new URL(req.url);
-  const weekStart = url.searchParams.get("week");
-  if (!isIsoCalendarDate(weekStart)) {
-    return NextResponse.json({ error: "week must be an ISO date" }, { status: 400 });
-  }
-  const horizonParam = url.searchParams.get("horizon");
-  const horizonWeeks = horizonParam === null ? 13 : Number(horizonParam);
-  if ((horizonParam !== null && !/^\d+$/.test(horizonParam)) ||
-      !Number.isInteger(horizonWeeks) || horizonWeeks < 1 || horizonWeeks > 52) {
-    return NextResponse.json({ error: "horizon must be a whole number from 1 to 52" }, { status: 400 });
-  }
-  const asOf = url.searchParams.get("asOf") ?? undefined;
-  if (asOf !== undefined && !isIsoCalendarDate(asOf)) {
-    return NextResponse.json({ error: "asOf must be an ISO date" }, { status: 400 });
-  }
-  // The cockpit's subsidiary view must be reproduced or the drill would show
-  // transactions the page's own totals excluded.
-  const subParam = url.searchParams.get("sub");
-  const requestedSubIds = subParam === null ? undefined : subParam.split(",");
-  if (requestedSubIds?.some((id) => !isUuid(id))) {
-    return NextResponse.json({ error: "sub must contain comma-separated UUIDs" }, { status: 400 });
-  }
-  if (gate.allowedSubsidiaryIds) {
-    // A restricted caller's drill must never widen the page's subsidiary
-    // scope. An explicit out-of-scope (or empty) selection is indistinguishable
-    // from a missing view, while an omitted selection inherits every visible
-    // subsidiary instead of falling through to cashPosition's whole-company
-    // default.
+    if (!gate)
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     if (
-      gate.allowedSubsidiaryIds.size === 0 ||
-      (requestedSubIds !== undefined &&
-        (requestedSubIds.length === 0 ||
-          requestedSubIds.some((id) => !gate.allowedSubsidiaryIds!.has(id))))
+      !can(gate, "banking.read") &&
+      !can(gate, "ap.read") &&
+      !can(gate, "ar.read")
     ) {
+      return NextResponse.json(
+        { error: "missing permission: banking.read, ap.read or ar.read" },
+        { status: 403 },
+      );
+    }
+    if (!(await isFeatureEnabled(gate.user.orgId, "banking"))) {
       return notFound("record");
     }
-  }
-  const subIds = gate.allowedSubsidiaryIds
-    ? requestedSubIds ?? [...gate.allowedSubsidiaryIds]
-    : requestedSubIds;
+    const user = gate.user;
 
-  try {
-    const cfg = await analyticsConfig(user.orgId, "cashflow");
-    const apSettings = {
-      weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
-      restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
-    };
-    const position = await cashPosition(user.orgId, horizonWeeks, apSettings, asOf, subIds, gate.allowedSubsidiaryIds);
-    const week = position.weeks.find((w) => w.weekStart === weekStart);
-    if (!week) return NextResponse.json({ error: "week not in horizon" }, { status: 404 });
-    return NextResponse.json({
-      weekStart: week.weekStart,
-      arEntries: week.arEntries,
-      apEntries: week.apEntries,
-    });
-  } catch (error) {
-    console.error("[cash/week-entries] failed", error);
-    return NextResponse.json({ error: "could not load week" }, { status: 500 });
-  }
-}
+    const url = new URL(req.url);
+    const weekStart = url.searchParams.get("week");
+    if (!isIsoCalendarDate(weekStart)) {
+      return NextResponse.json(
+        { error: "week must be an ISO date" },
+        { status: 400 },
+      );
+    }
+    const horizonParam = url.searchParams.get("horizon");
+    const horizonWeeks = horizonParam === null ? 13 : Number(horizonParam);
+    if (
+      (horizonParam !== null && !/^\d+$/.test(horizonParam)) ||
+      !Number.isInteger(horizonWeeks) ||
+      horizonWeeks < 1 ||
+      horizonWeeks > 52
+    ) {
+      return NextResponse.json(
+        { error: "horizon must be a whole number from 1 to 52" },
+        { status: 400 },
+      );
+    }
+    const asOf = url.searchParams.get("asOf") ?? undefined;
+    if (asOf !== undefined && !isIsoCalendarDate(asOf)) {
+      return NextResponse.json(
+        { error: "asOf must be an ISO date" },
+        { status: 400 },
+      );
+    }
+    // The cockpit's subsidiary view must be reproduced or the drill would show
+    // transactions the page's own totals excluded.
+    const subParam = url.searchParams.get("sub");
+    const requestedSubIds = subParam === null ? undefined : subParam.split(",");
+    if (requestedSubIds?.some((id) => !isUuid(id))) {
+      return NextResponse.json(
+        { error: "sub must contain comma-separated UUIDs" },
+        { status: 400 },
+      );
+    }
+    if (gate.allowedSubsidiaryIds) {
+      // A restricted caller's drill must never widen the page's subsidiary
+      // scope. An explicit out-of-scope (or empty) selection is indistinguishable
+      // from a missing view, while an omitted selection inherits every visible
+      // subsidiary instead of falling through to cashPosition's whole-company
+      // default.
+      if (
+        gate.allowedSubsidiaryIds.size === 0 ||
+        (requestedSubIds !== undefined &&
+          (requestedSubIds.length === 0 ||
+            requestedSubIds.some((id) => !gate.allowedSubsidiaryIds!.has(id))))
+      ) {
+        return notFound("record");
+      }
+    }
+    const subIds = gate.allowedSubsidiaryIds
+      ? (requestedSubIds ?? [...gate.allowedSubsidiaryIds])
+      : requestedSubIds;
+
+    try {
+      const cfg = await analyticsConfig(user.orgId, "cashflow");
+      const apSettings = {
+        weeklyCap: normalizeMoneyValue(String(cfg.weeklyApCap ?? 0)),
+        restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1,
+      };
+      const position = await cashPosition(
+        user.orgId,
+        horizonWeeks,
+        apSettings,
+        asOf,
+        subIds,
+        gate.allowedSubsidiaryIds,
+      );
+      const week = position.weeks.find((w) => w.weekStart === weekStart);
+      if (!week)
+        return NextResponse.json(
+          { error: "week not in horizon" },
+          { status: 404 },
+        );
+      return NextResponse.json({
+        weekStart: week.weekStart,
+        arEntries: week.arEntries,
+        apEntries: week.apEntries,
+      });
+    } catch (error) {
+      console.error("[cash/week-entries] failed", error);
+      return NextResponse.json(
+        { error: "could not load week" },
+        { status: 500 },
+      );
+    }
+  },
+});

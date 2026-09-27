@@ -42,7 +42,7 @@ const hooks = registerHooks({
         url: 'data:text/javascript,export const db = { execute: async () => ({ rows: [] }), transaction: async (fn) => { globalThis[Symbol.for("openbooks.form-layout-post-bool-unit")].txCalls++; return fn({ execute: async () => ({ rows: [{ id: "form-1", name: "n" }] }) }) } }',
       };
     }
-    if (specifier === "../../../../lib/authz" && parent.includes("customization/form-layouts/route")) {
+    if (specifier === "@/lib/authz" || (specifier === "../../../../lib/authz" && parent.includes("customization/form-layouts/route"))) {
       return { url: "mock:authz", shortCircuit: true };
     }
     if (specifier.endsWith("lib/customization/gates") && parent.includes("customization/form-layouts/route")) {
@@ -63,7 +63,6 @@ const hooks = registerHooks({
 
 const form_layout_post_bool_unitUrl = './route.ts?form-layout-post-bool-unit'
 const { POST } = (await import(form_layout_post_bool_unitUrl)) as typeof import('./route.ts');
-hooks.deregister();
 
 // A bare { schemaVersion, recordType } layout drops locked built-in fields,
 // which POST now refuses before the flags logic. The vehicle layout carries

@@ -54,6 +54,7 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     // No root tsconfig maps `@/` (only web/tsconfig does): `@/lib/...` → web/lib.
     const parent = context.parentURL ?? ''
+    if (specifier === '@/lib/authz') return { shortCircuit: true, format: 'module', url: 'mock:authz-post' }
     if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/list-views')) {
       // Late delegation: the route binds `db` at import time, before the
       // test installs its doubles, so the stub forwards on every call.

@@ -12,7 +12,6 @@ import { ProvisionDifferencesSection, ProvisionFrameworkBadge, ProvisionPostButt
 import { TaxFilingDrawer, TaxHistoryTable, TaxPageHeader, TaxPageShell, TaxPreparePanel, TaxTabPanels, TaxTabs } from '../../app/(app)/tax/sections'
 import { AssetsTabs, AssetsDocLink, AssetsEquipmentLink } from '../../app/(app)/assets/sections'
 import { NewAssetButton } from '../../app/(app)/assets/NewAssetButton'
-import { NewAssetRedirect } from '../../app/(app)/assets/NewAssetRedirect'
 import { RunDepreciationButton } from '../../app/(app)/assets/RunDepreciationButton'
 import { AssetDrawer } from '../../app/(app)/assets/AssetDrawer'
 import { TaxPoolsView } from '../../app/(app)/assets/tax-pools/TaxPoolsView'
@@ -214,7 +213,6 @@ export const ASSETS_TAX_WIDGETS = {
       currentParams={(props.currentParams as Record<string, string | string[] | undefined>) ?? {}}
     />
   ),
-  'new-asset-redirect': () => <NewAssetRedirect />,
   /* createMode rides the asset-drawer widget on an in-memory payload. */
   'run-depreciation': (props) => (
     <RunDepreciationButton

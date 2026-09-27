@@ -60,7 +60,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?file-cabinet-folders'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import(

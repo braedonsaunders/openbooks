@@ -106,6 +106,8 @@ const mockDb = `
     transaction: async (work) => work({ execute }),
   }
   export const ambientTenantOrgId = () => null
+  export function currentRequestOrgResolver() { return null }
+  export function registerRequestOrgResolver() {}
   export const withBypassContext = async (work) => work()
 `;
 
@@ -117,6 +119,12 @@ stubModules({
   extra: {
     "@openbooks/engine/src/platform/db.ts": mockDb,
     "../../../../lib/feature-gates": `export async function guardFeaturePermission() {
+       return {
+         user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
+         allowedSubsidiaryIds: null,
+       }
+     }`,
+    "@/lib/feature-gates": `export async function guardFeaturePermission() {
        return {
          user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
          allowedSubsidiaryIds: null,

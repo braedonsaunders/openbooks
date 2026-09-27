@@ -38,7 +38,6 @@ const EXEMPT_ROUTES: Readonly<Record<string, string>> = {
   "web/app/api/ap-capture/route.ts": "multipart document upload",
   "web/app/api/accounting/changes/[id]/apply/route.ts": "bodyless lifecycle action; change id is a path parameter",
   "web/app/api/accounting/changes/[id]/submit/route.ts": "bodyless lifecycle action; change id is a path parameter",
-  "web/app/api/assets/draft/route.ts": "bodyless draft factory",
   "web/app/api/assistant/application-command/route.ts": "size-capped raw body carrying a signed confirmation token",
   "web/app/api/banking/reconciliations/[id]/auto-match/route.ts": "bodyless lifecycle action; reconciliation id is a path parameter",
   "web/app/api/banking/reconciliations/[id]/sign-off/route.ts": "bodyless lifecycle action; reconciliation id is a path parameter",
@@ -56,8 +55,6 @@ const EXEMPT_ROUTES: Readonly<Record<string, string>> = {
   "web/app/api/file-cabinet/folders/[id]/restore/route.ts": "bodyless restore action; folder id is a path parameter",
   "web/app/api/flows/email-action/route.ts": "form-encoded action carrying a signed approval token",
   "web/app/api/flows/runs/[id]/retry/route.ts": "bodyless lifecycle action; run id is a path parameter",
-  "web/app/api/insights/cards/draft/route.ts": "bodyless draft factory",
-  "web/app/api/insights/dashboards/draft/route.ts": "bodyless draft factory",
   "web/app/api/journals/draft/route.ts": "bodyless draft factory",
   "web/app/api/leases/[id]/commence/route.ts": "bodyless lifecycle action; lease id is a path parameter",
   "web/app/api/parties/[id]/bank-accounts/submit/route.ts": "bodyless lifecycle action; party and account ids are path and query parameters",
@@ -90,7 +87,7 @@ const MUTATION_EXPORT_RE = /^export\s+(?:async\s+)?(?:function|const)\s+(POST|PA
 const DIRECT_JSON_READ_RE = /\b(?:req|request)\s*\.\s*json\s*\(/;
 // Deliberately NOT global: RegExp.prototype.test on a /g pattern carries
 // lastIndex across calls and silently skips matches on later routes.
-const SHARED_BOUNDARY_FACTORY_RE = /\b(?:makePATCH|makeConvertPOST|readV1JsonObject|v1CreateAliasedRecord|v1UpdateAliasedRecord|v1CreateOrder|v1ConvertOrder)\s*\(/;
+const SHARED_BOUNDARY_FACTORY_RE = /\b(?:defineRoute|makePATCH|makeConvertPOST|readV1JsonObject|v1CreateAliasedRecord|v1UpdateAliasedRecord|v1CreateOrder|v1ConvertOrder)\s*\(/;
 const TYPED_BOUNDARY_FACTORY_RE = /\bmakeAssignWarehousePOST\s*\(/;
 const PARSED_SCHEMA_ARG_RE = /\bparseJsonBody\(\s*(?:req|request)\s*,\s*([A-Za-z_$][\w$]*)/g;
 

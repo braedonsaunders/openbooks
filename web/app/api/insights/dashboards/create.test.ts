@@ -185,7 +185,8 @@ const mockSources = new Map<string, string>([
     'mock:authz',
     // A faithful editor gate: real gates always carry the effective
     // permission set the visibility predicate reads.
-    `export async function guardPermission(permission) {
+    `export async function getAuthz() { return null }
+     export async function guardPermission(permission) {
        if (permission === 'insights.create') return {
          user: { orgId: '${ORG_ID}', id: '${USER_ID}' },
          permissions: new Set(['insights.read', 'insights.create']),
@@ -200,7 +201,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:get-authz'],
+  ['@/lib/authz', 'mock:authz'],
 ])
 
 const hooks = registerHooks({
@@ -233,7 +234,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?insight-dashboards-create-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   state.requestKey = null

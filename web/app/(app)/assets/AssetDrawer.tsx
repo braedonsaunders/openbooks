@@ -1,6 +1,5 @@
 'use client'
 
-import { readApiErrorMessage } from '@/lib/api-error'
 
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
@@ -352,11 +351,15 @@ export function AssetDrawer({
       body: JSON.stringify({ ...payloadBody, name: name.trim() }),
     })
     if (!res.ok) {
-      const code = await readApiErrorMessage(res, 'save_failed')
+      const body = await res.json().catch(() => null) as { error?: unknown; remedy?: unknown } | null
+      const code = body?.error
+      if (code === 'idempotency-conflict' && typeof body?.remedy === 'string' && body.remedy.trim()) {
+        throw new Error(body.remedy)
+      }
       throw new Error(
         typeof code === 'string' && (CREATE_ERROR_CODES as readonly string[]).includes(code)
           ? t(`create.errors.${code}`)
-          : code,
+          : typeof code === 'string' ? code : t('create.errors.save_failed'),
       )
     }
     const data = (await res.json()) as { id?: unknown }

@@ -1,4 +1,5 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
@@ -9,11 +10,11 @@ import {
 } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { proposeAssetChange } from "@openbooks/engine/src/assets/asset-changes.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { guardFeaturePermission } from "@/lib/feature-gates";
 import { exactMoney, parseJsonBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
+
 import { notFound } from "@/lib/api/responses";
-export const runtime = "nodejs";
+export { runtime } from "@/lib/api/route";
 const date = z.string().refine(isIsoCalendarDate, "enter a calendar date");
 const plan = z.array(z.object({ date, amount: exactMoney() })).max(1200);
 const groupComponent = z.object({
@@ -89,91 +90,92 @@ const assetChangeSchema = z.object({
     })
     .optional(),
 });
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const gate = await guardFeaturePermission("assets.manage", "fixedAssets");
-  if (gate instanceof NextResponse) return gate;
-  const { id } = await params;
-  if (!isUuid(id))
-    return NextResponse.json({ error: "invalid asset" }, { status: 422 });
-  const orgId = gate.user.orgId;
-  try {
-    const result = await db.transaction(async (tx) => {
-      // Keep the owner check and every dependent read under one asset lock.
-      await lockScopeRow(
-        tx,
-        orgId,
-        "fixed_asset",
-        id,
-        gate.allowedSubsidiaryIds,
-        "share",
-      );
-      const subsidiaries = (
-        await tx.execute<{
-          id: string;
-          name: string;
-          base_currency: string;
-          is_elimination: boolean;
-        }>(
-          sql`select id,name,base_currency,is_elimination from subsidiaries where org_id=${orgId} and is_active order by name`,
+export const GET = defineRoute({
+  permission: "assets.manage",
+  feature: "fixedAssets",
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: _req, authz: gate, params }) => {
+    const { id } = await params;
+    if (!isUuid(id))
+      return NextResponse.json({ error: "invalid asset" }, { status: 422 });
+    const orgId = gate.user.orgId;
+    try {
+      const result = await db.transaction(async (tx) => {
+        // Keep the owner check and every dependent read under one asset lock.
+        await lockScopeRow(
+          tx,
+          orgId,
+          "fixed_asset",
+          id,
+          gate.allowedSubsidiaryIds,
+          "share",
+        );
+        const subsidiaries = (
+          await tx.execute<{
+            id: string;
+            name: string;
+            base_currency: string;
+            is_elimination: boolean;
+          }>(
+            sql`select id,name,base_currency,is_elimination from subsidiaries where org_id=${orgId} and is_active order by name`,
+          )
+        ).rows.filter(
+          (s) =>
+            !gate.allowedSubsidiaryIds || gate.allowedSubsidiaryIds.has(s.id),
+        );
+        const books = (
+          await tx.execute<{ id: string; name: string }>(
+            sql`select id,name from accounting_books where org_id=${orgId} and is_active order by is_primary desc,name`,
+          )
+        ).rows;
+        const groupBooks = (
+          await tx.execute<{ book_id: string; group_currency: string }>(
+            sql`select book_id,group_currency from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null order by book_id`,
+          )
+        ).rows;
+        const groupScope = (
+          await tx.execute<{ elimination_subsidiary_id: string }>(
+            sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null`,
+          )
+        ).rows;
+        if (
+          gate.allowedSubsidiaryIds &&
+          groupScope.some(
+            (s) => !gate.allowedSubsidiaryIds!.has(s.elimination_subsidiary_id),
+          )
         )
-      ).rows.filter(
-        (s) => !gate.allowedSubsidiaryIds || gate.allowedSubsidiaryIds.has(s.id),
-      );
-      const books = (
-        await tx.execute<{ id: string; name: string }>(
-          sql`select id,name from accounting_books where org_id=${orgId} and is_active order by is_primary desc,name`,
-        )
-      ).rows;
-      const groupBooks = (
-        await tx.execute<{ book_id: string; group_currency: string }>(
-          sql`select book_id,group_currency from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null order by book_id`,
-        )
-      ).rows;
-      const groupScope = (
-        await tx.execute<{ elimination_subsidiary_id: string }>(
-          sql`select distinct elimination_subsidiary_id from asset_transfer_bases where org_id=${orgId} and receiving_asset_id=${id} and reversed_by_change_id is null`,
-        )
-      ).rows;
-      if (
-        gate.allowedSubsidiaryIds &&
-        groupScope.some(
-          (s) => !gate.allowedSubsidiaryIds!.has(s.elimination_subsidiary_id),
-        )
-      )
-        return { deniedGroupScope: true as const };
-      return { subsidiaries, books, groupBooks };
-    });
-    if ("deniedGroupScope" in result) return notFound("record");
-    return NextResponse.json(result);
-  } catch (error) {
-    if (error instanceof ScopeNotFoundError) return notFound("record");
-    throw error;
-  }
-}
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const gate = await guardFeaturePermission("assets.manage", "fixedAssets");
-  if (gate instanceof NextResponse) return gate;
-  const { id } = await params;
-  if (!isUuid(id))
-    return NextResponse.json({ error: "invalid asset" }, { status: 422 });
-  const body = await parseJsonBody(req, assetChangeSchema, { status: 422 });
-  if (!body.ok) return body.response;
-  try {
-    return NextResponse.json({
-      changeId: await proposeAssetChange(
-        gate.user.orgId,
-        id,
-        gate.user.id,
-        body.data,
-      ),
-    });
-  } catch (e) {
-    return apiErrorResponse(e, { safeStatus: 422 });
-  }
-}
+          return { deniedGroupScope: true as const };
+        return { subsidiaries, books, groupBooks };
+      });
+      if ("deniedGroupScope" in result) return notFound("record");
+      return NextResponse.json(result);
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) return notFound("record");
+      throw error;
+    }
+  },
+});
+export const POST = defineRoute({
+  permission: "assets.manage",
+  feature: "fixedAssets",
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
+    const { id } = await params;
+    if (!isUuid(id))
+      return NextResponse.json({ error: "invalid asset" }, { status: 422 });
+    const body = await parseJsonBody(req, assetChangeSchema, { status: 422 });
+    if (!body.ok) return body.response;
+    try {
+      return NextResponse.json({
+        changeId: await proposeAssetChange(
+          gate.user.orgId,
+          id,
+          gate.user.id,
+          body.data,
+        ),
+      });
+    } catch (e) {
+      return apiErrorResponse(e, { safeStatus: 422 });
+    }
+  },
+});

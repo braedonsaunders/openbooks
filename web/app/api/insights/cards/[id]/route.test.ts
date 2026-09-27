@@ -117,6 +117,7 @@ const mockUrls = new Map<string, string>([
   ['@/lib/insight-mutations', 'mock:mutations'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../_lib', 'mock:insights-lib'],
 ])
 
@@ -135,7 +136,6 @@ const hooks = registerHooks({
 
 const routeUrl = new URL('./route.ts?insight-card-occ-test', import.meta.url).href
 const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset() {
   routeState.calls.length = 0

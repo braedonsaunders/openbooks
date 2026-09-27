@@ -39,7 +39,7 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../../../lib/feature-gates') {
+    if ((specifier === '@/lib/feature-gates' || specifier === '../../../../../lib/feature-gates')) {
       return { url: 'mock:feature-gates', shortCircuit: true }
     }
     if (specifier === '@openbooks/engine/src/platform/business-date.ts') {
@@ -56,7 +56,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?asset-disposal-writeoff-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const ASSET_ID = '00000000-0000-4000-8000-00000000a002'
 

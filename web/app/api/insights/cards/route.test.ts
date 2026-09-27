@@ -170,7 +170,8 @@ const mockSources = new Map<string, string>([
   ],
   [
     'mock:authz',
-    `export async function guardPermission(permission) {
+    `export async function getAuthz() { return null }
+     export async function guardPermission(permission) {
        if (permission === 'insights.create') return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
        return new Response(null, { status: 403 })
      }`,
@@ -181,7 +182,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../lib/authz', 'mock:authz'],
-  ['@/lib/authz', 'mock:get-authz'],
+  ['@/lib/authz', 'mock:authz'],
 ])
 
 const hooks = registerHooks({
@@ -214,7 +215,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?insight-cards-idempotency-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   state.requestKey = null

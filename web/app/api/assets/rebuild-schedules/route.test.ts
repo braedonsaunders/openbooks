@@ -98,6 +98,9 @@ const mockDb = `
   export async function withTransactionSavepoint(tx, work) {
     return work(tx)
   }
+  export async function withOrgTransaction(_orgId, work) {
+    return work()
+  }
   export async function withBypassContext(work) {
     return work()
   }
@@ -127,6 +130,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/feature-gates", "mock:feature-gates"],
+  ["@/lib/feature-gates", "mock:feature-gates"],
   ["@openbooks/engine/src/assets/depreciation.ts", "mock:builder"],
 ]);
 
@@ -152,7 +156,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?depreciation-rebuild-test";
 const routeModule = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { POST } = routeModule;
 

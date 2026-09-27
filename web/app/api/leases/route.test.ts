@@ -57,7 +57,7 @@ const hooks = registerHooks({
 // Keep the real parseJsonBody + zod schema + decimal/calendar classifiers.
 const create = await import("./route.ts");
 const change = await import("./[id]/changes/route.ts");
-hooks.deregister();
+
 const id = "00000000-0000-4000-8000-000000000001";
 const agreement = {
   subsidiaryId: id,

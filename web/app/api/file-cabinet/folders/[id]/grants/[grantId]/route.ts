@@ -1,15 +1,14 @@
-import { NextResponse } from 'next/server'
-import { requireSession } from '../../../../lib'
-import { deleteGrant } from '../../../../grant-handlers'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { deleteGrant } from "../../../../grant-handlers";
 
-export const runtime = 'nodejs'
+export { runtime } from "@/lib/api/route";
 
-export async function DELETE(
-  _req: Request,
-  { params }: { params: Promise<{ id: string; grantId: string }> },
-) {
-  const gate = await requireSession()
-  if (gate instanceof NextResponse) return gate
-  const { id, grantId } = await params
-  return deleteGrant(gate, 'folder', id, grantId)
-}
+export const DELETE = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string(), grantId: z.string() }),
+  handler: async ({ request: _req, authz: gate, params }) => {
+    const { id, grantId } = await params;
+    return deleteGrant(gate, "folder", id, grantId);
+  },
+});

@@ -160,7 +160,7 @@ const hooks = registerHooks({
     // an unrestricted caller: the idempotency contract never restricts the
     // caller, and a hand-copied guard double could only drift from the
     // production guards the route now calls.
-    if (specifier === "../../../lib/authz") {
+    if ((specifier === "@/lib/authz" || specifier === "../../../lib/authz")) {
       const real = nextResolve(specifier, context).url;
       const source = `
         export * from ${JSON.stringify(real)};
@@ -201,7 +201,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?accounts-idempotency-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(): void {
   state.requestKey = null;
@@ -255,7 +254,10 @@ test("account creation replays only the exact request for an idempotency key", a
     type: "income",
   });
   assert.equal(changed.status, 409);
-  assert.deepEqual(await changed.json(), { error: "invalid_idempotency_key" });
+  assert.deepEqual(await changed.json(), {
+    error: "idempotency-conflict",
+    remedy: "Close and reopen the account drawer to retry with a fresh request key.",
+  });
   assert.equal(
     state.loadAccountCalls,
     2,

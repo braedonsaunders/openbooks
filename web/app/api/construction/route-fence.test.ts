@@ -98,6 +98,9 @@ const mockSources = new Map<string, string>([
   [
     'mock:authz',
     `
+      export async function getAuthz() {
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+      }
       export async function guardPermission(permission) {
         if (permission === 'ar.create' || permission === 'ar.read' || permission === 'ar.approve' || permission === 'ar.post') {
           return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
@@ -112,6 +115,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
 ])
 
 const hooks = registerHooks({
@@ -153,7 +157,6 @@ const { featureGateLockKey: webFenceKey } = (await import('../../../lib/features
 const { featureGateLockKey: engineFenceKey } = (await import(
   '@openbooks/engine/src/organization/org-feature-lock.ts'
 )) as { featureGateLockKey: (orgId: string) => string }
-hooks.deregister()
 
 function reset(): void {
   fenceState.calls.length = 0

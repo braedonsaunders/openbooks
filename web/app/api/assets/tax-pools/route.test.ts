@@ -154,7 +154,9 @@ const selfUrl = new URL(import.meta.url).href;
 const mockUrl = (name: string) => `${selfUrl}?tax-pool-mock=${name}`;
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", mockUrl("authz")],
+  ["@/lib/authz", mockUrl("authz")],
   ["../../../../lib/feature-gates", mockUrl("feature-gates")],
+  ["@/lib/feature-gates", mockUrl("feature-gates")],
   ["../../../../lib/subsidiaries", mockUrl("subsidiaries")],
   ["@openbooks/engine/src/platform/db.ts", mockUrl("db")],
   ["@openbooks/engine/src/tax-returns/pool-run.ts", mockUrl("tax-pool-run")],
@@ -179,7 +181,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?tax-pools-subsidiary-scope-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(allowed: Set<string> | null): void {
   routeState.allowedSubsidiaryIds = allowed;

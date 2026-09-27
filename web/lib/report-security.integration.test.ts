@@ -402,11 +402,11 @@ test(
     const fixture = await withBypassContext(() => createScratchOrg())
     const oid = fixture.orgId
     const trigger = 'insight_audit_fault_' + randomUUID().replaceAll('-', '')
-    const { POST: createCard } = await import(
-      root + 'web/app/api/insights/cards/draft/route.ts'
+    const { POST: postCard } = await import(
+      root + 'web/app/api/insights/cards/route.ts'
     )
-    const { POST: createBoard } = await import(
-      root + 'web/app/api/insights/dashboards/draft/route.ts'
+    const { POST: postBoard } = await import(
+      root + 'web/app/api/insights/dashboards/route.ts'
     )
     const { PATCH: saveCard, DELETE: deleteCard } = await import(
       root + 'web/app/api/insights/cards/[id]/route.ts'
@@ -442,18 +442,23 @@ test(
         ),
       )
       await withOrgContext(oid, async () => {
-        const request = (body: unknown) =>
+        const request = (body: unknown, idempotencyKey?: string) =>
           new Request('http://test.local', {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: {
+              'content-type': 'application/json',
+              ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+            },
             body: JSON.stringify(body),
           })
+        const createCard = () => postCard(request({}, randomUUID()))
+        const createBoard = () => postBoard(request({}, randomUUID()))
         const ctx = (id: string) => ({ params: Promise.resolve({ id }) })
         const cardResponse = await createCard()
-        assert.equal(cardResponse.status, 200)
+        assert.equal(cardResponse.status, 201)
         const card = await cardResponse.json()
         const boardResponse = await createBoard()
-        assert.equal(boardResponse.status, 200)
+        assert.equal(boardResponse.status, 201)
         const board = await boardResponse.json()
         const cardBefore = await (
           await cardGet(request({}), ctx(card.id))

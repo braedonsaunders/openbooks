@@ -1,56 +1,85 @@
-import { NextResponse } from 'next/server'
-import { isRetainedFileEvidence, replaceFile } from '../../../../../../lib/file-cabinet'
-import { isUuid } from '../../../../../../lib/list-params'
-import { fileViewer, isAllowedContentType, MAX_BYTES, requireFileAccess, requireSession } from '../../../lib'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import {
+  isRetainedFileEvidence,
+  replaceFile,
+} from "../../../../../../lib/file-cabinet";
+import { isUuid } from "../../../../../../lib/list-params";
+import {
+  fileViewer,
+  isAllowedContentType,
+  MAX_BYTES,
+  requireFileAccess,
+} from "../../../lib";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export { runtime } from "@/lib/api/route";
 
 /** Upload a new version of a file (the old version is preserved). */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireSession()
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  // Replacing (new version) needs Editor+ on the file.
-  const access = await requireFileAccess(gate, id, 'editor')
-  if (access) return access
+export const POST = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
+    const { id } = await params;
+    if (!isUuid(id))
+      return notFound("record");
+    // Replacing (new version) needs Editor+ on the file.
+    const access = await requireFileAccess(gate, id, "editor");
+    if (access) return access;
 
-  const form = await req.formData().catch(() => null)
-  if (!form) return NextResponse.json({ error: 'expected multipart/form-data' }, { status: 400 })
-  const file = form.get('file')
-  if (!(file instanceof File)) return NextResponse.json({ error: 'file is required' }, { status: 400 })
-  if (!isAllowedContentType(file.type)) {
-    return NextResponse.json({ error: `unsupported file type: ${file.type || 'unknown'}` }, { status: 415 })
-  }
-  if (file.size > MAX_BYTES) return NextResponse.json({ error: 'file exceeds 25 MB limit' }, { status: 413 })
-
-  const bytes = Buffer.from(await file.arrayBuffer())
-  if (bytes.length > MAX_BYTES) return NextResponse.json({ error: 'file exceeds 25 MB limit' }, { status: 413 })
-  if (bytes.length === 0) return NextResponse.json({ error: 'file is empty' }, { status: 400 })
-
-  const ok = await replaceFile({
-    orgId: gate.user.orgId,
-    fileId: id,
-    filename: file.name || 'file',
-    contentType: file.type.split(';')[0]!.trim().toLowerCase(),
-    bytes,
-    updatedBy: gate.user.id,
-    audit: { actorId: gate.user.id, viewer: fileViewer(gate) },
-  })
-  if (!ok) {
-    if (await isRetainedFileEvidence(gate.user.orgId, id)) {
+    const form = await req.formData().catch(() => null);
+    if (!form)
       return NextResponse.json(
-        {
-          error: 'retained_evidence_cannot_be_replaced',
-          detail:
-            'this file is retained evidence for a posted or active record, a live payment artifact, or a lifecycle-governed HR document; its bytes are pinned and cannot be replaced',
-        },
-        { status: 409 },
-      )
+        { error: "expected multipart/form-data" },
+        { status: 400 },
+      );
+    const file = form.get("file");
+    if (!(file instanceof File))
+      return NextResponse.json({ error: "file is required" }, { status: 400 });
+    if (!isAllowedContentType(file.type)) {
+      return NextResponse.json(
+        { error: `unsupported file type: ${file.type || "unknown"}` },
+        { status: 415 },
+      );
     }
-    return notFound("record")
-  }
-  return NextResponse.json({ ok: true })
-}
+    if (file.size > MAX_BYTES)
+      return NextResponse.json(
+        { error: "file exceeds 25 MB limit" },
+        { status: 413 },
+      );
+
+    const bytes = Buffer.from(await file.arrayBuffer());
+    if (bytes.length > MAX_BYTES)
+      return NextResponse.json(
+        { error: "file exceeds 25 MB limit" },
+        { status: 413 },
+      );
+    if (bytes.length === 0)
+      return NextResponse.json({ error: "file is empty" }, { status: 400 });
+
+    const ok = await replaceFile({
+      orgId: gate.user.orgId,
+      fileId: id,
+      filename: file.name || "file",
+      contentType: file.type.split(";")[0]!.trim().toLowerCase(),
+      bytes,
+      updatedBy: gate.user.id,
+      audit: { actorId: gate.user.id, viewer: fileViewer(gate) },
+    });
+    if (!ok) {
+      if (await isRetainedFileEvidence(gate.user.orgId, id)) {
+        return NextResponse.json(
+          {
+            error: "retained_evidence_cannot_be_replaced",
+            detail:
+              "this file is retained evidence for a posted or active record, a live payment artifact, or a lifecycle-governed HR document; its bytes are pinned and cannot be replaced",
+          },
+          { status: 409 },
+        );
+      }
+      return notFound("record");
+    }
+    return NextResponse.json({ ok: true });
+  },
+});

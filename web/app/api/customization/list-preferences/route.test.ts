@@ -41,7 +41,7 @@ const VIEW_ID = '11111111-1111-4111-8111-111111111111'
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../../lib/authz') {
+    if ((specifier === '@/lib/authz' || specifier === '../../../../lib/authz')) {
       return { shortCircuit: true, url: 'mock:authz' }
     }
     if (specifier === '../../../../lib/customization/gates') {
@@ -105,7 +105,6 @@ const hooks = registerHooks({
 
 const list_preferences_inactive_lockUrl = './route.ts?list-preferences-inactive-lock'
 const { PUT } = (await import(list_preferences_inactive_lockUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(respondTx: RouteState['respondTx']): void {
   routeState.calls = []
