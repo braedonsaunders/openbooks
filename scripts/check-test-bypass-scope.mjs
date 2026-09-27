@@ -204,6 +204,18 @@ function braceDepthAt(code, index) {
   let i = 0;
   while (i < index) {
     const char = code[i];
+    // Comments first: an apostrophe in prose ("the handler's gate") must not
+    // open a phantom string that swallows the braces after it.
+    if (char === "/" && code[i + 1] === "/") {
+      const end = code.indexOf("\n", i);
+      i = end === -1 ? index : end + 1;
+      continue;
+    }
+    if (char === "/" && code[i + 1] === "*") {
+      const end = code.indexOf("*/", i + 2);
+      i = end === -1 ? index : end + 2;
+      continue;
+    }
     if (char === "'" || char === '"' || char === "`") {
       const quote = char;
       i++;
