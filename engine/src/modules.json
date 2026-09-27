@@ -458,6 +458,15 @@
         "platform"
       ]
     },
+    "resourcing": {
+      "description": "Professional services capacity, availability and resource planning.",
+      "dependsOn": [
+        "money",
+        "payroll",
+        "platform",
+        "projects"
+      ]
+    },
     "revenue": {
       "description": "Revenue recognition obligations and schedules; lease accounting.",
       "dependsOn": [
