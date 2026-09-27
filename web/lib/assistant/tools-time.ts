@@ -23,7 +23,7 @@ import {
 } from "../../app/api/timesheets/_lib";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
-import { dateInput, uuidInput, num, capList, decimalText } from "./tools-shared";
+import { dateInput, uuidInput, numberValue, capList, decimalText } from "./tools-shared";
 
 /**
  * Time-tracking and field-ticket read/search tools for the agentic assistant.
@@ -98,7 +98,7 @@ const getTimesheetWeek: AssistantToolDef = {
       isBillable: r.isBillable,
       memo: r.memo == null ? null : truncateText(r.memo, 200),
       hours: r.hours,
-      totalHours: num(r.hours.reduce((sum, h) => sum + (h === "" ? 0 : Number(h)), 0)),
+      totalHours: numberValue(r.hours.reduce((sum, h) => sum + (h === "" ? 0 : Number(h)), 0)),
       entryStatuses: r.entryStatuses,
       immutable: r.immutable,
     }));
@@ -114,7 +114,7 @@ const getTimesheetWeek: AssistantToolDef = {
         lockReasons: payload.lockReasons,
         lockedCount: payload.lockedCount,
         rejectionReason: payload.rejectionReason,
-        weekTotalHours: num(rows.reduce((sum, r) => sum + (r.totalHours as number), 0)),
+        weekTotalHours: numberValue(rows.reduce((sum, r) => sum + (r.totalHours as number), 0)),
         rows: capped.items,
         rowsTruncated: capped.truncated,
         href: "/timesheets",
@@ -224,7 +224,7 @@ const searchTimesheets: AssistantToolDef = {
         employeeName: r.employee_name,
         weekStart: r.week_start,
         status: r.status,
-        totalHours: num(r.total_hours),
+        totalHours: numberValue(r.total_hours),
         entryCount: Number(r.entry_count ?? 0),
         submittedAt: r.submitted_at,
         approvedAt: r.approved_at,
@@ -237,7 +237,7 @@ const searchTimesheets: AssistantToolDef = {
       data: {
         returned: capped.items.length,
         totalWeeks: Number(total.weeks ?? 0),
-        totalHours: num(total.hours ?? 0),
+        totalHours: numberValue(total.hours),
         truncated: capped.truncated,
         weeks: capped.items,
         byStatus: byStatus.rows.map((r) => ({ status: r.status, count: Number(r.count ?? 0) })),
@@ -330,7 +330,7 @@ const unbilledTime: AssistantToolDef = {
         projectId: a.projectId,
         revenue: decimalText(unbilled.revenue),
         cost: decimalText(unbilled.cost),
-        hours: num(unbilled.hours),
+        hours: numberValue(unbilled.hours),
         timeEntryCount: unbilled.timeEntryCount,
         costLineCount: unbilled.costLineCount,
         href: "/projects",
@@ -423,7 +423,7 @@ const listFieldTickets: AssistantToolDef = {
         foremanName: r.foreman_name,
         customerSignedAt: r.signed_at,
         signatureSentAt: r.sent_at,
-        totalHours: num(r.total_hours),
+        totalHours: numberValue(r.total_hours),
       })),
       limit,
     );
@@ -482,7 +482,7 @@ const getFieldTicket: AssistantToolDef = {
         timeTypeName: l.time_type_name,
         taskName: l.project_task_name,
         workedOn: l.worked_on,
-        hours: num(l.hours),
+        hours: numberValue(l.hours),
         billRate: l.bill_rate == null ? null : decimalText(l.bill_rate),
         status: l.status,
       })),
@@ -492,7 +492,7 @@ const getFieldTicket: AssistantToolDef = {
       (loaded.lines as TicketLineRow[]).map((l) => ({
         itemName: l.item_name,
         description: l.description == null ? null : truncateText(l.description, 200),
-        quantity: num(l.quantity),
+        quantity: numberValue(l.quantity),
         unit: l.unit,
         unitPrice: decimalText(l.unit_price),
         amount: decimalText(l.amount),
@@ -524,7 +524,7 @@ const getFieldTicket: AssistantToolDef = {
           chargeDocumentId: ticket.chargeDocumentId ?? null,
           laborTotal: decimalText(loaded.laborTotal),
           linesTotal: decimalText(loaded.linesTotal),
-          grandTotal: num(loaded.grandTotal),
+          grandTotal: numberValue(loaded.grandTotal),
         },
         labor: labor.items,
         laborTruncated: labor.truncated,

@@ -2,11 +2,10 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { assistantListPage, dateInput, orgToday } from "./tools-shared";
+import { assistantListPage, dateInput, money, orgToday } from "./tools-shared";
 
 /**
  * Construction-billing reads. Retainage (holdback) is not a separate document
@@ -16,8 +15,6 @@ import { assistantListPage, dateInput, orgToday } from "./tools-shared";
  * of that control account — this tool reads it exactly as the balance sheet
  * would and breaks it down by party, project, or source document.
  */
-
-const money = (v: unknown) => normalizeMoney(v == null ? "0" : String(v));
 
 const retainageBalances: AssistantToolDef = {
   name: "retainage_balances",

@@ -2,13 +2,12 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { loadAsset } from "../../app/api/assets/_lib";
 import { loadLease } from "../../app/(app)/assets/leases/_lib";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { uuidInput } from "./tools-shared";
+import { money, uuidInput } from "./tools-shared";
 
 /**
  * Fixed-asset reads. The register tab is an entity list over `fixed_assets`;
@@ -18,8 +17,6 @@ import { uuidInput } from "./tools-shared";
  * periods (GET `api/assets/tax-pools`). Every tool enforces the same gate
  * (`assets.read`) and feature (`fixedAssets`) as those routes.
  */
-
-const money = (v: unknown) => normalizeMoney(v == null ? "0" : String(v));
 
 function assetGate(): AssistantToolDef["gate"] {
   return { mode: "anyOf", perms: ["assets.read"] };

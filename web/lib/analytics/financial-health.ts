@@ -9,7 +9,8 @@ import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { resolveOrgId } from "../org-scope";
 import { flowRates } from "../fx-presentation";
 import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
-import { englishFinancialHealthNotes, type FinancialHealthNotes } from "./health-strings";
+import { healthStrings, type FinancialHealthNotes } from "./health-strings";
+import { englishCatalogMessage } from "./catalog-strings";
 import { OPERATING_EXPENSE_TYPES } from "./operating-expenses";
 import { decimalSum, type ExactDecimal } from '../statement-format'
 import { addMonthsClamped } from '@openbooks/engine/src/platform/business-date.ts';
@@ -323,7 +324,7 @@ export async function financialHealth(
   benchmarks: HealthBenchmarks = DEFAULT_BENCHMARKS,
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-  notes: FinancialHealthNotes = englishFinancialHealthNotes,
+  notes: FinancialHealthNotes = healthStrings(englishCatalogMessage, "en"),
 ): Promise<FinancialHealth> {
   const { moneyCompact } = await getMoneyFormatter(orgId)
   const resolvedOrgId = await resolveOrgId(orgId);

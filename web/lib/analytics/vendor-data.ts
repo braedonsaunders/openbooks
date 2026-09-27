@@ -6,7 +6,8 @@ import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { sql } from "drizzle-orm";
 import { addMonthsClamped, businessToday, calendarDaysBetween, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { englishVendorStrings, type VendorStrings } from "./vendor-strings";
+import { vendorStrings, type VendorStrings } from "./vendor-strings";
+import { englishCatalogMessage } from "./catalog-strings";
 
 /**
  * Vendor Performance — data behind /analytics/vendor-performance.
@@ -119,7 +120,7 @@ export async function vendorData(
   period: { from: string; to: string; label: string },
   orgId: string,
   allowed: ReadonlySet<string> | null,
-  strings: VendorStrings = englishVendorStrings,
+  strings: VendorStrings = vendorStrings(englishCatalogMessage, "en"),
 ): Promise<VendorData> {
   const { from, to } = period;
   const pFrom = priorYear(from);

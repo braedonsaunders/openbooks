@@ -2,12 +2,11 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { loadItem } from "../../app/api/items/_lib";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { assistantListPage, dateInput, uuidInput } from "./tools-shared";
+import { assistantListPage, dateInput, money, uuidInput } from "./tools-shared";
 
 /**
  * Item master + inventory reads. The item catalog screen
@@ -17,8 +16,6 @@ import { assistantListPage, dateInput, uuidInput } from "./tools-shared";
  * caller's visible subsidiaries — every tool here applies the same gate
  * (`items.read`) and the same subsidiary filter.
  */
-
-const money = (v: unknown) => normalizeMoney(v == null ? "0" : String(v));
 
 const searchItems: AssistantToolDef = {
   name: "search_items",

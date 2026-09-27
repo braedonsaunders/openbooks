@@ -22,7 +22,7 @@ import {
   crmSharedScope,
 } from "../crm-scope";
 import { type AssistantToolDef, type ToolResult, truncateText } from "./types";
-import { dateInput, uuidInput, num, capList, decimalText } from "./tools-shared";
+import { dateInput, uuidInput, numberValue, capList, decimalText } from "./tools-shared";
 
 /**
  * CRM read/search tools for the agentic assistant. Every tool is gated with
@@ -201,7 +201,7 @@ const getOpportunity: AssistantToolDef = {
       (loaded.lines as Record<string, unknown>[]).map((l) => ({
         lineNumber: l.line_number,
         description: truncateText(l.description as string | null, 200),
-        quantity: num(l.quantity),
+        quantity: numberValue(l.quantity),
         unit: l.unit,
         unitPrice: decimalText(l.unit_price),
         amount: decimalText(l.amount),
@@ -272,8 +272,8 @@ const getOpportunity: AssistantToolDef = {
           currency: head.currency,
           projectedAmount: decimalText(head.projected_amount),
           weightedAmount: decimalText(head.weighted_amount),
-          rangeLow: head.range_low == null ? null : num(head.range_low),
-          rangeHigh: head.range_high == null ? null : num(head.range_high),
+          rangeLow: head.range_low == null ? null : numberValue(head.range_low),
+          rangeHigh: head.range_high == null ? null : numberValue(head.range_high),
           expectedCloseDate: head.expected_close_date,
           nextStep: truncateText(head.next_step as string | null, 300),
           description: truncateText(head.description as string | null, 500),

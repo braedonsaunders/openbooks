@@ -1,8 +1,9 @@
 import "server-only";
 import { z } from "zod";
+import { getLocale, getTranslations } from "next-intl/server";
 import { withOrg } from "@openbooks/engine/src/platform/db.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { dateInput, num, capList, decimalText, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
+import { dateInput, numberValue, capList, decimalText, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
 import { healthData } from "../analytics/health-data";
 import { customerData, customerProfitability } from "../analytics/customer-data";
 import { vendorData } from "../analytics/vendor-data";
@@ -12,6 +13,13 @@ import { utilizationData } from "../analytics/utilization-data";
 import { spendVelocityData } from "../analytics/spend-velocity-data";
 import { sentinelData } from "../analytics/sentinel-data";
 import { sentinelAccessDenied } from "../analytics/sentinel-access";
+import { healthStrings } from "../analytics/health-strings";
+import { customerStrings } from "../analytics/customer-strings";
+import { vendorStrings } from "../analytics/vendor-strings";
+import { trueCostStrings } from "../analytics/true-cost-strings";
+import { utilizationStrings } from "../analytics/utilization-strings";
+import { spendVelocityStrings } from "../analytics/spend-velocity-strings";
+import { sentinelStrings } from "../analytics/sentinel-strings";
 import { analyticsConfig } from "../analytics/config";
 import { isFeatureEnabled } from "../features";
 import { apPosition } from "../cash/ap-position";
@@ -40,6 +48,11 @@ import type { CategoryWeekly, ForecastEntry, WeekRow } from "../cash/core";
 const periodInput = z.object({ ...rangeInputFields });
 
 type PeriodArgs = RangeArgs;
+
+async function requestAnalyticsStrings() {
+  const [translate, locale] = await Promise.all([getTranslations("analytics"), getLocale()]);
+  return { locale, translate: (key: string, values?: Record<string, string | number>) => translate(key, values) };
+}
 
 /** Compact map of a shared-engine forecast entry (AR/AP schedule line). */
 function slimEntry(e: ForecastEntry) {
@@ -107,7 +120,9 @@ const financialHealthTool: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
-    const r = await withOrg(authz.user.orgId, () => healthData(period, authz.user.orgId, authz.allowedSubsidiaryIds));
+    const { locale, translate } = await requestAnalyticsStrings();
+    const strings = healthStrings(translate, locale);
+    const r = await withOrg(authz.user.orgId, () => healthData(period, authz.user.orgId, authz.allowedSubsidiaryIds, strings));
     // soft-feature: only drops the budget section when the module is off; the dashboard stays.
     const budgetsOn = await isFeatureEnabled(authz.user.orgId, "budgets");
     const ratios = Object.fromEntries(
@@ -189,12 +204,14 @@ const customerIntelligenceTool: AssistantToolDef = {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     const orgId = authz.user.orgId;
+    const { locale, translate } = await requestAnalyticsStrings();
+    const strings = customerStrings(translate, locale);
     // soft-feature: only drops the job-costed section when the module is off; the dashboard stays.
     const projectsOn = await isFeatureEnabled(orgId, "projects");
     const [r, prof] = await withOrg(orgId, () =>
       Promise.all([
-        customerData(period, orgId, authz.allowedSubsidiaryIds),
-        projectsOn ? customerProfitability(period, orgId, authz.allowedSubsidiaryIds) : Promise.resolve(null),
+        customerData(period, orgId, authz.allowedSubsidiaryIds, strings),
+        projectsOn ? customerProfitability(period, orgId, authz.allowedSubsidiaryIds, strings) : Promise.resolve(null),
       ]),
     );
     return {
@@ -208,7 +225,7 @@ const customerIntelligenceTool: AssistantToolDef = {
         growth: {
           yoyGrowth: r.growth.yoyGrowth,
           avgMonthlyGrowth: r.growth.avgMonthlyGrowth,
-          medianMonthlyRevenue: num(r.growth.medianMonthlyRevenue),
+          medianMonthlyRevenue: numberValue(r.growth.medianMonthlyRevenue),
           totalNewCustomers: r.growth.totalNewCustomers,
           trend: r.growth.trend,
           monthly: capList(r.growth.monthly, 24),
@@ -220,14 +237,14 @@ const customerIntelligenceTool: AssistantToolDef = {
           r.rows.map((c) => ({
             id: c.id,
             name: c.name,
-            revenue: num(c.revenue),
+            revenue: numberValue(c.revenue),
             yoyPct: c.yoyPct,
             invoices: c.invoices,
-            avgInvoice: num(c.avgInvoice),
+            avgInvoice: numberValue(c.avgInvoice),
             recencyDays: c.recencyDays,
             segment: c.segment,
             tier: c.tier,
-            clv: num(c.clv),
+            clv: numberValue(c.clv),
             churnScore: c.churnScore,
             churnLevel: c.churnLevel,
             frictionLevel: c.frictionLevel,
@@ -250,9 +267,9 @@ const customerIntelligenceTool: AssistantToolDef = {
                 prof.customers.map((c) => ({
                   customerId: c.customerId,
                   customerName: c.customerName,
-                  totalRevenue: num(c.totalRevenue),
-                  totalCost: num(c.totalCost),
-                  grossProfit: num(c.grossProfit),
+                  totalRevenue: numberValue(c.totalRevenue),
+                  totalCost: numberValue(c.totalCost),
+                  grossProfit: numberValue(c.grossProfit),
                   marginPct: c.marginPct,
                   profitTier: c.profitTier,
                   isFakeChampion: c.isFakeChampion,
@@ -281,7 +298,9 @@ const vendorPerformanceTool: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
-    const r = await withOrg(authz.user.orgId, () => vendorData(period, authz.user.orgId, authz.allowedSubsidiaryIds));
+    const { locale, translate } = await requestAnalyticsStrings();
+    const strings = vendorStrings(translate, locale);
+    const r = await withOrg(authz.user.orgId, () => vendorData(period, authz.user.orgId, authz.allowedSubsidiaryIds, strings));
     return {
       ok: true,
       data: {
@@ -295,17 +314,17 @@ const vendorPerformanceTool: AssistantToolDef = {
           r.rows.map((v) => ({
             id: v.id,
             name: v.name,
-            spend: num(v.spend),
+            spend: numberValue(v.spend),
             yoyPct: v.yoyPct,
             sharePct: v.sharePct,
             bills: v.bills,
-            avgBill: num(v.avgBill),
+            avgBill: numberValue(v.avgBill),
             lastBill: v.lastBill,
             recencyDays: v.recencyDays,
             tier: v.tier,
             avgDaysToPay: v.avgDaysToPay,
             onTimePct: v.onTimePct,
-            lateSpend: num(v.lateSpend),
+            lateSpend: numberValue(v.lateSpend),
             score: v.score,
             grade: v.grade,
             quadrant: v.quadrant,
@@ -378,7 +397,9 @@ const trueCostTool: AssistantToolDef = {
     }
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
-    const r = await withOrg(authz.user.orgId, () => trueCostData(authz.user.orgId, period, authz.allowedSubsidiaryIds));
+    const { locale, translate } = await requestAnalyticsStrings();
+    const strings = trueCostStrings(translate, locale);
+    const r = await withOrg(authz.user.orgId, () => trueCostData(authz.user.orgId, period, authz.allowedSubsidiaryIds, strings));
     return {
       ok: true,
       data: {
@@ -389,9 +410,9 @@ const trueCostTool: AssistantToolDef = {
           r.departments.map((d) => ({
             id: d.id,
             name: d.name,
-            billedHours: num(d.billedHours),
-            totalHours: num(d.totalHours),
-            composite: num(d.composite),
+            billedHours: numberValue(d.billedHours),
+            totalHours: numberValue(d.totalHours),
+            composite: numberValue(d.composite),
           })),
           50,
         ),
@@ -401,9 +422,9 @@ const trueCostTool: AssistantToolDef = {
             key: c.key,
             name: c.name,
             categoryType: c.categoryType,
-            totalAmount: num(c.totalAmount),
+            totalAmount: numberValue(c.totalAmount),
             rate: c.rate,
-            rawRate: num(c.rawRate),
+            rawRate: numberValue(c.rawRate),
             rateDisplay: c.rateDisplay,
             allocationBase: c.allocationBase,
             allocationMethod: c.allocationMethod,
@@ -423,17 +444,17 @@ const trueCostTool: AssistantToolDef = {
         totals: r.totals,
         labor: {
           count: r.labor.count,
-          min: num(r.labor.min),
-          max: num(r.labor.max),
-          weighted: num(r.labor.weighted),
+          min: numberValue(r.labor.min),
+          max: numberValue(r.labor.max),
+          weighted: numberValue(r.labor.weighted),
           employees: capList(
             r.labor.employees.map((e) => ({
               id: e.id,
               name: e.name,
               deptName: e.deptName,
               title: e.title,
-              rate: num(e.rate),
-              hours: num(e.hours),
+              rate: numberValue(e.rate),
+              hours: numberValue(e.hours),
             })),
             50,
           ),
@@ -471,7 +492,9 @@ const utilizationTool: AssistantToolDef = {
     }
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
-    const r = await withOrg(authz.user.orgId, () => utilizationData(authz.user.orgId, period, authz.allowedSubsidiaryIds));
+    const { locale, translate } = await requestAnalyticsStrings();
+    const strings = utilizationStrings(translate, locale);
+    const r = await withOrg(authz.user.orgId, () => utilizationData(authz.user.orgId, period, authz.allowedSubsidiaryIds, strings));
     const slimGroup = (g: (typeof r.departments)[number]) => ({
       id: g.id,
       name: g.name,
@@ -514,21 +537,23 @@ const spendVelocityTool: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
-    const r = await withOrg(authz.user.orgId, () => spendVelocityData(authz.user.orgId, period, authz.allowedSubsidiaryIds));
+    const { locale, translate } = await requestAnalyticsStrings();
+    const strings = spendVelocityStrings(translate, locale);
+    const r = await withOrg(authz.user.orgId, () => spendVelocityData(authz.user.orgId, period, authz.allowedSubsidiaryIds, strings));
     const slimVelocity = (v: (typeof r.accountVelocity)[number]) => ({
       id: v.id,
       name: v.name,
       entityType: v.entityType,
-      totalSpend: num(v.totalSpend),
+      totalSpend: numberValue(v.totalSpend),
       transactionCount: v.transactionCount,
       billPct: v.billPct,
       expensePct: v.expensePct,
       velocity: v.velocity,
       acceleration: v.acceleration,
       trend: v.trend,
-      latestSpend: num(v.latestSpend),
-      previousSpend: num(v.previousSpend),
-      avgMonthlySpend: num(v.avgMonthlySpend),
+      latestSpend: numberValue(v.latestSpend),
+      previousSpend: numberValue(v.previousSpend),
+      avgMonthlySpend: numberValue(v.avgMonthlySpend),
     });
     return {
       ok: true,
@@ -547,9 +572,9 @@ const spendVelocityTool: AssistantToolDef = {
               accountId: x.accountId,
               accountName: x.accountName,
               monotonicRatio: x.monotonicRatio,
-              avgMonthlyIncrease: num(x.avgMonthlyIncrease),
-              totalCreep: num(x.totalCreep),
-              annualizedCreep: num(x.annualizedCreep),
+              avgMonthlyIncrease: numberValue(x.avgMonthlyIncrease),
+              totalCreep: numberValue(x.totalCreep),
+              annualizedCreep: numberValue(x.annualizedCreep),
               monthCount: x.monthCount,
               severity: x.severity,
             })),
@@ -575,11 +600,11 @@ const spendVelocityTool: AssistantToolDef = {
             r.periodComparison.accounts.map((x) => ({
               accountId: x.accountId,
               accountName: x.accountName,
-              currentAmount: num(x.currentAmount),
-              priorAmount: num(x.priorAmount),
-              twoBackAmount: num(x.twoBackAmount),
+              currentAmount: numberValue(x.currentAmount),
+              priorAmount: numberValue(x.priorAmount),
+              twoBackAmount: numberValue(x.twoBackAmount),
               changePct: x.changePct,
-              projectedAmount: num(x.projectedAmount),
+              projectedAmount: numberValue(x.projectedAmount),
               isNew: x.isNew,
               velocity: x.velocity,
               acceleration: x.acceleration,
@@ -615,7 +640,9 @@ const sentinelTool: AssistantToolDef = {
     if (sentinelAccessDenied(authz) !== null) return { ok: false, error: "forbidden" };
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
-    const r = await withOrg(authz.user.orgId, () => sentinelData(authz.user.orgId, period, authz));
+    const { locale, translate } = await requestAnalyticsStrings();
+    const strings = sentinelStrings(translate, locale);
+    const r = await withOrg(authz.user.orgId, () => sentinelData(authz.user.orgId, period, authz, strings));
     return {
       ok: true,
       data: {
@@ -639,13 +666,13 @@ const sentinelTool: AssistantToolDef = {
         },
         thresholdTrap: {
           total: r.thresholdTrap.total,
-          totalAmount: num(r.thresholdTrap.totalAmount),
+          totalAmount: numberValue(r.thresholdTrap.totalAmount),
           byTrap: capList(r.thresholdTrap.byTrap, 50),
           items: capList(r.thresholdTrap.items, 50),
         },
         weekend: {
           total: r.weekend.total,
-          totalAmount: num(r.weekend.totalAmount),
+          totalAmount: numberValue(r.weekend.totalAmount),
           saturday: r.weekend.saturday,
           sunday: r.weekend.sunday,
           items: capList(r.weekend.items, 50),
@@ -657,7 +684,7 @@ const sentinelTool: AssistantToolDef = {
             partyId: g.partyId,
             partyName: g.partyName,
             count: g.count,
-            totalAmount: num(g.totalAmount),
+            totalAmount: numberValue(g.totalAmount),
             startRef: g.startRef,
             endRef: g.endRef,
             dateSpanDays: g.dateSpanDays,

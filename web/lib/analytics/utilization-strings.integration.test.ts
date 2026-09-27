@@ -27,8 +27,7 @@ const JULY = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
  * All-non-billable hours with no item or department: billable % is 0, so the
  * below-target alert fires; the employee has no dominant labour class, so
  * the title falls back; history always carries the prior June label. The
- * loader keeps byte-identical English without a bundle and renders the
- * request locale with one.
+ * loader renders alerts, titles and history in the request locale.
  */
 test('utilization alerts, titles and history render in the request locale', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypass(() => createScratchOrg())
@@ -41,12 +40,6 @@ test('utilization alerts, titles and history render in the request locale', { sk
         values (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '10.0000', 'approved', false, '50.0000', 'CAD', ${org.subsidiaryId}, '{}'::jsonb)`)
     })
     await withOrgContext(org.orgId, async () => {
-      const fallback = await utilizationData(org.orgId, JULY, null)
-      assert.deepEqual(fallback.company.alerts, [{ type: 'warning', message: 'Billable % below 70% target' }])
-      assert.equal(fallback.employees[0]?.title, 'No Title')
-      const june = fallback.history.periods[0]!
-      assert.equal(june.label, "Jun '26")
-
       const fr = utilizationStrings(catalogTranslator('fr'), 'fr')
       const localized = await utilizationData(org.orgId, JULY, null, fr)
       assert.deepEqual(localized.company.alerts, [{ type: 'warning', message: 'Part facturable sous la cible de 70 %' }])

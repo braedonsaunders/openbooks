@@ -10,8 +10,9 @@
  * use the same calculation pipeline.
  */
 
-import { englishTrueCostStrings, type TrueCostStrings } from "./true-cost-strings";
-import { add, cmp, div, fromUnits, mulDecimal, mulPercent, roundDiv, toUnits } from "@openbooks/engine/src/money/money.ts";
+import { trueCostStrings, type TrueCostStrings } from "./true-cost-strings";
+import { englishCatalogMessage } from "./catalog-strings";
+import { add, cmp, div, fromUnits, mulDecimal, mulPercent, roundDiv, roundMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
 import { quantizeOverheadMoney } from "@openbooks/engine/src/projects/overhead-rates.ts";
 
 /* ─────────────────────────────────────────────── constants ── */
@@ -481,7 +482,7 @@ export function calculateFormulaCategoryData(
   allocationBase: AllocationBase,
   deptIds: string[],
   bases: AllocationBaseBundle,
-  strings: TrueCostStrings = englishTrueCostStrings,
+  strings: TrueCostStrings = trueCostStrings(englishCatalogMessage, "en"),
 ): { expense: Record<string, number>; expenseExact?: Record<string, string>; totalExpense: number; error?: string } {
   const expense: Record<string, number> = { Overall: 0 };
   const expenseExact: Record<string, string> = { Overall: "0.0000" };
@@ -685,14 +686,14 @@ export interface ScenarioImpact {
   fringeRate: number;
 }
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+const round2 = (n: number) => Number(roundMoney(String(n), 2));
 
 /** Calculate six scenario types, including annualized hours and fringe. */
 export function calculateScenario(
   input: ScenarioInput,
   cur: ScenarioCurrent,
   formatCurrency: (value: number) => string = (value) => `${round2(value)} currency units`,
-  strings: TrueCostStrings = englishTrueCostStrings,
+  strings: TrueCostStrings = trueCostStrings(englishCatalogMessage, "en"),
 ): ScenarioImpact {
   const { currentRate, currentExpense, currentHours, currentUtilization, fringeRate } = cur;
   let projectedRate = 0;

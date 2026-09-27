@@ -1,15 +1,39 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { safeApplicationToolError } from "./tool-errors";
 
 // tools-shared.ts is server-only; run its pure helpers under Node with the
 // same marker shim the other assistant tests use.
-const { compactRows, assistantListPage, capList, num, decimalText, MAX_LIST_ROWS, MAX_ROW_STRING } = await import("./tools-shared.ts");
+const { compactRows, assistantListPage, capList, num, numberValue, money, decimalText, MAX_LIST_ROWS, MAX_ROW_STRING } = await import("./tools-shared.ts");
 
 test("num rounds to cents and normalizes negative zero", () => {
-  assert.equal(num("12.345"), 12.35);
-  assert.equal(num("abc"), 0);
-  assert.ok(Object.is(num(-0.0001), 0));
-  assert.ok(Object.is(num("-0"), 0));
+  assert.deepEqual(num("12.345"), { ok: true, value: 12.35 });
+  assert.equal(numberValue("12.345"), 12.35);
+  assert.deepEqual(num("abc"), {
+    ok: false,
+    error: {
+      code: "unreadable_numeric_result",
+      message: "An assistant numeric result is missing or unreadable. Review the source record and correct its numeric value before retrying.",
+    },
+  });
+  assert.throws(() => numberValue(null), (error) => {
+    assert.match(safeApplicationToolError(error), /invalid_input: unreadable_numeric_result/);
+    assert.match(safeApplicationToolError(error), /Review the source record and correct its numeric value/);
+    return true;
+  });
+  assert.ok(Object.is(numberValue(-0.0001), 0));
+  assert.ok(Object.is(numberValue("-0"), 0));
+});
+
+test("money refuses absent and unreadable financial results", () => {
+  assert.throws(() => money(null), (error) => {
+    assert.match(safeApplicationToolError(error), /invalid_input: assistant financial result/);
+    assert.match(safeApplicationToolError(error), /Review the source record and correct its amount/);
+    return true;
+  });
+  assert.throws(() => money(undefined), /assistant financial result/);
+  assert.throws(() => money("1,234.56"), /assistant financial result/);
+  assert.equal(money("12.3400"), "12.3400");
 });
 
 test("compactRows caps the list and reports total/returned/truncated", () => {

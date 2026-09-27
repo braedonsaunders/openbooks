@@ -2,12 +2,11 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { listPrebills, loadPrebill, wipAnalytics } from "../wip-billing";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { dateInput, uuidInput } from "./tools-shared";
+import { dateInput, money, uuidInput } from "./tools-shared";
 
 /**
  * Subcontract + WIP-billing reads. Subcontracts are vendor-side project
@@ -19,8 +18,6 @@ import { dateInput, uuidInput } from "./tools-shared";
  * (analytics) plus the wipBilling feature. Customer-side holdback already
  * exists (`retainage_balances`); subcontractor holdback is the payable side.
  */
-
-const money = (v: unknown) => normalizeMoney(v == null ? "0" : String(v));
 
 async function subcontractsEnabled(orgId: string): Promise<boolean> {
   const [projects, subcontracts] = await Promise.all([

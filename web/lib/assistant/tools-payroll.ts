@@ -14,7 +14,7 @@ import {
 } from "../../app/api/payroll/subsidiary-scope";
 import { scopedRemittanceSummary, scopedYearEndFilings } from "../payroll-scoped-views";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { dateInput, uuidInput, num, capList, orgToday, decimalText } from "./tools-shared";
+import { dateInput, uuidInput, numberValue, capList, orgToday, decimalText } from "./tools-shared";
 
 /**
  * Payroll read/search tools for the agentic assistant. Every tool is
@@ -322,8 +322,8 @@ const payrollEntitlements: AssistantToolDef = {
         direction: b.plan.direction,
         balance: decimalText(b.balance),
         balanceMoney: b.balanceMoney == null ? null : decimalText(b.balanceMoney),
-        balanceHours: b.balanceHours == null ? null : num(b.balanceHours),
-        wage: b.wage == null ? null : num(b.wage),
+        balanceHours: b.balanceHours == null ? null : numberValue(b.balanceHours),
+        wage: b.wage == null ? null : numberValue(b.wage),
         maxBalance: b.limit?.maxBalance == null ? null : decimalText(b.limit.maxBalance),
         overLimit: b.overLimit,
         nearLimit: b.nearLimit,
@@ -389,7 +389,7 @@ const payrollRemittances: AssistantToolDef = {
           currency: g.currency,
           translated: g.translated,
           total: decimalText(g.total),
-          grossPayroll: num(g.grossPayroll),
+          grossPayroll: numberValue(g.grossPayroll),
           employeeCount: g.employeeCount,
           components: components.items,
           componentsTruncated: components.truncated,

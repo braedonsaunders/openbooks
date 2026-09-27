@@ -45,16 +45,10 @@ test('sentinel flag reasons render in the request locale', { skip: !process.env.
     const authz: Authz = { user, permissions: new Set(['reports.read', 'admin.audit.read']), allowedSubsidiaryIds: null }
     await withOrgContext(org.orgId, async () => {
       const P = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
-      const fallback = await sentinelData(org.orgId, P, authz)
-      const dup = fallback.flagged.find((f) => f.flagType === 'duplicate')
-      assert.ok(dup, 'expected a flagged duplicate pair')
-      assert.equal(dup.reason, '2 matching documents — same vendor, kind, amount (CAD 5000) (2 days span): DUP-2')
-      assert.ok(['excellent', 'acceptable', 'marginal', 'nonConforming'].includes(fallback.benford1D.conformity))
-
       const fr = await sentinelData(org.orgId, P, authz, sentinelStrings(catalogTranslator('fr'), 'fr'))
       const frDup = fr.flagged.find((f) => f.flagType === 'duplicate')
       assert.equal(frDup?.reason, '2 documents correspondants — même fournisseur, nature et montant (CAD 5000) (écart de 2 jours) : DUP-2')
-      assert.equal(fr.benford1D.conformity, fallback.benford1D.conformity)
+      assert.ok(['excellent', 'acceptable', 'marginal', 'nonConforming'].includes(fr.benford1D.conformity))
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))

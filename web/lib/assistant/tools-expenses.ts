@@ -9,7 +9,7 @@ import { expensesDashboard } from "../expenses-dashboard";
 import { loadExpenseReport } from "../expenses";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
-import { dateInput, uuidInput, num, capList, decimalText } from "./tools-shared";
+import { dateInput, uuidInput, numberValue, capList, decimalText } from "./tools-shared";
 
 /**
  * Expense-report read/search tools for the agentic assistant. Every tool
@@ -181,7 +181,7 @@ const getExpenseReport: AssistantToolDef = {
           employeePartyId: doc.party_id,
           employeeName: doc.employee_name,
           currency: doc.currency,
-          subtotal: num(doc.subtotal),
+          subtotal: numberValue(doc.subtotal),
           taxTotal: decimalText(doc.tax_total),
           total: decimalText(doc.total),
           openBalance: decimalText(doc.open_balance),

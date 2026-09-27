@@ -31,7 +31,8 @@ import {
   calculateFormulaCategoryData,
   getAllocationBaseValue,
 } from "./true-cost-engine";
-import { englishTrueCostStrings, type TrueCostStrings } from "./true-cost-strings";
+import { trueCostStrings, type TrueCostStrings } from "./true-cost-strings";
+import { englishCatalogMessage } from "./catalog-strings";
 
 /**
  * True Cost — data and calculations for the Burden (Rate Engine) dashboard.
@@ -325,7 +326,7 @@ export async function trueCostData(
   orgId: string,
   period: { from: string; to: string; label: string },
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-  strings: TrueCostStrings = englishTrueCostStrings,
+  strings: TrueCostStrings = trueCostStrings(englishCatalogMessage, "en"),
 ): Promise<TrueCostData> {
   if (!(await isFeatureEnabled(orgId, "projects"))) throw new Error("projects feature is disabled")
   const ids = allowedSubsidiaryIds === null ? null : [...allowedSubsidiaryIds]

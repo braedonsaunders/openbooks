@@ -2,21 +2,16 @@
  * Localizable sentence templates for financial health (health-data findings,
  * P&L/margin labels, month labels).
  *
- * Same pattern as the other analytics bundles: `englishHealthStrings` is the
- * exact legacy English copy (direct callers keep byte-identical output);
- * `healthStrings(t)` builds the catalog-backed bundle from
- * `getTranslations('analytics')` in the request locale. P&L and margin-flow
- * line names reuse the reviewed `financialHealth.pnl.*` keys — the client
- * renders loader labels verbatim, so there is exactly one source for each
- * line name. Percents travel pre-rendered (legacy toFixed shapes); money
- * travels through the existing locale-aware formatter.
+ * `healthStrings(t)` builds the bundle from `getTranslations('analytics')`
+ * in the request locale. P&L and margin-flow line names reuse the reviewed
+ * `financialHealth.pnl.*` keys — the client renders loader labels verbatim,
+ * so there is exactly one source for each line name. Percents travel
+ * pre-rendered; money travels through the existing locale-aware formatter.
  */
 
 import type { CatalogMessageFn } from "./catalog-strings";
 import { catalogMonthLabel } from "./catalog-strings";
 
-/** en-US short month names, Jan→Dec — the exact legacy toLocaleString rendering. */
-const LEGACY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export type PnlLineKey =
   | "revenue" | "cogs" | "grossProfit" | "opex"
@@ -68,69 +63,6 @@ export interface HealthStrings extends FinancialHealthNotes {
   marginOutlier(month: string, actual: string, avg: string): HealthFinding;
   revenueSpike(month: string, amount: string, avg: string): HealthFinding;
 }
-
-function legacyMonthLabel(ym: string): string {
-  // Static table, never a Date: the label only reads the month name and the
-  // year suffix from the parsed numbers, so output is identical at every year
-  // (Date.UTC would remap years 0-99 onto 1900-1999 without changing either).
-  const [y, m] = ym.split("-").map(Number);
-  return `${LEGACY_MONTHS[((m ?? 1) - 1 + 12) % 12] ?? ym} '${String(y ?? "").slice(2)}`;
-}
-
-const PNL: Record<PnlLineKey, string> = {
-  revenue: "Revenue",
-  cogs: "Cost of Goods Sold",
-  grossProfit: "Gross Profit",
-  opex: "Operating Expenses",
-  operatingIncome: "Operating Income",
-  otherExpense: "Other Expense",
-  netIncome: "Net Income",
-};
-
-const MARGIN: Record<MarginStageKey, string> = {
-  ...PNL,
-  excludeOtherIncome: "Exclude Other Income",
-  otherIncome: "Other Income",
-};
-
-/** Exact legacy English no-data notes (byte-identical to the ratio engine). */
-export const englishFinancialHealthNotes: FinancialHealthNotes = {
-  noDA: "No depreciation/amortization accounts found",
-  noBalanceSheet: "No balance sheet data",
-  noHeadcount: "No active employee records",
-  noInterestExpense: "No interest expense",
-  perEmployees: (revenue, headcount) => `${revenue} / ${headcount} employees`,
-};
-
-/** Exact legacy English sentences (byte-identical to the pre-catalog loader). */
-export const englishHealthStrings: HealthStrings = {
-  locale: "en",
-  ...englishFinancialHealthNotes,
-  monthLabel: legacyMonthLabel,
-  displaySegmentName: (_id, name) => name,
-  pnlLine: (key) => PNL[key],
-  marginStage: (key) => (key === "cogs" ? "COGS" : MARGIN[key]),
-  operatingLoss: (amount) => ({ severity: "issue", title: "Operating loss", detail: `Operating income is ${amount} — the business loses money before other items.` }),
-  gmCritical: (actual, target) => ({ severity: "issue", title: "Gross margin critically low", detail: `Gross margin is ${actual}% — less than half the ${target}% target.` }),
-  gmWellBelow: (actual, target) => ({ severity: "issue", title: "Gross margin well below target", detail: `Gross margin is ${actual}% vs the ${target}% target.` }),
-  gmBelow: (actual, target) => ({ severity: "issue", title: "Gross margin below target", detail: `Gross margin is ${actual}% vs a ${target}% benchmark.` }),
-  opmCritical: (actual, target) => ({ severity: "issue", title: "Operating margin critically low", detail: `Operating margin is ${actual}% — less than half the ${target}% target.` }),
-  opmBelow: (actual, target) => ({ severity: "issue", title: "Operating margin below target", detail: `Operating margin is ${actual}% vs a ${target}% benchmark.` }),
-  netLoss: (amount) => ({ severity: "issue", title: "Net loss for the period", detail: `Net income is ${amount}.` }),
-  revFalling: (pct) => ({ severity: "issue", title: "Revenue falling sharply year-over-year", detail: `Revenue is down ${pct}% vs the prior year.` }),
-  revDeclined: (pct) => ({ severity: "issue", title: "Revenue declined year-over-year", detail: `Revenue is down ${pct}% vs the prior year.` }),
-  revTrendingDown: (pct) => ({ severity: "issue", title: "Revenue trending down", detail: `Revenue fell ${pct}% across the last three active months.` }),
-  marginCompression: (pp) => ({ severity: "issue", title: "Margin compression", detail: `Gross margin slid ${pp}pp over the last three active months.` }),
-  belowBreakeven: (amount) => ({ severity: "issue", title: "Below breakeven", detail: `Average monthly revenue is under the approximately ${amount} breakeven.` }),
-  thinMargin: (pct) => ({ severity: "issue", title: "Thin safety margin", detail: `Only ${pct}% of monthly revenue separates you from breakeven.` }),
-  heavyOverhead: (pct) => ({ severity: "issue", title: "Heavy overhead", detail: `Operating expenses are ${pct}% of revenue (>40%).` }),
-  healthyGM: { severity: "rec", title: "Healthy gross margin", detail: "Direct-cost discipline is on track — protect pricing." },
-  trimOpex: { severity: "rec", title: "Trim operating expense", detail: "Gross margin is fine; the gap to operating margin is overhead — review OpEx." },
-  posLeverage: (x) => ({ severity: "rec", title: "Positive operating leverage", detail: `Operating income scales ${x}× revenue — lean into growth.` }),
-  rule40: (n) => ({ severity: "rec", title: "Passing the Rule of 40", detail: `Growth + margin = ${n}.` }),
-  marginOutlier: (month, actual, avg) => ({ severity: "anomaly", title: `Margin outlier in ${month}`, detail: `Gross margin ${actual}% vs ${avg}% average.` }),
-  revenueSpike: (month, amount, avg) => ({ severity: "anomaly", title: `Revenue spike/dip in ${month}`, detail: `Revenue ${amount} vs ${avg} average.` }),
-};
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
 export function healthStrings(t: CatalogMessageFn, locale: string): HealthStrings {

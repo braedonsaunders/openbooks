@@ -4,6 +4,9 @@ import { PERIOD_PRESET_IDS, type DateRange } from "@openbooks/reports";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { canonicalDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
 import { UUID_RE } from "@openbooks/engine/src/platform/uuid.ts";
+import { normalizeMoney, roundMoney } from "@openbooks/engine/src/money/money.ts";
+import { decimalNullRefusal } from "../payroll-decimal-refusal";
+import { invalidInput } from "../application/errors";
 import { fiscalStartMonth } from "../fiscal";
 import { resolveRangeArgs, type RangeArgs } from "./period-range";
 
@@ -56,14 +59,62 @@ export async function orgToday(orgId: string): Promise<string> {
   return businessToday(orgId);
 }
 
-export function num(v: unknown): number {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return 0;
-  const rounded = Math.round(n * 100) / 100;
-  // Normalize -0 (e.g. Math.round of a tiny negative) to 0: they compare
+export type AssistantNumberResult =
+  | { ok: true; value: number }
+  | { ok: false; error: { code: "unreadable_numeric_result" | "numeric_result_out_of_range"; message: string } };
+
+/** Parse an assistant numeric result without replacing missing or unreadable values with zero. */
+export function num(v: unknown): AssistantNumberResult {
+  const raw = typeof v === "string" ? v.trim()
+    : typeof v === "number" && Number.isFinite(v) ? String(v)
+      : typeof v === "bigint" ? String(v)
+        : null;
+  const exact = raw === null || raw === "" ? null : canonicalDecimal(raw, 8);
+  if (exact === null) {
+    return {
+      ok: false,
+      error: {
+        code: "unreadable_numeric_result",
+        message: "An assistant numeric result is missing or unreadable. Review the source record and correct its numeric value before retrying.",
+      },
+    };
+  }
+  const rounded = roundMoney(exact, 2);
+  const n = Number(rounded);
+  if (!Number.isFinite(n) || Math.abs(n) > Number.MAX_SAFE_INTEGER) {
+    return {
+      ok: false,
+      error: {
+        code: "numeric_result_out_of_range",
+        message: "An assistant numeric result exceeds the safe display range. Review the source record and use its exact decimal amount.",
+      },
+    };
+  }
+  // Normalize -0 (e.g. decimal rounding of a tiny negative) to 0: they compare
   // equal everywhere except Object.is, but the wire (JSON "0") cannot tell
   // them apart, so tool output should not either.
-  return rounded === 0 ? 0 : rounded;
+  return { ok: true, value: n === 0 ? 0 : n };
+}
+
+/** Unwrap `num` at a tool boundary so its typed refusal reaches the model. */
+export function numberValue(v: unknown): number {
+  const result = num(v);
+  if (!result.ok) throw invalidInput(`${result.error.code}: ${result.error.message}`);
+  return result.value;
+}
+
+/** Preserve exact money text and refuse a missing result instead of inventing zero. */
+export function money(v: unknown): string {
+  const field = "assistant financial result";
+  const remedy = "Review the source record and correct its amount before retrying.";
+  if (v === null || v === undefined) {
+    throw invalidInput(`${decimalNullRefusal(field, "an amount", v, 4)}. ${remedy}`);
+  }
+  const exact = canonicalDecimal(String(v), 4);
+  if (exact === null) {
+    throw invalidInput(`${decimalNullRefusal(field, "an amount", v, 4)}. ${remedy}`);
+  }
+  return normalizeMoney(exact);
 }
 
 /** Preserve financial decimal text in assistant results. A fractional JS

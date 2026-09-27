@@ -2,12 +2,11 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoneyValue } from "../cash/core";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { closeScopeDenied } from "./tools-close";
-import { assistantListPage, dateInput, uuidInput } from "./tools-shared";
+import { assistantListPage, dateInput, money, uuidInput } from "./tools-shared";
 
 /**
  * Foreign-exchange read tools for the agentic assistant. Rates come from the
@@ -17,11 +16,6 @@ import { assistantListPage, dateInput, uuidInput } from "./tools-shared";
  * ownership runs the Period Close consolidation actions write. Exact decimal
  * strings throughout — never floats.
  */
-
-/** Preserve ledger/rate decimals as canonical strings at the tool boundary. */
-function money(v: unknown): string {
-  return normalizeMoneyValue(String(v ?? "0"));
-}
 
 const listCurrencies: AssistantToolDef = {
   name: "list_currencies",

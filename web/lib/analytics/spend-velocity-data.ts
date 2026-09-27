@@ -2,12 +2,13 @@ import "server-only";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
-import { add, cmp, div, mulDecimal } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, mulDecimal, roundMoney } from "@openbooks/engine/src/money/money.ts";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig } from "./config";
 import { operatingExpenseRatio, periodOperatingExpenses } from "./operating-expenses";
-import { englishSpendVelocityStrings, type SpendVelocityStrings } from "./spend-velocity-strings";
+import { spendVelocityStrings, type SpendVelocityStrings } from "./spend-velocity-strings";
+import { englishCatalogMessage } from "./catalog-strings";
 import { getMoneyFormatter } from '../money-server'
 import { addMonthsClamped } from '@openbooks/engine/src/platform/business-date.ts';
 
@@ -281,7 +282,7 @@ export async function spendVelocityData(
   orgId: string,
   period: { from: string; to: string; label: string },
   allowed: ReadonlySet<string> | null,
-  strings: SpendVelocityStrings = englishSpendVelocityStrings,
+  strings: SpendVelocityStrings = spendVelocityStrings(englishCatalogMessage, "en"),
 ): Promise<SpendVelocityData> {
   const { money } = await getMoneyFormatter(orgId)
   const { from, to } = period;
@@ -740,7 +741,7 @@ export async function spendVelocityData(
   const zombieList: SpendVelocityData["zombies"]["subscriptions"] = [];
   for (const v of vendMap.values()) {
     if (v.months.length < C.zombieMinMonths) continue;
-    const amounts = v.months.map((m) => Math.round(m.amount * 100) / 100);
+    const amounts = v.months.map((m) => Number(roundMoney(String(m.amount), 2)));
     const first = amounts[0]!;
     let isZombie = amounts.every((x) => x === first);
     if (!isZombie) {

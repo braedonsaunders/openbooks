@@ -2,12 +2,11 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { loadEquipment } from "../../app/api/equipment/_lib";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { uuidInput } from "./tools-shared";
+import { money, uuidInput } from "./tools-shared";
 
 /**
  * Equipment reads. The equipment page (`web/app/(app)/assets/equipment`)
@@ -19,8 +18,6 @@ import { uuidInput } from "./tools-shared";
  * `equipment` feature. There is no maintenance entity — utilization is the
  * loader's metrics block.
  */
-
-const money = (v: unknown) => normalizeMoney(v == null ? "0" : String(v));
 
 /** Cost recovery and billable value per unit — the page KPI subqueries. */
 const chargeAggregates = sql`
