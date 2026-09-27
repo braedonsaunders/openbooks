@@ -33,7 +33,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   body: postBodySchema0,
-  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     const body = routeBody;
     // Parent (when provided) must be a valid folder inside the caller's org.
     const parentId = body.parentId ?? null;

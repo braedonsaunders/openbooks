@@ -16,7 +16,7 @@ export { runtime } from "@/lib/api/route";
 export const GET = defineRoute({
   permission: "assets.read",
   feature: "fixedAssets",
-  handler: async ({ authz: gate }) => {
+  handler: async ({ authz: _gate }) => {
     return NextResponse.json({ packs: taxDepreciationPacks() });
   },
 });
@@ -25,7 +25,7 @@ export const POST = defineRoute({
   permission: "admin.setup.manage",
   feature: "fixedAssets",
   body: postBodySchema0,
-  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     // Tax depreciation packs install the org-wide regime every entity's
     // assets depreciate under.
     const unrestricted = guardUnrestrictedScope(gate);

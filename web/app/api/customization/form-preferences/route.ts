@@ -34,7 +34,7 @@ function rowIsAccessible(
 export const PUT = defineRoute({
   public: "session",
   body: putBodySchema0,
-  handler: async ({ request: req, authz, body: routeBody }) => {
+  handler: async ({ request: _req, authz, body: routeBody }) => {
     if (!authz)
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;

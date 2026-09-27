@@ -99,8 +99,9 @@ const mockSources = new Map<string, string>([
     'mock:authz',
     `
       export async function getAuthz() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+        return { user: { orgId: 'org-1', id: 'user-1' }, permissions: new Set(['ar.create', 'ar.read', 'ar.approve', 'ar.post']), allowedSubsidiaryIds: null }
       }
+      export function can(authz, permission) { return authz.permissions.has(permission) }
       export async function guardPermission(permission) {
         if (permission === 'ar.create' || permission === 'ar.read' || permission === 'ar.approve' || permission === 'ar.post') {
           return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
@@ -118,7 +119,7 @@ const mockUrls = new Map<string, string>([
   ['@/lib/authz', 'mock:authz'],
 ])
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // Next's webpack alias (`@/*` → `web/*`): this suite lives three levels
     // below web/, so `web/app/api/construction/` + `../../../` is web/.

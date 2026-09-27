@@ -154,7 +154,7 @@ const mockUrls = new Map<string, string>([
   ["./_lib", "mock:accounts-lib"],
 ]);
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // Re-export the REAL authz module and override only the session gate with
     // an unrestricted caller: the idempotency contract never restricts the

@@ -57,7 +57,7 @@ export const PATCH = defineRoute({
   public: "session",
   params: z.object({ id: z.string() }),
   body: patchBodySchema0,
-  handler: async ({ request: req, authz: gate, params, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { id } = await params;
     if (!isUuid(id))
       return notFound("record");

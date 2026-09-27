@@ -18,7 +18,7 @@ export const PATCH = defineRoute({
   permission: "admin.setup.manage",
   feature: "fixedAssets",
   body: patchBodySchema0,
-  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     // Category tax attributes decide how every entity's assets are reported on
     // every filing: org-wide policy, unrestricted scope only.
     const unrestricted = guardUnrestrictedScope(gate);

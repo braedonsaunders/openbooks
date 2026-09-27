@@ -204,7 +204,7 @@ const mockUrls = new Map<string, string>([
   ['@/lib/authz', 'mock:authz'],
 ])
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@/lib/api/json') {
       return {

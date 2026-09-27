@@ -21,7 +21,7 @@ import {
   lockProjectForScope,
   withScopeSnapshot,
 } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { guardSubsidiaryScope } from "../../../lib/authz";
+import { can, guardSubsidiaryScope } from "../../../lib/authz";
 import { isUuid } from "../../../lib/list-params";
 import { projectCostSummary } from "../../../lib/project-costing";
 import {
@@ -486,7 +486,7 @@ async function actionProjectScope(
 export const POST = defineRoute({
   public: "session",
   body: postBodySchema0,
-  handler: async ({ request: req, authz, body: routeBody }) => {
+  handler: async ({ authz, body: routeBody }) => {
     // Project/pay-app ids below are pre-validated by actionProjectScope (garbage
     // 404s there), so the `as string` pins at the call sites only restate that.
     const body = routeBody as {
@@ -517,6 +517,12 @@ export const POST = defineRoute({
         : action === "billPayApp" || action === "releaseRetainage"
           ? "ar.post"
           : "ar.create";
+    if (!can(authz, permission)) {
+      return NextResponse.json(
+        { error: `missing permission: ${permission}` },
+        { status: 403 },
+      );
+    }
 
     const orgId = authz.user.orgId;
     const feature = await guardProjectsFeature(orgId);

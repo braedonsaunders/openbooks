@@ -22,7 +22,7 @@ const mockAuthz = `
   export function subsidiaryScopeAllows() { return true }
 `
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if ((specifier === '@/lib/authz' || specifier === '../../../lib/authz') || specifier === '../../../../lib/authz') return { shortCircuit: true, url: 'mock:file-authz' }
     return nextResolve(specifier, context)

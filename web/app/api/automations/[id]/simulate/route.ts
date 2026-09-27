@@ -20,7 +20,7 @@ export const POST = defineRoute({
   feature: "automations",
   params: z.object({ id: z.string() }),
   body: simulateAutomationBody,
-  handler: async ({ request: req, authz: gate, params, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const ctx = { params };
 
     if (!(await isFeatureEnabled(gate.user.orgId, "automationSimulator"))) {

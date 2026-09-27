@@ -83,7 +83,7 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
     if (specifier === '@openbooks/engine/src/tax-returns/depreciation-packs.ts') return { url: 'mock:packs', shortCircuit: true }

@@ -48,7 +48,7 @@ export const POST = defineRoute({
     none: "This insights surface is governed by its permission and has no separate organization feature switch.",
   },
   body: postBodySchema0,
-  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     const body = routeBody;
 
     let query;

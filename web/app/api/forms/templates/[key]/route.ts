@@ -31,7 +31,6 @@ function schemaHash(schema: unknown): string {
 
 export { runtime } from "@/lib/api/route";
 
-type Params = { params: Promise<{ key: string }> };
 
 /** Template meta + all versions + the editable draft schema. */
 export const GET = defineRoute({
@@ -80,7 +79,7 @@ export const PUT = defineRoute({
   },
   params: z.object({ key: z.string() }),
   body: putBodySchema0,
-  handler: async ({ request: req, authz: gate, params, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { user } = gate;
     const { key } = await params;
 

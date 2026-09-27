@@ -5,7 +5,6 @@ import { executeAutomation } from "@openbooks/engine/src/automations/execute.ts"
 import { isUuid } from "../../../../../lib/list-params";
 import { runAutomationBody } from "../../bodies";
 import { automationErrorResponse } from "../../_lib";
-import { notFound } from "@/lib/api/responses";
 
 
 export { runtime } from "@/lib/api/route";
@@ -20,7 +19,7 @@ export const POST = defineRoute({
   feature: "automations",
   params: z.object({ id: z.string() }),
   body: runAutomationBody,
-  handler: async ({ request: req, authz: gate, params, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const ctx = { params };
 
     const { id } = await ctx.params;

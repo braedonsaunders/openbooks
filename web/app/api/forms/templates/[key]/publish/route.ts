@@ -27,7 +27,7 @@ export const POST = defineRoute({
   },
   params: z.object({ key: z.string() }),
   body: postBodySchema0,
-  handler: async ({ request: req, authz: gate, params, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { user } = gate;
     const { key } = await params;
 

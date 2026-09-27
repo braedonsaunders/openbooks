@@ -65,7 +65,7 @@ const mockDb = `
   }
 `
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const parent = context.parentURL ?? ''
     if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/list-views')) {

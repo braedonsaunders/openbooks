@@ -54,7 +54,7 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
     const mocked = new Map<string, string>([
       ['../../../../lib/authz', 'mock:authz'],

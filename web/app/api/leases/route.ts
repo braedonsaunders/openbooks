@@ -9,7 +9,7 @@ export const POST = defineRoute({
   permission: "assets.manage",
   feature: "fixedAssets",
   body: leaseSchema,
-  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     try {
       return NextResponse.json(
         await createLeaseAgreement(gate.user.orgId, gate.user.id, routeBody),

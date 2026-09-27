@@ -443,7 +443,6 @@ export const POST = defineRoute({
             "Close and reopen the asset drawer to retry with a fresh request key.",
         });
       }
-      const message = error instanceof Error ? error.message : String(error);
       throw error;
     }
 

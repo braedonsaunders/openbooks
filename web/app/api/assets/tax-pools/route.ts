@@ -85,7 +85,7 @@ export const POST = defineRoute({
   permission: "assets.manage",
   feature: "fixedAssets",
   body: postBodySchema0,
-  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     const body = routeBody as {
       regime?: string;
       taxYear?: number;

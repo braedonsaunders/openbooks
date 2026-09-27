@@ -36,7 +36,7 @@ export const POST = defineRoute({
   permission: "time.reopen",
   feature: "timeTracking",
   body: postBodySchema0,
-  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     const body = routeBody as {
       entryId?: string;
       employee?: string;

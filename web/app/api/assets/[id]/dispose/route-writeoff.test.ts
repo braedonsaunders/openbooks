@@ -37,7 +37,7 @@ const mockSources = new Map<string, string>([
   ],
 ])
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if ((specifier === '@/lib/feature-gates' || specifier === '../../../../../lib/feature-gates')) {
       return { url: 'mock:feature-gates', shortCircuit: true }
