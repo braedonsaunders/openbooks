@@ -195,6 +195,23 @@ export async function lockFlowSubjectScope(
       throw new ScopeNotFoundError();
     return;
   }
+  if (subjectKind === "work_order") {
+    const order = (
+      await db.execute<{ subsidiary_id: string | null }>(sql`
+      select subsidiary_id from mfg_work_orders
+       where id = ${subjectId} and org_id = ${orgId}
+       for share
+    `)
+    ).rows[0];
+    if (
+      !order ||
+      (allowedSubsidiaryIds !== null &&
+        (order.subsidiary_id === null || !allowedSubsidiaryIds.has(order.subsidiary_id)))
+    ) {
+      throw new ScopeNotFoundError();
+    }
+    return;
+  }
   if (subjectKind === "budget_scenario" || subjectKind === "close_run") {
     // These org-wide subjects have no subsidiary owner. Restricted readers
     // retain the same fail-closed result as the unlocked resolver.

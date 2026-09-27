@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
+import { db, withBypassContext, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
-import { filterFlowRunSubjectsToScope, loadFlowSubjectSubsidiary, loadGateHeader } from "../../_lib.ts";
+import { filterFlowRunSubjectsToScope, loadFlowSubjectSubsidiary, loadGateHeader, lockFlowSubjectScope } from "../../_lib.ts";
 
 test("allocation flow scope includes every subsidiary touched by the run", async () => {
   const org = await withBypassContext(() => createScratchOrg());
@@ -43,6 +44,36 @@ test("allocation flow scope includes every subsidiary touched by the run", async
     assert.equal(await loadFlowSubjectSubsidiary('allocation_run', runId, org.orgId, onlyA), null);
     assert.deepEqual(await filterFlowRunSubjectsToScope(org.orgId, onlyA, [{ kind: 'allocation_run', id: runId }]), []);
     assert.equal((await loadGateHeader(gateId, org.orgId, new Set([org.subsidiaryId, subB])))?.subsidiary_id, org.subsidiaryId);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("work-order flow scope locks an in-scope order and hides an out-of-scope order", async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const otherSubsidiary = randomUUID();
+    await withBypassContext(() => db.execute(sql`insert into subsidiaries
+      (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${otherSubsidiary}, ${org.orgId}, ${org.subsidiaryId}, 'West Co', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`));
+    const inScopeOrder = randomUUID();
+    const outOfScopeOrder = randomUUID();
+    await withBypassContext(() => db.execute(sql`insert into mfg_work_orders
+      (id, org_id, number, produced_item_id, quantity_ordered, unit, subsidiary_id)
+      values (${inScopeOrder}, ${org.orgId}, 'WO-SCOPE-A', ${org.items.assembly}, 1, 'ea', ${org.subsidiaryId}),
+             (${outOfScopeOrder}, ${org.orgId}, 'WO-SCOPE-B', ${org.items.assembly}, 1, 'ea', ${otherSubsidiary})`));
+
+    const onlyA = new Set([org.subsidiaryId]);
+    await withOrgTransaction(org.orgId, () =>
+      lockFlowSubjectScope("work_order", inScopeOrder, org.orgId, onlyA),
+    );
+    await assert.rejects(
+      withOrgTransaction(org.orgId, () =>
+        lockFlowSubjectScope("work_order", outOfScopeOrder, org.orgId, onlyA),
+      ),
+      (error: unknown) =>
+        error instanceof ScopeNotFoundError && error.status === 404 && error.message === "not found",
+    );
   } finally {
     await dropScratchOrg(org.orgId);
   }

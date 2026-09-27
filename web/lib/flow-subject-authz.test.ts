@@ -135,6 +135,11 @@ test('non-document subjects resolve to their domain grant', () => {
     edit: 'allocations.manage',
     approve: 'allocations.approve',
   })
+  assert.deepEqual(flowSubjectPermissions('work_order'), {
+    read: 'manufacturing.read',
+    edit: 'manufacturing.manage',
+    approve: 'manufacturing.manage',
+  })
   assert.deepEqual(flowSubjectPermissions('hrm_change_request')?.read, 'hrm.employment.read')
   assert.deepEqual(flowSubjectPermissions('hrm_leave_request')?.read, 'hrm.leave.read')
   assert.deepEqual(flowSubjectPermissions('hrm_comp_cycle')?.read, 'hrm.compensation.read')

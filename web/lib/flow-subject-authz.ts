@@ -88,6 +88,7 @@ const NON_DOCUMENT_PERMISSIONS: Record<string, FlowSubjectPermissions> = {
   budget_scenario: { read: 'budgets.read', edit: 'budgets.manage', approve: 'budgets.approve' },
   close_run: { read: 'close.read', edit: 'close.run', approve: 'close.approve' },
   allocation_run: { read: 'allocations.read', edit: 'allocations.manage', approve: 'allocations.approve' },
+  work_order: { read: 'manufacturing.read', edit: 'manufacturing.manage', approve: 'manufacturing.manage' },
   pay_run: { read: 'payroll.read', edit: 'payroll.manage', approve: 'payroll.manage' },
   hrm_change_request: { read: 'hrm.employment.read', edit: 'hrm.employment.manage', approve: 'hrm.employment.manage' },
   hrm_leave_request: { read: 'hrm.leave.read', edit: 'hrm.leave.manage', approve: 'hrm.leave.manage' },

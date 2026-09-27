@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
-import { worklistGates } from "./gates.ts";
+import { decideGate, GateError, worklistGates } from "./gates.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -13,8 +13,8 @@ import {
 /**
  * Worklist subsidiary isolation: a restricted caller must not see approval
  * gates for legal entities outside their scope — including non-document
- * subjects (timesheet weeks inherit their entity from the employee party),
- * which carry no joined document row for callers to filter on.
+ * subjects such as timesheet weeks and work orders, which carry no joined
+ * document row for callers to filter on.
  *
  * The application layer already filters document gates by subsidiary; the
  * engine is the single point that can resolve every subject kind, so the
@@ -76,6 +76,56 @@ async function seedTimesheetGate(
   return gateId;
 }
 
+async function seedWorkOrderGates(
+  orgId: string,
+  itemId: string,
+  makerId: string,
+  firstApproverId: string,
+  secondApproverId: string,
+  subsidiaryId: string,
+  otherSubsidiaryId: string,
+): Promise<{ inScopeGateId: string; outOfScopeGateId: string }> {
+  const flowId = randomUUID();
+  const inScopeOrderId = randomUUID();
+  const outOfScopeOrderId = randomUUID();
+  const inScopeRunId = randomUUID();
+  const outOfScopeRunId = randomUUID();
+  const inScopeGateId = randomUUID();
+  const inScopeSiblingGateId = randomUUID();
+  const outOfScopeGateId = randomUUID();
+
+  await db.execute(sql`
+    insert into mfg_work_orders
+      (id, org_id, number, produced_item_id, quantity_ordered, unit, subsidiary_id, created_by)
+    values
+      (${inScopeOrderId}, ${orgId}, 'WO-WORKLIST-A', ${itemId}, 1, 'ea', ${subsidiaryId}, ${makerId}),
+      (${outOfScopeOrderId}, ${orgId}, 'WO-WORKLIST-B', ${itemId}, 1, 'ea', ${otherSubsidiaryId}, ${makerId})
+  `);
+  await db.execute(sql`
+    insert into flows (id, org_id, name, subject_kind, enabled, graph)
+    values (${flowId}, ${orgId}, 'Work-order approvals', 'work_order', true, '{}'::jsonb)
+  `);
+  await db.execute(sql`
+    insert into flow_runs (id, org_id, flow_id, subject_kind, subject_id, trigger, status)
+    values
+      (${inScopeRunId}, ${orgId}, ${flowId}, 'work_order', ${inScopeOrderId}, 'on_submit', 'waiting'),
+      (${outOfScopeRunId}, ${orgId}, ${flowId}, 'work_order', ${outOfScopeOrderId}, 'on_submit', 'waiting')
+  `);
+  await db.execute(sql`
+    insert into flow_gates
+      (id, org_id, flow_id, run_id, node_id, subject_kind, subject_id, title,
+       assignee_user_id, group_key, quorum, status)
+    values
+      (${inScopeGateId}, ${orgId}, ${flowId}, ${inScopeRunId}, 'gate-a', 'work_order', ${inScopeOrderId},
+       'Work-order approval', ${firstApproverId}, 'gate-a', 'all', 'pending'),
+      (${inScopeSiblingGateId}, ${orgId}, ${flowId}, ${inScopeRunId}, 'gate-a', 'work_order', ${inScopeOrderId},
+       'Work-order approval', ${secondApproverId}, 'gate-a', 'all', 'pending'),
+      (${outOfScopeGateId}, ${orgId}, ${flowId}, ${outOfScopeRunId}, 'gate-b', 'work_order', ${outOfScopeOrderId},
+       'Work-order approval', ${firstApproverId}, 'gate-b', 'any', 'pending')
+  `);
+  return { inScopeGateId, outOfScopeGateId };
+}
+
 test("a restricted worklist hides gates from other subsidiaries", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
@@ -86,6 +136,17 @@ test("a restricted worklist hides gates from other subsidiaries", { skip: !DB },
     const gateId = await withOrg(org.orgId, () =>
       seedTimesheetGate(org.orgId, actors.adminId, actors.approver1Id, otherSubsidiary),
     );
+    const workOrderGates = await withOrg(org.orgId, () =>
+      seedWorkOrderGates(
+        org.orgId,
+        org.items.assembly,
+        actors.submitterId,
+        actors.approver1Id,
+        actors.approver2Id,
+        org.subsidiaryId,
+        otherSubsidiary,
+      ),
+    );
 
     const unrestricted = await withOrg(org.orgId, () =>
       worklistGates(org.orgId, actors.approver1Id),
@@ -94,6 +155,8 @@ test("a restricted worklist hides gates from other subsidiaries", { skip: !DB },
       unrestricted.some((g) => g.id === gateId),
       "unrestricted callers still see every assigned gate",
     );
+    assert.ok(unrestricted.some((g) => g.id === workOrderGates.inScopeGateId));
+    assert.ok(unrestricted.some((g) => g.id === workOrderGates.outOfScopeGateId));
     const exposed = unrestricted.find((g) => g.id === gateId)!;
     assert.equal(exposed.subsidiaryId, otherSubsidiary, "the gate carries its legal entity for callers");
 
@@ -103,6 +166,28 @@ test("a restricted worklist hides gates from other subsidiaries", { skip: !DB },
     assert.ok(
       hidden.every((g) => g.id !== gateId),
       "a gate from another subsidiary is not listed",
+    );
+    assert.ok(hidden.some((g) => g.id === workOrderGates.inScopeGateId));
+    assert.ok(hidden.every((g) => g.id !== workOrderGates.outOfScopeGateId));
+
+    await withOrg(org.orgId, () =>
+      decideGate({
+        gateId: workOrderGates.inScopeGateId,
+        decision: "approved",
+        userId: actors.approver1Id,
+        allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+      }),
+    );
+    await assert.rejects(
+      withOrg(org.orgId, () =>
+        decideGate({
+          gateId: workOrderGates.outOfScopeGateId,
+          decision: "approved",
+          userId: actors.approver1Id,
+          allowedSubsidiaryIds: new Set([org.subsidiaryId]),
+        }),
+      ),
+      (error: unknown) => error instanceof GateError && error.message === "approval not found",
     );
 
     const visible = await withOrg(org.orgId, () =>
@@ -116,6 +201,7 @@ test("a restricted worklist hides gates from other subsidiaries", { skip: !DB },
     await db.execute(sql`delete from flow_gates where org_id = ${org.orgId}`);
     await db.execute(sql`delete from flow_runs where org_id = ${org.orgId}`);
     await db.execute(sql`delete from flows where org_id = ${org.orgId}`);
+    await db.execute(sql`delete from mfg_work_orders where org_id = ${org.orgId}`);
     await db.execute(sql`delete from timesheet_weeks where org_id = ${org.orgId}`);
     await dropScratchOrg(org.orgId);
   }
