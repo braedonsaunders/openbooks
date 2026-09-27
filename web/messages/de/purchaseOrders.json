@@ -64,6 +64,22 @@
     },
     "linksTitle": "Herkunft / Umgewandelt in",
     "linkCreatedFrom": "Erstellt aus",
-    "linkConvertedInto": "Umgewandelt in"
+    "linkConvertedInto": "Umgewandelt in",
+    "backorders": {
+      "tab": "Rückstände",
+      "loading": "Rückstände werden geladen…",
+      "loadFailed": "Die Rückstände konnten nicht geladen werden.",
+      "empty": "Für diesen Auftrag gibt es keine Rückstände.",
+      "line": "Zeile {line}",
+      "quantities": "Bestellt {ordered} · Erfüllt {fulfilled} · Storniert {cancelled}",
+      "open": "{open} offen",
+      "cancelRemainder": "Restmenge stornieren",
+      "cancelTitle": "{open} offene Menge in Zeile {line} stornieren",
+      "reasonLabel": "Grund",
+      "reasonPlaceholder": "Warum wird der Rest nicht geliefert?",
+      "cancelConfirm": "Restmenge stornieren",
+      "cancelFailed": "Die Restmenge konnte nicht storniert werden.",
+      "cancelled": "Restmenge von Zeile {line} storniert"
+    }
   }
 }

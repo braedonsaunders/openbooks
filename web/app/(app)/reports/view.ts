@@ -115,6 +115,9 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
   )
   const crmDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'crm')
   const inventoryDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'inventory')
+  const orderDefinitions = ordersEnabled
+    ? builtInDefinitions.filter((row) => entityCategory(row) === 'orders')
+    : []
   const aiDefinitions = builtInDefinitions.filter((row) => entityCategory(row) === 'ai governance')
   const payrollDefinitions = payrollEnabled
     ? builtInDefinitions.filter((row) => entityCategory(row) === 'payroll')
@@ -133,6 +136,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
     ...ledgerDefinitions,
     ...crmDefinitions,
     ...inventoryDefinitions,
+    ...orderDefinitions,
     ...aiDefinitions,
     ...payrollDefinitions,
     ...hrmDefinitions,
@@ -249,7 +253,10 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
       key: 'orders',
       label: t('hub.groups.orders'),
       accent: 'teal',
-      cards: [card('orders', '/reports/orders', 'ClipboardList')],
+      cards: [
+        card('orders', '/reports/orders', 'ClipboardList'),
+        ...definitionCards(orderDefinitions, 'Boxes', t('hub.cards.builtInDescription')),
+      ],
     } satisfies HubGroup] : []),
     ...(budgetsEnabled ? [{
       key: 'budgeting',

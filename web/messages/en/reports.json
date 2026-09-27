@@ -877,6 +877,10 @@
       "ai_capabilities": {
         "label": "AI capabilities",
         "description": "One row per AI capability: autonomy ceiling, reviewer, subject notice, enabled state and last review."
+      },
+      "backorders": {
+        "label": "Backorders",
+        "description": "Approved sales-order stock lines still owed to the customer — ordered, fulfilled, cancelled and open quantity per line, with customer, item and stock location."
       }
     },
     "columns": {
@@ -1916,6 +1920,24 @@
         "enabled": "Enabled",
         "last_reviewed_at": "Last reviewed",
         "reviewed_by": "Reviewed by"
+      },
+      "backorders": {
+        "document_number": "Order #",
+        "document_date": "Order date",
+        "party_name": "Customer",
+        "line_number": "Line #",
+        "item_code": "Item code",
+        "item_name": "Item",
+        "location_code": "Stock location",
+        "quantity": "Ordered",
+        "quantity_fulfilled": "Fulfilled",
+        "quantity_cancelled": "Cancelled",
+        "open_quantity": "Open",
+        "document_kind": "Transaction type",
+        "line_id": "Order line (id)",
+        "document_id": "Order (id)",
+        "item_id": "Item (id)",
+        "transaction_entry_id": "Transaction entry (id)"
       }
     },
     "enumValues": {
@@ -2161,6 +2183,10 @@
     "headcount-statement": {
       "name": "Headcount statement",
       "description": "Headcount and FTE by subsidiary and department, with totals."
+    },
+    "backorders": {
+      "name": "Backorders",
+      "description": "Sales-order stock lines still owed — ordered, fulfilled, cancelled and open by customer and item."
     }
   },
   "generalLedger": {

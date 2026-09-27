@@ -215,12 +215,12 @@ export async function purchasingHome(
     db.execute(sql`
       select
         ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'purchase_order'
-          and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_pos,
+          and d.status in ('draft', 'pending_approval', 'approved') and d.voided_at is null${docScope})` : sql`0`} as open_pos,
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago7}) as payments_7d,
         ${expensesOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'expense_report'
-          and d.status not in ('posted', 'closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as unposted_expenses,
+          and d.status in ('draft', 'pending_approval', 'approved') and d.voided_at is null${docScope})` : sql`0`} as unposted_expenses,
         ${grants.parties ? sql`(select count(*) from parties p where p.org_id = ${orgId} and p.is_active
           and exists (select 1 from vendor_roles vr where vr.org_id = p.org_id and vr.party_id = p.id and vr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``})` : sql`0`} as vendors
@@ -257,7 +257,7 @@ export async function purchasingHome(
           from documents d
           left join parties p on p.id = d.party_id and p.org_id = d.org_id
          where d.org_id = ${orgId} and d.kind = 'purchase_order'
-           and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope}`)
+           and d.status in ('draft', 'pending_approval', 'approved') and d.voided_at is null${docScope}`)
       : noPos,
     ordersOn
       ? db.execute<{ baseCurrency: string }>(sql`

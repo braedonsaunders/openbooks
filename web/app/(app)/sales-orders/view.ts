@@ -66,6 +66,7 @@ export interface SalesOrderDrawer {
   canManage: boolean
   canOverrideCredit: boolean
   layout: OrderDrawerProps['layout']
+  backorders: boolean
 }
 
 export interface SalesOrdersData {
@@ -99,6 +100,7 @@ export async function loadSalesOrders(
   await requireFeatureEnabled(authz.user.orgId, 'orders')
   const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
   const canManage = can(authz, 'ar.create')
+  const backorders = can(authz, 'orders.fulfill') && (await isFeatureEnabled(authz.user.orgId, 'fulfillment'))
   const t = await getTranslations('salesOrders')
   const openId = pickString(sp[PARAM])
   // Only a real document id may reach the uuid comparison: the create view
@@ -222,6 +224,7 @@ export async function loadSalesOrders(
           canManage,
           canOverrideCredit: can(authz, 'ar.approve'),
           layout: resolvedForm?.layout,
+          backorders,
         }
       : null
 

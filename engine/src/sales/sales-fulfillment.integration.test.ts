@@ -10,7 +10,7 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL);
  * the ordinary repository command can still register/skip this committed
  * regression when no PostgreSQL test environment is present.
  */
-test("partial sales fulfillments move inventory and fence billing exactly once", { skip: !DB }, () => {
+test("partial sales fulfillments move inventory, respect cancellations and fence billing exactly once", { skip: !DB }, () => {
   const source = `
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
@@ -20,6 +20,7 @@ test("partial sales fulfillments move inventory and fence billing exactly once",
     import { receiveInventory } from "./engine/src/inventory/movements.ts";
     import { postDocument } from "./engine/src/ledger/posting-document.ts";
     import { toUnits } from "./engine/src/money/money.ts";
+    import { cancelOrderLineRemainder } from "./engine/src/sales/backorders.ts";
     import {
       convertOrder,
       createOrderDraft,
@@ -176,12 +177,26 @@ test("partial sales fulfillments move inventory and fence billing exactly once",
       \`)).rows[0];
       assert.equal(invoiceIssues.count, 0, "billing a fulfilled order must not issue stock again");
 
-      // Two distinct commands race for the six units left. The source-row lock
+      // Two of the six open units are cancelled: fulfilment can no longer ship them.
+      await withOrg(org.orgId, () => db.execute(sql\`
+        update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb)
+               || '{"warehousing": true, "fulfillment": true}'::jsonb) where id = \${org.orgId}\`));
+      await withOrg(org.orgId, () => db.transaction((tx) => cancelOrderLineRemainder(tx, org.orgId, userId, {
+        documentId: order.id, lineId: sourceLineId, quantity: "2", reason: "customer reduced the order", allowedSubsidiaryIds: null,
+      })));
+      await assert.rejects(
+        withOrg(org.orgId, () => fulfillSalesOrder(org.orgId, userId, order.id, {
+          fulfillmentDate: org.date, idempotencyKey: "shipment-into-cancelled", lines: [{ sourceLineId, quantity: "5" }],
+        })),
+        /has only 4\.0000 remaining to fulfill/,
+      );
+
+      // Two distinct commands race for the four units left. The source-row lock
       // admits exactly one; the loser observes the committed ceiling.
       const remainderCommands = ["shipment-remainder-a", "shipment-remainder-b"].map((idempotencyKey) => ({
         fulfillmentDate: org.date,
         idempotencyKey,
-        lines: [{ sourceLineId, quantity: "6" }],
+        lines: [{ sourceLineId, quantity: "4" }],
       }));
       const raced = await Promise.allSettled(remainderCommands.map((command) =>
         withOrg(org.orgId, () => fulfillSalesOrder(org.orgId, userId, order.id, command)),
@@ -229,16 +244,17 @@ test("partial sales fulfillments move inventory and fence billing exactly once",
         from document_lines source_line
        where source_line.org_id = \${org.orgId} and source_line.id = \${sourceLineId}
       \`)).rows[0];
-      assert.equal(toUnits(finalFacts.fulfilled), toUnits("10"));
-      assert.equal(toUnits(finalFacts.billed), toUnits("10"));
-      assert.equal(toUnits(finalFacts.remainder_invoice_quantity), toUnits("6"));
+      // Billing stops at the ordered quantity net of the cancellation.
+      assert.equal(toUnits(finalFacts.fulfilled), toUnits("8"));
+      assert.equal(toUnits(finalFacts.billed), toUnits("8"));
+      assert.equal(toUnits(finalFacts.remainder_invoice_quantity), toUnits("4"));
       assert.equal(finalFacts.fulfillment_edges, 2);
       assert.equal(finalFacts.fulfillment_movements, 2);
-      assert.equal(toUnits(finalFacts.shipped_quantity), toUnits("-10"));
+      assert.equal(toUnits(finalFacts.shipped_quantity), toUnits("-8"));
 
       await assert.rejects(
         withOrg(org.orgId, () => convertOrder(org.orgId, userId, order.id, "customer_invoice")),
-        /already fully converted|do not cover/,
+        /already fully converted/,
       );
       console.log("SALES-FULFILLMENT-EXACTLY-ONCE");
     } finally {

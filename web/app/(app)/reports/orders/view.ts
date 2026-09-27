@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { formatCount, formatPercent01 } from '../../../../lib/format'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
 import {
   column,
   drill,
@@ -42,7 +43,8 @@ import { decimalSum } from '../../../../lib/statement-format'
 
 const KINDS = ['quote', 'sales_order', 'purchase_order'] as const
 
-/** A non-voided order remains open while any line has unconverted quantity. */
+/** A non-voided order remains open while any line has unconverted quantity
+ * (ordered less cancelled, not yet billed). */
 const openOrderPredicate = sql`
   d.status <> 'voided'
   and exists (
@@ -50,7 +52,7 @@ const openOrderPredicate = sql`
       from document_lines line
      where line.org_id = d.org_id
        and line.document_id = d.id
-       and line.quantity_billed < line.quantity
+       and line.quantity_billed < ${orderedNetOfCancelledSql('line')}
   )`
 
 export interface OrderRow {

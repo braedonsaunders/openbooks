@@ -64,6 +64,22 @@
     },
     "linksTitle": "オリジン / 変換先",
     "linkCreatedFrom": "作成元",
-    "linkConvertedInto": "変換先"
+    "linkConvertedInto": "変換先",
+    "backorders": {
+      "tab": "受注残",
+      "loading": "受注残を読み込み中…",
+      "loadFailed": "受注残を読み込めませんでした。",
+      "empty": "この受注に受注残はありません。",
+      "line": "明細 {line}",
+      "quantities": "受注 {ordered} · 出荷済み {fulfilled} · 取消 {cancelled}",
+      "open": "未出荷 {open}",
+      "cancelRemainder": "残数を取り消す",
+      "cancelTitle": "明細 {line} の未出荷 {open} を取り消す",
+      "reasonLabel": "理由",
+      "reasonPlaceholder": "残りを出荷しない理由",
+      "cancelConfirm": "残数を取り消す",
+      "cancelFailed": "残数を取り消せませんでした。",
+      "cancelled": "明細 {line} の残数を取り消しました"
+    }
   }
 }

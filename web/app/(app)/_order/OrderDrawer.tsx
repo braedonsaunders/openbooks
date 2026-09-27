@@ -23,6 +23,7 @@ import { promptDialog } from '../../../lib/prompt'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
+import { OrderBackorders } from './OrderBackorders'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
@@ -412,6 +413,7 @@ export function OrderDrawer({
   layout,
   createMode = false,
   closeHref,
+  backorders = false,
 }: {
   order: OrderPayload
   initialMode?: DrawerMode
@@ -442,6 +444,9 @@ export function OrderDrawer({
   createMode?: boolean
   /** List URL (filters preserved) that Cancel and the close affordance return to. */
   closeHref?: string
+  /** Show the Backorders tab: the page resolved Fulfillment on and the
+   *  fulfil-orders permission. The tab's route enforces both again. */
+  backorders?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
@@ -549,12 +554,13 @@ export function OrderDrawer({
     catch { return '0.0000' }
   }
 
-  /** Converted progress across all lines (quantity_billed / quantity). */
+  /** Converted progress across all lines: billed against the ordered
+   *  quantity net of cancellations, which is never billed. */
   const converted = useMemo(() => {
     let ordered = 0n
     let billed = 0n
     for (const l of order.lines) {
-      ordered += toUnits(String(l.quantity ?? 0))
+      ordered += toUnits(String(l.quantity ?? 0)) - toUnits(String(l.quantity_cancelled ?? 0))
       billed += toUnits(String(l.quantity_billed ?? 0))
     }
     return { ordered: fromUnits(ordered), billed: fromUnits(billed), partial: billed > 0n && billed < ordered, full: ordered > 0n && billed >= ordered }
@@ -1375,6 +1381,19 @@ export function OrderDrawer({
           label: tCommon('approvalFlow.historyTitle'),
           content: <ApprovalHistory subjectKind={kind} subjectId={String(doc.id)} showEmptyState />,
         },
+        ...(backorders && kind === 'sales_order' && isApproved ? [{
+          key: 'backorders',
+          label: t('backorders.tab'),
+          content: (
+            <OrderBackorders
+              orderId={String(doc.id)}
+              itemLabel={(itemId) => {
+                const item = itemById.get(itemId)
+                return item ? `${item.code ? `${item.code} · ` : ''}${item.name ?? ''}` : '—'
+              }}
+            />
+          ),
+        }] : []),
       ]}
       footer={
         <div className="flex w-full items-center gap-3">

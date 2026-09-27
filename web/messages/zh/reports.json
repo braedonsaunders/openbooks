@@ -877,6 +877,10 @@
       "ai_capabilities": {
         "label": "AI 能力",
         "description": "每项能力一行：自主性上限、评审人、提示、启用状态及上次评审。"
+      },
+      "backorders": {
+        "label": "欠交订单",
+        "description": "已批准销售订单中仍欠客户的库存行 — 每行的订购、已履行、已取消和未交数量，以及客户、物料和库存库位。"
       }
     },
     "columns": {
@@ -1916,6 +1920,24 @@
         "enabled": "已启用",
         "last_reviewed_at": "上次评审",
         "reviewed_by": "评审者"
+      },
+      "backorders": {
+        "document_number": "订单号",
+        "document_date": "订单日期",
+        "party_name": "客户",
+        "line_number": "行号",
+        "item_code": "物料编码",
+        "item_name": "物料",
+        "location_code": "库存库位",
+        "quantity": "订购数量",
+        "quantity_fulfilled": "已履行",
+        "quantity_cancelled": "已取消",
+        "open_quantity": "未交",
+        "document_kind": "交易类型",
+        "line_id": "订单行（ID）",
+        "document_id": "订单（ID）",
+        "item_id": "物料（ID）",
+        "transaction_entry_id": "交易分录（ID）"
       }
     },
     "enumValues": {
@@ -2161,6 +2183,10 @@
     "headcount-statement": {
       "name": "人员数量报表",
       "description": "按子公司与部门列示人数与全职当量及合计。"
+    },
+    "backorders": {
+      "name": "欠交订单",
+      "description": "仍欠交的销售订单库存行 — 按客户和物料列出订购、已履行、已取消和未交数量。"
     }
   },
   "generalLedger": {

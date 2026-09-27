@@ -4,6 +4,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
 import { defaultColumnsFor, validateCustomQuery, type ReportCustomQuery, type ReportRuleGroup } from '@openbooks/reports'
 import { can, type Authz } from './authz'
 import { canRunReportEntity } from './report-authz'
@@ -50,7 +51,8 @@ const dimSql = (dims: StatementDimFilter | undefined, alias: 'bl' | 'l') => {
     ${dims?.classId ? sql`and ${column('class_id')} = ${dims.classId}` : sql``}`
 }
 
-/** A non-voided order remains open while any line has unconverted quantity. */
+/** A non-voided order remains open while any line has unconverted quantity
+ * (ordered less cancelled, not yet billed). */
 const openOrderPredicate = sql`
   d.status <> 'voided'
   and exists (
@@ -58,7 +60,7 @@ const openOrderPredicate = sql`
       from document_lines line
      where line.org_id = d.org_id
        and line.document_id = d.id
-       and line.quantity_billed < line.quantity
+       and line.quantity_billed < ${orderedNetOfCancelledSql('line')}
   )`
 
 const linkedOrderPredicate = sql`

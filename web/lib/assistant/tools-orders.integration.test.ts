@@ -32,7 +32,7 @@ test('order reads: backlog, line remainders, and subsidiary isolation', { skip: 
   const hiddenPoId = randomUUID();
   try {
     await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"orders":true}'::jsonb) where id=${org.orgId}`);
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"orders":true,"warehousing":true,"fulfillment":true}'::jsonb) where id=${org.orgId}`);
       await db.execute(sql`
         insert into subsidiaries(id,org_id,parent_id,name,base_currency,country,is_active,is_elimination)
         values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden buyer','CAD','CA',true,false)
@@ -45,6 +45,7 @@ test('order reads: backlog, line remainders, and subsidiary isolation', { skip: 
       await db.execute(sql`
         insert into document_lines(id,org_id,document_id,line_number,item_id,quantity,quantity_fulfilled,quantity_billed,unit_price,amount,subsidiary_id)
         values (${randomUUID()},${org.orgId},${soId},1,${org.items.service},'10','4','2','20','200',${org.subsidiaryId}),
+               (${randomUUID()},${org.orgId},${soId},2,${org.items.fifo},'3','1','0','0','0',${org.subsidiaryId}),
                (${randomUUID()},${org.orgId},${hiddenPoId},1,${org.items.fifo},'5','0','0','100','500',${hidden})
       `);
       // Lines are immutable once approved: seed them as drafts, then commit.
@@ -72,6 +73,12 @@ test('order reads: backlog, line remainders, and subsidiary isolation', { skip: 
     assert.equal(line.remainingBillable, '8.0000');
     assert.equal(line.fulfilment, 'partially_fulfilled');
 
+    // The backorder position lists the stock line only, with its open quantity.
+    const position = await withOrgContext(org.orgId, () => executeAssistantTool(arOnly, 'get_backorder_position', { orderId: soId }));
+    assert.equal(position.ok, true, JSON.stringify(position));
+    const backordered = (position as { ok: true; data: { items: { lineNumber: number; open: string }[] } }).data.items;
+    assert.deepEqual(backordered.map((row) => [row.lineNumber, row.open]), [[2, '2.00000000']]);
+
     // ap-only caller cannot read the sales order; ar-only caller cannot read purchase kinds.
     const apOnly = reader(org.orgId, new Set([org.subsidiaryId]), ['assistant.use', 'ap.read']);
     const crossKind = await withOrgContext(org.orgId, () =>
@@ -97,6 +104,7 @@ test('order reads refuse while the feature is off', { skip: !process.env.OPENBOO
       executeAssistantTool(authz, 'search_orders', {}));
     assert.equal(search.ok, false);
     assert.equal((search as { ok: false; error: string }).error, 'orders_feature_disabled');
+    assert.deepEqual(await withOrgContext(org.orgId, () => executeAssistantTool(authz, 'get_backorder_position', {})), { ok: false, error: 'feature_disabled' });
   } finally {
     await dropScratchOrg(org.orgId);
   }

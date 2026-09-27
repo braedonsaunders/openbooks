@@ -1266,6 +1266,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "notifications.title",
   "number_sequences.document_kind",
   "number_sequences.prefix",
+  "order_line_cancellations.reason",
   "org_nav_configs.config",
   "overhead_rates.category",
   "overhead_rates.method",

@@ -64,6 +64,22 @@
     },
     "linksTitle": "Origin / Converted into",
     "linkCreatedFrom": "Created from",
-    "linkConvertedInto": "Converted into"
+    "linkConvertedInto": "Converted into",
+    "backorders": {
+      "tab": "Backorders",
+      "loading": "Loading backorders…",
+      "loadFailed": "Backorders could not be loaded.",
+      "empty": "Nothing is backordered on this order.",
+      "line": "Line {line}",
+      "quantities": "Ordered {ordered} · Fulfilled {fulfilled} · Cancelled {cancelled}",
+      "open": "{open} open",
+      "cancelRemainder": "Cancel remainder",
+      "cancelTitle": "Cancel {open} open on line {line}",
+      "reasonLabel": "Reason",
+      "reasonPlaceholder": "Why will the rest not ship?",
+      "cancelConfirm": "Cancel remainder",
+      "cancelFailed": "The remainder could not be cancelled.",
+      "cancelled": "Line {line} remainder cancelled"
+    }
   }
 }
