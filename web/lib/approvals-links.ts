@@ -17,6 +17,7 @@ const ORDER_HREF: Record<string, (id: string) => string> = {
   close_run: (id) => `/close?run=${id}&stage=lock`,
   // Budgets open their module drawer, where the checker decision is recorded.
   budget_scenario: (id) => `/budgets?budget=${id}`,
+  fund_release: (id) => `/nonprofit/releases?release=${id}`,
   // Allocation runs have no record drawer: approvers land on the Runs tab,
   // which shows the pending run with its computation and lineage.
   allocation_run: () => `/admin/setup/allocations?tab=runs`,
