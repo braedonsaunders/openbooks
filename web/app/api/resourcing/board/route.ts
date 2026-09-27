@@ -8,6 +8,8 @@ const Query = z.object({
   projectId: z.string().uuid().optional(),
   departmentId: z.string().uuid().optional(),
   jobTitle: z.string().trim().min(1).optional(),
+  qualificationTypeId: z.string().uuid().optional(),
+  page: z.coerce.number().int().min(1).optional(),
 }).strict();
 
 export const GET = defineRoute({
