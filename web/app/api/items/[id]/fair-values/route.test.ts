@@ -68,7 +68,6 @@ const routeUrl = "./route.ts?fair-values-concurrency-test";
 const { PATCH, DELETE } = (await import(
   routeUrl
 )) as typeof import("./route.ts");
-test.after(() => hooks.deregister())
 
 const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =
@@ -234,6 +233,7 @@ async function auditRows(fixture: Fixture): Promise<
   return result.rows;
 }
 
+test.after(() => hooks.deregister())
 test(
   "concurrent fair-value PATCHes audit each committed before-state",
   { skip: !DB },

@@ -49,7 +49,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?lrc-array-binding-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-test.after(() => hooks.deregister())
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -207,6 +206,7 @@ function put(fixture: Fixture, body: Record<string, unknown>): Promise<Response>
   }), { params: Promise.resolve({ id: fixture.versionId }) });
 }
 
+test.after(() => hooks.deregister())
 test(
   "PUT saves multi-element item/customer/location/line collections against live Postgres",
   async () => {

@@ -61,7 +61,6 @@ const mergeUrl = "../merge/route.ts?project-merge-route-test";
 const { GET: listDuplicates } = (await import(duplicatesUrl)) as typeof import("./route.ts");
 const { GET: previewMerge, POST: commitMerge } =
   (await import(mergeUrl)) as typeof import("../merge/route.ts");
-test.after(() => hooks.deregister())
 
 const { db } = await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
@@ -95,6 +94,7 @@ async function seedProject(
   return id;
 }
 
+test.after(() => hooks.deregister())
 test("project duplicates list, preview, and merge through the routes", async () => {
   const org = await createScratchOrg();
   try {

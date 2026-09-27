@@ -58,7 +58,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?subcontract-magnitude-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-test.after(() => hooks.deregister())
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
@@ -130,6 +129,7 @@ function createBody(fixture: Fixture, originalCommitment: string) {
   };
 }
 
+test.after(() => hooks.deregister())
 test("POST refuses a commitment wider than numeric(19,4) without writing", async () => {
   const fixture = await withBypass(seed);
   try {

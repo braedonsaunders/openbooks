@@ -53,7 +53,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?rates-currency-serialization-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-test.after(() => hooks.deregister())
 
 const { withBypassContext, withOrgContext, db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
@@ -169,6 +168,7 @@ async function assertFirstVersionLanded(fixture: Fixture): Promise<void> {
   assert.equal(state.rows[0]?.audit, 1, "the version's audit row must exist");
 }
 
+test.after(() => hooks.deregister())
 test(
   "first version creation waits on the Setup rate-book fence, so a racing currency PATCH cannot pass the history check",
   async () => {

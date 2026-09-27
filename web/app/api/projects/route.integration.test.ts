@@ -47,7 +47,6 @@ const hooks = registerHooks({
 
 const postRouteUrl = "./route.ts?projects-create-integration";
 const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
-test.after(() => hooks.deregister())
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
@@ -96,6 +95,7 @@ async function auditInserts(orgId: string, rowId: string): Promise<{ request_id:
   ).rows;
 }
 
+test.after(() => hooks.deregister())
 test(
   "projects POST creates one active project and one audit row under the feature gate",
   async () => {

@@ -47,7 +47,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?payment-links-expiry-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-test.after(() => hooks.deregister())
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sealJson } = await import("@openbooks/engine/src/platform/secrets.ts");
@@ -117,6 +116,7 @@ async function linkCount(orgId: string): Promise<number> {
   return rows[0]!.count;
 }
 
+test.after(() => hooks.deregister())
 test("POST refuses an impossible expiresOn without writing a link", async () => {
   const { org, invoiceId } = await fixture();
   try {
