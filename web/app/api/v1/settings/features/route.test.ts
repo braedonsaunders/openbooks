@@ -107,10 +107,9 @@ test("POST /api/v1/settings/features also accepts a top-level feature map", asyn
 test("POST /api/v1/settings/features refuses unknown feature keys without applying", async () => {
   routeState.normalized = { ok: false, error: "invalid-feature", key: "nope" };
   routeState.applied = null;
-  await assert.rejects(
-    () => POST(post({ features: { nope: true } }, { "idempotency-key": "key-1" })),
-    /invalid-feature/,
-  );
+  const response = await POST(post({ features: { nope: true } }, { "idempotency-key": "key-1" }));
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), { error: "invalid-feature", code: "invalid_input" });
   assert.equal(routeState.applied, null);
 });
 
