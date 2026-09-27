@@ -62,7 +62,7 @@ async function refuse(work: Promise<unknown>, code: string, text: string) {
 const cases: Case[] = [
   { name: "draft create, edit, and cancel", run: async (f) => {
     const draft = await order(f); const edited = await run((tx) => updateDraftWorkOrder(tx, f.org.orgId, f.actorId, draft.id, { quantityOrdered: "2", plannedEnd: "2026-07-20" }));
-    assert.equal(edited.quantityOrdered, "2"); assert.equal((await run((tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, draft.id))).status, "cancelled");
+    assert.equal(edited.quantityOrdered, "2.0000"); assert.equal((await run((tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, draft.id))).status, "cancelled");
   } },
   { name: "routing selection names the item and effective versions", run: async (f) => {
     const first = await route(f, f.org.items.assembly, "2026-01-01", "2026-06-30");
