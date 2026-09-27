@@ -217,8 +217,7 @@ function compute(
   rates: MtYearRates,
   context: StateEngineContext<MtYearRates>,
 ): UsStateWithholdingResult {
-  const period = context.requirePrintedPeriod(input.periodsPerYear, MT_PERIODS, 260);
-  const published = period as MtPeriod;
+  const published = context.fixedPeriod as MtPeriod;
   const { factors, trace } = context;
 
   const exempt = context.exemptResult({ factorKey: "MT_EXEMPT", factorFormat: "decimal" });
@@ -271,7 +270,7 @@ export const MT_FACTOR_LABELS: Readonly<Record<string, string>> = {
 };
 
 const MT_STATE_ENGINE = defineStateEngine({
-  state: { state: "MT", label: "Montana income tax", printedPeriods: null },
+  state: { state: "MT", label: "Montana income tax", printedPeriods: MT_PERIODS, fixedPeriodsOnly: true },
   editions: pairStateRateEditions(Object.values(MT_EDITIONS_BY_YEAR), MT_TAX_YEAR_EDITIONS),
   compute: compute,
 });

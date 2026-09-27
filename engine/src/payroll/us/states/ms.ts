@@ -168,7 +168,7 @@ export const MS_FACTOR_LABELS: Readonly<Record<string, string>> = {
 };
 
 const MS_STATE_ENGINE = defineStateEngine({
-  state: { state: "MS", label: "Mississippi income tax", printedPeriods: null },
+  state: { state: "MS", label: "Mississippi income tax", printedPeriods: MS_PERIODS, fixedPeriodsOnly: true },
   editions: pairStateRateEditions(Object.values(MS_EDITIONS_BY_YEAR), MS_TAX_YEAR_EDITIONS),
   compute: compute,
 });
