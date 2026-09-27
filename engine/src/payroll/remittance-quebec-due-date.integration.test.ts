@@ -33,6 +33,9 @@ async function seedQuebecAccelerated2(): Promise<{ orgId: string; actorId: strin
                                          remitter_type, is_default)
     values (${accountId}, ${org.orgId}, 'CA', 'ca_rp', '123456789RP0002', 'Quebec division',
             'accelerated_2', true)`);
+  await db.execute(sql`update orgs set settings = jsonb_set(jsonb_set(coalesce(settings, '{}'::jsonb),
+    '{payroll}', coalesce(settings->'payroll', '{}'::jsonb)), '{payroll,craRemittancePartyId}',
+    to_jsonb(${org.vendorId}::text), true) where id = ${org.orgId}`);
 
   const liabilityAccountId = randomUUID();
   await db.execute(sql`

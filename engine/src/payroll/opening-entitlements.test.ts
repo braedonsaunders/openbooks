@@ -14,7 +14,7 @@ import { saveOpeningBalances } from "./opening-balances.ts";
 import { payRunReadiness } from "./readiness.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
-import { seedPayrollComponents } from "./run-setup.ts";
+import { seedCanadianPayrollComponentsForTest } from "./filing-test-fixtures.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 
 /**
@@ -80,10 +80,9 @@ async function seedBanks(): Promise<BankFixture> {
         taxPayableAccountId: craPayable,
         vacationPayableAccountId: vacationPayable,
         wagesTo: "expense",
-        ca: { eht: { enabled: true, rate: "1.95", annualExemption: "1000" } },
       },
     })}::jsonb where id = ${org.orgId}`);
-  await seedPayrollComponents(org.orgId, actorId, "CA");
+  await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
 
   const components = (await db.execute<{ accrual_id: string; payout_id: string }>(sql`
     select (array_agg(id order by created_at, id)
