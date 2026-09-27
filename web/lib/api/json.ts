@@ -82,11 +82,22 @@ export async function parseJsonBody<S extends z.ZodType>(
       response: NextResponse.json({ error: INVALID_BODY }, { status: opts?.status ?? 400 }),
     };
   }
+  if (bounded.text === "") {
+    const parsed = schema.safeParse(undefined);
+    if (parsed.success) return { ok: true, data: parsed.data };
+    return {
+      ok: false,
+      response: NextResponse.json({ error: INVALID_BODY }, { status: opts?.status ?? 400 }),
+    };
+  }
   let raw: unknown;
   try {
-    raw = bounded.text ? (JSON.parse(bounded.text) as unknown) : undefined;
+    raw = JSON.parse(bounded.text) as unknown;
   } catch {
-    raw = undefined;
+    return {
+      ok: false,
+      response: NextResponse.json({ error: INVALID_BODY }, { status: opts?.status ?? 400 }),
+    };
   }
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     return {

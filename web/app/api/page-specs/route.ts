@@ -19,7 +19,7 @@ const POSTBodySchema1 = z.object({
   route: z.string().min(1).optional(),
   spec: z.json().optional(),
   note: z.string().nullable().optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 export const runtime = 'nodejs'

@@ -12,7 +12,7 @@ const POSTBodySchema1 = z.object({
   bookId: z.string().uuid().optional(), description: z.string().max(2000).optional(),
   fiscalYear: z.number().int().min(1900).max(9999).optional(), kind: z.enum(['forecast', 'budget']).optional(),
   name: z.string().max(200).optional(), sourceScenarioId: z.string().uuid().optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 export const runtime = 'nodejs'
@@ -35,7 +35,7 @@ export const POST = defineRoute({
   permission: 'budgets.manage',
   feature: 'budgets',
   body: POSTBodySchema1,
-  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
     const user = gate.user
 

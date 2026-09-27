@@ -121,6 +121,215 @@ export function findRouteFeatures(sourceText) {
   return calls;
 }
 
+/**
+ * Refuse body schemas that accept unconstrained JavaScript values or whose
+ * object shape accepts an empty request. A route may identify a top-level
+ * JSON column explicitly with `opaque: { fieldName: "reason" }`.
+ */
+export function analyzeRouteBodies(sourceText) {
+  const source = parse(sourceText, "route.ts");
+  const bindings = new Map();
+  const violations = [];
+  const visitBindings = (node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      bindings.set(node.name.text, node.initializer);
+    }
+    ts.forEachChild(node, visitBindings);
+  };
+  visitBindings(source);
+
+  const resolveSchema = (node, seen = new Set()) => {
+    let current = unwrap(node);
+    while (current && ts.isIdentifier(current) && bindings.has(current.text) && !seen.has(current.text)) {
+      seen.add(current.text);
+      current = unwrap(bindings.get(current.text));
+    }
+    return current;
+  };
+  const opaqueReason = (options, field) => {
+    const opaque = options.properties.find((property) =>
+      ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === "opaque");
+    const allowance = opaque && ts.isObjectLiteralExpression(opaque.initializer)
+      ? opaque.initializer.properties.find((property) =>
+          ts.isPropertyAssignment(property) &&
+          ((ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) && property.name.text === field))
+      : undefined;
+    if (!allowance || !ts.isPropertyAssignment(allowance)) return null;
+    return ts.isStringLiteral(allowance.initializer) && allowance.initializer.text.trim() !== ""
+      ? allowance.initializer.text
+      : "";
+  };
+  const isOptional = (node) => {
+    let current = resolveSchema(node);
+    while (current && ts.isCallExpression(current)) {
+      const callee = unwrap(current.expression);
+      if (ts.isPropertyAccessExpression(callee) && ["optional", "default", "catch"].includes(callee.name.text)) return true;
+      if (ts.isIdentifier(callee) && callee.text === "optional") return true;
+      if (ts.isPropertyAccessExpression(callee) && current.arguments.length > 0) {
+        current = unwrap(callee.expression);
+      } else {
+        break;
+      }
+    }
+    return false;
+  };
+  const objectShapes = (node, seen = new Set()) => {
+    const schema = resolveSchema(node, seen);
+    if (!schema || !ts.isCallExpression(schema)) return [];
+    const callee = unwrap(schema.expression);
+    if (ts.isPropertyAccessExpression(callee) && ["object", "looseObject"].includes(callee.name.text)) {
+      const shape = schema.arguments[0];
+      return shape && ts.isObjectLiteralExpression(shape) ? [shape] : [];
+    }
+    if (ts.isPropertyAccessExpression(callee) && ["union", "discriminatedUnion"].includes(callee.name.text)) {
+      const options = schema.arguments.find(ts.isArrayLiteralExpression);
+      return options ? options.elements.flatMap((option) => objectShapes(option, seen)) : [];
+    }
+    if (
+      ts.isPropertyAccessExpression(callee) &&
+      ["refine", "superRefine", "strict", "strip", "passthrough", "catchall"].includes(callee.name.text)
+    ) {
+      return objectShapes(callee.expression, seen);
+    }
+    return [];
+  };
+  const hasNonEmptyRefinement = (node, shape) => {
+    let schema = resolveSchema(node);
+    while (schema && ts.isCallExpression(schema)) {
+      const callee = unwrap(schema.expression);
+      if (!ts.isPropertyAccessExpression(callee)) return false;
+      if (["refine", "superRefine"].includes(callee.name.text)) {
+        const predicate = schema.arguments[0];
+        const parameter = predicate && (ts.isArrowFunction(predicate) || ts.isFunctionExpression(predicate))
+          ? predicate.parameters[0]?.name
+          : undefined;
+        if (parameter && ts.isIdentifier(parameter)) {
+          const names = new Set(shape.properties
+            .filter((property) => ts.isPropertyAssignment(property) && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)))
+            .map((property) => property.name.text));
+          let provesNonEmpty = false;
+          const inspectPredicate = (candidate) => {
+            if (ts.isBinaryExpression(candidate)) {
+              const op = candidate.operatorToken.kind;
+              if ([ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken].includes(op)) {
+                const isNullish = (value) => (ts.isIdentifier(unwrap(value)) && unwrap(value).text === "undefined") ||
+                  unwrap(value).kind === ts.SyntaxKind.NullKeyword;
+                const checksField = (value) => {
+                  const field = unwrap(value);
+                  return ts.isPropertyAccessExpression(field) && ts.isIdentifier(field.expression) &&
+                    field.expression.text === parameter.text && names.has(field.name.text);
+                };
+                if ((checksField(candidate.left) && isNullish(candidate.right)) ||
+                    (checksField(candidate.right) && isNullish(candidate.left))) provesNonEmpty = true;
+              }
+            }
+            if (
+              ts.isBinaryExpression(candidate) &&
+              [ts.SyntaxKind.GreaterThanToken, ts.SyntaxKind.GreaterThanEqualsToken].includes(candidate.operatorToken.kind)
+            ) {
+              const left = unwrap(candidate.left);
+              const right = unwrap(candidate.right);
+              if (ts.isNumericLiteral(right) && Number(right.text) === 0 && ts.isPropertyAccessExpression(left) &&
+                  left.name.text === "length" && ts.isCallExpression(unwrap(left.expression))) {
+                const keys = unwrap(left.expression);
+                const keysCallee = unwrap(keys.expression);
+                if (ts.isPropertyAccessExpression(keysCallee) && ts.isIdentifier(keysCallee.expression) && keysCallee.expression.text === "Object" &&
+                    keysCallee.name.text === "keys" && keys.arguments.some((argument) => ts.isIdentifier(unwrap(argument)) && unwrap(argument).text === parameter.text)) {
+                  provesNonEmpty = true;
+                }
+              }
+            }
+            ts.forEachChild(candidate, inspectPredicate);
+          };
+          inspectPredicate(predicate);
+          if (provesNonEmpty) return true;
+        }
+      }
+      schema = unwrap(callee.expression);
+      if (!ts.isCallExpression(schema)) return false;
+    }
+    return false;
+  };
+  const topLevelField = (node, bodySchema) => {
+    for (let current = node.parent; current && current !== bodySchema; current = current.parent) {
+      if (!ts.isPropertyAssignment(current) || !ts.isObjectLiteralExpression(current.parent)) continue;
+      const parentCall = current.parent.parent;
+      if (!parentCall || !ts.isCallExpression(parentCall) || parentCall.arguments[0] !== current.parent) continue;
+      const callee = unwrap(parentCall.expression);
+      if (!ts.isPropertyAccessExpression(callee) || !["object", "looseObject"].includes(callee.name.text)) continue;
+      const shapeProps = current.parent.properties;
+      const outer = shapeProps.find((property) => property === current);
+      if (outer && (ts.isIdentifier(outer.name) || ts.isStringLiteral(outer.name))) return outer.name.text;
+    }
+    return "body";
+  };
+  const inspectHandler = (handler) => {
+    const walk = (node) => {
+      if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Request") {
+        violations.push({ node, message: "defineRoute handler constructs a new Request; use its parsed body and request context directly" });
+      }
+      ts.forEachChild(node, walk);
+    };
+    walk(handler);
+  };
+
+  const visitRoutes = (node) => {
+    if (
+      ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "defineRoute" &&
+      ts.isObjectLiteralExpression(node.arguments[0])
+    ) {
+      const options = node.arguments[0];
+      const getOption = (name) => options.properties.find((property) =>
+        ts.isPropertyAssignment(property) && ts.isIdentifier(property.name) && property.name.text === name);
+      const bodyProperty = getOption("body");
+      if (bodyProperty && ts.isPropertyAssignment(bodyProperty)) {
+        const bodySchema = resolveSchema(bodyProperty.initializer);
+        const fieldViolations = [];
+        const walkBody = (child) => {
+          if (ts.isCallExpression(child)) {
+            const callee = unwrap(child.expression);
+            if (ts.isPropertyAccessExpression(callee) && ["unknown", "any"].includes(callee.name.text)) {
+              const field = topLevelField(child, bodySchema);
+              const reason = opaqueReason(options, field);
+              if (reason === null) {
+                fieldViolations.push({ node: child, message: `body field "${field}" uses z.${callee.name.text}() without an opaque allowance and reason` });
+              } else if (reason === "") {
+                fieldViolations.push({ node: child, message: `opaque allowance for body field "${field}" needs a non-empty reason` });
+              }
+            }
+          }
+          ts.forEachChild(child, walkBody);
+        };
+        walkBody(bodySchema);
+        violations.push(...fieldViolations);
+
+        const shapes = objectShapes(bodyProperty.initializer);
+        for (const shape of shapes) {
+          const properties = shape.properties.filter((property) => ts.isPropertyAssignment(property));
+          if (properties.length === 0 || !properties.every((property) => isOptional(property.initializer))) continue;
+          const allOpaque = properties.every((property) => {
+            const name = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name) ? property.name.text : "";
+            const reason = opaqueReason(options, name);
+            return reason !== null && reason !== "";
+          });
+          if (!allOpaque && !hasNonEmptyRefinement(bodyProperty.initializer, shape)) {
+            violations.push({ node: shape, message: "body object has only optional fields; require a field or explicitly allow each opaque JSON field with a reason" });
+          }
+        }
+      }
+      const handler = getOption("handler");
+      if (handler && ts.isPropertyAssignment(handler)) inspectHandler(handler.initializer);
+    }
+    ts.forEachChild(node, visitRoutes);
+  };
+  visitRoutes(source);
+
+  return violations.map(({ node, message }) => ({
+    line: source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1,
+    message,
+  }));
+}
+
 function unwrap(node) {
   while (
     node &&
@@ -204,6 +413,9 @@ function snapshot(root) {
     if (facts.jsonObject) jsonObjectImporters += 1;
     if (facts.sql) sqlImporters += 1;
     if (facts.defineRoute) {
+      for (const violation of analyzeRouteBodies(source)) {
+        featureViolations.push(`${file}:${violation.line}: ${violation.message}`);
+      }
       for (const call of findRouteFeatures(source)) {
         if (!call.hasPublic && !call.hasFeature) {
           featureViolations.push(`${file}: defineRoute without a feature (the type refuses omission; add a key or { none: "<reason>" })`);

@@ -19,12 +19,12 @@ import {
   completeBulkRunKey,
   releaseAbandonedBulkRunKey,
 } from '@openbooks/engine/src/scripting/bulk-run-claim.ts'
-import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+
 import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.object({ idempotencyKey: z.string().uuid().optional() });
+const requestBodySchema = z.object({ idempotencyKey: z.string().uuid().optional() }).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 
@@ -48,173 +48,169 @@ function invalidCronResponse(error: InvalidScheduledScriptCronError): Promise<Ne
  * unattributed: without an actor its material operations would be
  * indistinguishable from system automation.
  */
-async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('scripts.manage', 'scripts')
-  if (gate instanceof NextResponse) return gate
-  const user = gate.user
-  const { id } = await params
-  // A malformed id names no script: same answer as an unknown one, never a
-  // PostgreSQL uuid cast error escaping as a 500.
-  if (!isUuid(id)) return notFound("record")
 
-  const existing = (await db.execute<{ trigger_point: string; cron: string | null; is_active: boolean; cursor: string | null }>(sql`
-    select trigger_point, cron, is_active, next_run_at::text as cursor from user_scripts where id = ${id} and org_id = ${user.orgId}
-  `))
-  if (!existing.rows[0]) return notFound("record")
-  const kind = existing.rows[0].trigger_point
-  if (!existing.rows[0].is_active) return NextResponse.json({ error: 'Activate this script before running it.', code: 'SCRIPT_INACTIVE' }, { status: 409 })
-  if (kind !== 'scheduled' && kind !== 'bulk') return NextResponse.json({ error: 'Run now is available only for scheduled and bulk scripts.', code: 'SCRIPT_TRIGGER_NOT_RUNNABLE' }, { status: 422 })
-
-  try {
-    if (kind === 'bulk') {
-      // E02: a bulk Run-now is a non-idempotent money-moving execution, so
-      // it carries the caller's run key plus a durable claim. A double-click
-      // reuses the key: the second request either replays the recorded
-      // outcome (completed) or is refused as in-flight (409) — it never runs
-      // twice. Without a client key each request mints a fresh one (no
-      // cross-request dedupe). The queue id is deterministic in the key, so
-      // live duplicates collapse in BullMQ; the worker re-checks the claim
-      // because BullMQ dedupe only covers live jobs.
-      let rawBody: unknown = null
-      try {
-        rawBody = await req.json()
-      } catch {
-        rawBody = null
-      }
-      const provided = (rawBody as { idempotencyKey?: unknown } | null)?.idempotencyKey
-      let runKey: string
-      try {
-        runKey = bulkRunClientKey(provided)
-      } catch {
-        return NextResponse.json(
-          { error: 'A valid idempotencyKey is required; retry this run with the same client key.', code: 'SCRIPT_RUN_KEY_INVALID' },
-          { status: 400 },
-        )
-      }
-      const queueJobId = bulkScriptQueueJobId(id, runKey)
-      const claim = await claimBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
-      if (claim.status === 'completed') {
-        return NextResponse.json({ ...(claim.response as Record<string, unknown>), deduped: true })
-      }
-      if (claim.status === 'inflight') {
-        // Recovery from worker loss: attempts=1 leaves a failed job retained,
-        // and the claim would otherwise answer 409 forever. Release it only
-        // on proof the script never started (failed without processing); a
-        // job that may have executed keeps its claim because a retry would
-        // double-post, and that refusal names the remedy.
-        let failedBeforeStart = false
-        let failedAfterStart = false
-        try {
-          const { getScriptsQueue } = await import('@openbooks/jobs')
-          const job = await getScriptsQueue().getJob(queueJobId)
-          if (job && (await job.getState()) === 'failed') {
-            if (job.processedOn == null) failedBeforeStart = true
-            else failedAfterStart = true
-          }
-        } catch {
-          failedBeforeStart = false
-        }
-        if (failedBeforeStart) {
-          const released = await releaseAbandonedBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
-          if (released) {
-            const fresh = await claimBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
-            if (fresh.status === 'claimed') {
-              try {
-                const { getScriptsQueue } = await import('@openbooks/jobs')
-                await getScriptsQueue().getJob(queueJobId).then((job) => job?.retry())
-                return NextResponse.json({ queued: true, jobId: queueJobId, idempotencyKey: runKey })
-              } catch {
-                // The job left the failed state (a rival recovered first) or
-                // Redis failed: the fresh claim stays live and a later POST
-                // retries recovery. Never run inline here — the script may
-                // already be running under the rival's recovery.
-              }
-            }
-          }
-        }
-        return NextResponse.json(
-          {
-            error: failedAfterStart
-              ? 'A run with this key failed after starting; verify whether it posted, then retry with a new idempotency key.'
-              : 'A run with this key is already in progress.',
-            code: 'SCRIPT_RUN_IN_PROGRESS',
-          },
-          { status: 409 },
-        )
-      }
-      if (claim.status === 'mismatched') {
-        return NextResponse.json(
-          { error: 'This run key is already in use by a different script.', code: 'SCRIPT_RUN_KEY_MISMATCH' },
-          { status: 409 },
-        )
-      }
-      const payload = { orgId: user.orgId, scriptId: id, kind: 'bulk' as const, actorId: user.id, idempotencyKey: runKey }
-      try {
-        const { enqueueScriptRun } = await import('@openbooks/jobs')
-        const job = await enqueueScriptRun(payload, { jobId: queueJobId })
-        return NextResponse.json({ queued: true, jobId: job.id, idempotencyKey: runKey })
-      } catch {
-        // The enqueue reply may be lost after Redis accepted the job: only
-        // run inline on provable non-acceptance, mirroring the report and
-        // close delivery settlement. A kept job proceeds down the normal
-        // queued path; the worker completes the claim.
-        let accepted = false
-        try {
-          const { getScriptsQueue } = await import('@openbooks/jobs')
-          accepted = (await getScriptsQueue().getJob(queueJobId)) != null
-        } catch {
-          accepted = false
-        }
-        if (accepted) return NextResponse.json({ queued: true, jobId: queueJobId, idempotencyKey: runKey })
-        // Redis unavailable — run inline so "Run now" still works in dev,
-        // under the same authenticated actor as the queued path, completing
-        // the same claim the worker would have completed. The inline run
-        // shares the claim's stable journal scope, so a queued duplicate
-        // racing it replays instead of double-posting.
-        const outcome = await runBulkScript(id, user.orgId, { actorId: user.id, idempotencyScope: bulkRunIdempotencyScope(runKey) })
-        const response = { queued: false, ...outcome }
-        await completeBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey, response })
-        return NextResponse.json(response)
-      }
-    }
-
-    // Parse before the execution boundary: an invalid legacy schedule returns
-    // a repairable client error without running source or mutating its cursor.
-    let next: Date | null = null
-    if (kind === 'scheduled') {
-      try {
-        next = computeScheduledScriptNextRunAt(existing.rows[0].cron)
-      } catch (error) {
-        if (!(error instanceof InvalidScheduledScriptCronError)) throw error
-        return invalidCronResponse(error)
-      }
-    }
-
-    const outcome = await runScheduledScript(id, user.orgId, { actorId: user.id })
-    // Source runs outside a transaction. Advance only the captured scheduling
-    // policy/cursor; a concurrent editor or scheduler tick owns its new value.
-    if (next) {
-      await db.execute(sql`update user_scripts set next_run_at = ${next}
-        where id = ${id} and org_id = ${user.orgId} and trigger_point = 'scheduled' and is_active
-          and cron is not distinct from ${existing.rows[0].cron}
-          and next_run_at is not distinct from ${existing.rows[0].cursor}::timestamptz`)
-    }
-    return NextResponse.json(outcome)
-  } catch (e) {
-    if (e instanceof InvalidScheduledScriptCronError) return invalidCronResponse(e)
-    return unexpectedServerError('admin/scripts/run', e)
-  }
-}
 
 export const POST = defineRoute({
   permission: "scripts.manage",
   feature: "scripts",
   params: z.object({ "id": z.string() }),
   body: requestBodySchema,
-  handler: async ({ request, body, params }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  handler: async ({ request, params, authz: routeAuthz }) => {
+
+    const gate = routeAuthz
+
+    const user = gate.user
+    const { id } = params
+    // A malformed id names no script: same answer as an unknown one, never a
+    // PostgreSQL uuid cast error escaping as a 500.
+    if (!isUuid(id)) return notFound("record")
+
+    const existing = (await db.execute<{ trigger_point: string; cron: string | null; is_active: boolean; cursor: string | null }>(sql`
+      select trigger_point, cron, is_active, next_run_at::text as cursor from user_scripts where id = ${id} and org_id = ${user.orgId}
+    `))
+    if (!existing.rows[0]) return notFound("record")
+    const kind = existing.rows[0].trigger_point
+    if (!existing.rows[0].is_active) return NextResponse.json({ error: 'Activate this script before running it.', code: 'SCRIPT_INACTIVE' }, { status: 409 })
+    if (kind !== 'scheduled' && kind !== 'bulk') return NextResponse.json({ error: 'Run now is available only for scheduled and bulk scripts.', code: 'SCRIPT_TRIGGER_NOT_RUNNABLE' }, { status: 422 })
+
+    try {
+      if (kind === 'bulk') {
+        // E02: a bulk Run-now is a non-idempotent money-moving execution, so
+        // it carries the caller's run key plus a durable claim. A double-click
+        // reuses the key: the second request either replays the recorded
+        // outcome (completed) or is refused as in-flight (409) — it never runs
+        // twice. Without a client key each request mints a fresh one (no
+        // cross-request dedupe). The queue id is deterministic in the key, so
+        // live duplicates collapse in BullMQ; the worker re-checks the claim
+        // because BullMQ dedupe only covers live jobs.
+        let rawBody: unknown = null
+        try {
+          rawBody = await request.json()
+        } catch {
+          rawBody = null
+        }
+        const provided = (rawBody as { idempotencyKey?: unknown } | null)?.idempotencyKey
+        let runKey: string
+        try {
+          runKey = bulkRunClientKey(provided)
+        } catch {
+          return NextResponse.json(
+            { error: 'A valid idempotencyKey is required; retry this run with the same client key.', code: 'SCRIPT_RUN_KEY_INVALID' },
+            { status: 400 },
+          )
+        }
+        const queueJobId = bulkScriptQueueJobId(id, runKey)
+        const claim = await claimBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
+        if (claim.status === 'completed') {
+          return NextResponse.json({ ...(claim.response as Record<string, unknown>), deduped: true })
+        }
+        if (claim.status === 'inflight') {
+          // Recovery from worker loss: attempts=1 leaves a failed job retained,
+          // and the claim would otherwise answer 409 forever. Release it only
+          // on proof the script never started (failed without processing); a
+          // job that may have executed keeps its claim because a retry would
+          // double-post, and that refusal names the remedy.
+          let failedBeforeStart = false
+          let failedAfterStart = false
+          try {
+            const { getScriptsQueue } = await import('@openbooks/jobs')
+            const job = await getScriptsQueue().getJob(queueJobId)
+            if (job && (await job.getState()) === 'failed') {
+              if (job.processedOn == null) failedBeforeStart = true
+              else failedAfterStart = true
+            }
+          } catch {
+            failedBeforeStart = false
+          }
+          if (failedBeforeStart) {
+            const released = await releaseAbandonedBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
+            if (released) {
+              const fresh = await claimBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey })
+              if (fresh.status === 'claimed') {
+                try {
+                  const { getScriptsQueue } = await import('@openbooks/jobs')
+                  await getScriptsQueue().getJob(queueJobId).then((job) => job?.retry())
+                  return NextResponse.json({ queued: true, jobId: queueJobId, idempotencyKey: runKey })
+                } catch {
+                  // The job left the failed state (a rival recovered first) or
+                  // Redis failed: the fresh claim stays live and a later POST
+                  // retries recovery. Never run inline here — the script may
+                  // already be running under the rival's recovery.
+                }
+              }
+            }
+          }
+          return NextResponse.json(
+            {
+              error: failedAfterStart
+                ? 'A run with this key failed after starting; verify whether it posted, then retry with a new idempotency key.'
+                : 'A run with this key is already in progress.',
+              code: 'SCRIPT_RUN_IN_PROGRESS',
+            },
+            { status: 409 },
+          )
+        }
+        if (claim.status === 'mismatched') {
+          return NextResponse.json(
+            { error: 'This run key is already in use by a different script.', code: 'SCRIPT_RUN_KEY_MISMATCH' },
+            { status: 409 },
+          )
+        }
+        const payload = { orgId: user.orgId, scriptId: id, kind: 'bulk' as const, actorId: user.id, idempotencyKey: runKey }
+        try {
+          const { enqueueScriptRun } = await import('@openbooks/jobs')
+          const job = await enqueueScriptRun(payload, { jobId: queueJobId })
+          return NextResponse.json({ queued: true, jobId: job.id, idempotencyKey: runKey })
+        } catch {
+          // The enqueue reply may be lost after Redis accepted the job: only
+          // run inline on provable non-acceptance, mirroring the report and
+          // close delivery settlement. A kept job proceeds down the normal
+          // queued path; the worker completes the claim.
+          let accepted = false
+          try {
+            const { getScriptsQueue } = await import('@openbooks/jobs')
+            accepted = (await getScriptsQueue().getJob(queueJobId)) != null
+          } catch {
+            accepted = false
+          }
+          if (accepted) return NextResponse.json({ queued: true, jobId: queueJobId, idempotencyKey: runKey })
+          // Redis unavailable — run inline so "Run now" still works in dev,
+          // under the same authenticated actor as the queued path, completing
+          // the same claim the worker would have completed. The inline run
+          // shares the claim's stable journal scope, so a queued duplicate
+          // racing it replays instead of double-posting.
+          const outcome = await runBulkScript(id, user.orgId, { actorId: user.id, idempotencyScope: bulkRunIdempotencyScope(runKey) })
+          const response = { queued: false, ...outcome }
+          await completeBulkRunKey({ orgId: user.orgId, actorId: user.id, scriptId: id, key: runKey, response })
+          return NextResponse.json(response)
+        }
+      }
+
+      // Parse before the execution boundary: an invalid legacy schedule returns
+      // a repairable client error without running source or mutating its cursor.
+      let next: Date | null = null
+      if (kind === 'scheduled') {
+        try {
+          next = computeScheduledScriptNextRunAt(existing.rows[0].cron)
+        } catch (error) {
+          if (!(error instanceof InvalidScheduledScriptCronError)) throw error
+          return invalidCronResponse(error)
+        }
+      }
+
+      const outcome = await runScheduledScript(id, user.orgId, { actorId: user.id })
+      // Source runs outside a transaction. Advance only the captured scheduling
+      // policy/cursor; a concurrent editor or scheduler tick owns its new value.
+      if (next) {
+        await db.execute(sql`update user_scripts set next_run_at = ${next}
+          where id = ${id} and org_id = ${user.orgId} and trigger_point = 'scheduled' and is_active
+            and cron is not distinct from ${existing.rows[0].cron}
+            and next_run_at is not distinct from ${existing.rows[0].cursor}::timestamptz`)
+      }
+      return NextResponse.json(outcome)
+    } catch (e) {
+      if (e instanceof InvalidScheduledScriptCronError) return invalidCronResponse(e)
+      return unexpectedServerError('admin/scripts/run', e)
+    }
   },
 });

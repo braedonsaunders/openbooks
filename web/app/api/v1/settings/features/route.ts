@@ -13,7 +13,7 @@ import { applyFeatureChanges, normalizeFeatureChanges } from "../../../../../lib
 import { listApplicationFeatures } from "../../../../../lib/application/setup-read";
 
 const updateFeaturesBody = z.looseObject({
-  features: z.record(z.string(), z.unknown()).optional(),
+  features: z.record(z.string(), z.json()).optional(),
 });
 
 export const runtime = "nodejs";

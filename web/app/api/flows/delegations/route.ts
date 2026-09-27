@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from 'next/server'
 import {
   createDelegation,
@@ -52,60 +52,9 @@ async function legacyGET() {
   return NextResponse.json({ delegations })
 }
 
-async function legacyPOST(req: Request) {
-  const authz = await requireFlowsSession()
-  if (authz instanceof NextResponse) return authz
 
-  const parsedBody = await parseJsonBody(req, createDelegationBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    toUserId?: string
-    startsAt?: string
-    endsAt?: string
-    reason?: string
-  }
-  if (!body.toUserId || !isUuid(body.toUserId)) {
-    return NextResponse.json({ error: 'toUserId required' }, { status: 400 })
-  }
-  const startsAt = body.startsAt ? new Date(body.startsAt) : null
-  const endsAt = body.endsAt ? new Date(body.endsAt) : null
-  if (!startsAt || Number.isNaN(startsAt.getTime()) || !endsAt || Number.isNaN(endsAt.getTime())) {
-    return NextResponse.json({ error: 'valid startsAt and endsAt required' }, { status: 400 })
-  }
 
-  try {
-    const { delegation, overlapping } = await createDelegation({
-      orgId: authz.user.orgId,
-      fromUserId: authz.user.id,
-      toUserId: body.toUserId,
-      startsAt,
-      endsAt,
-      reason: body.reason,
-    })
-    // Overlaps are allowed (two delegates can cover the same window) but
-    // surfaced so the UI can note it.
-    return NextResponse.json({ delegation, overlapping }, { status: 201 })
-  } catch (e) {
-    return delegationErrorResponse(e)
-  }
-}
 
-async function legacyPATCH(req: Request) {
-  const authz = await requireFlowsSession()
-  if (authz instanceof NextResponse) return authz
-  const parsedBody2 = await parseJsonBody(req, revokeDelegationBodySchema);
-  if (!parsedBody2.ok) return parsedBody2.response;
-  const body = (parsedBody2.data) as { id?: string; revoke?: boolean }
-  if (!body.id || !isUuid(body.id) || body.revoke !== true) {
-    return NextResponse.json({ error: 'id and revoke:true required' }, { status: 400 })
-  }
-  try {
-    await revokeDelegation(authz.user.orgId, body.id, authz.user.id)
-    return NextResponse.json({ ok: true })
-  } catch (e) {
-    return delegationErrorResponse(e)
-  }
-}
 
 async function legacyDELETE(req: Request) {
   const authz = await requireFlowsSession()
@@ -128,24 +77,64 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   body: createDelegationBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const authz = routeAuthz
+
+
+
+
+
+    if (!body.toUserId || !isUuid(body.toUserId)) {
+      return NextResponse.json({ error: 'toUserId required' }, { status: 400 })
+    }
+    const startsAt = body.startsAt ? new Date(body.startsAt) : null
+    const endsAt = body.endsAt ? new Date(body.endsAt) : null
+    if (!startsAt || Number.isNaN(startsAt.getTime()) || !endsAt || Number.isNaN(endsAt.getTime())) {
+      return NextResponse.json({ error: 'valid startsAt and endsAt required' }, { status: 400 })
+    }
+
+    try {
+      const { delegation, overlapping } = await createDelegation({
+        orgId: authz.user.orgId,
+        fromUserId: authz.user.id,
+        toUserId: body.toUserId,
+        startsAt,
+        endsAt,
+        reason: body.reason,
+      })
+      // Overlaps are allowed (two delegates can cover the same window) but
+      // surfaced so the UI can note it.
+      return NextResponse.json({ delegation, overlapping }, { status: 201 })
+    } catch (e) {
+      return delegationErrorResponse(e)
+    }
   },
-});
+
+  feature: "flows",});
 
 export const PATCH = defineRoute({
   public: "session",
   body: revokeDelegationBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPATCH(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const authz = routeAuthz
+
+
+
+
+    if (!body.id || !isUuid(body.id) || body.revoke !== true) {
+      return NextResponse.json({ error: 'id and revoke:true required' }, { status: 400 })
+    }
+    try {
+      await revokeDelegation(authz.user.orgId, body.id, authz.user.id)
+      return NextResponse.json({ ok: true })
+    } catch (e) {
+      return delegationErrorResponse(e)
+    }
   },
-});
+
+  feature: "flows",});
 
 export const DELETE = defineRoute({
   public: "session",

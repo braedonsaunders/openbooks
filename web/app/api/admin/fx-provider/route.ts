@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -51,64 +51,9 @@ async function legacyGET() {
   return NextResponse.json({ config, runs: runs.rows, providers: Object.keys(FX_PROVIDER_MANIFESTS) })
 }
 
-async function legacyPUT(req: Request) {
-  const gate = await guardFeaturePermission(PERMISSION, 'multiCurrency')
-  if (gate instanceof NextResponse) return gate
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    provider?: FxProviderKey
-    displayName?: string
-    baseCurrency?: string
-    currencies?: string[]
-    schedule?: FxSyncSchedule
-    syncHourUtc?: number
-    lookbackDays?: number
-    isEnabled?: boolean
-    apiKey?: string | null
-  }
-  try {
-    // The engine owns the config write plus its immutable before/after
-    // audit as one transaction; the route must not write a second audit.
-    const id = await saveFxProviderConfig(gate.user.orgId, gate.user.id, {
-      provider: body.provider as FxProviderKey,
-      displayName: body.displayName,
-      baseCurrency: String(body.baseCurrency ?? ''),
-      currencies: Array.isArray(body.currencies) ? body.currencies : [],
-      schedule: body.schedule as FxSyncSchedule,
-      syncHourUtc: Number(body.syncHourUtc),
-      lookbackDays: Number(body.lookbackDays),
-      isEnabled: body.isEnabled === true,
-      apiKey: body.apiKey,
-    })
-    return NextResponse.json({ id })
-  } catch (error) {
-    if (error instanceof FxProviderError) return apiErrorResponse(error, { safeStatus: 422 })
-    throw error
-  }
-}
 
-async function legacyPOST(req: Request) {
-  const gate = await guardFeaturePermission(PERMISSION, 'multiCurrency')
-  if (gate instanceof NextResponse) return gate
-  const parsedBody2 = await parseJsonBody(req, runBodySchema);
-  if (!parsedBody2.ok) return parsedBody2.response;
-  const body = (parsedBody2.data) as { action?: 'test' | 'sync' }
-  if (body.action !== 'test' && body.action !== 'sync') {
-    return NextResponse.json({ error: 'action must be test or sync' }, { status: 400 })
-  }
-  try {
-    const result = await runFxProvider(
-      gate.user.orgId,
-      body.action === 'test' ? 'test' : 'manual',
-      gate.user.id,
-    )
-    return NextResponse.json({ ok: true, result })
-  } catch (error) {
-    if (error instanceof FxProviderError) return apiErrorResponse(error, { safeStatus: 422 })
-    throw error
-  }
-}
+
+
 
 export const GET = defineRoute({
   permission: "admin.setup.manage",
@@ -120,11 +65,32 @@ export const PUT = defineRoute({
   permission: "admin.setup.manage",
   feature: "multiCurrency",
   body: requestBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPUT(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz
+
+
+
+
+    try {
+      // The engine owns the config write plus its immutable before/after
+      // audit as one transaction; the route must not write a second audit.
+      const id = await saveFxProviderConfig(gate.user.orgId, gate.user.id, {
+        provider: body.provider as FxProviderKey,
+        displayName: body.displayName,
+        baseCurrency: String(body.baseCurrency ?? ''),
+        currencies: Array.isArray(body.currencies) ? body.currencies : [],
+        schedule: body.schedule as FxSyncSchedule,
+        syncHourUtc: Number(body.syncHourUtc),
+        lookbackDays: Number(body.lookbackDays),
+        isEnabled: body.isEnabled === true,
+        apiKey: body.apiKey,
+      })
+      return NextResponse.json({ id })
+    } catch (error) {
+      if (error instanceof FxProviderError) return apiErrorResponse(error, { safeStatus: 422 })
+      throw error
+    }
   },
 });
 
@@ -132,10 +98,26 @@ export const POST = defineRoute({
   permission: "admin.setup.manage",
   feature: "multiCurrency",
   body: runBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz
+
+
+
+
+    if (body.action !== 'test' && body.action !== 'sync') {
+      return NextResponse.json({ error: 'action must be test or sync' }, { status: 400 })
+    }
+    try {
+      const result = await runFxProvider(
+        gate.user.orgId,
+        body.action === 'test' ? 'test' : 'manual',
+        gate.user.id,
+      )
+      return NextResponse.json({ ok: true, result })
+    } catch (error) {
+      if (error instanceof FxProviderError) return apiErrorResponse(error, { safeStatus: 422 })
+      throw error
+    }
   },
 });

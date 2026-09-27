@@ -14,7 +14,7 @@ import { can } from "../../../../../lib/authz";
 import { readCompanySettings, updateCompanySettings } from "../../../../../lib/company-settings";
 
 const updateCompanySettingsBody = z.looseObject({
-  changes: z.record(z.string(), z.unknown()).optional(),
+  changes: z.record(z.string(), z.json()).optional(),
 });
 
 export const runtime = "nodejs";

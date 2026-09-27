@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
+
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../lib/authz";
@@ -31,7 +31,7 @@ const requestBodySchema = z.object({
   }).optional(),
   requireVendorBillApproval: z.boolean().optional(),
   requireStockCountReview: z.boolean().optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 export const runtime = "nodejs";
@@ -66,15 +66,7 @@ async function legacyGET() {
   return NextResponse.json(result.body, { status: result.status });
 }
 
-async function legacyPUT(req: Request) {
-  const gate = await guardPermission(SETTINGS_WRITE_PERMISSION);
-  if (gate instanceof NextResponse) return gate;
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const result = await updateCompanySettings(gate.user, parsedBody.data as Record<string, unknown>);
-  if (result.status === 404) return notFound("company settings");
-  return NextResponse.json(result.body, { status: result.status });
-}
+
 
 export const GET = defineRoute({
   permission: SETTINGS_READ_PERMISSION,
@@ -86,10 +78,14 @@ export const PUT = defineRoute({
   permission: SETTINGS_WRITE_PERMISSION,
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   body: requestBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPUT(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz;
+
+
+
+    const result = await updateCompanySettings(gate.user, body as Record<string, unknown>);
+    if (result.status === 404) return notFound("company settings");
+    return NextResponse.json(result.body, { status: result.status });
   },
 });

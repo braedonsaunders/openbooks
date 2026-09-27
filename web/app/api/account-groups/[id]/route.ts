@@ -14,7 +14,7 @@ const PATCHBodySchema1 = z.object({
     numberPrefixes: z.array(z.string()).optional(),
     namePattern: z.string().optional(),
   }).nullable().optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 

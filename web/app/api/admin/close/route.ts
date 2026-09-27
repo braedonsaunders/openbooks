@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardCloseScope } from "@/lib/close-scope";
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -10,7 +10,7 @@ import { CLOSE_MODULES, CloseError, type CloseModule } from "@openbooks/engine/s
 import { decidePeriodReopen, recloseApprovedReopen, requestPeriodReopen } from "@openbooks/engine/src/close/reopening.ts";
 import { generateAccountingPeriods } from "@openbooks/engine/src/close/calendar.ts";
 import { setPeriodLockState } from "@openbooks/engine/src/periods/period-locks.ts";
-import { guardPermission, guardSubsidiaryScope } from "../../../../lib/authz";
+import { can, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isValidEmailAddress } from "@openbooks/emails";
@@ -64,8 +64,6 @@ const requestBodySchema = z.discriminatedUnion("action", closeActionSchemas);
 
 
 export const runtime = "nodejs";
-
-type Body = Record<string, unknown>;
 
 const CADENCES = new Set([
   "monthly",
@@ -580,189 +578,188 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
   });
 }
 
-async function legacyPOST(req: Request) {
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as Body;
-  const action = typeof body.action === "string" ? body.action : "";
-  const permission = [
-    "request-reopen",
-    "decide-reopen",
-    "reclose-reopen",
-  ].includes(action)
-    ? "close.reopen"
-    : "periods.manage";
-  const gate = await guardPermission(permission);
-  if (gate instanceof NextResponse) return gate;
-  // Only a direct lock has entity-local effects. Reopen invalidates the
-  // organization-wide close review and configuration/delivery is shared.
-  if (action !== "set-lock") {
-    const denied = guardCloseScope(gate);
-    if (denied) return denied;
-  }
-  const { orgId, id: actorId } = gate.user;
-  try {
-    const advancedActions = new Set(["save-blueprint", "save-policy", "save-automation", "save-package", "send-package"]);
-    if (advancedActions.has(action) && !(await isFeatureEnabled(orgId, "advancedClose"))) {
-      throw new CloseError("enable Advanced close controls to manage blueprints, policies, automation, or reporting packages");
-    }
-    if (action === "save-calendar")
-      return NextResponse.json({
-        ok: true,
-        id: await saveCalendar(orgId, actorId, body),
-      });
-    if (action === "generate-periods") {
-      const calendarId = text(body, "calendarId", true)!;
-      if (!isUuid(calendarId)) throw new CloseError("invalid calendarId");
-      return NextResponse.json({
-        ok: true,
-        ...(await generateAccountingPeriods(
-          orgId,
-          calendarId,
-          Number(body.fiscalYear),
-          actorId,
-        )),
-      });
-    }
-    if (action === "save-blueprint")
-      return NextResponse.json({
-        ok: true,
-        id: await saveBlueprint(orgId, actorId, body),
-      });
-    if (action === "save-policy")
-      return NextResponse.json({
-        ok: true,
-        id: await savePolicy(orgId, actorId, body),
-      });
-    if (action === "save-automation")
-      return NextResponse.json({
-        ok: true,
-        id: await saveAutomation(orgId, actorId, body),
-      });
-    if (action === "save-package")
-      return NextResponse.json({
-        ok: true,
-        id: await savePackage(orgId, actorId, body),
-      });
-    if (action === "send-package") {
-      const packageId = text(body, "packageId", true)!;
-      const periodId = text(body, "periodId", true)!;
-      const bookId = text(body, "bookId", true)!;
-      // The send intent key comes from the request (one dialog instance,
-      // rotated after success): a double-click reuses it and dedupes in
-      // BullMQ and in the email worker, instead of sending both mails.
-      const idempotencyKey = text(body, "idempotencyKey", true)!;
-      if (!isUuid(packageId) || !isUuid(periodId) || !isUuid(bookId) || !isUuid(idempotencyKey))
-        throw new CloseError("invalid send target");
-      try {
-        const { closeDeliveryManualJobId, enqueueCloseDelivery } = await import("@openbooks/jobs");
-        await enqueueCloseDelivery(
-          { orgId, packageId, periodId, bookId, senderId: actorId, manualTrigger: true, idempotencyKey },
-          { jobId: closeDeliveryManualJobId({ packageId, periodId, bookId, idempotencyKey }) },
-        );
-      } catch {
-        throw new CloseError("the delivery queue is unavailable");
-      }
-      return NextResponse.json({ ok: true });
-    }
-    if (action === "set-lock") {
-      const periodId = text(body, "periodId", true)!;
-      const bookId = text(body, "bookId", true)!;
-      const subsidiaryId = text(body, "subsidiaryId");
-      const module = text(body, "module", true)! as CloseModule;
-      const state = text(body, "state", true)! as
-        "open" | "soft_closed" | "closed";
-      if (
-        !isUuid(periodId) ||
-        !isUuid(bookId) ||
-        (subsidiaryId && !isUuid(subsidiaryId)) ||
-        !CLOSE_MODULES.includes(module) ||
-        !["open", "soft_closed", "closed"].includes(state)
-      )
-        throw new CloseError("invalid lock scope or state");
-      const denied = guardSubsidiaryScope(gate, subsidiaryId);
-      if (denied) return denied;
-      await setPeriodLockState({
-        orgId,
-        periodId,
-        bookId,
-        subsidiaryId: subsidiaryId ?? undefined,
-        module,
-        state,
-        actorId,
-        reason: text(body, "reason", true)!,
-      });
-      return NextResponse.json({ ok: true });
-    }
-    if (action === "request-reopen") {
-      const periodId = text(body, "periodId", true)!;
-      const bookId = text(body, "bookId", true)!;
-      const subsidiaryId = text(body, "subsidiaryId");
-      if (
-        !isUuid(periodId) ||
-        !isUuid(bookId) ||
-        (subsidiaryId && !isUuid(subsidiaryId))
-      )
-        throw new CloseError("invalid reopen scope");
-      const modules = Array.isArray(body.modules)
-        ? body.modules.filter(
-            (item): item is CloseModule =>
-              typeof item === "string" &&
-              CLOSE_MODULES.includes(item as CloseModule),
-          )
-        : [];
-      const requestId = await requestPeriodReopen({
-        orgId,
-        periodId,
-        bookId,
-        subsidiaryId: subsidiaryId ?? undefined,
-        modules,
-        reason: text(body, "reason", true)!,
-        actorId,
-      });
-      return NextResponse.json({ ok: true, requestId });
-    }
-    if (action === "decide-reopen") {
-      const requestId = text(body, "requestId", true)!;
-      if (!isUuid(requestId)) throw new CloseError("invalid reopen request");
-      await decidePeriodReopen({
-        orgId,
-        requestId,
-        actorId,
-        approve: body.approve === true,
-        hours: body.hours == null ? undefined : Number(body.hours),
-      });
-      return NextResponse.json({ ok: true });
-    }
-    if (action === "reclose-reopen") {
-      const requestId = text(body, "requestId", true)!;
-      if (!isUuid(requestId)) throw new CloseError("invalid reopen request");
-      await recloseApprovedReopen({
-        orgId,
-        requestId,
-        actorId,
-        reason: text(body, "reason", true)!,
-      });
-      return NextResponse.json({ ok: true });
-    }
-    return NextResponse.json(
-      { error: "unknown close setup action" },
-      { status: 400 },
-    );
-  } catch (error) {
-    if (error instanceof CloseError)
-      return apiErrorResponse(error, { safeStatus: 422 });
-    throw error;
-  }
-}
+
 
 export const POST = defineRoute({
   public: "session",
   body: requestBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+
+
+
+    const action = typeof body.action === "string" ? body.action : "";
+    const permission = [
+      "request-reopen",
+      "decide-reopen",
+      "reclose-reopen",
+    ].includes(action)
+      ? "close.reopen"
+      : "periods.manage";
+    const gate = routeAuthz;
+    if (!can(gate, permission)) {
+      return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 });
+    }
+
+    // Only a direct lock has entity-local effects. Reopen invalidates the
+    // organization-wide close review and configuration/delivery is shared.
+    if (action !== "set-lock") {
+      const denied = guardCloseScope(gate);
+      if (denied) return denied;
+    }
+    const { orgId, id: actorId } = gate.user;
+    try {
+      const advancedActions = new Set(["save-blueprint", "save-policy", "save-automation", "save-package", "send-package"]);
+      if (advancedActions.has(action) && !(await isFeatureEnabled(orgId, "advancedClose"))) {
+        throw new CloseError("enable Advanced close controls to manage blueprints, policies, automation, or reporting packages");
+      }
+      if (action === "save-calendar")
+        return NextResponse.json({
+          ok: true,
+          id: await saveCalendar(orgId, actorId, body),
+        });
+      if (action === "generate-periods") {
+        const calendarId = text(body, "calendarId", true)!;
+        if (!isUuid(calendarId)) throw new CloseError("invalid calendarId");
+        return NextResponse.json({
+          ok: true,
+          ...(await generateAccountingPeriods(
+            orgId,
+            calendarId,
+            Number(body.fiscalYear),
+            actorId,
+          )),
+        });
+      }
+      if (action === "save-blueprint")
+        return NextResponse.json({
+          ok: true,
+          id: await saveBlueprint(orgId, actorId, body),
+        });
+      if (action === "save-policy")
+        return NextResponse.json({
+          ok: true,
+          id: await savePolicy(orgId, actorId, body),
+        });
+      if (action === "save-automation")
+        return NextResponse.json({
+          ok: true,
+          id: await saveAutomation(orgId, actorId, body),
+        });
+      if (action === "save-package")
+        return NextResponse.json({
+          ok: true,
+          id: await savePackage(orgId, actorId, body),
+        });
+      if (action === "send-package") {
+        const packageId = text(body, "packageId", true)!;
+        const periodId = text(body, "periodId", true)!;
+        const bookId = text(body, "bookId", true)!;
+        // The send intent key comes from the request (one dialog instance,
+        // rotated after success): a double-click reuses it and dedupes in
+        // BullMQ and in the email worker, instead of sending both mails.
+        const idempotencyKey = text(body, "idempotencyKey", true)!;
+        if (!isUuid(packageId) || !isUuid(periodId) || !isUuid(bookId) || !isUuid(idempotencyKey))
+          throw new CloseError("invalid send target");
+        try {
+          const { closeDeliveryManualJobId, enqueueCloseDelivery } = await import("@openbooks/jobs");
+          await enqueueCloseDelivery(
+            { orgId, packageId, periodId, bookId, senderId: actorId, manualTrigger: true, idempotencyKey },
+            { jobId: closeDeliveryManualJobId({ packageId, periodId, bookId, idempotencyKey }) },
+          );
+        } catch {
+          throw new CloseError("the delivery queue is unavailable");
+        }
+        return NextResponse.json({ ok: true });
+      }
+      if (action === "set-lock") {
+        const periodId = text(body, "periodId", true)!;
+        const bookId = text(body, "bookId", true)!;
+        const subsidiaryId = text(body, "subsidiaryId");
+        const module = text(body, "module", true)! as CloseModule;
+        const state = text(body, "state", true)! as
+          "open" | "soft_closed" | "closed";
+        if (
+          !isUuid(periodId) ||
+          !isUuid(bookId) ||
+          (subsidiaryId && !isUuid(subsidiaryId)) ||
+          !CLOSE_MODULES.includes(module) ||
+          !["open", "soft_closed", "closed"].includes(state)
+        )
+          throw new CloseError("invalid lock scope or state");
+        const denied = guardSubsidiaryScope(gate, subsidiaryId);
+        if (denied) return denied;
+        await setPeriodLockState({
+          orgId,
+          periodId,
+          bookId,
+          subsidiaryId: subsidiaryId ?? undefined,
+          module,
+          state,
+          actorId,
+          reason: text(body, "reason", true)!,
+        });
+        return NextResponse.json({ ok: true });
+      }
+      if (action === "request-reopen") {
+        const periodId = text(body, "periodId", true)!;
+        const bookId = text(body, "bookId", true)!;
+        const subsidiaryId = text(body, "subsidiaryId");
+        if (
+          !isUuid(periodId) ||
+          !isUuid(bookId) ||
+          (subsidiaryId && !isUuid(subsidiaryId))
+        )
+          throw new CloseError("invalid reopen scope");
+        const modules = Array.isArray(body.modules)
+          ? body.modules.filter(
+              (item): item is CloseModule =>
+                typeof item === "string" &&
+                CLOSE_MODULES.includes(item as CloseModule),
+            )
+          : [];
+        const requestId = await requestPeriodReopen({
+          orgId,
+          periodId,
+          bookId,
+          subsidiaryId: subsidiaryId ?? undefined,
+          modules,
+          reason: text(body, "reason", true)!,
+          actorId,
+        });
+        return NextResponse.json({ ok: true, requestId });
+      }
+      if (action === "decide-reopen") {
+        const requestId = text(body, "requestId", true)!;
+        if (!isUuid(requestId)) throw new CloseError("invalid reopen request");
+        await decidePeriodReopen({
+          orgId,
+          requestId,
+          actorId,
+          approve: body.approve === true,
+          hours: body.hours == null ? undefined : Number(body.hours),
+        });
+        return NextResponse.json({ ok: true });
+      }
+      if (action === "reclose-reopen") {
+        const requestId = text(body, "requestId", true)!;
+        if (!isUuid(requestId)) throw new CloseError("invalid reopen request");
+        await recloseApprovedReopen({
+          orgId,
+          requestId,
+          actorId,
+          reason: text(body, "reason", true)!,
+        });
+        return NextResponse.json({ ok: true });
+      }
+      return NextResponse.json(
+        { error: "unknown close setup action" },
+        { status: 400 },
+      );
+    } catch (error) {
+      if (error instanceof CloseError)
+        return apiErrorResponse(error, { safeStatus: 422 });
+      throw error;
+    }
   },
 });

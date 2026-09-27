@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -106,85 +106,7 @@ async function legacyGET(req: Request) {
   return NextResponse.json(current);
 }
 
-async function legacyPUT(req: Request) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const { user } = authz;
 
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    page?: unknown;
-    layout?: { order?: unknown; hidden?: unknown };
-    expectedRevision?: unknown;
-  } | null;
-  const page = pageParam(body?.page);
-  if (!page) {
-    return NextResponse.json({ error: "unknown page" }, { status: 400 });
-  }
-  if (body?.expectedRevision === undefined) {
-    return NextResponse.json({ error: LAYOUT_REVISION_REQUIRED }, { status: 409 });
-  }
-  const expectedRevision = body.expectedRevision;
-  if (expectedRevision !== null && typeof expectedRevision !== "string") {
-    return NextResponse.json(
-      { error: "page layout revision must be the exact revision previously read, or null for a first save" },
-      { status: 400 },
-    );
-  }
-  const order = keys(body?.layout?.order);
-  const hidden = keys(body?.layout?.hidden);
-  const layout = { ...(order ? { order } : {}), ...(hidden ? { hidden } : {}) };
-
-  // Lock and compare in the same transaction as the replacement. A slow
-  // request can therefore never commit over a newer save that advanced the
-  // exact revision while this request was in flight.
-  const outcome = await db.transaction(async (tx) => {
-    const current = await readCurrent(
-      (query) => tx.execute(query),
-      user.orgId,
-      user.id,
-      page,
-      true,
-    );
-    if (current.revision !== expectedRevision) {
-      return { kind: "conflict" as const, current };
-    }
-    const written = await tx.execute<{ layout: PageLayoutPrefs; revision: string }>(sql`
-      insert into user_page_layouts (org_id, user_id, page, layout, created_by, updated_by)
-      values (${user.orgId}, ${user.id}, ${page}, ${JSON.stringify(layout)}::jsonb, ${user.id}, ${user.id})
-      on conflict (org_id, user_id, page)
-      do update set layout = excluded.layout,
-        updated_at = greatest(clock_timestamp(), user_page_layouts.updated_at + interval '1 microsecond'),
-        updated_by = excluded.updated_by
-      where user_page_layouts.org_id = ${user.orgId}
-      returning layout, ${layoutRevisionSql(sql.raw("updated_at"))} as revision
-    `);
-    const row = written.rows[0];
-    // A write that matches zero rows is a failure, not a save: the locked
-    // read above rules out a concurrent deleter, so an empty returning set
-    // means the fence itself misfired — refuse rather than report {ok}.
-    if (!row) {
-      const reread = await readCurrent(
-        (query) => tx.execute(query),
-        user.orgId,
-        user.id,
-        page,
-        false,
-      );
-      return { kind: "conflict" as const, current: reread };
-    }
-    return { kind: "ok" as const, layout: row.layout, revision: row.revision };
-  });
-
-  if (outcome.kind === "conflict") {
-    return NextResponse.json(
-      { error: LAYOUT_REVISION_CONFLICT, current: outcome.current },
-      { status: 409 },
-    );
-  }
-  return NextResponse.json({ ok: true, page, layout: outcome.layout, revision: outcome.revision });
-}
 
 export const GET = defineRoute({
   public: "session",
@@ -194,10 +116,80 @@ export const GET = defineRoute({
 export const PUT = defineRoute({
   public: "session",
   body: requestBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPUT(replayRequest as never);
+  handler: async ({ body }) => {
+
+    const authz = await getAuthz();
+    if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    const { user } = authz;
+
+
+
+
+    const page = pageParam(body?.page);
+    if (!page) {
+      return NextResponse.json({ error: "unknown page" }, { status: 400 });
+    }
+    if (body?.expectedRevision === undefined) {
+      return NextResponse.json({ error: LAYOUT_REVISION_REQUIRED }, { status: 409 });
+    }
+    const expectedRevision = body.expectedRevision;
+    if (expectedRevision !== null && typeof expectedRevision !== "string") {
+      return NextResponse.json(
+        { error: "page layout revision must be the exact revision previously read, or null for a first save" },
+        { status: 400 },
+      );
+    }
+    const order = keys(body?.layout?.order);
+    const hidden = keys(body?.layout?.hidden);
+    const layout = { ...(order ? { order } : {}), ...(hidden ? { hidden } : {}) };
+
+    // Lock and compare in the same transaction as the replacement. A slow
+    // request can therefore never commit over a newer save that advanced the
+    // exact revision while this request was in flight.
+    const outcome = await db.transaction(async (tx) => {
+      const current = await readCurrent(
+        (query) => tx.execute(query),
+        user.orgId,
+        user.id,
+        page,
+        true,
+      );
+      if (current.revision !== expectedRevision) {
+        return { kind: "conflict" as const, current };
+      }
+      const written = await tx.execute<{ layout: PageLayoutPrefs; revision: string }>(sql`
+        insert into user_page_layouts (org_id, user_id, page, layout, created_by, updated_by)
+        values (${user.orgId}, ${user.id}, ${page}, ${JSON.stringify(layout)}::jsonb, ${user.id}, ${user.id})
+        on conflict (org_id, user_id, page)
+        do update set layout = excluded.layout,
+          updated_at = greatest(clock_timestamp(), user_page_layouts.updated_at + interval '1 microsecond'),
+          updated_by = excluded.updated_by
+        where user_page_layouts.org_id = ${user.orgId}
+        returning layout, ${layoutRevisionSql(sql.raw("updated_at"))} as revision
+      `);
+      const row = written.rows[0];
+      // A write that matches zero rows is a failure, not a save: the locked
+      // read above rules out a concurrent deleter, so an empty returning set
+      // means the fence itself misfired — refuse rather than report {ok}.
+      if (!row) {
+        const reread = await readCurrent(
+          (query) => tx.execute(query),
+          user.orgId,
+          user.id,
+          page,
+          false,
+        );
+        return { kind: "conflict" as const, current: reread };
+      }
+      return { kind: "ok" as const, layout: row.layout, revision: row.revision };
+    });
+
+    if (outcome.kind === "conflict") {
+      return NextResponse.json(
+        { error: LAYOUT_REVISION_CONFLICT, current: outcome.current },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ ok: true, page, layout: outcome.layout, revision: outcome.revision });
   },
 });

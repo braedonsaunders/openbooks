@@ -8,7 +8,7 @@ import { listSetupRecords } from "../../../../../lib/application/setup-read";
 import { settleWrite } from "../../../../../lib/application/tool-catalog";
 import { createSetupRecord } from "../../../../../lib/setup/write";
 
-const setupRecordBody = z.record(z.string(), z.unknown());
+const setupRecordBody = z.record(z.string(), z.json());
 
 export const runtime = "nodejs";
 

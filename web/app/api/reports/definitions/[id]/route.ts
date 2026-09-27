@@ -25,7 +25,7 @@ const reportLayoutSchema = z.object({
 const PATCHBodySchema1 = z.object({
   name: z.string().trim().min(1).optional(), description: z.string().nullable().optional(),
   query: z.json().optional(), layout: reportLayoutSchema, expectedUpdatedAt: z.string().min(1).optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 
@@ -48,7 +48,7 @@ async function loadReportDefinitionRevision(orgId: string, id: string): Promise<
 export const GET = defineRoute({
   permission: 'reports.read',
   feature: { none: "The loaded definition is filtered by its effective statement or query entity feature access." },
-  handler: async ({ request: _req, authz: routeAuthz, params: routeParams }) => {
+  handler: async ({ authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { id } = await params
@@ -69,7 +69,7 @@ export const PATCH = defineRoute({
   permission: 'reports.create',
   feature: { none: "Updated query plans are checked for their entity feature access before they are saved." },
   body: PATCHBodySchema1,
-  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { user } = gate
@@ -159,7 +159,7 @@ export const PATCH = defineRoute({
 export const DELETE = defineRoute({
   permission: 'reports.create',
   feature: { none: "Deletion checks access to the selected definition before changing its lifecycle state." },
-  handler: async ({ request: _req, authz: routeAuthz, params: routeParams }) => {
+  handler: async ({ authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { user } = gate

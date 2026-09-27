@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
@@ -137,175 +137,7 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ resource
   return NextResponse.json({ rows: rows.rows })
 }
 
-async function legacyPOST(req: Request, { params }: { params: Promise<{ resource: string }> }) {
-  const gate = await guardPermission('admin.setup.manage')
-  if (gate instanceof NextResponse) return gate
-  const { resource } = await params
-  if (!RESOURCES.has(resource)) return notFound("record")
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as {
-    code?: string; name?: string; formatterScript?: string; direction?: string;
-    country?: unknown; currency?: string; fileExtension?: string; contentType?: string;
-    settings?: Record<string, unknown>; isActive?: boolean; bankAccountId?: string;
-    paymentFormatId?: string; subsidiaryId?: string; paymentBankProfileId?: string;
-    cron?: string; timezone?: string; selectionCriteria?: Record<string, unknown>;
-    action?: string; partyId?: string; partyBankAccountId?: string; scheme?: string;
-    mandateReference?: string; status?: string; signedOn?: string; validFrom?: string;
-    expiresOn?: string; proofFileId?: string;
-  }
-  try {
-    if (resource === 'formats') {
-      // Format currency is Multi-currency configuration. Turning that
-      // switch off must refuse a new write; omitting currency keeps
-      // stored formats and a null restriction.
-      if (
-        body.currency !== undefined &&
-        !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
-      ) {
-        return notFound("record")
-      }
-      if (!body.code?.trim() || !body.name?.trim() || !body.formatterScript?.trim()) {
-        return NextResponse.json({ error: 'code, name, and formatterScript are required' }, { status: 400 })
-      }
-      const country = optionalCountry(body.country)
-      if (country === undefined) return NextResponse.json({ error: 'country must be a valid ISO country code' }, { status: 400 })
-      const row = await db.transaction(async (tx) => {
-        const createdFormat = (await tx.insert(schema.paymentFormats).values({
-          orgId: gate.user.orgId,
-          code: body.code!.trim().toUpperCase(),
-          name: body.name!.trim(),
-          rail: 'custom',
-          direction: body.direction === 'debit' || body.direction === 'both' ? body.direction : 'credit',
-          country,
-          currency: body.currency !== undefined ? (body.currency?.trim().toUpperCase() || null) : null,
-          fileExtension: body.fileExtension?.trim().replace(/^\./, '') || 'txt',
-          contentType: body.contentType?.trim() || 'text/plain; charset=utf-8',
-          formatterScript: body.formatterScript!,
-          settings: body.settings ?? {},
-          isActive: body.isActive !== false,
-          createdBy: gate.user.id,
-          updatedBy: gate.user.id,
-        }).returning())[0]!
-        await auditConfigChange(tx, gate.user.orgId, 'payment_formats', createdFormat.id, 'insert',
-          { after: createdFormat }, gate.user.id, req.headers.get('X-Request-Id'))
-        return createdFormat
-      })
-      return NextResponse.json({ id: row.id }, { status: 201 })
-    }
-    if (resource === 'profiles') {
-      // Profile currency is Multi-currency configuration. Turning that
-      // switch off must refuse a new write; omitting currency keeps the
-      // format / subsidiary / org fallback so a profile can still be created.
-      if (
-        body.currency !== undefined &&
-        !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
-      ) {
-        return notFound("record")
-      }
-      const country = optionalCountry(body.country)
-      if (country === undefined) return NextResponse.json({ error: 'country must be a valid ISO country code' }, { status: 400 })
-      body.country = country
-      if (!body.name || !isUuid(body.bankAccountId ?? '') || !isUuid(body.paymentFormatId ?? '')) {
-        return NextResponse.json({ error: 'name, bankAccountId, and paymentFormatId are required' }, { status: 400 })
-      }
-      let currency =
-        body.currency !== undefined ? String(body.currency).trim().toUpperCase() : ''
-      if (body.currency === undefined) {
-        const fallback = (await db.execute<{ currency: string | null }>(sql`
-          select coalesce(nullif(f.currency, ''), s.base_currency, o.base_currency) as currency
-            from orgs o
-            left join payment_formats f on f.id = ${body.paymentFormatId} and f.org_id = o.id
-            left join subsidiaries s on s.id = ${body.subsidiaryId ?? null} and s.org_id = o.id
-           where o.id = ${gate.user.orgId}`))
-        currency = fallback.rows[0]?.currency ?? ''
-      }
-      if (!/^[A-Z]{3}$/.test(currency)) {
-        return NextResponse.json({ error: 'name, bankAccountId, paymentFormatId, and currency are required' }, { status: 400 })
-      }
-      const input = { ...body, currency } as unknown as PaymentBankProfileInput
-      const row = await createPaymentBankProfile(gate.user.orgId, gate.user.id, input, gate.allowedSubsidiaryIds)
-      return NextResponse.json(row, { status: 201 })
-    }
-    if (resource === 'schedules') {
-      if (!body.name?.trim() || !isUuid(body.paymentBankProfileId ?? '') || !body.cron?.trim()) {
-        return NextResponse.json({ error: 'name, paymentBankProfileId, and cron are required' }, { status: 400 })
-      }
-      const nextRunAt = computeNextRunAt(body.cron!.trim(), new Date(), body.timezone?.trim() || 'UTC')
-      if (!nextRunAt) return NextResponse.json({ error: 'cron expression is invalid' }, { status: 400 })
-      const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`))
-      if (!profile.rows[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
-      const row = await db.transaction(async (tx) => {
-        const created = (await tx.insert(schema.paymentSchedules).values({
-          orgId: gate.user.orgId,
-          name: body.name!.trim(),
-          paymentBankProfileId: body.paymentBankProfileId!,
-          cron: body.cron!.trim(),
-          timezone: body.timezone?.trim() || 'UTC',
-          selectionCriteria: body.selectionCriteria ?? {},
-          action: body.action === 'submit_for_approval' ? 'submit_for_approval' : 'create_draft',
-          nextRunAt,
-          isActive: body.isActive !== false,
-          createdBy: gate.user.id,
-          updatedBy: gate.user.id,
-        }).returning())[0]!
-        await auditConfigChange(tx, gate.user.orgId, 'payment_schedules', created.id, 'insert',
-          { after: created }, gate.user.id, req.headers.get('X-Request-Id'))
-        return created
-      })
-      return NextResponse.json({ id: row.id }, { status: 201 })
-    }
-    if (!isUuid(body.partyId ?? '') || !isUuid(body.partyBankAccountId ?? '') || !body.mandateReference?.trim()) {
-      return NextResponse.json({ error: 'partyId, partyBankAccountId, and mandateReference are required' }, { status: 400 })
-    }
-    const scheme = body.scheme === 'nacha' || body.scheme === 'sepa_core' || body.scheme === 'sepa_b2b' || body.scheme === 'custom' ? body.scheme : 'custom'
-    const mandateStatus = body.status === 'pending' || body.status === 'active' || body.status === 'suspended' || body.status === 'revoked' || body.status === 'expired' ? body.status : 'pending'
-    const creation = await db.transaction(async (tx) => {
-      // Mandates are owned by their counterparty. Hold that party row across
-      // scope validation and insert so a concurrent rehome cannot create a
-      // mandate for a party the operator no longer owns.
-      const party = (await tx.execute(sql`
-        select p.id from parties p
-         where p.id = ${body.partyId} and p.org_id = ${gate.user.orgId}
-           and p.is_active
-           ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
-         for update
-      `)).rows[0]
-      if (!party) return { kind: 'not-found' as const }
-      const mandateBank = (await tx.execute(sql`
-        select 1 from party_bank_accounts b
-         where b.id = ${body.partyBankAccountId} and b.party_id = ${body.partyId}
-           and b.org_id = ${gate.user.orgId} and b.is_active and b.approved_at is not null
-         for update
-      `))
-      if (!mandateBank.rows[0]) return { kind: 'invalid-bank' as const }
-      const created = (await tx.insert(schema.paymentMandates).values({
-        orgId: gate.user.orgId,
-        partyId: body.partyId!,
-        partyBankAccountId: body.partyBankAccountId!,
-        scheme,
-        mandateReference: body.mandateReference!.trim(),
-        status: mandateStatus,
-        signedOn: body.signedOn || null,
-        validFrom: body.validFrom || null,
-        expiresOn: body.expiresOn || null,
-        proofFileId: isUuid(body.proofFileId ?? '') ? body.proofFileId : null,
-        createdBy: gate.user.id,
-        updatedBy: gate.user.id,
-      }).returning())[0]!
-      await auditConfigChange(tx, gate.user.orgId, 'payment_mandates', created.id, 'insert',
-        { after: created }, gate.user.id, req.headers.get('X-Request-Id'))
-      return { kind: 'created' as const, row: created }
-    })
-    if (creation.kind === 'not-found') return notFound("record")
-    if (creation.kind === 'invalid-bank') return NextResponse.json({ error: 'approved counterparty bank account is invalid' }, { status: 400 })
-    return NextResponse.json({ id: creation.row.id }, { status: 201 })
-  } catch (error) {
-    if (error instanceof ScopeNotFoundError) return notFound("record")
-    const message = error instanceof Error ? error.message : 'request failed'
-    return NextResponse.json({ error: message }, { status: 422 })
-  }
-}
+
 
 function optionalCountry(value: unknown): string | null | undefined {
   if (value == null || (typeof value === 'string' && value.trim() === '')) return null
@@ -324,10 +156,165 @@ export const POST = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "resource": z.string() }),
   body: requestBodySchema,
-  handler: async ({ request, body, params }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  handler: async ({ request, body, params, authz: routeAuthz }) => {
+
+    const gate = routeAuthz
+
+    const { resource } = params
+    if (!RESOURCES.has(resource)) return notFound("record")
+
+
+
+    try {
+      if (resource === 'formats') {
+        // Format currency is Multi-currency configuration. Turning that
+        // switch off must refuse a new write; omitting currency keeps
+        // stored formats and a null restriction.
+        if (
+          body.currency !== undefined &&
+          !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
+        ) {
+          return notFound("record")
+        }
+        if (!body.code?.trim() || !body.name?.trim() || !body.formatterScript?.trim()) {
+          return NextResponse.json({ error: 'code, name, and formatterScript are required' }, { status: 400 })
+        }
+        const country = optionalCountry(body.country)
+        if (country === undefined) return NextResponse.json({ error: 'country must be a valid ISO country code' }, { status: 400 })
+        const row = await db.transaction(async (tx) => {
+          const createdFormat = (await tx.insert(schema.paymentFormats).values({
+            orgId: gate.user.orgId,
+            code: body.code!.trim().toUpperCase(),
+            name: body.name!.trim(),
+            rail: 'custom',
+            direction: body.direction === 'debit' || body.direction === 'both' ? body.direction : 'credit',
+            country,
+            currency: body.currency !== undefined ? (body.currency?.trim().toUpperCase() || null) : null,
+            fileExtension: body.fileExtension?.trim().replace(/^\./, '') || 'txt',
+            contentType: body.contentType?.trim() || 'text/plain; charset=utf-8',
+            formatterScript: body.formatterScript!,
+            settings: body.settings ?? {},
+            isActive: body.isActive !== false,
+            createdBy: gate.user.id,
+            updatedBy: gate.user.id,
+          }).returning())[0]!
+          await auditConfigChange(tx, gate.user.orgId, 'payment_formats', createdFormat.id, 'insert',
+            { after: createdFormat }, gate.user.id, request.headers.get('X-Request-Id'))
+          return createdFormat
+        })
+        return NextResponse.json({ id: row.id }, { status: 201 })
+      }
+      if (resource === 'profiles') {
+        // Profile currency is Multi-currency configuration. Turning that
+        // switch off must refuse a new write; omitting currency keeps the
+        // format / subsidiary / org fallback so a profile can still be created.
+        if (
+          body.currency !== undefined &&
+          !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
+        ) {
+          return notFound("record")
+        }
+        const country = optionalCountry(body.country)
+        if (country === undefined) return NextResponse.json({ error: 'country must be a valid ISO country code' }, { status: 400 })
+        body.country = country
+        if (!body.name || !isUuid(body.bankAccountId ?? '') || !isUuid(body.paymentFormatId ?? '')) {
+          return NextResponse.json({ error: 'name, bankAccountId, and paymentFormatId are required' }, { status: 400 })
+        }
+        let currency =
+          body.currency !== undefined ? String(body.currency).trim().toUpperCase() : ''
+        if (body.currency === undefined) {
+          const fallback = (await db.execute<{ currency: string | null }>(sql`
+            select coalesce(nullif(f.currency, ''), s.base_currency, o.base_currency) as currency
+              from orgs o
+              left join payment_formats f on f.id = ${body.paymentFormatId} and f.org_id = o.id
+              left join subsidiaries s on s.id = ${body.subsidiaryId ?? null} and s.org_id = o.id
+             where o.id = ${gate.user.orgId}`))
+          currency = fallback.rows[0]?.currency ?? ''
+        }
+        if (!/^[A-Z]{3}$/.test(currency)) {
+          return NextResponse.json({ error: 'name, bankAccountId, paymentFormatId, and currency are required' }, { status: 400 })
+        }
+        const input = { ...body, currency } as unknown as PaymentBankProfileInput
+        const row = await createPaymentBankProfile(gate.user.orgId, gate.user.id, input, gate.allowedSubsidiaryIds)
+        return NextResponse.json(row, { status: 201 })
+      }
+      if (resource === 'schedules') {
+        if (!body.name?.trim() || !isUuid(body.paymentBankProfileId ?? '') || !body.cron?.trim()) {
+          return NextResponse.json({ error: 'name, paymentBankProfileId, and cron are required' }, { status: 400 })
+        }
+        const nextRunAt = computeNextRunAt(body.cron!.trim(), new Date(), body.timezone?.trim() || 'UTC')
+        if (!nextRunAt) return NextResponse.json({ error: 'cron expression is invalid' }, { status: 400 })
+        const profile = (await db.execute(sql`select 1 from payment_bank_profiles p join payment_formats f on f.id = p.payment_format_id and f.org_id = p.org_id where p.id = ${body.paymentBankProfileId} and p.org_id = ${gate.user.orgId} and p.is_active and f.direction <> 'debit'`))
+        if (!profile.rows[0]) return NextResponse.json({ error: 'payment profile is invalid or inactive' }, { status: 400 })
+        const row = await db.transaction(async (tx) => {
+          const created = (await tx.insert(schema.paymentSchedules).values({
+            orgId: gate.user.orgId,
+            name: body.name!.trim(),
+            paymentBankProfileId: body.paymentBankProfileId!,
+            cron: body.cron!.trim(),
+            timezone: body.timezone?.trim() || 'UTC',
+            selectionCriteria: body.selectionCriteria ?? {},
+            action: body.action === 'submit_for_approval' ? 'submit_for_approval' : 'create_draft',
+            nextRunAt,
+            isActive: body.isActive !== false,
+            createdBy: gate.user.id,
+            updatedBy: gate.user.id,
+          }).returning())[0]!
+          await auditConfigChange(tx, gate.user.orgId, 'payment_schedules', created.id, 'insert',
+            { after: created }, gate.user.id, request.headers.get('X-Request-Id'))
+          return created
+        })
+        return NextResponse.json({ id: row.id }, { status: 201 })
+      }
+      if (!isUuid(body.partyId ?? '') || !isUuid(body.partyBankAccountId ?? '') || !body.mandateReference?.trim()) {
+        return NextResponse.json({ error: 'partyId, partyBankAccountId, and mandateReference are required' }, { status: 400 })
+      }
+      const scheme = body.scheme === 'nacha' || body.scheme === 'sepa_core' || body.scheme === 'sepa_b2b' || body.scheme === 'custom' ? body.scheme : 'custom'
+      const mandateStatus = body.status === 'pending' || body.status === 'active' || body.status === 'suspended' || body.status === 'revoked' || body.status === 'expired' ? body.status : 'pending'
+      const creation = await db.transaction(async (tx) => {
+        // Mandates are owned by their counterparty. Hold that party row across
+        // scope validation and insert so a concurrent rehome cannot create a
+        // mandate for a party the operator no longer owns.
+        const party = (await tx.execute(sql`
+          select p.id from parties p
+           where p.id = ${body.partyId} and p.org_id = ${gate.user.orgId}
+             and p.is_active
+             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })}
+           for update
+        `)).rows[0]
+        if (!party) return { kind: 'not-found' as const }
+        const mandateBank = (await tx.execute(sql`
+          select 1 from party_bank_accounts b
+           where b.id = ${body.partyBankAccountId} and b.party_id = ${body.partyId}
+             and b.org_id = ${gate.user.orgId} and b.is_active and b.approved_at is not null
+           for update
+        `))
+        if (!mandateBank.rows[0]) return { kind: 'invalid-bank' as const }
+        const created = (await tx.insert(schema.paymentMandates).values({
+          orgId: gate.user.orgId,
+          partyId: body.partyId!,
+          partyBankAccountId: body.partyBankAccountId!,
+          scheme,
+          mandateReference: body.mandateReference!.trim(),
+          status: mandateStatus,
+          signedOn: body.signedOn || null,
+          validFrom: body.validFrom || null,
+          expiresOn: body.expiresOn || null,
+          proofFileId: isUuid(body.proofFileId ?? '') ? body.proofFileId : null,
+          createdBy: gate.user.id,
+          updatedBy: gate.user.id,
+        }).returning())[0]!
+        await auditConfigChange(tx, gate.user.orgId, 'payment_mandates', created.id, 'insert',
+          { after: created }, gate.user.id, request.headers.get('X-Request-Id'))
+        return { kind: 'created' as const, row: created }
+      })
+      if (creation.kind === 'not-found') return notFound("record")
+      if (creation.kind === 'invalid-bank') return NextResponse.json({ error: 'approved counterparty bank account is invalid' }, { status: 400 })
+      return NextResponse.json({ id: creation.row.id }, { status: 201 })
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) return notFound("record")
+      const message = error instanceof Error ? error.message : 'request failed'
+      return NextResponse.json({ error: message }, { status: 422 })
+    }
   },
 });

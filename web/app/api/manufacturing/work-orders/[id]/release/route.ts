@@ -8,7 +8,7 @@ import { dispatchWorkOrderFlow } from "../../_flows";
 import { loadScopedWorkOrder } from "../../_scope";
 
 const Params = z.object({ id: z.string().uuid() });
-const Body = z.object({ reason: z.string().trim().max(500).nullable().optional() }).strict();
+const Body = z.object({ reason: z.string().trim().max(500).nullable().optional() }).strict().refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 export const POST = defineRoute({
   permission: "manufacturing.manage", feature: "manufacturing", params: Params, body: Body,

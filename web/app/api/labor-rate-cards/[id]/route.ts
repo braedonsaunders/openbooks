@@ -31,7 +31,7 @@ const cardBodySchema = z.object({
   effective_to: z.string().nullable(),
   status: z.enum(["draft", "active", "retired"]),
   derivation_policy: z.enum(["explicit", "time_type_multipliers"]),
-  custom: z.record(z.string(), z.unknown()).optional(),
+  custom: z.record(z.string(), z.json()).optional(),
   scopes: z.array(z.object({ scopeType: z.string(), scopeValueId: z.string().nullable().optional(), scopeValueText: z.string().nullable().optional(), includeChildren: z.boolean().optional() })),
   lines: z.array(z.object({ id: z.string().optional(), itemId: z.string().optional(), regular: z.string().nullable().optional(), timeTypeRates: z.record(z.string(), z.string()).optional() })),
   adjustments: z.array(z.object({ code: z.string().trim().min(1), name: z.string().trim().min(1), category: z.string(), calculation: z.string(), value: z.string().nullable().optional(), unit: z.string().nullable().optional(), presentation: z.string(), threshold: z.string().nullable().optional(), thresholdUnit: z.string().nullable().optional(), referenceText: z.string().nullable().optional(), targets: z.array(z.object({ targetType: z.string(), targetValueId: z.string().nullable().optional(), targetValueText: z.string().nullable().optional(), includeChildren: z.boolean().optional() })) })),

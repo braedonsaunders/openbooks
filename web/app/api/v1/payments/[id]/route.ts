@@ -10,7 +10,7 @@ import { v1GetRecord } from "../../../../../lib/api/v1-records";
 import { updatePayment } from "../../../../../lib/application/payments";
 
 const updatePaymentRequestBody = z.looseObject({
-  patch: z.record(z.string(), z.unknown()).optional(),
+  patch: z.record(z.string(), z.json()).optional(),
 });
 
 export const runtime = "nodejs";

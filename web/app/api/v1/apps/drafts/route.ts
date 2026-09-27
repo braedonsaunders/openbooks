@@ -6,7 +6,7 @@ import { readV1JsonObject, withV1Request } from "../../../../../lib/api/v1-reque
 import { draftExtension } from "../../../../../lib/application/extensions";
 
 const draftExtensionBody = z.looseObject({
-  bundle: z.unknown().refine((value) => value !== undefined, "bundle is required"),
+  bundle: z.json().refine((value) => value !== undefined, "bundle is required"),
   reason: z.string().trim().min(1, "reason is required").optional(),
   expectedBaseVersionId: z.union([z.string(), z.null()]).optional(),
   sourceDraft: z.looseObject({ id: z.string().min(1), contentHash: z.string().min(1) }).nullable().optional(),

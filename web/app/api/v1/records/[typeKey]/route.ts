@@ -25,7 +25,7 @@ import { z } from "zod";
 
 export const runtime = "nodejs";
 
-const recordBodySchema = z.record(z.string(), z.unknown());
+const recordBodySchema = z.record(z.string(), z.json());
 
 /**
  * Durably evidence one finished request attempt. Material commands already

@@ -33,9 +33,9 @@ const projectPatchSchema = z.object({
   customerPoNumber: z.string().nullable().optional(), startsOn: z.string().nullable().optional(),
   endsOn: z.string().nullable().optional(), notes: z.string().nullable().optional(),
   siteJurisdiction: z.string().nullable().optional(), contractValue: z.union([exactMoney(), z.null()]).optional(),
-  custom: z.record(z.string(), z.unknown()).optional(), subsidiaryId: nullableUuidId.optional(),
+  custom: z.record(z.string(), z.json()).optional(), subsidiaryId: nullableUuidId.optional(),
   subsidiaryIncludeChildren: z.boolean().optional(), isActive: z.boolean().optional(), tasks: z.never().optional(),
-}).strict()
+}).strict().refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." })
 
 function bad(error: string, fieldErrors?: Record<string, string>) {
   return NextResponse.json({ error, ...(fieldErrors ? { fieldErrors } : {}) }, { status: 422 })

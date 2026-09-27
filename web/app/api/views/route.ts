@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -52,137 +52,7 @@ async function legacyGET() {
  * request returns the same view without a duplicate insert or duplicate
  * audit event. Cancel/close writes nothing.
  */
-async function legacyPOST(req: Request) {
-  const gate = await guardPermission('reports.create')
-  if (gate instanceof NextResponse) return gate
-  const { user } = gate
 
-  const requestId = req.headers.get('Idempotency-Key')?.trim() ?? ''
-  if (!isUuid(requestId)) {
-    return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
-  }
-
-  const parsedBody = await parseJsonBody(req, createViewBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data
-
-  const name = body.name?.trim() || 'Untitled view'
-  const description = body.description?.trim() || null
-
-  let query = defaultRowsQuery(REPORT_ENTITY_MAP.ledger_lines!)
-  if (body.query !== undefined) {
-    try {
-      query = await validateOrgReportQuery(gate, body.query)
-    } catch (err) {
-      return apiErrorResponse(err)
-    }
-    const denied = await guardReportEntity(gate, query)
-    if (denied) return denied
-  }
-  const layout = (validateReportLayout(body.layout) as Record<string, unknown> | null) ?? null
-
-  const scopeValue: unknown = body.scope ?? 'private'
-  if (scopeValue !== 'private' && scopeValue !== 'shared') {
-    return NextResponse.json({ error: 'Invalid scope' }, { status: 422 })
-  }
-  const scope: ViewScope = scopeValue
-  let allowedRoles: string[] | null = null
-  if (body.allowedRoles !== undefined && body.allowedRoles !== null) {
-    if (
-      !Array.isArray(body.allowedRoles) ||
-      body.allowedRoles.some((r) => typeof r !== 'string' || r.trim() === '')
-    ) {
-      return NextResponse.json({ error: 'Invalid allowedRoles' }, { status: 422 })
-    }
-    const roles = [...new Set((body.allowedRoles as string[]).map((r) => r.trim()))]
-    allowedRoles = roles.length ? roles : null
-  }
-
-  const slug = await uniqueViewSlug(user.orgId, slugifyViewName(name))
-
-  const snapshot = {
-    id: requestId,
-    org_id: user.orgId,
-    slug,
-    name,
-    description,
-    query,
-    layout,
-    scope,
-    owner_id: user.id,
-    allowed_roles: allowedRoles,
-  }
-  const match = { name, description, query, layout, scope, owner_id: user.id, allowed_roles: allowedRoles }
-
-  const outcome = await db.transaction(async (tx) => {
-    const claim = await claimIdempotentCreate(tx, {
-      orgId: user.orgId,
-      table: 'saved_views',
-      key: requestId,
-    })
-    if (claim === 'exists') {
-      return {
-        kind: 'replay' as const,
-        result: await resolveIdempotentReplay(tx, {
-          orgId: user.orgId,
-          table: 'saved_views',
-          key: requestId,
-          match,
-        }),
-      }
-    }
-    const inserted = (await tx.execute<{ id: string; slug: string }>(sql`
-      insert into saved_views
-        (id, org_id, slug, name, description, query, layout, scope, owner_id,
-         allowed_roles, created_by, updated_by)
-      values (${requestId}, ${user.orgId}, ${slug}, ${name}, ${description},
-              ${JSON.stringify(query)}::jsonb, ${layout ? JSON.stringify(layout) : null}::jsonb,
-              ${scope}, ${user.id},
-              ${allowedRoles ? JSON.stringify(allowedRoles) : null}::jsonb,
-              ${user.id}, ${user.id})
-      on conflict (id) do nothing
-      returning id, slug
-    `))
-    if (!inserted.rows[0]) {
-      return {
-        kind: 'replay' as const,
-        result: await resolveIdempotentReplay(tx, {
-          orgId: user.orgId,
-          table: 'saved_views',
-          key: requestId,
-          match,
-        }),
-      }
-    }
-    await auditSetupChange(
-      {
-        orgId: user.orgId,
-        table: 'saved_views',
-        rowId: requestId,
-        action: 'insert',
-        changes: { before: null, after: snapshot },
-        actorId: user.id,
-        requestId,
-      },
-      tx,
-    )
-    return { kind: 'created' as const, result: inserted.rows[0] }
-  })
-  if (outcome.kind === 'replay') {
-    if (outcome.result === 'conflict') {
-      return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
-    }
-    const existing = (await db.execute<{ id: string; slug: string }>(sql`
-      select id, slug from saved_views
-       where id = ${requestId} and org_id = ${user.orgId}
-    `))
-    if (!existing.rows[0]) {
-      return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
-    }
-    return NextResponse.json({ id: existing.rows[0].id, slug: existing.rows[0].slug }, { status: 200 })
-  }
-  return NextResponse.json({ id: outcome.result.id, slug: outcome.result.slug }, { status: 201 })
-}
 
 export const GET = defineRoute({
   permission: "reports.read",
@@ -194,10 +64,136 @@ export const POST = defineRoute({
   permission: "reports.create",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   body: createViewBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ request, body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz
+
+    const { user } = gate
+
+    const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
+    if (!isUuid(requestId)) {
+      return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
+    }
+
+
+
+
+
+    const name = body.name?.trim() || 'Untitled view'
+    const description = body.description?.trim() || null
+
+    let query = defaultRowsQuery(REPORT_ENTITY_MAP.ledger_lines!)
+    if (body.query !== undefined) {
+      try {
+        query = await validateOrgReportQuery(gate, body.query)
+      } catch (err) {
+        return apiErrorResponse(err)
+      }
+      const denied = await guardReportEntity(gate, query)
+      if (denied) return denied
+    }
+    const layout = (validateReportLayout(body.layout) as Record<string, unknown> | null) ?? null
+
+    const scopeValue: unknown = body.scope ?? 'private'
+    if (scopeValue !== 'private' && scopeValue !== 'shared') {
+      return NextResponse.json({ error: 'Invalid scope' }, { status: 422 })
+    }
+    const scope: ViewScope = scopeValue
+    let allowedRoles: string[] | null = null
+    if (body.allowedRoles !== undefined && body.allowedRoles !== null) {
+      if (
+        !Array.isArray(body.allowedRoles) ||
+        body.allowedRoles.some((r) => typeof r !== 'string' || r.trim() === '')
+      ) {
+        return NextResponse.json({ error: 'Invalid allowedRoles' }, { status: 422 })
+      }
+      const roles = [...new Set((body.allowedRoles as string[]).map((r) => r.trim()))]
+      allowedRoles = roles.length ? roles : null
+    }
+
+    const slug = await uniqueViewSlug(user.orgId, slugifyViewName(name))
+
+    const snapshot = {
+      id: requestId,
+      org_id: user.orgId,
+      slug,
+      name,
+      description,
+      query,
+      layout,
+      scope,
+      owner_id: user.id,
+      allowed_roles: allowedRoles,
+    }
+    const match = { name, description, query, layout, scope, owner_id: user.id, allowed_roles: allowedRoles }
+
+    const outcome = await db.transaction(async (tx) => {
+      const claim = await claimIdempotentCreate(tx, {
+        orgId: user.orgId,
+        table: 'saved_views',
+        key: requestId,
+      })
+      if (claim === 'exists') {
+        return {
+          kind: 'replay' as const,
+          result: await resolveIdempotentReplay(tx, {
+            orgId: user.orgId,
+            table: 'saved_views',
+            key: requestId,
+            match,
+          }),
+        }
+      }
+      const inserted = (await tx.execute<{ id: string; slug: string }>(sql`
+        insert into saved_views
+          (id, org_id, slug, name, description, query, layout, scope, owner_id,
+           allowed_roles, created_by, updated_by)
+        values (${requestId}, ${user.orgId}, ${slug}, ${name}, ${description},
+                ${JSON.stringify(query)}::jsonb, ${layout ? JSON.stringify(layout) : null}::jsonb,
+                ${scope}, ${user.id},
+                ${allowedRoles ? JSON.stringify(allowedRoles) : null}::jsonb,
+                ${user.id}, ${user.id})
+        on conflict (id) do nothing
+        returning id, slug
+      `))
+      if (!inserted.rows[0]) {
+        return {
+          kind: 'replay' as const,
+          result: await resolveIdempotentReplay(tx, {
+            orgId: user.orgId,
+            table: 'saved_views',
+            key: requestId,
+            match,
+          }),
+        }
+      }
+      await auditSetupChange(
+        {
+          orgId: user.orgId,
+          table: 'saved_views',
+          rowId: requestId,
+          action: 'insert',
+          changes: { before: null, after: snapshot },
+          actorId: user.id,
+          requestId,
+        },
+        tx,
+      )
+      return { kind: 'created' as const, result: inserted.rows[0] }
+    })
+    if (outcome.kind === 'replay') {
+      if (outcome.result === 'conflict') {
+        return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+      }
+      const existing = (await db.execute<{ id: string; slug: string }>(sql`
+        select id, slug from saved_views
+         where id = ${requestId} and org_id = ${user.orgId}
+      `))
+      if (!existing.rows[0]) {
+        return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+      }
+      return NextResponse.json({ id: existing.rows[0].id, slug: existing.rows[0].slug }, { status: 200 })
+    }
+    return NextResponse.json({ id: outcome.result.id, slug: outcome.result.slug }, { status: 201 })
   },
 });

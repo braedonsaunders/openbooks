@@ -36,6 +36,16 @@ test("parseJsonBody returns typed data for a valid object", async () => {
   }
 });
 
+test("parseJsonBody accepts an empty request only when the schema accepts an omitted body", async () => {
+  const emptyRequest = () => new Request("http://localhost/api/test", { method: "POST" });
+  const optional = z.union([z.object({ reason: z.string().optional() }), z.undefined()]);
+  const accepted = await parseJsonBody(emptyRequest(), optional);
+  assert.deepEqual(accepted, { ok: true, data: undefined });
+
+  const refused = await parseJsonBody(emptyRequest(), z.object({ reason: z.string() }));
+  assert.equal(refused.ok, false);
+});
+
 test("parseJsonBody rejects malformed JSON with 400", async () => {
   const parsed = await parseJsonBody(jsonRequest("{not json"), z.object({}));
   assert.equal(parsed.ok, false);

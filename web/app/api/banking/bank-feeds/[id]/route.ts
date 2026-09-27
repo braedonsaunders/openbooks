@@ -19,7 +19,7 @@ const PATCHBodySchema1 = z.object({
   credentials: z.record(z.string(), z.string()).nullable().optional(), externalAccountId: z.string().nullable().optional(),
   isActive: z.boolean().optional(), name: z.string().trim().min(1).optional(),
   syncCadence: z.enum(['manual', 'hourly', 'daily']).optional(), syncOverlapDays: z.number().int().min(0).max(90).nullable().optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 

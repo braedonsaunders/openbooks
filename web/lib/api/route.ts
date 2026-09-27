@@ -36,6 +36,8 @@ interface CommonOptions<
 > {
   params?: P;
   body?: B;
+  /** Top-level JSON body columns that intentionally remain uninterpreted. */
+  opaque?: Record<string, string>;
   handler: (ctx: {
     request: Request;
     authz: A;
@@ -112,6 +114,7 @@ interface LooseOptions {
   scope?: RouteScope;
   params?: z.ZodType;
   body?: z.ZodType;
+  opaque?: Record<string, string>;
   handler: LooseHandler;
 }
 

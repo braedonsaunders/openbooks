@@ -50,7 +50,7 @@ const PATCHBodySchema1 = z.object({
   paymentHoldReason: z.string().nullable().optional(), internalNotes: z.string().nullable().optional(),
   billingMethod: z.string().nullable().optional(), isFinalInvoice: z.boolean().optional(), currency: z.string().optional(),
   custom: jsonObjectSchema.optional(), unsplitDistributionGroups: z.array(z.string().uuid()).optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 
@@ -60,7 +60,7 @@ const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 export const GET = defineRoute({
   public: 'session',
-  handler: async ({ request: _req, params: routeParams }) => {
+  handler: async ({ params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const authz = await getAuthz()
     if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -99,7 +99,7 @@ export const GET = defineRoute({
 export const PATCH = defineRoute({
   public: 'session',
   body: PATCHBodySchema1,
-  handler: async ({ request: _req, params: routeParams, body: routeBody }) => {
+  handler: async ({ params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const authz = await getAuthz()
     if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })

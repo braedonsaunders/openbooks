@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
+
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
@@ -30,44 +30,9 @@ function setupWriteResponse(result: { status: number; body: Record<string, unkno
   return NextResponse.json(result.body, { status: result.status });
 }
 
-async function legacyPOST(req: Request, { params }: { params: Promise<{ entity: string }> }) {
-  const gate = await guardPermission(PERMISSION)
-  if (gate instanceof NextResponse) return gate
-  const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
-  const entityKey = (await params).entity
-  const refused = await preflightSetupWrite(actor, entityKey, 'create')
-  if (refused) return setupWriteResponse(refused)
-  // Creates are idempotent on the caller's key, which becomes the new row's
-  // id: the drawer mints one UUID per mounted create session and reuses it
-  // across retries and timeouts. The key is required (400, no write) and only
-  // read on POST — PATCH never needs it. It is validated after authentication
-  // and the entity preflight, so unknown/disabled entities and
-  // declared-module creates keep their 404/405 semantics with or without it.
-  const requestId = req.headers.get('Idempotency-Key')?.trim() ?? ''
-  if (!requestId) {
-    return NextResponse.json({ error: 'Idempotency-Key header is required', code: 'invalid' }, { status: 400 })
-  }
-  if (!isUuid(requestId)) {
-    return NextResponse.json({ error: 'Idempotency-Key must be a UUID', code: 'invalid' }, { status: 400 })
-  }
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const result = await createSetupRecord(actor, entityKey, parsedBody.data as Record<string, unknown>, { requestId })
-  return setupWriteResponse(result)
-}
 
-async function legacyPATCH(req: Request, { params }: { params: Promise<{ entity: string }> }) {
-  const gate = await guardPermission(PERMISSION)
-  if (gate instanceof NextResponse) return gate
-  const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
-  const entityKey = (await params).entity
-  const refused = await preflightSetupWrite(actor, entityKey, 'update')
-  if (refused) return setupWriteResponse(refused)
-  const parsedBody2 = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody2.ok) return parsedBody2.response;
-  const result = await updateSetupRecord(actor, entityKey, parsedBody2.data as Record<string, unknown>)
-  return setupWriteResponse(result)
-}
+
+
 
 async function legacyDELETE(req: Request, { params }: { params: Promise<{ entity: string }> }) {
   const gate = await guardPermission(PERMISSION)
@@ -87,11 +52,31 @@ export const POST = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "entity": z.string() }),
   body: requestBodySchema,
-  handler: async ({ request, body, params }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  handler: async ({ request, body, params, authz: routeAuthz }) => {
+
+    const gate = routeAuthz
+
+    const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
+    const entityKey = (params).entity
+    const refused = await preflightSetupWrite(actor, entityKey, 'create')
+    if (refused) return setupWriteResponse(refused)
+    // Creates are idempotent on the caller's key, which becomes the new row's
+    // id: the drawer mints one UUID per mounted create session and reuses it
+    // across retries and timeouts. The key is required (400, no write) and only
+    // read on POST — PATCH never needs it. It is validated after authentication
+    // and the entity preflight, so unknown/disabled entities and
+    // declared-module creates keep their 404/405 semantics with or without it.
+    const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
+    if (!requestId) {
+      return NextResponse.json({ error: 'Idempotency-Key header is required', code: 'invalid' }, { status: 400 })
+    }
+    if (!isUuid(requestId)) {
+      return NextResponse.json({ error: 'Idempotency-Key must be a UUID', code: 'invalid' }, { status: 400 })
+    }
+
+
+    const result = await createSetupRecord(actor, entityKey, body as Record<string, unknown>, { requestId })
+    return setupWriteResponse(result)
   },
 });
 
@@ -100,11 +85,18 @@ export const PATCH = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "entity": z.string() }),
   body: requestBodySchema,
-  handler: async ({ request, body, params }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPATCH(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  handler: async ({ body, params, authz: routeAuthz }) => {
+
+    const gate = routeAuthz
+
+    const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
+    const entityKey = (params).entity
+    const refused = await preflightSetupWrite(actor, entityKey, 'update')
+    if (refused) return setupWriteResponse(refused)
+
+
+    const result = await updateSetupRecord(actor, entityKey, body as Record<string, unknown>)
+    return setupWriteResponse(result)
   },
 });
 

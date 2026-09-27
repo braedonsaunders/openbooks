@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from 'next/server'
-import { guardPermission, guardUnrestrictedScope } from '../../../../../../lib/authz'
+
 import { saveSetupAgentPolicy } from '../../../../../../lib/setup/agents'
 import { CONTINUOUS_CLOSE_DETECTOR_SPECS } from '@openbooks/engine/src/agents/continuous-close-config.ts'
 import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
@@ -30,24 +30,7 @@ export const dynamic = 'force-dynamic'
  * provider page's per-agent PUT calls the same command behind its own key);
  * the audit row is written there, not here.
  */
-async function legacyPUT(request: Request, { params }: { params: Promise<{ agentKey: string }> }) {
-  const gate = await guardPermission('admin.setup.manage')
-  if (gate instanceof NextResponse) return gate
-  const scopeDenied = guardUnrestrictedScope(gate)
-  if (scopeDenied) return scopeDenied
-  const { agentKey } = await params
-  const parsedBody = await parseJsonBody(request, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const policy = await saveSetupAgentPolicy(gate.user.orgId, gate.user.id, agentKey, parsedBody.data)
-    return NextResponse.json(policy)
-  } catch (error) {
-    const message = (error as Error).message
-    if (message === 'invalid_agent') return NextResponse.json({ error: 'invalid_agent' }, { status: 404 })
-    if (message === 'feature_disabled') return NextResponse.json({ error: 'feature_disabled' }, { status: 409 })
-    return NextResponse.json({ error: message }, { status: 422 })
-  }
-}
+
 
 export const PUT = defineRoute({
   permission: "admin.setup.manage",
@@ -55,10 +38,23 @@ export const PUT = defineRoute({
   scope: "unrestricted",
   params: z.object({ "agentKey": z.string() }),
   body: requestBodySchema,
-  handler: async ({ request, body, params }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPUT(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  handler: async ({ body, params, authz: routeAuthz }) => {
+
+    const gate = routeAuthz
+
+
+
+    const { agentKey } = params
+
+
+    try {
+      const policy = await saveSetupAgentPolicy(gate.user.orgId, gate.user.id, agentKey, body)
+      return NextResponse.json(policy)
+    } catch (error) {
+      const message = (error as Error).message
+      if (message === 'invalid_agent') return NextResponse.json({ error: 'invalid_agent' }, { status: 404 })
+      if (message === 'feature_disabled') return NextResponse.json({ error: 'feature_disabled' }, { status: 409 })
+      return NextResponse.json({ error: message }, { status: 422 })
+    }
   },
 });

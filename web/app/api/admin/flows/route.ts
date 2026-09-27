@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
@@ -8,7 +8,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { emptyAutomationGraph } from '@openbooks/forms-core'
 import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
-import { guardUnrestrictedScope } from '../../../../lib/authz'
+
 import { filterFlowRunSubjectsToScope } from '../../flows/_lib'
 
 const FLOW_SUBJECT_KINDS = listFlowSubjectProfiles().map((profile) => profile.subjectKind) as [string, ...string[]];
@@ -90,45 +90,7 @@ async function legacyGET() {
   })
 }
 
-async function legacyPOST(req: Request) {
-  const gate = await guardFeaturePermission('flows.manage', 'flows')
-  if (gate instanceof NextResponse) return gate
-  const scopeDenied = guardUnrestrictedScope(gate)
-  if (scopeDenied) return scopeDenied
-  const user = gate.user
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>
 
-  const name = String(body.name ?? '').trim()
-  if (!name || name.length > 200) {
-    return NextResponse.json({ error: 'name required (max 200 chars)' }, { status: 400 })
-  }
-  const subjectKind = String(body.subjectKind ?? '')
-  if (!listFlowSubjectProfiles().some((p) => p.subjectKind === subjectKind)) {
-    return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 })
-  }
-
-  const id = await db.transaction(async (tx) => {
-    const r = (await tx.execute<{ id: string }>(sql`
-      insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)
-      values (${user.orgId}, ${name}, ${subjectKind}, false,
-              ${JSON.stringify(emptyAutomationGraph())}::jsonb, ${user.id}, ${user.id})
-      returning *
-    `))
-    const created = r.rows[0]!
-    await tx.execute(sql`
-      insert into audit_log
-        (org_id, table_name, row_id, action, changes, actor_id, request_id)
-      values
-        (${user.orgId}, 'flows', ${created.id}, 'insert',
-         ${JSON.stringify({ after: created })}::jsonb,
-         ${user.id}, ${req.headers.get('X-Request-Id')})
-    `)
-    return created.id
-  })
-  return NextResponse.json({ id })
-}
 
 export const GET = defineRoute({
   permission: "flows.manage",
@@ -141,10 +103,44 @@ export const POST = defineRoute({
   feature: "flows",
   scope: "unrestricted",
   body: requestBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ request, body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz
+
+
+
+    const user = gate.user
+
+
+
+
+    const name = String(body.name ?? '').trim()
+    if (!name || name.length > 200) {
+      return NextResponse.json({ error: 'name required (max 200 chars)' }, { status: 400 })
+    }
+    const subjectKind = String(body.subjectKind ?? '')
+    if (!listFlowSubjectProfiles().some((p) => p.subjectKind === subjectKind)) {
+      return NextResponse.json({ error: `unknown subject kind "${subjectKind}"` }, { status: 400 })
+    }
+
+    const id = await db.transaction(async (tx) => {
+      const r = (await tx.execute<{ id: string }>(sql`
+        insert into flows (org_id, name, subject_kind, enabled, graph, created_by, updated_by)
+        values (${user.orgId}, ${name}, ${subjectKind}, false,
+                ${JSON.stringify(emptyAutomationGraph())}::jsonb, ${user.id}, ${user.id})
+        returning *
+      `))
+      const created = r.rows[0]!
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values
+          (${user.orgId}, 'flows', ${created.id}, 'insert',
+           ${JSON.stringify({ after: created })}::jsonb,
+           ${user.id}, ${request.headers.get('X-Request-Id')})
+      `)
+      return created.id
+    })
+    return NextResponse.json({ id })
   },
 });

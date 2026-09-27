@@ -22,7 +22,7 @@ const PATCHBodySchema1 = z.object({
   expectedUpdatedAt: z.string().min(1).optional(),
   memo: z.string().nullable().optional(),
   partyId: nullableId.optional(), paymentCardId: nullableId.optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 
@@ -43,7 +43,7 @@ function malformedId(id: string): NextResponse | null {
 export const GET = defineRoute({
   permission: 'expenses.read',
   feature: 'expenses',
-  handler: async ({ request: _req, authz: routeAuthz, params: routeParams }) => {
+  handler: async ({ authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { id } = await params
@@ -70,7 +70,7 @@ export const PATCH = defineRoute({
   permission: 'expenses.create',
   feature: 'expenses',
   body: PATCHBodySchema1,
-  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const user = gate.user
@@ -204,7 +204,7 @@ export const DELETE = defineRoute({
   permission: 'expenses.create',
   feature: 'expenses',
   body: DELETEBodySchema1,
-  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { id } = await params

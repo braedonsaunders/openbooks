@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -16,7 +16,7 @@ import {
   SCHEDULED_SCRIPT_NON_PRODUCTION_CODE,
   ScheduledScriptNonProductionError,
 } from '@openbooks/engine/src/scripting/scheduled-env.ts'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
+
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
@@ -70,88 +70,32 @@ function validationResponse(error: ValidationError): Promise<NextResponse> {
   return apiErrorResponse(refusal, { details: { code: refusal.code, field: refusal.field } })
 }
 
-async function legacyPOST(req: Request) {
-  const gate = await guardFeaturePermission('scripts.manage', 'scripts')
-  if (gate instanceof NextResponse) return gate
-  const user = gate.user
-  const parsedBody = await parseJsonBody(req, createScriptBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>
-  const err = validate(body)
-  if (err) return validationResponse(err)
 
-  const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
-  const nextRunAt = cron && body.isActive !== false ? computeScheduledScriptNextRunAt(cron) : null
-  const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
-  // Creating an ACTIVE schedule outside production would never fire (the
-  // scanner only reads production orgs) — refuse by name before writing.
-  // Inactive scheduled scripts and other trigger points are unaffected.
-  if (cron && body.isActive !== false) {
-    try {
-      await assertProductionEnvForScheduledScript(user.orgId)
-    } catch (error) {
-      if (error instanceof ScheduledScriptNonProductionError) return nonProductionResponse(error)
-      throw error
-    }
-  }
-  // A script can mint or mutate posted documents on every matching event, so
-  // its creation is audited with the full row in the same transaction.
-  const row = await db.transaction(async (tx) => {
-    if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return notFound("record")
-    const created = (await tx.execute<Record<string, unknown>>(sql`
-      insert into user_scripts (org_id, name, trigger_point, document_kind, endpoint_slug, source, cron, next_run_at, timeout_ms, sort_order, is_active)
-      values (${user.orgId}, ${body.name}, ${body.triggerPoint}, ${body.documentKind ?? null}, ${slug}, ${body.source},
-              ${cron}, ${nextRunAt}, ${body.timeoutMs ?? 2000}, ${body.sortOrder ?? 100}, ${body.isActive !== false})
-      returning *
-    `))
-    await tx.execute(sql`
-      insert into audit_log
-        (org_id, table_name, row_id, action, changes, actor_id, request_id)
-      values
-        (${user.orgId}, 'user_scripts', ${String(created.rows[0]!.id)}, 'insert',
-         ${JSON.stringify({ after: created.rows[0] })}::jsonb,
-         ${user.id}, ${req.headers.get('X-Request-Id')})
-    `)
-    return created.rows[0]!
-  })
-  if (row instanceof NextResponse) return row
-  return NextResponse.json({ id: String(row.id) })
-}
 
-async function legacyPATCH(req: Request) {
-  const gate = await guardFeaturePermission('scripts.manage', 'scripts')
-  if (gate instanceof NextResponse) return gate
-  const user = gate.user
-  const parsedBody2 = await parseJsonBody(req, updateScriptBodySchema);
-  if (!parsedBody2.ok) return parsedBody2.response;
-  const body = (parsedBody2.data) as Record<string, unknown>
-  if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
-  // A malformed id names nothing: same answer as an unknown script, never a
-  // PostgreSQL uuid cast error escaping as a 500.
-  if (typeof body.id !== 'string' || !isUuid(body.id)) {
-    return notFound("record")
-  }
-  const err = validate(body)
-  if (err) return validationResponse(err)
 
-  const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
-  const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
-  const missing = await db.transaction(async (tx) => {
-    if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return notFound("record")
-    const before = (await tx.execute<Record<string, unknown>>(sql`
-      select * from user_scripts where id = ${body.id} and org_id = ${user.orgId} for update
-    `))
-    if (!before.rows[0]) return true
-    // Derive policy changes against the live locked row. Ordinary edits must
-    // retain the scheduler's cursor, including PostgreSQL microseconds.
-    const schedulingChanged = before.rows[0].trigger_point !== body.triggerPoint
-      || before.rows[0].cron !== cron || before.rows[0].is_active !== (body.isActive !== false)
-    // Activating a schedule outside production would never fire (the
-    // scanner only reads production orgs) — refuse by name before
-    // writing. Name-only edits, deactivations, and other trigger points
-    // pass through, so legacy rows are never newly trapped by an
-    // unrelated edit.
-    if (schedulingChanged && cron && body.isActive !== false) {
+
+export const POST = defineRoute({
+  permission: "scripts.manage",
+  feature: "scripts",
+  body: createScriptBodySchema,
+  handler: async ({ request, body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz
+
+    const user = gate.user
+
+
+
+    const err = validate(body)
+    if (err) return validationResponse(err)
+
+    const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
+    const nextRunAt = cron && body.isActive !== false ? computeScheduledScriptNextRunAt(cron) : null
+    const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
+    // Creating an ACTIVE schedule outside production would never fire (the
+    // scanner only reads production orgs) — refuse by name before writing.
+    // Inactive scheduled scripts and other trigger points are unaffected.
+    if (cron && body.isActive !== false) {
       try {
         await assertProductionEnvForScheduledScript(user.orgId)
       } catch (error) {
@@ -159,43 +103,28 @@ async function legacyPATCH(req: Request) {
         throw error
       }
     }
-    const nextRunAt = schedulingChanged
-      ? (cron && body.isActive !== false ? computeScheduledScriptNextRunAt(cron) : null)
-      : sql`next_run_at`
-    const updated = (await tx.execute<Record<string, unknown>>(sql`
-      update user_scripts set
-        name = ${body.name}, trigger_point = ${body.triggerPoint}, document_kind = ${body.documentKind ?? null},
-        endpoint_slug = ${slug},
-        source = ${body.source}, cron = ${cron}, next_run_at = ${nextRunAt},
-        timeout_ms = ${body.timeoutMs ?? 2000},
-        sort_order = ${body.sortOrder ?? 100}, is_active = ${body.isActive !== false}, updated_at = now()
-      where id = ${body.id} and org_id = ${user.orgId}
-      returning *
-    `))
-    await tx.execute(sql`
-      insert into audit_log
-        (org_id, table_name, row_id, action, changes, actor_id, request_id)
-      values
-        (${user.orgId}, 'user_scripts', ${String(updated.rows[0]!.id)}, 'update',
-         ${JSON.stringify({ before: before.rows[0], after: updated.rows[0] })}::jsonb,
-         ${user.id}, ${req.headers.get('X-Request-Id')})
-    `)
-    return false
-  })
-  if (missing instanceof NextResponse) return missing
-  if (missing) return notFound("record")
-  return NextResponse.json({ ok: true })
-}
-
-export const POST = defineRoute({
-  permission: "scripts.manage",
-  feature: "scripts",
-  body: createScriptBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+    // A script can mint or mutate posted documents on every matching event, so
+    // its creation is audited with the full row in the same transaction.
+    const row = await db.transaction(async (tx) => {
+      if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return notFound("record")
+      const created = (await tx.execute<Record<string, unknown>>(sql`
+        insert into user_scripts (org_id, name, trigger_point, document_kind, endpoint_slug, source, cron, next_run_at, timeout_ms, sort_order, is_active)
+        values (${user.orgId}, ${body.name}, ${body.triggerPoint}, ${body.documentKind ?? null}, ${slug}, ${body.source},
+                ${cron}, ${nextRunAt}, ${body.timeoutMs ?? 2000}, ${body.sortOrder ?? 100}, ${body.isActive !== false})
+        returning *
+      `))
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values
+          (${user.orgId}, 'user_scripts', ${String(created.rows[0]!.id)}, 'insert',
+           ${JSON.stringify({ after: created.rows[0] })}::jsonb,
+           ${user.id}, ${request.headers.get('X-Request-Id')})
+      `)
+      return created.rows[0]!
+    })
+    if (row instanceof NextResponse) return row
+    return NextResponse.json({ id: String(row.id) })
   },
 });
 
@@ -203,10 +132,73 @@ export const PATCH = defineRoute({
   permission: "scripts.manage",
   feature: "scripts",
   body: updateScriptBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPATCH(replayRequest as never);
+  handler: async ({ request, body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz
+
+    const user = gate.user
+
+
+
+    if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+    // A malformed id names nothing: same answer as an unknown script, never a
+    // PostgreSQL uuid cast error escaping as a 500.
+    if (typeof body.id !== 'string' || !isUuid(body.id)) {
+      return notFound("record")
+    }
+    const err = validate(body)
+    if (err) return validationResponse(err)
+
+    const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
+    const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
+    const missing = await db.transaction(async (tx) => {
+      if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return notFound("record")
+      const before = (await tx.execute<Record<string, unknown>>(sql`
+        select * from user_scripts where id = ${body.id} and org_id = ${user.orgId} for update
+      `))
+      if (!before.rows[0]) return true
+      // Derive policy changes against the live locked row. Ordinary edits must
+      // retain the scheduler's cursor, including PostgreSQL microseconds.
+      const schedulingChanged = before.rows[0].trigger_point !== body.triggerPoint
+        || before.rows[0].cron !== cron || before.rows[0].is_active !== (body.isActive !== false)
+      // Activating a schedule outside production would never fire (the
+      // scanner only reads production orgs) — refuse by name before
+      // writing. Name-only edits, deactivations, and other trigger points
+      // pass through, so legacy rows are never newly trapped by an
+      // unrelated edit.
+      if (schedulingChanged && cron && body.isActive !== false) {
+        try {
+          await assertProductionEnvForScheduledScript(user.orgId)
+        } catch (error) {
+          if (error instanceof ScheduledScriptNonProductionError) return nonProductionResponse(error)
+          throw error
+        }
+      }
+      const nextRunAt = schedulingChanged
+        ? (cron && body.isActive !== false ? computeScheduledScriptNextRunAt(cron) : null)
+        : sql`next_run_at`
+      const updated = (await tx.execute<Record<string, unknown>>(sql`
+        update user_scripts set
+          name = ${body.name}, trigger_point = ${body.triggerPoint}, document_kind = ${body.documentKind ?? null},
+          endpoint_slug = ${slug},
+          source = ${body.source}, cron = ${cron}, next_run_at = ${nextRunAt},
+          timeout_ms = ${body.timeoutMs ?? 2000},
+          sort_order = ${body.sortOrder ?? 100}, is_active = ${body.isActive !== false}, updated_at = now()
+        where id = ${body.id} and org_id = ${user.orgId}
+        returning *
+      `))
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values
+          (${user.orgId}, 'user_scripts', ${String(updated.rows[0]!.id)}, 'update',
+           ${JSON.stringify({ before: before.rows[0], after: updated.rows[0] })}::jsonb,
+           ${user.id}, ${request.headers.get('X-Request-Id')})
+      `)
+      return false
+    })
+    if (missing instanceof NextResponse) return missing
+    if (missing) return notFound("record")
+    return NextResponse.json({ ok: true })
   },
 });

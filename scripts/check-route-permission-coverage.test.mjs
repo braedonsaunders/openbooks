@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  analyzeRouteBodies,
   analyzeImports,
   findRouteFeatures,
   isPublicRoute,
@@ -39,4 +40,58 @@ test("public paths match exact entries and segment roots only", () => {
   assert.equal(isPublicRoute("/api/v1/records/x", surface), true);
   assert.equal(isPublicRoute("/api/accounts", surface), false);
   assert.equal(isPublicRoute("/api/v10", surface), false);
+});
+
+test("route body schemas and handlers reject opaque validation gaps and request replay", () => {
+  const cases = [
+    {
+      name: "unallowed unknown body field",
+      source: `defineRoute({ permission: "x", feature: "orders", body: z.object({ payload: z.unknown() }), handler: async () => ok() })`,
+      expected: 'body field "payload" uses z.unknown()',
+    },
+    {
+      name: "reasoned opaque JSON body field",
+      source: `defineRoute({ permission: "x", feature: "orders", body: z.object({ payload: z.unknown() }), opaque: { payload: "Organization-defined JSON is stored without interpretation." }, handler: async () => ok() })`,
+      expected: null,
+    },
+    {
+      name: "empty opaque reason",
+      source: `defineRoute({ permission: "x", feature: "orders", body: z.object({ payload: z.any() }), opaque: { payload: " " }, handler: async () => ok() })`,
+      expected: "needs a non-empty reason",
+    },
+    {
+      name: "body with only optional fields",
+      source: `defineRoute({ permission: "x", feature: "orders", body: z.object({ name: z.string().optional() }), handler: async () => ok() })`,
+      expected: "body object has only optional fields",
+    },
+    {
+      name: "optional body fields with a no-op refinement",
+      source: `defineRoute({ permission: "x", feature: "orders", body: z.object({ name: z.string().optional() }).refine(() => true), handler: async () => ok() })`,
+      expected: "body object has only optional fields",
+    },
+    {
+      name: "optional patch fields with a non-empty refinement",
+      source: `defineRoute({ permission: "x", feature: "orders", body: z.object({ name: z.string().optional() }).refine((body) => Object.keys(body).length > 0), handler: async () => ok() })`,
+      expected: null,
+    },
+    {
+      name: "discriminated body variants require an action",
+      source: `defineRoute({ permission: "x", feature: "orders", body: z.discriminatedUnion("action", [z.object({ action: z.literal("create"), name: z.string().optional() }), z.object({ action: z.literal("delete"), id: z.string() })]), handler: async () => ok() })`,
+      expected: null,
+    },
+    {
+      name: "handler request replay",
+      source: `defineRoute({ permission: "x", feature: "orders", body: z.object({ name: z.string() }), handler: async ({ request }) => new Request(request.url) })`,
+      expected: "handler constructs a new Request",
+    },
+  ];
+
+  for (const item of cases) {
+    const violations = analyzeRouteBodies(item.source);
+    if (item.expected === null) {
+      assert.deepEqual(violations, [], item.name);
+    } else {
+      assert.ok(violations.some(({ message }) => message.includes(item.expected)), item.name);
+    }
+  }
 });

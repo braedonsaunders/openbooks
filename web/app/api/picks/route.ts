@@ -22,7 +22,7 @@ const createBody = z.object({
     serialId: uuidId.nullable().optional(),
   })).min(1).max(500),
   /** Header custom-field values; validated against the record type's definitions. */
-  custom: z.record(z.string(), z.unknown()).optional(),
+  custom: z.record(z.string(), z.json()).optional(),
 })
 
 /** Create a draft pick list reserving bin stock for an issued sales order. */

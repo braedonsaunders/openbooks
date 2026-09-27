@@ -21,7 +21,7 @@ const createRunBody = z.object({
     .array(uuidId, { error: 'select at least one bill' })
     .min(1, 'select at least one bill'),
   scheduledFor: isoDate().nullable().optional(),
-  selectionCriteria: z.record(z.string(), z.unknown()).optional(),
+  selectionCriteria: z.record(z.string(), z.json()).optional(),
 })
 
 async function listPaymentRuns() {

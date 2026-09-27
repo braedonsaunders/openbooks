@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, orgContext, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
@@ -175,364 +175,7 @@ async function legacyGET() {
   });
 }
 
-async function legacyPOST(req: Request) {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "onlinePayments"))) {
-    return NextResponse.json({ error: "feature disabled" }, { status: 404 });
-  }
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>;
-  const orgId = gate.user.orgId;
 
-  if (body.action === "saveRule") {
-    const unrestrictedScope = guardUnrestrictedScope(gate);
-    if (unrestrictedScope) return unrestrictedScope;
-    const name = typeof body.name === "string" ? body.name.trim() : "";
-    const calculation = body.calculation;
-    if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
-    if (calculation !== "percent" && calculation !== "fixed" && calculation !== "percent_plus_fixed") {
-      return NextResponse.json({ error: "invalid calculation" }, { status: 400 });
-    }
-    if (typeof body.feeIncomeAccountId !== "string" || !isUuid(body.feeIncomeAccountId)) {
-      return NextResponse.json({ error: "fee income account is required" }, { status: 400 });
-    }
-    const id = typeof body.id === "string" ? body.id : null;
-    if (id !== null && !isUuid(id)) {
-      return NextResponse.json({ error: "invalid rule id" }, { status: 400 });
-    }
-    const provider = body.provider === "stripe" || body.provider === "adyen" || body.provider === "gocardless" ? body.provider : null;
-    const paymentMethod = body.paymentMethod === "card" || body.paymentMethod === "bank_debit" ? body.paymentMethod : "all";
-
-    // Effective dating accepts only real calendar days: a malformed string
-    // would otherwise surface as a Postgres cast failure and an inverted
-    // range as a constraint violation — both raw 500s.
-    const effectiveFrom = typeof body.effectiveFrom === "string" && body.effectiveFrom ? body.effectiveFrom : await businessToday(orgId);
-    const effectiveTo = typeof body.effectiveTo === "string" && body.effectiveTo ? body.effectiveTo : null;
-    if (!isIsoCalendarDate(effectiveFrom)) {
-      return NextResponse.json({ error: "effectiveFrom must be a calendar date (YYYY-MM-DD)" }, { status: 422 });
-    }
-    if (effectiveTo !== null && (!isIsoCalendarDate(effectiveTo) || effectiveTo < effectiveFrom)) {
-      return NextResponse.json(
-        { error: "effectiveTo must be a calendar date on or after effectiveFrom" },
-        { status: 422 },
-      );
-    }
-
-    // Every supplied amount must be strictly positive: a stored zero is either
-    // a silent never-charging policy or ignored config noise, since
-    // computeSurcharge treats absent components as zero.
-    const moneyOrNull = (raw: unknown) => {
-      if (raw == null || raw === "") return null;
-      const exact = canonicalDecimal(raw, 4);
-      if (exact === null) return "invalid";
-      if (compareDecimal(exact, "0") <= 0 || exact.replace("-", "").split(".")[0]!.length > 12) return "invalid";
-      return normalizeMoney(exact);
-    };
-    const percent = moneyOrNull(body.percent);
-    const fixedAmount = moneyOrNull(body.fixedAmount);
-    const capAmount = moneyOrNull(body.capAmount);
-    // Unreadable input gets the named cause; the combined message below
-    // keeps covering non-positive and over-wide figures (12 whole digits
-    // on these columns, so the composer carries that bound too).
-    for (const [label, raw, noun] of [
-      ["Surcharge percent", body.percent, "a percent"],
-      ["Surcharge fixed amount", body.fixedAmount, "an amount"],
-      ["Surcharge cap amount", body.capAmount, "an amount"],
-    ] as Array<[string, unknown, string]>) {
-      if (raw != null && raw !== "" && canonicalDecimal(raw, 4) === null) {
-        return NextResponse.json(
-          { error: moneyRefusal(label, raw, noun, 4, 12) },
-          { status: 422 },
-        );
-      }
-    }
-    if (percent === "invalid" || fixedAmount === "invalid" || capAmount === "invalid") {
-      return NextResponse.json(
-        { error: "surcharge amounts must be positive decimals with at most 4 fraction digits" },
-        { status: 422 },
-      );
-    }
-
-    // The calculation owns exactly its components: a component it ignores must
-    // not be stored (misleading setup), and the rule must actually charge — a
-    // policy whose fee is identically zero would silently pass as a surcharge.
-    if ((calculation === "fixed" && percent !== null) || (calculation === "percent" && fixedAmount !== null)) {
-      return NextResponse.json(
-        { error: `${calculation} surcharges do not take a ${calculation === "fixed" ? "percent" : "fixed amount"}` },
-        { status: 422 },
-      );
-    }
-    if (
-      (calculation === "percent" && percent === null) ||
-      (calculation === "fixed" && fixedAmount === null) ||
-      (calculation === "percent_plus_fixed" && percent === null && fixedAmount === null)
-    ) {
-      return NextResponse.json(
-        { error: "surcharge rule must charge a nonzero fee for its calculation type" },
-        { status: 422 },
-      );
-    }
-
-    // A referenced fee account must be a real posting income account the
-    // caller may see: entity-owned accounts outside their subsidiaries fail
-    // the same lookup (record-level 404-shaped refusal, unchanged).
-    const feeScope = gate.allowedSubsidiaryIds === null
-      ? sql``
-      : sql` and (subsidiary_id is null or subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[]))`;
-    const feeAccount = await db.execute<{ id: string }>(sql`
-      select id from accounts
-       where org_id = ${orgId} and id = ${body.feeIncomeAccountId}
-         and type in ('income', 'income_other') and is_active and not is_summary
-         ${feeScope}
-       limit 1
-    `);
-    if (!feeAccount.rows[0]) {
-      return NextResponse.json({ error: "fee income account not found" }, { status: 422 });
-    }
-
-    const values = {
-      name,
-      calculation,
-      percent,
-      fixedAmount,
-      capAmount,
-      feeIncomeAccountId: body.feeIncomeAccountId,
-      provider,
-      paymentMethod,
-      effectiveFrom,
-      effectiveTo,
-    };
-
-    // Rule write + audit evidence commit together or not at all; both audit
-    // sides are captured rows, never the request payload restated.
-    try {
-      // GiST exclusion checks can deadlock when concurrent inserts each wait
-      // on the other's uncommitted index entry. PostgreSQL aborts the victim,
-      // so retry the entire transaction (including audit) after rollback. No
-      // external side effects occur here. A fresh preflight can then observe
-      // the winner and return the ordinary effective-dating conflict.
-      // An enclosing tenant transaction owns its rollback; never retry on
-      // that same aborted connection or commit any of its work here.
-      const ambientTransaction = orgContext.getStore();
-      const ownsTransaction = !ambientTransaction?.txDb || ambientTransaction.bypass;
-      for (let attempt = 0; ; attempt += 1) {
-        try {
-          await withOrgTransaction(orgId, async () => {
-            const beforeRow = id
-              ? (
-                  await db.execute<SurchargeRuleSnapshot>(sql`
-                    select ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
-                      from payment_surcharge_rules
-                     where org_id = ${orgId} and id = ${id}
-                     for update
-                  `)
-                ).rows[0] ?? null
-              : null;
-            if (id && !beforeRow) throw new SurchargeRuleMissing();
-
-            // Same provider tier + overlapping effective window + overlapping
-            // method coverage = shadowing. This preflight gives an admin a useful
-            // message; migration 0023's exclusion constraint is the authoritative
-            // concurrency guard when two transactions both pass this read.
-            // Disjoint methods (card-only vs bank-debit-only) never compete.
-            const clash = await db.execute<{ id: string }>(sql`
-              select id from payment_surcharge_rules
-               where org_id = ${orgId} and is_active
-                 and provider is not distinct from ${values.provider}
-                 and id is distinct from ${id}
-                 and daterange(effective_from, effective_to, '[]')
-                     && daterange(${values.effectiveFrom}::date, ${values.effectiveTo}::date, '[]')
-                 and not ((payment_method = 'card' and ${values.paymentMethod} = 'bank_debit')
-                       or (payment_method = 'bank_debit' and ${values.paymentMethod} = 'card'))
-               limit 1
-            `);
-            if (clash.rows[0]) throw new SurchargeRuleDatingConflict(values.effectiveFrom);
-
-            if (id) {
-              const updated = await db.execute<SurchargeRuleSnapshot>(sql`
-                update payment_surcharge_rules set
-                  name = ${values.name}, calculation = ${values.calculation}, percent = ${values.percent},
-                  fixed_amount = ${values.fixedAmount}, cap_amount = ${values.capAmount},
-                  fee_income_account_id = ${values.feeIncomeAccountId}, provider = ${values.provider},
-                  payment_method = ${values.paymentMethod}, effective_from = ${values.effectiveFrom},
-                  effective_to = ${values.effectiveTo}, updated_at = now(), updated_by = ${gate.user.id}
-                where org_id = ${orgId} and id = ${id}
-                returning ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
-              `);
-              const afterRow = updated.rows[0];
-              if (!afterRow) throw new SurchargeRuleMissing();
-              await db.execute(sql`
-                insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-                values (${orgId}, 'payment_surcharge_rules', ${id}, 'update',
-                        ${JSON.stringify({ rule: [beforeRow, afterRow] })}::jsonb, ${gate.user.id})
-              `);
-            } else {
-              const inserted = await db.execute<SurchargeRuleSnapshot & { id: string }>(sql`
-                insert into payment_surcharge_rules
-                  (org_id, name, calculation, percent, fixed_amount, cap_amount, fee_income_account_id,
-                   provider, payment_method, effective_from, effective_to, created_by, updated_by)
-                values (${orgId}, ${values.name}, ${values.calculation}, ${values.percent}, ${values.fixedAmount},
-                        ${values.capAmount}, ${values.feeIncomeAccountId}, ${values.provider}, ${values.paymentMethod},
-                        ${values.effectiveFrom}, ${values.effectiveTo}, ${gate.user.id}, ${gate.user.id})
-                returning id, ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
-              `);
-              const afterRow = inserted.rows[0]!;
-              await db.execute(sql`
-                insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-                values (${orgId}, 'payment_surcharge_rules', ${afterRow.id}, 'insert',
-                        ${JSON.stringify({ rule: [null, afterRow] })}::jsonb, ${gate.user.id})
-              `);
-            }
-          });
-          break;
-        } catch (error) {
-          if (postgresErrorCode(error) !== "40P01") throw error;
-          if (!ownsTransaction || attempt >= 2) {
-            return NextResponse.json(
-              { error: "surcharge rule save conflicted with another transaction; retry the save" },
-              { status: 409 },
-            );
-          }
-        }
-      }
-    } catch (e) {
-      if (e instanceof SurchargeRuleMissing) {
-        return NextResponse.json({ error: "surcharge rule not found" }, { status: 404 });
-      }
-      if (e instanceof SurchargeRuleDatingConflict) {
-        return apiErrorResponse(e, { safeStatus: 409 });
-      }
-      // The preflight above is intentionally unlocked. The storage constraint
-      // decides a concurrent race; expose the exact same API contract rather
-      // than leaking a constraint name or converting the loser into a 500.
-      const code = postgresErrorCode(e);
-      if (code === "23P01" || code === "23505") {
-        return apiErrorResponse(new SurchargeRuleDatingConflict(values.effectiveFrom), { safeStatus: 409 });
-      }
-      throw e;
-    }
-    return NextResponse.json({ ok: true });
-  }
-
-  if (body.action === "deleteRule") {
-    const unrestrictedScope = guardUnrestrictedScope(gate);
-    if (unrestrictedScope) return unrestrictedScope;
-    if (typeof body.id !== "string" || !isUuid(body.id)) {
-      return NextResponse.json({ error: "id is required" }, { status: 400 });
-    }
-    try {
-      await withOrgTransaction(orgId, async () => {
-        const before = await db.execute<SurchargeRuleSnapshot>(sql`
-          select ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
-            from payment_surcharge_rules
-           where org_id = ${orgId} and id = ${body.id}
-           for update
-        `);
-        const beforeRow = before.rows[0];
-        if (!beforeRow || !beforeRow.isActive) throw new SurchargeRuleMissing();
-        // Deactivation is a real state change: re-deleting an inactive rule
-        // must fail loudly rather than fabricate another audit entry.
-        const deactivated = await db.execute<{ id: string }>(sql`
-          update payment_surcharge_rules set is_active = false, updated_at = now(), updated_by = ${gate.user.id}
-           where org_id = ${orgId} and id = ${body.id} and is_active
-          returning id
-        `);
-        if (!deactivated.rows[0]) throw new SurchargeRuleMissing();
-        await db.execute(sql`
-          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${orgId}, 'payment_surcharge_rules', ${body.id}, 'delete',
-                  ${JSON.stringify({ rule: [beforeRow, { ...beforeRow, isActive: false }] })}::jsonb, ${gate.user.id})
-        `);
-      });
-    } catch (e) {
-      if (e instanceof SurchargeRuleMissing) {
-        return NextResponse.json({ error: "surcharge rule not found" }, { status: 404 });
-      }
-      throw e;
-    }
-    return NextResponse.json({ ok: true });
-  }
-
-  if (body.action === "test") {
-    // A connection test reads the org-wide config (including sealed-secret
-    // presence) and writes its last_error back to the shared row: restricted
-    // callers are refused before touching it.
-    const unrestrictedTest = guardUnrestrictedScope(gate);
-    if (unrestrictedTest) return unrestrictedTest;
-    const provider = body.provider;
-    if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
-      return NextResponse.json({ error: "unknown provider" }, { status: 400 });
-    }
-    const config = (await db.execute<Parameters<typeof configSecrets>[0]>(sql`
-      select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
-             publishable_key, settings, surcharge_rule_id, secrets
-        from psp_provider_configs
-       where org_id = ${orgId} and provider = ${provider} limit 1
-    `));
-    if (!config.rows[0]) return NextResponse.json({ ok: false, detail: "provider is not configured" });
-    let result: { ok: boolean; detail: string };
-    try {
-      result = await testAcceptanceConnection(provider, configSecrets(config.rows[0], orgId));
-    } catch (e) {
-      result = { ok: false, detail: e instanceof Error ? e.message : String(e) };
-    }
-    await db.execute(sql`
-      update psp_provider_configs set last_error = ${result.ok ? null : result.detail}, updated_at = now()
-       where org_id = ${orgId} and provider = ${provider}
-    `);
-    return NextResponse.json(result);
-  }
-
-  // Provider configs are org-wide rows with no subsidiary lineage: saving one
-  // (settlement bank, surcharge rule, keys, settings) acts on every entity
-  // at once, so only unrestricted callers may write them. Surcharge-rule
-  // saves above stay available to restricted callers, constrained to
-  // in-scope fee accounts by the scoped lookup.
-  const unrestrictedSave = guardUnrestrictedScope(gate);
-  if (unrestrictedSave) return unrestrictedSave;
-  const provider = body.provider;
-  if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
-    return NextResponse.json({ error: "provider must be stripe, adyen or gocardless" }, { status: 400 });
-  }
-  for (const [field, value] of [
-    ["defaultBankAccountId", body.defaultBankAccountId],
-    ["surchargeRuleId", body.surchargeRuleId],
-  ] as const) {
-    if (value !== undefined && value !== null && (typeof value !== "string" || !isUuid(value))) {
-      return NextResponse.json({ error: `${field} must be a valid UUID` }, { status: 400 });
-    }
-  }
-  try {
-    if (body.settings != null && (typeof body.settings !== "object" || Array.isArray(body.settings))) {
-      throw new PaymentAcceptanceError("provider settings must be an object");
-    }
-    const settings = normalizeAcceptanceProviderSettings(
-      provider,
-      body.settings == null ? undefined : (body.settings as Record<string, unknown>),
-    );
-    await saveAcceptanceConfig(gate.user.orgId, gate.user.id, {
-      provider,
-      displayName: typeof body.displayName === "string" ? body.displayName : undefined,
-      isEnabled: body.isEnabled !== false,
-      acceptanceEnabled: body.acceptanceEnabled === true,
-      // The unrestricted gate above already refused restricted callers; the
-      // engine re-asserts it, so the settlement bank can never be set
-      // cross-entity even by a future caller that skips the route guard.
-      defaultBankAccountId: typeof body.defaultBankAccountId === "string" ? body.defaultBankAccountId : null,
-      publishableKey: typeof body.publishableKey === "string" ? body.publishableKey : null,
-      surchargeRuleId: typeof body.surchargeRuleId === "string" ? body.surchargeRuleId : null,
-      settings,
-      apiKey: typeof body.apiKey === "string" && body.apiKey ? body.apiKey : null,
-      webhookSecret: typeof body.webhookSecret === "string" && body.webhookSecret ? body.webhookSecret : null,
-    }, gate.allowedSubsidiaryIds);
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    if (e instanceof PaymentAcceptanceError) return apiErrorResponse(e, { safeStatus: 422 })
-    return apiErrorResponse(e);
-  }
-}
 
 export const GET = defineRoute({
   permission: "admin.setup.manage",
@@ -545,10 +188,363 @@ export const POST = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   scope: "unrestricted",
   body: requestBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz;
+
+    if (!(await isFeatureEnabled(gate.user.orgId, "onlinePayments"))) {
+      return NextResponse.json({ error: "feature disabled" }, { status: 404 });
+    }
+
+
+
+    const orgId = gate.user.orgId;
+
+    if (body.action === "saveRule") {
+      const unrestrictedScope = guardUnrestrictedScope(gate);
+      if (unrestrictedScope) return unrestrictedScope;
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      const calculation = body.calculation;
+      if (!name) return NextResponse.json({ error: "name is required" }, { status: 400 });
+      if (calculation !== "percent" && calculation !== "fixed" && calculation !== "percent_plus_fixed") {
+        return NextResponse.json({ error: "invalid calculation" }, { status: 400 });
+      }
+      if (typeof body.feeIncomeAccountId !== "string" || !isUuid(body.feeIncomeAccountId)) {
+        return NextResponse.json({ error: "fee income account is required" }, { status: 400 });
+      }
+      const id = typeof body.id === "string" ? body.id : null;
+      if (id !== null && !isUuid(id)) {
+        return NextResponse.json({ error: "invalid rule id" }, { status: 400 });
+      }
+      const provider = body.provider === "stripe" || body.provider === "adyen" || body.provider === "gocardless" ? body.provider : null;
+      const paymentMethod = body.paymentMethod === "card" || body.paymentMethod === "bank_debit" ? body.paymentMethod : "all";
+
+      // Effective dating accepts only real calendar days: a malformed string
+      // would otherwise surface as a Postgres cast failure and an inverted
+      // range as a constraint violation — both raw 500s.
+      const effectiveFrom = typeof body.effectiveFrom === "string" && body.effectiveFrom ? body.effectiveFrom : await businessToday(orgId);
+      const effectiveTo = typeof body.effectiveTo === "string" && body.effectiveTo ? body.effectiveTo : null;
+      if (!isIsoCalendarDate(effectiveFrom)) {
+        return NextResponse.json({ error: "effectiveFrom must be a calendar date (YYYY-MM-DD)" }, { status: 422 });
+      }
+      if (effectiveTo !== null && (!isIsoCalendarDate(effectiveTo) || effectiveTo < effectiveFrom)) {
+        return NextResponse.json(
+          { error: "effectiveTo must be a calendar date on or after effectiveFrom" },
+          { status: 422 },
+        );
+      }
+
+      // Every supplied amount must be strictly positive: a stored zero is either
+      // a silent never-charging policy or ignored config noise, since
+      // computeSurcharge treats absent components as zero.
+      const moneyOrNull = (raw: unknown) => {
+        if (raw == null || raw === "") return null;
+        const exact = canonicalDecimal(raw, 4);
+        if (exact === null) return "invalid";
+        if (compareDecimal(exact, "0") <= 0 || exact.replace("-", "").split(".")[0]!.length > 12) return "invalid";
+        return normalizeMoney(exact);
+      };
+      const percent = moneyOrNull(body.percent);
+      const fixedAmount = moneyOrNull(body.fixedAmount);
+      const capAmount = moneyOrNull(body.capAmount);
+      // Unreadable input gets the named cause; the combined message below
+      // keeps covering non-positive and over-wide figures (12 whole digits
+      // on these columns, so the composer carries that bound too).
+      for (const [label, raw, noun] of [
+        ["Surcharge percent", body.percent, "a percent"],
+        ["Surcharge fixed amount", body.fixedAmount, "an amount"],
+        ["Surcharge cap amount", body.capAmount, "an amount"],
+      ] as Array<[string, unknown, string]>) {
+        if (raw != null && raw !== "" && canonicalDecimal(raw, 4) === null) {
+          return NextResponse.json(
+            { error: moneyRefusal(label, raw, noun, 4, 12) },
+            { status: 422 },
+          );
+        }
+      }
+      if (percent === "invalid" || fixedAmount === "invalid" || capAmount === "invalid") {
+        return NextResponse.json(
+          { error: "surcharge amounts must be positive decimals with at most 4 fraction digits" },
+          { status: 422 },
+        );
+      }
+
+      // The calculation owns exactly its components: a component it ignores must
+      // not be stored (misleading setup), and the rule must actually charge — a
+      // policy whose fee is identically zero would silently pass as a surcharge.
+      if ((calculation === "fixed" && percent !== null) || (calculation === "percent" && fixedAmount !== null)) {
+        return NextResponse.json(
+          { error: `${calculation} surcharges do not take a ${calculation === "fixed" ? "percent" : "fixed amount"}` },
+          { status: 422 },
+        );
+      }
+      if (
+        (calculation === "percent" && percent === null) ||
+        (calculation === "fixed" && fixedAmount === null) ||
+        (calculation === "percent_plus_fixed" && percent === null && fixedAmount === null)
+      ) {
+        return NextResponse.json(
+          { error: "surcharge rule must charge a nonzero fee for its calculation type" },
+          { status: 422 },
+        );
+      }
+
+      // A referenced fee account must be a real posting income account the
+      // caller may see: entity-owned accounts outside their subsidiaries fail
+      // the same lookup (record-level 404-shaped refusal, unchanged).
+      const feeScope = gate.allowedSubsidiaryIds === null
+        ? sql``
+        : sql` and (subsidiary_id is null or subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[]))`;
+      const feeAccount = await db.execute<{ id: string }>(sql`
+        select id from accounts
+         where org_id = ${orgId} and id = ${body.feeIncomeAccountId}
+           and type in ('income', 'income_other') and is_active and not is_summary
+           ${feeScope}
+         limit 1
+      `);
+      if (!feeAccount.rows[0]) {
+        return NextResponse.json({ error: "fee income account not found" }, { status: 422 });
+      }
+
+      const values = {
+        name,
+        calculation,
+        percent,
+        fixedAmount,
+        capAmount,
+        feeIncomeAccountId: body.feeIncomeAccountId,
+        provider,
+        paymentMethod,
+        effectiveFrom,
+        effectiveTo,
+      };
+
+      // Rule write + audit evidence commit together or not at all; both audit
+      // sides are captured rows, never the request payload restated.
+      try {
+        // GiST exclusion checks can deadlock when concurrent inserts each wait
+        // on the other's uncommitted index entry. PostgreSQL aborts the victim,
+        // so retry the entire transaction (including audit) after rollback. No
+        // external side effects occur here. A fresh preflight can then observe
+        // the winner and return the ordinary effective-dating conflict.
+        // An enclosing tenant transaction owns its rollback; never retry on
+        // that same aborted connection or commit any of its work here.
+        const ambientTransaction = orgContext.getStore();
+        const ownsTransaction = !ambientTransaction?.txDb || ambientTransaction.bypass;
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            await withOrgTransaction(orgId, async () => {
+              const beforeRow = id
+                ? (
+                    await db.execute<SurchargeRuleSnapshot>(sql`
+                      select ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
+                        from payment_surcharge_rules
+                       where org_id = ${orgId} and id = ${id}
+                       for update
+                    `)
+                  ).rows[0] ?? null
+                : null;
+              if (id && !beforeRow) throw new SurchargeRuleMissing();
+
+              // Same provider tier + overlapping effective window + overlapping
+              // method coverage = shadowing. This preflight gives an admin a useful
+              // message; migration 0023's exclusion constraint is the authoritative
+              // concurrency guard when two transactions both pass this read.
+              // Disjoint methods (card-only vs bank-debit-only) never compete.
+              const clash = await db.execute<{ id: string }>(sql`
+                select id from payment_surcharge_rules
+                 where org_id = ${orgId} and is_active
+                   and provider is not distinct from ${values.provider}
+                   and id is distinct from ${id}
+                   and daterange(effective_from, effective_to, '[]')
+                       && daterange(${values.effectiveFrom}::date, ${values.effectiveTo}::date, '[]')
+                   and not ((payment_method = 'card' and ${values.paymentMethod} = 'bank_debit')
+                         or (payment_method = 'bank_debit' and ${values.paymentMethod} = 'card'))
+                 limit 1
+              `);
+              if (clash.rows[0]) throw new SurchargeRuleDatingConflict(values.effectiveFrom);
+
+              if (id) {
+                const updated = await db.execute<SurchargeRuleSnapshot>(sql`
+                  update payment_surcharge_rules set
+                    name = ${values.name}, calculation = ${values.calculation}, percent = ${values.percent},
+                    fixed_amount = ${values.fixedAmount}, cap_amount = ${values.capAmount},
+                    fee_income_account_id = ${values.feeIncomeAccountId}, provider = ${values.provider},
+                    payment_method = ${values.paymentMethod}, effective_from = ${values.effectiveFrom},
+                    effective_to = ${values.effectiveTo}, updated_at = now(), updated_by = ${gate.user.id}
+                  where org_id = ${orgId} and id = ${id}
+                  returning ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
+                `);
+                const afterRow = updated.rows[0];
+                if (!afterRow) throw new SurchargeRuleMissing();
+                await db.execute(sql`
+                  insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+                  values (${orgId}, 'payment_surcharge_rules', ${id}, 'update',
+                          ${JSON.stringify({ rule: [beforeRow, afterRow] })}::jsonb, ${gate.user.id})
+                `);
+              } else {
+                const inserted = await db.execute<SurchargeRuleSnapshot & { id: string }>(sql`
+                  insert into payment_surcharge_rules
+                    (org_id, name, calculation, percent, fixed_amount, cap_amount, fee_income_account_id,
+                     provider, payment_method, effective_from, effective_to, created_by, updated_by)
+                  values (${orgId}, ${values.name}, ${values.calculation}, ${values.percent}, ${values.fixedAmount},
+                          ${values.capAmount}, ${values.feeIncomeAccountId}, ${values.provider}, ${values.paymentMethod},
+                          ${values.effectiveFrom}, ${values.effectiveTo}, ${gate.user.id}, ${gate.user.id})
+                  returning id, ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
+                `);
+                const afterRow = inserted.rows[0]!;
+                await db.execute(sql`
+                  insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+                  values (${orgId}, 'payment_surcharge_rules', ${afterRow.id}, 'insert',
+                          ${JSON.stringify({ rule: [null, afterRow] })}::jsonb, ${gate.user.id})
+                `);
+              }
+            });
+            break;
+          } catch (error) {
+            if (postgresErrorCode(error) !== "40P01") throw error;
+            if (!ownsTransaction || attempt >= 2) {
+              return NextResponse.json(
+                { error: "surcharge rule save conflicted with another transaction; retry the save" },
+                { status: 409 },
+              );
+            }
+          }
+        }
+      } catch (e) {
+        if (e instanceof SurchargeRuleMissing) {
+          return NextResponse.json({ error: "surcharge rule not found" }, { status: 404 });
+        }
+        if (e instanceof SurchargeRuleDatingConflict) {
+          return apiErrorResponse(e, { safeStatus: 409 });
+        }
+        // The preflight above is intentionally unlocked. The storage constraint
+        // decides a concurrent race; expose the exact same API contract rather
+        // than leaking a constraint name or converting the loser into a 500.
+        const code = postgresErrorCode(e);
+        if (code === "23P01" || code === "23505") {
+          return apiErrorResponse(new SurchargeRuleDatingConflict(values.effectiveFrom), { safeStatus: 409 });
+        }
+        throw e;
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "deleteRule") {
+      const unrestrictedScope = guardUnrestrictedScope(gate);
+      if (unrestrictedScope) return unrestrictedScope;
+      if (typeof body.id !== "string" || !isUuid(body.id)) {
+        return NextResponse.json({ error: "id is required" }, { status: 400 });
+      }
+      try {
+        await withOrgTransaction(orgId, async () => {
+          const before = await db.execute<SurchargeRuleSnapshot>(sql`
+            select ${SURCHARGE_RULE_SNAPSHOT_COLUMNS}
+              from payment_surcharge_rules
+             where org_id = ${orgId} and id = ${body.id}
+             for update
+          `);
+          const beforeRow = before.rows[0];
+          if (!beforeRow || !beforeRow.isActive) throw new SurchargeRuleMissing();
+          // Deactivation is a real state change: re-deleting an inactive rule
+          // must fail loudly rather than fabricate another audit entry.
+          const deactivated = await db.execute<{ id: string }>(sql`
+            update payment_surcharge_rules set is_active = false, updated_at = now(), updated_by = ${gate.user.id}
+             where org_id = ${orgId} and id = ${body.id} and is_active
+            returning id
+          `);
+          if (!deactivated.rows[0]) throw new SurchargeRuleMissing();
+          await db.execute(sql`
+            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${orgId}, 'payment_surcharge_rules', ${body.id}, 'delete',
+                    ${JSON.stringify({ rule: [beforeRow, { ...beforeRow, isActive: false }] })}::jsonb, ${gate.user.id})
+          `);
+        });
+      } catch (e) {
+        if (e instanceof SurchargeRuleMissing) {
+          return NextResponse.json({ error: "surcharge rule not found" }, { status: 404 });
+        }
+        throw e;
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "test") {
+      // A connection test reads the org-wide config (including sealed-secret
+      // presence) and writes its last_error back to the shared row: restricted
+      // callers are refused before touching it.
+      const unrestrictedTest = guardUnrestrictedScope(gate);
+      if (unrestrictedTest) return unrestrictedTest;
+      const provider = body.provider;
+      if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
+        return NextResponse.json({ error: "unknown provider" }, { status: 400 });
+      }
+      const config = (await db.execute<Parameters<typeof configSecrets>[0]>(sql`
+        select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,
+               publishable_key, settings, surcharge_rule_id, secrets
+          from psp_provider_configs
+         where org_id = ${orgId} and provider = ${provider} limit 1
+      `));
+      if (!config.rows[0]) return NextResponse.json({ ok: false, detail: "provider is not configured" });
+      let result: { ok: boolean; detail: string };
+      try {
+        result = await testAcceptanceConnection(provider, configSecrets(config.rows[0], orgId));
+      } catch (e) {
+        result = { ok: false, detail: e instanceof Error ? e.message : String(e) };
+      }
+      await db.execute(sql`
+        update psp_provider_configs set last_error = ${result.ok ? null : result.detail}, updated_at = now()
+         where org_id = ${orgId} and provider = ${provider}
+      `);
+      return NextResponse.json(result);
+    }
+
+    // Provider configs are org-wide rows with no subsidiary lineage: saving one
+    // (settlement bank, surcharge rule, keys, settings) acts on every entity
+    // at once, so only unrestricted callers may write them. Surcharge-rule
+    // saves above stay available to restricted callers, constrained to
+    // in-scope fee accounts by the scoped lookup.
+
+
+    const provider = body.provider;
+    if (provider !== "stripe" && provider !== "adyen" && provider !== "gocardless") {
+      return NextResponse.json({ error: "provider must be stripe, adyen or gocardless" }, { status: 400 });
+    }
+    for (const [field, value] of [
+      ["defaultBankAccountId", body.defaultBankAccountId],
+      ["surchargeRuleId", body.surchargeRuleId],
+    ] as const) {
+      if (value !== undefined && value !== null && (typeof value !== "string" || !isUuid(value))) {
+        return NextResponse.json({ error: `${field} must be a valid UUID` }, { status: 400 });
+      }
+    }
+    try {
+      if (body.settings != null && (typeof body.settings !== "object" || Array.isArray(body.settings))) {
+        throw new PaymentAcceptanceError("provider settings must be an object");
+      }
+      const settings = normalizeAcceptanceProviderSettings(
+        provider,
+        body.settings == null ? undefined : (body.settings as Record<string, unknown>),
+      );
+      await saveAcceptanceConfig(gate.user.orgId, gate.user.id, {
+        provider,
+        displayName: typeof body.displayName === "string" ? body.displayName : undefined,
+        isEnabled: body.isEnabled !== false,
+        acceptanceEnabled: body.acceptanceEnabled === true,
+        // The unrestricted gate above already refused restricted callers; the
+        // engine re-asserts it, so the settlement bank can never be set
+        // cross-entity even by a future caller that skips the route guard.
+        defaultBankAccountId: typeof body.defaultBankAccountId === "string" ? body.defaultBankAccountId : null,
+        publishableKey: typeof body.publishableKey === "string" ? body.publishableKey : null,
+        surchargeRuleId: typeof body.surchargeRuleId === "string" ? body.surchargeRuleId : null,
+        settings,
+        apiKey: typeof body.apiKey === "string" && body.apiKey ? body.apiKey : null,
+        webhookSecret: typeof body.webhookSecret === "string" && body.webhookSecret ? body.webhookSecret : null,
+      }, gate.allowedSubsidiaryIds);
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      if (e instanceof PaymentAcceptanceError) return apiErrorResponse(e, { safeStatus: 422 })
+      return apiErrorResponse(e);
+    }
   },
 });

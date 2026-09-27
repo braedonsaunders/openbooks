@@ -21,7 +21,7 @@ const budgetCellBody = z.looseObject({
   note: z.string().nullable().optional(),
 });
 const updateBudgetCellsBody = z.looseObject({
-  expectedRevision: z.unknown().optional(),
+  expectedRevision: z.json().optional(),
   cells: z.array(budgetCellBody),
 });
 

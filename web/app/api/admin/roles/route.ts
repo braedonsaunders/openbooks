@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint } from "@openbooks/engine/src/platform/db.ts";
@@ -197,234 +197,9 @@ async function audit(args: {
             ${JSON.stringify(args.changes)}, ${args.actorId})`);
 }
 
-async function legacyPOST(req: Request) {
-  const gate = await guardPermission("admin.roles.manage");
-  if (gate instanceof NextResponse) return gate;
-  const actor = gate.user;
 
-  const parsedBody = await parseJsonBody(req, createRoleBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    name?: string;
-    key?: string;
-    description?: string;
-    permissions?: unknown;
-    subsidiaryRestriction?: unknown;
-  };
-  for (const field of ["name", "key", "description"] as const) {
-    if (body[field] !== undefined && typeof body[field] !== "string") {
-      return NextResponse.json({ error: `${field} must be a string` }, { status: 400 });
-    }
-  }
-  const name = body.name?.trim();
-  if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
-  const key = (body.key?.trim() || slugify(name)).toLowerCase();
-  if (!KEY_RE.test(key)) {
-    return NextResponse.json(
-      { error: "key must be 2–64 chars: lowercase letters, digits, _ or -" },
-      { status: 400 },
-    );
-  }
-  const permissions = await normalizePermissions(body.permissions ?? [], actor.orgId);
-  if (!permissions) {
-    return NextResponse.json({ error: "permissions must be known catalogue keys" }, { status: 400 });
-  }
-  const escalation = ceilingViolation(gate, permissions);
-  if (escalation) return escalation;
-  let restriction: SubsidiaryRestriction = { mode: "all" };
-  if (body.subsidiaryRestriction !== undefined) {
-    const norm = await normalizeSubsidiaryRestriction(body.subsidiaryRestriction, actor.orgId);
-    if ("error" in norm) return NextResponse.json({ error: norm.error }, { status: 400 });
-    restriction = norm.value;
-  }
 
-  return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
-    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${actor.orgId}`}, 0))`);
-    if (!await normalizePermissions(permissions, actor.orgId)) return NextResponse.json({ error: "A module permission is no longer active" }, { status: 409 });
-    // An omitted restriction defaults to all, so it is judged like any
-    // other grant: a scoped actor cannot create an all-scope role, and a
-    // finite-list actor cannot create an open-ended subtree.
-    const grantRefusal = coverageRefusal(
-      gate, await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id), restriction);
-    if (grantRefusal) return grantRefusal;
-    const inserted = await db.execute<{ id: string }>(sql`
-      insert into app_roles (org_id, key, name, description, is_built_in, permissions,
-                             subsidiary_restriction, created_by, updated_by)
-      values (${actor.orgId}, ${key}, ${name}, ${body.description?.trim() || null}, false,
-              ${JSON.stringify(permissions)}, ${JSON.stringify(restriction)}, ${actor.id}, ${actor.id})
-      on conflict (org_id, key) do nothing
-      returning id`);
-    if (!inserted.rows[0]) {
-      return NextResponse.json({ error: `a role with key "${key}" already exists` }, { status: 409 });
-    }
-    await seedDashboardDefaultsForOrg(actor.orgId, [key]);
-    await audit({
-      orgId: actor.orgId,
-      rowId: inserted.rows[0].id,
-      action: "insert",
-      changes: {
-        key: [null, key],
-        name: [null, name],
-        permissions: [null, permissions],
-        subsidiaryRestriction: [null, restriction],
-      },
-      actorId: actor.id,
-    });
-    return NextResponse.json({ ok: true, id: inserted.rows[0].id });
-  }));
-}
 
-async function legacyPATCH(req: Request) {
-  const gate = await guardPermission("admin.roles.manage");
-  if (gate instanceof NextResponse) return gate;
-  const actor = gate.user;
-
-  const parsedBody2 = await parseJsonBody(req, updateRoleBodySchema);
-  if (!parsedBody2.ok) return parsedBody2.response;
-  const body = (parsedBody2.data) as {
-    id?: string;
-    name?: string;
-    description?: string;
-    permissions?: unknown;
-    subsidiaryRestriction?: unknown;
-  };
-  for (const field of ["name", "description"] as const) {
-    if (body[field] !== undefined && typeof body[field] !== "string") {
-      return NextResponse.json({ error: `${field} must be a string` }, { status: 400 });
-    }
-  }
-  if (typeof body.id !== "string" || !isUuid(body.id)) {
-    return NextResponse.json({ error: "id required" }, { status: 400 });
-  }
-  const id = body.id;
-  return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
-    await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${actor.orgId}`}, 0))`);
-    const existing = ((await db.execute(sql`
-      select id, key, name, description, is_built_in, permissions, subsidiary_restriction
-        from app_roles where id = ${id} and org_id = ${actor.orgId} for update`)));
-    const role = existing.rows[0];
-    if (!role) return NextResponse.json({ error: "role not found" }, { status: 404 });
-    if (role.is_built_in && role.key === "admin") {
-      return NextResponse.json({ error: "the Administrator role cannot be edited" }, { status: 403 });
-    }
-
-    const changes: Record<string, unknown> = {};
-    const sets: SQL[] = [];
-
-    // Normalize a restriction edit first so the permission branch judges
-    // additions against the role's effective (post-edit) scope.
-    let nextRestriction: SubsidiaryRestriction | undefined;
-    if (body.subsidiaryRestriction !== undefined) {
-      const norm = await normalizeSubsidiaryRestriction(body.subsidiaryRestriction, actor.orgId);
-      if ("error" in norm) return NextResponse.json({ error: norm.error }, { status: 400 });
-      nextRestriction = norm.value;
-    }
-
-    // The role's effective permissions after this PATCH (post-edit when
-    // permissions change, otherwise the stored set). A scope widening below
-    // is judged against these: widening a role whose permissions exceed the
-    // actor's ceiling broadens every one of those grants.
-    let effectivePermissions = rolePermissionList(role.permissions);
-    if (body.permissions !== undefined) {
-      const permissions = await normalizePermissions(body.permissions, actor.orgId, rolePermissionList(role.permissions));
-      if (!permissions) {
-        return NextResponse.json(
-          { error: "permissions must be known catalogue keys" },
-          { status: 400 },
-        );
-      }
-      effectivePermissions = permissions;
-      // Only what the edit ADDS is a grant; keeping or dropping keys the actor
-      // lacks does not widen anyone's access.
-      const current = new Set(rolePermissionList(role.permissions));
-      const added = permissions.filter((p) => !current.has(p));
-      const escalation = ceilingViolation(gate, added);
-      if (escalation) return escalation;
-      if (added.length > 0) {
-        // Granting even an own permission to a role the actor could not
-        // grant is still a broader grant.
-        const coverage = await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id);
-        const widening = coverageRefusal(
-          gate, coverage, nextRestriction ?? storedRestriction(role.subsidiary_restriction));
-        if (widening) return widening;
-      }
-      sets.push(sql`permissions = ${JSON.stringify(permissions)}`);
-      changes.permissions = [role.permissions, permissions];
-    }
-    // Like permissions, subsidiary access may change on built-in roles too.
-    // Only the ADDED scope is judged: a narrowing-only edit keeps the
-    // legitimate removal contract and needs no authority over removed
-    // access. Additions are policy-aware (a subtree target is open-ended,
-    // so list → subtree is widening even when today's enumeration matches).
-    if (nextRestriction !== undefined) {
-      const edit = await resolveRestrictionEditScopes(
-        db, actor.orgId, storedRestriction(role.subsidiary_restriction), nextRestriction);
-      const coverage = await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id);
-      let widening: NextResponse | null;
-      if (gate.user.isSuperAdmin) {
-        widening = null;
-      } else if (edit.additions === undefined) {
-        widening = scopeRefusedResponse();
-      } else if (edit.additions === null) {
-        // Unbounded addition (to all, or to a subtree the old policy does
-        // not cover): the NEXT policy itself must sit in the portfolio.
-        widening = coverageRefusal(gate, coverage, nextRestriction);
-      } else if (edit.additions.size > 0) {
-        // Exact enumerated addition of a closed list target: only the new
-        // ids are judged, never retained wide access.
-        widening = grantedScopeSetWithinCoverage(coverage, edit.additions)
-          ? null
-          : scopeRefusedResponse();
-      } else {
-        widening = null;
-      }
-      if (widening) return widening;
-      // Widening the scope broadens every permission the role confers, so a
-      // scope-widening edit must also hold the role's effective (post-edit)
-      // permissions inside the actor's ceiling — even when the added scope
-      // itself is covered and no permission key changed. Narrowing-only
-      // edits (empty additions) keep the removal contract and skip this.
-      const scopeWidened =
-        edit.additions === null ||
-        (edit.additions !== undefined && edit.additions.size > 0);
-      if (scopeWidened) {
-        const escalation = ceilingViolation(gate, effectivePermissions);
-        if (escalation) return escalation;
-      }
-      sets.push(sql`subsidiary_restriction = ${JSON.stringify(nextRestriction)}`);
-      changes.subsidiaryRestriction = [role.subsidiary_restriction, nextRestriction];
-    }
-    if (body.name !== undefined || body.description !== undefined) {
-      if (role.is_built_in) {
-        return NextResponse.json(
-          { error: "only permissions can be changed on a built-in role" },
-          { status: 400 },
-        );
-      }
-      if (body.name !== undefined) {
-        const name = body.name.trim();
-        if (!name) return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
-        sets.push(sql`name = ${name}`);
-        changes.name = [role.name, name];
-      }
-      if (body.description !== undefined) {
-        const description = body.description.trim() || null;
-        sets.push(sql`description = ${description}`);
-        changes.description = [role.description, description];
-      }
-    }
-    if (sets.length === 0) {
-      return NextResponse.json({ error: "nothing to update" }, { status: 400 });
-    }
-
-    await db.execute(sql`
-      update app_roles
-         set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${actor.id}
-       where id = ${id} and org_id = ${actor.orgId}`);
-    await audit({ orgId: actor.orgId, rowId: id, action: "update", changes, actorId: actor.id });
-    return NextResponse.json({ ok: true });
-  }));
-}
 
 type AffectedAssignment = {
   id: string;
@@ -434,155 +209,7 @@ type AffectedAssignment = {
   other_roles: number;
 };
 
-async function legacyDELETE(req: Request) {
-  const gate = await guardPermission("admin.roles.manage");
-  if (gate instanceof NextResponse) return gate;
-  const actor = gate.user;
 
-  const parsedBody3 = await parseJsonBody(req, deleteRoleBodySchema);
-  if (!parsedBody3.ok) return parsedBody3.response;
-  const { id, replacementRoleId } = (parsedBody3.data) as {
-    id?: string;
-    replacementRoleId?: unknown;
-  };
-  if (typeof id !== "string" || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
-  if (replacementRoleId !== undefined && replacementRoleId !== null) {
-    if (typeof replacementRoleId !== "string" || !isUuid(replacementRoleId)) {
-      return NextResponse.json({ error: "replacementRoleId must be a uuid" }, { status: 400 });
-    }
-    if (replacementRoleId.toLowerCase() === id.toLowerCase()) {
-      return NextResponse.json({ error: "a role cannot replace itself" }, { status: 400 });
-    }
-  }
-  const replacementId = typeof replacementRoleId === "string" ? replacementRoleId : null;
-
-  // Serialize role deletions and hold both role records while checking the
-  // replacement's permission ceiling and writing assignments/audit evidence.
-  // The deferred database guard also protects active users' last role.
-  return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
-    const tx = db;
-    await tx.execute(sql`
-      select pg_advisory_xact_lock(hashtextextended(${`openbooks:role-delete:${actor.orgId}`}, 0))
-    `);
-    const locked = await tx.execute<{
-      id: string; key: string; name: string; is_built_in: boolean; permissions: unknown;
-      subsidiary_restriction: unknown;
-    }>(sql`
-      select id, key, name, is_built_in, permissions, subsidiary_restriction from app_roles
-       where org_id = ${actor.orgId} and (id = ${id} or id = ${replacementId}::uuid)
-       order by id for update`);
-    const role = locked.rows.find((row) => row.id === id.toLowerCase());
-    if (!role) return NextResponse.json({ error: "role not found" }, { status: 404 });
-    if (role.is_built_in) {
-      return NextResponse.json({ error: "built-in roles cannot be deleted" }, { status: 403 });
-    }
-    const replacement = replacementId
-      ? locked.rows.find((row) => row.id === replacementId.toLowerCase()) ?? null
-      : null;
-    if (replacementId && !replacement) {
-      return NextResponse.json({ error: "replacement role not found" }, { status: 404 });
-    }
-    if (replacement) {
-      const escalation = ceilingViolation(gate, rolePermissionList(replacement.permissions));
-      if (escalation) return escalation;
-      // The replacement is a fresh grant to every stranded user: its policy
-      // must sit inside the actor's portfolio as well.
-      const widening = coverageRefusal(
-        gate, await loadSubsidiaryGrantCoverage(tx, actor.orgId, actor.id),
-        storedRestriction(replacement.subsidiary_restriction));
-      if (widening) return widening;
-    }
-    // Grants hold the role before this user lock; unassignment and activation
-    // take the same user lock before inspecting the remaining assignments.
-    await tx.execute(sql`
-      select u.id from users u
-       where u.org_id = ${actor.orgId} and exists (
-         select 1 from role_assignments a
-          where a.org_id = u.org_id and a.user_id = u.id and a.role_id = ${id}
-       )
-       order by u.id for update of u`);
-    // Lock every remaining assignment for those users as well. A caller using
-    // repeatable read must refuse a concurrently deleted snapshot row rather
-    // than count it as a surviving role.
-    await tx.execute(sql`
-      select a.id from role_assignments a
-       where a.org_id = ${actor.orgId} and exists (
-         select 1 from role_assignments held
-          where held.org_id = a.org_id and held.user_id = a.user_id and held.role_id = ${id}
-       )
-       order by a.user_id, a.id for update of a`);
-    const affected = await tx.execute<AffectedAssignment>(sql`
-      select a.id, a.user_id, u.name as user_name, u.is_active,
-             (select count(*)::int from role_assignments o
-               where o.org_id = a.org_id and o.user_id = a.user_id and o.role_id <> a.role_id) as other_roles
-        from role_assignments a
-        join users u on u.id = a.user_id and u.org_id = a.org_id
-       where a.role_id = ${id} and a.org_id = ${actor.orgId}
-       order by u.is_active desc, u.name, a.id
-    `);
-    const stranded = affected.rows.filter((row) => row.is_active && row.other_roles === 0);
-    if (stranded.length > 0 && !replacement) {
-      const named = stranded.slice(0, 5).map((row) => row.user_name);
-      const suffix = stranded.length > named.length ? `, and ${stranded.length - named.length} more` : "";
-      return NextResponse.json(
-        {
-          error: `${stranded.length} active ${stranded.length === 1 ? "user holds" : "users hold"} only this role (${named.join(", ")}${suffix}); choose a replacement role or reassign them first`,
-          affectedCount: stranded.length,
-          affectedUsers: stranded.map((row) => ({ id: row.user_id, name: row.user_name })),
-        },
-        { status: 409 },
-      );
-    }
-
-    for (const row of affected.rows) {
-      await tx.execute(sql`
-        delete from role_assignments where id = ${row.id} and org_id = ${actor.orgId}`);
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${actor.orgId}, 'role_assignments', ${row.id}, 'delete',
-                ${JSON.stringify({ userId: [row.user_id, null], roleId: [id, null], reason: "role_deleted" })},
-                ${actor.id})`);
-    }
-    if (replacement) {
-      for (const row of stranded) {
-        const inserted = await tx.execute<{ id: string }>(sql`
-          insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
-          values (${actor.orgId}, ${row.user_id}, ${replacement.id}, ${actor.id}, ${actor.id})
-          on conflict (org_id, user_id, role_id) do nothing
-          returning id`);
-        if (!inserted.rows[0]) continue;
-        await tx.execute(sql`
-          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-          values (${actor.orgId}, 'role_assignments', ${inserted.rows[0].id}, 'insert',
-                  ${JSON.stringify({ userId: [null, row.user_id], roleId: [null, replacement.id], reason: "role_deleted_replacement", replacedRoleId: id })},
-                  ${actor.id})`);
-      }
-    }
-    await tx.execute(sql`
-      delete from role_dashboard_layouts where role_key = ${role.key} and org_id = ${actor.orgId}`);
-    await tx.execute(
-      sql`delete from app_roles where id = ${id} and org_id = ${actor.orgId}`,
-    );
-    await audit({
-      orgId: actor.orgId,
-      rowId: id,
-      action: "delete",
-      changes: {
-        key: [role.key, null],
-        name: [role.name, null],
-        removedAssignments: affected.rows.length,
-        replacementRoleId: replacement?.id ?? null,
-        reassignedUsers: replacement ? stranded.map((row) => row.user_id) : [],
-      },
-      actorId: actor.id,
-    }, tx);
-    return NextResponse.json({
-      ok: true,
-      removedAssignments: affected.rows.length,
-      reassignedUsers: replacement ? stranded.length : 0,
-    });
-  }));
-}
 
 async function legacyGET() {
   const gate = await guardPermission("admin.roles.manage");
@@ -595,11 +222,76 @@ export const POST = defineRoute({
   permission: "admin.roles.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   body: createRoleBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz;
+
+    const actor = gate.user;
+
+
+
+
+    for (const field of ["name", "key", "description"] as const) {
+      if (body[field] !== undefined && typeof body[field] !== "string") {
+        return NextResponse.json({ error: `${field} must be a string` }, { status: 400 });
+      }
+    }
+    const name = body.name?.trim();
+    if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+    const key = (body.key?.trim() || slugify(name)).toLowerCase();
+    if (!KEY_RE.test(key)) {
+      return NextResponse.json(
+        { error: "key must be 2–64 chars: lowercase letters, digits, _ or -" },
+        { status: 400 },
+      );
+    }
+    const permissions = await normalizePermissions(body.permissions ?? [], actor.orgId);
+    if (!permissions) {
+      return NextResponse.json({ error: "permissions must be known catalogue keys" }, { status: 400 });
+    }
+    const escalation = ceilingViolation(gate, permissions);
+    if (escalation) return escalation;
+    let restriction: SubsidiaryRestriction = { mode: "all" };
+    if (body.subsidiaryRestriction !== undefined) {
+      const norm = await normalizeSubsidiaryRestriction(body.subsidiaryRestriction, actor.orgId);
+      if ("error" in norm) return NextResponse.json({ error: norm.error }, { status: 400 });
+      restriction = norm.value;
+    }
+
+    return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+      await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${actor.orgId}`}, 0))`);
+      if (!await normalizePermissions(permissions, actor.orgId)) return NextResponse.json({ error: "A module permission is no longer active" }, { status: 409 });
+      // An omitted restriction defaults to all, so it is judged like any
+      // other grant: a scoped actor cannot create an all-scope role, and a
+      // finite-list actor cannot create an open-ended subtree.
+      const grantRefusal = coverageRefusal(
+        gate, await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id), restriction);
+      if (grantRefusal) return grantRefusal;
+      const inserted = await db.execute<{ id: string }>(sql`
+        insert into app_roles (org_id, key, name, description, is_built_in, permissions,
+                               subsidiary_restriction, created_by, updated_by)
+        values (${actor.orgId}, ${key}, ${name}, ${body.description?.trim() || null}, false,
+                ${JSON.stringify(permissions)}, ${JSON.stringify(restriction)}, ${actor.id}, ${actor.id})
+        on conflict (org_id, key) do nothing
+        returning id`);
+      if (!inserted.rows[0]) {
+        return NextResponse.json({ error: `a role with key "${key}" already exists` }, { status: 409 });
+      }
+      await seedDashboardDefaultsForOrg(actor.orgId, [key]);
+      await audit({
+        orgId: actor.orgId,
+        rowId: inserted.rows[0].id,
+        action: "insert",
+        changes: {
+          key: [null, key],
+          name: [null, name],
+          permissions: [null, permissions],
+          subsidiaryRestriction: [null, restriction],
+        },
+        actorId: actor.id,
+      });
+      return NextResponse.json({ ok: true, id: inserted.rows[0].id });
+    }));
   },
 });
 
@@ -607,11 +299,151 @@ export const PATCH = defineRoute({
   permission: "admin.roles.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   body: updateRoleBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPATCH(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz;
+
+    const actor = gate.user;
+
+
+
+
+    for (const field of ["name", "description"] as const) {
+      if (body[field] !== undefined && typeof body[field] !== "string") {
+        return NextResponse.json({ error: `${field} must be a string` }, { status: 400 });
+      }
+    }
+    if (typeof body.id !== "string" || !isUuid(body.id)) {
+      return NextResponse.json({ error: "id required" }, { status: 400 });
+    }
+    const id = body.id;
+    return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+      await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${actor.orgId}`}, 0))`);
+      const existing = ((await db.execute(sql`
+        select id, key, name, description, is_built_in, permissions, subsidiary_restriction
+          from app_roles where id = ${id} and org_id = ${actor.orgId} for update`)));
+      const role = existing.rows[0];
+      if (!role) return NextResponse.json({ error: "role not found" }, { status: 404 });
+      if (role.is_built_in && role.key === "admin") {
+        return NextResponse.json({ error: "the Administrator role cannot be edited" }, { status: 403 });
+      }
+
+      const changes: Record<string, unknown> = {};
+      const sets: SQL[] = [];
+
+      // Normalize a restriction edit first so the permission branch judges
+      // additions against the role's effective (post-edit) scope.
+      let nextRestriction: SubsidiaryRestriction | undefined;
+      if (body.subsidiaryRestriction !== undefined) {
+        const norm = await normalizeSubsidiaryRestriction(body.subsidiaryRestriction, actor.orgId);
+        if ("error" in norm) return NextResponse.json({ error: norm.error }, { status: 400 });
+        nextRestriction = norm.value;
+      }
+
+      // The role's effective permissions after this PATCH (post-edit when
+      // permissions change, otherwise the stored set). A scope widening below
+      // is judged against these: widening a role whose permissions exceed the
+      // actor's ceiling broadens every one of those grants.
+      let effectivePermissions = rolePermissionList(role.permissions);
+      if (body.permissions !== undefined) {
+        const permissions = await normalizePermissions(body.permissions, actor.orgId, rolePermissionList(role.permissions));
+        if (!permissions) {
+          return NextResponse.json(
+            { error: "permissions must be known catalogue keys" },
+            { status: 400 },
+          );
+        }
+        effectivePermissions = permissions;
+        // Only what the edit ADDS is a grant; keeping or dropping keys the actor
+        // lacks does not widen anyone's access.
+        const current = new Set(rolePermissionList(role.permissions));
+        const added = permissions.filter((p) => !current.has(p));
+        const escalation = ceilingViolation(gate, added);
+        if (escalation) return escalation;
+        if (added.length > 0) {
+          // Granting even an own permission to a role the actor could not
+          // grant is still a broader grant.
+          const coverage = await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id);
+          const widening = coverageRefusal(
+            gate, coverage, nextRestriction ?? storedRestriction(role.subsidiary_restriction));
+          if (widening) return widening;
+        }
+        sets.push(sql`permissions = ${JSON.stringify(permissions)}`);
+        changes.permissions = [role.permissions, permissions];
+      }
+      // Like permissions, subsidiary access may change on built-in roles too.
+      // Only the ADDED scope is judged: a narrowing-only edit keeps the
+      // legitimate removal contract and needs no authority over removed
+      // access. Additions are policy-aware (a subtree target is open-ended,
+      // so list → subtree is widening even when today's enumeration matches).
+      if (nextRestriction !== undefined) {
+        const edit = await resolveRestrictionEditScopes(
+          db, actor.orgId, storedRestriction(role.subsidiary_restriction), nextRestriction);
+        const coverage = await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id);
+        let widening: NextResponse | null;
+        if (gate.user.isSuperAdmin) {
+          widening = null;
+        } else if (edit.additions === undefined) {
+          widening = scopeRefusedResponse();
+        } else if (edit.additions === null) {
+          // Unbounded addition (to all, or to a subtree the old policy does
+          // not cover): the NEXT policy itself must sit in the portfolio.
+          widening = coverageRefusal(gate, coverage, nextRestriction);
+        } else if (edit.additions.size > 0) {
+          // Exact enumerated addition of a closed list target: only the new
+          // ids are judged, never retained wide access.
+          widening = grantedScopeSetWithinCoverage(coverage, edit.additions)
+            ? null
+            : scopeRefusedResponse();
+        } else {
+          widening = null;
+        }
+        if (widening) return widening;
+        // Widening the scope broadens every permission the role confers, so a
+        // scope-widening edit must also hold the role's effective (post-edit)
+        // permissions inside the actor's ceiling — even when the added scope
+        // itself is covered and no permission key changed. Narrowing-only
+        // edits (empty additions) keep the removal contract and skip this.
+        const scopeWidened =
+          edit.additions === null ||
+          (edit.additions !== undefined && edit.additions.size > 0);
+        if (scopeWidened) {
+          const escalation = ceilingViolation(gate, effectivePermissions);
+          if (escalation) return escalation;
+        }
+        sets.push(sql`subsidiary_restriction = ${JSON.stringify(nextRestriction)}`);
+        changes.subsidiaryRestriction = [role.subsidiary_restriction, nextRestriction];
+      }
+      if (body.name !== undefined || body.description !== undefined) {
+        if (role.is_built_in) {
+          return NextResponse.json(
+            { error: "only permissions can be changed on a built-in role" },
+            { status: 400 },
+          );
+        }
+        if (body.name !== undefined) {
+          const name = body.name.trim();
+          if (!name) return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
+          sets.push(sql`name = ${name}`);
+          changes.name = [role.name, name];
+        }
+        if (body.description !== undefined) {
+          const description = body.description.trim() || null;
+          sets.push(sql`description = ${description}`);
+          changes.description = [role.description, description];
+        }
+      }
+      if (sets.length === 0) {
+        return NextResponse.json({ error: "nothing to update" }, { status: 400 });
+      }
+
+      await db.execute(sql`
+        update app_roles
+           set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${actor.id}
+         where id = ${id} and org_id = ${actor.orgId}`);
+      await audit({ orgId: actor.orgId, rowId: id, action: "update", changes, actorId: actor.id });
+      return NextResponse.json({ ok: true });
+    }));
   },
 });
 
@@ -619,11 +451,152 @@ export const DELETE = defineRoute({
   permission: "admin.roles.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   body: deleteRoleBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyDELETE(replayRequest as never);
+  handler: async ({ authz: routeAuthz }) => {
+
+    const gate = routeAuthz;
+
+    const actor = gate.user;
+
+
+
+
+    if (typeof id !== "string" || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
+    if (replacementRoleId !== undefined && replacementRoleId !== null) {
+      if (typeof replacementRoleId !== "string" || !isUuid(replacementRoleId)) {
+        return NextResponse.json({ error: "replacementRoleId must be a uuid" }, { status: 400 });
+      }
+      if (replacementRoleId.toLowerCase() === id.toLowerCase()) {
+        return NextResponse.json({ error: "a role cannot replace itself" }, { status: 400 });
+      }
+    }
+    const replacementId = typeof replacementRoleId === "string" ? replacementRoleId : null;
+
+    // Serialize role deletions and hold both role records while checking the
+    // replacement's permission ceiling and writing assignments/audit evidence.
+    // The deferred database guard also protects active users' last role.
+    return withOrgTransaction(actor.orgId, () => withTransactionSavepoint(db, async () => {
+      const tx = db;
+      await tx.execute(sql`
+        select pg_advisory_xact_lock(hashtextextended(${`openbooks:role-delete:${actor.orgId}`}, 0))
+      `);
+      const locked = await tx.execute<{
+        id: string; key: string; name: string; is_built_in: boolean; permissions: unknown;
+        subsidiary_restriction: unknown;
+      }>(sql`
+        select id, key, name, is_built_in, permissions, subsidiary_restriction from app_roles
+         where org_id = ${actor.orgId} and (id = ${id} or id = ${replacementId}::uuid)
+         order by id for update`);
+      const role = locked.rows.find((row) => row.id === id.toLowerCase());
+      if (!role) return NextResponse.json({ error: "role not found" }, { status: 404 });
+      if (role.is_built_in) {
+        return NextResponse.json({ error: "built-in roles cannot be deleted" }, { status: 403 });
+      }
+      const replacement = replacementId
+        ? locked.rows.find((row) => row.id === replacementId.toLowerCase()) ?? null
+        : null;
+      if (replacementId && !replacement) {
+        return NextResponse.json({ error: "replacement role not found" }, { status: 404 });
+      }
+      if (replacement) {
+        const escalation = ceilingViolation(gate, rolePermissionList(replacement.permissions));
+        if (escalation) return escalation;
+        // The replacement is a fresh grant to every stranded user: its policy
+        // must sit inside the actor's portfolio as well.
+        const widening = coverageRefusal(
+          gate, await loadSubsidiaryGrantCoverage(tx, actor.orgId, actor.id),
+          storedRestriction(replacement.subsidiary_restriction));
+        if (widening) return widening;
+      }
+      // Grants hold the role before this user lock; unassignment and activation
+      // take the same user lock before inspecting the remaining assignments.
+      await tx.execute(sql`
+        select u.id from users u
+         where u.org_id = ${actor.orgId} and exists (
+           select 1 from role_assignments a
+            where a.org_id = u.org_id and a.user_id = u.id and a.role_id = ${id}
+         )
+         order by u.id for update of u`);
+      // Lock every remaining assignment for those users as well. A caller using
+      // repeatable read must refuse a concurrently deleted snapshot row rather
+      // than count it as a surviving role.
+      await tx.execute(sql`
+        select a.id from role_assignments a
+         where a.org_id = ${actor.orgId} and exists (
+           select 1 from role_assignments held
+            where held.org_id = a.org_id and held.user_id = a.user_id and held.role_id = ${id}
+         )
+         order by a.user_id, a.id for update of a`);
+      const affected = await tx.execute<AffectedAssignment>(sql`
+        select a.id, a.user_id, u.name as user_name, u.is_active,
+               (select count(*)::int from role_assignments o
+                 where o.org_id = a.org_id and o.user_id = a.user_id and o.role_id <> a.role_id) as other_roles
+          from role_assignments a
+          join users u on u.id = a.user_id and u.org_id = a.org_id
+         where a.role_id = ${id} and a.org_id = ${actor.orgId}
+         order by u.is_active desc, u.name, a.id
+      `);
+      const stranded = affected.rows.filter((row) => row.is_active && row.other_roles === 0);
+      if (stranded.length > 0 && !replacement) {
+        const named = stranded.slice(0, 5).map((row) => row.user_name);
+        const suffix = stranded.length > named.length ? `, and ${stranded.length - named.length} more` : "";
+        return NextResponse.json(
+          {
+            error: `${stranded.length} active ${stranded.length === 1 ? "user holds" : "users hold"} only this role (${named.join(", ")}${suffix}); choose a replacement role or reassign them first`,
+            affectedCount: stranded.length,
+            affectedUsers: stranded.map((row) => ({ id: row.user_id, name: row.user_name })),
+          },
+          { status: 409 },
+        );
+      }
+
+      for (const row of affected.rows) {
+        await tx.execute(sql`
+          delete from role_assignments where id = ${row.id} and org_id = ${actor.orgId}`);
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${actor.orgId}, 'role_assignments', ${row.id}, 'delete',
+                  ${JSON.stringify({ userId: [row.user_id, null], roleId: [id, null], reason: "role_deleted" })},
+                  ${actor.id})`);
+      }
+      if (replacement) {
+        for (const row of stranded) {
+          const inserted = await tx.execute<{ id: string }>(sql`
+            insert into role_assignments (org_id, user_id, role_id, created_by, updated_by)
+            values (${actor.orgId}, ${row.user_id}, ${replacement.id}, ${actor.id}, ${actor.id})
+            on conflict (org_id, user_id, role_id) do nothing
+            returning id`);
+          if (!inserted.rows[0]) continue;
+          await tx.execute(sql`
+            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${actor.orgId}, 'role_assignments', ${inserted.rows[0].id}, 'insert',
+                    ${JSON.stringify({ userId: [null, row.user_id], roleId: [null, replacement.id], reason: "role_deleted_replacement", replacedRoleId: id })},
+                    ${actor.id})`);
+        }
+      }
+      await tx.execute(sql`
+        delete from role_dashboard_layouts where role_key = ${role.key} and org_id = ${actor.orgId}`);
+      await tx.execute(
+        sql`delete from app_roles where id = ${id} and org_id = ${actor.orgId}`,
+      );
+      await audit({
+        orgId: actor.orgId,
+        rowId: id,
+        action: "delete",
+        changes: {
+          key: [role.key, null],
+          name: [role.name, null],
+          removedAssignments: affected.rows.length,
+          replacementRoleId: replacement?.id ?? null,
+          reassignedUsers: replacement ? stranded.map((row) => row.user_id) : [],
+        },
+        actorId: actor.id,
+      }, tx);
+      return NextResponse.json({
+        ok: true,
+        removedAssignments: affected.rows.length,
+        reassignedUsers: replacement ? stranded.length : 0,
+      });
+    }));
   },
 });
 

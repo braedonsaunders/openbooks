@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from "next/server";
 import {
   commitPostingPeriodAssignment,
@@ -75,46 +75,7 @@ async function legacyGET(req: Request) {
 }
 
 /** Commit the assignment (preview first: only previewed rows are committed). */
-async function legacyPOST(req: Request) {
-  const gate = await guardFeaturePermission("close.run", "continuousClose");
-  if (gate instanceof NextResponse) return gate;
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as Record<string, unknown>;
-  const bookId = typeof body.bookId === "string" ? body.bookId : "";
-  if (!isUuid(bookId)) {
-    return NextResponse.json({ error: "valid bookId is required" }, { status: 400 });
-  }
-  const rawIds = body.documentIds;
-  if (rawIds !== undefined) {
-    if (
-      !Array.isArray(rawIds)
-      || rawIds.some((id) => typeof id !== "string" || !isUuid(id))
-      || new Set(rawIds).size !== rawIds.length
-    ) {
-      return NextResponse.json(
-        { error: "documentIds must contain unique valid UUIDs" },
-        { status: 400 },
-      );
-    }
-  }
-  const scope = subsidiaryScope(gate);
-  if (scope instanceof NextResponse) return scope;
-  try {
-    const result = await commitPostingPeriodAssignment(gate.user.orgId, {
-      bookId,
-      documentIds: rawIds as string[] | undefined,
-      subsidiaryIds: scope,
-      actorId: gate.user.id,
-    });
-    return NextResponse.json({ ok: true, ...result });
-  } catch (error) {
-    if (error instanceof PostingPeriodAssignmentError || error instanceof CloseError) {
-      return apiErrorResponse(error, { safeStatus: 422 });
-    }
-    throw error;
-  }
-}
+
 
 export const GET = defineRoute({
   permission: "close.run",
@@ -126,10 +87,45 @@ export const POST = defineRoute({
   permission: "close.run",
   feature: "continuousClose",
   body: requestBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz;
+
+
+
+
+    const bookId = typeof body.bookId === "string" ? body.bookId : "";
+    if (!isUuid(bookId)) {
+      return NextResponse.json({ error: "valid bookId is required" }, { status: 400 });
+    }
+    const rawIds = body.documentIds;
+    if (rawIds !== undefined) {
+      if (
+        !Array.isArray(rawIds)
+        || rawIds.some((id) => typeof id !== "string" || !isUuid(id))
+        || new Set(rawIds).size !== rawIds.length
+      ) {
+        return NextResponse.json(
+          { error: "documentIds must contain unique valid UUIDs" },
+          { status: 400 },
+        );
+      }
+    }
+    const scope = subsidiaryScope(gate);
+    if (scope instanceof NextResponse) return scope;
+    try {
+      const result = await commitPostingPeriodAssignment(gate.user.orgId, {
+        bookId,
+        documentIds: rawIds as string[] | undefined,
+        subsidiaryIds: scope,
+        actorId: gate.user.id,
+      });
+      return NextResponse.json({ ok: true, ...result });
+    } catch (error) {
+      if (error instanceof PostingPeriodAssignmentError || error instanceof CloseError) {
+        return apiErrorResponse(error, { safeStatus: 422 });
+      }
+      throw error;
+    }
   },
 });

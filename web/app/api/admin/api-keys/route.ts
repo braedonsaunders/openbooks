@@ -1,5 +1,5 @@
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
@@ -223,371 +223,13 @@ async function legacyGET() {
 }
 
 /** Create a new key — returns the plaintext ONCE. */
-async function legacyPOST(req: Request) {
-  const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
-  if (gate instanceof NextResponse) return gate;
-  const actor = gate.user;
 
-  const parsedBody = await parseJsonBody(req, createApiKeyBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    name?: string;
-    description?: string | null;
-    scopes?: unknown;
-    expiresAt?: string | null;
-    rateLimitPerMin?: number | null;
-  };
-  const name = typeof body.name === "string" ? body.name.trim() : "";
-  if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
-  if (
-    body.description !== undefined &&
-    body.description !== null &&
-    typeof body.description !== "string"
-  ) {
-    return NextResponse.json({ error: "description must be a string" }, { status: 400 });
-  }
-
-  // An omitted or empty scope set is a rejected request, never a
-  // full-permission credential.
-  const scopes = normalizeScopes(body.scopes);
-  if (!scopes) {
-    return NextResponse.json(
-      { error: "at least one scope is required; scopes must be known catalogue keys" },
-      { status: 400 },
-    );
-  }
-
-  // Creation grants the full request, so every scope must sit inside the
-  // editor's own authority. The new key is owned by the editor, so its
-  // subsidiary lens is the editor's own — no cross-entity grant is possible
-  // here; the PATCH path checks the entity ceiling for other owners' keys.
-  if (!actor.isSuperAdmin) {
-    const missing = permissionsOutsideCeiling(gate.permissions, scopes);
-    if (missing.length > 0) return ceilingRefusal(missing);
-  }
-
-  const rate = parseRate(body.rateLimitPerMin);
-  if (rate === false) {
-    return NextResponse.json({ error: "rateLimitPerMin must be a positive integer or blank" }, { status: 400 });
-  }
-  // Default to 120/min when unspecified; null = unlimited.
-  const rateValue = rate === undefined ? 120 : rate;
-
-  // Strict validation: only a complete, timezone-qualified ISO date-time or null
-  // yields a value. Falsy impostors (0, false, "") must not coerce to a
-  // non-expiring (NULL) key — non-expiring is only via explicit null
-  // (omitted is kept as non-expiring for backward compatibility; new
-  // clients should send null). No expiry policy table exists yet, so an
-  // explicit null is currently allowed; a future policy may restrict it.
-  let expiresAt: string | null = null;
-  if (body.expiresAt === undefined || body.expiresAt === null) {
-    expiresAt = null;
-  } else if (typeof body.expiresAt === "string") {
-    if (!z.string().datetime({ offset: true }).safeParse(body.expiresAt).success) {
-      return NextResponse.json({ error: "expiresAt must be an ISO date-time with a timezone or null" }, { status: 400 });
-    }
-    const d = new Date(body.expiresAt);
-    if (d.getTime() <= Date.now()) {
-      return NextResponse.json({ error: "expiresAt must be in the future" }, { status: 400 });
-    }
-    expiresAt = d.toISOString();
-  } else {
-    return NextResponse.json({ error: "expiresAt must be an ISO date-time with a timezone or null" }, { status: 400 });
-  }
-
-  const gen = generateApiKey();
-  const description = typeof body.description === "string" ? body.description.trim() || null : null;
-  const insertedId = await withOrgTransaction(actor.orgId, async () => {
-    const inserted = (await db.execute(sql`
-      insert into api_keys (org_id, user_id, name, description, key_prefix, key_hash,
-                            key_preview, scopes, rate_limit_per_min, is_active, expires_at, created_by, updated_by)
-      values (${actor.orgId}, ${actor.id}, ${name}, ${description},
-              ${gen.keyPrefix}, ${gen.keyHash}, ${gen.keyPreview},
-              ${JSON.stringify(scopes)}, ${rateValue}, true, ${expiresAt}, ${actor.id}, ${actor.id})
-      returning id`)) as unknown as { rows: Array<{ id: string }> };
-    const id = inserted.rows[0]?.id;
-    if (!id) throw new Error("api key insert did not return an id");
-
-    await audit({
-      orgId: actor.orgId,
-      rowId: id,
-      action: "insert",
-      changes: {
-        before: null,
-        after: {
-          name,
-          description,
-          scopes,
-          rate_limit_per_min: rateValue,
-          is_active: true,
-          expires_at: expiresAt,
-        },
-      },
-      actorId: actor.id,
-    });
-    return id;
-  });
-
-  return NextResponse.json({ id: insertedId, plaintext: gen.plaintext }, { status: 201 });
-}
 
 /** Update a key — name, description, scopes, suspension/resume, or rate limit. */
-async function legacyPATCH(req: Request) {
-  const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
-  if (gate instanceof NextResponse) return gate;
-  const actor = gate.user;
 
-  const parsedBody2 = await parseJsonBody(req, updateApiKeyBodySchema);
-  if (!parsedBody2.ok) return parsedBody2.response;
-  const body = (parsedBody2.data) as {
-    id?: string;
-    name?: string;
-    description?: string | null;
-    scopes?: unknown;
-    isActive?: boolean;
-    rateLimitPerMin?: number | null;
-  };
-  if (!body.id || !isUuid(body.id)) {
-    return NextResponse.json({ error: "id required" }, { status: 400 });
-  }
-  const keyId = body.id;
-
-  const fields = {
-    name: undefined as string | undefined,
-    description: undefined as string | null | undefined,
-    scopes: undefined as string[] | undefined,
-    isActive: undefined as boolean | undefined,
-    rateLimitPerMin: undefined as number | null | undefined,
-  };
-  if (body.name !== undefined) {
-    const name = typeof body.name === "string" ? body.name.trim() : "";
-    if (!name) return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
-    fields.name = name;
-  }
-  if (body.description !== undefined) {
-    if (body.description !== null && typeof body.description !== "string") {
-      return NextResponse.json({ error: "description must be a string" }, { status: 400 });
-    }
-    fields.description = body.description === null ? null : body.description.trim() || null;
-  }
-  if (body.scopes !== undefined) {
-    // Clearing scopes to [] would mint a key whose grant contract is empty;
-    // a key is narrowed or revoked, never blanked.
-    const scopes = normalizeScopes(body.scopes);
-    if (!scopes) {
-      return NextResponse.json(
-        { error: "at least one scope is required; scopes must be known catalogue keys" },
-        { status: 400 },
-      );
-    }
-    fields.scopes = scopes;
-  }
-  if (body.rateLimitPerMin !== undefined) {
-    const rate = parseRate(body.rateLimitPerMin);
-    if (rate === false) {
-      return NextResponse.json({ error: "rateLimitPerMin must be a positive integer or blank" }, { status: 400 });
-    }
-    fields.rateLimitPerMin = rate;
-  }
-  // isActive is a strict boolean: a truthy non-boolean (e.g. the string
-  // "true") would otherwise slip past the revoked-key reactivation guard below
-  // (which compares against `true`) while still being written to the boolean
-  // column, and any other non-boolean aborts the update with an unhandled
-  // storage error.
-  if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
-    return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
-  }
-  const wantsReactivation = body.isActive === true;
-  if (body.isActive !== undefined) fields.isActive = body.isActive;
-  if (Object.values(fields).every((value) => value === undefined)) {
-    return NextResponse.json({ error: "nothing to update" }, { status: 400 });
-  }
-
-  return withOrgTransaction(actor.orgId, async () => {
-    const existing = (await db.execute(sql`
-      select id, user_id, name, description, scopes, rate_limit_per_min, is_active
-        from api_keys
-       where id = ${keyId} and org_id = ${actor.orgId}
-       for update`)) as unknown as {
-      rows: Array<{
-        id: string;
-        user_id: string;
-        name: string;
-        description: string | null;
-        scopes: unknown;
-        rate_limit_per_min: number | null;
-        is_active: boolean;
-      }>;
-    };
-    const key = existing.rows[0];
-    if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
-
-    if (wantsReactivation && (await hasRevocationRecord(actor.orgId, keyId))) {
-      return NextResponse.json(
-        { error: "this key was revoked; revocation is permanent — create a new key" },
-        { status: 409 },
-      );
-    }
-
-    const storedScopes = Array.isArray(key.scopes)
-      ? key.scopes.filter((s): s is string => typeof s === "string")
-      : [];
-    const storedSet = new Set(storedScopes);
-    const added = fields.scopes ? fields.scopes.filter((s) => !storedSet.has(s)) : [];
-    const finalScopes = fields.scopes ?? storedScopes;
-    const resumes = wantsReactivation && !key.is_active;
-
-    // Privilege ceiling for the two ways PATCH grants authority. Untouched
-    // scopes are never re-checked, so narrowing, metadata edits, suspension,
-    // and revocation stay available to every key-manager.
-    if (!actor.isSuperAdmin && (added.length > 0 || resumes)) {
-      const active = await ownerIsActive(actor.orgId, key.user_id);
-      // Fresh grants to a deactivated owner's key are refused outright: the
-      // trusted entity lens resolves EMPTY for inactive users, which would
-      // hide the owner's stored broader entity policy. A resume re-enables
-      // nothing while the owner stays inactive (use-time auth requires an
-      // active owner), so it keeps the no-effective-authority treatment.
-      if (added.length > 0 && !active) return inactiveOwnerRefusal();
-      if (added.length > 0) {
-        const missing = permissionsOutsideCeiling(gate.permissions, added);
-        if (missing.length > 0) return ceilingRefusal(missing);
-      }
-      // Resuming re-enables exactly the intersection of the key's scopes
-      // with the OWNER's current permissions — inert scopes the owner cannot
-      // use grant nothing, so only that effective authority is ceiling-checked.
-      let effective: string[] = [];
-      if (resumes && active && finalScopes.length > 0) {
-        // An empty set here is valid-but-inert authority (zero), not an
-        // invalid declaration — the resume keeps its no-authority treatment.
-        effective = [
-          ...(resolveKeyScopeAuthority(
-            await ownerEffectivePermissions(actor.orgId, key.user_id),
-            finalScopes,
-          ) ?? []),
-        ];
-        if (effective.length > 0) {
-          const missing = permissionsOutsideCeiling(gate.permissions, effective);
-          if (missing.length > 0) return ceilingRefusal(missing);
-        }
-      }
-      // Entity scope: a subsidiary-restricted editor must not grant the same
-      // permission across all entities through an unrestricted (or wider)
-      // key owner. A resume that re-enables no effective authority grants
-      // nothing, so it needs no entity check.
-      if (added.length > 0 || effective.length > 0) {
-        const ownerLens = await actorAllowedSubsidiaryIds(db, actor.orgId, key.user_id);
-        if (!subsidiaryScopeWithinCeiling(gate.allowedSubsidiaryIds, ownerLens)) {
-          return subsidiaryScopeRefusal(ownerLens);
-        }
-      }
-    }
-
-    const before: Record<string, unknown> = {};
-    const after: Record<string, unknown> = {};
-    const sets: SQL[] = [];
-    if (fields.name !== undefined) {
-      sets.push(sql`name = ${fields.name}`);
-      before.name = key.name;
-      after.name = fields.name;
-    }
-    if (fields.description !== undefined) {
-      sets.push(sql`description = ${fields.description}`);
-      before.description = key.description;
-      after.description = fields.description;
-    }
-    if (fields.scopes !== undefined) {
-      sets.push(sql`scopes = ${JSON.stringify(fields.scopes)}`);
-      before.scopes = key.scopes;
-      after.scopes = fields.scopes;
-    }
-    if (fields.isActive !== undefined) {
-      sets.push(sql`is_active = ${fields.isActive}`);
-      before.is_active = key.is_active;
-      after.is_active = fields.isActive;
-    }
-    if (fields.rateLimitPerMin !== undefined) {
-      sets.push(sql`rate_limit_per_min = ${fields.rateLimitPerMin}`);
-      before.rate_limit_per_min = key.rate_limit_per_min;
-      after.rate_limit_per_min = fields.rateLimitPerMin;
-    }
-
-    await db.execute(sql`
-      update api_keys
-         set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${actor.id}
-       where id = ${keyId} and org_id = ${actor.orgId}`);
-
-    await audit({
-      orgId: actor.orgId,
-      rowId: keyId,
-      action: "update",
-      changes: { before, after },
-      actorId: actor.id,
-    });
-    return NextResponse.json({ ok: true });
-  });
-}
 
 /** Revoke a key permanently while preserving its row and event references. */
-async function legacyDELETE(req: Request) {
-  const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
-  if (gate instanceof NextResponse) return gate;
-  const actor = gate.user;
 
-  const parsedBody3 = await parseJsonBody(req, revokeApiKeyBodySchema);
-  if (!parsedBody3.ok) return parsedBody3.response;
-  const { id } = (parsedBody3.data) as { id?: string };
-  if (!id || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
-
-  return withOrgTransaction(actor.orgId, async () => {
-    const existing = (await db.execute(sql`
-      select id, name, key_prefix, is_active
-        from api_keys
-       where id = ${id} and org_id = ${actor.orgId}
-       for update`)) as unknown as {
-      rows: Array<{ id: string; name: string; key_prefix: string; is_active: boolean }>;
-    };
-    const key = existing.rows[0];
-    if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
-
-    // Destroy the credential hash with a discarded secret. A direct
-    // is_active=true write therefore cannot revive the compromised bearer
-    // (no presented secret can match the destroyed hash, and the API
-    // refuses reactivation of revoked keys). The stored prefix/preview are
-    // deliberately kept: they were already visible while the key was
-    // active, and keeping them keeps the masked display stable across
-    // revoke.
-    const destroyed = generateApiKey();
-    await db.execute(sql`
-      update api_keys
-         set is_active = false,
-             key_hash = ${destroyed.keyHash},
-             updated_at = now(),
-             updated_by = ${actor.id}
-       where id = ${id} and org_id = ${actor.orgId}`);
-
-    await audit({
-      orgId: actor.orgId,
-      rowId: id,
-      action: "delete",
-      changes: {
-        before: {
-          name: key.name,
-          key_prefix: key.key_prefix,
-          is_active: key.is_active,
-          credential_material: "stored",
-        },
-        after: {
-          name: key.name,
-          key_prefix: key.key_prefix,
-          is_active: false,
-          credential_material: "destroyed",
-        },
-      },
-      actorId: actor.id,
-    });
-    return NextResponse.json({ ok: true });
-  });
-}
 
 export const GET = defineRoute({
   permission: "api.keys.manage",
@@ -599,11 +241,107 @@ export const POST = defineRoute({
   permission: "api.keys.manage",
   feature: "apiAccess",
   body: createApiKeyBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz;
+
+    const actor = gate.user;
+
+
+
+
+    const name = typeof body.name === "string" ? body.name.trim() : "";
+    if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+    if (
+      body.description !== undefined &&
+      body.description !== null &&
+      typeof body.description !== "string"
+    ) {
+      return NextResponse.json({ error: "description must be a string" }, { status: 400 });
+    }
+
+    // An omitted or empty scope set is a rejected request, never a
+    // full-permission credential.
+    const scopes = normalizeScopes(body.scopes);
+    if (!scopes) {
+      return NextResponse.json(
+        { error: "at least one scope is required; scopes must be known catalogue keys" },
+        { status: 400 },
+      );
+    }
+
+    // Creation grants the full request, so every scope must sit inside the
+    // editor's own authority. The new key is owned by the editor, so its
+    // subsidiary lens is the editor's own — no cross-entity grant is possible
+    // here; the PATCH path checks the entity ceiling for other owners' keys.
+    if (!actor.isSuperAdmin) {
+      const missing = permissionsOutsideCeiling(gate.permissions, scopes);
+      if (missing.length > 0) return ceilingRefusal(missing);
+    }
+
+    const rate = parseRate(body.rateLimitPerMin);
+    if (rate === false) {
+      return NextResponse.json({ error: "rateLimitPerMin must be a positive integer or blank" }, { status: 400 });
+    }
+    // Default to 120/min when unspecified; null = unlimited.
+    const rateValue = rate === undefined ? 120 : rate;
+
+    // Strict validation: only a complete, timezone-qualified ISO date-time or null
+    // yields a value. Falsy impostors (0, false, "") must not coerce to a
+    // non-expiring (NULL) key — non-expiring is only via explicit null
+    // (omitted is kept as non-expiring for backward compatibility; new
+    // clients should send null). No expiry policy table exists yet, so an
+    // explicit null is currently allowed; a future policy may restrict it.
+    let expiresAt: string | null = null;
+    if (body.expiresAt === undefined || body.expiresAt === null) {
+      expiresAt = null;
+    } else if (typeof body.expiresAt === "string") {
+      if (!z.string().datetime({ offset: true }).safeParse(body.expiresAt).success) {
+        return NextResponse.json({ error: "expiresAt must be an ISO date-time with a timezone or null" }, { status: 400 });
+      }
+      const d = new Date(body.expiresAt);
+      if (d.getTime() <= Date.now()) {
+        return NextResponse.json({ error: "expiresAt must be in the future" }, { status: 400 });
+      }
+      expiresAt = d.toISOString();
+    } else {
+      return NextResponse.json({ error: "expiresAt must be an ISO date-time with a timezone or null" }, { status: 400 });
+    }
+
+    const gen = generateApiKey();
+    const description = typeof body.description === "string" ? body.description.trim() || null : null;
+    const insertedId = await withOrgTransaction(actor.orgId, async () => {
+      const inserted = (await db.execute(sql`
+        insert into api_keys (org_id, user_id, name, description, key_prefix, key_hash,
+                              key_preview, scopes, rate_limit_per_min, is_active, expires_at, created_by, updated_by)
+        values (${actor.orgId}, ${actor.id}, ${name}, ${description},
+                ${gen.keyPrefix}, ${gen.keyHash}, ${gen.keyPreview},
+                ${JSON.stringify(scopes)}, ${rateValue}, true, ${expiresAt}, ${actor.id}, ${actor.id})
+        returning id`)) as unknown as { rows: Array<{ id: string }> };
+      const id = inserted.rows[0]?.id;
+      if (!id) throw new Error("api key insert did not return an id");
+
+      await audit({
+        orgId: actor.orgId,
+        rowId: id,
+        action: "insert",
+        changes: {
+          before: null,
+          after: {
+            name,
+            description,
+            scopes,
+            rate_limit_per_min: rateValue,
+            is_active: true,
+            expires_at: expiresAt,
+          },
+        },
+        actorId: actor.id,
+      });
+      return id;
+    });
+
+    return NextResponse.json({ id: insertedId, plaintext: gen.plaintext }, { status: 201 });
   },
 });
 
@@ -611,11 +349,193 @@ export const PATCH = defineRoute({
   permission: "api.keys.manage",
   feature: "apiAccess",
   body: updateApiKeyBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPATCH(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz;
+
+    const actor = gate.user;
+
+
+
+
+    if (!body.id || !isUuid(body.id)) {
+      return NextResponse.json({ error: "id required" }, { status: 400 });
+    }
+    const keyId = body.id;
+
+    const fields = {
+      name: undefined as string | undefined,
+      description: undefined as string | null | undefined,
+      scopes: undefined as string[] | undefined,
+      isActive: undefined as boolean | undefined,
+      rateLimitPerMin: undefined as number | null | undefined,
+    };
+    if (body.name !== undefined) {
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      if (!name) return NextResponse.json({ error: "name cannot be empty" }, { status: 400 });
+      fields.name = name;
+    }
+    if (body.description !== undefined) {
+      if (body.description !== null && typeof body.description !== "string") {
+        return NextResponse.json({ error: "description must be a string" }, { status: 400 });
+      }
+      fields.description = body.description === null ? null : body.description.trim() || null;
+    }
+    if (body.scopes !== undefined) {
+      // Clearing scopes to [] would mint a key whose grant contract is empty;
+      // a key is narrowed or revoked, never blanked.
+      const scopes = normalizeScopes(body.scopes);
+      if (!scopes) {
+        return NextResponse.json(
+          { error: "at least one scope is required; scopes must be known catalogue keys" },
+          { status: 400 },
+        );
+      }
+      fields.scopes = scopes;
+    }
+    if (body.rateLimitPerMin !== undefined) {
+      const rate = parseRate(body.rateLimitPerMin);
+      if (rate === false) {
+        return NextResponse.json({ error: "rateLimitPerMin must be a positive integer or blank" }, { status: 400 });
+      }
+      fields.rateLimitPerMin = rate;
+    }
+    // isActive is a strict boolean: a truthy non-boolean (e.g. the string
+    // "true") would otherwise slip past the revoked-key reactivation guard below
+    // (which compares against `true`) while still being written to the boolean
+    // column, and any other non-boolean aborts the update with an unhandled
+    // storage error.
+    if (body.isActive !== undefined && typeof body.isActive !== "boolean") {
+      return NextResponse.json({ error: "isActive must be a boolean" }, { status: 400 });
+    }
+    const wantsReactivation = body.isActive === true;
+    if (body.isActive !== undefined) fields.isActive = body.isActive;
+    if (Object.values(fields).every((value) => value === undefined)) {
+      return NextResponse.json({ error: "nothing to update" }, { status: 400 });
+    }
+
+    return withOrgTransaction(actor.orgId, async () => {
+      const existing = (await db.execute(sql`
+        select id, user_id, name, description, scopes, rate_limit_per_min, is_active
+          from api_keys
+         where id = ${keyId} and org_id = ${actor.orgId}
+         for update`)) as unknown as {
+        rows: Array<{
+          id: string;
+          user_id: string;
+          name: string;
+          description: string | null;
+          scopes: unknown;
+          rate_limit_per_min: number | null;
+          is_active: boolean;
+        }>;
+      };
+      const key = existing.rows[0];
+      if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
+
+      if (wantsReactivation && (await hasRevocationRecord(actor.orgId, keyId))) {
+        return NextResponse.json(
+          { error: "this key was revoked; revocation is permanent — create a new key" },
+          { status: 409 },
+        );
+      }
+
+      const storedScopes = Array.isArray(key.scopes)
+        ? key.scopes.filter((s): s is string => typeof s === "string")
+        : [];
+      const storedSet = new Set(storedScopes);
+      const added = fields.scopes ? fields.scopes.filter((s) => !storedSet.has(s)) : [];
+      const finalScopes = fields.scopes ?? storedScopes;
+      const resumes = wantsReactivation && !key.is_active;
+
+      // Privilege ceiling for the two ways PATCH grants authority. Untouched
+      // scopes are never re-checked, so narrowing, metadata edits, suspension,
+      // and revocation stay available to every key-manager.
+      if (!actor.isSuperAdmin && (added.length > 0 || resumes)) {
+        const active = await ownerIsActive(actor.orgId, key.user_id);
+        // Fresh grants to a deactivated owner's key are refused outright: the
+        // trusted entity lens resolves EMPTY for inactive users, which would
+        // hide the owner's stored broader entity policy. A resume re-enables
+        // nothing while the owner stays inactive (use-time auth requires an
+        // active owner), so it keeps the no-effective-authority treatment.
+        if (added.length > 0 && !active) return inactiveOwnerRefusal();
+        if (added.length > 0) {
+          const missing = permissionsOutsideCeiling(gate.permissions, added);
+          if (missing.length > 0) return ceilingRefusal(missing);
+        }
+        // Resuming re-enables exactly the intersection of the key's scopes
+        // with the OWNER's current permissions — inert scopes the owner cannot
+        // use grant nothing, so only that effective authority is ceiling-checked.
+        let effective: string[] = [];
+        if (resumes && active && finalScopes.length > 0) {
+          // An empty set here is valid-but-inert authority (zero), not an
+          // invalid declaration — the resume keeps its no-authority treatment.
+          effective = [
+            ...(resolveKeyScopeAuthority(
+              await ownerEffectivePermissions(actor.orgId, key.user_id),
+              finalScopes,
+            ) ?? []),
+          ];
+          if (effective.length > 0) {
+            const missing = permissionsOutsideCeiling(gate.permissions, effective);
+            if (missing.length > 0) return ceilingRefusal(missing);
+          }
+        }
+        // Entity scope: a subsidiary-restricted editor must not grant the same
+        // permission across all entities through an unrestricted (or wider)
+        // key owner. A resume that re-enables no effective authority grants
+        // nothing, so it needs no entity check.
+        if (added.length > 0 || effective.length > 0) {
+          const ownerLens = await actorAllowedSubsidiaryIds(db, actor.orgId, key.user_id);
+          if (!subsidiaryScopeWithinCeiling(gate.allowedSubsidiaryIds, ownerLens)) {
+            return subsidiaryScopeRefusal(ownerLens);
+          }
+        }
+      }
+
+      const before: Record<string, unknown> = {};
+      const after: Record<string, unknown> = {};
+      const sets: SQL[] = [];
+      if (fields.name !== undefined) {
+        sets.push(sql`name = ${fields.name}`);
+        before.name = key.name;
+        after.name = fields.name;
+      }
+      if (fields.description !== undefined) {
+        sets.push(sql`description = ${fields.description}`);
+        before.description = key.description;
+        after.description = fields.description;
+      }
+      if (fields.scopes !== undefined) {
+        sets.push(sql`scopes = ${JSON.stringify(fields.scopes)}`);
+        before.scopes = key.scopes;
+        after.scopes = fields.scopes;
+      }
+      if (fields.isActive !== undefined) {
+        sets.push(sql`is_active = ${fields.isActive}`);
+        before.is_active = key.is_active;
+        after.is_active = fields.isActive;
+      }
+      if (fields.rateLimitPerMin !== undefined) {
+        sets.push(sql`rate_limit_per_min = ${fields.rateLimitPerMin}`);
+        before.rate_limit_per_min = key.rate_limit_per_min;
+        after.rate_limit_per_min = fields.rateLimitPerMin;
+      }
+
+      await db.execute(sql`
+        update api_keys
+           set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${actor.id}
+         where id = ${keyId} and org_id = ${actor.orgId}`);
+
+      await audit({
+        orgId: actor.orgId,
+        rowId: keyId,
+        action: "update",
+        changes: { before, after },
+        actorId: actor.id,
+      });
+      return NextResponse.json({ ok: true });
+    });
   },
 });
 
@@ -623,10 +543,65 @@ export const DELETE = defineRoute({
   permission: "api.keys.manage",
   feature: "apiAccess",
   body: revokeApiKeyBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyDELETE(replayRequest as never);
+  handler: async ({ authz: routeAuthz }) => {
+
+    const gate = routeAuthz;
+
+    const actor = gate.user;
+
+
+
+
+    if (!id || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+    return withOrgTransaction(actor.orgId, async () => {
+      const existing = (await db.execute(sql`
+        select id, name, key_prefix, is_active
+          from api_keys
+         where id = ${id} and org_id = ${actor.orgId}
+         for update`)) as unknown as {
+        rows: Array<{ id: string; name: string; key_prefix: string; is_active: boolean }>;
+      };
+      const key = existing.rows[0];
+      if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
+
+      // Destroy the credential hash with a discarded secret. A direct
+      // is_active=true write therefore cannot revive the compromised bearer
+      // (no presented secret can match the destroyed hash, and the API
+      // refuses reactivation of revoked keys). The stored prefix/preview are
+      // deliberately kept: they were already visible while the key was
+      // active, and keeping them keeps the masked display stable across
+      // revoke.
+      const destroyed = generateApiKey();
+      await db.execute(sql`
+        update api_keys
+           set is_active = false,
+               key_hash = ${destroyed.keyHash},
+               updated_at = now(),
+               updated_by = ${actor.id}
+         where id = ${id} and org_id = ${actor.orgId}`);
+
+      await audit({
+        orgId: actor.orgId,
+        rowId: id,
+        action: "delete",
+        changes: {
+          before: {
+            name: key.name,
+            key_prefix: key.key_prefix,
+            is_active: key.is_active,
+            credential_material: "stored",
+          },
+          after: {
+            name: key.name,
+            key_prefix: key.key_prefix,
+            is_active: false,
+            credential_material: "destroyed",
+          },
+        },
+        actorId: actor.id,
+      });
+      return NextResponse.json({ ok: true });
+    });
   },
 });

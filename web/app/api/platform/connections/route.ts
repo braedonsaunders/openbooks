@@ -27,7 +27,7 @@ export const runtime = "nodejs";
 const connectionCreateBody = z.object({
   source: z.string().trim().min(1),
   displayName: z.string().optional(),
-  config: z.record(z.string(), z.unknown()).optional(),
+  config: z.record(z.string(), z.json()).optional(),
   secrets: z.record(z.string(), z.string()).optional(),
 }).strict();
 
