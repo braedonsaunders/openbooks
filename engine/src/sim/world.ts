@@ -9,6 +9,8 @@ import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { mul, neg, roundMoney, sum } from "../money/money.ts";
 import { SIM_ORG_PREFIX } from "./db-guard.ts";
 import type { Profile } from "./profiles/index.ts";
+import { provisionResourcingPlan } from "./resourcing-plan.ts";
+import { Rng } from "./rng.ts";
 
 /**
  * Provision a full accounting org for a profile, spanning the entire simulation
@@ -553,7 +555,20 @@ export async function provisionOrg(
 
     await ensureReportDefinitions(orgId);
 
-    return { orgId, bookId, subsidiaryId, fiscalCalendarId, currency: cur, accounts, vendors, customers, actors, periods, employees, timeTypeId, laborItemId, engagements, jobs, subscriptions };
+    const simWorld = {
+      orgId, bookId, subsidiaryId, fiscalCalendarId, currency: cur, accounts,
+      vendors, customers, actors, periods, employees, timeTypeId, laborItemId,
+      engagements, jobs, subscriptions,
+    };
+    if (profile.resourcing) await provisionResourcingPlan({
+      profile,
+      plan: profile.resourcing,
+      world: simWorld,
+      window,
+      rng: Rng.fromSeed(`${profile.id}:${window.startDate}:${window.endDate}`),
+    });
+
+    return simWorld;
   });
 
   try {
