@@ -31,7 +31,7 @@ export const POST = defineRoute({
     const unrestricted = guardUnrestrictedScope(gate);
     if (unrestricted) return unrestricted;
 
-    const body = routeBody as { code?: string };
+    const body = routeBody;
     try {
       return NextResponse.json(
         await installTaxDepreciationPack(

@@ -79,8 +79,8 @@ export const PATCH = defineRoute({
       description: z.string().trim().max(2000).nullable().optional(),
       layout: layoutBody.optional(),
       allowedRoles: z.array(z.string().uuid("allowedRoles must contain role UUIDs")).nullable().optional(),
-      isDefault: z.boolean().optional(),
-      isActive: z.boolean().optional(),
+    isDefault: z.boolean({ error: "isDefault must be a boolean" }).optional(),
+    isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
     })
     .refine((body) => Object.keys(body).length > 0, "provide at least one form field to update"),
   handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {

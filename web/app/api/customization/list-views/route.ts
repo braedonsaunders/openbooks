@@ -32,7 +32,7 @@ const postBodySchema0 = z.strictObject({
   name: z.string().trim().min(1, "name is required").max(200),
   scope: z.enum(["org", "user"]),
   config: configBody.optional(),
-  isDefault: z.boolean().optional(),
+  isDefault: z.boolean({ error: "isDefault must be a boolean" }).optional(),
 });
 
 export { runtime } from "@/lib/api/route";

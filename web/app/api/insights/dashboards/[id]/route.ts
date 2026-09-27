@@ -23,7 +23,7 @@ const layoutBody = z.array(z.strictObject({
   w: z.number().int().min(1).max(12),
   h: z.number().int().min(1).max(24),
 })).max(1000, "layout cannot contain more than 1000 cards");
-const revisionBody = z.string().regex(
+const revisionBody = z.string({ error: "expectedUpdatedAt is required; reload and review the latest revision" }).regex(
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/,
   "expectedUpdatedAt must be the exact dashboard revision",
 );

@@ -15,7 +15,7 @@ export { runtime } from "@/lib/api/route";
 // offers this named remedy and then previews again.
 const rebuildBody = z.strictObject({
   bookId: z.string().uuid("bookId must be a valid id").nullable().optional(),
-  assetIds: z.array(z.string().uuid("assetIds must contain valid ids")).min(1, "select at least one asset"),
+  assetIds: z.array(z.string().uuid("assetIds must contain valid ids"), { error: "assetIds must be a list" }).min(1, "select at least one asset"),
 });
 
 function bad(error: string, field?: string, status = 422) {

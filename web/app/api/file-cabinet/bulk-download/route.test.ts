@@ -57,7 +57,7 @@ const mockSources = new Map<string, string>([
 const _hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
     const mocked = new Map<string, string>([
-      ['../../../../lib/authz', 'mock:authz'],
+      ['@/lib/authz', 'mock:authz'],
       ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
       ['../../../../lib/file-zip', 'mock:file-zip'],
       ['../lib', 'mock:cabinet-lib'],
@@ -136,17 +136,18 @@ test('bulk download rejects an all-malformed selection without touching the mani
   const response = await post(['not-a-uuid', 42, null])
 
   assert.equal(response.status, 400)
-  assert.deepEqual(await response.json(), { error: 'no files selected' })
+  assert.equal((await response.json()).issues[0].path, 'fileIds.0')
   assert.equal(state.manifestCalls, 0)
   assert.equal(state.buildCalls, 0)
 })
 
-test('bulk download strips malformed ids so one bad entry cannot poison the manifest query', async () => {
+test('bulk download refuses malformed ids before the manifest query', async () => {
   reset()
   const good = '123e4567-e89b-12d3-a456-426614174000'
 
   const response = await post([good, 'not-a-uuid'])
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(state.manifestIds, [good])
+  assert.equal(response.status, 400)
+  assert.equal((await response.json()).issues[0].path, 'fileIds.1')
+  assert.equal(state.manifestCalls, 0)
 })

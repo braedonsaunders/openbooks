@@ -28,7 +28,7 @@ const createCardBodySchema = z.strictObject({
   name: z.string().trim().max(200).optional(),
   description: z.string().trim().max(2000).nullable().optional(),
   query: insightQueryBody.optional(),
-  vizType: z.enum(INSIGHT_VIZ_TYPES).optional(),
+  vizType: z.enum(INSIGHT_VIZ_TYPES, { error: "vizType must be a supported visualization type" }).optional(),
   vizSettings: z.record(z.string().min(1), z.json()).optional(),
   allowedRoles: z.array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys")).nullable().optional(),
 });

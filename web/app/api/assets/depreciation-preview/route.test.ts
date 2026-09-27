@@ -215,9 +215,7 @@ const mockDb = `
   export async function withOrgTransaction(_orgId, work) {
     return work()
   }
-  export async function withBypassContext(work) {
-    return work()
-  }
+  export async function withBypassContext(orgOrWork, work) { return (work ?? orgOrWork)() } export { withBypassContext as withOrgContext }
 `;
 
 const mockSources = new Map<string, string>([
@@ -351,10 +349,11 @@ test("unknown book, period, and asset ids are refused by name", async () => {
     [{ assetIds: ["00000000-0000-4000-8000-00000000a099"], throughDate: "2026-09-30" }, "unknown_asset"],
     [{ throughDate: "2026-02-30" }, "invalid_through_date"],
   ];
-  for (const [body, code] of cases) {
+  for (const [index, [body, code]] of cases.entries()) {
     const res = await preview(body);
     assert.equal(res.status, 422);
-    assert.equal(((await res.json()) as { error: string }).error, code);
+    const responseBody = (await res.json()) as { error: string; issues?: { path: string }[] };
+    assert.equal(index === 3 ? responseBody.issues?.[0]?.path : responseBody.error, index === 3 ? "throughDate" : code);
   }
 });
 
@@ -385,11 +384,7 @@ test("the posting date is fingerprinted and validated", async () => {
   const dated = ((await datedResponse.json()) as PreviewBody).fingerprint;
   assert.notEqual(plain, dated);
   const bad = await preview({ throughDate: "2026-09-30", postingDate: "2026-13-40" });
-  assert.equal(bad.status, 422);
-  assert.equal(
-    ((await bad.json()) as { error: string }).error,
-    "invalid_posting_date",
-  );
+  assert.deepEqual([bad.status, ((await bad.json()) as { issues?: { path: string }[] }).issues?.[0]?.path], [422, "postingDate"]);
 });
 
 test("a posting date outside a line's period warns instead of failing", async () => {

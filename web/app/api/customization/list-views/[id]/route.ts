@@ -88,8 +88,8 @@ export const PATCH = defineRoute({
     .strictObject({
       name: z.string().trim().min(1, "name cannot be empty").max(200).optional(),
       config: configBody.optional(),
-      isDefault: z.boolean().optional(),
-      isActive: z.boolean().optional(),
+    isDefault: z.boolean({ error: "isDefault must be a boolean" }).optional(),
+    isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
     })
     .refine((body) => Object.keys(body).length > 0, "provide at least one view field to update"),
   handler: async ({ request: _req, authz, params, body: routeBody }) => {

@@ -20,7 +20,7 @@ import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
 import { isoDate } from "../../../../lib/api/json";
 import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.strictObject({
-  regime: z.string().trim().min(1, "regime is required"),
+  regime: z.string().trim().min(1, "regime cannot be empty").optional(),
   taxYear: z.number().int().min(1000).max(9999),
   yearStart: isoDate("yearStart must be a valid calendar date").optional(),
   yearEnd: isoDate("yearEnd must be a valid calendar date").optional(),
@@ -86,14 +86,7 @@ export const POST = defineRoute({
   feature: "fixedAssets",
   body: postBodySchema0,
   handler: async ({ request: _req, authz: gate, body: routeBody }) => {
-    const body = routeBody as {
-      regime?: string;
-      taxYear?: number;
-      yearStart?: string;
-      yearEnd?: string;
-      bookId?: string;
-      subsidiaryId?: string;
-    };
+    const body = routeBody;
     const availableRegimes = await listTaxRegimes(gate.user.orgId);
     const regime = body.regime || availableRegimes[0]?.code;
     if (!regime || !availableRegimes.some((item) => item.code === regime)) {

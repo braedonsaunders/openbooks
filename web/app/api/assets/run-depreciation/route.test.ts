@@ -316,9 +316,7 @@ const mockDb = `
   export async function withOrgTransaction(_orgId, work) {
     return work()
   }
-  export async function withBypassContext(work) {
-    return work()
-  }
+  export async function withBypassContext(orgOrWork, work) { return (work ?? orgOrWork)() } export { withBypassContext as withOrgContext }
 `;
 
 const mockSources = new Map<string, string>([

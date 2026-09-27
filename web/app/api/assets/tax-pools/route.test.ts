@@ -221,7 +221,7 @@ test("GET applies the caller subsidiary scope to tax pool periods", async () => 
 test("POST refuses an explicit subsidiary outside the caller scope before running the pool", async () => {
   reset(new Set([SUB_VISIBLE]));
 
-  const response = await post({ taxYear: 2026, subsidiaryId: "sub-other" });
+  const response = await post({ taxYear: 2026, subsidiaryId: "00000000-0000-4000-8000-0000000000e2" });
 
   assert.equal(response.status, 404);
   assert.deepEqual(await response.json(), { error: "not_found" });

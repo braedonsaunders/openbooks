@@ -25,7 +25,7 @@ const layoutBody = z.array(z.strictObject({
   y: z.number().int().min(0).max(999),
   w: z.number().int().min(1).max(12),
   h: z.number().int().min(1).max(24),
-})).max(1000, "layout cannot contain more than 1000 cards");
+}), { error: "layout must be an array of card placements" }).max(1000, "layout cannot contain more than 1000 cards");
 const createDashboardBodySchema = z.strictObject({
   name: z.string().trim().max(200).optional(),
   description: z.string().trim().max(2000).nullable().optional(),

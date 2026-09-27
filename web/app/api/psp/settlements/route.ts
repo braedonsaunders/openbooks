@@ -16,10 +16,7 @@ import {
   savePspProviderConfig,
   summarizeSettlement,
 } from "@openbooks/engine/src/payments/psp-settlement.ts";
-import {
-  businessToday,
-  isIsoCalendarDate,
-} from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import {
   can,
   guardSubsidiaryScope,
@@ -34,11 +31,11 @@ import {
   subsidiaryFeatureEnabled,
 } from "../../../../lib/features";
 import { notFound } from "@/lib/api/responses";
-import { exactMoney } from "@/lib/api/json";
+import { exactMoney, isoDate } from "@/lib/api/json";
 const provider = z.enum(["stripe", "recurly", "chargebee"]);
 const accountReference = z.uuid().nullable().optional();
 const subsidiaryReference = z.uuid().nullable().optional();
-const calendarDateShape = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "must be YYYY-MM-DD");
+const calendarDateShape = isoDate("must be a valid calendar date");
 const providerCurrency = z.string().trim().regex(/^[A-Za-z]{3}$/, "must be a three-letter currency code");
 const recurlyAmount = (field: string) =>
   exactMoney(`${field} must be decimal text; JSON numbers are refused`);
@@ -286,12 +283,12 @@ export const POST = defineRoute({
             userId,
             parsed,
             {
-              bankAccountId: body.bankAccountId,
-              feeAccountId: body.feeAccountId,
-              disputeAccountId: body.disputeAccountId,
-              fxAccountId: body.fxAccountId,
-              clearingAccountId: body.clearingAccountId,
-              subsidiaryId: body.subsidiaryId,
+              bankAccountId: body.bankAccountId ?? undefined,
+              feeAccountId: body.feeAccountId ?? undefined,
+              disputeAccountId: body.disputeAccountId ?? undefined,
+              fxAccountId: body.fxAccountId ?? undefined,
+              clearingAccountId: body.clearingAccountId ?? undefined,
+              subsidiaryId: body.subsidiaryId ?? undefined,
             },
             authz.allowedSubsidiaryIds,
           );

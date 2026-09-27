@@ -271,11 +271,10 @@ test('card create validates viz type and query before inserting', async () => {
   const key = '00000000-0000-4000-8000-00000000d010'
 
   const badViz = await post(key, { ...BODY, vizType: 'hologram' })
-  assert.equal(badViz.status, 422)
-  assert.deepEqual(await badViz.json(), { error: 'invalid viz type' })
+  assert.deepEqual([badViz.status, ((await badViz.json()) as { issues?: { path: string }[] }).issues?.[0]?.path], [400, 'vizType'])
 
   const badQuery = await post(key, { ...BODY, query: { source: 'nope' } })
-  assert.equal(badQuery.status, 422)
+  assert.deepEqual([badQuery.status, ((await badQuery.json()) as { issues?: { path: string }[] }).issues?.[0]?.path], [400, 'query'])
 
   assert.equal(state.rows.size, 0, 'validation failures must not insert')
 })
