@@ -1721,6 +1721,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "res_requests.reason",
   "res_requests.status",
   "res_retainer_drawdowns.state",
+  "res_retainers.currency",
   "res_retainers.kind",
   "res_retainers.state",
   "resource_grants.access",
