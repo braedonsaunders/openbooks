@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
+import { stubModules } from "../../../../testing/stub-modules";
 
 // The price preview is the drawer's pricing-time source: its response must
 // carry the full lineage the drawer echoes as the line's recorded basis
@@ -27,21 +27,10 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
-  resolve(specifier, context, nextResolve) {
-    return nextResolve(specifier, context);
-  },
-  load(url, context, nextLoad) {
-    if (url === "mock:items-price-basis-authz") {
-      return { format: "module", source: mockAuthz, shortCircuit: true };
-    }
-    return nextLoad(url, context);
-  },
-});
+stubModules({ authz: mockAuthz });
 
 const routeUrl = "./route.ts?items-price-basis-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import(
