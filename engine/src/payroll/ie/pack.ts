@@ -343,11 +343,6 @@ const IE_EDITION_SCAFFOLD: PayrollEditionScaffold = {
       purpose: "the year's PAYE credits and bands, PRSI class rates and USC bands — every figure placeheld",
       template: `/** {year} Irish statutory tables — TRANSCRIBE, do not invent.\n * PAYE: Revenue Tax and Duty Manual Part 42-04-35A (Employer's Guide to PAYE).\n * USC: revenue.ie Standard rates and thresholds of USC ({year}).\n * PRSI: Department of Social Protection SW14 Contribution Rates and User Guide ({year}).\n */\nexport const IE_RATES_{year} = { year: {year}, status: "draft" as const };\n`,
     },
-    {
-      path: "engine/src/payroll/ie/rates-{year}.test.ts",
-      purpose: "the failing conformance stub for Revenue's published calculation examples",
-      template: `import { test } from "node:test";\nimport assert from "node:assert/strict";\n\ntest("{year} published Revenue examples", () => {\n  assert.ok(\n    false,\n    "paste at least one published {year} Revenue PAYE/USC worked example before paying an IE employee in {year}",\n  );\n});\n`,
-    },
   ],
   barrels: [],
   steps: [
@@ -356,8 +351,12 @@ const IE_EDITION_SCAFFOLD: PayrollEditionScaffold = {
     "Replace every placeholder in rates-{year}.ts and record each publication's edition or version.",
     "Cross-verify: the USC band arithmetic against Revenue's worked examples, and the PRSI "
     + "class A thresholds against SW14.",
-    "Paste the published examples into the stub test and flip the edition to \"published\".",
-    "Run the payroll suite: the {year} stubs must pass and the CA/US goldens must not move.",
+    "Add citation-backed GOLDENS to engine/src/payroll/ie/conformance.test.ts. Paste independently worked Revenue examples into GOLDENS, for example:\n"
+    + "  { year: {year}, label: \"PAYE worked example\", citation: \"Revenue Employer's Guide to PAYE, {year} edition\", input: { pay: \"...\" }, expected: { paye: \"...\" } },",
+    "Add applicable refusal cases to REFUSALS in engine/src/payroll/ie/conformance.test.ts using its row shape: "
+    + "{ label: \"...\", input: { pay: \"...\", payDate: \"...\" }, refusal: /remedy/ }.",
+    "Flip the edition to \"published\", then run the payroll suite: the {year} GOLDENS "
+    + "must pass and the existing IE goldens must not move.",
   ],
 };
 
