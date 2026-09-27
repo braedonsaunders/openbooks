@@ -1,4 +1,5 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
+import { notFound } from '@/lib/api/responses'
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { withReportBookColumn } from '../../../../../../lib/report-book-label'
@@ -47,7 +48,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     return notFound("record")
   }
   if ((kind === 'availability' || kind === 'replenishment') && !(await isFeatureEnabled(gate.user.orgId, 'warehousing'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound('record')
   }
 
   const url = new URL(req.url)
