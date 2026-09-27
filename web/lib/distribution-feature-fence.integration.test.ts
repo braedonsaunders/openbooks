@@ -40,7 +40,7 @@ registerHooks({ resolve(specifier, context, next) {
   const parent = context.parentURL ?? ''
   const authzImport = specifier === './authz' || specifier.endsWith('/lib/authz')
   const fenced = ['/lib/api/route', '/lib/feature-gates', '/warehouse/view', '/api/admin/setup/', '/reports/',
-    '/api/reports/statement/', '/picks/view', '/shipments/view', '/sales-orders/view', '/purchase-orders/view',
+    '/api/reports/statement/', '/api/scan/resolve', '/picks/view', '/shipments/view', '/sales-orders/view', '/purchase-orders/view',
     '/api/sales-orders/', '/api/purchase-orders/', '/returns/view', '/api/returns/'].some((path) => parent.includes(path))
   if (authzImport && fenced) return { shortCircuit: true, url: AUTHZ_DOUBLE }
   const reportCopy = ['/reports/', '/lib/availability-report', '/sales-orders/view', '/purchase-orders/view'].some((path) => parent.includes(path))
@@ -67,6 +67,9 @@ const { loadAvailability } = await import('../app/(app)/reports/availability/vie
 const { loadReplenishment } = await import('../app/(app)/reports/replenishment/view')
 const { loadReportsHub } = await import('../app/(app)/reports/view')
 const statementExport = await import('../app/api/reports/statement/[kind]/export/route')
+const scanResolveRoute = await import('../app/api/scan/resolve/route')
+const itemIdentifiers = await import('@openbooks/engine/src/inventory/item-identifiers.ts')
+const { optionalScanResolver } = await import('./scan')
 const returnsRoute = await import('../app/api/returns/route')
 const returnRoute = await import('../app/api/returns/[id]/route')
 const returnReceiveRoute = await import('../app/api/returns/[id]/receive/route')
@@ -571,5 +574,39 @@ test('drop shipping off hides drawer actions, returns bare route 404s, and prese
     await setFeature(org.orgId, 'dropShipping', true)
     assert.deepEqual(await dropShipEvidence(org.orgId), before, 'turning the feature off and on preserves routes, ship-to, confirmation documents and audit history')
     assert.ok(confirmation.purchaseReceipt.id)
+  })
+})
+
+// ---- Customer part numbers and scanning -----------------------------------
+
+test('customer part numbers and barcode resolution refuse when their feature keys are off', { skip: !DB }, async () => {
+  await withFencedOrg(async (org) => {
+    await setFeature(org.orgId, 'barcodeScanning', false)
+    await setFeature(org.orgId, 'customerPartNumbers', false)
+    assert.equal(optionalScanResolver(false, () => ({ field: 'item' })), undefined,
+      'shared pickers receive no scan resolver, so the scan affordance is absent')
+
+    const response = await scanResolveRoute.POST(json('POST', '/api/scan/resolve', { field: 'item', value: 'SKU-UNKNOWN' }))
+    assert.equal(response.status, 404)
+    assert.deepEqual(await response.json(), { error: 'not_found' })
+
+    await assert.rejects(
+      withBypassContext(() => itemIdentifiers.resolveScan(db, org.orgId, { field: 'item', value: 'SKU-UNKNOWN' })),
+      (error: unknown) => error instanceof itemIdentifiers.ScanRefusal
+        && error.name === 'ScanRefusal'
+        && error.code === 'barcode_scanning_disabled'
+        && error.remedy === 'turn on Barcode scanning in Company Settings → Features',
+    )
+
+    const customerRef = await setupWrite('POST', 'customer-item-refs', {
+      customerId: org.customerId, itemId: org.items.fifo, customerSku: 'OFF-CUSTOMER-SKU',
+    })
+    const identifier = await setupWrite('POST', 'item-identifiers', {
+      itemId: org.items.fifo, kind: 'internal', value: 'OFF-ITEM-ID',
+    })
+    assert.equal(customerRef.status, 404)
+    assert.deepEqual(await customerRef.json(), { error: 'not_found' })
+    assert.equal(identifier.status, 404)
+    assert.deepEqual(await identifier.json(), { error: 'not_found' })
   })
 })
