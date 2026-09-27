@@ -12,8 +12,8 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } fro
  * explanation, every API route answers a bare 404, the engine refuses by name
  * with the Features remedy, Setup writes are refused, and the assistant tool
  * is withheld. Turning the feature off and on again preserves every row and
- * its audit history. Later distribution surfaces add their own section below
- * and reuse these helpers.
+ * its audit history. Later sections add imports to the top import block, never
+ * after a test registration, so test discovery completes before execution.
  */
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
@@ -76,6 +76,26 @@ const returnSourcesRoute = await import('../app/api/returns/sources/route')
 const { loadReturns } = await import('../app/(app)/returns/view')
 const returnEngine = await import('@openbooks/engine/src/sales/returns.ts')
 const { RETURNS_TOOLS } = await import('./assistant/tools-returns')
+const pickRoutes = await import('../app/api/picks/route')
+const pickRoute = await import('../app/api/picks/[id]/route')
+const pickReleaseRoute = await import('../app/api/picks/[id]/release/route')
+const pickVoidRoute = await import('../app/api/picks/[id]/void/route')
+const pickCandidatesRoute = await import('../app/api/picks/candidates/route')
+const shipmentRoutes = await import('../app/api/shipments/route')
+const shipmentRoute = await import('../app/api/shipments/[id]/route')
+const shipmentCompleteRoute = await import('../app/api/shipments/[id]/complete/route')
+const shipmentVoidRoute = await import('../app/api/shipments/[id]/void/route')
+const shipmentTrackingRoute = await import('../app/api/shipments/[id]/send-tracking/route')
+const backordersRoute = await import('../app/api/sales-orders/[id]/backorders/route')
+const { loadPicks } = await import('../app/(app)/picks/view')
+const { loadShipments } = await import('../app/(app)/shipments/view')
+const { orderFulfillmentActions } = await import('../app/(app)/sales-orders/view')
+const { enabledListSource } = await import('./list/sources')
+const { guardReportEntity, hiddenReportEntityKeys } = await import('./report-authz')
+const { FULFILLMENT_TOOLS } = await import('./assistant/tools-fulfillment')
+const fulfillment = await import('@openbooks/engine/src/sales/fulfillment.ts')
+const { backorderPosition, cancelOrderLineRemainder } = await import('@openbooks/engine/src/sales/backorders.ts')
+const { salesOrderLineRemainders } = await import('@openbooks/engine/src/records/order-line-remainders.ts')
 
 const FEATURES_REMEDY = /turn on Warehousing in Company Settings → Features/
 
@@ -190,7 +210,7 @@ test('warehousing off hides every surface, preserves its rows, and keeps a suspe
     for (const tool of WAREHOUSE_TOOLS) {
       assert.equal(canRunTool(state.authz as never, tool, features), false, `${tool.name} is withheld`)
     }
-    await engineRefusal(() => WAREHOUSE_TOOLS[0]!.execute({}, state.authz as never))
+    assert.deepEqual(await WAREHOUSE_TOOLS[0]!.execute({}, state.authz as never), { ok: false, error: 'warehousing_feature_disabled' })
 
     await assert.rejects(
       withBypassContext(() => receiveInventory(org.orgId, actorId, {
@@ -246,33 +266,12 @@ test('availability and replenishment vanish with warehousing, and releasable bac
     }
     await engineRefusal(() => availability.getAvailableToPromise(db, org.orgId, { ...query, itemId: org.items.fifo }))
     await engineRefusal(() => replenishmentProposals(db, org.orgId, query))
-    await engineRefusal(() => itemTool.execute({ itemId: org.items.fifo }, state.authz as never))
-    await engineRefusal(() => replenishmentTool.execute({}, state.authz as never))
+    assert.deepEqual(await itemTool.execute({ itemId: org.items.fifo }, state.authz as never), { ok: false, error: 'warehousing_feature_disabled' })
+    assert.deepEqual(await replenishmentTool.execute({}, state.authz as never), { ok: false, error: 'warehousing_feature_disabled' })
   })
 })
 
 // ---- Fulfillment ----------------------------------------------------------
-
-const pickRoutes = await import('../app/api/picks/route')
-const pickRoute = await import('../app/api/picks/[id]/route')
-const pickReleaseRoute = await import('../app/api/picks/[id]/release/route')
-const pickVoidRoute = await import('../app/api/picks/[id]/void/route')
-const pickCandidatesRoute = await import('../app/api/picks/candidates/route')
-const shipmentRoutes = await import('../app/api/shipments/route')
-const shipmentRoute = await import('../app/api/shipments/[id]/route')
-const shipmentCompleteRoute = await import('../app/api/shipments/[id]/complete/route')
-const shipmentVoidRoute = await import('../app/api/shipments/[id]/void/route')
-const shipmentTrackingRoute = await import('../app/api/shipments/[id]/send-tracking/route')
-const backordersRoute = await import('../app/api/sales-orders/[id]/backorders/route')
-const { loadPicks } = await import('../app/(app)/picks/view')
-const { loadShipments } = await import('../app/(app)/shipments/view')
-const { orderFulfillmentActions } = await import('../app/(app)/sales-orders/view')
-const { enabledListSource } = await import('./list/sources')
-const { guardReportEntity, hiddenReportEntityKeys } = await import('./report-authz')
-const { FULFILLMENT_TOOLS } = await import('./assistant/tools-fulfillment')
-const fulfillment = await import('@openbooks/engine/src/sales/fulfillment.ts')
-const { backorderPosition, cancelOrderLineRemainder } = await import('@openbooks/engine/src/sales/backorders.ts')
-const { salesOrderLineRemainders } = await import('@openbooks/engine/src/records/order-line-remainders.ts')
 
 const FULFILLMENT_REMEDY = 'Turn on Warehousing and Fulfillment on Company Settings → Features'
 
