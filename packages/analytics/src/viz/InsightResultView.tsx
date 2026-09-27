@@ -97,14 +97,16 @@ export function InsightResultView({
                 {spec.columns.map((c) => (
                   <td
                     key={c.key}
+                    aria-label={result.undefinedLabels?.[i]?.[c.key]}
                     className={
                       'px-3 py-1.5 ' +
                       (c.type === 'currency' || c.type === 'number'
                         ? 'text-right tabular-nums'
-                        : 'text-left text-slate-700 dark:text-slate-300')
+                        : 'text-left text-slate-700 dark:text-slate-300') +
+                      (result.undefinedLabels?.[i]?.[c.key] ? ' text-slate-400 dark:text-slate-500' : '')
                     }
                   >
-                    {valueLabel(c, row[c.key]) ?? formatCell(row[c.key], c.type)}
+                    {valueLabel(c, row[c.key]) ?? formatCell(row[c.key], c.type, c.format, c.scale)}
                   </td>
                 ))}
               </tr>

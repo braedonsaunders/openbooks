@@ -180,7 +180,7 @@ export function customQueryReferencesBook(q: ReportCustomQuery): boolean {
 /** True when the measure aggregates a txn-currency money column (a value
  *  denominated in the row's transaction currency, not the org base). */
 export function isTxnCurrencyMeasure(entity: ReportEntity, m: ReportMeasure): boolean {
-  if (m.fn !== 'sum' && m.fn !== 'avg' && m.fn !== 'min' && m.fn !== 'max') return false
+  if (m.fn !== 'sum' && m.fn !== 'avg' && m.fn !== 'min' && m.fn !== 'max' && m.fn !== 'opening' && m.fn !== 'closing') return false
   if (!m.column) return false
   return entityColumn(entity, m.column)?.txnCurrency === true
 }
@@ -189,7 +189,7 @@ export function isTxnCurrencyMeasure(entity: ReportEntity, m: ReportMeasure): bo
  *  mixes denominations or bases when buckets combine). Counts and distinct
  *  counts never blend. */
 export function isMoneyBlendingMeasure(entity: ReportEntity, m: ReportMeasure): boolean {
-  if (m.fn !== 'sum' && m.fn !== 'avg' && m.fn !== 'min' && m.fn !== 'max') return false
+  if (m.fn !== 'sum' && m.fn !== 'avg' && m.fn !== 'min' && m.fn !== 'max' && m.fn !== 'opening' && m.fn !== 'closing') return false
   if (!m.column) return false
   return entityColumn(entity, m.column)?.kind === 'money'
 }
@@ -197,7 +197,7 @@ export function isMoneyBlendingMeasure(entity: ReportEntity, m: ReportMeasure): 
 /** True when the measure aggregates functional-base money (GL base amounts
  *  stamped per line in the owning subsidiary's base_currency). */
 export function isBaseMoneyMeasure(entity: ReportEntity, m: ReportMeasure): boolean {
-  if (m.fn !== 'sum' && m.fn !== 'avg' && m.fn !== 'min' && m.fn !== 'max') return false
+  if (m.fn !== 'sum' && m.fn !== 'avg' && m.fn !== 'min' && m.fn !== 'max' && m.fn !== 'opening' && m.fn !== 'closing') return false
   if (!m.column) return false
   return entityColumn(entity, m.column)?.baseMoney === true
 }
@@ -495,7 +495,7 @@ function compileSummarize(
   // Resolve breakouts (group-by dimensions) and measures from the catalog.
   const breakouts = (q.breakouts ?? []).filter((b) => columnRef(entity, b.column))
   let measures = (q.measures ?? []).filter(
-    (m) => m.fn === 'count' || (m.column && columnRef(entity, m.column)),
+    (m) => m.fn === 'count' || m.fn === 'formula' || (m.column && columnRef(entity, m.column)),
   )
   measures = measures.filter((m) => REPORT_AGG_FNS.includes(m.fn))
   if (measures.length === 0) measures = [{ fn: 'count' }]
@@ -506,7 +506,7 @@ function compileSummarize(
   for (const m of measures) {
     if (isSnapshotSum(entity, m)) {
       throw new Error(
-        `cannot sum '${m.column}' on '${entity.key}': it is a running snapshot (each row already carries the cumulative total) — use the 'latest' aggregate for the end value, or sum the underlying additive column`,
+        `cannot sum '${m.column}' on '${entity.key}': it is a running snapshot (each row already carries the cumulative total) — use the 'opening' or 'closing' aggregate for a period balance, or sum the underlying additive column`,
       )
     }
   }
@@ -529,31 +529,48 @@ function compileSummarize(
     && opts.allowedSubsidiaryIds != null && opts.allowedSubsidiaryIds.length === 1
 
   const startMonth = opts.fiscalStartMonth && opts.fiscalStartMonth >= 1 && opts.fiscalStartMonth <= 12 ? opts.fiscalStartMonth : 1
-  const dimSelect = breakouts.map((b, i) => `${dimExpr(entity, b, startMonth)} AS "d${i}"`)
-  const measSelect = measures.map((m, i) => `${measureExpr(entity, m)} AS "m${i}"`)
-
   const params = new SqlParams()
   const whereParts = implicitWhere(entity, orgId, params, opts)
   const from = bindReportFromAsOf(entity.from, opts.asOf, (value) => params.add(value))
   const filters = compileCustomFilters(entity, q, params)
   if (filters) whereParts.push(`(${filters})`)
+  const measureFilters = measures.map((measure) =>
+    measure.filter ? compileRuleGroup(entity, measure.filter, params) : null,
+  )
+  const hasSemiAdditive = measures.some((measure) => measure.fn === 'opening' || measure.fn === 'closing')
+  const dimSelect = breakouts.map((b, i) =>
+    hasSemiAdditive ? `"d${i}" AS "d${i}"` : `${dimExpr(entity, b, startMonth)} AS "d${i}"`,
+  )
+  const measSelect = hasSemiAdditive
+    ? measures.map((m, i) => `${semiAdditiveMeasureExpr(m, i, measureFilters[i] ?? null)} AS "m${i}"`)
+    : measures.map((m, i) => `${measureExpr(entity, m, measureFilters[i] ?? null)} AS "m${i}"`)
 
   // Order: sectioned summaries read as a ledger — enum dims follow their
   // CATALOG option order (a payroll journal lists earnings before deductions
   // before employer contributions), other dims alphabetically; a temporal
   // trend reads chronologically; otherwise rank by the first measure (top-N).
   const firstMeasureOrdinal = breakouts.length + 1
-  const sectioned = !!q.groupBy && breakouts.some((b) => b.column === q.groupBy && !b.bin)
+  const sectioned = !!q.groupBy && breakouts.some((b) => b.column === q.groupBy)
   const sectionedDimOrder = (b: ReportBreakout, i: number): string => {
     const column = entityColumn(entity, b.column)
     if (!b.bin && (column?.kind === 'enum' || column?.kind === 'boolean') && column.options?.length) {
       // Options are server-authored catalog constants, single-quoted safely.
       const list = column.options.map((option) => `'${option.replace(/'/g, "''")}'`).join(', ')
-      return `array_position(ARRAY[${list}]::text[], ${columnRef(entity, b.column)}) ASC NULLS LAST`
+      const ref = hasSemiAdditive ? `"d${i}"` : columnRef(entity, b.column)
+      return `array_position(ARRAY[${list}]::text[], ${ref}) ASC NULLS LAST`
     }
     return `${i + 1} ASC`
   }
-  const orderSql =
+  const explicitFormulaSort = q.sorts?.find((sort) => measures.some((measure) => measure.fn === 'formula' && measure.key === sort.column))
+  const formulaSort = explicitFormulaSort ?? (measures[0]?.fn === 'formula' && measures[0].key
+    ? { column: measures[0].key, direction: 'desc' as const }
+    : undefined)
+  const formulaSortValue = formulaSort
+    ? formulaOrderExpr(entity, measures, measureFilters, formulaSort.column, hasSemiAdditive)
+    : null
+  const orderSql = formulaSortValue
+    ? `ORDER BY ${formulaSortValue} ${formulaSort!.direction.toUpperCase()} NULLS LAST${breakouts.length ? `, ${breakouts.map((_, i) => `${i + 1} ASC`).join(', ')}` : ''}`
+    :
     breakouts.length === 0
       ? ''
       : sectioned
@@ -574,11 +591,19 @@ function compileSummarize(
   })
   const censusRefs = census.censusRefs
   const censusCTE = census.censusCTE(from, whereParts.join(' AND '))
-  const bookGroupCount = census.bookGroupCount
+  const bookGroupCount = hasSemiAdditive && census.bookGroupCount.length
+    ? [`COUNT(DISTINCT "__book") AS "__book_group_n"`]
+    : census.bookGroupCount
+  const semiAdditiveCte = hasSemiAdditive
+    ? buildSemiAdditiveCte(entity, breakouts, measures, measureFilters, from, whereParts.join(' AND '), startMonth)
+    : null
   const text = [
-    `${censusCTE}SELECT ${[...dimSelect, ...measSelect, ...censusRefs, ...bookGroupCount].join(', ')}`,
-    `FROM ${from}`,
-    `WHERE ${whereParts.join(' AND ')}`,
+    semiAdditiveCte
+      ? `${censusCTE}${censusCTE ? ', ' : 'WITH '}${semiAdditiveCte}`
+      : censusCTE,
+    `SELECT ${[...dimSelect, ...measSelect, ...censusRefs, ...bookGroupCount, ...(formulaSortValue ? [`${formulaSortValue} AS "__formula_sort"`] : [])].join(', ')}`,
+    `FROM ${semiAdditiveCte ? '__temporal_rows' : from}`,
+    semiAdditiveCte ? '' : `WHERE ${whereParts.join(' AND ')}`,
     breakouts.length > 0 ? `GROUP BY ${breakouts.map((_, i) => i + 1).join(', ')}` : '',
     orderSql,
     `LIMIT ${limit}`,
@@ -752,31 +777,155 @@ function dimExpr(entity: ReportEntity, b: ReportBreakout, startMonth = 1): strin
 }
 
 /** SQL for an aggregate measure. Identifiers come from the catalog only. */
-function measureExpr(entity: ReportEntity, m: ReportMeasure): string {
-  if (m.fn === 'count') return 'COUNT(*)::int'
-  const ref = columnRef(entity, m.column ?? '')!
+function measureExpr(entity: ReportEntity, m: ReportMeasure, filter: string | null = null): string {
+  if (m.fn === 'formula') return 'NULL::numeric'
+  if (m.fn === 'opening' || m.fn === 'closing') {
+    if (!entity.timeKey) throw new Error(`measure '${m.key ?? m.label ?? m.fn}' uses ${m.fn}, but '${entity.key}' has no time key`)
+    throw new Error(`${m.fn} measures require the semi-additive query path`)
+  }
+  const ref = m.fn === 'count' ? null : columnRef(entity, m.column ?? '')!
+  const aggregate = (sql: string) => filter ? `${sql} FILTER (WHERE ${filter})` : sql
+  if (m.fn === 'count') return `${filter ? `COUNT(*) FILTER (WHERE ${filter})` : 'COUNT(*)'}::int`
   switch (m.fn) {
     case 'count_distinct':
-      return `COUNT(DISTINCT ${ref})::int`
+      return `${filter ? `COUNT(DISTINCT ${ref}) FILTER (WHERE ${filter})` : `COUNT(DISTINCT ${ref})`}::int`
     case 'latest': {
       // Exact end-of-window value of a running figure: the value carried by
       // the chronologically last row in the group.
       if (!entity.latestOrderExpr) {
         throw new Error(`entity ${entity.key} does not support the 'latest' aggregate`)
       }
-      return `(ARRAY_AGG(${ref} ORDER BY ${entity.latestOrderExpr}))[1]`
+      const arrayAgg = `ARRAY_AGG(${ref} ORDER BY ${entity.latestOrderExpr})`
+      return filter ? `(${arrayAgg} FILTER (WHERE ${filter}))[1]` : `(${arrayAgg})[1]`
     }
     case 'sum':
-      return `SUM(${ref})`
+      return aggregate(`SUM(${ref})`)
     case 'avg':
-      return averageSql(ref)
+      return aggregate(averageSql(ref!))
     case 'min':
-      return `MIN(${ref})`
+      return aggregate(`MIN(${ref})`)
     case 'max':
-      return `MAX(${ref})`
+      return aggregate(`MAX(${ref})`)
     default:
-      return 'COUNT(*)::int'
+      return aggregate('COUNT(*)::int')
   }
+}
+
+function semiAdditiveMeasureExpr(measure: ReportMeasure, index: number, filter: string | null): string {
+  if (measure.fn === 'formula') return 'NULL::numeric'
+  const where = [
+    measure.fn === 'opening' ? '"__time" = "__first_time"' : measure.fn === 'closing' ? '"__time" = "__last_time"' : null,
+    filter ? `"__f${index}"` : null,
+  ].filter(Boolean).join(' AND ')
+  const filterSql = where ? ` FILTER (WHERE ${where})` : ''
+  if (measure.fn === 'count') return `COUNT(*)${filterSql}`
+  const ref = `"__v${index}"`
+  switch (measure.fn) {
+    case 'count_distinct': return `COUNT(DISTINCT ${ref})${filterSql}`
+    case 'sum': return `SUM(${ref})${filterSql}`
+    case 'avg': return averageSql(ref) + filterSql
+    case 'min': return `MIN(${ref})${filterSql}`
+    case 'max': return `MAX(${ref})${filterSql}`
+    case 'latest': {
+      const values = `ARRAY_AGG(${ref} ORDER BY "__latest_rank")`
+      return filterSql ? `(${values}${filterSql})[1]` : `(${values})[1]`
+    }
+    case 'opening':
+    case 'closing': return `SUM(${ref})${filterSql}`
+    default: return `COUNT(*)${filterSql}`
+  }
+}
+
+function buildSemiAdditiveCte(
+  entity: ReportEntity,
+  breakouts: readonly ReportBreakout[],
+  measures: readonly ReportMeasure[],
+  filters: readonly (string | null)[],
+  from: string,
+  where: string,
+  startMonth: number,
+): string {
+  if (measures.some((measure) => measure.fn === 'latest') && !entity.latestOrderExpr) {
+    throw new Error(`entity '${entity.key}' does not support the 'latest' aggregate`)
+  }
+  if (!entity.timeKey) throw new Error(`opening/closing measures require a time key on '${entity.key}'`)
+  const timeRef = columnRef(entity, entity.timeKey)
+  if (!timeRef) throw new Error(`time key '${entity.timeKey}' is not a column on '${entity.key}'`)
+  const sourcePartition = breakouts.map((breakout) => dimExpr(entity, breakout, startMonth))
+  const sourcePartitionSql = sourcePartition.length ? `PARTITION BY ${sourcePartition.join(', ')}` : ''
+  const bucketPartitionSql = breakouts.length
+    ? `PARTITION BY ${breakouts.map((_, index) => `"d${index}"`).join(', ')}`
+    : ''
+  const base = [
+    ...breakouts.map((breakout, index) => `${dimExpr(entity, breakout, startMonth)} AS "d${index}"`),
+    ...measures.map((measure, index) => {
+      const value = measure.fn === 'count' ? '1::int' : measure.fn === 'formula' ? 'NULL::numeric' : columnRef(entity, measure.column ?? '')!
+      return `${value} AS "__v${index}"`
+    }),
+    ...measures.flatMap((_, index) => filters[index] ? [`CASE WHEN (${filters[index]}) THEN TRUE ELSE FALSE END AS "__f${index}"`] : []),
+    `${timeRef} AS "__time"`,
+    ...(entity.bookScope ? [`${entity.bookScope.column} AS "__book"`] : []),
+    ...(measures.some((measure) => measure.fn === 'latest') && entity.latestOrderExpr
+      ? [`ROW_NUMBER() OVER (${sourcePartitionSql ? `${sourcePartitionSql} ` : ''}ORDER BY ${entity.latestOrderExpr}) AS "__latest_rank"`]
+      : []),
+  ]
+  const temporal = [
+    `MIN("__time") OVER (${bucketPartitionSql}) AS "__first_time"`,
+    `MAX("__time") OVER (${bucketPartitionSql}) AS "__last_time"`,
+  ]
+  return `__measure_rows AS (SELECT ${base.join(', ')} FROM ${from} WHERE ${where}), __temporal_rows AS (SELECT *, ${temporal.join(', ')} FROM __measure_rows)`
+}
+
+function formulaOrderExpr(
+  entity: ReportEntity,
+  measures: readonly ReportMeasure[],
+  filters: readonly (string | null)[],
+  key: string,
+  semiAdditive: boolean,
+): string {
+  const keyIndex = new Map(measures.flatMap((measure, index) => measure.key ? [[measure.key, index] as const] : []))
+  const active = new Set<number>()
+  const aggregateExpr = (index: number): string => {
+    const measure = measures[index]!
+    if (measure.fn !== 'formula') {
+      return semiAdditive
+        ? semiAdditiveMeasureExpr(measure, index, filters[index] ?? null)
+        : measureExpr(entity, measure, filters[index] ?? null)
+    }
+    if (!measure.expr || active.has(index)) throw new Error(`formula measure '${measure.key ?? index}' cannot be used for sorting`)
+    active.add(index)
+    const expression = formulaExprSql(measure.expr, aggregateExpr, keyIndex)
+    const guards = (measure.guards ?? []).map((guard) => {
+      const ref = keyIndex.get(guard.measure)
+      if (ref === undefined) throw new Error(`formula measure '${measure.key}' has an unknown guard measure '${guard.measure}'`)
+      const value = aggregateExpr(ref)
+      return guard.when === 'zero' ? `${value} = 0` : `${value} IS NULL`
+    })
+    active.delete(index)
+    return guards.length ? `CASE WHEN ${guards.join(' OR ')} THEN NULL ELSE (${expression}) END` : `(${expression})`
+  }
+  const index = keyIndex.get(key)
+  if (index === undefined) throw new Error(`formula sort key '${key}' does not resolve`)
+  return aggregateExpr(index)
+}
+
+function formulaExprSql(
+  expr: NonNullable<ReportMeasure['expr']>,
+  aggregateExpr: (index: number) => string,
+  keyIndex: ReadonlyMap<string, number>,
+): string {
+  if ('ref' in expr) {
+    const index = keyIndex.get(expr.ref)
+    if (index === undefined) throw new Error(`formula references unknown measure '${expr.ref}'`)
+    return aggregateExpr(index)
+  }
+  if ('const' in expr) {
+    if (!/^[+-]?\d+(?:\.\d+)?$/.test(expr.const)) throw new Error('formula contains an invalid decimal constant')
+    return `(${expr.const})::numeric`
+  }
+  const left = formulaExprSql(expr.left, aggregateExpr, keyIndex)
+  const right = formulaExprSql(expr.right, aggregateExpr, keyIndex)
+  return expr.op === '/' ? `(${left} / NULLIF(${right}, 0))` : `(${left} ${expr.op} ${right})`
 }
 
 // --- labels & defaults (shared by run.ts and the studio) ----------------------
@@ -789,6 +938,9 @@ const AGG_FN_LABEL: Record<ReportAggFn, string> = {
   min: 'Min',
   max: 'Max',
   latest: 'Latest',
+  opening: 'Opening',
+  closing: 'Closing',
+  formula: 'Formula',
 }
 
 export function labelFor(entity: ReportEntity, key: string): string {

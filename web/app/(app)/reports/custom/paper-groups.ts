@@ -23,6 +23,7 @@ export function resultGroupsForPaper(
     subtitle: group.subtitle,
     columns: group.columns,
     rows: group.rows,
+    undefinedCells: group.undefinedCells,
     money: group.money,
     align: group.align,
     totalRows: group.totalRows,

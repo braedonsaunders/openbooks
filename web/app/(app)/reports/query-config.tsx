@@ -18,6 +18,11 @@ import {
 } from '@openbooks/reports'
 import { reportColumnGroup } from '../../../lib/report-builder-catalog'
 
+// These editor controls cannot author expressions or configure time keys.
+const BUILDER_AGG_FNS = REPORT_AGG_FNS.filter(
+  (fn) => fn !== 'opening' && fn !== 'closing' && fn !== 'formula',
+)
+
 /**
  * Shared query-config editors (rows-mode column picker, summarize-mode
  * breakouts + measures) reused by the custom-report builder AND the
@@ -467,7 +472,7 @@ export function SummarizeConfig({
                   })
                 }}
               >
-                {REPORT_AGG_FNS.map((fn) => (
+                {BUILDER_AGG_FNS.map((fn) => (
                   <option key={fn} value={fn}>
                     {tReports(`aggs.${fn}`)}
                   </option>

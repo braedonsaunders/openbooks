@@ -28,7 +28,7 @@ test('sum of the YTD snapshot refuses instead of counting every stub many times 
   // honest aggregate.
   assert.throws(
     () => summarize([{ fn: 'sum', column: 'ytd_amount' }]),
-    /ytd_amount.*snapshot.*latest|snapshot.*ytd_amount.*latest/,
+    /ytd_amount.*snapshot.*opening.*closing/,
   )
 })
 

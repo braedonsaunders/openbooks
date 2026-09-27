@@ -105,9 +105,13 @@ function exactTooltip(params: unknown): string {
     if (typeof point !== 'object' || point === null) return String(point)
     const item = point as { name?: unknown; axisValueLabel?: unknown; seriesName?: unknown; data?: unknown; value?: unknown }
     const data = typeof item.data === 'object' && item.data !== null
-      ? item.data as { exactValue?: unknown }
+      ? item.data as { exactValue?: unknown; undefinedLabel?: unknown; format?: unknown; scale?: unknown }
       : null
-    const exact = typeof data?.exactValue === 'string' ? formatCell(data.exactValue, 'currency') : String(item.value ?? '')
+    const exact = typeof data?.undefinedLabel === 'string'
+      ? escapeTooltipHtml(data.undefinedLabel)
+      : typeof data?.exactValue === 'string'
+        ? formatCell(data.exactValue, data.format === 'money' ? 'currency' : 'number', data.format === 'percent' ? 'percent' : data.format as ResultColumn['format'], typeof data.scale === 'number' ? data.scale : undefined)
+        : String(item.value ?? '')
     const label = item.seriesName ?? item.name ?? ''
     const category = item.axisValueLabel == null ? '' : `${escapeTooltipHtml(item.axisValueLabel)} — `
     return `${category}${escapeTooltipHtml(label)}: ${exact}`
@@ -149,18 +153,30 @@ export function buildVizSpec(
     return { kind: 'empty', reason: 'pickFields' }
   }
 
-  const currencyData = new Map<string, Array<{ value: number; exactValue: string }>>()
+  const currencyData = new Map<string, Array<{ value: number | null; exactValue?: string; format?: string; undefinedLabel?: string }>>()
+  const formulaData = new Map<string, Array<{ value: number | null; exactValue?: string; format?: string; scale?: number; undefinedLabel?: string }>>()
   for (const measure of values) {
-    if (!isCurrency(measure)) continue
-    const points: Array<{ value: number; exactValue: string }> = []
-    for (const row of result.rows) {
+    const points: Array<{ value: number | null; exactValue?: string; format?: string; scale?: number; undefinedLabel?: string }> = []
+    for (const [rowIndex, row] of result.rows.entries()) {
+      const undefinedLabel = result.undefinedLabels?.[rowIndex]?.[measure.key]
+      if (undefinedLabel) {
+        points.push({ value: null, undefinedLabel })
+        continue
+      }
+      if (!isCurrency(measure) && !measure.format) continue
       const raw = row[measure.key]
-      const exactValue = raw == null ? '0.0000' : typeof raw === 'string' ? raw : null
-      const value = exactCurrencyCoordinate(exactValue)
-      if (exactValue === null || value === null) return { kind: 'empty', reason: 'unsupportedMoneyPrecision' }
-      points.push({ value, exactValue })
+      if (isCurrency(measure)) {
+        const exactValue = raw == null ? '0.0000' : typeof raw === 'string' ? raw : null
+        const value = exactCurrencyCoordinate(exactValue)
+        if (exactValue === null || value === null) return { kind: 'empty', reason: 'unsupportedMoneyPrecision' }
+        points.push({ value, exactValue, format: 'money' })
+      } else {
+        const exactValue = raw == null ? undefined : String(raw)
+        points.push({ value: raw == null ? null : num(raw), ...(exactValue ? { exactValue } : {}), format: measure.format, scale: measure.scale })
+      }
     }
-    currencyData.set(measure.key, points)
+    if (isCurrency(measure)) currencyData.set(measure.key, points)
+    else if (measure.format || points.some((point) => point.undefinedLabel)) formulaData.set(measure.key, points)
   }
 
   const categories = result.rows.map(
@@ -174,14 +190,16 @@ export function buildVizSpec(
       name: categories[i],
       ...(isCurrency(measure)
         ? currencyData.get(measure.key)![i]
-        : { value: num(r[measure.key]) }),
+        : formulaData.has(measure.key)
+          ? formulaData.get(measure.key)![i]
+          : { value: num(r[measure.key]) }),
     }))
     return {
       kind: 'chart',
       chartType: 'pie',
       option: {
         color: PALETTE,
-        tooltip: { trigger: 'item', formatter: isCurrency(measure) ? exactTooltip : undefined },
+        tooltip: { trigger: 'item', formatter: isCurrency(measure) || !!measure.format ? exactTooltip : undefined },
         legend: settings.hideLegend ? undefined : { type: 'scroll', bottom: 0, textStyle: { color: AXIS_TEXT } },
         series: [
           {
@@ -200,6 +218,7 @@ export function buildVizSpec(
   // bar | line | area — shared cartesian axes.
   const horizontal = vizType === 'bar' && settings.horizontal === true
   const currencyAxis = values.every((v) => isCurrency(v))
+  const percentAxis = !currencyAxis && values.length > 0 && values.every((v) => v.format === 'percent')
 
   const catAxis = {
     type: 'category' as const,
@@ -210,7 +229,7 @@ export function buildVizSpec(
   }
   const valAxis = {
     type: 'value' as const,
-    axisLabel: { color: AXIS_TEXT, formatter: currencyAxis ? compactCurrencyFormatter : undefined },
+    axisLabel: { color: AXIS_TEXT, formatter: currencyAxis ? compactCurrencyFormatter : percentAxis ? (value: number) => `${value}%` : undefined },
     splitLine: { lineStyle: { color: SPLIT_LINE } },
   }
 
@@ -220,7 +239,7 @@ export function buildVizSpec(
       type: vizType === 'bar' ? 'bar' : 'line',
       data: isCurrency(v)
         ? currencyData.get(v.key)!
-        : result.rows.map((r) => num(r[v.key])),
+        : formulaData.get(v.key) ?? result.rows.map((r) => num(r[v.key])),
       itemStyle: { color: PALETTE[i % PALETTE.length] },
       label: { show: settings.showValues === true, color: AXIS_TEXT },
     }
@@ -245,7 +264,7 @@ export function buildVizSpec(
     option: {
       color: PALETTE,
       grid: { left: 12, right: 16, top: 24, bottom: settings.hideLegend ? 28 : 44, containLabel: true },
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: values.some(isCurrency) ? exactTooltip : undefined },
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: values.some((value) => isCurrency(value) || !!value.format) ? exactTooltip : undefined },
       legend:
         settings.hideLegend || series.length <= 1
           ? undefined
@@ -317,8 +336,14 @@ function compactCurrencyFormatter(value: number): string {
  *  the rest of the app uses. Money arrives from pg as exact decimal strings
  *  (numeric → string); those strings are formatted EXACTLY — never through
  *  Number(), which cannot represent them past 2^53. */
-export function formatCell(value: unknown, type: ResultColumn['type']): string {
+export function formatCell(value: unknown, type: ResultColumn['type'], format?: ResultColumn['format'], scale?: number): string {
   if (value == null || value === '') return '—'
+  if (format === 'percent' || format === 'ratio' || format === 'number') {
+    const formatted = typeof value === 'string'
+      ? formatDecimalString(value, 0, scale ?? decimalScale(value) ?? (format === 'percent' ? 2 : 4))
+      : String(value)
+    return `${formatted ?? String(value)}${format === 'percent' ? '%' : ''}`
+  }
   if (type === 'currency') {
     if (typeof value === 'string') {
       const scale = decimalScale(value)

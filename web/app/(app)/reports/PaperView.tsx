@@ -40,6 +40,8 @@ export type PaperGroup = {
   subtitle?: string
   columns: string[]
   rows: PaperCell[][]
+  /** Explanation for undefined formula cells, aligned to the rendered rows. */
+  undefinedCells?: (string | null)[][]
   align?: ('left' | 'right' | 'center')[]
   /** Per-column: format the cell as currency (else plain number/text). */
   money?: boolean[]
@@ -158,16 +160,19 @@ export function PaperView({
                             const negative = typeof cell === 'number' && cell < 0
                             const href = group.links?.[ri]?.[ci]
                             const cellLink = group.cellLinks?.[ri]?.[ci]
+                            const undefinedLabel = group.undefinedCells?.[ri]?.[ci] ?? undefined
                             const drill = group.drills?.[ri]?.[ci]
                               ?? (isNumericCell(cell) ? group.drillTarget ?? data.defaultDrillTarget : undefined)
                             const text = fmt(cell, isMoney)
                             return (
                               <TableCell
                                 key={ci}
+                                aria-label={undefinedLabel}
                                 className={cn(
                                   a === 'right' && 'text-right tabular-nums',
                                   a === 'center' && 'text-center',
                                   negative && 'text-red-600 dark:text-red-400',
+                                  undefinedLabel && 'text-slate-400 dark:text-slate-500',
                                 )}
                               >
                                 {cellLink?.kind === 'transaction' ? (

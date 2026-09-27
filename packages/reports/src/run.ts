@@ -37,6 +37,8 @@ import {
   type ReportTemporalBin,
 } from './types'
 import { fiscalMonthOffset, fiscalYearOf, utcCivilDate } from './fiscal-calendar'
+import { evaluateFormulaMeasures } from './formula'
+import { validateReportMeasureSet } from './validate'
 
 /** Structural pg-client contract (pg.Pool / pg.Client / pg.PoolClient). */
 export type PgQueryable = {
@@ -86,6 +88,93 @@ export type ReportRunLabels = {
   enumValue?: (v: string) => string | null | undefined
   /** Display label for the entity itself (the summary band's Source value). */
   entityLabel?: (entity: ReportEntity) => string
+  /** Localized explanation used when a formula is undefined. */
+  undefinedFormula?: () => string
+  /** Localized total-row explanation for non-additive formula inputs. */
+  notTotalled?: () => string
+}
+
+function formulaNotTotalledKeys(measures: readonly ReportMeasure[], totalable: readonly boolean[]): Set<string> {
+  const keyIndex = new Map(measures.flatMap((measure, index) => measure.key ? [[measure.key, index] as const] : []))
+  const cache = new Map<number, boolean>()
+  const active = new Set<number>()
+  const canTotal = (index: number): boolean => {
+    if (cache.has(index)) return cache.get(index)!
+    if (active.has(index)) return false
+    const measure = measures[index]!
+    if (measure.fn !== 'formula') return !!totalable[index]
+    active.add(index)
+    const refs: string[] = []
+    const walk = (expr: NonNullable<ReportMeasure['expr']>) => {
+      if ('ref' in expr) refs.push(expr.ref)
+      else if ('op' in expr) { walk(expr.left); walk(expr.right) }
+    }
+    if (measure.expr) walk(measure.expr)
+    const result = refs.every((key) => {
+      const target = keyIndex.get(key)
+      return target !== undefined && canTotal(target)
+    })
+    active.delete(index)
+    cache.set(index, result)
+    return result
+  }
+  return new Set(measures.flatMap((measure, index) =>
+    measure.fn === 'formula' && !canTotal(index) && measure.key ? [measure.key] : [],
+  ))
+}
+
+function formulaTotalValues(
+  measures: readonly ReportMeasure[],
+  aggregateValues: readonly unknown[],
+  totalable: readonly boolean[],
+  labels: ReportRunLabels,
+): ReturnType<typeof evaluateFormulaMeasures> {
+  return evaluateFormulaMeasures(measures, aggregateValues, formulaNotTotalledKeys(measures, totalable), {
+    undefined: labels.undefinedFormula?.(),
+    notTotalled: labels.notTotalled?.(),
+  })
+}
+
+function totalComponents(
+  raws: readonly Record<string, unknown>[],
+  measures: readonly ReportMeasure[],
+  formulaTotalable: readonly boolean[],
+  names: (rows: Record<string, unknown>[]) => string[],
+  entity: ReportEntity,
+  breakouts: readonly ReportBreakout[],
+): (string | null)[] {
+  return measures.map((measure, index) => {
+    if (measure.fn === 'formula' || !formulaTotalable[index]) return null
+    return aggregateMeasureTotal(raws, index, measure, entity, breakouts, names)
+  })
+}
+
+function writeFormulaTotals(
+  entity: ReportEntity,
+  row: (string | number | null)[],
+  measures: readonly ReportMeasure[],
+  visibleMeasureIndices: readonly number[],
+  components: readonly unknown[],
+  offset: number,
+  formulaTotalable: readonly boolean[],
+  labels: ReportRunLabels,
+  undefinedCells: (string | null)[],
+): void {
+  const results = formulaTotalValues(measures, components, formulaTotalable, labels)
+  results.forEach((result, index) => {
+    if (measures[index]?.fn !== 'formula') return
+    const visibleIndex = visibleMeasureIndices.indexOf(index)
+    if (visibleIndex < 0) return
+    const target = offset + visibleIndex
+    if (result.undefinedLabel) {
+      row[target] = result.undefinedLabel
+      undefinedCells[target] = result.undefinedLabel
+    } else {
+      row[target] = result.value === null
+        ? null
+        : formatMeasureValue(entity, measures[index]!, result.value)
+    }
+  })
 }
 
 export type RunCustomQueryOpts = CompileCustomQueryOpts & {
@@ -153,7 +242,7 @@ export async function runCustomQuery(
       compiled,
       compiled.hasDenominationCensus ? parseDenominationCounts(rows[0]) : {},
     )
-    result = shapeSummarizeResult(
+    result = shapeSummarizeRows(
       entity, compiled.breakouts, compiled.measures, rows, labels,
       compiled.groupBy, compiled.totals ?? null, singles, fiscalStartMonth,
     )
@@ -299,7 +388,7 @@ function shapeRowsResult(
 
 // --- summarize mode ----------------------------------------------------------
 
-function shapeSummarizeResult(
+export function shapeSummarizeRows(
   entity: ReportEntity,
   breakouts: NonNullable<ReportCustomQuery['breakouts']>,
   measures: NonNullable<ReportCustomQuery['measures']>,
@@ -310,12 +399,37 @@ function shapeSummarizeResult(
   singles: DenominationSingles = { txn: true, base: true, book: true },
   fiscalStartMonth = 1,
 ): ReportRunResult {
+  const visibleMeasureIndices = measures.flatMap((measure, index) => measure.hidden ? [] : [index])
+  const visibleMeasureIndex = new Map(visibleMeasureIndices.map((index, visibleIndex) => [index, visibleIndex]))
+  const visibleMeasures = visibleMeasureIndices.map((index) => measures[index]!)
   const measureHeading = (m: (typeof measures)[number]) =>
     labels.measure?.(entity, m) ?? measureLabel(entity, m)
   const columns = [
     ...breakouts.map((b) => labels.breakout?.(entity, b) ?? breakoutLabel(entity, b)),
-    ...measures.map(measureHeading),
+    ...visibleMeasures.map(measureHeading),
   ]
+  const undefinedByRow = new Map<Record<string, unknown>, (string | null)[]>()
+  dataRows.forEach((row) => {
+    const undefinedCells = Array.from({ length: columns.length }, () => null as string | null)
+    const formulaValues = evaluateFormulaMeasures(
+      measures,
+      measures.map((_, index) => row[`m${index}`]),
+      new Set(),
+      { undefined: labels.undefinedFormula?.(), notTotalled: labels.notTotalled?.() },
+    )
+    formulaValues.forEach((result, index) => {
+      if (measures[index]?.fn !== 'formula') return
+      const visibleIndex = visibleMeasureIndex.get(index)
+      if (visibleIndex === undefined) return
+      if (result.undefinedLabel) {
+        row[`m${index}`] = result.undefinedLabel
+        undefinedCells[breakouts.length + visibleIndex] = result.undefinedLabel
+      } else {
+        row[`m${index}`] = result.value
+      }
+    })
+    undefinedByRow.set(row, undefinedCells)
+  })
   const rowNames = new Map<Record<string, unknown>, string>(dataRows.map((row, index) => {
     const dimensions = breakouts.map((breakout, i) => {
       const value = formatBreakoutValue(row[`d${i}`], breakout.bin, fiscalStartMonth)
@@ -332,8 +446,12 @@ function shapeSummarizeResult(
         ? formatBreakoutValue(row[`d${i}`], b.bin, fiscalStartMonth)
         : formatCellValue(entity, b.column, row[`d${i}`], labels),
     ),
-    ...measures.map((m, i) => formatMeasureValue(entity, m, row[`m${i}`])),
+    ...visibleMeasureIndices.map((i, visibleIndex) => undefinedByRow.get(row)?.[breakouts.length + visibleIndex]
+      ?? formatMeasureValue(entity, measures[i]!, row[`m${i}`])),
   ])
+  const formulaTotalable = measures.map((measure) =>
+    measure.fn === 'sum' || measure.fn === 'count' || measure.fn === 'opening' || measure.fn === 'closing',
+  )
 
   // Exact per-row scope of each aggregate bucket: eq for plain breakouts,
   // a date range for binned buckets, is-empty for null buckets. A row whose
@@ -359,13 +477,13 @@ function shapeSummarizeResult(
   })
 
   const measureIsMoney = (m: (typeof measures)[number]) =>
-    m.fn !== 'count'
-    && !!m.column
-    && entity.columns.find((col) => col.key === m.column)?.kind === 'money'
-  const moneyFlags = [...breakouts.map(() => false), ...measures.map(measureIsMoney)]
+    m.fn === 'formula' ? m.format === 'money' : m.fn !== 'count'
+      && !!m.column
+      && entity.columns.find((col) => col.key === m.column)?.kind === 'money'
+  const moneyFlags = [...breakouts.map(() => false), ...visibleMeasures.map(measureIsMoney)]
   const alignFlags = [
     ...breakouts.map(() => 'left' as const),
-    ...measures.map(() => 'right' as const),
+    ...visibleMeasures.map(() => 'right' as const),
   ]
 
   // A derived footer row (e.g. Net pay = earnings − deductions) over a set of
@@ -379,13 +497,15 @@ function shapeSummarizeResult(
     labelPos: number,
     summableFlags: boolean[],
     measureOffset: number,
-  ): (string | number | null)[] | null => {
+  ): { row: (string | number | null)[]; undefinedCells: (string | null)[] } | null => {
     const fieldIndex = breakouts.findIndex((b) => b.column === spec.plus.field && !b.bin)
     const minusIndex = spec.minus ? breakouts.findIndex((b) => b.column === spec.minus!.field && !b.bin) : fieldIndex
     if (fieldIndex < 0 || minusIndex < 0) return null
     const row = Array.from({ length: width }, () => null as string | number | null)
     row[labelPos] = spec.label
+    const formulaComponents: (string | null)[] = measures.map(() => null)
     measures.forEach((m, mi) => {
+      const visibleIndex = visibleMeasureIndex.get(mi)
       if (!summableFlags[mi]) return
       const plusRows = raws.filter((r) => String(r[`d${fieldIndex}`] ?? '') === spec.plus.value)
       const plusInputs = plusRows.map((r) => r[`m${mi}`])
@@ -394,19 +514,21 @@ function shapeSummarizeResult(
         : []
       const minusInputs = minusRows.map((r) => r[`m${mi}`])
       if (plusInputs.every((v) => v == null) && minusInputs.every((v) => v == null)) return
-      const total = subtractExactDecimals(
-        sumExactDecimals(plusInputs, namesForRows(plusRows)),
-        sumExactDecimals(minusInputs, namesForRows(minusRows)),
-      )
-      row[measureOffset + mi] = shapeTotalValue(m.fn, total)
+      const plusTotal = aggregateMeasureTotal(plusRows, mi, m, entity, breakouts, namesForRows)
+      const minusTotal = spec.minus ? aggregateMeasureTotal(minusRows, mi, m, entity, breakouts, namesForRows) : '0'
+      const total = subtractExactDecimals(plusTotal, minusTotal)
+      if (visibleIndex !== undefined) row[measureOffset + visibleIndex] = shapeTotalValue(m.fn, total)
+      if (formulaTotalable[mi]) formulaComponents[mi] = total
     })
-    return row
+    const undefinedCells = Array.from({ length: width }, () => null as string | null)
+    writeFormulaTotals(entity, row, measures, visibleMeasureIndices, formulaComponents, measureOffset, formulaTotalable, labels, undefinedCells)
+    return { row, undefinedCells }
   }
 
   // Sectioned summarize: one titled group per bucket of the groupBy breakout
   // (the payroll journal's per-employee blocks), that column lifted out of the
   // table. Row scope keys stay COMPLETE so drills still hit the exact bucket.
-  const sectionIndex = groupBy ? breakouts.findIndex((b) => b.column === groupBy && !b.bin) : -1
+  const sectionIndex = groupBy ? breakouts.findIndex((b) => b.column === groupBy) : -1
   let groups: ReportGroup[]
   if (sectionIndex >= 0 && dataRows.length > 0) {
     const drop = (list: unknown[]) => list.filter((_, i) => i !== sectionIndex)
@@ -423,13 +545,14 @@ function shapeSummarizeResult(
     // sum-of-snapshot plans and totals stay blank here. avg/min/max stay
     // blank.
     const summable = measures.map(
-      (m) => (m.fn === 'sum' || m.fn === 'count' || m.fn === 'latest') && !isSnapshotSum(entity, m),
+      (m) => (m.fn === 'sum' || m.fn === 'count' || m.fn === 'latest' || m.fn === 'opening' || m.fn === 'closing') && !isSnapshotSum(entity, m),
     )
     const totalLabel = (label: string) => labels.subtotal?.(label) ?? `${label} — total`
     // Subtotal level: the first breakout that ISN'T the section column.
     const levelIndex = breakouts.findIndex((_, i) => i !== sectionIndex)
     type Bucket = {
       rows: (string | number | null)[][]
+      undefinedCells: (string | null)[][]
       keys: (ReportRowScopeRule[] | null)[]
       raw: Record<string, unknown>[]
       totalRows: number[]
@@ -440,8 +563,9 @@ function shapeSummarizeResult(
       const key = row[`d${sectionIndex}`] == null
         ? (labels.none?.() ?? '(none)')
         : String(rows[ri]![sectionIndex] ?? row[`d${sectionIndex}`])
-      const bucket = buckets.get(key) ?? { rows: [], keys: [], raw: [], totalRows: [], dataCount: 0 }
+      const bucket = buckets.get(key) ?? { rows: [], undefinedCells: [], keys: [], raw: [], totalRows: [], dataCount: 0 }
       bucket.rows.push(drop(rows[ri]!) as (string | number | null)[])
+      bucket.undefinedCells.push(drop(undefinedByRow.get(row) ?? columns.map(() => null)) as (string | null)[])
       bucket.keys.push(rowKeys[ri] ?? null)
       bucket.raw.push(row)
       bucket.dataCount += 1
@@ -453,7 +577,7 @@ function shapeSummarizeResult(
     // raw aggregates, never over display strings.
     if (totals?.sections && levelIndex >= 0 && breakouts.length >= 2) {
       for (const bucket of buckets.values()) {
-        const out: Bucket = { rows: [], keys: [], raw: [], totalRows: [], dataCount: bucket.dataCount }
+        const out: Bucket = { rows: [], undefinedCells: [], keys: [], raw: [], totalRows: [], dataCount: bucket.dataCount }
         const levelPos = drop(breakouts.map((_, i) => i)).indexOf(levelIndex)
         let levelRaw: Record<string, unknown>[] = []
         let levelValue: string | null = null
@@ -463,14 +587,21 @@ function shapeSummarizeResult(
           const totalsRow = sectionColumns.map(() => null as string | number | null)
           totalsRow[levelPos] = totalLabel(levelDisplay ?? levelValue)
           measures.forEach((m, mi) => {
+            const visibleIndex = visibleMeasureIndex.get(mi)
             if (!summable[mi]) return
             const inputs = levelRaw.map((raw) => raw[`m${mi}`])
             if (inputs.every((v) => v === null || v === undefined)) return
-            const total = sumExactDecimals(inputs, namesForRows(levelRaw))
-            totalsRow[breakouts.length - 1 + mi] = shapeTotalValue(m.fn, total)
+            const total = m.fn === 'opening' || m.fn === 'closing'
+              ? aggregateMeasureTotal(levelRaw, mi, m, entity, breakouts, namesForRows)
+              : sumExactDecimals(inputs, namesForRows(levelRaw))
+            if (visibleIndex !== undefined) totalsRow[breakouts.length - 1 + visibleIndex] = shapeTotalValue(m.fn, total)
           })
+          const components = totalComponents(levelRaw, measures, formulaTotalable, namesForRows, entity, breakouts)
+          const totalUndefined = Array.from({ length: sectionColumns.length }, () => null as string | null)
+          writeFormulaTotals(entity, totalsRow, measures, visibleMeasureIndices, components, breakouts.length - 1, formulaTotalable, labels, totalUndefined)
           out.totalRows.push(out.rows.length)
           out.rows.push(totalsRow)
+          out.undefinedCells.push(totalUndefined)
           out.keys.push(null)
         }
         bucket.rows.forEach((row, i) => {
@@ -481,10 +612,12 @@ function shapeSummarizeResult(
           levelDisplay = row[levelPos] == null ? null : String(row[levelPos])
           levelRaw.push(bucket.raw[i]!)
           out.rows.push(row)
+          out.undefinedCells.push(bucket.undefinedCells[i]!)
           out.keys.push(bucket.keys[i] ?? null)
         })
         emit()
         bucket.rows = out.rows
+        bucket.undefinedCells = out.undefinedCells
         bucket.keys = out.keys
         bucket.totalRows = out.totalRows
       }
@@ -497,10 +630,11 @@ function shapeSummarizeResult(
       )
       for (const bucket of buckets.values()) {
         for (const spec of totals.derived) {
-          const row = buildDerivedRow(spec, bucket.raw, sectionColumns.length, levelPos, summable, breakouts.length - 1)
-          if (!row) continue
+          const derived = buildDerivedRow(spec, bucket.raw, sectionColumns.length, levelPos, summable, breakouts.length - 1)
+          if (!derived) continue
           bucket.totalRows.push(bucket.rows.length)
-          bucket.rows.push(row)
+          bucket.rows.push(derived.row)
+          bucket.undefinedCells.push(derived.undefinedCells)
           bucket.keys.push(null)
         }
       }
@@ -512,6 +646,7 @@ function shapeSummarizeResult(
       subtitle: labels.rowCount?.(bucket.dataCount) ?? `${bucket.dataCount} row(s)`,
       columns: sectionColumns,
       rows: bucket.rows,
+      undefinedCells: bucket.undefinedCells,
       money: sectionMoney.some(Boolean) ? sectionMoney : undefined,
       align: sectionAlign,
       rowKeys: bucket.keys,
@@ -535,19 +670,34 @@ function shapeSummarizeResult(
       })
       const grandRows: (string | number | null)[][] = []
       const grandKeys: (ReportRowScopeRule[] | null)[] = []
+      const grandUndefinedCells: (string | null)[][] = []
+      const timeSection = breakouts[sectionIndex]?.column === entity.timeKey
       // Insertion order = the query's ledger order (enum dims by catalog).
       for (const entry of grand.values()) {
         const row = entry.label.slice(0, breakouts.length - 1) as (string | number | null)[]
+        const formulaComponents: (string | null)[] = measures.map(() => null)
+        const orderedRaw = timeSection
+          ? [...entry.raw].sort((left, right) => comparableTime(left[`d${sectionIndex}`]).localeCompare(comparableTime(right[`d${sectionIndex}`])))
+          : entry.raw
         measures.forEach((m, mi) => {
-          const inputs = entry.raw.map((raw) => raw[`m${mi}`])
+          const visibleIndex = visibleMeasureIndex.get(mi)
+          const inputs = timeSection && (m.fn === 'opening' || m.fn === 'closing')
+            ? [orderedRaw[m.fn === 'opening' ? 0 : orderedRaw.length - 1]?.[`m${mi}`]]
+            : entry.raw.map((raw) => raw[`m${mi}`])
           if (!summable[mi] || inputs.every((v) => v === null || v === undefined)) {
-            row[breakouts.length - 1 + mi] = null
+            if (visibleIndex !== undefined) row[breakouts.length - 1 + visibleIndex] = null
             return
           }
-          const total = sumExactDecimals(inputs, namesForRows(entry.raw))
-          row[breakouts.length - 1 + mi] = shapeTotalValue(m.fn, total)
+          const total = (m.fn === 'opening' || m.fn === 'closing') && !timeSection
+            ? aggregateMeasureTotal(entry.raw, mi, m, entity, breakouts, namesForRows)
+            : sumExactDecimals(inputs, namesForRows(entry.raw))
+          if (visibleIndex !== undefined) row[breakouts.length - 1 + visibleIndex] = shapeTotalValue(m.fn, total)
+          if (formulaTotalable[mi]) formulaComponents[mi] = total
         })
+        const undefinedCells = Array.from({ length: sectionColumns.length }, () => null as string | null)
+        writeFormulaTotals(entity, row, measures, visibleMeasureIndices, formulaComponents, breakouts.length - 1, formulaTotalable, labels, undefinedCells)
         grandRows.push(row)
+        grandUndefinedCells.push(undefinedCells)
         grandKeys.push(entry.scope)
       }
       const grandTotalRows: number[] = []
@@ -557,10 +707,11 @@ function shapeSummarizeResult(
           0,
         )
         for (const spec of totals.derived) {
-          const row = buildDerivedRow(spec, dataRows, sectionColumns.length, levelPos, summable, breakouts.length - 1)
-          if (!row) continue
+          const derived = buildDerivedRow(spec, dataRows, sectionColumns.length, levelPos, summable, breakouts.length - 1)
+          if (!derived) continue
           grandTotalRows.push(grandRows.length)
-          grandRows.push(row)
+          grandRows.push(derived.row)
+          grandUndefinedCells.push(derived.undefinedCells)
           grandKeys.push(null)
         }
       }
@@ -570,6 +721,7 @@ function shapeSummarizeResult(
         subtitle: labels.groupCount?.(buckets.size) ?? `${buckets.size} group${buckets.size === 1 ? '' : 's'}`,
         columns: sectionColumns,
         rows: grandRows,
+        undefinedCells: grandUndefinedCells,
         money: sectionMoney.some(Boolean) ? sectionMoney : undefined,
         align: sectionAlign,
         rowKeys: grandKeys,
@@ -588,6 +740,7 @@ function shapeSummarizeResult(
             : undefined,
         columns,
         rows,
+        undefinedCells: dataRows.map((row) => undefinedByRow.get(row) ?? columns.map(() => null)),
         isEmpty: dataRows.length === 0,
         money: moneyFlags.some(Boolean) ? moneyFlags : undefined,
         rowKeys,
@@ -610,27 +763,253 @@ function shapeSummarizeResult(
     },
   ]
   measures.forEach((m, i) => {
-    if (m.fn === 'sum' && isTxnCurrencyMeasure(entity, m) && !singles.txn) return
-    if (m.fn === 'sum' && isBaseMoneyMeasure(entity, m) && !singles.base) return
-    if (m.fn === 'sum' && isMoneyBlendingMeasure(entity, m) && entity.bookScope && !singles.book) return
+    if (m.hidden) return
+    if ((m.fn === 'sum' || m.fn === 'opening' || m.fn === 'closing') && isTxnCurrencyMeasure(entity, m) && !singles.txn) return
+    if ((m.fn === 'sum' || m.fn === 'opening' || m.fn === 'closing') && isBaseMoneyMeasure(entity, m) && !singles.base) return
+    if ((m.fn === 'sum' || m.fn === 'opening' || m.fn === 'closing') && isMoneyBlendingMeasure(entity, m) && entity.bookScope && !singles.book) return
     // A snapshot card never sums: the compiler refuses sum-of-snapshot plans,
     // and a total here would multiply every movement by its stub count.
-    if (m.fn === 'count' || (m.fn === 'sum' && !isSnapshotSum(entity, m))) {
-      const total = sumExactDecimals(
-        dataRows.map((row) => row[`m${i}`]),
-        namesForRows(dataRows),
-      )
+    if (m.fn === 'count' || m.fn === 'sum' || m.fn === 'opening' || m.fn === 'closing') {
+      const total = aggregateMeasureTotal(dataRows, i, m, entity, breakouts, namesForRows)
       summary.push({
         label:
           labels.summaryTotal?.(measureHeading(m)) ??
           `Total ${measureLabel(entity, m).toLowerCase()}`,
-        value: formatExactNumber(total) ?? '0.00',
+        value: m.fn === 'count' ? Number(total) : formatExactNumber(total) ?? total,
         money: measureIsMoney(m),
       })
     }
   })
 
+  const summaryComponents = measures.map((measure, index) =>
+    measure.fn !== 'formula' && formulaTotalable[index]
+      ? aggregateMeasureTotal(dataRows, index, measure, entity, breakouts, namesForRows)
+      : null,
+  )
+  const summaryFormulaValues = formulaTotalValues(measures, summaryComponents, formulaTotalable, labels)
+  summaryFormulaValues.forEach((result, index) => {
+    if (measures[index]?.fn !== 'formula' || measures[index]?.hidden) return
+    const measure = measures[index]!
+    summary.push({
+      label: labels.summaryTotal?.(measureHeading(measure)) ?? `Total ${measureHeading(measure).toLowerCase()}`,
+      value: result.undefinedLabel ?? (result.value === null
+        ? labels.undefinedFormula?.() ?? 'Undefined — divides by zero'
+        : formatMeasureValue(entity, measure, result.value) ?? result.value),
+      money: measure.format === 'money',
+    })
+  })
+
   return { groups, summary, rowCount: dataRows.length }
+}
+
+export type InMemoryReportMeasure = Omit<ReportMeasure, 'filter'> & {
+  /** Trusted engine predicate applied before this aggregate is calculated. */
+  filter?: (row: Readonly<Record<string, unknown>>) => boolean
+}
+
+export type SummarizeRowsPlan = {
+  entity: ReportEntity
+  breakouts: ReportBreakout[]
+  measures: InMemoryReportMeasure[]
+  /** Time column used by opening and closing; defaults to entity.timeKey. */
+  timeKey?: string
+  groupBy?: string | null
+  totals?: ReportCustomQuery['totals']
+  fiscalStartMonth?: number
+  labels?: ReportRunLabels
+}
+
+/** Pure producer for trusted, engine-computed facts. The returned dN/mN rows
+ *  have the same aliases and decimal-string representation as the SQL path. */
+export function summarizeRows(
+  inputRows: readonly Readonly<Record<string, unknown>>[],
+  plan: SummarizeRowsPlan,
+): Record<string, unknown>[] {
+  const timeKey = plan.timeKey ?? plan.entity.timeKey
+  const entity = { ...plan.entity, timeKey }
+  const reportMeasures = plan.measures.map(({ filter: _predicate, ...measure }) => measure)
+  validateReportMeasureSet(entity, reportMeasures)
+  const fiscalStartMonth = plan.fiscalStartMonth != null
+    && plan.fiscalStartMonth >= 1
+    && plan.fiscalStartMonth <= 12
+    ? plan.fiscalStartMonth
+    : 1
+  const groups = new Map<string, { dimensions: unknown[]; rows: readonly Readonly<Record<string, unknown>>[] }>()
+  const mutableGroups = new Map<string, { dimensions: unknown[]; rows: Readonly<Record<string, unknown>>[] }>()
+
+  if (plan.breakouts.length === 0) mutableGroups.set('[]', { dimensions: [], rows: [] })
+
+  for (const row of inputRows) {
+    const dimensions = plan.breakouts.map((breakout) => memoryDimension(row[breakout.column], breakout, fiscalStartMonth))
+    const key = JSON.stringify(dimensions.map(stableMemoryValue))
+    const bucket = mutableGroups.get(key) ?? { dimensions, rows: [] }
+    bucket.rows.push(row)
+    mutableGroups.set(key, bucket)
+  }
+
+  // Match the report SQL's user-visible ordering: a sectioned enum follows its
+  // catalog order, date bins are chronological, and other summaries rank by
+  // the first measure descending.
+  const buckets = [...mutableGroups.values()]
+  const sectionIndex = plan.groupBy
+    ? plan.breakouts.findIndex((breakout) => breakout.column === plan.groupBy)
+    : -1
+  if (sectionIndex >= 0 && plan.breakouts[sectionIndex]) {
+    buckets.sort((left, right) => {
+      for (const [index, breakout] of plan.breakouts.entries()) {
+        const column = entity.columns.find((candidate) => candidate.key === breakout.column)
+        const a = left.dimensions[index]
+        const b = right.dimensions[index]
+        if (a == null || b == null) {
+          if (a == null && b != null) return 1
+          if (a != null && b == null) return -1
+          continue
+        }
+        if (!breakout.bin && (column?.kind === 'enum' || column?.kind === 'boolean') && column.options?.length) {
+          const rank = new Map(column.options.map((value, optionIndex) => [value, optionIndex]))
+          const order = (rank.get(String(a)) ?? Number.MAX_SAFE_INTEGER) - (rank.get(String(b)) ?? Number.MAX_SAFE_INTEGER)
+          if (order) return order
+        } else {
+          const order = String(a).localeCompare(String(b))
+          if (order) return order
+        }
+      }
+      return 0
+    })
+  } else if (plan.breakouts[0]?.bin) {
+    buckets.sort((left, right) => String(left.dimensions[0] ?? '').localeCompare(String(right.dimensions[0] ?? '')))
+  } else if (plan.breakouts.length > 0) {
+    buckets.sort((left, right) => {
+      const leftTotal = inMemorySortValue(left.rows, plan.measures, timeKey)
+      const rightTotal = inMemorySortValue(right.rows, plan.measures, timeKey)
+      return compareDecimals(rightTotal, leftTotal)
+        || JSON.stringify(left.dimensions).localeCompare(JSON.stringify(right.dimensions))
+    })
+  }
+
+  for (const bucket of buckets) groups.set(JSON.stringify(bucket.dimensions.map(stableMemoryValue)), bucket)
+  return [...groups.values()].map((bucket) => {
+    const raw: Record<string, unknown> = {}
+    bucket.dimensions.forEach((value, index) => { raw[`d${index}`] = value })
+    plan.measures.forEach((measure, index) => {
+      raw[`m${index}`] = measure.fn === 'formula'
+        ? null
+        : aggregateInMemoryMeasure(bucket.rows, measure, timeKey)
+    })
+    return raw
+  })
+}
+
+/** Produce the complete shared result shape for in-memory facts. */
+export function shapeSummarizedRows(
+  rows: Record<string, unknown>[],
+  plan: SummarizeRowsPlan,
+): ReportRunResult {
+  const entity = { ...plan.entity, timeKey: plan.timeKey ?? plan.entity.timeKey }
+  const measures = plan.measures.map(({ filter: _predicate, ...measure }) => measure)
+  return shapeSummarizeRows(
+    entity,
+    plan.breakouts,
+    measures,
+    rows.map((row) => ({ ...row })),
+    plan.labels ?? {},
+    plan.groupBy ?? null,
+    plan.totals ?? null,
+    { txn: true, base: true, book: true },
+    plan.fiscalStartMonth ?? 1,
+  )
+}
+
+function aggregateInMemoryMeasure(
+  rows: readonly Readonly<Record<string, unknown>>[],
+  measure: InMemoryReportMeasure,
+  timeKey?: string,
+): string | number | null {
+  let selected = rows.filter((row) => !measure.filter || measure.filter(row))
+  if (measure.fn === 'opening' || measure.fn === 'closing') {
+    if (!timeKey) throw new Error(`Measure '${measure.key ?? measure.label ?? measure.fn}' requires a time key`)
+    const values = rows.map((row) => memoryTime(row[timeKey])).filter(Boolean).sort()
+    const boundary = measure.fn === 'opening' ? values[0] : values[values.length - 1]
+    selected = boundary === undefined ? [] : selected.filter((row) => memoryTime(row[timeKey]) === boundary)
+  }
+  if (measure.fn === 'count') return selected.length
+  if (measure.fn === 'count_distinct') {
+    const unique = new Set(selected.map((row) => row[measure.column ?? '']).filter((value) => value != null).map(stableMemoryValue))
+    return unique.size
+  }
+  if (measure.fn === 'formula') return null
+  if (measure.fn !== 'sum' && measure.fn !== 'opening' && measure.fn !== 'closing') {
+    throw new Error(`In-memory summaries do not support '${measure.fn}' measures`)
+  }
+  return sumExactDecimals(selected.map((row) => row[measure.column ?? '']))
+}
+
+function inMemorySortValue(
+  rows: readonly Readonly<Record<string, unknown>>[],
+  measures: readonly InMemoryReportMeasure[],
+  timeKey?: string,
+): string | number | null {
+  const aggregateValues = measures.map((measure) => measure.fn === 'formula'
+    ? null
+    : aggregateInMemoryMeasure(rows, measure, timeKey))
+  const reportMeasures = measures.map(({ filter: _predicate, ...measure }) => measure)
+  const formulaValues = evaluateFormulaMeasures(reportMeasures, aggregateValues)
+  return measures[0]?.fn === 'formula'
+    ? formulaValues[0]?.value ?? null
+    : aggregateValues[0] as string | number | null
+}
+
+function memoryDimension(value: unknown, breakout: ReportBreakout, fiscalStartMonth: number): unknown {
+  if (!breakout.bin || value == null) return value ?? null
+  const raw = memoryTime(value)
+  if (!raw) return null
+  const date = new Date(raw)
+  if (Number.isNaN(date.getTime())) return null
+  if (breakout.bin.startsWith('fiscal_')) {
+    date.setUTCMonth(date.getUTCMonth() - (fiscalStartMonth - 1))
+  }
+  switch (breakout.bin) {
+    case 'week': {
+      const day = date.getUTCDay()
+      date.setUTCDate(date.getUTCDate() - ((day + 6) % 7))
+      break
+    }
+    case 'day': break
+    case 'month': case 'fiscal_period': date.setUTCDate(1); break
+    case 'quarter': case 'fiscal_quarter': date.setUTCMonth(Math.floor(date.getUTCMonth() / 3) * 3, 1); break
+    case 'year': case 'fiscal_year': date.setUTCMonth(0, 1); break
+  }
+  date.setUTCHours(0, 0, 0, 0)
+  if (breakout.bin.startsWith('fiscal_')) date.setUTCMonth(date.getUTCMonth() + (fiscalStartMonth - 1))
+  return date.toISOString()
+}
+
+function memoryTime(value: unknown): string {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? '' : value.toISOString()
+  if (value == null) return ''
+  const text = String(value)
+  const dateText = /^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T00:00:00.000Z` : text
+  const date = new Date(dateText)
+  return Number.isNaN(date.getTime()) ? text : date.toISOString()
+}
+
+function stableMemoryValue(value: unknown): string | number | boolean | null {
+  if (value instanceof Date) return memoryTime(value)
+  if (value == null) return null
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value
+  return String(value)
+}
+
+function compareDecimals(left: string | number | null, right: string | number | null): number {
+  if (left == null) return right == null ? 0 : 1
+  if (right == null) return -1
+  const a = decimalParts(left)
+  const b = decimalParts(right)
+  if (!a || !b) return String(left).localeCompare(String(right))
+  const scale = Math.max(a.scale, b.scale)
+  const av = a.units * 10n ** BigInt(scale - a.scale)
+  const bv = b.units * 10n ** BigInt(scale - b.scale)
+  return av < bv ? -1 : av > bv ? 1 : 0
 }
 
 // --- value formatting ----------------------------------------------------------
@@ -786,6 +1165,44 @@ function sumExactDecimals(values: unknown[], rowNames: string[] = values.map((_,
   return `${negative ? '-' : ''}${digits.slice(0, -scale)}.${digits.slice(-scale)}`
 }
 
+function aggregateMeasureTotal(
+  raws: readonly Record<string, unknown>[],
+  index: number,
+  measure: ReportMeasure,
+  entity: ReportEntity,
+  breakouts: readonly ReportBreakout[],
+  names: (rows: Record<string, unknown>[]) => string[],
+): string {
+  let selected = [...raws]
+  const timeIndex = measure.fn === 'opening' || measure.fn === 'closing'
+    ? breakouts.findIndex((breakout) => breakout.column === entity.timeKey)
+    : -1
+  if (timeIndex >= 0) {
+    const groups = new Map<string, Record<string, unknown>[]>()
+    for (const row of selected) {
+      const key = breakouts.map((_, dim) => dim === timeIndex ? '' : String(row[`d${dim}`] ?? '')).join('\u0000')
+      const bucket = groups.get(key) ?? []
+      bucket.push(row)
+      groups.set(key, bucket)
+    }
+    selected = []
+    for (const bucket of groups.values()) {
+      const times = bucket.map((row) => comparableTime(row[`d${timeIndex}`])).filter(Boolean).sort()
+      const boundary = measure.fn === 'opening' ? times[0] : times[times.length - 1]
+      if (boundary !== undefined) selected.push(...bucket.filter((row) => comparableTime(row[`d${timeIndex}`]) === boundary))
+    }
+  }
+  return sumExactDecimals(selected.map((row) => row[`m${index}`]), names(selected))
+}
+
+function comparableTime(value: unknown): string {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return ''
+    return `${String(value.getFullYear()).padStart(4, '0')}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}T${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}:${String(value.getSeconds()).padStart(2, '0')}`
+  }
+  return value == null ? '' : String(value)
+}
+
 /**
  * Display value for a combined total over exact-decimal inputs. Counts are
  * true integers; every other aggregate keeps its exact decimal string —
@@ -820,9 +1237,14 @@ function formatExactNumber(value: unknown): string | null {
  */
 export function formatMeasureValue(
   entity: ReportEntity,
-  measure: Pick<ReportMeasure, 'column' | 'fn' | 'label'>,
+  measure: Pick<ReportMeasure, 'column' | 'fn' | 'label' | 'format'>,
   v: unknown,
 ): string | number | null {
+  if (measure.fn === 'formula') {
+    const value = formatCustomValue(v)
+    if (value === null || measure.format !== 'percent') return value
+    return `${value}%`
+  }
   const kind = measure.column ? entityColumn(entity, measure.column)?.kind : undefined
   if (kind !== 'date') return formatCustomValue(v)
   if (v === null || typeof v === 'undefined') return null

@@ -41,6 +41,8 @@ export async function reportRunLabels(): Promise<PagedExportLabels> {
     summaryGroups: () => t("run.summaryGroups"),
     summarySource: () => t("run.summarySource"),
     summaryTotal: (measureHeading) => t("run.summaryTotal", { measure: measureHeading }),
+    undefinedFormula: () => t("run.undefinedFormula"),
+    notTotalled: () => t("run.notTotalled"),
     none: () => t("run.none"),
     subtotal: (level: string) => t("run.subtotal", { level }),
     grandTotalsTitle: () => t("run.grandTotals"),

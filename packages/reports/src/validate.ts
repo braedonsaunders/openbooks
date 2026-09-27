@@ -4,7 +4,7 @@
 // CRUD routes and the run/preview route.
 
 import { REPORT_ENTITY_MAP, entityColumn, type ReportEntity } from './entities'
-import { normalizeReportLimit } from './custom-query'
+import { isMoneyBlendingMeasure, normalizeReportLimit } from './custom-query'
 import {
   REPORT_AGG_FNS,
   REPORT_FILTER_OPERATORS,
@@ -14,6 +14,7 @@ import {
   type ReportCustomQuery,
   type ReportLayoutConfig,
   type ReportMeasure,
+  type ReportFormulaExpr,
   type ReportRule,
   type ReportRuleGroup,
 } from './types'
@@ -24,6 +25,156 @@ const MAX_BREAKOUTS = 6
 const MAX_MEASURES = 8
 const MAX_SORT_LEVELS = 3
 const MAX_LABEL_LEN = 80
+const MAX_FORMULA_DEPTH = 12
+
+function sanitizeFormulaExpr(raw: unknown, measureKey: string, depth = 0): ReportFormulaExpr {
+  if (depth > MAX_FORMULA_DEPTH || !raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new ReportQueryValidationError(`Formula measure '${measureKey}' has an invalid expression`)
+  }
+  const expr = raw as Record<string, unknown>
+  if (Object.keys(expr).length === 1 && typeof expr.ref === 'string' && expr.ref.trim()) {
+    return { ref: expr.ref.trim() }
+  }
+  if (Object.keys(expr).length === 1 && typeof expr.const === 'string' && /^[+-]?\d+(?:\.\d+)?$/.test(expr.const)) {
+    return { const: expr.const }
+  }
+  if (Object.keys(expr).length === 3 && ['+', '-', '*', '/'].includes(String(expr.op))) {
+    return {
+      op: expr.op as '+' | '-' | '*' | '/',
+      left: sanitizeFormulaExpr(expr.left, measureKey, depth + 1),
+      right: sanitizeFormulaExpr(expr.right, measureKey, depth + 1),
+    }
+  }
+  throw new ReportQueryValidationError(`Formula measure '${measureKey}' has an invalid expression`)
+}
+
+function formulaRefs(expr: ReportFormulaExpr): string[] {
+  if ('ref' in expr) return [expr.ref]
+  if ('const' in expr) return []
+  return [...formulaRefs(expr.left), ...formulaRefs(expr.right)]
+}
+
+function validateFormulaMeasures(entity: ReportEntity, measures: readonly ReportMeasure[]): void {
+  const byKey = new Map<string, ReportMeasure>()
+  for (const measure of measures) {
+    if (measure.key) {
+      if (byKey.has(measure.key)) throw new ReportQueryValidationError(`Duplicate measure key '${measure.key}'`)
+      byKey.set(measure.key, measure)
+    }
+    if ((measure.fn === 'opening' || measure.fn === 'closing') && !entity.timeKey) {
+      throw new ReportQueryValidationError(`Measure '${measure.key ?? measure.label ?? measure.column ?? measure.fn}' uses ${measure.fn}, but '${entity.key}' has no time key`)
+    }
+    if ((measure.fn === 'opening' || measure.fn === 'closing') && !entity.columns.some((column) => column.key === entity.timeKey)) {
+      throw new ReportQueryValidationError(`Measure '${measure.key ?? measure.label ?? measure.column ?? measure.fn}' uses ${measure.fn}, but '${entity.key}' has an invalid time key`)
+    }
+  }
+  const units = new Map<string, 'money' | 'ratio' | 'number'>()
+  const active = new Set<string>()
+  const unitOf = (key: string, owner: string): 'money' | 'ratio' | 'number' => {
+    const measure = byKey.get(key)
+    if (!measure) throw new ReportQueryValidationError(`Formula measure '${owner}' references unknown measure '${key}'`)
+    if (units.has(key)) return units.get(key)!
+    if (active.has(key)) throw new ReportQueryValidationError(`Formula measure '${owner}' forms a cycle through '${key}'`)
+    active.add(key)
+    let unit: 'money' | 'ratio' | 'number'
+    if (measure.fn !== 'formula') {
+      unit = measure.fn !== 'count' && measure.fn !== 'count_distinct'
+        && measure.column && entity.columns.find((column) => column.key === measure.column)?.kind === 'money'
+        ? 'money'
+        : 'number'
+    } else {
+      if (!measure.expr || !measure.format) throw new ReportQueryValidationError(`Formula measure '${key}' requires an expression and format`)
+      const exprUnit = (expr: ReportFormulaExpr): 'money' | 'ratio' | 'number' => {
+        if ('ref' in expr) return unitOf(expr.ref, key)
+        if ('const' in expr) return 'number'
+        const left = exprUnit(expr.left)
+        const right = exprUnit(expr.right)
+        if (expr.op === '+' || expr.op === '-') {
+          if (left !== right) throw new ReportQueryValidationError(`Formula measure '${key}' cannot ${expr.op === '+' ? 'add' : 'subtract'} ${left} and ${right} measures`)
+          return left
+        }
+        if (expr.op === '*') {
+          if (left === 'money' && right === 'money') throw new ReportQueryValidationError(`Formula measure '${key}' cannot multiply money by money`)
+          if (left === 'money' || right === 'money') return 'money'
+          return left === 'ratio' || right === 'ratio' ? 'ratio' : 'number'
+        }
+        if (left === 'money' && right === 'money') return 'ratio'
+        if (left === 'money') return 'money'
+        if (right === 'money') throw new ReportQueryValidationError(`Formula measure '${key}' cannot divide a non-money measure by money`)
+        return 'ratio'
+      }
+      const resultUnit = exprUnit(measure.expr)
+      const formatUnit = measure.format === 'money' ? 'money' : measure.format === 'number' ? 'number' : 'ratio'
+      if (resultUnit !== formatUnit) throw new ReportQueryValidationError(`Formula measure '${key}' has ${resultUnit} inputs and must use the ${resultUnit} format`)
+      unit = resultUnit
+      for (const ref of formulaRefs(measure.expr)) unitOf(ref, key)
+      for (const guard of measure.guards ?? []) {
+        if (!byKey.has(guard.measure)) throw new ReportQueryValidationError(`Formula measure '${key}' has a guard for unknown measure '${guard.measure}'`)
+      }
+    }
+    active.delete(key)
+    units.set(key, unit)
+    return unit
+  }
+
+  for (const measure of measures) {
+    if (measure.fn !== 'formula') continue
+    const key = measure.key ?? measure.label ?? 'unnamed formula'
+    if (!measure.key || !measure.label || !measure.expr || !['ratio', 'percent', 'money', 'number'].includes(String(measure.format))) {
+      throw new ReportQueryValidationError(`Formula measure '${key}' requires a key, label, expression and format`)
+    }
+    if (!/^[A-Za-z0-9_.-]{1,80}$/.test(measure.key)) {
+      throw new ReportQueryValidationError(`Formula measure '${key}' has an invalid key`)
+    }
+    if (measure.scale !== undefined && (!Number.isInteger(measure.scale) || measure.scale < 0 || measure.scale > 12)) {
+      throw new ReportQueryValidationError(`Formula measure '${key}' has an invalid scale`)
+    }
+    if (measure.undefinedLabel !== undefined && (!measure.undefinedLabel.trim() || measure.undefinedLabel.length > 120)) {
+      throw new ReportQueryValidationError(`Formula measure '${key}' has an invalid undefined label`)
+    }
+    for (const ref of formulaRefs(measure.expr)) unitOf(ref, key)
+    unitOf(measure.key, key)
+    for (const guard of measure.guards ?? []) {
+      if (!['zero', 'null'].includes(guard.when) || !guard.label.trim()) {
+        throw new ReportQueryValidationError(`Formula measure '${key}' has an invalid guard`)
+      }
+    }
+  }
+
+  const denominationKinds = (key: string, activeDenominations = new Set<string>()): Set<string> => {
+    if (activeDenominations.has(key)) return new Set()
+    const measure = byKey.get(key)
+    if (!measure) return new Set()
+    if (measure.fn === 'formula') {
+      const nested = new Set(activeDenominations).add(key)
+      const kinds = new Set<string>()
+      for (const ref of formulaRefs(measure.expr!)) {
+        for (const kind of denominationKinds(ref, nested)) kinds.add(kind)
+      }
+      return kinds
+    }
+    if (!isMoneyBlendingMeasure(entity, measure)) return new Set()
+    const column = entity.columns.find((candidate) => candidate.key === measure.column)
+    if (!column) return new Set()
+    return new Set([column.txnCurrency ? 'transaction currency' : column.baseMoney ? 'functional currency' : 'money'])
+  }
+  for (const measure of measures) {
+    if (measure.fn !== 'formula' || !measure.key) continue
+    const kinds = new Set<string>()
+    for (const ref of formulaRefs(measure.expr!)) {
+      for (const kind of denominationKinds(ref)) kinds.add(kind)
+    }
+    if (kinds.size > 1) {
+      throw new ReportQueryValidationError(`Formula measure '${measure.key}' combines money inputs with incompatible denominations (${[...kinds].join(' and ')})`)
+    }
+  }
+}
+
+/** Shared measure-set validation for trusted producers that bypass the
+ *  request-shaped custom-query sanitizer. */
+export function validateReportMeasureSet(entity: ReportEntity, measures: readonly ReportMeasure[]): void {
+  validateFormulaMeasures(entity, measures)
+}
 
 /**
  * Custom-report validation refusals are user-actionable (the message names
@@ -79,6 +230,7 @@ export function validateCustomQuery(
         .slice(0, MAX_BREAKOUTS)
     : []
 
+  const measureFilters = new WeakMap<ReportMeasure, unknown>()
   let measures: ReportMeasure[] = Array.isArray(q.measures)
     ? (q.measures as unknown[])
         .flatMap((m) => {
@@ -86,15 +238,48 @@ export function validateCustomQuery(
           const o = m as Record<string, unknown>
           const fn = String(o.fn ?? '')
           if (!REPORT_AGG_FNS.includes(fn as never)) return []
-          if (fn !== 'count' && !validColumn(o.column)) return []
+          if (fn !== 'count' && fn !== 'formula' && !validColumn(o.column)) return []
           const label = typeof o.label === 'string' && o.label.trim() ? o.label.trim() : undefined
-          return [
-            {
-              fn: fn as ReportMeasure['fn'],
-              ...(fn === 'count' ? {} : { column: o.column as string }),
-              ...(label ? { label } : {}),
-            },
-          ]
+          const key = typeof o.key === 'string' && o.key.trim() ? o.key.trim() : undefined
+          const measure: ReportMeasure = {
+            fn: fn as ReportMeasure['fn'],
+            ...(fn !== 'count' && fn !== 'formula' ? { column: o.column as string } : {}),
+            ...(label ? { label } : {}),
+            ...(key ? { key } : {}),
+            ...(o.hidden === true ? { hidden: true } : {}),
+          }
+          measureFilters.set(measure, o.filter)
+          if (fn === 'formula') {
+            if (o.filter != null) throw new ReportQueryValidationError(`Formula measure '${key ?? label ?? 'unnamed formula'}' cannot have a filter — filter its component measures`)
+            if (typeof o.format === 'string' && ['ratio', 'percent', 'money', 'number'].includes(o.format)) {
+              measure.format = o.format as ReportMeasure['format']
+            }
+            if (typeof o.expr !== 'undefined') measure.expr = sanitizeFormulaExpr(o.expr, key ?? label ?? 'unnamed formula')
+            if (o.scale !== undefined) {
+              if (typeof o.scale !== 'number' || !Number.isInteger(o.scale) || o.scale < 0 || o.scale > 12) {
+                throw new ReportQueryValidationError(`Formula measure '${key ?? label ?? 'unnamed formula'}' has an invalid scale`)
+              }
+              measure.scale = o.scale
+            }
+            if (typeof o.undefinedLabel === 'string' && o.undefinedLabel.trim() && o.undefinedLabel.length <= 120) {
+              measure.undefinedLabel = o.undefinedLabel.trim()
+            }
+            if (o.guards !== undefined) {
+              if (!Array.isArray(o.guards) || o.guards.length > MAX_MEASURES) {
+                throw new ReportQueryValidationError(`Formula measure '${key ?? label ?? 'unnamed formula'}' has invalid guards`)
+              }
+              measure.guards = o.guards.map((rawGuard) => {
+                if (!rawGuard || typeof rawGuard !== 'object') throw new ReportQueryValidationError(`Formula measure '${key ?? label ?? 'unnamed formula'}' has an invalid guard`)
+                const guard = rawGuard as Record<string, unknown>
+                if (typeof guard.measure !== 'string' || !guard.measure || (guard.when !== 'zero' && guard.when !== 'null')
+                  || typeof guard.label !== 'string' || !guard.label.trim() || guard.label.length > 120) {
+                  throw new ReportQueryValidationError(`Formula measure '${key ?? label ?? 'unnamed formula'}' has an invalid guard`)
+                }
+                return { measure: guard.measure, when: guard.when, label: guard.label.trim() }
+              })
+            }
+          }
+          return [measure]
         })
         .slice(0, MAX_MEASURES)
     : []
@@ -106,6 +291,9 @@ export function validateCustomQuery(
   // (and with no breakouts that count is a single grand total).
   if (mode === 'summarize' && measures.length === 0) {
     measures = [{ fn: 'count' }]
+  }
+  if (mode === 'summarize' && breakouts.length === 0 && measures.length > 0 && measures.every((measure) => measure.hidden)) {
+    throw new ReportQueryValidationError('Select at least one visible measure')
   }
 
   // Totals only mean something for sectioned summaries; whitelist the shape.
@@ -214,12 +402,21 @@ export function validateCustomQuery(
   }
   const filters = q.filters == null ? null : sanitizeGroup(q.filters, 1)
   const filtersFinal = filters && filters.rules.length ? filters : null
+  measures = measures.map((measure) => {
+    const rawFilter = measureFilters.get(measure)
+    if (rawFilter == null) return measure
+    const filter = sanitizeGroup(rawFilter, 1)
+    if (!filter.rules.length) throw new ReportQueryValidationError(`Measure '${measure.key ?? measure.label ?? measure.fn}' has an empty filter`)
+    return { ...measure, filter }
+  })
+  validateFormulaMeasures(entityMeta, measures)
 
   const groupBy = validColumn(q.groupBy) ? q.groupBy : null
+  const measureKeys = new Set(measures.flatMap((measure) => measure.key ? [measure.key] : []))
   const sanitizeSort = (raw: unknown): { column: string; direction: 'asc' | 'desc' } | null => {
     if (!raw || typeof raw !== 'object') return null
     const s = raw as Record<string, unknown>
-    if (!validColumn(s.column)) return null
+    if (typeof s.column !== 'string' || (!validColumn(s.column) && !measureKeys.has(s.column))) return null
     return {
       column: s.column,
       direction: s.direction === 'asc' ? ('asc' as const) : ('desc' as const),

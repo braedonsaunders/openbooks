@@ -8,7 +8,7 @@
 // no query can escape its org. Output is a single SELECT ready for the read-only
 // executor.
 
-import { REPORT_ENTITY_MAP, SqlParams, averageSql, buildDenominationCensus, compileSubsidiaryScope, compileBookScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, isBaseMoneyMeasure, isMoneyBlendingMeasure, isTxnCurrencyMeasure, reportBaseCurrencyPin, reportBookPin, reportTxnCurrencyPin, resolvePreset, type ReportBreakout, type ReportCustomQuery, type ReportEntity, type ReportMeasure, type ReportRule } from '@openbooks/reports'
+import { REPORT_AGG_FNS, REPORT_ENTITY_MAP, SqlParams, averageSql, buildDenominationCensus, compileCustomQuery, compileSubsidiaryScope, compileBookScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, isBaseMoneyMeasure, isMoneyBlendingMeasure, isTxnCurrencyMeasure, reportBaseCurrencyPin, reportBookPin, reportTxnCurrencyPin, resolvePreset, type ReportBreakout, type ReportCustomQuery, type ReportEntity, type ReportMeasure, type ReportRule, type ReportRuleGroup } from '@openbooks/reports'
 import { sourceFromEntity } from './catalog'
 import { buildSource, sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
 import type {
@@ -70,11 +70,39 @@ export type InsightLabelResolver = {
   measure?: (agg: Exclude<AggFn, 'count'>, fieldLabel: string) => string
   /** Column label for a date-binned dimension. */
   binnedDimension?: (fieldLabel: string, bin: DateBin) => string
+  /** Localized undefined/total explanations shared with the report engine. */
+  undefinedFormula?: () => string
+  notTotalled?: () => string
 }
 
 const MAX_ROWS = 10_000
-const AGG_FNS: AggFn[] = ['sum', 'count', 'avg', 'min', 'max']
+const AGG_FNS: readonly AggFn[] = REPORT_AGG_FNS
 const DATE_BINS: DateBin[] = ['day', 'week', 'month', 'quarter', 'year']
+
+function queryMeasureFn(measure: QueryMeasure): AggFn {
+  return measure.fn ?? measure.agg ?? 'count'
+}
+
+function hasReportMeasureShape(query: InsightQuery): boolean {
+  return (query.measures ?? []).some((measure) => {
+    const fn = queryMeasureFn(measure)
+    return !!measure.fn || !!measure.filter || fn === 'count_distinct' || fn === 'latest'
+      || fn === 'opening' || fn === 'closing' || fn === 'formula'
+  })
+}
+
+function queryMeasureField(measure: QueryMeasure): string | undefined {
+  return measure.column ?? measure.field
+}
+
+function reportMeasure(measure: QueryMeasure): ReportMeasure {
+  const fn = queryMeasureFn(measure)
+  return {
+    ...measure,
+    fn,
+    ...(fn === 'count' || fn === 'formula' ? {} : { column: queryMeasureField(measure) }),
+  } as ReportMeasure
+}
 
 /** Whitelist-safe output alias: caller-provided aliases are re-slugged, never
  *  interpolated raw. Bounded so a stored plan can't emit a pathological ident. */
@@ -237,9 +265,7 @@ function toReportPlan(query: InsightQuery): ReportCustomQuery {
  *  insight catalog projects report columns key-for-key), so the report
  *  entity's own txnCurrency/baseMoney flags classify each measure. */
 function toReportMeasures(query: InsightQuery): ReportMeasure[] {
-  return (query.measures ?? []).map((m) =>
-    m.agg === 'count' || !m.field ? { fn: 'count' } : { fn: m.agg, column: m.field },
-  )
+  return (query.measures ?? []).map(reportMeasure)
 }
 
 /** True when the card explicitly scopes or partitions by accounting book — a
@@ -249,6 +275,229 @@ function toReportMeasures(query: InsightQuery): ReportMeasure[] {
  *  uses this to decide the book allowlist; the compiler only applies it. */
 export function insightQueryReferencesBook(query: InsightQuery): boolean {
   return customQueryReferencesBook(toReportPlan(query))
+}
+
+function shiftCalendarDate(value: string, days: number): string {
+  const date = new Date(`${value}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + days)
+  return date.toISOString().slice(0, 10)
+}
+
+function dateRangeFilter(field: string, from: string, to: string): ReportRuleGroup {
+  return {
+    combinator: 'and',
+    rules: [
+      { field, op: 'gte', value: from },
+      { field, op: 'lte', value: to },
+    ],
+  }
+}
+
+function reportFilterGroup(
+  filters: readonly QueryFilter[] | undefined,
+  fiscalStartMonth: number,
+  asOf: string,
+): ReportRuleGroup | null {
+  if (!filters?.length) return null
+  const supported: Record<string, ReportRule['op']> = {
+    eq: 'eq', neq: 'neq', in: 'in', not_in: 'not_in', gte: 'gte', lte: 'lte',
+    contains: 'contains', is_null: 'is_null', is_not_null: 'is_not_null',
+  }
+  const rules: ReportRuleGroup['rules'] = filters.map((filter) => {
+    if (filter.op === 'gt' || filter.op === 'lt') {
+      return {
+        combinator: 'and',
+        not: true,
+        rules: [{
+          field: filter.field,
+          op: filter.op === 'gt' ? 'lte' : 'gte',
+          value: filter.value as ReportRule['value'],
+        }],
+      }
+    }
+    if (filter.op === 'last_n_days') {
+      const days = Number(filter.value)
+      if (!Number.isFinite(days) || days < 0) {
+        throw new InsightCompileError('last_n_days_needs_number', '"within last N days" needs a number')
+      }
+      return { field: filter.field, op: 'gte', value: shiftCalendarDate(asOf, -Math.trunc(days)) }
+    }
+    if (filter.op === 'this_month' || filter.op === 'this_quarter') {
+      const date = new Date(`${asOf}T00:00:00.000Z`)
+      const firstMonth = filter.op === 'this_month'
+        ? date.getUTCMonth()
+        : Math.floor(date.getUTCMonth() / 3) * 3
+      const monthCount = filter.op === 'this_month' ? 1 : 3
+      const from = new Date(Date.UTC(date.getUTCFullYear(), firstMonth, 1)).toISOString().slice(0, 10)
+      const next = new Date(Date.UTC(date.getUTCFullYear(), firstMonth + monthCount, 1)).toISOString().slice(0, 10)
+      return dateRangeFilter(filter.field, from, shiftCalendarDate(next, -1))
+    }
+    if (filter.op === 'this_year' || filter.op === 'ytd') {
+      const preset = filter.op === 'this_year' ? 'this_fiscal_year' : 'this_fiscal_year_to_date'
+      const range = resolvePreset(preset, { startMonth: fiscalStartMonth, today: asOf })
+      if (!range) throw new InsightCompileError('unknown_operator', `could not resolve '${filter.op}'`, filter.op)
+      return dateRangeFilter(filter.field, range.from, range.to)
+    }
+    const op = supported[filter.op]
+    if (!op) throw new InsightCompileError('unknown_operator', `filter operator '${filter.op}' cannot be combined with formula measures`, filter.op)
+    return { field: filter.field, op, value: filter.value } as unknown as ReportRule
+  })
+  return { combinator: 'and', rules }
+}
+
+function resolveMeasureFilterPresets(group: ReportRuleGroup, fiscalStartMonth: number, asOf: string): ReportRuleGroup {
+  const rules: (ReportRule | ReportRuleGroup)[] = []
+  for (const rule of group.rules) {
+    if ('rules' in rule) {
+      rules.push(resolveMeasureFilterPresets(rule as ReportRuleGroup, fiscalStartMonth, asOf))
+      continue
+    }
+    if (rule.op !== 'period_preset') {
+      rules.push(rule)
+      continue
+    }
+    const range = resolvePreset(String(rule.value ?? ''), { startMonth: fiscalStartMonth, today: asOf })
+    if (!range) throw new InsightCompileError('unknown_operator', `unknown period preset '${String(rule.value ?? '')}'`, String(rule.value ?? ''))
+    rules.push({ combinator: 'and', rules: [
+      { field: rule.field, op: 'gte', value: range.from },
+      { field: rule.field, op: 'lte', value: range.to },
+    ] })
+  }
+  return { ...group, rules }
+}
+
+function compileReportMeasures(
+  query: InsightQuery,
+  entity: ReportEntity,
+  orgId: string,
+  labels: InsightLabelResolver,
+  asOf: string,
+  allowedSubsidiaryIds: readonly string[] | null,
+  allowedBookIds: readonly string[] | null | undefined,
+  fiscalStartMonth: number,
+): CompiledQuery {
+  const source = buildSource(sourceFromEntity(entity))
+  const dimensions = query.dimensions ?? []
+  const inputMeasures = query.measures ?? []
+  const measures = inputMeasures.map((input) => {
+    const measure = reportMeasure(input)
+    return measure.filter
+      ? { ...measure, filter: resolveMeasureFilterPresets(measure.filter, fiscalStartMonth, asOf) }
+      : measure
+  })
+  const sort = (query.sort ?? []).find((entry) => {
+    const measureIndex = inputMeasures.findIndex((measure) =>
+      measure.key === entry.ref || measure.alias === entry.ref || (measure.fn === 'formula' && measure.label === entry.ref),
+    )
+    return measureIndex >= 0 && measures[measureIndex]?.fn === 'formula'
+  })
+  const sortMeasureIndex = sort
+    ? inputMeasures.findIndex((measure) => measure.key === sort.ref || measure.alias === sort.ref || measure.label === sort.ref)
+    : -1
+  const reportQuery: ReportCustomQuery = {
+    entity: entity.key,
+    mode: 'summarize',
+    columns: [],
+    breakouts: dimensions.map((dimension) => ({ column: dimension.field, ...(dimension.bin ? { bin: dimension.bin } : {}) })),
+    measures,
+    filters: reportFilterGroup(query.filters, fiscalStartMonth, asOf),
+    ...(sortMeasureIndex >= 0 && measures[sortMeasureIndex]?.key
+      ? { sorts: [{ column: measures[sortMeasureIndex]!.key!, direction: sort!.dir }] }
+      : {}),
+    limit: query.limit,
+  }
+  const compiled = compileCustomQuery(entity, reportQuery, orgId, {
+    allowedSubsidiaryIds,
+    allowedBookIds,
+    asOf,
+    fiscalStartMonth,
+  })
+  const innerLimit = `LIMIT ${compiled.limit}`
+  if (!compiled.text.endsWith(innerLimit)) throw new Error('report compiler is missing its aggregate row limit')
+  // The executor may request one sentinel row beyond the visible cap.
+  const reportSql = `${compiled.text.slice(0, -innerLimit.length)}LIMIT ${compiled.limit + 1}`
+  const selects: string[] = []
+  const columns: ResultColumn[] = []
+  const dimensionColumnKeys: string[] = []
+  const measureColumnKeys: string[] = []
+  const seenAliases = new Set<string>()
+  const unique = (alias: string) => {
+    let value = alias
+    let suffix = 2
+    while (seenAliases.has(value)) value = `${alias}_${suffix++}`
+    seenAliases.add(value)
+    return value
+  }
+  dimensions.forEach((dimension, index) => {
+    const resolved = resolveDimension(source, dimension)
+    const alias = unique(resolved.alias)
+    dimensionColumnKeys.push(alias)
+    const base = labels.field?.(source.key, resolved.field) ?? resolved.field.label
+    const binned = !!dimension.bin && resolved.field.canBin
+    selects.push(`"__report"."d${index}" AS "${alias}"`)
+    columns.push({
+      key: alias,
+      label: binned ? (labels.binnedDimension?.(base, dimension.bin!) ?? `${base} (${dimension.bin})`) : base,
+      type: resolved.field.semanticType,
+      role: 'dimension',
+      valueKind: binned ? undefined : resolved.field.valueKind,
+      dateBin: binned ? dimension.bin : undefined,
+    })
+  })
+  inputMeasures.forEach((measure, index) => {
+    const normalized = measures[index]!
+    const fn = normalized.fn
+    const field = queryMeasureField(measure) ? sourceField(source, queryMeasureField(measure)!) : null
+    const defaultAlias = normalized.key ?? (fn === 'formula' ? `formula_${index + 1}` : `${fn}_${field?.key ?? 'count'}`)
+    const alias = normalized.hidden
+      ? unique(`__formula_measure_${index}`)
+      : unique(safeAlias(measure.alias, defaultAlias))
+    const label = normalized.label
+      ?? (fn === 'count' ? (labels.count?.() ?? 'Count')
+        : labels.measure?.(fn, field ? (labels.field?.(source.key, field) ?? field.label) : '')
+          ?? defaultMeasureLabel({ ...measure, fn, agg: fn }, field))
+    selects.push(`"__report"."m${index}" AS "${alias}"`)
+    measureColumnKeys.push(alias)
+    if (normalized.hidden) return
+    columns.push({
+      key: alias,
+      label,
+      type: fn === 'formula' ? (normalized.format === 'money' ? 'currency' : 'number') : measureType(fn, field),
+      role: 'measure',
+      ...(normalized.format ? { format: normalized.format } : {}),
+      ...(normalized.scale !== undefined ? { scale: normalized.scale } : {}),
+    })
+  })
+  for (const dimension of compiled.denominationDimensions ?? []) {
+    selects.push(`"__report"."__${dimension}_n"`, `"__report"."__${dimension}_v"`)
+  }
+  if (compiled.denominationDimensions?.includes('book')) selects.push('"__report"."__book_group_n"')
+  if (!columns.length) throw new InsightCompileError('no_columns', 'query selects no visible columns')
+  const reportAlias = '__report'
+  const formulaOrderIndex = sortMeasureIndex >= 0
+    ? sortMeasureIndex
+    : measures[0]?.fn === 'formula' ? 0 : -1
+  const formulaOrder = formulaOrderIndex >= 0 && measures[formulaOrderIndex]?.fn === 'formula'
+    ? ` ORDER BY "__report"."__formula_sort" ${(sort?.dir ?? 'desc').toUpperCase()} NULLS LAST${dimensionColumnKeys.map((key) => `, "${key}" ASC`).join('')}`
+    : ''
+  return {
+    sql: `select ${selects.join(', ')} from (${reportSql}) ${reportAlias}${formulaOrder}\nlimit ${compiled.limit}`,
+    params: compiled.values,
+    columns,
+    measureColumnKeys,
+    limit: compiled.limit,
+    denomination: {
+      breakouts: compiled.breakouts,
+      measures: compiled.measures,
+      txnCurrencyPinned: compiled.txnCurrencyPinned ?? null,
+      baseCurrencyPinned: compiled.baseCurrencyPinned ?? null,
+      bookPinned: compiled.bookPinned ?? null,
+      bookSingleBasis: compiled.bookSingleBasis ?? false,
+      baseSingleSubsidiary: compiled.baseSingleSubsidiary ?? false,
+      hasDenominationCensus: compiled.hasDenominationCensus ?? false,
+      denominationDimensions: compiled.denominationDimensions ?? [],
+    },
+  }
 }
 
 /** The source's authored implicit predicate (e.g. "only active tiers"), shared
@@ -276,19 +525,21 @@ function resolveDimension(source: AnalyticsSource, dim: QueryDimension): { expr:
 }
 
 function resolveMeasure(source: AnalyticsSource, m: QueryMeasure): { expr: string; alias: string; field: AnalyticsField | null } {
-  if (!AGG_FNS.includes(m.agg))
-    throw new InsightCompileError('unknown_aggregation', `unknown aggregation "${m.agg}"`, m.agg)
-  if (m.agg === 'count') {
+  const agg = queryMeasureFn(m)
+  const fieldKey = queryMeasureField(m)
+  if (!AGG_FNS.includes(agg))
+    throw new InsightCompileError('unknown_aggregation', `unknown aggregation "${agg}"`, agg)
+  if (agg === 'count') {
     return { expr: 'count(*)', alias: safeAlias(m.alias, 'count'), field: null }
   }
-  const field = sourceField(source, m.field ?? '')
+  const field = sourceField(source, fieldKey ?? '')
   if (!field)
-    throw new InsightCompileError('unknown_field', `unknown measure field "${m.field}"`, m.field)
+    throw new InsightCompileError('unknown_field', `unknown measure field "${fieldKey}"`, fieldKey)
   if (!field.canMeasure)
-    throw new InsightCompileError('not_a_measure', `"${m.field}" is not a numeric measure`, m.field)
+    throw new InsightCompileError('not_a_measure', `"${fieldKey}" is not a numeric measure`, fieldKey)
   return {
-    expr: aggSql(m.agg, field.expr),
-    alias: safeAlias(m.alias, `${m.agg}_${field.key}`),
+    expr: aggSql(agg, field.expr),
+    alias: safeAlias(m.alias, `${agg}_${field.key}`),
     field,
   }
 }
@@ -318,6 +569,9 @@ export function compileInsightQuery(
   const entity = entityMap[query.source]
   if (!entity || entity.key !== query.source)
     throw new InsightCompileError('unknown_source', `unknown source "${query.source}"`, query.source)
+  if (hasReportMeasureShape(query)) {
+    return compileReportMeasures(query, entity, orgId, labels, asOf, allowedSubsidiaryIds, allowedBookIds, fiscalStartMonth)
+  }
   const source = buildSource(sourceFromEntity(entity))
   const fieldLabel = (f: AnalyticsField) => labels.field?.(source.key, f) ?? f.label
 
@@ -418,15 +672,16 @@ export function compileInsightQuery(
       })
     }
     for (const m of measures) {
+      const fn = queryMeasureFn(m)
       const r = resolveMeasure(source, m)
       const alias = uniq(r.alias)
       selects.push(`${r.expr} as "${alias}"`)
       const label =
-        m.agg === 'count'
+        fn === 'count'
           ? (labels.count?.() ?? 'Count')
-          : (labels.measure?.(m.agg, r.field ? fieldLabel(r.field) : '') ??
+          : (labels.measure?.(fn, r.field ? fieldLabel(r.field) : '') ??
             defaultMeasureLabel(m, r.field))
-      columns.push({ key: alias, label, type: measureType(m.agg, r.field), role: 'measure' })
+      columns.push({ key: alias, label, type: measureType(fn, r.field), role: 'measure' })
     }
   }
 
@@ -452,8 +707,10 @@ export function compileInsightQuery(
       if (!fieldOrd.has(d.field)) fieldOrd.set(d.field, i + 1)
     })
     measures.forEach((m, j) => {
-      if (m.agg !== 'count' && m.field && !fieldOrd.has(m.field))
-        fieldOrd.set(m.field, dimensions.length + j + 1)
+      const fn = queryMeasureFn(m)
+      const field = queryMeasureField(m)
+      if (fn !== 'count' && field && !fieldOrd.has(field))
+        fieldOrd.set(field, dimensions.length + j + 1)
     })
   }
 
@@ -544,8 +801,9 @@ function clampLimit(raw: number | null | undefined): number {
 
 /** English fallback for an aggregated measure's column label. */
 function defaultMeasureLabel(m: QueryMeasure, field: AnalyticsField | null): string {
-  if (m.agg === 'count') return 'Count'
-  const verb = m.agg === 'sum' ? 'Total' : m.agg[0]!.toUpperCase() + m.agg.slice(1)
+  const agg = queryMeasureFn(m)
+  if (agg === 'count') return 'Count'
+  const verb = agg === 'sum' ? 'Total' : agg[0]!.toUpperCase() + agg.slice(1)
   return `${verb} ${field?.label ?? ''}`.trim()
 }
 
