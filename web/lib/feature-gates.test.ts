@@ -87,6 +87,8 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   returnAuthorizations: ['app/api/returns'],
   fieldTickets: ['app/api/field-tickets'],
   subscriptionBilling: ['app/api/subscriptions'],
+  usageBilling: ['app/api/usage'],
+  saasMetrics: ['app/api/metrics'],
   advancedSubscriptions: ['app/api/subscriptions/advanced'],
   revenueRecognition: ['app/api/revenue', 'app/api/items/[id]/fair-values'],
   wipBilling: ['app/api/wip-billing'],

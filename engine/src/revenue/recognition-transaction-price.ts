@@ -1,7 +1,8 @@
 /** Transaction price: errors, feature flag, variable consideration, financing, pricing. Split from revenue/recognition.ts (pure moves only). */
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "../platform/db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
 import { add, cmp, fromUnits, mulPercent, mulRate, neg, roundDiv, sum, toUnits } from "../money/money.ts";
 import { periodInterest, periodRateFromAnnualPercent, type AccretionPeriod } from "../money/present-value.ts";
 
@@ -11,10 +12,26 @@ import { periodInterest, periodRateFromAnnualPercent, type AccretionPeriod } fro
 
 export class TransactionPriceError extends Error {
   readonly name = "TransactionPriceError";
+  readonly status: 422 | 409;
+  readonly code: string;
+  readonly remedy: string;
+
+  constructor(message: string, options: { status?: 422 | 409; code?: string; remedy?: string } = {}) {
+    super(message);
+    this.status = options.status ?? 422;
+    this.code = options.code ?? "revenue_transaction_price_invalid";
+    this.remedy = options.remedy ?? "Correct the contract pricing assumptions and submit the revised transaction price.";
+  }
 }
 
 export class RevenueRecognitionError extends Error {
   readonly name = "RevenueRecognitionError";
+}
+
+export class RevenueRecognitionFeatureOffError extends RevenueRecognitionError {
+  readonly status = 422;
+  readonly code = "revenue_recognition_feature_off";
+  readonly remedy = "Enable Revenue Recognition in Company Settings → Features.";
 }
 
 /** Registry default is on — absence must not disable recognition. Resolved
@@ -29,7 +46,7 @@ export async function revenueRecognitionFeatureEnabled(
 
 export async function assertEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<void> {
   if (!(await revenueRecognitionFeatureEnabled(runner, orgId))) {
-    throw new RevenueRecognitionError("Revenue recognition feature is disabled");
+    throw new RevenueRecognitionFeatureOffError("Revenue recognition feature is disabled");
   }
 }
 
@@ -235,6 +252,15 @@ export interface ContractPricingResult {
   financing: FinancingComponentResult | null;
 }
 
+/** Read the contract's legal-entity assignment for the route's record-level guard. */
+export async function getContractPricingSubsidiary(orgId: string, contractId: string): Promise<string | null | undefined> {
+  return withOrgTransaction(orgId, async () => {
+    const row = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from revenue_contracts where org_id = ${orgId} and id = ${contractId}`)).rows[0];
+    return row ? row.subsidiaryId : undefined;
+  });
+}
+
 /**
  * Determine and persist a revenue contract's transaction price (ASC 606 step
  * 3): fixed consideration plus CONSTRAINED variable consideration, less any
@@ -248,49 +274,70 @@ export async function setContractPricing(
   contractId: string,
   input: ContractPricingInput,
   actorId: string | null,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<ContractPricingResult> {
-  if (cmp(input.fixedConsideration, "0") < 0) {
-    throw new TransactionPriceError("fixed consideration cannot be negative");
-  }
-  const variable = input.variable ? estimateVariableConsideration(input.variable) : null;
-  const promised = add(input.fixedConsideration, variable?.constrained ?? "0");
-  const financing = input.financing
-    ? separateFinancingComponent({
-        consideration: promised,
-        annualRatePercent: input.financing.annualRatePercent,
-        years: input.financing.years,
-      })
-    : null;
-  const transactionPrice = financing ? financing.cashSellingPrice : fromUnits(toUnits(promised));
+  return withOrgTransaction(orgId, async () => {
+    await assertEnabled(db, orgId);
+    const contract = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from revenue_contracts
+       where org_id = ${orgId} and id = ${contractId} for update`)).rows[0];
+    if (!contract || !subsidiaryScopeAllows(allowedSubsidiaryIds, contract.subsidiaryId)) throw new ScopeNotFoundError();
+    const allocated = (await db.execute<{ id: string }>(sql`
+      select id from performance_obligations where org_id = ${orgId} and contract_id = ${contractId} limit 1`)).rows[0];
+    if (allocated) {
+      throw new TransactionPriceError(
+        "The contract has been allocated to performance obligations.",
+        { status: 409, code: "revenue_contract_pricing_locked", remedy: "Propose a contract modification from Revenue → contract → Modify contract." },
+      );
+    }
+    if (cmp(input.fixedConsideration, "0") < 0) {
+      throw new TransactionPriceError("fixed consideration cannot be negative");
+    }
+    const variable = input.variable ? estimateVariableConsideration(input.variable) : null;
+    const promised = add(input.fixedConsideration, variable?.constrained ?? "0");
+    const financing = input.financing
+      ? separateFinancingComponent({
+          consideration: promised,
+          annualRatePercent: input.financing.annualRatePercent,
+          years: input.financing.years,
+        })
+      : null;
+    const transactionPrice = financing ? financing.cashSellingPrice : fromUnits(toUnits(promised));
 
-  const updated = (await db.execute<{ id: string }>(sql`
-    update revenue_contracts
-       set pricing = ${JSON.stringify({
-         fixedConsideration: fromUnits(toUnits(input.fixedConsideration)),
-         variable,
-         financing: financing
-           ? {
-               annualRatePercent: input.financing!.annualRatePercent,
-               years: input.financing!.years,
-               cashSellingPrice: financing.cashSellingPrice,
-               financingComponent: financing.financingComponent,
-             }
-           : null,
-         promisedConsideration: fromUnits(toUnits(promised)),
-         transactionPrice,
-       })}::jsonb,
-           total_transaction_price = ${transactionPrice},
-           updated_at = now(), updated_by = ${actorId}
-     where id = ${contractId} and org_id = ${orgId}
-       and not exists (select 1 from performance_obligations o where o.org_id=${orgId} and o.contract_id=${contractId})
-     returning id`));
-  if (!updated.rows[0]) throw new TransactionPriceError("contract not found or already allocated; propose a contract modification from Revenue → contract → Modify contract");
+    const updated = await db.execute<{ id: string }>(sql`
+      update revenue_contracts
+         set pricing = ${JSON.stringify({
+           fixedConsideration: fromUnits(toUnits(input.fixedConsideration)),
+           variable,
+           financing: financing
+             ? {
+                 annualRatePercent: input.financing!.annualRatePercent,
+                 years: input.financing!.years,
+                 cashSellingPrice: financing.cashSellingPrice,
+                 financingComponent: financing.financingComponent,
+               }
+             : null,
+           promisedConsideration: fromUnits(toUnits(promised)),
+           transactionPrice,
+         })}::jsonb,
+             total_transaction_price = ${transactionPrice},
+             updated_at = now(), updated_by = ${actorId}
+       where id = ${contractId} and org_id = ${orgId}
+         and not exists (select 1 from performance_obligations o where o.org_id=${orgId} and o.contract_id=${contractId})
+       returning id`);
+    if (updated.rows.length !== 1) {
+      throw new TransactionPriceError(
+        "Contract pricing changed before it could be saved.",
+        { status: 409, code: "revenue_contract_pricing_conflict", remedy: "Reload Revenue → contract → Pricing and submit the intended values again." },
+      );
+    }
 
-  return {
-    contractId,
-    promisedConsideration: fromUnits(toUnits(promised)),
-    transactionPrice,
-    variable,
-    financing,
-  };
+    return {
+      contractId,
+      promisedConsideration: fromUnits(toUnits(promised)),
+      transactionPrice,
+      variable,
+      financing,
+    };
+  });
 }
