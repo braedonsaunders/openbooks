@@ -8,7 +8,6 @@ interface RouteState {
   // A read-only role carries read without manage.
   perms: string[];
   featureOn: boolean;
-  actionReasonsOn: boolean;
   calls: Array<{ fn: string; args: unknown }>;
   serviceThrow: unknown;
   mapped: unknown[];
@@ -21,9 +20,6 @@ const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
   perms: ["hrm.employment.read", "hrm.employment.manage"],
   featureOn: true,
-  // Off by default: the reason codes are an opt-in sub-feature, so the
-  // plain submit path must keep working without them.
-  actionReasonsOn: false,
   calls: [],
   serviceThrow: null,
   mapped: [],
@@ -58,11 +54,8 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.hrm-changerequest-id-test')]
       export async function isFeatureEnabled(orgId, key) {
-        // The submit route consults hrmActionReasons as well as
-        // the module switch. The mock refuses an UNDECLARED key on
-        // purpose -- that is what caught this -- so a route that starts
-        // reading a new feature must say so here.
-        if (key === 'hrmActionReasons') return state.actionReasonsOn
+        // The mock refuses an UNDECLARED key on purpose, so a route that
+        // starts reading a new feature must say so here.
         if (key !== 'hrm') throw new Error('unexpected feature ' + key)
         return state.featureOn
       }
@@ -95,6 +88,18 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    "mock:action-reasons",
+    `
+      const state = globalThis[Symbol.for('openbooks.hrm-changerequest-id-test')]
+      // The classification rule reads the org's declared codes itself;
+      // the route's job is to run it before the service with the body's
+      // classification.
+      export async function validateSubmitActionReason(args) {
+        state.calls.push({ fn: 'validateReason', args })
+      }
+    `,
+  ],
+  [
     "mock:lib",
     `
       const state = globalThis[Symbol.for('openbooks.hrm-changerequest-id-test')]
@@ -115,6 +120,7 @@ const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
   ["../../../../../../lib/features", "mock:features"],
   ["@openbooks/engine/src/hrm/change-requests.ts", "mock:service"],
+  ["@openbooks/engine/src/automations/action-reasons.ts", "mock:action-reasons"],
   ["../_lib", "mock:lib"],
   ["../../_lib", "mock:lib"],
 ]);
@@ -216,18 +222,19 @@ test("record read returns the service row", async () => {
     assert.equal(submitted.status, 200);
     assert.deepEqual(await submitted.json(), { request: { id: REQUEST_ID, status: "pending_approval" } });
     assert.deepEqual(routeState.calls, [
+      { fn: "validateReason", args: { orgId: "org-1", reason: "go" } },
       { fn: "submit", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, reason: "go" } },
     ]);
     const noReason = await withdrawRoute!.POST(new Request("http://openbooks.test/x", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" }), ctx);
     assert.equal(noReason.status, 400, "withdrawal without a reason is refused at the boundary");
-    assert.equal(routeState.calls.length, 1, "the refused withdrawal never reached the service");
+    assert.equal(routeState.calls.length, 2, "the refused withdrawal never reached the service");
     const withdrawn = await withdrawRoute!.POST(
       new Request("http://openbooks.test/x", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason: "hiring freeze" }) }),
       ctx,
     );
     assert.equal(withdrawn.status, 200);
     assert.deepEqual(await withdrawn.json(), { request: { id: REQUEST_ID, status: "withdrawn" } });
-    assert.deepEqual(routeState.calls[1], { fn: "withdraw", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, reason: "hiring freeze" } });
+    assert.deepEqual(routeState.calls[2], { fn: "withdraw", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, reason: "hiring freeze" } });
   });
 
   test("edit, submit and withdraw refuse a read-only role before the service runs", async () => {

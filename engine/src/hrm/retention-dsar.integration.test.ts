@@ -38,7 +38,7 @@ import { buildExport, claimQueuedExport, downloadExport, listExports, requestExp
  */
 
 
-const RETENTION_FEATURES = ["hrm", "hrmDocuments", "hrmDocumentRetention", "hrmDataSubjectExport"] as const;
+const RETENTION_FEATURES = ["hrm", "hrmDocuments"] as const;
 
 const RETENTION_SPEC = {
   features: RETENTION_FEATURES,

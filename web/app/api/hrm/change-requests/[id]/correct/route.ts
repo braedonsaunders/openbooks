@@ -14,7 +14,7 @@ import { correctBody } from "../../../../automations/bodies";
  */
 export const POST = defineRoute({
   permission: "hrm.employment.manage",
-  feature: "hrmEventVerbs",
+  feature: "hrm",
   body: correctBody,
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz: gate, params, body }) => {

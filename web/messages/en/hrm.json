@@ -328,7 +328,7 @@
       "unassignHint": "Posts an explicit null link: the slot keeps its content but holds no establishment.",
       "actionLabel": "Action",
       "actionPlaceholder": "Select an action",
-      "actionRequired": "Pick the HR action this change files under.",
+      "actionRequired": "Pick the HR action and reason this change files under.",
       "reasonCodeLabel": "Reason",
       "reasonCodePlaceholder": "Select a reason",
       "rescindAction": "Rescind",
@@ -1600,8 +1600,6 @@
     "empty": "Nothing here yet.",
     "emptyAction": "Configure it in Setup below.",
     "truncatedNote": "Showing the first {limit} of {total} rows.",
-    "sectionOffTitle": "This section is turned off",
-    "sectionOffMessage": "Enable its feature in Company Settings → Features.",
     "active": "Active",
     "retired": "Retired",
     "sections": {

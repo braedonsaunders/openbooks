@@ -1529,7 +1529,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     key: 'crew_time_batches',
     label: 'Crew time batches',
     category: 'time',
-    featureKey: 'fieldTimeCrewEntry',
+    featureKey: 'fieldTime',
     requiredPermission: 'time.read',
     description: 'Foreman crew batches per project per day — status across the approval stages, hours and headcount.',
     from: `crew_time_batches b
@@ -1541,7 +1541,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'foreman_name', label: 'Foreman', kind: 'text', expr: 'frm.display_name' },
       { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
       { key: 'worked_on', label: 'Worked on', kind: 'date', expr: 'b.worked_on' },
-      { key: 'status', label: 'Status', kind: 'enum', expr: 'b.status', options: ['draft', 'submitted', 'approved_stage_1', 'approved_stage_2', 'rejected', 'posted'] },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'b.status', options: ['draft', 'submitted', 'approved', 'rejected', 'posted'] },
       { key: 'total_hours', label: 'Total hours', kind: 'number', expr: '(select coalesce(sum(l.hours), 0) from crew_time_batch_lines l where l.batch_id = b.id)' },
       { key: 'worker_count', label: 'Workers', kind: 'number', expr: '(select count(distinct l.employee_party_id) from crew_time_batch_lines l where l.batch_id = b.id)' },
       { key: 'line_count', label: 'Lines', kind: 'number', expr: '(select count(*) from crew_time_batch_lines l where l.batch_id = b.id)' },

@@ -19,7 +19,6 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../../lib/features'
 import { loadOrRefuse, type PageRefusal } from '../../../../lib/load-or-refuse'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
 import { myClockDay, resolveOwnParty } from '@openbooks/engine/src/hrm/field-time/reads.ts'
@@ -158,9 +157,8 @@ function emptyClockBody(t: ClockText) {
 async function clockBody(orgId: string, userId: string, t: ClockText) {
   const partyId = await resolveOwnParty(orgId, userId)
   const day = await myClockDay(orgId, userId)
-  const settings = await loadFieldTimeSettings(orgId)
-  const photoOn = await isFeatureEnabled(orgId, 'fieldTimePhoto')
-  const photoRequired = photoOn || settings.photoRequired
+  // The org-wide photo rule is declared in Timesheets setup.
+  const { photoRequired } = await loadFieldTimeSettings(orgId)
   let photoFolderId: string | null = null
   if (photoRequired) {
     try {

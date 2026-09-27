@@ -12,11 +12,11 @@ export const runtime = "nodejs";
 
 /**
  * Talent-pool collection: GET lists pools, POST creates one (manage gate
- * in the service). 404s while hrm, hrmRecruiting, or hrmTalentPool is off.
+ * in the service). 404s while HRM or Recruiting is off.
  */
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
-  feature: "hrmTalentPool",
+  feature: "hrmRecruiting",
   handler: async ({ authz: gate }) => {
     try {
       const pools = await listTalentPools({
@@ -32,7 +32,7 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmTalentPool",
+  feature: "hrmRecruiting",
   body: createTalentPoolBody,
   handler: async ({ authz: gate, body: body }) => {
     try {

@@ -279,7 +279,7 @@ export const REPORTING_WIDGETS = {
     />
   ),
   'new-report': () => <NewReportButton />,
-  /** HR-21 Ask box: the island null-guards while hrmNlReports is off. */
+  /** Ask box: the island null-guards while the actor has no assistant access. */
   'reports-nl-ask': (props) => (
     <NlAskPanel
       ask={(props.ask as ComponentProps<typeof NlAskPanel>['ask']) ?? null}

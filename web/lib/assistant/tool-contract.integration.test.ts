@@ -169,6 +169,11 @@ const EMPTY_STORE: Record<string, string> = {
   // HR-19: the survey read refuses an unknown survey by name, and the
   // refusal reaches the caller through hrmRefusal unchanged.
   hrm_survey_results: "survey is not visible in this organization",
+  // Payroll is on in every scratch org, so the payroll-owned AI tools reach
+  // their services, which refuse the harness reader (no user row, so no
+  // held grant) by name.
+  hrm_explain_pay: "Self-service requires the hrm.self.read permission — ask an administrator to grant it in /admin/roles.",
+  payroll_anomalies: "running payroll checks needs the payroll manager — ask a payroll administrator to run the scan",
 };
 
 const FEATURE_OFF = new Set([
@@ -189,7 +194,6 @@ const FEATURE_OFF = new Set([
   // HR-20 begin: the contract scratch org never enables field time —
   // both tools prove their feature-off refusals here, never real paths.
   "fieldTime_feature_disabled",
-  "fieldTimeCrewEntry_feature_disabled",
   // HR-20 end
 ]);
 
@@ -403,7 +407,10 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
             const documented =
               (typeof error === "string" && FEATURE_OFF.has(error)) ||
               EMPTY_STORE[tool.name] === error ||
-              (tool.name === "tax_return" && typeof error === "string" && error.startsWith("tax_return: "));
+              (tool.name === "tax_return" && typeof error === "string" && error.startsWith("tax_return: ")) ||
+              // The harness entity is an HRM one and HRM is off here, so the
+              // validator refuses it by name, listing the visible catalog.
+              (tool.name === "nl_report" && typeof error === "string" && error.startsWith("report definition refused: unknown report entity"));
             assert.ok(
               documented,
               `tool ${tool.name} refused with an undocumented error: ${JSON.stringify(error)}`,

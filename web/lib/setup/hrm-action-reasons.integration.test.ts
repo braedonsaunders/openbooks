@@ -31,14 +31,12 @@ test('hrm-action-reasons declares the drawer fields the rehomed section renders'
 })
 
 async function seedOrg(): Promise<{ orgId: string; actorId: string }> {
-  // The child gate never stands alone: hrmActionReasons requires its hrm
-  // parent (feature-gate hierarchy), so the seed enables both — exactly
-  // what the Features switchboard enforces.
+  // Reason codes ride Human resources, so the seed switches it on.
   const org = await withBypass(() => createScratchOrg())
   const actorId = await withBypass(() => createScratchUser(org.orgId, 'Setup Admin', 'admin'))
   await withBypass(() => db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
-      coalesce(settings->'features', '{}'::jsonb) || '{"hrm": true, "hrmActionReasons": true}'::jsonb)
+      coalesce(settings->'features', '{}'::jsonb) || '{"hrm": true}'::jsonb)
      where id = ${org.orgId}`))
   return { orgId: org.orgId, actorId }
 }

@@ -51,16 +51,19 @@ import {
 } from "@openbooks/emails";
 
 /**
- * HR-19 duties (one scanner per key; the registry refuses duplicates).
+ * HRM document and recruiting duties (one scanner per key; the registry
+ * refuses duplicates).
  *
  * hrm-retention-tick: the daily retention job — expire stale sends, start
  * clocks, flag due documents, execute past-grace actions unless held.
  * hrm-dsar-exports: drain queued subject-access exports (the zip builds
  * in the worker, never inline). hrm-document-reminders: nudge open
  * signers past the reminder threshold through the org transport, then
- * record the reminded event. Every duty scans only orgs with the parent
- * switch on, claims one org at a time on its own advisory key, and logs
- * instead of throwing — a duty that throws aborts its siblings.
+ * record the reminded event. These three scan orgs with HR documents on;
+ * hrm-candidate-retention runs each active retention rule for orgs with
+ * Recruiting on. Every duty claims one org-day at a time on its own
+ * advisory key, and logs instead of throwing — a duty that throws aborts
+ * its siblings.
  */
 async function orgsWithFeature(feature: string): Promise<string[]> {
   // Resolve the requirement chain from the registry — the same graph the
@@ -137,7 +140,7 @@ async function withOrgClaim(
 }
 
 async function runRetentionDuty(now: Date): Promise<void> {
-  for (const orgId of await orgsWithFeature("hrmDocumentRetention")) {
+  for (const orgId of await orgsWithFeature("hrmDocuments")) {
     const today = await businessToday(orgId);
     await withOrgClaim("hrm-retention-tick", orgId, today, async () => {
     try {
@@ -152,7 +155,7 @@ async function runRetentionDuty(now: Date): Promise<void> {
 }
 
 async function runRecruitingRetentionDuty(): Promise<void> {
-  for (const orgId of await orgsWithFeature("hrmCandidateRetention")) {
+  for (const orgId of await orgsWithFeature("hrmRecruiting")) {
     const today = await businessToday(orgId);
     for (const ruleId of await activeRetentionRuleIdsForDuty(orgId)) {
       await withOrgClaim("hrm-candidate-retention", orgId, `${today}:${ruleId}`, async () => {
@@ -171,7 +174,7 @@ async function runRecruitingRetentionDuty(): Promise<void> {
 }
 
 async function runDsarDuty(): Promise<void> {
-  for (const orgId of await orgsWithFeature("hrmDataSubjectExport")) {
+  for (const orgId of await orgsWithFeature("hrmDocuments")) {
     const today = await businessToday(orgId);
     await withOrgClaim("hrm-dsar-exports", orgId, today, async () => {
     try {

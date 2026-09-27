@@ -9,8 +9,8 @@ export async function generateMetadata() {
 
 /**
  * Org chart tab: the as-of tree with vacancies plus the directory.
- * Renders when hrm and hrmOrgChart are on and the actor holds
- * hrm.employment.read OR hrm.self.read — the loader 404s otherwise.
+ * Renders when hrm is on and the actor holds hrm.employment.read OR
+ * hrm.self.read — the loader 404s otherwise.
  */
 export default async function OrgChartPage({
   searchParams,

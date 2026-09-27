@@ -10,21 +10,15 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { requestExportBody } from "../retention-schedules/bodies";
 
+/** Subject-access exports are part of HR documents (which requires HRM). */
 export async function gateExports(orgId: string): Promise<NextResponse | null> {
-  if (!(await isFeatureEnabled(orgId, "hrm")))
-    return notFound("record");
-  if (!(await isFeatureEnabled(orgId, "hrmDocuments"))) {
-    return notFound("record");
-  }
-  if (!(await isFeatureEnabled(orgId, "hrmDataSubjectExport"))) {
-    return notFound("record");
-  }
+  if (!(await isFeatureEnabled(orgId, "hrmDocuments"))) return notFound("record");
   return null;
 }
 
 export const GET = defineRoute({
   permission: "hrm.documents.read",
-  feature: "hrmDataSubjectExport",
+  feature: "hrmDocuments",
   handler: async ({ request: req, authz: gate }) => {
     try {
       const params = new URL(req.url).searchParams;

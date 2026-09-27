@@ -9,8 +9,8 @@ export async function generateMetadata() {
 
 /**
  * The foreman crew page — batches per project per day with the batch
- * drawer. Renders for time readers and foremen when
- * fieldTimeCrewEntry is on — the view 404s otherwise.
+ * drawer. Renders for time readers and foremen when field time
+ * capture is on — the view 404s otherwise.
  */
 export default async function CrewPage({
   searchParams,

@@ -26,7 +26,7 @@ import { getSurveyResults, submitResponse } from "./surveys/responses.ts";
  */
 
 
-const SURVEYS_FEATURES = ["hrm", "hrmSurveys", "hrmPulseSurveys"] as const;
+const SURVEYS_FEATURES = ["hrm", "hrmSurveys"] as const;
 
 const SURVEYS_SPEC = {
   features: SURVEYS_FEATURES,

@@ -1,10 +1,12 @@
 /**
- * HR-20 crew_time_batch flow subject.
+ * crew_time_batch flow subject.
  *
  * The subject is a crew_time_batches row: the foreman's batch per
- * project per day. Stages from time_approval_stages are Flows gates;
- * the crew service advances batch status as gates release. Hours stay
- * in the lines — a flow must not rewrite the thing it is approving.
+ * project per day. Tenant flows own the approval routing — any sequence
+ * of supervisor, project manager or payroll gates is authored as a flow —
+ * and the crew service approves the batch when those gates release it.
+ * Hours stay in the lines — a flow must not rewrite the thing it is
+ * approving.
  */
 
 import { sql } from "drizzle-orm";
@@ -21,8 +23,7 @@ export const CREW_TIME_BATCH_SUBJECT_KIND = "crew_time_batch" as const;
 const CREW_BATCH_STATUSES = [
   { value: "draft", label: "Draft" },
   { value: "submitted", label: "Submitted" },
-  { value: "approved_stage_1", label: "Stage 1 approved" },
-  { value: "approved_stage_2", label: "Stage 2 approved" },
+  { value: "approved", label: "Approved" },
   { value: "rejected", label: "Rejected" },
   { value: "posted", label: "Posted" },
 ] as const;
@@ -180,7 +181,7 @@ export const crewBatchFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapte
     const result = (await db.execute<{ id: string }>(sql`
       select id::text as id from crew_time_batches
        where org_id = ${orgId}
-         and status in ('submitted', 'approved_stage_1')
+         and status = 'submitted'
        order by worked_on desc
        limit ${limit}
     `));

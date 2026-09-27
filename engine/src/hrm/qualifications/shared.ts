@@ -14,20 +14,21 @@ import { inputGuards } from "../input-guards.ts";
  * partial effects roll back.
  */
 
+/**
+ * Certifications and licenses is one module switch: the ledger, its
+ * renewal alerts, dispatch gating and equipment requirements all ride it
+ * (the last two also need Project Scheduling and Equipment respectively).
+ */
 export const HRM_CERTIFICATIONS_FEATURE = "hrmCertifications" as const;
-export const HRM_DISPATCH_GATING_FEATURE = "hrmDispatchGating" as const;
-export const HRM_EQUIPMENT_QUALIFICATIONS_FEATURE = "hrmEquipmentQualifications" as const;
-export const HRM_CERTIFICATION_ALERTS_FEATURE = "hrmCertificationAlerts" as const;
 
 export async function assertQualificationsFeature(
   exec: SqlExecutor,
   orgId: string,
-  feature: string,
   what: string,
 ): Promise<void> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, feature))) {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE))) {
     throw new HrmQualificationError(
-      `${what} is unavailable while the ${feature} feature is off — enable it under Company Settings → Features; existing qualification data is preserved.`,
+      `${what} is unavailable while Certifications and licenses is off — enable it under Company Settings → Features; existing qualification data is preserved.`,
     );
   }
 }

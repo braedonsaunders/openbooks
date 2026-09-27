@@ -15,7 +15,7 @@ import { createPlanBody } from "../compensation/bodies";
  */
 export const GET = defineRoute({
   permission: "hrm.compensation.read",
-  feature: "hrmHeadcountPlans",
+  feature: "hrmCompensation",
   handler: async ({ request: req, authz: gate }) => {
     const planId = new URL(req.url).searchParams.get("planId");
     try {
@@ -44,7 +44,7 @@ export const GET = defineRoute({
 });
 export const POST = defineRoute({
   permission: "hrm.compensation.manage",
-  feature: "hrmHeadcountPlans",
+  feature: "hrmCompensation",
   body: createPlanBody,
   handler: async ({ request: _req, authz: gate, body }) => {
     if (body.fiscalPeriodTo < body.fiscalPeriodFrom) {

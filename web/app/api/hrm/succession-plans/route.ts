@@ -16,7 +16,7 @@ import { createSuccessionPlanBody, patchSuccessionPlanBody } from "./bodies";
  */
 export const GET = defineRoute({
   permission: "hrm.performance.manage",
-  feature: "hrmSuccession",
+  feature: "hrmPerformance",
   handler: async ({ request: req, authz }) => {
     void req;
     try {
@@ -32,7 +32,7 @@ export const GET = defineRoute({
 });
 export const POST = defineRoute({
   permission: "hrm.performance.manage",
-  feature: "hrmSuccession",
+  feature: "hrmPerformance",
   body: createSuccessionPlanBody,
   handler: async ({ request: _req, authz, body }) => {
     try {
@@ -51,7 +51,7 @@ export const POST = defineRoute({
 });
 export const PATCH = defineRoute({
   permission: "hrm.performance.manage",
-  feature: "hrmSuccession",
+  feature: "hrmPerformance",
   body: patchSuccessionPlanBody,
   handler: async ({ request: req, authz, body }) => {
     const id = new URL(req.url).searchParams.get("id");

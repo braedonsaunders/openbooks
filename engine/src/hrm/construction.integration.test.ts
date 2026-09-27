@@ -67,7 +67,7 @@ import {
 
 
 
-const CONSTRUCTION_FEATURES = ["hrm", "payroll", "projects", "timeTracking", "hrmConstructionCompliance", "hrmPrevailingWage", "hrmCertifiedPayroll", "hrmWorkersCompClasses", "hrmApprenticeRatios", "hrmPerDiem"] as const;
+const CONSTRUCTION_FEATURES = ["hrm", "payroll", "projects", "timeTracking", "hrmConstructionCompliance"] as const;
 
 const CONSTRUCTION_SPEC = {
   features: CONSTRUCTION_FEATURES,
@@ -154,7 +154,7 @@ test("feature-off and grant refusals fire by name", { skip: !DB }, async () => {
     await grantPermissions(org.orgId, adminId, ["hrm.construction.read", "hrm.construction.manage"]);
     await assertConstructionRefusal(
       () => createClassification(db, { orgId: org.orgId, actorId: adminId, code: "X", name: "X", trade: "X" }),
-      /hrmConstructionCompliance feature is off/,
+      /while Construction compliance is off/,
     );
     await enableFeatures(org.orgId, CONSTRUCTION_FEATURES);
     const outsider = await createScratchUser(org.orgId, "Off Outsider", "off_outsider");

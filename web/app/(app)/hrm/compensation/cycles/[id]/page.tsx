@@ -11,7 +11,8 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 /**
  * One merit cycle — the team grid with the pacing bar, department
  * filter chips, and the per-line drawer. Renders only when
- * hrmMeritCycles is on and the actor holds hrm.compensation.read.
+ * Compensation and Payroll are on and the actor holds
+ * hrm.compensation.read.
  */
 export default async function CompCyclePage({
   params,

@@ -38,9 +38,7 @@ async function enableFieldTime(orgId: string, fieldTimeExtra: Record<string, unk
   await db.execute(sql`
     update orgs set settings = coalesce(settings, '{}'::jsonb)
       || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb)
-      || '{"projects": true, "timeTracking": true, "fieldTime": true, "fieldTimeGeofence": true,
-             "fieldTimePhoto": false, "fieldTimeKiosk": true, "fieldTimeCrewEntry": true,
-             "fieldTimeEquipment": true, "fieldTimeMultiStageApproval": true, "equipment": true}')
+      || '{"projects": true, "timeTracking": true, "fieldTime": true, "equipment": true}')
      where id = ${orgId}`);
   await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{fieldTime}',

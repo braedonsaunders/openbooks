@@ -26,8 +26,8 @@ export async function loadReviewTemplateBuilder(id: string): Promise<ReviewTempl
   if (!(await isFeatureEnabled(orgId, 'hrm'))) notFound()
   const template = await loadReviewTemplate(orgId, id)
   if (!template) notFound()
-  const competenciesOn =
-    (await isFeatureEnabled(orgId, 'hrmPerformance')) && (await isFeatureEnabled(orgId, 'hrmCompetencies'))
+  // Competencies are part of Performance.
+  const competenciesOn = await isFeatureEnabled(orgId, 'hrmPerformance')
   return { template, competencies: competenciesOn ? await listCompetencyOptions(orgId) : null }
 }
 

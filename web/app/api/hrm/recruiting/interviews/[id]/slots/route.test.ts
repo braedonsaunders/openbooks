@@ -16,7 +16,7 @@ const test = nodeTest;
 
 const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
-  features: { hrm: true, hrmRecruiting: true, hrmInterviewScheduling: true },
+  features: { hrm: true, hrmRecruiting: true },
   calls: [],
   serviceThrow: null,
   mapped: [],
@@ -109,7 +109,7 @@ const INTERVIEW_ID = "00000000-0000-4000-8000-000000000041";
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
-  routeState.features = { hrm: true, hrmRecruiting: true, hrmInterviewScheduling: true };
+  routeState.features = { hrm: true, hrmRecruiting: true };
   routeState.calls = [] as RouteState["calls"];
   routeState.serviceThrow = null;
   routeState.mapped = [];
@@ -127,9 +127,9 @@ function params() {
   return { params: Promise.resolve({ id: INTERVIEW_ID }) };
 }
 
-test("a switched-off scheduling surface 404s before the service runs", async () => {
+test("a switched-off Recruiting module 404s before the service runs", async () => {
   reset();
-  routeState.features.hrmInterviewScheduling = false;
+  routeState.features.hrmRecruiting = false;
   assert.equal(
     (await slotsRoute!.POST(jsonRequest("http://openbooks.test/x", "POST", { poolId: "pool-1" }), params())).status,
     404,

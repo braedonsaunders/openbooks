@@ -31,8 +31,7 @@ export const PATCH = defineRoute({
   }) => {
     if (
       !(await isFeatureEnabled(authz.user.orgId, "hrm")) ||
-      !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||
-      !(await isFeatureEnabled(authz.user.orgId, "hrmCalibration"))
+      !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance"))
     ) {
       return notFound("record");
     }

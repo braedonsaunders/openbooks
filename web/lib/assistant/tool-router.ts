@@ -91,6 +91,7 @@ export const CORE_TOOL_MODULES: Record<string, string> = {
   run_report: "reports",
   list_report_schedules: "reports",
   list_reporting_packages: "reports",
+  nl_report: "reports",
   // Setup + company settings.
   list_setup_entities: "setup",
   list_setup_records: "setup",

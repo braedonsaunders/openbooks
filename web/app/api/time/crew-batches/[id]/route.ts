@@ -8,7 +8,7 @@ import { postPermission } from '../../../../../lib/document-kinds'
 import { postDocument } from '@openbooks/engine/src/ledger/posting-document.ts'
 import { paymentControlDeps } from '@openbooks/engine/src/payments/payment-accounts.ts'
 import {
-  approveBatchStage,
+  approveBatch,
   postBatch,
   rejectBatch,
   setBatchLines,
@@ -30,7 +30,7 @@ function fieldTime(error: unknown) {
 }
 
 async function batchGate(perm: 'time.crew.enter' | 'time.read' | 'time.approve' | 'time.manage') {
-  return guardFeaturePermission(perm, 'fieldTimeCrewEntry')
+  return guardFeaturePermission(perm, 'fieldTime')
 }
 
 /** GET → batch detail with lines and append-only history. */
@@ -129,7 +129,7 @@ async function legacyPOST(req: Request, ctx: { params: Promise<{ id: string }> }
       const gate = await batchGate('time.approve')
       if (gate instanceof NextResponse) return gate
       const actor = { actorUserId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
-      const status = await approveBatchStage({
+      const status = await approveBatch({
         orgId: gate.user.orgId,
         actorUserId: gate.user.id,
         batchId: id,

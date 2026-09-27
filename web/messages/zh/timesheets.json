@@ -132,7 +132,7 @@
     "flagAutoClosed": "自动结束",
     "flagPhoto": "有照片",
     "crewTitle": "班组工时",
-    "crewDescription": "工长按项目按日填报 — 签名、分阶段审批、一次性过账。",
+    "crewDescription": "工长按项目按日填报 — 签名、审批、一次性过账。",
     "newBatch": "新建批次",
     "statusLabel": "状态",
     "allBatches": "全部批次",
@@ -146,8 +146,7 @@
     "setupLink": "外勤设置",
     "statusDraft": "草稿",
     "statusSubmitted": "已提交",
-    "statusStage1": "第1阶段已批",
-    "statusStage2": "第2阶段已批",
+    "statusApproved": "已批准",
     "statusRejected": "已驳回",
     "statusPosted": "已过账",
     "worker": "工人",
@@ -164,7 +163,7 @@
     "saveLines": "保存",
     "signAndSubmit": "签名并提交",
     "withdraw": "退回草稿",
-    "approveStage": "批准本阶段",
+    "approve": "批准",
     "reject": "驳回",
     "rejectReason": "驳回理由",
     "post": "过账",
@@ -196,15 +195,16 @@
     "kiosksTitle": "终端设备",
     "noKiosks": "尚未注册终端。",
     "retired": "已停用",
-    "tokenIssued": "{name}的设备链接 — 请立即复制，不会再次显示：", "acknowledgeToken": "我已复制此设备链接",
+    "tokenIssued": "{name}的设备链接 — 请立即复制，不会再次显示：",
+    "acknowledgeToken": "我已复制此设备链接",
     "kioskNamePlaceholder": "终端名称（工地或门口）…",
     "registerKiosk": "注册终端",
     "pinWorkerPlaceholder": "工人party id…",
     "pinPlaceholder": "4–10位PIN",
     "setPin": "设置PIN",
-    "stagesTitle": "审批链",
-    "singleApproval": "采用单级审批。",
-    "stagesHint": "审批链按主题通过API声明 — 阶段为1、2、3连续编号。",
+    "approvalRoutingTitle": "审批路由",
+    "approvalRoutingHint": "工时表和团队工时批次的审批通过 Flows 进行。在工时表周或团队工时批次记录上创建流程，即可添加主管、项目经理或薪资审批步骤；没有流程时，由工时审批人直接审批。",
+    "approvalRoutingLink": "打开 Flows",
     "kioskNeedPin": "请选择工人并输入PIN。",
     "kioskIdentified": "已确认 — 请在下方打卡。",
     "kioskClockedIn": "上班已记录。",
@@ -233,18 +233,6 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "使用我的位置",
     "locationDenied": "无法获取位置 — 请手动输入坐标。",
-    "saveGeofence": "保存围栏",
-    "subjects": {
-      "timesheetWeek": "工时表周",
-      "crewTimeBatch": "团队工时批次"
-    },
-    "approvers": {
-      "supervisor": "主管",
-      "projectManager": "项目经理",
-      "payroll": "薪资",
-      "role": "角色",
-      "namedRole": "角色：{role}"
-    },
-    "unknownApprovalTarget": "未知审批对象"
+    "saveGeofence": "保存围栏"
   }
 }

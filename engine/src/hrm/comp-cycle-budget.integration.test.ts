@@ -76,6 +76,8 @@ installEngineSeams();
 
 
 const COMP_CYCLE_BUDGET_SPEC = {
+  // Merit cycles open and push only while Payroll is on.
+  features: ["hrm", "payroll"],
   users: [
     { key: "hrId", name: "Budget HR", handle: "budget_hr", permissions: ["hrm.compensation.read", "hrm.compensation.manage", "hrm.compensation.approve"], link: true },
   ],

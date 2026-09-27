@@ -10,11 +10,11 @@ export const runtime = "nodejs";
 /**
  * Hiring-manager scorecard summary: aggregates over submitted verdicts
  * with missing seats listed by name (manager scope in the service). 404s
- * while hrm, hrmRecruiting, or hrmStructuredInterviews is off.
+ * while HRM or Recruiting is off.
  */
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
-  feature: "hrmStructuredInterviews",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const { id } = routeParams;

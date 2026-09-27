@@ -4,9 +4,9 @@ import {
   requireAggregateCertificationsRead,
 } from "../authorization.ts";
 import { businessToday } from "../../platform/business-date.ts";
+import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HrmQualificationError } from "./errors.ts";
 import {
-  HRM_CERTIFICATIONS_FEATURE,
   assertQualificationsFeature,
   requireDate,
   requireId,
@@ -36,6 +36,33 @@ const SUBJECT_KINDS: readonly RequirementSubjectKind[] = [
 ];
 
 const SEVERITIES: readonly RequirementSeverity[] = ["block", "warn"];
+
+/**
+ * Equipment qualification requirements live on equipment records, so the
+ * equipment subject exists only while Equipment is on. Every other subject
+ * rides Certifications and licenses alone. Off hides the subject — stored
+ * requirements are preserved.
+ */
+export async function subjectKindAvailable(
+  exec: SqlExecutor,
+  orgId: string,
+  kind: RequirementSubjectKind,
+): Promise<boolean> {
+  if (kind !== "equipment") return true;
+  return lockAndCheckOrgFeature(exec, orgId, "equipment");
+}
+
+async function assertSubjectKindAvailable(
+  exec: SqlExecutor,
+  orgId: string,
+  kind: RequirementSubjectKind,
+): Promise<void> {
+  if (!(await subjectKindAvailable(exec, orgId, kind))) {
+    throw new HrmQualificationError(
+      "Equipment qualification requirements are unavailable while Equipment & rentals is off — enable it under Company Settings → Features; existing requirements are preserved.",
+    );
+  }
+}
 
 export interface QualificationRequirement {
   readonly id: string;
@@ -92,6 +119,7 @@ export async function resolveSubject(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
   asOf: string,
 ): Promise<string> {
+  await assertSubjectKindAvailable(exec, orgId, subjectKind);
   const ids = allowedSubsidiaryIds === null ? null : `{${[...allowedSubsidiaryIds].join(",")}}`;
   let name: string | null = null;
   if (subjectKind === "project") {
@@ -189,7 +217,7 @@ export async function setRequirement(
   }
   return runInCallerTransaction(exec, async (tx) => {
     const allowed = await requireAggregateCertificationsManage(tx, orgId, actorId);
-    await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification requirements");
+    await assertQualificationsFeature(tx, orgId, "Qualification requirements");
     const subjectName = await resolveSubject(tx, orgId, input.subjectKind, subjectId, allowed, await businessToday(orgId));
     const type = (await tx.execute<{ id: string; code: string }>(sql`
       select id, code from hrm_qualification_types
@@ -246,7 +274,7 @@ export async function removeRequirement(exec: SqlExecutor, input: RemoveRequirem
   const requirementId = requireId(input.requirementId, "requirementId");
   return runInCallerTransaction(exec, async (tx) => {
     const allowed = await requireAggregateCertificationsManage(tx, orgId, actorId);
-    await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification requirements");
+    await assertQualificationsFeature(tx, orgId, "Qualification requirements");
     const target = (await tx.execute<{ subject_kind: RequirementSubjectKind; subject_id: string }>(sql`
       select subject_kind, subject_id::text as subject_id
         from hrm_qualification_requirements
@@ -309,7 +337,8 @@ export async function listRequirementSubjectOptions(
     throw new HrmQualificationError("The subject search limit must be between 1 and 101 — use the bounded picker limit.");
   }
   const allowed = await requireAggregateCertificationsManage(exec, orgId, actorId);
-  await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification requirements");
+  await assertQualificationsFeature(exec, orgId, "Qualification requirements");
+  await assertSubjectKindAvailable(exec, orgId, input.subjectKind);
   const ids = allowed === null ? null : `{${[...allowed].join(",")}}`;
   const pattern = `%${input.query.trim().replace(/[\\%_]/g, "\\$&")}%`;
   if (input.subjectKind === "project") {
@@ -363,7 +392,7 @@ export async function listRequirements(
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const allowed = await requireAggregateCertificationsRead(exec, orgId, actorId);
-  await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification requirements");
+  await assertQualificationsFeature(exec, orgId, "Qualification requirements");
   const asOf = await businessToday(orgId);
   const kind = input.subjectKind ?? null;
   if (kind !== null && !SUBJECT_KINDS.includes(kind)) {
@@ -375,6 +404,7 @@ export async function listRequirements(
   const out: QualificationRequirement[] = [];
   const kinds = kind ? [kind] : [...SUBJECT_KINDS];
   for (const k of kinds) {
+    if (!(await subjectKindAvailable(exec, orgId, k))) continue;
     const ids = allowed === null ? null : `{${[...allowed].join(",")}}`;
     const scope = k === "project"
       ? sql`and exists (select 1 from projects p where p.org_id = r.org_id and p.id = r.subject_id and (${ids}::uuid[] is null or p.subsidiary_id = any(${ids}::uuid[])))`

@@ -17,7 +17,7 @@ export const runtime = "nodejs";
  */
 export const POST = defineRoute({
   permission: "hrm.self.request",
-  feature: "hrmPayTransparency",
+  feature: "hrmCompensation",
   body: requestPayInfoBody,
   handler: async ({ authz: gate, body: body }) => {
     try {

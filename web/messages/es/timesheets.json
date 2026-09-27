@@ -132,7 +132,7 @@
     "flagAutoClosed": "autocerrado",
     "flagPhoto": "foto",
     "crewTitle": "Tiempo de cuadrilla",
-    "crewDescription": "Lotes del capataz por proyecto y día — firma, aprueba por etapas, contabiliza una vez.",
+    "crewDescription": "Lotes del capataz por proyecto y día — firma, aprueba, contabiliza una vez.",
     "newBatch": "Nuevo lote",
     "statusLabel": "Estado",
     "allBatches": "Todos los lotes",
@@ -146,8 +146,7 @@
     "setupLink": "Configuración de campo",
     "statusDraft": "Borrador",
     "statusSubmitted": "Enviado",
-    "statusStage1": "Etapa 1 aprobada",
-    "statusStage2": "Etapa 2 aprobada",
+    "statusApproved": "Aprobado",
     "statusRejected": "Rechazado",
     "statusPosted": "Contabilizado",
     "worker": "Trabajador",
@@ -164,7 +163,7 @@
     "saveLines": "Guardar líneas",
     "signAndSubmit": "Firmar y enviar",
     "withdraw": "Devolver a borrador",
-    "approveStage": "Aprobar etapa",
+    "approve": "Aprobar",
     "reject": "Rechazar",
     "rejectReason": "Motivo del rechazo",
     "post": "Contabilizar",
@@ -196,15 +195,16 @@
     "kiosksTitle": "Quioscos",
     "noKiosks": "Aún no hay quioscos registrados.",
     "retired": "Retirado",
-    "tokenIssued": "Enlace del dispositivo para {name} — cópialo ahora, no volverá a mostrarse:", "acknowledgeToken": "He copiado este enlace del dispositivo",
+    "tokenIssued": "Enlace del dispositivo para {name} — cópialo ahora, no volverá a mostrarse:",
+    "acknowledgeToken": "He copiado este enlace del dispositivo",
     "kioskNamePlaceholder": "Nombre del quiosco (obra o acceso)…",
     "registerKiosk": "Registrar quiosco",
     "pinWorkerPlaceholder": "ID de parte del trabajador…",
     "pinPlaceholder": "PIN de 4–10 dígitos",
     "setPin": "Fijar PIN",
-    "stagesTitle": "Cadenas de aprobación",
-    "singleApproval": "Rige la aprobación simple.",
-    "stagesHint": "Las cadenas se declaran por asunto en la API de etapas — 1, 2, 3 sin saltos.",
+    "approvalRoutingTitle": "Circuito de aprobación",
+    "approvalRoutingHint": "Las aprobaciones de hojas de horas y de registros de horas del equipo se gestionan en Flows. Cree un flujo sobre la semana de hojas de horas o el registro de horas del equipo para añadir pasos de aprobación del supervisor, del jefe de proyecto o de nómina; sin un flujo, un aprobador de horas aprueba directamente.",
+    "approvalRoutingLink": "Abrir Flows",
     "kioskNeedPin": "Elige al trabajador e introduce el PIN.",
     "kioskIdentified": "Identificado — ficha abajo.",
     "kioskClockedIn": "Entrada fichada.",
@@ -233,18 +233,6 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "Usar mi ubicación",
     "locationDenied": "Ubicación no disponible — introduce las coordenadas a mano.",
-    "saveGeofence": "Guardar geocerca",
-    "subjects": {
-      "timesheetWeek": "Semana de hojas de horas",
-      "crewTimeBatch": "Registro de horas del equipo"
-    },
-    "approvers": {
-      "supervisor": "Persona supervisora",
-      "projectManager": "Responsable del proyecto",
-      "payroll": "Nómina",
-      "role": "Rol",
-      "namedRole": "Rol: {role}"
-    },
-    "unknownApprovalTarget": "Destino de aprobación desconocido"
+    "saveGeofence": "Guardar geocerca"
   }
 }

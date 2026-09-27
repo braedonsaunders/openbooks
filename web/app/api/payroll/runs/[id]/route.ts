@@ -23,7 +23,6 @@ import { canonicalAdjustmentHours, mutatePayRunAdjustment, payRunBulkAdjustmentI
 import { storedHolidayEligibilityForRun } from '@openbooks/engine/src/payroll/holiday-attestations.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import '../../../../../lib/feature-gates';
-import { isFeatureEnabled } from '../../../../../lib/features'
 import { aiRailsErrorResponse } from '../../../../../lib/ai-rails'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -684,22 +683,19 @@ export const POST = defineRoute({
         // truth, two consumers — render and refuse.)
         await assertPayRunNotStale(gate.user.orgId, id, db, gate.allowedSubsidiaryIds)
         await assertPayRunApprovalReleased(gate.user.orgId, id)
-        // Open block-severity anomaly flags refuse the finalize while
-        // the hrmPayrollAnomalies capability is on. Skipped entirely while
-        // the capability is off (the hook is not registered); the engine
+        // Open block-severity anomaly flags refuse the finalize. Payroll
+        // checks ride Payroll, so the refusal always applies here; the engine
         // commit below stays the untouched source of truth —
         // this boundary only refuses before calling it, never re-implements it.
-        if (await isFeatureEnabled(gate.user.orgId, 'hrmPayrollAnomalies')) {
-          const period = (await db.execute<{ periodStart: string; periodEnd: string }>(sql`
-            select period_start::text as "periodStart", period_end::text as "periodEnd"
-              from pay_runs where org_id = ${gate.user.orgId} and document_id = ${id}`)).rows[0]
-          if (period) {
-            const { checkPayrollFinalizeAllowed } = await import('@openbooks/engine/src/hrm/ai/anomalies.ts')
-            try {
-              await checkPayrollFinalizeAllowed(db, { orgId: gate.user.orgId, periodFrom: period.periodStart, periodTo: period.periodEnd })
-            } catch (e) {
-              return aiRailsErrorResponse(e)
-            }
+        const period = (await db.execute<{ periodStart: string; periodEnd: string }>(sql`
+          select period_start::text as "periodStart", period_end::text as "periodEnd"
+            from pay_runs where org_id = ${gate.user.orgId} and document_id = ${id}`)).rows[0]
+        if (period) {
+          const { checkPayrollFinalizeAllowed } = await import('@openbooks/engine/src/hrm/ai/anomalies.ts')
+          try {
+            await checkPayrollFinalizeAllowed(db, { orgId: gate.user.orgId, periodFrom: period.periodStart, periodTo: period.periodEnd })
+          } catch (e) {
+            return aiRailsErrorResponse(e)
           }
         }
         const result = await commitPayRun({ orgId: gate.user.orgId, documentId: id, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })

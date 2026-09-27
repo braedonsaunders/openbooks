@@ -8,7 +8,7 @@ import { registerFlowApprovalReleaseHandler } from '@openbooks/engine/src/flows/
  * Most flow subjects release entirely inside the engine. A few product
  * records orchestrate services that intentionally live in the web package
  * (field-ticket rate resolution and project-charge materialization,
- * timesheet stamping, crew batch stage advancement). The engine cannot
+ * timesheet stamping, crew batch approval). The engine cannot
  * import web, so the node server registers those handlers here at boot,
  * exactly like the flow PDF renderer.
  *
@@ -64,9 +64,9 @@ export async function registerFlowApprovalReleaseHandlers(): Promise<void> {
 
   // Crew batch approval routing is tenant-authored in Flows as well. The
   // engine decides WHO approves and when the gates resolve; this supplies
-  // what approval means for a batch — advancing the current approval stage
-  // through the crew service, or bouncing it to the foreman with the
-  // approver's reason attached.
+  // what approval means for a batch — approving it through the crew
+  // service, or bouncing it to the foreman with the approver's reason
+  // attached.
   registerFlowApprovalReleaseHandler('crew_time_batch', async ({
     subjectId,
     outcome,

@@ -20,7 +20,6 @@ import {
 } from "../../payroll/labor-compliance.ts";
 import { PAYROLL_COUNTRY_PACKS, type PayrollCountryPack } from "../../payroll/packs.ts";
 import {
-  HRM_CERTIFIED_PAYROLL_FEATURE,
   assertConstructionFeature,
   assertProjectInScope,
   loadOrgCountry,
@@ -78,7 +77,7 @@ export async function listFormats(
   orgId: string,
   actorId: string,
 ): Promise<{ packName: string; formats: readonly CertifiedFormat[] }> {
-  await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
+  await assertConstructionFeature(exec, orgId, "Certified payroll");
   requireId(actorId, "actorId");
   await requireHrmConstructionRead(exec, orgId, actorId);
   const pack = await packForOrg(exec, orgId);
@@ -95,7 +94,7 @@ export async function constructionCarveOuts(
   actorId: string,
   region?: string,
 ): Promise<ReturnType<typeof constructionRulesFor>> {
-  await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
+  await assertConstructionFeature(exec, orgId, "Certified payroll");
   requireId(actorId, "actorId");
   await requireHrmConstructionRead(exec, orgId, actorId);
   const pack = await packForOrg(exec, orgId);
@@ -512,7 +511,7 @@ export async function listRuns(
   actorId: string,
   projectId?: string | null,
 ): Promise<readonly CertifiedRun[]> {
-  await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
+  await assertConstructionFeature(exec, orgId, "Certified payroll");
   requireId(actorId, "actorId");
   // Runs attest named workers' certified wages (identity + amounts):
   // restricted readers see only runs for in-scope projects; runs with no
@@ -558,7 +557,7 @@ export async function generate(
   const projectId = requireId(input.projectId, "projectId");
   const weekEnding = requireDate(input.weekEnding, "weekEnding");
   const formatKey = requireText(input.formatKey, "formatKey");
-  await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
+  await assertConstructionFeature(exec, orgId, "Certified payroll");
   // A certified run attests named workers' wages for a project: the
   // project must be in the actor's subsidiary scope before the run
   // freezes anything — generating B's attested filing as A is refused.
@@ -596,7 +595,7 @@ export async function submitRun(
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const runId = requireId(input.runId, "runId");
-  await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
+  await assertConstructionFeature(exec, orgId, "Certified payroll");
   // Submitting files B's attested wages: scope fences before the status
   // read. An out-of-scope run refuses with the run's own shape — never
   // the project's — so a B run id probes like a fabricated one.
@@ -646,7 +645,7 @@ export async function amendRun(
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const runId = requireId(input.runId, "runId");
-  await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
+  await assertConstructionFeature(exec, orgId, "Certified payroll");
   // Amending rebuilds B's attested filing under a new run: scope fences
   // before the status read, and an out-of-scope run refuses with the
   // run's own not-found shape — never the project's.
@@ -716,7 +715,7 @@ export async function projectComplianceSummary(
 ): Promise<ProjectComplianceSummary> {
   requireId(actorId, "actorId");
   const project = requireId(projectId, "projectId");
-  await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
+  await assertConstructionFeature(exec, orgId, "Certified payroll");
   // The cockpit aggregates one project's findings and filings: the
   // project itself must be in scope, or B's open-findings count and last
   // filing leak through A's cockpit.
@@ -790,7 +789,7 @@ export async function downloadRun(
 ): Promise<{ filename: string; contentType: string; body: string }> {
   requireId(actorId, "actorId");
   requireId(runId, "runId");
-  await assertConstructionFeature(exec, orgId, HRM_CERTIFIED_PAYROLL_FEATURE, "Certified payroll");
+  await assertConstructionFeature(exec, orgId, "Certified payroll");
   // The frozen file names B's workers and their certified wages: the
   // run's project must be in scope before the bytes are returned —
   // both a missing run and an out-of-scope one refuse not-found, so

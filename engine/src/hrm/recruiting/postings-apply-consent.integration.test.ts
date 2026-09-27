@@ -30,7 +30,7 @@ import {
  */
 
 const POSTINGS_APPLY_CONSENT_SPEC = {
-  features: ["hrm", "hrmRecruiting", "hrmJobBoards"],
+  features: ["hrm", "hrmRecruiting"],
   users: [
     { key: "recruiterId", name: "Apply Recruiter", handle: "apply_recruiter", permissions: ["hrm.recruiting.read", "hrm.recruiting.manage"] },
   ],

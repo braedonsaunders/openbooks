@@ -40,8 +40,8 @@ async function grant(orgId: string, userId: string, permissions: string[]): Prom
   }
 }
 
-async function enableBoards(orgId: string): Promise<void> {
-  for (const key of ["hrm", "hrmRecruiting", "hrmJobBoards"] as const) {
+async function enableRecruiting(orgId: string): Promise<void> {
+  for (const key of ["hrm", "hrmRecruiting"] as const) {
     await db.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${`features,${key}`}, ','), 'true'::jsonb, true)
@@ -52,7 +52,7 @@ async function enableBoards(orgId: string): Promise<void> {
 test("public feed lists published postings with no ambient org scope", async () => {
   const org = await createScratchOrg();
   try {
-    await enableBoards(org.orgId);
+    await enableRecruiting(org.orgId);
     const recruiterId = await createScratchUser(org.orgId, "Feed Recruiter", "feed_recruiter");
     await grant(org.orgId, recruiterId, ["hrm.recruiting.read", "hrm.recruiting.manage"]);
     const requisition = await createRequisition({
@@ -80,14 +80,14 @@ test("public feed lists published postings with no ambient org scope", async () 
     assert.equal(jobs.length, 1, "the public feed serves the published posting under deny-by-default RLS");
     assert.equal(jobs[0]!.postingId, posting.id);
     assert.equal(jobs[0]!.title, "Backend engineer");
-    // Switching the job board off must stop the feed.
+    // Switching Recruiting off must stop the feed.
     await db.execute(sql`
       update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmJobBoards}', 'false'::jsonb, true)
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmRecruiting}', 'false'::jsonb, true)
        where id = ${org.orgId}`);
     await assert.rejects(
       orgContext.run({ orgId: null, bypass: false }, () => listFeedPostings(resolved)),
-      /Job boards is off/,
+      /Recruiting is off/,
     );
   } finally {
     await dropScratchOrg(org.orgId);

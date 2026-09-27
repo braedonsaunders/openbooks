@@ -14,13 +14,13 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../../lib/features'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
 /**
  * The field-time setup surface: declared rules, kiosks with token
- * issue/revoke and worker PINs, and the multi-stage chains. Renders
- * for time managers when fieldTime is on — the view 404s otherwise.
+ * issue/revoke and worker PINs, and a pointer to Flows, where timesheet
+ * and crew-batch approval routing is authored. Renders for time managers
+ * when fieldTime is on — the view 404s otherwise.
  */
 
 export interface FieldSetupData {
@@ -47,18 +47,17 @@ export interface FieldSetupData {
     isActive: boolean
     lastSeenAt: string | null
   }[]
-  chains: { subject: string; stages: { order: number; approverKind: string; roleKey?: string | null }[] | null }[]
   kioskLinkBase: string
   /**
-   * Whether the caller may manage kiosks (time.kiosk.manage plus the
-   * fieldTimeKiosk feature): without it the kiosk section hides instead
-   * of showing devices whose register/revoke calls would only 403.
+   * Whether the caller may manage kiosks (time.kiosk.manage): without it
+   * the kiosk section hides instead of showing devices whose
+   * register/revoke calls would only 403.
    */
   canManageKiosks: boolean
   /**
-   * Whether the caller's settings and chain edits would persist: both
-   * PUTs need unrestricted subsidiary scope, so a restricted manager
-   * reads the policy with disabled forms instead of failing saves.
+   * Whether the caller's settings edits would persist: the PUT needs
+   * unrestricted subsidiary scope, so a restricted manager reads the
+   * policy with disabled forms instead of failing saves.
    */
   canEditPolicy: boolean
 }
@@ -70,11 +69,11 @@ export async function loadFieldSetupPage(): Promise<FieldSetupData> {
   await requireFeatureEnabled(authz.user.orgId, 'fieldTime')
   const t = await getTranslations('timesheets')
   const orgId = authz.user.orgId
-  // Kiosk devices are the kiosks API's authority (time.kiosk.manage plus
-  // the fieldTimeKiosk feature), not this page's: without both the
+  // Kiosk devices are the kiosks API's authority (time.kiosk.manage on
+  // top of the fieldTime gate this page already requires): without it the
   // section hides, and with a restricted scope the list matches that
   // API's project visibility exactly.
-  const canManageKiosks = can(authz, 'time.kiosk.manage') && (await isFeatureEnabled(orgId, 'fieldTimeKiosk'))
+  const canManageKiosks = can(authz, 'time.kiosk.manage')
   const canEditPolicy = authz.allowedSubsidiaryIds === null
   const settings = (await db.execute<{ settings: unknown }>(sql`
     select settings->'fieldTime' as settings from orgs where id = ${orgId}`)).rows[0]?.settings as Record<string, unknown> | null
@@ -92,8 +91,6 @@ export async function loadFieldSetupPage(): Promise<FieldSetupData> {
             and ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
        )`}
      order by name`)).rows
-  const chains = (await db.execute<{ subject_kind: string; stages: unknown }>(sql`
-    select subject_kind, stages from time_approval_stages where org_id = ${orgId}`)).rows
   return {
     title: t('field.setupTitle'),
     description: t('field.setupDescription'),
@@ -113,10 +110,6 @@ export async function loadFieldSetupPage(): Promise<FieldSetupData> {
       photoRequired: settings?.photoRequired === true,
     },
     kiosks,
-    chains: ['timesheet_week', 'crew_time_batch'].map((subject) => ({
-      subject,
-      stages: (chains.find((chain) => chain.subject_kind === subject)?.stages ?? null) as FieldSetupData['chains'][number]['stages'],
-    })),
     kioskLinkBase: '/kiosk',
     canManageKiosks,
     canEditPolicy,
@@ -142,7 +135,6 @@ export function fieldSetupSpec(data: FieldSetupData): PageSpec {
           widgetBlock('hrm-field-time-setup', {
             initialSettings: data.initialSettings,
             kiosks: data.kiosks,
-            chains: data.chains,
             kioskLinkBase: data.kioskLinkBase,
             canManageKiosks: data.canManageKiosks,
             canEditPolicy: data.canEditPolicy,

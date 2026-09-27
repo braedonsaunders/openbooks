@@ -152,7 +152,6 @@ const EXCLUDED_TABLES: Record<string, string> = {
   number_sequences: "sequence counters for document numbering.",
   connector_replay_authorizations: "operational authorization evidence for closed-period replay; not a reporting entity.",
   employee_tax_certificates: "tax certificate PII.",
-  time_approval_stages: "time approval workflow configuration.",
   source_deletion_resolutions: "sync conflict-resolution runtime.",
   posting_effects: "posting pipeline internals.",
   payroll_employer_facts: "employee statutory facts that drive payroll calculations, not a generic reporting surface.",

@@ -15,12 +15,12 @@ export const runtime = "nodejs";
  * Interview scorecards: GET reads under the blind rule (own card plus
  * others only after submitting, unless privileged), POST submits the
  * actor's own verdict. The read gate is hrm.recruiting.read; submitting
- * needs a panel seat (checked in the service). 404s while hrm,
- * hrmRecruiting, or hrmStructuredInterviews is off.
+ * needs a panel seat (checked in the service). 404s while HRM
+ * or Recruiting is off.
  */
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
-  feature: "hrmStructuredInterviews",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const { id } = routeParams;
@@ -39,7 +39,7 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: "hrm.recruiting.read",
-  feature: "hrmStructuredInterviews",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: submitScorecardBody,
   handler: async ({

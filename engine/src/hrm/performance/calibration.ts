@@ -10,7 +10,7 @@ import { HrmPerformanceError, mathRefusal } from "./errors.ts";
 import { inputGuards } from "../input-guards.ts";
 import { assertRatingInScale, parseRatingScale, type RatingScale } from "./performance-math.ts";
 import { employerSubsidiaryScope } from "./subsidiary-scope.ts";
-import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
+import { HRM_PERFORMANCE_KEY } from "./one-on-ones.ts";
 
 /**
  * Governed HRM calibration sessions (0228, HR-17): open a session over a
@@ -38,8 +38,6 @@ import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
  * Do not touch packages/payroll. Existing refusal classes are untouched.
  */
 
-export const HRM_CALIBRATION_KEY = "hrmCalibration" as const;
-
 export type CalibrationSessionStatus = "draft" | "open" | "closed";
 export type CalibrationEventKind = "opened" | "rating_changed" | "potential_set" | "reverted" | "closed";
 
@@ -52,16 +50,10 @@ export async function assertCalibrationFeature(db: SqlExecutor, orgId: string): 
       "hrm feature is disabled: enable it on Company Settings → Features before opening calibration",
     );
   }
-  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_CONTINUOUS_KEY))) {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrmPerformance feature is disabled: enable it on Company Settings → Features before opening calibration",
-    );
-  }
-  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_CALIBRATION_KEY))) {
-    throw new HrmPerformanceError(
-      "FEATURE_OFF",
-      "hrmCalibration feature is disabled: enable it on Company Settings → Features before opening calibration",
     );
   }
 }

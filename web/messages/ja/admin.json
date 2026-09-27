@@ -3959,10 +3959,6 @@
         "circle": "円",
         "polygon": "多角形"
       },
-      "approvalSubject": {
-        "timesheetWeek": "タイムシート週",
-        "crewTimeBatch": "班バッチ"
-      },
       "hrmRetentionAction": {
         "anonymize": "匿名化",
         "delete": "削除"
@@ -5031,15 +5027,7 @@
   "features": {
     "hrm": {
       "title": "人事",
-      "description": "時点履歴、人員数、変更申請の追跡を備えた雇用記録。HRM基盤を読み取るだけで、給与計算を動かすことはありません。"
-    },
-    "hrmCelebrations": {
-      "title": "職場のお祝い",
-      "description": "ホームに従業員の誕生日・勤続記念・新しい仲間を表示します。"
-    },
-    "hrmManagerNudges": {
-      "title": "マネージャーへの促し",
-      "description": "マネージャーのホームに離職と1:1の促しを、自分のチームに限定して表示します。"
+      "description": "時点履歴、人員数、アクション・理由コード付きの変更申請、組織図を備えた雇用記録。HRM基盤を読み取るだけで、給与計算を動かすことはありません。"
     },
     "homeAnnouncements": {
       "title": "ホームのお知らせ",
@@ -5282,197 +5270,37 @@
       "title": "シミュレーター",
       "description": "実際のサブジェクトに対して書き込みなしでレシピを試行します。"
     },
-    "hrmActionReasons": {
-      "title": "アクション・理由コード",
-      "description": "すべての変更申請にHRアクションと理由コードを必須にします。"
-    },
-    "hrmEventVerbs": {
-      "title": "変更イベント動詞",
-      "description": "雇用変更の取消・破棄・訂正を追加イベントとして行います。"
-    },
     "hrmConstructionCompliance": {
       "title": "建設コンプライアンス",
       "description": "自社施工向けの標準賃金表、認証給与、労災クラス、見習い比率、日当。給与・プロジェクト・勤怠が必要。"
     },
-    "hrmPrevailingWage": {
-      "title": "標準賃金",
-      "description": "宣言済み賃金表から現場・分類・日付で賃金を解決。"
-    },
-    "hrmCertifiedPayroll": {
-      "title": "認証給与",
-      "description": "パック宣言ファイルで描画する週次確定レポート。"
-    },
-    "hrmWorkersCompClasses": {
-      "title": "労災クラス",
-      "description": "優先度ルールで原価時間をプレミアムクラスに分割。"
-    },
-    "hrmApprenticeRatios": {
-      "title": "見習い比率",
-      "description": "熟練・見習い比率を日次で強制；違反は熟練単価で計算。"
-    },
-    "hrmPerDiem": {
-      "title": "日当",
-      "description": "承認済み勤怠から日当・旅費を給与シームへ計算。"
-    },
     "hrmCompensation": {
       "title": "報酬",
-      "description": "職務体系とバンド：役割の適正給与と各人の位置。"
-    },
-    "hrmMeritCycles": {
-      "title": "昇給サイクル",
-      "description": "給与実績を確定し昇給を決定して反映するラウンド。"
-    },
-    "hrmHeadcountPlans": {
-      "title": "人員計画",
-      "description": "バンドから積算したシナリオ。承認で求人を開く。"
-    },
-    "hrmPayTransparency": {
-      "title": "給与の透明性",
-      "description": "給与実績からの確定済み指標と従業員の情報請求。"
+      "description": "職務体系と給与バンド、昇給サイクル、コスト試算付きの要員計画、給与の透明性。昇給サイクルには給与計算も必要です。"
     },
     "hrmCertifications": {
       "title": "認定・免許",
       "description": "作業員の資格台帳：体系、保有資格、配置要件、期限アラート。無効化してもデータは削除されません。"
     },
-    "hrmDispatchGating": {
-      "title": "配置ゲート",
-      "description": "必要な資格がない要員の割当を拒否。プロジェクトとスケジュールが必要。"
-    },
-    "hrmEquipmentQualifications": {
-      "title": "設備の資格要件",
-      "description": "設備に必要な資格種類を定義。設備管理が必要。"
-    },
-    "hrmCertificationAlerts": {
-      "title": "資格アラート",
-      "description": "保有者と上長への毎日の期限通知（受信箱経由）。"
-    },
     "hrmPerformance": {
       "title": "パフォーマンス",
-      "description": "評価・目標・1:1・フィードバック・キャリブレーション・タレント・後継の親スイッチ。"
-    },
-    "hrmOneOnOnes": {
-      "title": "1:1",
-      "description": "アジェンダを引き継ぐ定期的なマネージャーとメンバーの面談。"
-    },
-    "hrmFeedback": {
-      "title": "フィードバック",
-      "description": "発生時に記録する称賛・フィードバック・依頼。"
-    },
-    "hrmCompetencies": {
-      "title": "コンピテンシー",
-      "description": "評価や職位レベルに紐づく段階付きの再利用可能なスキル語彙。"
-    },
-    "hrmCalibration": {
-      "title": "キャリブレーション",
-      "description": "監査証跡付きの評価サイクルに対する格付けグリッド。"
-    },
-    "hrmSuccession": {
-      "title": "タレントと後継",
-      "description": "職位ごとのタレントレビューと後継計画。"
+      "description": "評価、目標、1:1、フィードバック、コンピテンシー、キャリブレーション、タレントレビュー、後継計画。"
     },
     "hrmDocuments": {
       "title": "HR文書",
-      "description": "電子署名、テンプレート、確認書を備えた入社から退職までのHR文書。無効化してもデータは削除されません。"
-    },
-    "hrmDocumentRetention": {
-      "title": "文書の保持",
-      "description": "猶予期間後の監査付き削除を備えた保持スケジュール。無効化してもデータは削除されません。"
-    },
-    "hrmDataSubjectExport": {
-      "title": "開示請求エクスポート",
-      "description": "データ主体向けワンクリック開示エクスポート。無効化してもデータは削除されません。"
+      "description": "電子署名、テンプレート、確認書を備えた入社から退職までのHR文書に加え、保存期間スケジュールと本人開示エクスポート。無効化してもデータは削除されません。"
     },
     "hrmSurveys": {
       "title": "エンゲージメント調査",
       "description": "匿名度別の結果を備えたエンゲージメント・パルス調査。無効化してもデータは削除されません。"
     },
-    "hrmPulseSurveys": {
-      "title": "パルス調査",
-      "description": "トレンド付きの定期パルス実施。調査機能が必要です。"
-    },
-    "hrmOrgChart": {
-      "title": "組織図",
-      "description": "欠員、部門、スパン・オブ・コントロールを示す組織ツリー。"
-    },
     "fieldTime": {
       "title": "現場打刻",
       "description": "ジオフェンス・写真・オフラインキュー付きのモバイル／キオスク打刻、職長バッチ、機械時間の計上。"
     },
-    "fieldTimeGeofence": {
-      "title": "打刻ジオフェンス",
-      "description": "プロジェクトの円・多角形と位置を照合。圏外はフラグ表示し、拒否しません。"
-    },
-    "fieldTimePhoto": {
-      "title": "打刻写真",
-      "description": "モバイル打刻に写真を必須化。"
-    },
-    "fieldTimeKiosk": {
-      "title": "現場キオスク",
-      "description": "自動復帰付きの共用PIN端末。"
-    },
-    "fieldTimeCrewEntry": {
-      "title": "班の工数入力",
-      "description": "プロジェクト×日ごとの職長バッチ（署名・段階承認付き）。"
-    },
-    "fieldTimeEquipment": {
-      "title": "工数に機械時間",
-      "description": "工数・バッチ明細に機械時間（機械チャージ品目で単価計算）。機械機能が必要。"
-    },
-    "fieldTimeMultiStageApproval": {
-      "title": "多段階の工数承認",
-      "description": "タイムシートと班バッチの上長・PM・給与の段階チェーン。"
-    },
     "hrmRecruiting": {
       "title": "採用",
-      "description": "求人、候補者、面接、オファー：欠員から採用までの流れ。"
-    },
-    "hrmStructuredInterviews": {
-      "title": "構造化面接",
-      "description": "評価項目つき面接キットとブラインド方式のパネル評価。"
-    },
-    "hrmInterviewScheduling": {
-      "title": "面接日程調整",
-      "description": "候補者向け自己予約リンクつきの提案枠。"
-    },
-    "hrmOfferSigning": {
-      "title": "オファー署名",
-      "description": "テンプレートのオファーを版管理PDF化し製品内で署名。"
-    },
-    "hrmJobBoards": {
-      "title": "求人掲示",
-      "description": "社内キャリアページとフィード配信、選考結果の同期つき。"
-    },
-    "hrmCandidateRetention": {
-      "title": "候補者データ保持",
-      "description": "同意の取得と保持ルール：期限で匿名化または削除。"
-    },
-    "hrmTalentPool": {
-      "title": "タレントプール",
-      "description": "過去の候補者を募集中の求人に照合するプール。"
-    },
-    "hrmAiAssist": {
-      "title": "AI支援",
-      "description": "確定的HRMのAI能力のマスタースイッチ。自動で提出・承認・支払いすることはありません。"
-    },
-    "hrmExplainPay": {
-      "title": "明細の説明",
-      "description": "前期差分つき確定的明細トレースを「給与」ドロワーに表示。"
-    },
-    "hrmPayrollAnomalies": {
-      "title": "給与異常",
-      "description": "ライフサイクルつき実行前フラグ。ブロックは確定を拒否。"
-    },
-    "hrmTimeAnomalies": {
-      "title": "勤怠異常",
-      "description": "承認チップと受信箱に勤怠フラグを表示。"
-    },
-    "hrmDrafting": {
-      "title": "根拠に基づく起草",
-      "description": "引用記録からの下書きと言語フラグ。自動提出しません。"
-    },
-    "hrmNlReports": {
-      "title": "自然言語レポート",
-      "description": "質問から検証済み定義を作成し、プレビューしてビュー保存。"
+      "description": "求人、候補者、構造化面接、日程調整、製品内署名付きオファー、求人掲載、候補者データの保持、タレントプール。"
     },
     "aiGovernanceLedger": {
       "title": "AIガバナンス台帳",

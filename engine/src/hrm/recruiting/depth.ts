@@ -5,10 +5,10 @@ import { HrmAuthorizationError, requireRecruitingFeature } from "../authorizatio
 import { RecruitingError } from "./errors.ts";
 
 /**
- * Shared depth-layer helpers (HR-18, 0229).
+ * Shared recruiting depth-layer helpers.
  *
- * - requireDepthFeature: every new write/read entry point refuses BY NAME
- *   naming Company Settings → Features when its sub-feature is off. The
+ * - requireDepthFeature: every depth write/read entry point refuses BY
+ *   NAME, naming Company Settings → Features, when Recruiting is off. The
  *   API/page layer 404s as well; this is the service-level refusal so a
  *   caller that reaches past the page still gets the remedy, never silent
  *   behavior or a zero.
@@ -25,18 +25,6 @@ import { RecruitingError } from "./errors.ts";
  *   so scan-only and unit-test callers never load Redis.
  */
 
-export const DEPTH_FEATURE_KEYS = [
-  "hrmRecruiting",
-  "hrmStructuredInterviews",
-  "hrmInterviewScheduling",
-  "hrmOfferSigning",
-  "hrmJobBoards",
-  "hrmCandidateRetention",
-  "hrmTalentPool",
-] as const;
-
-export type DepthFeatureKey = (typeof DEPTH_FEATURE_KEYS)[number];
-
 export async function loadFeatureState(
   exec: SqlExecutor,
   orgId: string,
@@ -47,14 +35,13 @@ export async function loadFeatureState(
   return row?.features ?? {};
 }
 
-/** Refuse by name when the sub-feature (or its hrmRecruiting parent) is off. */
+/** Refuse by name when Recruiting (or its HRM parent) is off. */
 export async function requireDepthFeature(
   exec: SqlExecutor,
   orgId: string,
-  key: DepthFeatureKey,
 ): Promise<void> {
   try {
-    await requireRecruitingFeature(exec, orgId, key);
+    await requireRecruitingFeature(exec, orgId);
   } catch (error) {
     if (!(error instanceof HrmAuthorizationError)) throw error;
     throw new RecruitingError("REFUSED", error.message);

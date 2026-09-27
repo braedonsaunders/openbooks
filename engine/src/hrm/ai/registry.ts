@@ -1,10 +1,13 @@
+import { featureEnabled, type FeatureState } from "../../organization/feature-registry.ts";
 import { autonomyRaiseRefused, unknownCapability } from "./errors.ts";
 
 /**
- * HRM AI rails (HR-21) code registry. Every AI capability is a TOOL or a
- * DETERMINISTIC service; the registry is the single source of truth the
- * org mirror (ai_capabilities), the assistant prompts, and the ledger
- * sync all read from.
+ * AI capability registry. Every AI capability is a TOOL or a DETERMINISTIC
+ * service; the registry is the single source of truth the org mirror
+ * (ai_capabilities), the assistant prompts, and the ledger sync all read
+ * from. Capability keys are stable identifiers recorded on every ledger
+ * row — they are not feature switches. Each capability rides the module
+ * that owns its data (`featureKey`); there is no separate AI switch.
  *
  * Autonomy ladder (ascending): read_only < draft < propose <
  * act_with_confirmation. There is no autonomous level — the code maximum
@@ -21,7 +24,7 @@ export const AI_AUTONOMY_LADDER = [
 export type AiAutonomy = (typeof AI_AUTONOMY_LADDER)[number];
 
 export interface AiCapabilityDef {
-  /** Matches the feature/tool key. */
+  /** Stable capability identifier (ledger rows, the org mirror, tools). */
   readonly key: string;
   readonly name: string;
   readonly purpose: string;
@@ -35,8 +38,13 @@ export interface AiCapabilityDef {
   readonly noticeRequired: boolean;
   /** Notice shown to subjects. Never empty when noticeRequired. */
   readonly noticeText: string;
-  /** Feature key gating the capability (the Features switchboard). */
-  readonly featureKey: string;
+  /**
+   * Module feature that gates the capability — the module owning the data
+   * it reads. Null when the capability has no module of its own and only
+   * follows the assistant's gating (the `assistant.use` permission and the
+   * model configuration).
+   */
+  readonly featureKey: string | null;
   /** One prompt line appended to the assistant system prompt while on. */
   readonly promptLine: string;
 }
@@ -51,7 +59,7 @@ const DEFINITIONS: readonly AiCapabilityDef[] = [
     reviewerRole: "payroll administrator",
     noticeRequired: true,
     noticeText: "Pay explanations are generated from your payroll records. The figures come from the deterministic payroll calculation; the wording is AI-generated and the numbers govern.",
-    featureKey: "hrmExplainPay",
+    featureKey: "payroll",
     promptLine: "hrmExplainPay (read-only): explain payslips from the deterministic trace only, citing record ids; never reveal another person's pay.",
   },
   {
@@ -63,7 +71,7 @@ const DEFINITIONS: readonly AiCapabilityDef[] = [
     reviewerRole: "payroll administrator",
     noticeRequired: true,
     noticeText: "Pre-run payroll checks flag unusual figures for human review. A flag is a question, never a decision: a person resolves every flag before the run is finalized.",
-    featureKey: "hrmPayrollAnomalies",
+    featureKey: "payroll",
     promptLine: "hrmPayrollAnomalies (propose): surface payroll check flags with their numbers; never clear or resolve a flag yourself.",
   },
   {
@@ -75,7 +83,7 @@ const DEFINITIONS: readonly AiCapabilityDef[] = [
     reviewerRole: "payroll administrator",
     noticeRequired: true,
     noticeText: "Timesheet checks flag unusual entries for the approver. A flag is a question for a person, never an automated rejection.",
-    featureKey: "hrmTimeAnomalies",
+    featureKey: "timeTracking",
     promptLine: "hrmTimeAnomalies (propose): surface timesheet flags with their numbers; approval stays with the human approver.",
   },
   {
@@ -87,7 +95,7 @@ const DEFINITIONS: readonly AiCapabilityDef[] = [
     reviewerRole: "HR manager",
     noticeRequired: true,
     noticeText: "AI drafts are starting points assembled from your records. A person reviews, edits and submits every word — nothing is filed automatically.",
-    featureKey: "hrmDrafting",
+    featureKey: "hrm",
     promptLine: "hrmDrafting (draft): draft only from the cited sources, list every source, flag biased language; never submit or file anything.",
   },
   {
@@ -99,13 +107,13 @@ const DEFINITIONS: readonly AiCapabilityDef[] = [
     reviewerRole: "system administrator",
     noticeRequired: true,
     noticeText: "Report definitions from plain-language questions are validated against your report permissions and previewed before saving. The question is interpreted, never executed as written.",
-    featureKey: "hrmNlReports",
+    featureKey: null,
     promptLine: "hrmNlReports (draft): produce report definitions inside the caller's report permissions; invalid definitions are refused, never repaired silently.",
   },
   {
     key: "aiGovernanceLedger",
     name: "AI governance ledger",
-    purpose: "Capability registry mirror, decision log, notice catalogue and review cadence. On whenever any AI feature is.",
+    purpose: "Capability registry mirror, decision log, notice catalogue and review cadence for every AI capability.",
     dataScope: ["ai_capabilities", "ai_decisions"],
     maxAutonomy: "read_only",
     reviewerRole: "system administrator",
@@ -119,6 +127,14 @@ const DEFINITIONS: readonly AiCapabilityDef[] = [
 export const AI_CAPABILITIES: ReadonlyMap<string, AiCapabilityDef> = new Map(
   DEFINITIONS.map((def) => [def.key, def]),
 );
+
+/**
+ * Whether a capability is available under the org's feature state: its
+ * module feature is on, or it has no module gate of its own.
+ */
+export function capabilityFeatureOn(features: FeatureState, def: AiCapabilityDef): boolean {
+  return def.featureKey === null || featureEnabled(features, def.featureKey);
+}
 
 /** Position on the ladder; unknown autonomy sorts below read_only. */
 export function autonomyRank(autonomy: string): number {

@@ -15,6 +15,7 @@ import {
 
 import { isUuid } from "../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../compensation/_lib";
+import { meritCyclesPayrollRefusal } from "../_gate";
 import { setBudgetsBody } from "../../compensation/bodies";
 
 export const runtime = "nodejs";
@@ -31,9 +32,11 @@ export const runtime = "nodejs";
  */
 export const GET = defineRoute({
   permission: "hrm.compensation.read",
-  feature: "hrmMeritCycles",
+  feature: "hrmCompensation",
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ authz: gate, params: routeParams }) => {
+    const payrollOff = await meritCyclesPayrollRefusal(gate.user.orgId);
+    if (payrollOff) return payrollOff;
     const { id } = routeParams;
     if (!isUuid(id))
       return NextResponse.json({ error: "invalid cycle" }, { status: 400 });
@@ -67,7 +70,7 @@ const ACTIONS = [
 
 export const POST = defineRoute({
   permission: "hrm.compensation.manage",
-  feature: "hrmMeritCycles",
+  feature: "hrmCompensation",
   params: z.object({ id: z.string().min(1) }),
   body: setBudgetsBody.or(
     z.object({
@@ -80,6 +83,8 @@ export const POST = defineRoute({
     params: routeParams,
     body: body,
   }) => {
+    const payrollOff = await meritCyclesPayrollRefusal(gate.user.orgId);
+    if (payrollOff) return payrollOff;
     const { id } = routeParams;
     if (!isUuid(id))
       return NextResponse.json({ error: "invalid cycle" }, { status: 400 });

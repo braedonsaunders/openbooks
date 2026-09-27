@@ -14,7 +14,7 @@ import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, isUniqueViolationOn, mathRefusal } from "./errors.ts";
 import { inputGuards } from "../input-guards.ts";
 import { parseAppliesScope } from "./performance-math.ts";
-import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
+import { HRM_PERFORMANCE_KEY } from "./one-on-ones.ts";
 
 /**
  * Governed HRM competency frameworks (0228, HR-17): frameworks,
@@ -36,8 +36,6 @@ import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
  * Do not touch packages/payroll. Existing refusal classes are untouched.
  */
 
-export const HRM_COMPETENCIES_KEY = "hrmCompetencies" as const;
-
 export type CompetencyLinkKind = "job_level" | "position" | "review_template_section";
 
 const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
@@ -49,16 +47,10 @@ async function assertCompetenciesFeature(db: SqlExecutor, orgId: string): Promis
       "hrm feature is disabled: enable it on Company Settings → Features before opening competency frameworks",
     );
   }
-  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_CONTINUOUS_KEY))) {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrmPerformance feature is disabled: enable it on Company Settings → Features before opening competency frameworks",
-    );
-  }
-  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_COMPETENCIES_KEY))) {
-    throw new HrmPerformanceError(
-      "FEATURE_OFF",
-      "hrmCompetencies feature is disabled: enable it on Company Settings → Features before opening competency frameworks",
     );
   }
 }

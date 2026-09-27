@@ -60,10 +60,7 @@ async function setup(): Promise<Harness> {
   await grant(org.orgId, adminId, "payroll.manage");
   await grant(org.orgId, adminId, "hrm.employment.read");
   await grant(org.orgId, adminId, "admin.setup.manage");
-  await enableFeatures(org.orgId, [
-    "hrm", "payroll", "hrmAiAssist", "hrmExplainPay", "hrmPayrollAnomalies",
-    "hrmTimeAnomalies", "hrmDrafting", "hrmNlReports", "aiGovernanceLedger",
-  ]);
+  await enableFeatures(org.orgId, ["hrm", "payroll", "aiGovernanceLedger"]);
   return { org, adminId };
 }
 
@@ -172,7 +169,7 @@ test("capability sync seeds six rows; autonomy moves down only", { skip: !DB }, 
     // Unknown capability refuses with the remedy.
     await assert.rejects(
       updateCapability(db, { orgId: org.orgId, actorId: adminId, key: "hrmTimeTravel", autonomy: "read_only" }),
-      /Company Settings → Features/,
+      /not in the capability registry/,
     );
   } finally {
     await dropScratchOrg(org.orgId);
@@ -437,10 +434,11 @@ test("inbox adapters surface blocking checks and overdue reviews through the act
     assert.deepEqual(await payrollAnomalyBlockAdapter.list(outsiderCtx), []);
     assert.deepEqual(await aiCapabilityReviewAdapter.list(outsiderCtx), []);
 
-    // Capability off: the hook is not registered — the adapters list nothing.
+    // Owning module off: Payroll off silences the blocking-check adapter,
+    // the ledger off silences the review adapter.
     await db.execute(sql`
       update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmPayrollAnomalies}', 'false'::jsonb, true)
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,payroll}', 'false'::jsonb, true)
        where id = ${org.orgId}`);
     await db.execute(sql`
       update orgs

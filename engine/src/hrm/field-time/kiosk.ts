@@ -14,7 +14,7 @@ import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts"
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { assertUnrestrictedScope, lockProjectForScope, ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
 import { FieldTimeError, refuse } from "./errors.ts";
-import { FIELD_TIME_FEATURE, FIELD_TIME_KIOSK_FEATURE } from "./settings.ts";
+import { FIELD_TIME_FEATURE } from "./settings.ts";
 import { hashDeviceToken, hashPin, issueDeviceToken, verifyPin } from "./pins.ts";
 import { recordClockEvent, type ClockRecordResult, type RecordClockInput } from "./clock.ts";
 
@@ -26,12 +26,6 @@ async function requireKioskFeature(orgId: string): Promise<void> {
     refuse(
       "field_time_off",
       "Field time is turned off — turn on fieldTime in Company Settings → Features to use kiosk clock-in",
-    );
-  }
-  if (!(await lockAndCheckOrgFeature(db, orgId, FIELD_TIME_KIOSK_FEATURE))) {
-    refuse(
-      "field_time_kiosk_off",
-      "Kiosk clock-in is turned off — turn on fieldTimeKiosk in Company Settings → Features to use kiosk clock-in",
     );
   }
 }

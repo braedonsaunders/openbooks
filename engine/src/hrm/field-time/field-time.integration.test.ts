@@ -1,5 +1,5 @@
 /**
- * HR-20 field-time integration proofs (DB-owned — gated remotely).
+ * Field-time integration proofs (DB-owned — gated remotely).
  *
  * - Offline replay: the same event array twice yields the same entries once.
  * - Sequence refusals reach the caller by name, never silent pairs.
@@ -8,7 +8,7 @@
  * - Batch post creates entries once and equipment charges once; a second
  *   post refuses; the charge posts the same balanced job-cost and
  *   recovery rows the equipment-charge path asserts.
- * - The multi-stage chain runs through Flows with stage 3 rejecting.
+ * - A submitted batch approves once; a rejected batch never posts.
  * - Feature-off: recording refuses with the remedy, never a row.
  */
 import assert from "node:assert/strict";
@@ -19,8 +19,7 @@ import { db, withOrg, withOrgTransaction } from "../../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../../testing/fixtures.ts";
 import { recordClockEvent, replayClockEvents } from "./clock.ts";
 import { identifyByPin, registerKiosk, setWorkerPin } from "./kiosk.ts";
-import { createBatch, setBatchLines, submitBatch, approveBatchStage, rejectBatch, postBatch } from "./crew.ts";
-import { saveChain } from "./stages.ts";
+import { createBatch, setBatchLines, submitBatch, approveBatch, rejectBatch, postBatch } from "./crew.ts";
 import { FieldTimeError } from "./errors.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -29,9 +28,7 @@ async function enableFieldTime(orgId: string, extra: Record<string, boolean> = {
   await db.execute(sql`
     update orgs set settings = coalesce(settings, '{}'::jsonb)
       || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb)
-      || '{"projects": true, "timeTracking": true, "fieldTime": true, "fieldTimeGeofence": true,
-             "fieldTimePhoto": false, "fieldTimeKiosk": true, "fieldTimeCrewEntry": true,
-             "fieldTimeEquipment": true, "fieldTimeMultiStageApproval": true, "equipment": true}'
+      || '{"projects": true, "timeTracking": true, "fieldTime": true, "equipment": true}'
       || ${JSON.stringify(extra)}::jsonb)
      where id = ${orgId}`);
   await db.execute(sql`
@@ -189,7 +186,7 @@ test("batch post creates entries and balanced equipment charges once", { skip: !
       });
       await submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, canManageAll: true, allowedSubsidiaryIds: null });
       // Single approval stands without a declared chain: one approve posts.
-      await approveBatchStage({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null });
+      await approveBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null });
       return postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null });
     });
     assert.equal(posted.entryIds.length, 1);
@@ -313,7 +310,7 @@ test("a foreman double-submit names the existing batch instead of a 500", { skip
   }
 });
 
-test("a declared three-stage chain rejects at its third stage with reasons", { skip: !DB }, async () => {
+test("a submitted batch approves once; a rejected batch never posts", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     await enableFieldTime(org.orgId);
@@ -324,30 +321,30 @@ test("a declared three-stage chain rejects at its third stage with reasons", { s
     await withOrg(org.orgId, async () => {
       await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${foreman}, ${org.orgId}, 'person', 'Foreman'), (${worker}, ${org.orgId}, 'person', 'Crew Hand')`);
       await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, status, is_active, custom) values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'JOB-FT', 'Field job', 'active', true, '{}'::jsonb)`);
-      await saveChain({
-        orgId: org.orgId, actorUserId: actor, subject: "crew_time_batch",
-        stages: [
-          { order: 1, approverKind: "supervisor" },
-          { order: 2, approverKind: "payroll" },
-          { order: 3, approverKind: "supervisor" },
-        ],
-      });
-      const batchId = await createBatch({
-        orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman,
-        projectId, workedOn: "2026-09-14", canManageAll: true, allowedSubsidiaryIds: null,
-      });
-      await setBatchLines({
-        orgId: org.orgId, actorUserId: actor, batchId,
-        lines: [{ employeePartyId: worker, hours: "8.0000" }],
-        canManageAll: true, allowedSubsidiaryIds: null,
-      });
-      await submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, canManageAll: true, allowedSubsidiaryIds: null });
-      assert.equal(await approveBatchStage({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null }), "approved_stage_1");
-      assert.equal(await approveBatchStage({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null }), "approved_stage_2");
-      await rejectBatch({ orgId: org.orgId, actorUserId: actor, batchId, reason: "Stage 3: split the overtime line", allowedSubsidiaryIds: null });
-      const status = (await db.execute<{ status: string }>(sql`select status from crew_time_batches where id = ${batchId}`)).rows[0]?.status;
+      const submitted = async (workedOn: string): Promise<string> => {
+        const batchId = await createBatch({
+          orgId: org.orgId, actorUserId: actor, foremanPartyId: foreman,
+          projectId, workedOn, canManageAll: true, allowedSubsidiaryIds: null,
+        });
+        await setBatchLines({
+          orgId: org.orgId, actorUserId: actor, batchId,
+          lines: [{ employeePartyId: worker, hours: "8.0000" }],
+          canManageAll: true, allowedSubsidiaryIds: null,
+        });
+        await submitBatch({ orgId: org.orgId, actorUserId: actor, batchId, canManageAll: true, allowedSubsidiaryIds: null });
+        return batchId;
+      };
+      const approvedId = await submitted("2026-09-14");
+      assert.equal(await approveBatch({ orgId: org.orgId, actorUserId: actor, batchId: approvedId, allowedSubsidiaryIds: null }), "approved");
+      assert.equal(
+        await refusesCode(() => approveBatch({ orgId: org.orgId, actorUserId: actor, batchId: approvedId, allowedSubsidiaryIds: null })),
+        "batch_not_approvable",
+      );
+      const rejectedId = await submitted("2026-09-15");
+      await rejectBatch({ orgId: org.orgId, actorUserId: actor, batchId: rejectedId, reason: "Split the overtime line", allowedSubsidiaryIds: null });
+      const status = (await db.execute<{ status: string }>(sql`select status from crew_time_batches where id = ${rejectedId}`)).rows[0]?.status;
       assert.equal(status, "rejected");
-      const posted = await refusesCode(() => postBatch({ orgId: org.orgId, actorUserId: actor, batchId, allowedSubsidiaryIds: null }));
+      const posted = await refusesCode(() => postBatch({ orgId: org.orgId, actorUserId: actor, batchId: rejectedId, allowedSubsidiaryIds: null }));
       assert.equal(posted, "batch_not_approved");
     });
   } finally {

@@ -35,7 +35,7 @@ import { closeCalibrationSession, createCalibrationSession, openCalibrationSessi
  */
 
 const PERF = ["hrm.performance.read", "hrm.performance.manage", "hrm.retention.read", "hrm.self.read", "hrm.employment.read"];
-const PERF_FEATURES = ["hrmPerformance", "hrmFeedback", "hrmCompetencies"];
+const PERF_FEATURES = ["hrmPerformance"];
 const MANAGE = ["hrm.performance.manage"];
 const HR = { hrFull: { scope: "all", link: true }, hrA: { scope: "A", link: true }, hrB: { scope: "B", link: true } } as const;
 const SCOPE_DENIED = /not visible in this organization and legal-entity scope/;
@@ -154,7 +154,7 @@ async function oneOnOnes(w: World) {
   return { ...people, oneA, oneB: (await schedule(people.b, "2026-03-01T11:00:00Z")).id };
 }
 
-const ONE_ON_ONE = { features: ["hrmPerformance", "hrmOneOnOnes"], permissions: ["hrm.performance.read", "hrm.performance.manage", "hrm.self.read"], actors: HR };
+const ONE_ON_ONE = { features: PERF_FEATURES, permissions: ["hrm.performance.read", "hrm.performance.manage", "hrm.self.read"], actors: HR };
 
 /** Talent world: an A and a B employment, an org-wide cycle, and an HR whose role covers no entity. */
 async function talentWorld(w: World) {
@@ -167,7 +167,7 @@ async function talentWorld(w: World) {
 }
 
 const TALENT = {
-  features: ["hrmPerformance", "hrmSuccession"],
+  features: PERF_FEATURES,
   permissions: MANAGE,
   actors: { hrFull: { scope: "all", permissions: [...MANAGE, "hrm.position.manage"] }, hrA: { scope: "A" } },
 } as const;
@@ -183,7 +183,7 @@ async function calibrationWorld(w: World, submit: ReadonlyArray<"a" | "b">) {
   return { ...people, templateId, cycleId, reviewIds, sessionId: session.id };
 }
 
-const CALIBRATION = { features: ["hrmPerformance", "hrmCalibration"], permissions: MANAGE, actors: HR };
+const CALIBRATION = { features: PERF_FEATURES, permissions: MANAGE, actors: HR };
 
 scopeMatrix([
   scopeRow({

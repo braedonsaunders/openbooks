@@ -61,20 +61,15 @@ export const FEATURES: FeatureDef[] = [
   // Schedule-of-values billing remains a project-type procedure, not a gate.
   { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'field-tickets', 'lien-waivers'] },
   { key: 'timeTracking', defaultEnabled: true, category: 'operations', navModules: ['timesheets'], parentKey: 'projects' },
-  // HR-20 begin: field time capture — mobile and kiosk clock-in with
-  // geofence, photo and offline queue; foreman crew batch entry;
-  // equipment hours on entries; multi-stage approval. The parent rides
-  // timeTracking (office orgs never see a clock) and needs projects;
-  // sub-features hide optional complexity. Off stops rendering and
-  // writing, never data.
+  // Field time capture — ONE switch for mobile and kiosk clock-in,
+  // geofence checks, clock photos, the offline queue, foreman crew batches
+  // and equipment hours on time. It rides timeTracking (office orgs never
+  // see a clock) and needs projects. What stays tunable is configuration,
+  // not a feature: geofences are declared per project, photo requirements
+  // live in Timesheets setup and on each kiosk, equipment hours need the
+  // Equipment module, and approval routing is authored in Flows. Off stops
+  // rendering and writing, never data.
   { key: 'fieldTime', defaultEnabled: false, category: 'operations', navModules: ['timesheets'], parentKey: 'timeTracking', requiresAll: ['projects'] },
-  { key: 'fieldTimeGeofence', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
-  { key: 'fieldTimePhoto', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
-  { key: 'fieldTimeKiosk', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
-  { key: 'fieldTimeCrewEntry', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
-  { key: 'fieldTimeEquipment', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime', requiresAll: ['equipment'] },
-  { key: 'fieldTimeMultiStageApproval', defaultEnabled: false, category: 'operations', parentKey: 'fieldTime' },
-  // HR-20 end
   // Payroll — country-pack statutory engines (CA T4127, US Pub 15-T), pay
   // runs, stubs, remittance liabilities. Off by default: enabling payroll is
   // a deliberate adoption decision (TD1/W-4 profiles, control accounts,
@@ -86,33 +81,23 @@ export const FEATURES: FeatureDef[] = [
   // exist before the cockpit says anything true). Stands alone: it reads
   // the HRM foundation but never drives payroll.
   { key: 'hrm', defaultEnabled: false, category: 'operations', navModules: ['hrm'] },
-  // HR-12 begin: compensation — job architecture and bands ride the
-  // parent; merit cycles, headcount plans and pay transparency are
-  // opt-in sub-features. Merit cycles push to payroll and read pay
-  // truth, so hrmMeritCycles additionally requires payroll.
+  // Every HRM module below is ONE switch under Human resources — no module
+  // carries sub-switches. What a module does is on whenever the module is;
+  // what a tenant may reasonably tune is configuration inside the module.
+  // Human resources itself covers the core record surface: change
+  // requests with action and reason codes and cancel/rescind/correct
+  // verbs, the org chart, and the persona-home widgets (celebrations and
+  // manager nudges, placed through dashboard layouts).
+  //
+  // Compensation — job architecture, bands, merit cycles, headcount plans
+  // and pay transparency. Merit cycles additionally need Payroll, checked
+  // where they read pay truth or push rates.
   { key: 'hrmCompensation', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
-  { key: 'hrmMeritCycles', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation', requiresAll: ['payroll'] },
-  { key: 'hrmHeadcountPlans', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation' },
-  { key: 'hrmPayTransparency', defaultEnabled: false, category: 'operations', parentKey: 'hrmCompensation' },
-  // HR-12 end
-  // HR-17 begin: continuous performance. hrmPerformance is the parent
-  // gate for the whole review-and-growth surface (HR-7's cycles, reviews
-  // and goals move under it additively); 1:1s, feedback, competencies,
-  // calibration and succession are opt-in sub-features. Off hides the
+  // Performance — cycles, reviews and goals, plus 1:1s, feedback,
+  // competencies, calibration, talent reviews and succession. Off hides the
   // tab, widgets, tools and setup — never data.
   { key: 'hrmPerformance', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
-  { key: 'hrmOneOnOnes', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
-  { key: 'hrmFeedback', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
-  { key: 'hrmCompetencies', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
-  { key: 'hrmCalibration', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
-  { key: 'hrmSuccession', defaultEnabled: false, category: 'operations', parentKey: 'hrmPerformance' },
-  // HR-17 end
-  // HR-15 begin: optional persona-home complexity. The inbox and the persona
-  // homes are core; only these widgets gate. Off hides the widget, never data.
-  { key: 'hrmCelebrations', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
-  { key: 'hrmManagerNudges', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
   { key: 'homeAnnouncements', defaultEnabled: true, category: 'platform' },
-  // HR-15 end
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
   // Project scheduling: critical-path Gantt, working calendars, baselines and
   // resource levelling. Off by default — a schedule is a planning instrument,
@@ -220,81 +205,37 @@ export const FEATURES: FeatureDef[] = [
   { key: 'automationWebhooks', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
   { key: 'automationSimulator', defaultEnabled: false, category: 'platform', parentKey: 'automations' },
   // HR-16 end
-  // HR-16 action/reason codes (0227): cheap, every enterprise suite has
-  // them — default ON. Event verbs (cancel/rescind/correct) on completed
-  // employment changes.
-  // HR-16 begin
-  { key: 'hrmActionReasons', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
-  { key: 'hrmEventVerbs', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
-  // HR-16 end
   { key: 'apps', defaultEnabled: true, category: 'platform', navModules: ['apps'] },
   { key: 'scripts', defaultEnabled: false, category: 'platform', navModules: ['admin-scripts'] },
   { key: 'apiAccess', defaultEnabled: false, category: 'platform', navModules: ['admin-api-keys', 'api-docs'] },
   { key: 'mcpAccess', defaultEnabled: false, category: 'platform', requiresAll: ['apiAccess'] },
   { key: 'queryConsole', defaultEnabled: false, category: 'platform', navModules: ['sql'] },
-  // HR-13 begin: construction compliance — prevailing-wage and union rate
-  // tables, certified payroll, workers'-comp class splits, apprentice
-  // ratios, per-diem and travel pay. A general-business org never sees
-  // any of this: the parent needs payroll, projects and time tracking,
-  // and every complexity below it is a sub-feature that hides and
-  // switches off independently. Toggling never deletes data.
+  // Construction compliance — prevailing-wage and union rate tables,
+  // certified payroll, workers'-comp class splits, apprentice ratios, and
+  // per-diem and travel pay. A general-business org never sees any of it:
+  // the module needs payroll, projects and time tracking. Toggling never
+  // deletes data.
   { key: 'hrmConstructionCompliance', defaultEnabled: false, category: 'operations', parentKey: 'hrm', requiresAll: ['payroll', 'projects', 'timeTracking'] },
-  { key: 'hrmPrevailingWage', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance' },
-  { key: 'hrmCertifiedPayroll', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance', requiresAll: ['hrmPrevailingWage'] },
-  { key: 'hrmWorkersCompClasses', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance' },
-  { key: 'hrmApprenticeRatios', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance', requiresAll: ['hrmPrevailingWage'] },
-  { key: 'hrmPerDiem', defaultEnabled: false, category: 'operations', parentKey: 'hrmConstructionCompliance' },
-  // HR-13 end
-  // HR-14 begin: certifications, licenses and dispatch gating — the worker
-  // qualification ledger. Dispatch gating refuses unqualified assignments
-  // on the projectScheduling board (needs projects + projectScheduling);
-  // equipment qualifications gate machine assignments (needs equipment);
-  // certification alerts are the daily expiry scan (needs nothing else).
-  // Toggling any of these never deletes data.
+  // Certifications and licenses — the worker qualification ledger, its
+  // daily expiry alerts, dispatch gating on the project scheduling board
+  // (where Project Scheduling is on) and equipment qualification
+  // requirements (where Equipment is on). Toggling never deletes data.
   { key: 'hrmCertifications', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
-  { key: 'hrmDispatchGating', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications', requiresAll: ['projects', 'projectScheduling'] },
-  { key: 'hrmEquipmentQualifications', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications', requiresAll: ['equipment'] },
-  { key: 'hrmCertificationAlerts', defaultEnabled: false, category: 'operations', parentKey: 'hrmCertifications' },
-  // HR-14 end
-  // HR-19 begin: documents with e-sign ride the hrm parent; retention
-  // schedules with audited deletion and one-click subject-access exports
-  // are opt-in sub-features. Surveys ride hrm with pulse cadence as the
-  // opt-in complexity. The org chart is default-on: every suite has one.
-  // Toggling never deletes data — rows stay and re-render when re-on.
+  // HR documents — hire-to-retire documents with e-signature, retention
+  // schedules with audited deletion, and subject-access exports. Toggling
+  // never deletes data — rows stay and re-render when re-on.
   { key: 'hrmDocuments', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
-  { key: 'hrmDocumentRetention', defaultEnabled: false, category: 'operations', parentKey: 'hrmDocuments' },
-  { key: 'hrmDataSubjectExport', defaultEnabled: false, category: 'operations', parentKey: 'hrmDocuments' },
+  // Engagement surveys — one-off and recurring pulse surveys with
+  // anonymity-grade results.
   { key: 'hrmSurveys', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
-  { key: 'hrmPulseSurveys', defaultEnabled: false, category: 'operations', parentKey: 'hrmSurveys' },
-  { key: 'hrmOrgChart', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
-  // HR-19 end
-  // HR-18 begin: recruiting depth — the HR-6 funnel rides the parent (on
-  // wherever hrm is on); kits, scheduling, signing, boards, retention and
-  // pools are opt-in sub-features. hrmOfferSigning will requireAll
-  // hrmDocuments when HR-19 lands; until then it signs through the File
-  // Cabinet HMAC primitive the field-ticket surface uses, so no documents
-  // edge is declared here.
+  // Recruiting — the vacancy-to-hire funnel with interview kits,
+  // scheduling, offer signing, job boards, candidate retention and talent
+  // pools.
   { key: 'hrmRecruiting', defaultEnabled: true, category: 'operations', parentKey: 'hrm' },
-  { key: 'hrmStructuredInterviews', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
-  { key: 'hrmInterviewScheduling', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
-  { key: 'hrmOfferSigning', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
-  { key: 'hrmJobBoards', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
-  { key: 'hrmCandidateRetention', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
-  { key: 'hrmTalentPool', defaultEnabled: false, category: 'operations', parentKey: 'hrmRecruiting' },
-  // HR-18 end
-  // HR-21 begin: AI on the rails — every capability is a tool or a
-  // deterministic service; the LLM only phrases and drafts. The parent
-  // hides all AI complexity; sub-features switch independently and
-  // turning them off preserves data and audit history. The ledger is
-  // governance: it is on whenever any AI feature is.
-  { key: 'hrmAiAssist', defaultEnabled: false, category: 'operations', parentKey: 'hrm' },
-  { key: 'hrmExplainPay', defaultEnabled: false, category: 'operations', parentKey: 'hrmAiAssist', requiresAll: ['payroll'] },
-  { key: 'hrmPayrollAnomalies', defaultEnabled: false, category: 'operations', parentKey: 'hrmAiAssist', requiresAll: ['payroll'] },
-  { key: 'hrmTimeAnomalies', defaultEnabled: false, category: 'operations', parentKey: 'hrmAiAssist', requiresAll: ['timeTracking'] },
-  { key: 'hrmDrafting', defaultEnabled: false, category: 'operations', parentKey: 'hrmAiAssist' },
-  { key: 'hrmNlReports', defaultEnabled: false, category: 'operations', parentKey: 'hrmAiAssist' },
+  // The AI governance ledger records every AI-assisted answer across the
+  // product. It is platform governance, not an HRM module: the AI
+  // capabilities it logs ride the module that owns their data.
   { key: 'aiGovernanceLedger', defaultEnabled: true, category: 'platform' },
-  // HR-21 end
 ]
 
 export const FEATURE_BY_KEY = new Map(FEATURES.map((f) => [f.key, f]))

@@ -23,9 +23,9 @@ import { loadOrgChartHome, orgChartAuthz } from '../../../../lib/hrm/org-chart-h
 /**
  * Org chart tab: the tree widget (collapsible nodes, vacancy nodes,
  * as-of picker, search-to-node, person drawer) with a Directory
- * sub-view over the shared `table` block. Renders when hrm and
- * hrmOrgChart are on and the actor holds hrm.employment.read OR
- * hrm.self.read — the loader 404s otherwise.
+ * sub-view over the shared `table` block. Renders when hrm is on and
+ * the actor holds hrm.employment.read OR hrm.self.read — the loader
+ * 404s otherwise.
  */
 
 const f = field

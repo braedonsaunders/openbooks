@@ -12,8 +12,8 @@ export const runtime = "nodejs";
 
 /**
  * Offer-template collection: GET lists templates, POST creates one
- * (manage gate in the service). 404s while hrm, hrmRecruiting, or
- * hrmOfferSigning is off — the Setup surface hides with the same switch.
+ * (manage gate in the service). 404s while HRM or Recruiting is
+ * off — the Setup surface hides with the same switch.
  */
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",

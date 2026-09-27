@@ -25,12 +25,7 @@ import { taskPairingCode } from "./task-pairing.ts";
 import { assertNoFieldTimeSourceCollision, lockEmployeeTimeSources } from "./source-collision.ts";
 import { isClockPhotoSql } from "./photos.ts";
 import { lockActiveKioskToken } from "./kiosk-token-lock.ts";
-import {
-  FIELD_TIME_GEOFENCE_FEATURE,
-  FIELD_TIME_FEATURE,
-  FIELD_TIME_PHOTO_FEATURE,
-  loadFieldTimeSettings,
-} from "./settings.ts";
+import { FIELD_TIME_FEATURE, loadFieldTimeSettings } from "./settings.ts";
 import {
   allocateShiftNetMs,
   distributeProRata,
@@ -115,11 +110,10 @@ async function checkPhotoRequirement(input: RecordClockInput): Promise<void> {
     if (!kiosk) refuse("kiosk_unknown", "The kiosk is unknown or retired — re-register the kiosk device before clocking");
     kioskRequires = kiosk.photo_required;
   }
-  const settings = await loadFieldTimeSettings(input.orgId);
-  const featureRequires =
-    (await lockAndCheckOrgFeature(db, input.orgId, FIELD_TIME_PHOTO_FEATURE)) ||
-    settings.photoRequired;
-  if ((kioskRequires || featureRequires) && !input.photoFileId) {
+  // The org-wide rule lives in Timesheets setup; a kiosk may require a
+  // photo on its own even when the org-wide rule does not.
+  const orgRequires = (await loadFieldTimeSettings(input.orgId)).photoRequired;
+  if ((kioskRequires || orgRequires) && !input.photoFileId) {
     refuse(
       "photo_required",
       "A photo is required to clock in here — capture a photo and retry the clock action",
@@ -212,8 +206,9 @@ async function checkGeofence(
   projectId: string | null,
   geo: ClockGeo | null | undefined,
 ): Promise<"inside" | "outside" | "unavailable" | "not_required"> {
+  // Geofences are declared per project: a project with no active fence
+  // is simply not checked, so the declaration is the configuration.
   if (!projectId) return "not_required";
-  if (!(await lockAndCheckOrgFeature(db, orgId, FIELD_TIME_GEOFENCE_FEATURE))) return "not_required";
   const fences = (await db.execute<{ kind: string; center: unknown; radius_m: number | null; polygon: unknown }>(sql`
     select kind, center, radius_m, polygon from project_geofences
      where org_id = ${orgId} and project_id = ${projectId} and is_active`)).rows;

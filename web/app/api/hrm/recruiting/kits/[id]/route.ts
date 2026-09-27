@@ -14,11 +14,11 @@ export const runtime = "nodejs";
 /**
  * One interview kit: PATCH setActive retires/reactivates, DELETE removes a
  * kit with no sittings (a kit with interviews refuses by name). 404s while
- * hrm, hrmRecruiting, or hrmStructuredInterviews is off.
+ * HRM or Recruiting is off.
  */
 export const PATCH = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmStructuredInterviews",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: setKitActiveBody,
   handler: async ({
@@ -44,7 +44,7 @@ export const PATCH = defineRoute({
 
 export const DELETE = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmStructuredInterviews",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const { id } = routeParams;

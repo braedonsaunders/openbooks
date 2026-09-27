@@ -14,7 +14,7 @@ import {
   type WorkerQualification,
 } from '@openbooks/engine/src/hrm/qualifications/qualifications.ts'
 import type { DerivedQualificationStatus } from '@openbooks/engine/src/hrm/qualifications/shared.ts'
-import { listRequirements } from '@openbooks/engine/src/hrm/qualifications/requirements.ts'
+import { listRequirements, subjectKindAvailable } from '@openbooks/engine/src/hrm/qualifications/requirements.ts'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { loadQueueLabels } from './change-requests'
@@ -144,7 +144,8 @@ export interface QualificationsPageData {
     searchHint: string
     searchFailed: string
     more: string
-    subjects: Record<'project' | 'equipment' | 'position' | 'classification', string>
+    /** Offered subject kinds; equipment is absent while Equipment is off. */
+    subjects: Partial<Record<'project' | 'equipment' | 'position' | 'classification', string>>
   }
   requirementsRemoveLabel: string
   requirementsRemoveConfirm: string
@@ -226,11 +227,12 @@ export async function loadQualificationsPage(
   const section = (sp.section === 'requirements' || sp.section === 'alerts' ? sp.section : 'ledger') as QualificationSection
   const today = await businessToday(orgId)
 
-  const [all, types, requirements, alerts] = await Promise.all([
+  const [all, types, requirements, alerts, equipmentSubjects] = await Promise.all([
     listQualifications(db, { orgId, actorId }),
     listQualificationTypes(db, { orgId, actorId }),
     listRequirements(db, { orgId, actorId }),
     listAlerts(db, { orgId, actorId }),
+    subjectKindAvailable(db, orgId, 'equipment'),
   ])
 
   const counts: Record<QualificationSegment, number> = {
@@ -497,9 +499,10 @@ export async function loadQualificationsPage(
       searchHint: t('qualifications.requirementManager.searchHint'),
       searchFailed: t('qualifications.requirementManager.searchFailed'),
       more: t('qualifications.requirementManager.more'),
+      // Equipment is a requirement subject only while Equipment is on.
       subjects: {
         project: t('qualifications.requirementManager.subjects.project'),
-        equipment: t('qualifications.requirementManager.subjects.equipment'),
+        ...(equipmentSubjects ? { equipment: t('qualifications.requirementManager.subjects.equipment') } : {}),
         position: t('qualifications.requirementManager.subjects.position'),
         classification: t('qualifications.requirementManager.subjects.classification'),
       },

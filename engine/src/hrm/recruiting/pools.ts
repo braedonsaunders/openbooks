@@ -9,7 +9,7 @@ import {
 } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 import { isUniqueViolation, requireActorId, requireId, requireOrgId } from "./input.ts";
-import { pgTextArray, requireDepthFeature } from "./depth.ts";
+import { pgTextArray } from "./depth.ts";
 import { candidateInScopePredicate, requireCandidateOwnedInScope } from "./candidate-scope.ts";
 
 /**
@@ -77,7 +77,6 @@ export async function listTalentPools(query: {
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingReadOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmTalentPool");
     const rows = (await db.execute<PoolRow>(sql`
       select id, name, description from hrm_talent_pools where org_id = ${orgId} order by name
     `)).rows;
@@ -102,7 +101,6 @@ export async function createTalentPool(query: {
       : String(query.description);
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmTalentPool");
     try {
       const row = (await db.execute<PoolRow>(sql`
         insert into hrm_talent_pools (org_id, name, description, created_by, updated_by)
@@ -133,7 +131,6 @@ export async function deleteTalentPool(query: {
   const poolId = requireId(query.poolId, "poolId");
   await withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmTalentPool");
     // Memberships follow the pool (CASCADE); the candidates themselves are
     // untouched — deleting a pool never deletes a person.
     const deleted = (await db.execute<{ id: string }>(sql`
@@ -168,7 +165,6 @@ export async function addPoolMember(query: {
     query.note == null || String(query.note).trim().length === 0 ? null : String(query.note);
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmTalentPool");
     const pool = (await db.execute<{ one: number }>(sql`
       select 1 as one from hrm_talent_pools where org_id = ${orgId} and id = ${poolId}
     `)).rows[0];
@@ -223,7 +219,6 @@ export async function removePoolMember(query: {
   const candidateId = requireId(query.candidateId, "candidateId");
   await withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmTalentPool");
     // Removing a stranger's membership answers whether they were pooled:
     // ownership first, so unknown and out-of-scope refuse identically.
     await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
@@ -248,7 +243,6 @@ export async function listPoolMembers(query: {
   const poolId = requireId(query.poolId, "poolId");
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingReadOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmTalentPool");
     const pool = (await db.execute<{ one: number }>(sql`
       select 1 as one from hrm_talent_pools where org_id = ${orgId} and id = ${poolId}
     `)).rows[0];
@@ -282,7 +276,6 @@ export async function tagCandidate(query: {
   const tags = requireTags(query.tags, "candidate");
   return withOrgTransaction(orgId, async () => {
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmTalentPool");
     // Tags ride the candidate row: retagging a stranger mutates them, so
     // ownership comes before the write and the denial stays not-found.
     await requireCandidateOwnedInScope(db, orgId, candidateId, await actorAllowedSubsidiaryIds(db, orgId, actorId));
@@ -326,7 +319,6 @@ export async function rediscoverForRequisition(query: {
     } catch {
       await requireHrmRecruitingRead(db, orgId, actorId, requisitionId);
     }
-    await requireDepthFeature(db, orgId, "hrmTalentPool");
     const requisition = (await db.execute<{ status: string }>(sql`
       select status from hrm_requisitions where org_id = ${orgId} and id = ${requisitionId}
     `)).rows[0];

@@ -270,10 +270,10 @@ export async function loadEntityRole(
                 // Authoring rides the manage grant; readers see the request
                 // list only. The change-request routes re-check this grant.
                 canManageHrm: can(authz, 'hrm.employment.manage'),
-                // HR-16 verb buttons (Rescind/Correct) ride the approve
-                // grant plus hrmEventVerbs — the routes refuse anything
-                // else, so the buttons stay hidden without both.
-                canVerb: can(authz, 'hrm.employment.approve') && (await isFeatureEnabled(orgId, 'hrmEventVerbs')),
+                // Verb buttons (Rescind/Correct) ride Human resources
+                // (already held here) and the approve grant — the routes
+                // refuse anything else, so the buttons hide without it.
+                canVerb: can(authz, 'hrm.employment.approve'),
                 // The exit section rides the retention read grant (record
                 // display) and the performance manage grant (recording);
                 // the exit routes re-check both.

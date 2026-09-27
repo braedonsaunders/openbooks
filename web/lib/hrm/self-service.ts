@@ -98,12 +98,11 @@ export async function meTabs(authz: Authz, activeHref: string): Promise<ModuleHo
   if (hasTeam || activeHref === '/me/team') {
     tabs.push({ href: '/me/team', label: t('me.tabs.team'), active: activeHref === '/me/team' })
   }
-  // HR-17 begin: the 1:1s tab shows only while hrmOneOnOnes is on — the
-  // page itself re-checks and 404s otherwise.
-  if (activeHref === '/me/one-on-ones' || (await meHasOneOnOnes(authz))) {
+  // The 1:1s tab shows only while Performance is on — the page itself
+  // re-checks and 404s otherwise.
+  if (activeHref === '/me/one-on-ones' || (await mePerformanceOn(authz.user.orgId))) {
     tabs.push({ href: '/me/one-on-ones', label: t('me.tabs.oneOnOnes'), active: activeHref === '/me/one-on-ones' })
   }
-  // HR-17 end
   // HR-12 begin: the Compensation tab shows only when the feature is on
   // and the person has something to see (a band or a statement) — the
   // page itself re-checks and 404s otherwise.
@@ -183,35 +182,17 @@ async function meHasSurveys(authz: Authz): Promise<boolean> {
 }
 // HR-19 end
 
-// HR-17 begin: Me 1:1s tab visibility — the hrmOneOnOnes switch. Read
-// failures resolve to false (the tab hides) rather than denying the
-// whole Me strip.
-async function meHasOneOnOnes(authz: Authz): Promise<boolean> {
+// The Performance switch behind the Me 1:1s tab, the team roster's 1:1
+// column and its per-report praise action. Read failures resolve to false
+// (the surfaces hide) rather than denying the whole Me strip or team page.
+async function mePerformanceOn(orgId: string): Promise<boolean> {
   try {
     const { isFeatureEnabled } = await import('../features')
-    return await isFeatureEnabled(authz.user.orgId, 'hrmOneOnOnes')
+    return await isFeatureEnabled(orgId, 'hrmPerformance')
   } catch {
     return false
   }
 }
-// HR-17 end
-
-// HR-17 begin: Me team roster 1:1 column (hrmOneOnOnes) and per-report
-// praise action (hrmFeedback). Read failures resolve to hidden rather
-// than denying the whole team page.
-async function meContinuousOn(orgId: string): Promise<{ oneOnOnes: boolean; feedback: boolean }> {
-  try {
-    const { isFeatureEnabled } = await import('../features')
-    const [oneOnOnes, feedback] = await Promise.all([
-      isFeatureEnabled(orgId, 'hrmOneOnOnes'),
-      isFeatureEnabled(orgId, 'hrmFeedback'),
-    ])
-    return { oneOnOnes, feedback }
-  } catch {
-    return { oneOnOnes: false, feedback: false }
-  }
-}
-// HR-17 end
 
 function toRefusal(t: Catalog, error: unknown): MeRefusal | null {
   if (error instanceof SelfServiceError || error instanceof HrmAuthorizationError) {
@@ -886,7 +867,7 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       loadManagerOwedReviews({ orgId, actorId: authz.user.id }).catch(() => []),
     ])
     const canOpenDrawer = can(authz, 'parties.read')
-    const continuous = await meContinuousOn(orgId).catch(() => ({ oneOnOnes: false, feedback: false }))
+    const performanceOn = await mePerformanceOn(orgId)
     const feedbackKinds = [
       { value: 'praise', label: t('performance.continuous.feedback.praise') },
       { value: 'feedback', label: t('performance.continuous.feedback.feedbackKind') },
@@ -903,15 +884,15 @@ export async function loadMeTeam(authz: Authz): Promise<MeTeamData> {
       refusal: null,
       hasContent: true,
       asOf: team.asOf,
-      continuousOn: continuous.oneOnOnes || continuous.feedback,
+      continuousOn: performanceOn,
       roster: team.reports.map((report) => ({
         employmentId: report.employmentId,
         workerName: report.workerName,
-        oneOnOneHref: continuous.oneOnOnes
+        oneOnOneHref: performanceOn
           ? `/me/one-on-ones?report=${encodeURIComponent(report.employmentId)}`
           : null,
-        oneOnOneLabel: continuous.oneOnOnes ? t('me.team.oneOnOneLink') : null,
-        feedback: continuous.feedback
+        oneOnOneLabel: performanceOn ? t('me.team.oneOnOneLink') : null,
+        feedback: performanceOn
           ? {
               subjectEmploymentId: report.employmentId,
               requestedFromPartyId: report.workerPartyId,

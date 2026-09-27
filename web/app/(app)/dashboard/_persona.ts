@@ -330,7 +330,7 @@ export async function loadPersonaMetrics(
     out.upcoming = upcoming.slice(0, 5)
   }
 
-  if (need('celebrations') && (await isFeatureEnabled(orgId, 'hrmCelebrations')) && (await isFeatureEnabled(orgId, 'hrm'))) {
+  if (need('celebrations') && (await isFeatureEnabled(orgId, 'hrm'))) {
     const teamScope = isManager ? teamIds : null
     const rows = (await db.execute<{ name: string; service_start: string }>(sql`
       select p.display_name as name, min(v.effective_from)::text as service_start
@@ -370,7 +370,7 @@ export async function loadPersonaMetrics(
     out.teamSteps = rows.map((row) => ({ title: row.title, owner: row.owner, due: row.due_on }))
   }
 
-  if (need('teamNudges') && isManager && (await isFeatureEnabled(orgId, 'hrmManagerNudges'))) {
+  if (need('teamNudges') && isManager && (await isFeatureEnabled(orgId, 'hrm'))) {
     const overdue = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_process_steps s
         join hrm_processes p on p.org_id = s.org_id and p.id = s.process_id

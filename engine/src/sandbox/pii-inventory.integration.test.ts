@@ -1942,8 +1942,6 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "temporary_differences.category",
   "temporary_differences.description",
   "temporary_differences.source",
-  "time_approval_stages.stages",
-  "time_approval_stages.subject_kind",
   "time_clock_events.cost_code_ref",
   "time_clock_events.device_id",
   "time_clock_events.geo_check",

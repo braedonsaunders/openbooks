@@ -9,12 +9,12 @@ export const runtime = "nodejs";
 
 /**
  * One talent pool: DELETE removes the pool (memberships follow; candidates
- * are untouched — deleting a pool never deletes a person). 404s while hrm,
- * hrmRecruiting, or hrmTalentPool is off.
+ * are untouched — deleting a pool never deletes a person). 404s while HRM
+ * or Recruiting is off.
  */
 export const DELETE = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmTalentPool",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const { id } = routeParams;

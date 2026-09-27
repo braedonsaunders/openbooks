@@ -28,8 +28,7 @@ export const GET = defineRoute({
     if (scopeDenied) return scopeDenied;
     if (
       !(await isFeatureEnabled(authz.user.orgId, "hrm")) ||
-      !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||
-      !(await isFeatureEnabled(authz.user.orgId, "hrmFeedback"))
+      !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance"))
     ) {
       return notFound("record");
     }
@@ -53,8 +52,7 @@ export const POST = defineRoute({
     if (scopeDenied) return scopeDenied;
     if (
       !(await isFeatureEnabled(authz.user.orgId, "hrm")) ||
-      !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||
-      !(await isFeatureEnabled(authz.user.orgId, "hrmFeedback"))
+      !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance"))
     ) {
       return notFound("record");
     }

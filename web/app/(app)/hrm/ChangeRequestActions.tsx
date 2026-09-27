@@ -7,7 +7,13 @@ import { toast } from 'sonner'
 import { Button, Drawer, Label, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { promptDialog } from '../../../lib/prompt'
-import { ChangeRequestDrawer, type DepartmentOption, type EditableChangeRequest } from './ChangeRequestDrawer'
+import {
+  ActionReasonFields,
+  ChangeRequestDrawer,
+  useActionReasons,
+  type DepartmentOption,
+  type EditableChangeRequest,
+} from './ChangeRequestDrawer'
 
 /**
  * Lifecycle actions for one employment change request, following the status
@@ -44,10 +50,9 @@ export function ChangeRequestActions({
   /** Loader-resolved manage grant: without it no lifecycle action
    * renders, even on a draft — the queue table gates its column the same way. */
   canManage: boolean
-  /** HR-16 verb actions (Rescind/Correct) display gate: the routes 404
-   * unless hrmEventVerbs is on and require hrm.employment.approve, so the
-   * buttons render only when both hold. Defaults off so older callers
-   * never gain verb buttons by omission. */
+  /** Verb actions (Rescind/Correct) display gate: the routes require
+   * hrm.employment.approve, so the buttons render only with it. Defaults
+   * off so older callers never gain verb buttons by omission. */
   canVerb?: boolean
   onChanged: () => void
 }) {
@@ -131,8 +136,8 @@ export function ChangeRequestActions({
           {t('employment.changeRequests.withdrawAction')}
         </Button>
       ) : null}
-      {/* HR-16 begin: Rescind (danger) and Correct (secondary) on a completed change,
-       * gated on the approve grant plus hrmEventVerbs — the routes refuse anything else. */}
+      {/* Rescind (danger) and Correct (secondary) on a completed change,
+       * gated on the approve grant — the routes refuse anything else. */}
       {request.status === 'applied' && appliedChangeId && canVerb ? (
         <>
           <Button size="sm" variant="destructive" disabled={verbBusy} onClick={() => verbAction('rescind')}>
@@ -143,7 +148,6 @@ export function ChangeRequestActions({
           </Button>
         </>
       ) : null}
-      {/* HR-16 end */}
       {editing ? (
         <ChangeRequestDrawer
           employmentId={employmentId}
@@ -188,8 +192,19 @@ function LifecycleReasonDrawer({
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Submit carries the classification once the org declares reason codes,
+  // the same rule the propose drawer and the submit API apply.
+  const reasons = useActionReasons(action === 'submit', setError)
+  const [hrAction, setHrAction] = useState('')
+  const [reasonCode, setReasonCode] = useState('')
+  const reasonsPending = reasons.loadState === 'loading' || reasons.loadState === 'failed'
 
   async function confirm() {
+    if (reasonsPending) return
+    if (reasons.required && (!hrAction || !reasonCode)) {
+      setError(t('employment.changeRequests.actionRequired'))
+      return
+    }
     if (!reason.trim()) {
       setError(t('employment.changeRequests.reasonRequired'))
       return
@@ -200,7 +215,10 @@ function LifecycleReasonDrawer({
       const res = await fetch(`/api/hrm/change-requests/${requestId}/${action}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: reason.trim() }),
+        body: JSON.stringify({
+          reason: reason.trim(),
+          ...(reasons.required ? { action: hrAction, reasonCode } : {}),
+        }),
       })
       if (!res.ok) {
         const message = await readApiErrorMessage(res, t('employment.changeRequests.requestFailed'))
@@ -239,13 +257,31 @@ function LifecycleReasonDrawer({
           <Button variant="outline" disabled={busy} onClick={onClose}>
             {tCommon('actions.cancel')}
           </Button>
-          <Button disabled={busy} onClick={confirm}>
+          <Button disabled={busy || reasonsPending} onClick={confirm}>
             {t(action === 'submit' ? 'employment.changeRequests.submitConfirm' : 'employment.changeRequests.withdrawConfirm')}
           </Button>
         </>
       }
     >
       <div className="space-y-5">
+        {reasons.required ? (
+          <ActionReasonFields
+            idPrefix="cr-lifecycle"
+            options={reasons.options}
+            action={hrAction}
+            reasonCode={reasonCode}
+            disabled={busy}
+            onActionChange={(value) => {
+              setHrAction(value)
+              setReasonCode('')
+              setError(null)
+            }}
+            onReasonCodeChange={(value) => {
+              setReasonCode(value)
+              setError(null)
+            }}
+          />
+        ) : null}
         <div className="space-y-1.5">
           <Label htmlFor="cr-lifecycle-reason">{t('employment.changeRequests.reasonLabel')}</Label>
           <Textarea

@@ -1,13 +1,12 @@
 import type { SetupEntity } from './types'
 
 /**
- * HR-20 field-time Setup entities. All three are rehomed — geofences
- * onto the project page, kiosks and approval stages onto the Timesheets
- * setup surface — never a second switchboard. Device tokens are issued
- * and revoked through the kiosk API (the raw token shows once); the
- * registry never reads or writes the token hash. Stage chains are
- * validated structures edited through the Timesheets setup API, with
- * the registry carrying the subject row only.
+ * Field-time Setup entities. Both are rehomed — geofences onto the
+ * project page, kiosks onto the Timesheets setup surface — never a second
+ * switchboard. Device tokens are issued and revoked through the kiosk API
+ * (the raw token shows once); the registry never reads or writes the
+ * token hash. Approval routing for timesheets and crew batches is authored
+ * in Flows, not here.
  */
 
 const GEOFENCE_KINDS = [
@@ -15,16 +14,11 @@ const GEOFENCE_KINDS = [
   { value: 'polygon', labelKey: 'options.geofenceKind.polygon' },
 ]
 
-const STAGE_SUBJECTS = [
-  { value: 'timesheet_week', labelKey: 'options.approvalSubject.timesheetWeek' },
-  { value: 'crew_time_batch', labelKey: 'options.approvalSubject.crewTimeBatch' },
-]
-
 export const PROJECT_GEOFENCES_ENTITY: SetupEntity = {
   key: 'project-geofences',
   table: 'project_geofences',
   groupKey: 'projects',
-  featureKey: 'fieldTimeGeofence',
+  featureKey: 'fieldTime',
   rehomed: true, // section on the project page
   rehomedTo: '/projects',
   iconKey: 'map-pin',
@@ -53,7 +47,7 @@ export const TIME_KIOSKS_ENTITY: SetupEntity = {
   key: 'time-kiosks',
   table: 'time_kiosks',
   groupKey: 'workforce',
-  featureKey: 'fieldTimeKiosk',
+  featureKey: 'fieldTime',
   rehomed: true, // section on the Timesheets setup surface
   rehomedTo: '/time/setup',
   iconKey: 'tablet',
@@ -76,27 +70,5 @@ export const TIME_KIOSKS_ENTITY: SetupEntity = {
     { key: 'pinRequired', kind: 'boolean' },
     { key: 'photoRequired', kind: 'boolean' },
     { key: 'isActive', kind: 'boolean' },
-  ],
-}
-
-export const TIME_APPROVAL_STAGES_ENTITY: SetupEntity = {
-  key: 'time-approval-stages',
-  table: 'time_approval_stages',
-  groupKey: 'workforce',
-  featureKey: 'fieldTimeMultiStageApproval',
-  rehomed: true, // section on the Timesheets setup surface
-  rehomedTo: '/time/setup',
-  iconKey: 'git-branch',
-  orgScoped: true,
-  actorCols: true,
-  orderBy: 'subject_kind',
-  hasActive: false,
-  docSlug: 'crew-time-entry',
-  columns: [
-    { key: 'subjectKind', kind: 'badge', options: STAGE_SUBJECTS },
-  ],
-  fields: [
-    { key: 'subjectKind', kind: 'select', required: true, lockedOnEdit: true, options: STAGE_SUBJECTS },
-    { key: 'stages', kind: 'json', required: true },
   ],
 }

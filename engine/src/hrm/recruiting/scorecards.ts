@@ -184,7 +184,6 @@ export async function ensurePanelScorecards(query: {
   return withOrgTransaction(orgId, async () => {
     const chain = await interviewRequisition(db, orgId, interviewId);
     await requireHrmRecruitingManage(db, orgId, actorId, chain.requisitionId);
-    await requireDepthFeature(db, orgId, "hrmStructuredInterviews");
     const parties = await panelPartyIds(db, orgId, interviewId);
     let created = 0;
     for (const partyId of parties) {
@@ -225,7 +224,7 @@ export async function submitScorecard(query: SubmitScorecardQuery): Promise<Scor
   const actorId = requireActorId(query.actorId);
   const interviewId = requireId(query.interviewId, "interviewId");
   return withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmStructuredInterviews");
+    await requireDepthFeature(db, orgId);
     const chain = await interviewRequisition(db, orgId, interviewId);
     const person = await loadApprovalPerson(db, orgId, actorId);
     if (!person.partyId) {
@@ -369,7 +368,7 @@ export async function readScorecardsForInterview(query: ScorecardReadQuery): Pro
   const actorId = requireActorId(query.actorId);
   const interviewId = requireId(query.interviewId, "interviewId");
   return withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmStructuredInterviews");
+    await requireDepthFeature(db, orgId);
     const chain = await interviewRequisition(db, orgId, interviewId);
     let privileged = false;
     try {
@@ -454,7 +453,7 @@ export async function scorecardSummary(query: ScorecardReadQuery): Promise<Score
   const actorId = requireActorId(query.actorId);
   const interviewId = requireId(query.interviewId, "interviewId");
   return withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmStructuredInterviews");
+    await requireDepthFeature(db, orgId);
     const chain = await interviewRequisition(db, orgId, interviewId);
     let privileged = false;
     try {

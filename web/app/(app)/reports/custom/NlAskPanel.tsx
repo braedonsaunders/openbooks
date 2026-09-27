@@ -31,7 +31,7 @@ interface NlDraft {
 }
 
 /**
- * HR-21 Ask box on the custom reports page. The question hands off to the
+ * Ask box on the custom reports page. The question hands off to the
  * assistant (?q=), where the model authors the report-engine definition
  * through the nl_report tool and saves the draft; this panel lists the
  * caller's drafts with Save as view (creates the definition through the

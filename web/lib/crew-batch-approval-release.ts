@@ -1,5 +1,5 @@
 import 'server-only'
-import { approveBatchStage, rejectBatch } from '@openbooks/engine/src/hrm/field-time/crew.ts'
+import { approveBatch, rejectBatch } from '@openbooks/engine/src/hrm/field-time/crew.ts'
 import { actorAllowedSubsidiaryIds } from '@openbooks/engine/src/organization/actor-subsidiaries.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 
@@ -7,8 +7,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
  * Apply a flow gate's decision to a crew time batch.
  *
  * Flows owns the routing — who approves, in what order, with what quorum. This
- * owns what approval MEANS for a batch: advancing the current stage through
- * the crew service (which stamps status, audit events, and the acting user),
+ * owns what approval MEANS for a batch: approving it through the crew service
+ * (which stamps status, audit events, and the acting user),
  * or bouncing the batch back to the foreman with the approver's comment as
  * the reason they will read.
  *
@@ -27,7 +27,7 @@ export async function releaseCrewTimeBatchApproval(
   // use) and pass it explicitly — the crew service takes no omitted scope.
   const allowedSubsidiaryIds = await actorAllowedSubsidiaryIds(db, orgId, actorId)
   if (outcome === 'approved') {
-    await approveBatchStage({
+    await approveBatch({
       orgId,
       actorUserId: actorId,
       batchId: subjectId,

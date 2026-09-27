@@ -28,8 +28,7 @@ export function ChangeRequestDetailDialog({
   /** Loader-resolved manage grant: the drawer's lifecycle actions
    * render only with it. */
   canManage: boolean
-  /** HR-16 verb actions (Rescind/Correct) display gate: approve grant
-   * plus the hrmEventVerbs feature. */
+  /** Verb actions (Rescind/Correct) display gate: the approve grant. */
   canVerb?: boolean
 }) {
   const router = useRouter()

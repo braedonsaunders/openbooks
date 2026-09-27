@@ -13,7 +13,7 @@ import {
   type ScratchOrg,
 } from "../testing/fixtures.ts";
 import {
-  enableDepth,
+  enableFeatures,
   grantPermissions,
   linkPerson,
   recruitingError,
@@ -51,6 +51,7 @@ import {
   withdrawOffer,
 } from "./recruiting/offers.ts";
 import { acceptOfferAsHire } from "./recruiting/hire.ts";
+import { createOfferTemplate, renderOfferVersion } from "./recruiting/offers-signing.ts";
 import { proposeSlots, bookSlot, listInterviewerPools } from "./recruiting/scheduling.ts";
 import { evaluateRetentionRule } from "./recruiting/retention.ts";
 import {
@@ -94,24 +95,12 @@ type Harness = {
   interviewerPartyId: string;
 };
 
-/**
- * Recruiting-depth feature keys. The parent goes first: enabling only the
- * children leaves every gate refusing by name.
- */
-const RECRUITING_DEPTH_KEYS = [
-  "hrm",
-  "hrmRecruiting",
-  "hrmStructuredInterviews",
-  "hrmInterviewScheduling",
-  "hrmOfferSigning",
-  "hrmJobBoards",
-  "hrmCandidateRetention",
-  "hrmTalentPool",
-];
+/** Recruiting rides the HRM parent: both go on together. */
+const RECRUITING_FEATURE_KEYS = ["hrm", "hrmRecruiting"];
 
 async function setupRecruitingHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableRecruitingDepth(org.orgId);
+  await enableRecruiting(org.orgId);
   const recruiterId = await createScratchUser(org.orgId, "HRM Recruiter", "hrm_recruiter");
   const approverId = await createScratchUser(org.orgId, "HRM Approver", "hrm_approver");
   const managerId = await createScratchUser(org.orgId, "Hiring Manager", "hiring_manager");
@@ -261,7 +250,6 @@ test("full funnel: draft to filled hire with storage proofs", { skip: !DB }, asy
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
     await seedFlow(orgId, h.approverId);
-    await disableOfferSigning(orgId);
     // The interviewer sits on panels, so they hold an employment row.
     await seedEmploymentForParty(orgId, h.org.subsidiaryId, h.interviewerPartyId);
     const position = await createPosition({
@@ -685,7 +673,6 @@ test("a past-due sent offer reads expired and refuses its accept", { skip: !DB }
 test("hire without an approval flow rolls back whole: no party, no draft, no fill", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
-    await disableOfferSigning(orgId);
     // Deliberately no seedFlow: submission finds no gate and refuses.
     const requisition = await createRequisition({
       orgId,
@@ -757,7 +744,6 @@ test("hire refuses off an unopened requisition and off a position filled under u
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
     await seedFlow(orgId, h.approverId);
-    await disableOfferSigning(orgId);
     const position = await createPosition({
       orgId,
       actorId: h.recruiterId,
@@ -1044,30 +1030,13 @@ test("storage refuses event edits, event deletes, and template deletes with hist
   });
 });
 
-// HR-18 begin: recruiting-depth hostile loops (0229), proved against
-// storage. Every refusal below asserts the writes that must NOT exist;
-// every success reads its aftermath back from the tables, never from the
-// service's return value alone.
+// Recruiting-depth hostile loops, proved against storage. Every refusal
+// below asserts the writes that must NOT exist; every success reads its
+// aftermath back from the tables, never from the service's return value
+// alone.
 
-async function enableRecruitingDepth(orgId: string): Promise<void> {
-  // The depth keys ride the registry's parent chain (hrmRecruiting requires
-  // the hrm parent): enabling only the children leaves every gate refusing
-  // by name, so the parent goes on first.
-  await enableDepth(orgId, RECRUITING_DEPTH_KEYS);
-}
-
-/**
- * These funnel tests predate the HR-18 signing gate and prove hire
- * mechanics orthogonal to signing (funnel flow, no-flow rollback,
- * requisition gating). The shared harness enables every depth feature, so
- * they run under the product default — signing off — while the dedicated
- * signing test (below) keeps proving the gate with the feature on.
- */
-async function disableOfferSigning(orgId: string): Promise<void> {
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features,hrmOfferSigning}', 'false'::jsonb, true)
-     where id = ${orgId}`);
+async function enableRecruiting(orgId: string): Promise<void> {
+  await enableFeatures(orgId, RECRUITING_FEATURE_KEYS);
 }
 
 async function seedSentOffer(h: Harness): Promise<{ applicationId: string; candidateId: string; offerId: string }> {
@@ -1127,12 +1096,22 @@ async function employmentCount(orgId: string): Promise<number> {
   return Number(rows[0]!.count);
 }
 
-test("hire refuses an unsigned offer while offer signing is on, writing nothing", { skip: !DB }, async () => {
+test("hire refuses an offer whose rendered letter is unsigned, writing nothing", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
-    await enableRecruitingDepth(orgId);
+    await enableRecruiting(orgId);
     const before = await employmentCount(orgId);
     const { offerId } = await seedSentOffer(h);
+    // Rendering the letter puts the offer into the e-sign lifecycle; from
+    // then on hire needs the candidate's signature.
+    const template = await createOfferTemplate({
+      orgId,
+      actorId: h.recruiterId,
+      name: "Standard letter",
+      bodyTemplate: "Dear {{candidate_name}}, we offer you {{job_title}}.",
+      clauses: [],
+    });
+    await renderOfferVersion({ orgId, actorId: h.recruiterId, offerId, templateId: template.id });
     await assert.rejects(
       acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId }),
       /unsigned/,
@@ -1148,7 +1127,7 @@ test("hire refuses an unsigned offer while offer signing is on, writing nothing"
 test("scheduling proposes from a pool's declared windows and books first-wins", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
-    await enableRecruitingDepth(orgId);
+    await enableRecruiting(orgId);
     await seedEmploymentForParty(orgId, h.org.subsidiaryId, h.interviewerPartyId);
     const { applicationId } = await seedSentOffer(h);
     const interview = await scheduleInterview({
@@ -1271,7 +1250,7 @@ async function seedAgedApplication(
 test("retention anonymizes an expired prospect and keeps the analytics", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
-    await enableRecruitingDepth(orgId);
+    await enableRecruiting(orgId);
     const ruleId = randomUUID();
     await db.execute(sql`
       insert into hrm_retention_rules (id, org_id, name, region_scope, basis, retain_months, action, is_active)
@@ -1299,7 +1278,7 @@ test("retention anonymizes an expired prospect and keeps the analytics", { skip:
 test("country-scoped retention matches the candidate's requisition legal-entity country", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
-    await enableRecruitingDepth(orgId);
+    await enableRecruiting(orgId);
     const country = (await db.execute<{ country: string }>(sql`
       select country from subsidiaries where org_id = ${orgId} and id = ${h.org.subsidiaryId}
     `)).rows[0]!.country;
@@ -1323,7 +1302,7 @@ test("country-scoped retention matches the candidate's requisition legal-entity 
 test("the system retention duty returns its durable per-rule business-day claim", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
-    await enableRecruitingDepth(orgId);
+    await enableRecruiting(orgId);
     const ruleId = randomUUID();
     await db.execute(sql`
       insert into hrm_retention_rules (id, org_id, name, region_scope, basis, retain_months, action, is_active)
@@ -1343,7 +1322,7 @@ test("the system retention duty returns its durable per-rule business-day claim"
 test("retention never touches a candidate with an open application", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
-    await enableRecruitingDepth(orgId);
+    await enableRecruiting(orgId);
     const ruleId = randomUUID();
     await db.execute(sql`
       insert into hrm_retention_rules (id, org_id, name, region_scope, basis, retain_months, action, is_active)
@@ -1366,7 +1345,7 @@ test("retention never touches a candidate with an open application", { skip: !DB
 test("retention rechecks open applications after locking against a concurrent attach", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
-    await enableRecruitingDepth(orgId);
+    await enableRecruiting(orgId);
     const ruleId = randomUUID();
     await db.execute(sql`
       insert into hrm_retention_rules (id, org_id, name, region_scope, basis, retain_months, action, is_active)
@@ -1412,7 +1391,7 @@ test("retention rechecks open applications after locking against a concurrent at
 test("consent extension emails go once per grant, then lapse into the action", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
-    await enableRecruitingDepth(orgId);
+    await enableRecruiting(orgId);
     const ruleId = randomUUID();
     await db.execute(sql`
       insert into hrm_retention_rules
@@ -1456,7 +1435,7 @@ test("feed tokens round-trip for their org and refuse tampering", { skip: !DB },
 test("a public apply captures consents and records the posting source", { skip: !DB }, async () => {
   await withHarness(async (h) => {
     const orgId = h.org.orgId;
-    await enableRecruitingDepth(orgId);
+    await enableRecruiting(orgId);
     const seeded = await seedSentOffer(h);
     const requisitionId = (await db.execute<{ requisition_id: string }>(sql`
       select requisition_id from hrm_applications where id = ${seeded.applicationId}`)).rows[0]!.requisition_id;
@@ -1503,4 +1482,3 @@ test("a public apply captures consents and records the posting source", { skip: 
     assert.ok(afterKinds.includes("apply_duplicate"), "the duplicate attempt is recorded for staff");
   });
 });
-// HR-18 end

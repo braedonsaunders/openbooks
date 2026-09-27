@@ -26,9 +26,9 @@ const patchBody = z.object({
 /**
  * AI capability registry mirror. GET lists the org rows; PATCH edits
  * autonomy DOWN only (raises refuse by name), the reviewer, or records a
- * review. Feature enablement is read from Company Settings → Features.
- * POST syncs the mirror from the code
- * registry when a feature turns on. Ledger under the setup grant.
+ * review. Each capability's enabled state follows the module that owns
+ * its data (Company Settings → Features). POST syncs the mirror from the
+ * code registry. Ledger under the setup grant.
  */
 async function legacyGET() {
   const gate = await guardPermission("admin.setup.manage");

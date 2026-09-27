@@ -371,7 +371,7 @@ type RequestRow = {
   payload_digest: string;
   payload_schema_version: string;
   reason: string | null;
-  /** Generic HR action (0227, hrmActionReasons). Null = unclassified. */
+  /** Generic HR action (0227). Null = unclassified. */
   action: string | null;
   /** Reason code from hrm_action_reasons (0227). */
   reason_code: string | null;
@@ -785,9 +785,9 @@ export interface SubmitChangeRequestQuery {
   readonly requestId: string;
   readonly reason: unknown;
   /** Generic HR action (0227). Persisted, never validated here: the
-   *  feature-gated require/both validation lives in the web boundary
-   *  (automations action-reasons) so this module never depends on the
-   *  automations engine module. */
+   *  require-both validation (enforced once the org declares an active
+   *  reason code) lives in the web boundary (automations action-reasons)
+   *  so this module never depends on the automations engine module. */
   readonly action?: string | null;
   readonly reasonCode?: string | null;
 }

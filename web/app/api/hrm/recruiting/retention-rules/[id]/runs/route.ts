@@ -15,12 +15,12 @@ export const runtime = "nodejs";
  * The service enforces the manage grant plus the runner's employer scope —
  * a scoped runner's manual run touches only owned candidates; the scheduled
  * system tick calls the same service as system for org-wide coverage.
- * Every evaluation appends exactly one run row. 404s while hrm,
- * hrmRecruiting, or hrmCandidateRetention is off.
+ * Every evaluation appends exactly one run row. 404s while HRM
+ * or Recruiting is off.
  */
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
-  feature: "hrmCandidateRetention",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const { id } = routeParams;
@@ -39,7 +39,7 @@ export const GET = defineRoute({
 
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmCandidateRetention",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   handler: async ({ request: _req, authz: gate, params: routeParams }) => {
     const { id } = routeParams;

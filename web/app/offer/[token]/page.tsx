@@ -26,7 +26,6 @@ export default async function OfferSigningPage({ params }: { params: Promise<{ t
   const features = await resolvePublicOrgFeatures(offer.offerId, 'offer')
   if (!features) notFound()
   if (!(await isFeatureEnabled(features.orgId, 'hrmRecruiting'))) notFound()
-  if (!(await isFeatureEnabled(features.orgId, 'hrmOfferSigning'))) notFound()
 
   return (
     <main className="mx-auto min-h-screen max-w-2xl bg-white px-6 py-10">

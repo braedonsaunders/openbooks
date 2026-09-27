@@ -184,8 +184,8 @@ test("hrmRefusal carries read-service refusals and rethrows the rest", () => {
 });
 
 // HR-18 begin: recruiting depth reads ride hrm_recruiting (names and
-// states only, never PII), each refusing by name while its sub-switch is
-// off, through the canonical depth services — never parallel SQL.
+// states only, never PII), each refusing by name while Recruiting is off,
+// through the canonical depth services — never parallel SQL.
 test("hrm_recruiting depth inputs accept valid IDs and reject malformed IDs", () => {
   const byName = new Map(HRM_TOOLS.map((tool) => [tool.name, tool] as const));
   const recruiting = byName.get("hrm_recruiting")!;

@@ -1,7 +1,7 @@
 /**
- * Field-time features and permissions: same shape as feature-registry tests
- * (registered, defaulted, parented, granted to the same built-in roles as
- * time.read/manage).
+ * Field-time feature and permissions: the one fieldTime switch (registered,
+ * defaulted, parented) and the permissions granted to the same built-in
+ * roles as time.read/manage.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -12,36 +12,13 @@ import {
   PERMISSION_GROUPS,
 } from "../../organization/permissions.ts";
 
-describe("field-time features", () => {
+describe("field-time feature", () => {
   it("fieldTime rides timeTracking and needs projects", () => {
     const def = FEATURE_BY_KEY.get("fieldTime");
     assert.ok(def, "fieldTime must be registered");
     assert.equal(def.defaultEnabled, false);
     assert.equal(def.parentKey, "timeTracking");
     assert.deepEqual(def.requiresAll, ["projects"]);
-  });
-  it("all six sub-features hang under fieldTime", () => {
-    for (const key of [
-      "fieldTimeGeofence",
-      "fieldTimePhoto",
-      "fieldTimeKiosk",
-      "fieldTimeCrewEntry",
-      "fieldTimeEquipment",
-      "fieldTimeMultiStageApproval",
-    ]) {
-      const sub = FEATURE_BY_KEY.get(key);
-      assert.ok(sub, `${key} must be registered`);
-      assert.equal(sub.parentKey, "fieldTime");
-      assert.equal(sub.defaultEnabled, false);
-    }
-    assert.deepEqual(FEATURE_BY_KEY.get("fieldTimeEquipment")!.requiresAll, ["equipment"]);
-  });
-  it("a stale stored override never resurrects a child while the parent is off", () => {
-    assert.equal(featureEnabled({ fieldTime: false, fieldTimeKiosk: true }, "fieldTimeKiosk"), false);
-    assert.equal(
-      featureEnabled({ projects: true, timeTracking: true, fieldTime: true, fieldTimeKiosk: true }, "fieldTimeKiosk"),
-      true,
-    );
   });
   it("office orgs never see a clock: fieldTime dies with timeTracking", () => {
     assert.equal(

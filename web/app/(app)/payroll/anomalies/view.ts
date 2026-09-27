@@ -19,7 +19,6 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadAnomalyChecks, type AnomalyChecksData } from '../../../../lib/hrm/ai-rails'
 
@@ -132,14 +131,8 @@ export async function loadAnomalyChecksPage(
   // The page gate lives here — where the route-gate scanner reads — and the
   // loader enforces nothing twice: it takes the authorized session as input.
   const authz = await requirePermission('payroll.manage')
-  // Either anomaly surface admits: the remedy names the payroll switch, the
-  // page's own, while the time switch alone still opens the queue.
-  if (
-    !(await isFeatureEnabled(authz.user.orgId, 'hrmPayrollAnomalies')) &&
-    !(await isFeatureEnabled(authz.user.orgId, 'hrmTimeAnomalies'))
-  ) {
-    await requireFeatureEnabled(authz.user.orgId, 'hrmPayrollAnomalies')
-  }
+  // The checks queue is a Payroll surface: it rides the Payroll module.
+  await requireFeatureEnabled(authz.user.orgId, 'payroll')
   return loadAnomalyChecks(authz, sp)
 }
 

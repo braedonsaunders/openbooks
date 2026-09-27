@@ -397,7 +397,7 @@ export async function getRequisitionDetail(query: GetRequisitionDetailQuery): Pr
  * Band range for a requisition drawer (HR-12, additive): the narrowest
  * live annual band covering the opening's position level, employer,
  * and department. Returns null (renders nothing) when the
- * hrmPayTransparency switch is off, the reader lacks
+ * Compensation switch is off, the reader lacks
  * hrm.compensation.read, the opening names no architected position, or
  * no band covers the scope — never a zero, never a guess.
  */
@@ -413,7 +413,7 @@ async function requisitionBandRange(
   if (!(await actorHasPermission(exec, orgId, actorId, "hrm.compensation.read"))) return null;
   const settings = (await exec.execute<{ features: Record<string, boolean> | null }>(sql`
     select settings->'features' as features from orgs where id = ${orgId}`)).rows[0]?.features ?? {};
-  if (!featureEnabled(settings, "hrmPayTransparency")) return null;
+  if (!featureEnabled(settings, "hrmCompensation")) return null;
   if (!row.positionId) return null;
   const position = (await exec.execute<{ level_id: string | null; location_id: string | null }>(sql`
     select job_level_id as level_id, location_id

@@ -42,12 +42,11 @@ export const HRM_FIELD_TIME_WIDGETS = {
       signLabel={str(props, 'signLabel') ?? ''}
     />
   ),
-  /** The field-time setup surface: rules, kiosks, chains. */
+  /** The field-time setup surface: rules, kiosks, approval routing pointer. */
   'hrm-field-time-setup': (props) => (
     <FieldTimeSetup
       initialSettings={(props.initialSettings as ComponentProps<typeof FieldTimeSetup>['initialSettings'])!}
       kiosks={(props.kiosks as ComponentProps<typeof FieldTimeSetup>['kiosks']) ?? []}
-      chains={(props.chains as ComponentProps<typeof FieldTimeSetup>['chains']) ?? []}
       kioskLinkBase={str(props, 'kioskLinkBase') ?? ''}
       canManageKiosks={props.canManageKiosks === true}
       canEditPolicy={props.canEditPolicy === true}

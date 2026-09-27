@@ -33,7 +33,7 @@ import { loadFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/sett
  * The foreman crew page: batches per project per day as a shared
  * `table` block with `filter-chips` segments, the batch workspace
  * (`hrm-crew-workspace` island) in a drawer from the `batch` search
- * param. 404s when fieldTimeCrewEntry is off — rows stay, they simply
+ * param. 404s when field time capture is off — rows stay, they simply
  * stop rendering.
  */
 
@@ -83,15 +83,14 @@ export async function loadCrewPage(sp: Record<string, string | undefined>): Prom
     await requirePermission('time.read')
   }
   const authed = session
-  await requireFeatureEnabled(authed.user.orgId, 'fieldTimeCrewEntry')
+  await requireFeatureEnabled(authed.user.orgId, 'fieldTime')
   const t = await getTranslations('timesheets')
   const orgId = authed.user.orgId
   const statusLabel = (status: string) => STATUS_LABELS[status] ?? status
   const STATUS_LABELS: Record<string, string> = {
     draft: t('field.statusDraft'),
     submitted: t('field.statusSubmitted'),
-    approved_stage_1: t('field.statusStage1'),
-    approved_stage_2: t('field.statusStage2'),
+    approved: t('field.statusApproved'),
     rejected: t('field.statusRejected'),
     posted: t('field.statusPosted'),
   }
@@ -111,7 +110,7 @@ export async function loadCrewPage(sp: Record<string, string | undefined>): Prom
     canEnter: can(authed, 'time.crew.enter'),
     segmentsLabel: t('field.statusLabel'),
     allLabel: t('field.allBatches'),
-    segments: ['draft', 'submitted', 'approved_stage_1', 'approved_stage_2', 'rejected', 'posted'].map((status) => ({
+    segments: ['draft', 'submitted', 'approved', 'rejected', 'posted'].map((status) => ({
       value: status,
       label: statusLabel(status),
     })),
@@ -220,7 +219,9 @@ async function crewWorkspaceData(
   if (batchId) {
     const detail = await getBatchDetail(orgId, actor, batchId)
     const settings = await loadFieldTimeSettings(orgId)
-    const equipmentOn = await isFeatureEnabled(orgId, 'fieldTimeEquipment')
+    // Field time is already required above; equipment hours also need
+    // the Equipment module.
+    const equipmentOn = await isFeatureEnabled(orgId, 'equipment')
     const [workers, timeTypes, tasks, units] = await Promise.all([
       db.execute<{ id: string; name: string }>(sql`
         select p.id::text as id, p.display_name as name from parties p

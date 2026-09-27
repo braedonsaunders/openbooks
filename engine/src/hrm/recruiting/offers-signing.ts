@@ -54,9 +54,10 @@ import {
  *   Cabinet HMAC construction the field-ticket signing surface uses.
  * - Token routes are sessionless: the token binds ONE offer, and every
  *   consumer re-checks liveness (unsigned/sent/viewed, unexpired).
- * - hire.ts calls requireSignedOfferForHire: with hrmOfferSigning on, an
- *   accepted-but-unsigned offer refuses the hire BY NAME; with the feature
- *   off, hire behaves exactly as today.
+ * - hire.ts calls requireSignedOfferForHire: once an offer enters the
+ *   e-sign lifecycle, an accepted-but-unsigned offer refuses the hire BY
+ *   NAME; an offer that never entered signing hires on its commercial
+ *   acceptance.
  */
 
 export const OFFER_SIGNATURE_DOMAIN = "hrm-offer-signature:v1";
@@ -159,7 +160,6 @@ export async function listOfferTemplates(query: {
     // Shared configuration: any recruiting reader lists; writing needs
     // unrestricted scope (see createOfferTemplate).
     await requireHrmRecruitingReadOrg(db, orgId, actorId);
-    await requireDepthFeature(db, orgId, "hrmOfferSigning");
     const rows = (await db.execute<TemplateRow>(sql`
       select id, name, body_template as "bodyTemplate", clauses,
              approval_required as "approvalRequired", is_active as "isActive"
@@ -194,7 +194,6 @@ export async function createOfferTemplate(query: {
     // grant at all.)
     await requireHrmRecruitingManageOrg(db, orgId, actorId);
     assertUnrestrictedScope(await actorAllowedSubsidiaryIds(db, orgId, actorId));
-    await requireDepthFeature(db, orgId, "hrmOfferSigning");
     try {
       const row = (await db.execute<TemplateRow>(sql`
         insert into hrm_offer_templates
@@ -323,7 +322,7 @@ export async function renderOfferVersion(query: {
   const templateId = requireId(query.templateId, "templateId");
   const renderedFileId = query.renderedFileId == null ? null : requireId(query.renderedFileId, "renderedFileId");
   return withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmOfferSigning");
+    await requireDepthFeature(db, orgId);
     const locked = (await db.execute<{ version: number; signatureStatus: string | null }>(sql`
       select version, signature_status as "signatureStatus"
         from hrm_offers where org_id = ${orgId} and id = ${offerId} for update
@@ -411,7 +410,7 @@ export async function listOfferVersions(query: {
   const actorId = requireActorId(query.actorId);
   const offerId = requireId(query.offerId, "offerId");
   return withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmOfferSigning");
+    await requireDepthFeature(db, orgId);
     const offer = await loadOffer(db, orgId, offerId);
     if (!offer) throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
     const application = await loadApplication(db, orgId, offer.applicationId);
@@ -454,7 +453,7 @@ export async function offerSignatureState(query: {
   const actorId = requireActorId(query.actorId);
   const offerId = requireId(query.offerId, "offerId");
   return withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmOfferSigning");
+    await requireDepthFeature(db, orgId);
     const offer = await loadOffer(db, orgId, offerId);
     if (!offer) throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
     const application = await loadApplication(db, orgId, offer.applicationId);
@@ -504,7 +503,7 @@ export async function listOffersWithSignature(query: {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   return withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmOfferSigning");
+    await requireDepthFeature(db, orgId);
     // The read grant plus the actor's employer scope over each offer's
     // requisition. (This filter previously compared the application
     // requisition id against the SUBSIDIARY allow-list — every comparison
@@ -564,7 +563,7 @@ export async function sendOfferLink(query: {
   const enqueue = query.enqueueEmail ?? enqueueRecruitingEmailJob;
   const candidateName = typeof query.candidateName === "string" ? query.candidateName : "candidate";
   const staged = await withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmOfferSigning");
+    await requireDepthFeature(db, orgId);
     const offer = await loadOffer(db, orgId, offerId);
     if (!offer) throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
     const application = await loadApplication(db, orgId, offer.applicationId);
@@ -747,7 +746,7 @@ export async function readOfferForSigning(signingToken: string): Promise<{
   const { orgId, offerId } = await offerScopeForToken(signingToken);
   const tokenHash = hashRecruitingToken(signingToken);
   return withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmOfferSigning");
+    await requireDepthFeature(db, orgId);
     const full = (await db.execute<{
       signatureStatus: string | null;
       version: number;
@@ -835,7 +834,7 @@ export async function signOffer(query: {
   const documentHash: unknown = query.documentHash;
   const renderedFileId = query.renderedFileId == null ? null : requireId(query.renderedFileId, "renderedFileId");
   return withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmOfferSigning");
+    await requireDepthFeature(db, orgId);
     const current = (await db.execute<{
       signatureStatus: string | null;
       version: number;
@@ -934,7 +933,7 @@ export async function declineOfferSigning(query: {
   }
   const tokenHash = hashRecruitingToken(query.signingToken);
   return withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmOfferSigning");
+    await requireDepthFeature(db, orgId);
     const locked = (await db.execute<{ signatureStatus: string | null; signingTokenHash: string | null }>(sql`
       select signature_status as "signatureStatus", signing_token_hash as "signingTokenHash"
         from hrm_offers where org_id = ${orgId} and id = ${offerId} for update
@@ -975,7 +974,7 @@ export async function voidOfferSignature(query: {
     throw new RecruitingError("INVALID_INPUT", "voiding a signature needs a reason — record why the letter was pulled");
   }
   await withOrgTransaction(orgId, async () => {
-    await requireDepthFeature(db, orgId, "hrmOfferSigning");
+    await requireDepthFeature(db, orgId);
     const offer = await loadOffer(db, orgId, offerId);
     if (!offer) throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
     const application = await loadApplication(db, orgId, offer.applicationId);
@@ -1003,30 +1002,28 @@ export async function voidOfferSignature(query: {
 }
 
 /**
- * The hire gate (called by hire.ts): with hrmOfferSigning on, hire
- * requires an accepted+signed offer and refuses BY NAME otherwise; with
- * the feature off, hire behaves exactly as today (no check).
+ * The hire gate (called by hire.ts, which already holds the Recruiting
+ * gate). Signing is declared per offer: rendering a letter or sending a
+ * signing link puts the offer into the e-sign lifecycle, and from then on
+ * hire requires the candidate's signature and refuses BY NAME otherwise.
+ * An offer that never entered signing hires on its commercial acceptance
+ * alone.
  */
 export async function requireSignedOfferForHire(
   exec: SqlExecutor,
   orgId: string,
   offerId: string,
 ): Promise<void> {
-  const state = (await exec.execute<{ features: Record<string, boolean> | null }>(sql`
-    select settings->'features' as features from orgs where id = ${orgId}
-  `)).rows[0]?.features;
-  const { featureEnabled } = await import("../../organization/feature-registry.ts");
-  if (!featureEnabled(state ?? {}, "hrmOfferSigning")) return;
   const row = (await exec.execute<{ signatureStatus: string | null }>(sql`
     select signature_status as "signatureStatus" from hrm_offers where org_id = ${orgId} and id = ${offerId}
   `)).rows[0];
   if (!row) {
     throw new RecruitingError("NOT_FOUND", "offer is not visible in this organization");
   }
-  if (row.signatureStatus !== "signed") {
+  if (row.signatureStatus !== null && row.signatureStatus !== "signed") {
     throw new RecruitingError(
       "REFUSED",
-      `offer signing is on and this offer is ${row.signatureStatus ?? "unsigned"} — send the signing link and collect the candidate's signature before hiring; hire never lands on an unsigned offer`,
+      `this offer's letter is ${row.signatureStatus} — send the signing link and collect the candidate's signature before hiring (a declined or voided letter needs a fresh render first); hire never lands on an unsigned offer`,
     );
   }
 }

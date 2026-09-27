@@ -6,7 +6,7 @@ import { qualificationErrorResponse } from "../qualifications/_lib";
 /** Fired expiry alerts (the scan writes them; the inbox consumes them). */
 export const GET = defineRoute({
   permission: "hrm.certifications.read",
-  feature: "hrmCertificationAlerts",
+  feature: "hrmCertifications",
   handler: async ({ request: req, authz: gate }) => {
     const params = new URL(req.url).searchParams;
     try {

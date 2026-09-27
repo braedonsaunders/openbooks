@@ -35,7 +35,6 @@ import { buildRegisterBuckets, type RegisterBucket } from '../../../../../lib/pa
 import { can, requirePermission } from '../../../../../lib/authz'
 import { subsidiaryUiOptions } from '../../../../../lib/subsidiaries'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
-import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { groupTabs } from '../../../../../components/module-home/group-tabs'
 import type {
@@ -130,9 +129,8 @@ export interface PayRunWizardData {
    * With no policy there is no button and commit behaves exactly as before.
    */
   approval: PayRunApprovalState
-  /** HR-21: open block-severity anomaly flags overlapping this run's
-   *  period. Zero while hrmPayrollAnomalies is off; the commit route
-   *  refuses while this is nonzero. */
+  /** Open block-severity anomaly flags overlapping this run's period. The
+   *  commit route refuses while this is nonzero. */
   anomalyBlocks: number
   /**
    * Active, non-elimination entities the caller may see — the target list
@@ -438,18 +436,16 @@ export async function loadPayRunWizard(
     // a restricted caller cannot select an account the funding panel omitted.
     const bankAccounts = funding.accounts.map(({ id, label }) => ({ id, label }))
 
-    // HR-21: the review step shows the blocking count with a link to the
-    // checks queue, and the commit button stays off while it is nonzero.
-    // The flags table is read here (count only); the route gate re-checks
-    // on commit, so a flag raised after this render still refuses.
-    let anomalyBlocks = 0
-    if (await isFeatureEnabled(orgId, 'hrmPayrollAnomalies')) {
-      const blocks = await db.execute<{ n: string }>(sql`
-        select count(*)::text as n from payroll_anomaly_flags
-         where org_id = ${orgId} and severity = 'block' and status in ('open', 'acknowledged')
-           and pay_period_from <= ${run.period_end}::date and pay_period_to >= ${run.period_start}::date`)
-      anomalyBlocks = Number(blocks.rows[0]?.n ?? 0)
-    }
+    // The review step shows the blocking count with a link to the checks
+    // queue, and the commit button stays off while it is nonzero. Payroll
+    // checks ride Payroll, so they are always on here. The flags table is
+    // read here (count only); the route gate re-checks on commit, so a
+    // flag raised after this render still refuses.
+    const blocks = await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from payroll_anomaly_flags
+       where org_id = ${orgId} and severity = 'block' and status in ('open', 'acknowledged')
+         and pay_period_from <= ${run.period_end}::date and pay_period_to >= ${run.period_start}::date`)
+    const anomalyBlocks = Number(blocks.rows[0]?.n ?? 0)
 
     const moduleTabs = await groupTabs('payroll', '/payroll/runs', { orgId })
 

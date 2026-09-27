@@ -132,7 +132,7 @@
     "flagAutoClosed": "automatisch geschlossen",
     "flagPhoto": "Foto",
     "crewTitle": "Teamzeit",
-    "crewDescription": "Vorarbeiter-Chargen pro Projekt und Tag — signieren, stufenweise genehmigen, einmal buchen.",
+    "crewDescription": "Vorarbeiter-Chargen pro Projekt und Tag — signieren, genehmigen, einmal buchen.",
     "newBatch": "Neue Charge",
     "statusLabel": "Status",
     "allBatches": "Alle Chargen",
@@ -146,8 +146,7 @@
     "setupLink": "Vor-Ort-Einrichtung",
     "statusDraft": "Entwurf",
     "statusSubmitted": "Eingereicht",
-    "statusStage1": "Stufe 1 genehmigt",
-    "statusStage2": "Stufe 2 genehmigt",
+    "statusApproved": "Genehmigt",
     "statusRejected": "Abgelehnt",
     "statusPosted": "Gebucht",
     "worker": "Mitarbeiter",
@@ -164,7 +163,7 @@
     "saveLines": "Zeilen speichern",
     "signAndSubmit": "Signieren und einreichen",
     "withdraw": "Zurück in Entwurf",
-    "approveStage": "Stufe genehmigen",
+    "approve": "Genehmigen",
     "reject": "Ablehnen",
     "rejectReason": "Ablehnungsgrund",
     "post": "Buchen",
@@ -196,15 +195,16 @@
     "kiosksTitle": "Kioskgeräte",
     "noKiosks": "Noch keine Kiosks registriert.",
     "retired": "Stillgelegt",
-    "tokenIssued": "Gerätelink für {name} — jetzt kopieren, er wird nicht erneut angezeigt:", "acknowledgeToken": "Ich habe diesen Gerätelink kopiert",
+    "tokenIssued": "Gerätelink für {name} — jetzt kopieren, er wird nicht erneut angezeigt:",
+    "acknowledgeToken": "Ich habe diesen Gerätelink kopiert",
     "kioskNamePlaceholder": "Kioskname (Baustelle oder Tor)…",
     "registerKiosk": "Kiosk registrieren",
     "pinWorkerPlaceholder": "Mitarbeiter-Partei-ID…",
     "pinPlaceholder": "4–10-stellige PIN",
     "setPin": "PIN setzen",
-    "stagesTitle": "Genehmigungsstufen",
-    "singleApproval": "Einfache Genehmigung gilt.",
-    "stagesHint": "Stufen werden pro Vorgang über die Genehmigungsstufen-API hinterlegt — Stufen laufen 1, 2, 3 ohne Lücken.",
+    "approvalRoutingTitle": "Genehmigungsweg",
+    "approvalRoutingHint": "Genehmigungen für Stundenzettel und Team-Zeitstapel laufen über Flows. Legen Sie einen Flow für den Datensatz Abrechnungswoche oder Zeiterfassungsteam an, um Genehmigungsschritte für Vorgesetzte, Projektleitung oder Lohnbuchhaltung hinzuzufügen; ohne Flow genehmigt eine Person mit Zeitfreigabe direkt.",
+    "approvalRoutingLink": "Flows öffnen",
     "kioskNeedPin": "Wähle den Mitarbeiter und gib die PIN ein.",
     "kioskIdentified": "Erkannt — unten ein- oder ausstempeln.",
     "kioskClockedIn": "Eingestempelt.",
@@ -233,18 +233,6 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "Meinen Standort verwenden",
     "locationDenied": "Standort nicht verfügbar — Koordinaten von Hand eingeben.",
-    "saveGeofence": "Geofence speichern",
-    "subjects": {
-      "timesheetWeek": "Abrechnungswoche",
-      "crewTimeBatch": "Zeiterfassungsteam"
-    },
-    "approvers": {
-      "supervisor": "Vorgesetzte Person",
-      "projectManager": "Projektleitung",
-      "payroll": "Lohnabrechnung",
-      "role": "Rolle",
-      "namedRole": "Rolle: {role}"
-    },
-    "unknownApprovalTarget": "Unbekanntes Genehmigungsziel"
+    "saveGeofence": "Geofence speichern"
   }
 }

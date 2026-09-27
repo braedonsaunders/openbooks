@@ -7,9 +7,7 @@ import { logDecision } from "@openbooks/engine/src/hrm/ai/governance.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { executeReport } from "../../../../lib/custom-reports";
 import { aiRailsErrorResponse, requireAnyPerm } from "../../../../lib/ai-rails";
-import { isFeatureEnabled } from "../../../../lib/features";
 import { canRunReportEntity, hiddenReportEntityKeys } from "../../../../lib/report-authz";
-import { notFound } from "@/lib/api/responses";
 
 
 export const runtime = "nodejs";
@@ -26,6 +24,8 @@ const nlBody = z.object({
  * entities refuse by name, never repaired), runs it once as a preview
  * under the caller's report gates, and on save stores the draft for
  * save-as-view. The output is a report-engine definition, never SQL.
+ * No module feature gates the route: it drafts only over report entities
+ * the caller may already read, under the reports.read grant.
  */
 export const POST = defineRoute({
   public: 'session',
@@ -33,9 +33,6 @@ export const POST = defineRoute({
   handler: async ({ request: _req , body: routeBody }) => {
     const authz = await requireAnyPerm(["reports.read"]);
     if (authz instanceof NextResponse) return authz;
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
-        return notFound("record");
-      }
 
     const body = routeBody;
     try {
@@ -98,17 +95,12 @@ export const POST = defineRoute({
 
 /**
  * The caller's own NL drafts for the Ask panel's save-as-view list.
- * Feature-gated like POST: absent capability answers 404, never an
- * empty list pretending there is nothing to ask.
  */
 export const GET = defineRoute({
   public: 'session',
   handler: async (_) => {
     const authz = await requireAnyPerm(["reports.read"]);
     if (authz instanceof NextResponse) return authz;
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
-        return notFound("record");
-      }
     try {
         const drafts = await listNlDrafts(db, { orgId: authz.user.orgId, actorId: authz.user.id });
         return NextResponse.json({ drafts });
@@ -134,9 +126,6 @@ export const PATCH = defineRoute({
   handler: async ({ request: _req , body: routeBody }) => {
     const authz = await requireAnyPerm(["reports.read"]);
     if (authz instanceof NextResponse) return authz;
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
-        return notFound("record");
-      }
 
     try {
         const draft = await transitionNlDraft(db, {

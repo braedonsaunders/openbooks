@@ -230,7 +230,7 @@ export async function loadProcessesPage(authz: Authz, sp: Record<string, string 
   // HR-21: "Draft from evidence" on the process drawer (onboarding_plan
   // from the process's template). The checklist has no editable plan
   // field, so Insert copies to the clipboard (the drawer's own fallback).
-  const draftLabel = detail ? await loadAiDraftButton(authz.user.orgId) : null
+  const draftLabel = detail ? await loadAiDraftButton(authz) : null
   const processHref = processId !== null ? hrefFor(segment, processId) : null
   const draftDrawer = await loadAiDraftDrawer({
     draftParam: typeof sp.draft === 'string' ? sp.draft : null,

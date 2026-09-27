@@ -328,7 +328,7 @@
       "unassignHint": "Registra un vínculo nulo explícito: el espacio conserva su contenido pero no ocupa plantilla.",
       "actionLabel": "Acción",
       "actionPlaceholder": "Seleccione una acción",
-      "actionRequired": "Elija la acción de RR. HH. de este cambio.",
+      "actionRequired": "Elija la acción de RR. HH. y el motivo de este cambio.",
       "reasonCodeLabel": "Motivo",
       "reasonCodePlaceholder": "Seleccione un motivo",
       "rescindAction": "Rescindir",
@@ -1544,8 +1544,6 @@
     "empty": "Nada aquí todavía.",
     "emptyAction": "Configúrelo en Ajustes abajo.",
     "truncatedNote": "Se muestran las primeras {limit} de {total} filas.",
-    "sectionOffTitle": "Esta sección está desactivada",
-    "sectionOffMessage": "Active la función correspondiente en Configuración de la empresa → Funciones.",
     "active": "Activo",
     "retired": "Retirado",
     "sections": {

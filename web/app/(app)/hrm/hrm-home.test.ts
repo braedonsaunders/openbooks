@@ -435,7 +435,7 @@ test("a refused queue reaches the pending widget as data", () => {
 });
 
 test("the cockpit binds loader figures and scopes every display leg to the org", async () => {
-  gap.__homeFeatures = { hrmOrgChart: false };
+  gap.__homeFeatures = {};
   gap.__homeQueries = [];
   gap.__homeQueue = [
     { id: "cr-1", employmentId: "emp-1", payload: { kind: "hire", effectiveFrom: "2026-10-01" }, status: "pending_approval" },
@@ -456,8 +456,8 @@ test("the cockpit binds loader figures and scopes every display leg to the org",
   assert.ok(data.trendData.slice(0, 11).every((point) => point === 40), "history comes from the shared census read");
   assert.deepEqual(
     data.directory.map((entry) => entry.href),
-    ["/hrm/performance"],
-    "without subordinate grants or features the directory keeps only the ungated surface",
+    ["/hrm/org-chart", "/hrm/performance"],
+    "without subordinate grants the directory keeps the org chart (employment read) and the ungated surface",
   );
   assert.deepEqual(
     data.actions.map((action) => action.href),

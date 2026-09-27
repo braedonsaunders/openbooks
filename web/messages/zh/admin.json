@@ -3889,10 +3889,6 @@
         "circle": "圆形",
         "polygon": "多边形"
       },
-      "approvalSubject": {
-        "timesheetWeek": "工时周",
-        "crewTimeBatch": "班组批次"
-      },
       "hrmRetentionAction": {
         "anonymize": "匿名化",
         "delete": "删除"
@@ -5031,15 +5027,7 @@
   "features": {
     "hrm": {
       "title": "人力资源",
-      "description": "带有时点历史、人员数量和变更申请跟踪的雇用记录。仅读取人力资源基础数据，绝不驱动薪资。"
-    },
-    "hrmCelebrations": {
-      "title": "团队庆祝",
-      "description": "在首页显示生日、入职周年和新成员。"
-    },
-    "hrmManagerNudges": {
-      "title": "管理者提醒",
-      "description": "在管理者首页显示离职与1:1提醒，仅限其团队。"
+      "description": "带有时点历史、人员数量、含操作与原因代码的变更申请以及组织架构图的雇用记录。仅读取人力资源基础数据，绝不驱动薪资。"
     },
     "homeAnnouncements": {
       "title": "首页公告",
@@ -5282,197 +5270,37 @@
       "title": "模拟器",
       "description": "对真实主体无写入试运行配方。"
     },
-    "hrmActionReasons": {
-      "title": "操作与原因代码",
-      "description": "每个变更申请必须填写HR操作和原因代码。"
-    },
-    "hrmEventVerbs": {
-      "title": "变更事件动词",
-      "description": "以追加事件取消、撤销和更正雇佣变更。"
-    },
     "hrmConstructionCompliance": {
       "title": "建筑合规",
       "description": "自营施工的现行工资表、认证工资、工伤类别、学徒比例和每日津贴。需要工资、项目和考勤。"
     },
-    "hrmPrevailingWage": {
-      "title": "现行工资",
-      "description": "根据已申报工资表按地点、分类和日期确定工资。"
-    },
-    "hrmCertifiedPayroll": {
-      "title": "认证工资",
-      "description": "通过工资包申报文件渲染的每周冻结报告。"
-    },
-    "hrmWorkersCompClasses": {
-      "title": "工伤类别",
-      "description": "按优先级规则将成本工时拆分到保险类别。"
-    },
-    "hrmApprenticeRatios": {
-      "title": "学徒比例",
-      "description": "按日执行熟练工与学徒比例；违规按熟练工标准计价。"
-    },
-    "hrmPerDiem": {
-      "title": "每日津贴",
-      "description": "根据已批准考勤计算每日津贴和差旅费并传入工资。"
-    },
     "hrmCompensation": {
       "title": "薪酬",
-      "description": "岗位体系与带宽：岗位应付薪酬与人员位置。"
-    },
-    "hrmMeritCycles": {
-      "title": "调薪周期",
-      "description": "冻结薪酬事实、决定加薪并推送标准的轮次。"
-    },
-    "hrmHeadcountPlans": {
-      "title": "人力规划",
-      "description": "按带宽测算的方案，批准后开启招聘。"
-    },
-    "hrmPayTransparency": {
-      "title": "薪酬透明",
-      "description": "根据薪酬事实冻结的指标与员工信息请求。"
+      "description": "岗位体系与薪酬带宽、调薪周期、带成本测算的编制计划以及薪酬透明。调薪周期还需要启用薪资。"
     },
     "hrmCertifications": {
       "title": "认证与执照",
       "description": "员工资质台账：分类、所持证书、派工要求与到期提醒。关闭功能不会删除数据。"
     },
-    "hrmDispatchGating": {
-      "title": "派工门禁",
-      "description": "拒绝缺少所需资质人员的排班指派。需要项目与排程。"
-    },
-    "hrmEquipmentQualifications": {
-      "title": "设备资质要求",
-      "description": "在设备档案上声明所需的资质类型。需要设备管理。"
-    },
-    "hrmCertificationAlerts": {
-      "title": "认证提醒",
-      "description": "通过收件箱向持有人及其主管发送每日到期通知。"
-    },
     "hrmPerformance": {
       "title": "绩效",
-      "description": "评估、目标、1:1、反馈、校准、人才与继任的总开关。"
-    },
-    "hrmOneOnOnes": {
-      "title": "1:1",
-      "description": "主管与下属的定期面谈,议程自动结转。"
-    },
-    "hrmFeedback": {
-      "title": "反馈",
-      "description": "在发生时记录的表扬、反馈与请求。"
-    },
-    "hrmCompetencies": {
-      "title": "能力",
-      "description": "与评估和职级挂钩的分级复用技能词汇。"
-    },
-    "hrmCalibration": {
-      "title": "校准",
-      "description": "评估周期上的评分矩阵,并附审计轨迹。"
-    },
-    "hrmSuccession": {
-      "title": "人才与继任",
-      "description": "各职位的人才评估与继任计划。"
+      "description": "评估、目标、1:1、反馈、胜任力、校准、人才盘点与继任计划。"
     },
     "hrmDocuments": {
       "title": "人力资源文档",
-      "description": "从入职到离职的人力资源文档，支持电子签名、模板和确认书。关闭功能不会删除数据。"
-    },
-    "hrmDocumentRetention": {
-      "title": "文档保留",
-      "description": "宽限期后经审计删除的保留规则。关闭功能不会删除数据。"
-    },
-    "hrmDataSubjectExport": {
-      "title": "主体访问导出",
-      "description": "面向数据主体的一键访问导出。关闭功能不会删除数据。"
+      "description": "从入职到离职的人力资源文档，支持电子签名、模板和确认书，并包含保留期限计划与数据主体访问导出。关闭功能不会删除数据。"
     },
     "hrmSurveys": {
       "title": "敬业度调查",
       "description": "具有匿名等级结果的敬业度和脉动调查。关闭功能不会删除数据。"
     },
-    "hrmPulseSurveys": {
-      "title": "脉动调查",
-      "description": "带趋势的定期脉动调查。需要调查功能。"
-    },
-    "hrmOrgChart": {
-      "title": "组织架构图",
-      "description": "显示空缺、部门和管理幅度的组织树。"
-    },
     "fieldTime": {
       "title": "外勤打卡",
       "description": "带围栏、拍照、离线队列的手机／终端打卡，工长批次，工时附设备工时。"
     },
-    "fieldTimeGeofence": {
-      "title": "打卡围栏",
-      "description": "按项目的圆和多边形核对位置；围栏外只标记，不拒绝。"
-    },
-    "fieldTimePhoto": {
-      "title": "打卡拍照",
-      "description": "手机打卡必须拍照。"
-    },
-    "fieldTimeKiosk": {
-      "title": "工地终端",
-      "description": "共用PIN设备，自动回到待机。"
-    },
-    "fieldTimeCrewEntry": {
-      "title": "班组工时",
-      "description": "工长按项目按日填报，签名并分阶段审批。"
-    },
-    "fieldTimeEquipment": {
-      "title": "工时附设备",
-      "description": "工时与批次行的设备工时，按设备计费品目计价。需要设备功能。"
-    },
-    "fieldTimeMultiStageApproval": {
-      "title": "工时多级审批",
-      "description": "工时单与班组批次的主管、项目经理、薪酬审批链。"
-    },
     "hrmRecruiting": {
       "title": "招聘",
-      "description": "需求、候选人、面试与录用：从空缺到入职的全流程。"
-    },
-    "hrmStructuredInterviews": {
-      "title": "结构化面试",
-      "description": "带评分维度的面试题库与盲审小组结论。"
-    },
-    "hrmInterviewScheduling": {
-      "title": "面试排期",
-      "description": "附候选人自助预约链接的建议时段。"
-    },
-    "hrmOfferSigning": {
-      "title": "录用函签署",
-      "description": "模板录用函生成版本化PDF并在产品内签署。"
-    },
-    "hrmJobBoards": {
-      "title": "招聘渠道",
-      "description": "内部招聘页与信息流发布，附录用结果回传。"
-    },
-    "hrmCandidateRetention": {
-      "title": "候选人保留",
-      "description": "同意采集与保留规则：到期匿名化或删除。"
-    },
-    "hrmTalentPool": {
-      "title": "人才库",
-      "description": "将往期候选人与在招职位匹配的人才池。"
-    },
-    "hrmAiAssist": {
-      "title": "AI 助手",
-      "description": "确定性 HRM AI 能力的总开关。此处不会自动提交、审批或付款。"
-    },
-    "hrmExplainPay": {
-      "title": "工资单解释",
-      "description": "在“工资”抽屉中显示确定性追溯及上期差异。"
-    },
-    "hrmPayrollAnomalies": {
-      "title": "薪资异常",
-      "description": "带生命周期的运行前标记；阻止级别拒绝确认。"
-    },
-    "hrmTimeAnomalies": {
-      "title": "考勤异常",
-      "description": "考勤标记显示为审批徽章和收件箱事项。"
-    },
-    "hrmDrafting": {
-      "title": "依据起草",
-      "description": "基于引用记录的草稿及措辞标记；从不自动提交。"
-    },
-    "hrmNlReports": {
-      "title": "自然语言报表",
-      "description": "根据问题生成经验证的定义，可预览并另存为视图。"
+      "description": "需求、候选人、结构化面试、面试排期、产品内签署的录用通知、招聘渠道、候选人数据保留与人才库。"
     },
     "aiGovernanceLedger": {
       "title": "AI 治理台账",

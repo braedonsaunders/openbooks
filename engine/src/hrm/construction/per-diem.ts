@@ -14,7 +14,6 @@ import {
   type PerDiemBasis,
 } from "./pure.ts";
 import {
-  HRM_PER_DIEM_FEATURE,
   assertConstructionFeature,
   assertEmploymentInScope,
   requireDate,
@@ -64,7 +63,7 @@ export interface PerDiemEntry {
 }
 
 export async function listPolicies(exec: SqlExecutor, orgId: string, actorId: string): Promise<readonly PerDiemPolicy[]> {
-  await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem policies");
+  await assertConstructionFeature(exec, orgId, "Per-diem policies");
   requireId(actorId, "actorId");
   await requireHrmConstructionRead(exec, orgId, actorId);
   const rows = (
@@ -125,7 +124,7 @@ export async function createPolicy(
   if (currency.length !== 3) throw new HrmConstructionError("Currency must be a 3-letter ISO code.");
   const effectiveFrom = requireDate(input.effectiveFrom, "effectiveFrom");
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem policies");
+    await assertConstructionFeature(exec, orgId, "Per-diem policies");
     // Policies price every entity's travel: org-wide config needs
     // unrestricted scope, named with the remedy.
     await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
@@ -412,7 +411,7 @@ export async function computeForWeek(
   const employmentId = requireId(input.employmentId, "employmentId");
   const weekStart = requireDate(input.weekStart, "weekStart");
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem computation");
+    await assertConstructionFeature(exec, orgId, "Per-diem computation");
     // Computing materializes allowance rows for one employment: the
     // employment's employer must sit inside the lens, locked shared so a
     // concurrent rehome waits for the check. Missing and out-of-scope
@@ -629,7 +628,7 @@ export async function listEntries(
   actorId: string,
   status?: string | null,
 ): Promise<readonly PerDiemEntry[]> {
-  await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem entries");
+  await assertConstructionFeature(exec, orgId, "Per-diem entries");
   requireId(actorId, "actorId");
   // Entries carry per-employee allowance amounts: the read fences to
   // in-scope employments — B's rows and amounts never reach an A-scoped
@@ -680,7 +679,7 @@ export async function approveEntry(
   const entryId = requireId(input.entryId, "entryId");
   const table = input.kind === "per_diem" ? "hrm_per_diem_entries" : "hrm_travel_pay_entries";
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem approval");
+    await assertConstructionFeature(exec, orgId, "Per-diem approval");
     // Approving feeds payroll: the entry is locked and its employment's
     // employer must sit inside the lens — a B entry reads exactly like a
     // missing one, and B's amounts never cross into the allowance seam.
@@ -772,7 +771,7 @@ export async function voidEntry(
   const reason = requireText(input.reason, "reason");
   const table = input.kind === "per_diem" ? "hrm_per_diem_entries" : "hrm_travel_pay_entries";
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Per-diem voids");
+    await assertConstructionFeature(exec, orgId, "Per-diem voids");
     // Voiding touches the entry and its payroll seam together: the entry
     // is locked and its employment's employer must sit inside the lens —
     // a B entry voids exactly like a missing one.
@@ -853,7 +852,7 @@ export async function computeTravelForWeek(
   const employmentId = requireId(input.employmentId, "employmentId");
   const weekStart = requireDate(input.weekStart, "weekStart");
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_PER_DIEM_FEATURE, "Travel-pay computation");
+    await assertConstructionFeature(exec, orgId, "Travel-pay computation");
     // Same employment scope as per-diem computation: the employer must
     // sit inside the lens, locked shared against a concurrent rehome.
     const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");

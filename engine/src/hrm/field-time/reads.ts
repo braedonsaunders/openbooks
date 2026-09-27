@@ -28,7 +28,7 @@ export interface CrewBatchActor {
   /** Subsidiaries the actor may see; null = unrestricted (explicit sentinel, never omitted). */
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }
-import { FIELD_TIME_CREW_ENTRY_FEATURE, FIELD_TIME_FEATURE } from "./settings.ts";
+import { FIELD_TIME_FEATURE } from "./settings.ts";
 import { clockStatus } from "./clock.ts";
 
 export async function resolveOwnParty(orgId: string, userId: string, exec: SqlExecutor = db): Promise<string> {
@@ -188,10 +188,10 @@ export async function listCrewBatches(
   actor: CrewBatchActor,
   exec: SqlExecutor = db,
 ): Promise<CrewBatchSummary[]> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_CREW_ENTRY_FEATURE))) {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_FEATURE))) {
     refuse(
-      "field_time_crew_off",
-      "Crew time entry is turned off — turn on fieldTimeCrewEntry in Company Settings → Features to see crew batches",
+      "field_time_off",
+      "Field time is turned off — turn on fieldTime in Company Settings → Features to see crew batches",
     );
   }
   // Reads show own batches plus the projects in scope: a foreman sees their
@@ -253,10 +253,10 @@ export async function getBatchDetail(
   batchId: string,
   exec: SqlExecutor = db,
 ): Promise<BatchDetail> {
-  if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_CREW_ENTRY_FEATURE))) {
+  if (!(await lockAndCheckOrgFeature(exec, orgId, FIELD_TIME_FEATURE))) {
     refuse(
-      "field_time_crew_off",
-      "Crew time entry is turned off — turn on fieldTimeCrewEntry in Company Settings → Features to see crew batches",
+      "field_time_off",
+      "Field time is turned off — turn on fieldTime in Company Settings → Features to see crew batches",
     );
   }
   // Same own-or-in-scope rule as the list: an out-of-scope batch answers

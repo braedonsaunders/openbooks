@@ -220,13 +220,13 @@ async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injec
 }
 
 export const GET = defineRoute({
-  permission: 'time.manage', feature: 'fieldTimeGeofence',
+  permission: 'time.manage', feature: 'fieldTime',
 
   handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
 });
 
 export const POST = defineRoute({
-  permission: 'time.manage', feature: 'fieldTimeGeofence',
+  permission: 'time.manage', feature: 'fieldTime',
 
   handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
 });

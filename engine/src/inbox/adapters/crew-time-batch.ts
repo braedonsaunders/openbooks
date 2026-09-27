@@ -13,7 +13,7 @@ import { CREW_TIME_BATCH_SUBJECT_KIND } from "../../flows/crew-batches-adapter.t
 import { decideGate, delegateGate } from "../../flows/gates.ts";
 import { worklistApprovals } from "../../flows/approval-worklist.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { FIELD_TIME_CREW_ENTRY_FEATURE } from "../../hrm/field-time/settings.ts";
+import { FIELD_TIME_FEATURE } from "../../hrm/field-time/settings.ts";
 import { actorPartyId, toWorklistScope } from "../guard.ts";
 import { db, type SqlExecutor } from "../../platform/db.ts";
 import { parseDelegationReason } from "../delegation.ts";
@@ -34,7 +34,7 @@ export const crewTimeBatchAdapter: InboxAdapter = {
     // Gate first: with crew entry off the inbox must not touch crew tables
     // at all — no worklist scan for crew gates, no own-batch query.
     const exec: SqlExecutor = ctx.exec ?? db;
-    if (!(await lockAndCheckOrgFeature(exec, ctx.orgId, FIELD_TIME_CREW_ENTRY_FEATURE))) return [];
+    if (!(await lockAndCheckOrgFeature(exec, ctx.orgId, FIELD_TIME_FEATURE))) return [];
     const out: InboxItem[] = [];
     const approvals = await worklistApprovals(ctx.orgId, ctx.actorId, toWorklistScope(ctx));
     for (const item of approvals) {

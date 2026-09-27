@@ -46,7 +46,6 @@ async function canMoveFunnel(authz: Authz, requisitionId: string, canManage: boo
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { setupSectionParams } from '../../../../lib/list-params'
 import { recruitingHref } from '../../../../lib/hrm/workspace-href'
-import { isFeatureEnabled } from '../../../../lib/features'
 import { SETUP_ENTITY_BY_KEY } from '../../../../lib/setup/registry'
 import { loadAiDraftButton, loadAiDraftDrawer, type AiDraftDrawerData } from '../../../../lib/hrm/ai-rails'
 import { rootSubsidiary, subsidiaryUiOptions } from '../../../../lib/subsidiaries'
@@ -343,8 +342,7 @@ export async function loadRecruitingPage(
 ): Promise<RecruitingPageData> {
   // The page gate lives here — where the route-gate scanner reads — and the
   // loader enforces nothing twice: it takes the authorized session as input.
-  // HR-18: the HR-6 funnel rides the hrmRecruiting parent (on wherever hrm
-  // is on) — the wrap is additive and changes nothing by default.
+  // Recruiting rides the HRM parent and is on wherever HRM is, by default.
   const authz = await requirePermission('hrm.recruiting.read')
   await requireFeatureEnabled(authz.user.orgId, 'hrm')
   await requireFeatureEnabled(authz.user.orgId, 'hrmRecruiting')
@@ -354,9 +352,8 @@ export async function loadRecruitingPage(
   const status = typeof sp.status === 'string' && (STATUSES as readonly string[]).includes(sp.status)
     ? sp.status
     : null
-  // HR-18: route sub-tabs. A tab naming a switched-off surface falls back
-  // to Openings, so feature-off tabs are absent, not errors.
-  const tab: DepthTab = await resolveDepthTab(authz, sp.tab)
+  // Route sub-tabs. An unknown tab param falls back to Openings.
+  const tab: DepthTab = resolveDepthTab(sp.tab)
   // Drawer hrefs preserve the depth tab, the status filter, and the
   // rehomed setup-section params through the ONE shared helper — closing a
   // drawer returns to the same tab/filter instead of the default view.
@@ -406,9 +403,9 @@ export async function loadRecruitingPage(
     retryHref,
     retryLabel: tc('actions.retry'),
   })
-  // HR-21: one shared "Draft from evidence" label for both draft hosts;
-  // null while hrmDrafting is off hides both buttons.
-  const draftLabel = await loadAiDraftButton(authz.user.orgId)
+  // One shared "Draft from evidence" label for both draft hosts; null
+  // (Human resources off, or no assistant access) hides both buttons.
+  const draftLabel = await loadAiDraftButton(authz)
   if (requisitionId) {
     try {
       const detail = await getRequisitionDetail({ orgId: authz.user.orgId, actorId: authz.user.id, requisitionId })
@@ -773,25 +770,16 @@ export async function loadRecruitingPage(
           : tab === 'pools'
             ? { name: t('recruiting.depth.columns.name'), members: t('recruiting.depth.columns.members') }
             : null
-  // HR-18: the Setup lists rehomed under this tab, each behind its own
-  // sub-switch (a tab being on never implies its Setup surface is — the
-  // interviews tab covers two switches, pools covers two). Unknown keys
-  // stay absent rather than rendering a section the registry cannot serve.
+  // The Setup lists rehomed under this tab. Unknown keys stay absent
+  // rather than rendering a section the registry cannot serve.
   const SETUP_BY_TAB: Record<Exclude<DepthTab, 'openings'>, readonly string[]> = {
     interviews: ['hrm-interview-kits', 'hrm-interviewer-pools'],
     offers: ['hrm-offer-templates'],
     postings: [],
     pools: ['hrm-retention-rules'],
   }
-  const setupSections: string[] = []
-  if (tab !== 'openings') {
-    for (const entityKey of SETUP_BY_TAB[tab]) {
-      const entry = SETUP_ENTITY_BY_KEY.get(entityKey)
-      if (entry?.featureKey && (await isFeatureEnabled(authz.user.orgId, entry.featureKey))) {
-        setupSections.push(entityKey)
-      }
-    }
-  }
+  const setupSections: string[] =
+    tab === 'openings' ? [] : SETUP_BY_TAB[tab].filter((entityKey) => SETUP_ENTITY_BY_KEY.has(entityKey))
   const drawerOpen =
     requisition !== null ||
     candidate !== null ||

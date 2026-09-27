@@ -39,7 +39,7 @@ import { saveTemplate } from "./documents/templates.ts";
  */
 
 
-const DOCUMENTS_FEATURES = ["hrm", "hrmDocuments", "hrmDocumentRetention", "hrmDataSubjectExport"] as const;
+const DOCUMENTS_FEATURES = ["hrm", "hrmDocuments"] as const;
 
 const DOCUMENTS_SPEC = {
   features: DOCUMENTS_FEATURES,

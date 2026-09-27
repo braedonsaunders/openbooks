@@ -1,8 +1,8 @@
 /**
- * HR-20 feature-off isolation proofs (DB-owned — gated remotely).
+ * Field-time feature-off isolation proofs (DB-owned — gated remotely).
  *
  * The field-ticket system is shipped and in use; field time must never
- * interfere with it. With fieldTime / fieldTimeCrewEntry off, every
+ * interfere with it. With fieldTime off, every
  * existing path that can reach field-time code — the timesheet drawer
  * flags (approvalFlags), the project cockpit crew-today (crewToday), the
  * team scope (teamClockedIn), and the inbox worklist
@@ -55,15 +55,13 @@ function gatedStatements(seen: string[]): string[] {
   return seen.filter((text) => FIELD_TIME_TABLES.test(text));
 }
 
-/** Parents on, field-time flags explicitly off: only our own gate can refuse. */
+/** Parents on, the field-time flag explicitly off: only our own gate can refuse. */
 async function disableFieldTime(orgId: string): Promise<void> {
   await db.execute(sql`
     update orgs set settings = coalesce(settings, '{}'::jsonb)
       || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb)
       || '{"projects": true, "timeTracking": true, "equipment": true,
-             "fieldTime": false, "fieldTimeGeofence": false, "fieldTimePhoto": false,
-             "fieldTimeKiosk": false, "fieldTimeCrewEntry": false,
-             "fieldTimeEquipment": false, "fieldTimeMultiStageApproval": false}'::jsonb)
+             "fieldTime": false}'::jsonb)
      where id = ${orgId}`);
 }
 
@@ -72,7 +70,7 @@ async function enableFieldTime(orgId: string): Promise<void> {
     update orgs set settings = coalesce(settings, '{}'::jsonb)
       || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb)
       || '{"projects": true, "timeTracking": true, "equipment": true,
-             "fieldTime": true, "fieldTimeCrewEntry": true}'::jsonb)
+             "fieldTime": true}'::jsonb)
      where id = ${orgId}`);
 }
 
@@ -118,8 +116,8 @@ test("feature-off: self and crew reads refuse by name", { skip: !DB }, async () 
     await withOrg(org.orgId, async () => {
       const { exec, seen } = recording();
       assert.equal(await refusesCode(myClockDay(org.orgId, randomUUID(), exec)), "field_time_off");
-      assert.equal(await refusesCode(listCrewBatches(org.orgId, {}, { actorUserId: randomUUID(), allowedSubsidiaryIds: null }, exec)), "field_time_crew_off");
-      assert.equal(await refusesCode(getBatchDetail(org.orgId, { actorUserId: randomUUID(), allowedSubsidiaryIds: null }, randomUUID(), exec)), "field_time_crew_off");
+      assert.equal(await refusesCode(listCrewBatches(org.orgId, {}, { actorUserId: randomUUID(), allowedSubsidiaryIds: null }, exec)), "field_time_off");
+      assert.equal(await refusesCode(getBatchDetail(org.orgId, { actorUserId: randomUUID(), allowedSubsidiaryIds: null }, randomUUID(), exec)), "field_time_off");
       assert.deepEqual(
         gatedStatements(seen),
         [],
@@ -147,7 +145,7 @@ test("feature-off: inbox lists no crew items without touching crew tables", { sk
       assert.deepEqual(
         gatedStatements(seen),
         [],
-        `inbox reached gated tables while fieldTimeCrewEntry is off:\n${gatedStatements(seen).join("\n")}`,
+        `inbox reached gated tables while fieldTime is off:\n${gatedStatements(seen).join("\n")}`,
       );
     });
   } finally {

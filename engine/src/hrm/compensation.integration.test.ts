@@ -17,6 +17,7 @@ import {
   seedPositionedEmployment,
   seedWage,
   setCompensationSettings,
+  setFeatures,
   setupHarness,
   withHarness,
 } from "../testing/hrm-harness.ts";
@@ -92,6 +93,8 @@ async function seedManagerLink(orgId: string, employmentId: string, managerEmplo
 }
 
 const COMPENSATION_SPEC = {
+  // Merit cycles open and push only while Payroll is on.
+  features: ["hrm", "payroll"],
   users: [
     { key: "hrId", name: "Comp HR", handle: "comp_hr", permissions: ["hrm.compensation.read", "hrm.compensation.manage", "hrm.compensation.approve", "hrm.recruiting.manage"], link: true },
     { key: "managerId", name: "Comp Manager", handle: "comp_manager", permissions: ["hrm.compensation.read", "hrm.self.read", "hrm.compensation.approve"], link: true },
@@ -239,6 +242,13 @@ test("HR-12 cycle open proposes within guideline, flags outside, and refuses emp
         unratedRow: "meets",
       },
     });
+    // With Payroll off the open refuses by name and snapshots nothing.
+    await setFeatures(org.orgId, { payroll: false });
+    await assert.rejects(
+      openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id }),
+      (e: unknown) => e instanceof CompensationError && /Payroll is off/.test(e.message),
+    );
+    await setFeatures(org.orgId, { payroll: true });
     const opened = await openCycle({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });
     assert.equal(opened.lines, 2);
     const lines = await listCycleLines({ orgId: org.orgId, actorId: h.hrId, cycleId: cycle.id });

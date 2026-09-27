@@ -43,17 +43,14 @@ export function isRecruitingAbsence(error: unknown): boolean {
 import { businessTimeZone } from '@openbooks/engine/src/platform/business-date.ts'
 import { sql } from 'drizzle-orm'
 import { can, type Authz } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
-import { RECRUITING_DEPTH_FEATURE } from '../../../../lib/hrm/view-tab-registry'
 
 /**
- * Recruiting depth tabs (HR-18): Interviews, Offers, Postings, and Pools
- * ride the /hrm/recruiting route as `?tab=` sub-tabs beside the existing
- * Openings table. Every loader resolves through the canonical depth
- * services (blind rule, signature state, disposition log included) — the
- * page renders data, never queries. Each tab renders only while its
- * sub-switch is on; a tab param naming a switched-off surface falls back
- * to Openings, so feature-off tabs are absent, not errors.
+ * Recruiting depth tabs: Interviews, Offers, Postings, and Pools ride the
+ * /hrm/recruiting route as `?tab=` sub-tabs beside the Openings table.
+ * Every loader resolves through the canonical depth services (blind rule,
+ * signature state, disposition log included) — the page renders data,
+ * never queries. The tabs are part of Recruiting: they render whenever
+ * the module is on, and an unknown tab param falls back to Openings.
  */
 
 export const DEPTH_TABS = ['openings', 'interviews', 'offers', 'postings', 'pools'] as const
@@ -61,13 +58,9 @@ export type DepthTab = (typeof DEPTH_TABS)[number]
 
 type T = Awaited<ReturnType<typeof getTranslations>>
 
-export async function resolveDepthTab(authz: Authz, tab: unknown): Promise<DepthTab> {
+export function resolveDepthTab(tab: unknown): DepthTab {
   if (typeof tab !== 'string' || !(DEPTH_TABS as readonly string[]).includes(tab)) return 'openings'
-  if (tab === 'openings') return 'openings'
-  if (await isFeatureEnabled(authz.user.orgId, RECRUITING_DEPTH_FEATURE[tab as Exclude<DepthTab, 'openings'>])) {
-    return tab as DepthTab
-  }
-  return 'openings'
+  return tab as DepthTab
 }
 
 function hrefForTab(tab: DepthTab, status: string | null): string {

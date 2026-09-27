@@ -49,7 +49,7 @@ type Harness = {
 
 async function setupScalesHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableHrm(org.orgId, "hrmPerformance", "hrmCalibration");
+  await enableHrm(org.orgId, "hrmPerformance");
   const hrId = await createScratchUser(org.orgId, "Scale HR", "scale_hr");
   await grant(org.orgId, hrId, ["hrm.performance.manage"]);
   const managerUser = await createScratchUser(org.orgId, "Scale Manager", "scale_manager");

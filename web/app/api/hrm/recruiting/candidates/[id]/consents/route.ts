@@ -16,11 +16,11 @@ const consentActionBody = z.union([withdrawConsentBody, recordConsentBody]);
 /**
  * Candidate consents: POST records (or re-grants) consent for a purpose,
  * POST with action withdraw withdraws it (the row stays as evidence).
- * 404s while hrm, hrmRecruiting, or hrmCandidateRetention is off.
+ * 404s while HRM or Recruiting is off.
  */
 export const POST = defineRoute({
   permission: "hrm.recruiting.manage",
-  feature: "hrmCandidateRetention",
+  feature: "hrmRecruiting",
   params: z.object({ id: z.string().min(1) }),
   body: consentActionBody,
   handler: async ({

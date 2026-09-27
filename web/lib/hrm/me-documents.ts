@@ -7,17 +7,15 @@ import { listOwnExports } from '@openbooks/engine/src/hrm/documents/dsar.ts'
 import { loadOrRefuse, type PageRefusal } from '../load-or-refuse'
 import { meTabs } from './self-service'
 import { getAuthz, type Authz } from '../authz'
-import { isFeatureEnabled } from '../features'
 import { requireFeatureEnabled } from '../feature-gates'
 
 /**
- * Me documents loader (0230, HR-19): the person's own documents with
- * inline sign/acknowledge plus their subject-access exports with an
+ * Me documents loader: the person's own documents with inline
+ * sign/acknowledge plus their subject-access exports with an
  * export-my-data request. Fenced to the actor's own party by the
  * services; HR readers land on /hrm/documents instead. Renders when
  * hrm and hrmDocuments are on and the actor holds hrm.self.read — a
- * switched-off feature redirects to its remedy instead. The export request
- * renders only while hrmDataSubjectExport is on.
+ * switched-off feature redirects to its remedy instead.
  */
 
 export interface MeDocumentsAuthz {
@@ -56,7 +54,6 @@ export async function loadMeDocumentsHome(authz: MeDocumentsAuthz, sp: Record<st
     ? outcome.data
     : [{ documents: [], partyId: '' }, { exports: [] }]
   const refusal: PageRefusal | null = outcome.ok ? null : outcome.refusal
-  const exportOn = await isFeatureEnabled(authz.orgId, 'hrmDataSubjectExport')
   const statusLabel = (value: string): string =>
     t.has(`meDocuments.status.${value}`) ? t(`meDocuments.status.${value}`) : value
   // The stored scope manifest names each omitted document with its reason;
@@ -83,7 +80,7 @@ export async function loadMeDocumentsHome(authz: MeDocumentsAuthz, sp: Record<st
     description: t('meDocuments.description'),
     tabs,
     partyId,
-    canRequestExport: exportOn && partyId.length > 0,
+    canRequestExport: partyId.length > 0,
     columns: {
       title: t('meDocuments.columns.title'),
       status: t('meDocuments.columns.status'),
@@ -125,7 +122,7 @@ export async function loadMeDocumentsHome(authz: MeDocumentsAuthz, sp: Record<st
     requestExportLabel: t('meDocuments.requestExport'),
     requestExportDone: t('meDocuments.requestExportDone'),
     downloadLabel: t('meDocuments.download'),
-    exportOpen: sp.export === '1' && exportOn && partyId.length > 0,
+    exportOpen: sp.export === '1' && partyId.length > 0,
     refusal,
   }
 }

@@ -17,7 +17,7 @@ import { patchCalibrationSessionBody } from "../bodies";
  */
 export const GET = defineRoute({
   permission: "hrm.performance.read",
-  feature: "hrmCalibration",
+  feature: "hrmPerformance",
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz, params }) => {
     const { id } = params;
@@ -43,7 +43,7 @@ export const GET = defineRoute({
 });
 export const PATCH = defineRoute({
   permission: "hrm.performance.manage",
-  feature: "hrmCalibration",
+  feature: "hrmPerformance",
   body: patchCalibrationSessionBody,
   params: z.object({ id: z.string() }),
   handler: async ({ request: _req, authz, params, body }) => {

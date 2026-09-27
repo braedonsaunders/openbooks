@@ -20,7 +20,7 @@ import { getDocumentDetail } from "./documents/documents.ts";
  */
 test("an inherited completion reads unverified; a frozen one reads current", { skip: !DB }, async () => {
   const org = await createScratchOrg();
-  await enableFeatures(org.orgId, ["hrm", "hrmDocuments", "hrmDocumentRetention"]);
+  await enableFeatures(org.orgId, ["hrm", "hrmDocuments"]);
   const actorId = await createScratchUser(org.orgId, "HR Reader", "hr_admin");
   await db.execute(sql`
     insert into user_permission_overrides (org_id, user_id, permission, effect)

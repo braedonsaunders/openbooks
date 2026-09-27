@@ -17,7 +17,7 @@ const test = nodeTest;
 
 const routeState: RouteState = {
   gate: { user: { id: "user-1", orgId: "org-1" } },
-  features: { hrmCompensation: true, hrmMeritCycles: true },
+  features: { hrmCompensation: true, payroll: true },
   calls: [],
   serviceThrow: null,
   expectedPermission: "",
@@ -135,6 +135,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../../../../lib/authz", "mock:authz"],
+  ["../../../../lib/features", "mock:authz"],
   ["../../../../../lib/features", "mock:authz"],
   ["../../../../../../../lib/features", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
@@ -172,7 +173,7 @@ const LINE_ID = "00000000-0000-4000-8000-000000000082";
 
 function reset(permission: string): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
-  routeState.features = { hrmCompensation: true, hrmMeritCycles: true };
+  routeState.features = { hrmCompensation: true, payroll: true };
   routeState.calls = [];
   routeState.serviceThrow = null;
   routeState.expectedPermission = permission;
@@ -194,11 +195,15 @@ function patchRequest(url: string, body: unknown): Request {
   });
 }
 
-  test("cycles 404 while hrmMeritCycles is off — the feature-off refusal", async () => {
+  test("cycles 404 while Compensation is off and refuse by name while Payroll is off", async () => {
     reset("hrm.compensation.read");
-    routeState.features = { hrmCompensation: true, hrmMeritCycles: false };
-    const response = await collectionRoute!.GET(new Request("http://openbooks.test/api/hrm/comp-cycles"));
-    assert.equal(response.status, 404);
+    routeState.features = { hrmCompensation: false, payroll: true };
+    const request = () => new Request("http://openbooks.test/api/hrm/comp-cycles");
+    assert.equal((await collectionRoute!.GET(request())).status, 404);
+    routeState.features = { hrmCompensation: true, payroll: false };
+    const refused = await collectionRoute!.GET(request());
+    assert.equal(refused.status, 422);
+    assert.match(((await refused.json()) as { error: string }).error, /Payroll is off/);
     assert.deepEqual(routeState.calls, []);
   });
 

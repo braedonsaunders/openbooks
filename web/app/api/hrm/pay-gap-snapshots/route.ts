@@ -14,7 +14,7 @@ import { generateSnapshotBody } from "../compensation/bodies";
  */
 export const GET = defineRoute({
   permission: "hrm.compensation.manage",
-  feature: "hrmPayTransparency",
+  feature: "hrmCompensation",
   handler: async ({ authz: gate }) => {
     try {
       const snapshot = await latestGapSnapshot({
@@ -29,7 +29,7 @@ export const GET = defineRoute({
 });
 export const POST = defineRoute({
   permission: "hrm.compensation.manage",
-  feature: "hrmPayTransparency",
+  feature: "hrmCompensation",
   body: generateSnapshotBody,
   handler: async ({ request: _req, authz: gate, body }) => {
     try {

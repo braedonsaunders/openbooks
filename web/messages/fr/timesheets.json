@@ -132,7 +132,7 @@
     "flagAutoClosed": "fermée auto",
     "flagPhoto": "photo",
     "crewTitle": "Temps d'équipe",
-    "crewDescription": "Lots du chef par projet et par jour — signature, étapes, comptabilisation unique.",
+    "crewDescription": "Lots du chef par projet et par jour — signature, validation, comptabilisation unique.",
     "newBatch": "Nouveau lot",
     "statusLabel": "Statut",
     "allBatches": "Tous les lots",
@@ -146,8 +146,7 @@
     "setupLink": "Réglages terrain",
     "statusDraft": "Brouillon",
     "statusSubmitted": "Soumis",
-    "statusStage1": "Étape 1 validée",
-    "statusStage2": "Étape 2 validée",
+    "statusApproved": "Validé",
     "statusRejected": "Rejeté",
     "statusPosted": "Comptabilisé",
     "worker": "Ouvrier",
@@ -164,7 +163,7 @@
     "saveLines": "Enregistrer",
     "signAndSubmit": "Signer et soumettre",
     "withdraw": "Renvoyer en brouillon",
-    "approveStage": "Valider l'étape",
+    "approve": "Valider",
     "reject": "Rejeter",
     "rejectReason": "Motif du rejet",
     "post": "Comptabiliser",
@@ -196,15 +195,16 @@
     "kiosksTitle": "Bornes",
     "noKiosks": "Aucune borne enregistrée.",
     "retired": "Retirée",
-    "tokenIssued": "Lien de l'appareil pour {name} — copiez-le, il ne sera plus affiché :", "acknowledgeToken": "J'ai copié ce lien d'appareil",
+    "tokenIssued": "Lien de l'appareil pour {name} — copiez-le, il ne sera plus affiché :",
+    "acknowledgeToken": "J'ai copié ce lien d'appareil",
     "kioskNamePlaceholder": "Nom de la borne (chantier ou accès)…",
     "registerKiosk": "Enregistrer la borne",
     "pinWorkerPlaceholder": "ID partie de l'ouvrier…",
     "pinPlaceholder": "PIN à 4–10 chiffres",
     "setPin": "Définir le PIN",
-    "stagesTitle": "Chaînes de validation",
-    "singleApproval": "La validation simple s'applique.",
-    "stagesHint": "Les chaînes se déclarent par sujet via l'API — étapes 1, 2, 3 sans trou.",
+    "approvalRoutingTitle": "Circuit de validation",
+    "approvalRoutingHint": "Les validations des feuilles de temps et des feuilles de temps d’équipe passent par Flows. Créez un flux sur la semaine de feuilles de temps ou la feuille de temps d’équipe pour ajouter des étapes de validation par le superviseur, le chef de projet ou la paie ; sans flux, un valideur des temps valide directement.",
+    "approvalRoutingLink": "Ouvrir Flows",
     "kioskNeedPin": "Choisissez l'ouvrier et saisissez le PIN.",
     "kioskIdentified": "Identifié — pointez ci-dessous.",
     "kioskClockedIn": "Arrivée pointée.",
@@ -233,18 +233,6 @@
     "cornersPlaceholder": "43.6532,-79.3832",
     "useLocation": "Utiliser ma position",
     "locationDenied": "Position indisponible — saisissez les coordonnées à la main.",
-    "saveGeofence": "Enregistrer la zone",
-    "subjects": {
-      "timesheetWeek": "Semaine de feuilles de temps",
-      "crewTimeBatch": "Feuille de temps d’équipe"
-    },
-    "approvers": {
-      "supervisor": "Responsable",
-      "projectManager": "Responsable de projet",
-      "payroll": "Paie",
-      "role": "Rôle",
-      "namedRole": "Rôle : {role}"
-    },
-    "unknownApprovalTarget": "Cible d’approbation inconnue"
+    "saveGeofence": "Enregistrer la zone"
   }
 }

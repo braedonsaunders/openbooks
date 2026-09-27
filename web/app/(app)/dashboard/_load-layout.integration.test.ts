@@ -14,15 +14,13 @@ const { qualificationSourceAvailable } = await import('@openbooks/engine/src/inb
 
 /** Persona-default expectation under the scratch org's real feature flags. */
 async function expectedAdminDefault(orgId: string) {
-  const [payroll, hrm, celebrations, nudges, announcements, quals] = await Promise.all([
+  const [payroll, hrm, announcements, quals] = await Promise.all([
     isFeatureEnabled(orgId, 'payroll'),
     isFeatureEnabled(orgId, 'hrm'),
-    isFeatureEnabled(orgId, 'hrmCelebrations'),
-    isFeatureEnabled(orgId, 'hrmManagerNudges'),
     isFeatureEnabled(orgId, 'homeAnnouncements'),
     qualificationSourceAvailable(),
   ])
-  return personaDefaultLayout('admin', { payroll, hrm, celebrations, nudges, announcements, quals })
+  return personaDefaultLayout('admin', { payroll, hrm, announcements, quals })
 }
 
 type Authz = Parameters<typeof loadDashboardLayout>[0]

@@ -1,10 +1,10 @@
 import type { SetupEntity } from './types'
 
 /**
- * HR-18 recruiting-depth Setup entities (0229). All four top-level lists
- * live rehomed on /hrm/recruiting (SetupEntitySection via the shared
- * `setup-section` widget), never on the setup rail — one configurable
- * surface, never two. Kit attributes and questions nest under their kit in
+ * Recruiting-depth Setup entities, gated on the Recruiting module. All
+ * four top-level lists live rehomed on /hrm/recruiting (SetupEntitySection
+ * via the shared `setup-section` widget), never on the setup rail — one
+ * configurable surface, never two. Kit attributes and questions nest under their kit in
  * the registry (served by the shared CRUD API and the kits/[id] routes);
  * the kit drawer owns their authoring, so the registry carries no second
  * editor.
@@ -35,7 +35,7 @@ export const RECRUITING_KITS_ENTITY: SetupEntity = {
   key: 'hrm-interview-kits',
   table: 'hrm_interview_kits',
   groupKey: 'workforce',
-  featureKey: 'hrmStructuredInterviews',
+  featureKey: 'hrmRecruiting',
   rehomed: true, // section on the HRM Recruiting page (Interviews tab)
   rehomedTo: '/hrm/recruiting?tab=interviews',
   iconKey: 'clipboard-check',
@@ -65,7 +65,7 @@ export const RECRUITING_KIT_ATTRIBUTES_ENTITY: SetupEntity = {
   key: 'hrm-kit-attributes',
   table: 'hrm_scorecard_attributes',
   groupKey: 'workforce',
-  featureKey: 'hrmStructuredInterviews',
+  featureKey: 'hrmRecruiting',
   nestedUnder: 'hrm-interview-kits',
   iconKey: 'list-checks',
   orgScoped: true,
@@ -94,7 +94,7 @@ export const RECRUITING_KIT_QUESTIONS_ENTITY: SetupEntity = {
   key: 'hrm-kit-questions',
   table: 'hrm_interview_kit_questions',
   groupKey: 'workforce',
-  featureKey: 'hrmStructuredInterviews',
+  featureKey: 'hrmRecruiting',
   nestedUnder: 'hrm-interview-kits',
   iconKey: 'list-checks',
   orgScoped: true,
@@ -119,7 +119,7 @@ export const RECRUITING_INTERVIEWER_POOLS_ENTITY: SetupEntity = {
   key: 'hrm-interviewer-pools',
   table: 'hrm_interviewer_pools',
   groupKey: 'workforce',
-  featureKey: 'hrmInterviewScheduling',
+  featureKey: 'hrmRecruiting',
   rehomed: true, // section on the HRM Recruiting page (Interviews tab)
   rehomedTo: '/hrm/recruiting?tab=interviews',
   iconKey: 'users',
@@ -149,7 +149,7 @@ export const RECRUITING_OFFER_TEMPLATES_ENTITY: SetupEntity = {
   key: 'hrm-offer-templates',
   table: 'hrm_offer_templates',
   groupKey: 'workforce',
-  featureKey: 'hrmOfferSigning',
+  featureKey: 'hrmRecruiting',
   rehomed: true, // section on the HRM Recruiting page (Offers tab)
   rehomedTo: '/hrm/recruiting?tab=offers',
   iconKey: 'file',
@@ -179,7 +179,7 @@ export const RECRUITING_RETENTION_RULES_ENTITY: SetupEntity = {
   key: 'hrm-retention-rules',
   table: 'hrm_retention_rules',
   groupKey: 'workforce',
-  featureKey: 'hrmCandidateRetention',
+  featureKey: 'hrmRecruiting',
   rehomed: true, // section on the HRM Recruiting page (Pools tab: pools keep
   // candidates, retention rules bound how long — one stewardship surface)
   rehomedTo: '/hrm/recruiting?tab=pools',

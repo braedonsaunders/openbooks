@@ -32,8 +32,8 @@ export function ReviewAnswerForm({
   textLabel: string
   requiredLabel: string
   failed: string
-  /** HR-21 "Draft from evidence" link: absent while hrmDrafting is off, the
-   *  review is not pending, or the review is a peer review (no draft kind). */
+  /** "Draft from evidence" link: absent without assistant access, while the
+   *  review is not pending, or for a peer review (no draft kind). */
   draft: { href: string; label: string } | null
 }) {
   const router = useRouter()

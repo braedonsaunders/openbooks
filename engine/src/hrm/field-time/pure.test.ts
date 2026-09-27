@@ -15,7 +15,6 @@ import {
   splitZoneDays,
   validateClockSequence,
   validateEventChronology,
-  validateStages,
   type ClockPayload,
 } from "./pure.ts";
 import { FieldTimeError } from "./errors.ts";
@@ -289,26 +288,6 @@ describe("offline payload identity", () => {
     assert.equal(sameClockPayload(base, { ...base, employeePartyId: "33333333-3333-4333-8333-333333333333" }), false);
     assert.equal(sameClockPayload(base, { ...base, projectId: null }), false);
     assert.equal(sameClockPayload(base, { ...base, source: "kiosk" }), false);
-  });
-});
-
-describe("stage validation", () => {
-  it("a two-stage chain validates in order", () => {
-    const stages = validateStages([
-      { order: 2, approverKind: "payroll" },
-      { order: 1, approverKind: "supervisor" },
-    ]);
-    assert.deepEqual(stages.map((s) => s.order), [1, 2]);
-  });
-  it("gapped orders are refused", () => {
-    const msg = refuses(() => validateStages([{ order: 1, approverKind: "supervisor" }, { order: 3, approverKind: "payroll" }]));
-    assert.match(msg, /without gaps/);
-  });
-  it("role without a key is refused", () => {
-    refuses(() => validateStages([{ order: 1, approverKind: "role" }]));
-  });
-  it("empty chain is refused", () => {
-    refuses(() => validateStages([]));
   });
 });
 

@@ -5,7 +5,6 @@ import { HrmQualificationError } from "./errors.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import {
   HRM_CERTIFICATIONS_FEATURE,
-  HRM_DISPATCH_GATING_FEATURE,
   assertQualificationsFeature,
   projectDerivedStatus,
   requireDate,
@@ -88,7 +87,7 @@ export async function checkAssignment(
   const subjectId = requireId(input.subjectId, "subjectId");
   const subjectKind = input.subjectKind;
   const allowed = await requireAggregateCertificationsRead(exec, orgId, actorId);
-  await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Dispatch gating");
+  await assertQualificationsFeature(exec, orgId, "Dispatch gating");
   const on = input.on ? requireDate(input.on, "on") : await businessToday(orgId);
   const employmentScope = allowed === null ? null : `{${[...allowed].join(",")}}`;
   const visibleEmployment = (await exec.execute<{ id: string }>(sql`
@@ -127,7 +126,7 @@ export async function checkAssignmentTrusted(
   const employmentId = requireId(input.employmentId, "employmentId");
   const subjectId = requireId(input.subjectId, "subjectId");
   const on = requireDate(input.on, "on");
-  await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Dispatch gating");
+  await assertQualificationsFeature(exec, orgId, "Dispatch gating");
   return checkAssignmentInternal(exec, orgId, employmentId, input.subjectKind, subjectId, on);
 }
 
@@ -315,7 +314,7 @@ export interface ScheduleGateInput {
 }
 
 export interface ScheduleGateResult {
-  /** False when the feature is off or nothing resolves to gate. */
+  /** False while dispatch gating is off or nothing resolves to gate. */
   readonly gated: boolean;
   readonly verdict: GateVerdict;
   readonly employmentId: string | null;
@@ -323,11 +322,19 @@ export interface ScheduleGateResult {
 }
 
 /**
+ * Dispatch gating is part of Certifications and licenses and applies on
+ * the project scheduling board, so it runs only while both modules are on.
+ */
+export async function dispatchGatingOn(exec: SqlExecutor, orgId: string): Promise<boolean> {
+  return (await lockAndCheckOrgFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE))
+    && (await lockAndCheckOrgFeature(exec, orgId, "projectScheduling"));
+}
+
+/**
  * The scheduling assignment hook: schedule_task_assignments +
- * schedule_resources call this before inserting when hrmDispatchGating
- * is on. With the feature off the gate is never consulted (the
- * assignment path must not call it — proven by a test double that
- * throws). Resources with no employment behind them (equipment rows,
+ * schedule_resources call this before inserting while dispatch gating is
+ * on. Off, the gate is never consulted (the assignment path must not call
+ * it — proven by a test double that throws). Resources with no employment behind them (equipment rows,
  * vendor placeholders) have nothing to gate and pass through: the gate
  * answers "can this person be on that job", and there is no person.
  */
@@ -344,9 +351,7 @@ export async function gateScheduleAssignment(
     employmentId: null,
     resourceName: null,
   };
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_DISPATCH_GATING_FEATURE))) {
-    return passThrough;
-  }
+  if (!(await dispatchGatingOn(exec, orgId))) return passThrough;
   const resource = (await exec.execute<{ name: string; party_id: string | null; project_id: string | null }>(sql`
     select name, party_id::text, project_id::text
       from schedule_resources

@@ -12,7 +12,7 @@ import { compensationErrorResponse } from "../../../../compensation/_lib";
  */
 export const POST = defineRoute({
   permission: "hrm.compensation.manage",
-  feature: "hrmHeadcountPlans",
+  feature: "hrmCompensation",
   body: z.object({
     action: z.literal("approve"),
     reason: z.string().trim().max(2000).nullable().optional(),

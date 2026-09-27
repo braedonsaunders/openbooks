@@ -150,10 +150,9 @@ async function constructionFeatureRefused(orgId: string): Promise<ToolResult | n
   return null;
 }
 
-async function continuousFeatureRefused(orgId: string, key: string): Promise<ToolResult | null> {
+async function performanceFeatureRefused(orgId: string): Promise<ToolResult | null> {
   if (!(await isFeatureEnabled(orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
   if (!(await isFeatureEnabled(orgId, "hrmPerformance"))) return { ok: false, error: HRM_FEATURE_OFF };
-  if (!(await isFeatureEnabled(orgId, key))) return { ok: false, error: HRM_FEATURE_OFF };
   return null;
 }
 
@@ -745,12 +744,11 @@ const hrmRecruiting: AssistantToolDef = {
     requisitionId: uuidInput.optional().describe("One opening in full (pipeline, funnel, applications); omit for the segment list"),
     segment: z.enum(requisitionSegments).optional().describe("List segment (default open)"),
     limit: z.number().int().min(1).max(200).optional().describe("Maximum openings to return (default 50)"),
-    // HR-18 begin: depth reads (names and states only, never PII). Each
-    // refuses by name while its sub-switch is off.
+    // Depth reads (names and states only, never PII). Each refuses by
+    // name while Recruiting is off.
     interviewId: uuidInput.optional().describe("Scorecard summary for one interview: per-attribute aggregates, counts, and missing seats by name"),
     offerId: uuidInput.optional().describe("One offer's signature state and version count"),
     includePostings: z.boolean().optional().describe("Include board posting status beside a requisitionId detail"),
-    // HR-18 end
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
     const gated = await hrmFeatureRefused(authz.user.orgId);
@@ -798,9 +796,9 @@ const hrmRecruiting: AssistantToolDef = {
           actorId: authz.user.id,
           requisitionId: a.requisitionId,
         });
-        // HR-18 begin: board posting status beside the detail (board, board
-        // status, apply counts — never applicant PII). Refuses by name
-        // while hrmJobBoards is off.
+        // Board posting status beside the detail (board, board status,
+        // apply counts — never applicant PII). Refuses by name while
+        // Recruiting is off.
         let postings: { boardKey: string; status: string; applyCount: number }[] | undefined;
         if (a.includePostings === true) {
           const { listPostings } = await import("@openbooks/engine/src/hrm/recruiting/postings.ts");
@@ -816,7 +814,6 @@ const hrmRecruiting: AssistantToolDef = {
             applyCount: posting.applyCount,
           }));
         }
-        // HR-18 end
         return {
           ok: true,
           data: {
@@ -1352,11 +1349,10 @@ const hrmCertifiedPayroll: AssistantToolDef = {
 };
 // HR-13 end
 
-// HR-12 begin: compensation and pay-equity read tools. Bands and
-// placement, cycle status, and plan status ride comp.read behind the
-// hrmCompensation switch; the equity tool reports the latest frozen
-// snapshot aggregates only (never per-person pay) behind
-// hrmPayTransparency. Both absent when their switch is off.
+// Compensation and pay-equity read tools. Bands and placement, cycle
+// status, and plan status ride comp.read; the equity tool reports the
+// latest frozen snapshot aggregates only (never per-person pay). Both
+// ride the Compensation switch and are absent while it is off.
 const hrmCompensation: AssistantToolDef = {
   name: "hrm_compensation",
   description:
@@ -1381,18 +1377,15 @@ const hrmCompensation: AssistantToolDef = {
       const [bands, cycles, plans] = await Promise.all([
         listPayBands({ orgId: authz.user.orgId, actorId: authz.user.id, asOf }),
         // Merit cycles are an optional section of the compensation answer, not
-        // its subject: with the switch off the bands and placement still answer
-        // and the section is simply absent. The tool itself rides
-        // hrmCompensation and is gone when that is off, so this is never the
-        // refusal path.
+        // its subject: they additionally need Payroll, and with Payroll off the
+        // bands and placement still answer and the section is simply absent.
+        // The tool itself rides hrmCompensation and is gone when that is off,
+        // so this is never the refusal path.
         // soft-feature: optional section only, never a refusal.
-        isFeatureEnabled(authz.user.orgId, "hrmMeritCycles").then((on) =>
+        isFeatureEnabled(authz.user.orgId, "payroll").then((on) =>
           on ? listCycles({ orgId: authz.user.orgId, actorId: authz.user.id }) : [],
         ),
-        // soft-feature: headcount plans are the same optional section, same reason.
-        isFeatureEnabled(authz.user.orgId, "hrmHeadcountPlans").then((on) =>
-          on ? listPlans({ orgId: authz.user.orgId, actorId: authz.user.id }) : [],
-        ),
+        listPlans({ orgId: authz.user.orgId, actorId: authz.user.id }),
       ]);
       let placement: { employmentId: string; placement: string; compaRatio: string | null } | null = null;
       if (a.employmentId) {
@@ -1427,12 +1420,12 @@ const hrmPayEquity: AssistantToolDef = {
     "Latest frozen pay-gap snapshot: org-level mean/median gaps and per-category gaps with joint-assessment flags. Aggregates only — never per-person pay. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["hrm.compensation.read"] },
-  feature: "hrmPayTransparency",
+  feature: "hrmCompensation",
   tier: "module",
   inputSchema: z.object({}),
   execute: async (raw, authz): Promise<ToolResult> => {
     void raw;
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmPayTransparency"))) return { ok: false, error: HRM_FEATURE_OFF };
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCompensation"))) return { ok: false, error: HRM_FEATURE_OFF };
     try {
       const { latestGapSnapshot } = await import("@openbooks/engine/src/hrm/compensation/pay-transparency.ts");
       const snapshot = await latestGapSnapshot({ orgId: authz.user.orgId, actorId: authz.user.id });
@@ -1464,7 +1457,6 @@ const hrmPayEquity: AssistantToolDef = {
     }
   },
 };
-// HR-12 end
 
 // HR-16 begin: automation run/error status (0226). Read-only: recipes and
 // the run log with errors, behind the automations switch and read grant.
@@ -1597,7 +1589,9 @@ const hrmDispatchCheck: AssistantToolDef = {
     "Dispatch readiness for one worker on one subject: which required qualifications are met, which block, and which warn, as of a date. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["hrm.certifications.read"] },
-  feature: "hrmDispatchGating",
+  // The readiness verdict is a certifications read on any subject; only
+  // the scheduling board's assignment gate also needs Project Scheduling.
+  feature: "hrmCertifications",
   tier: "module",
   inputSchema: z.object({
     employmentId: uuidInput.optional().describe("Worker employment to check"),
@@ -1606,7 +1600,7 @@ const hrmDispatchCheck: AssistantToolDef = {
     on: dateInput.optional().describe("Check as of this date; defaults to today"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmDispatchGating"))) return { ok: false, error: HRM_FEATURE_OFF };
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmCertifications"))) return { ok: false, error: HRM_FEATURE_OFF };
     const a = raw as { employmentId?: string; subjectKind?: string; subjectId?: string; on?: string };
     if (!a.employmentId) return { ok: false, error: "employment_required" };
     if (!a.subjectKind || !a.subjectId) return { ok: false, error: "subject_required" };
@@ -1758,7 +1752,7 @@ const hrmOrgChart: AssistantToolDef = {
     "Org chart: the reporting tree with titles, departments, vacancies, and span of control as of a date, plus the directory. Names and titles only — never pay or private fields. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["hrm.self.read"] },
-  feature: "hrmOrgChart",
+  feature: "hrm",
   tier: "module",
   inputSchema: z.object({
     asOf: dateInput.optional().describe("Read the tree as of this date; defaults to today"),
@@ -1766,7 +1760,7 @@ const hrmOrgChart: AssistantToolDef = {
     page: z.number().int().positive().optional().describe("Directory page to read; continue with directoryNextPage"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    if (!(await isFeatureEnabled(authz.user.orgId, "hrmOrgChart"))) return { ok: false, error: HRM_FEATURE_OFF };
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
       const a = raw as { asOf?: string; search?: string; page?: number };
     try {
       const { loadDirectory, loadOrgChart } = await import("@openbooks/engine/src/hrm/org-chart.ts");
@@ -1805,11 +1799,11 @@ const hrmOrgChart: AssistantToolDef = {
 };
 // HR-19 end
 
-// HR-17 begin: continuous-performance read tools. 1:1s and feedback read
-// through the structural scope (own and reports) with the HR grant as
-// the widening leg; calibration reads through the manage grant. Each
-// sits behind its own sub-switch — off means the tool is absent, never
-// an empty answer.
+// Continuous-performance read tools. 1:1s and feedback read through the
+// structural scope (own and reports) with the HR grant as the widening
+// leg; calibration reads through the manage grant. All ride the
+// Performance switch — off means the tools are absent, never an empty
+// answer.
 
 const oneOnOneStatuses = ["scheduled", "held", "skipped", "cancelled"] as const;
 
@@ -1819,7 +1813,7 @@ const hrmOneOnOnes: AssistantToolDef = {
     "1:1 meetings for the caller and their reports: schedule, agenda, and status. Private items stay author-only. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["hrm.performance.read", "hrm.self.read"] },
-  feature: "hrmOneOnOnes",
+  feature: "hrmPerformance",
   tier: "module",
   inputSchema: z.object({
     employmentId: uuidInput.optional().describe("Keep only meetings touching this employment"),
@@ -1827,7 +1821,7 @@ const hrmOneOnOnes: AssistantToolDef = {
     limit: z.number().int().min(1).max(200).optional().describe("Maximum meetings to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const gated = await continuousFeatureRefused(authz.user.orgId, "hrmOneOnOnes");
+    const gated = await performanceFeatureRefused(authz.user.orgId);
     if (gated) return gated;
     const a = raw as { employmentId?: string; status?: (typeof oneOnOneStatuses)[number]; limit?: number };
     const limit = Math.min(a.limit ?? 50, 200);
@@ -1869,7 +1863,7 @@ const hrmFeedback: AssistantToolDef = {
     "Feedback in the caller's scope: praise, feedback, and requests filtered by the visibility matrix. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["hrm.performance.read", "hrm.self.read"] },
-  feature: "hrmFeedback",
+  feature: "hrmPerformance",
   tier: "module",
   inputSchema: z.object({
     subjectEmploymentId: uuidInput.optional().describe("Keep only feedback about this employment"),
@@ -1877,7 +1871,7 @@ const hrmFeedback: AssistantToolDef = {
     limit: z.number().int().min(1).max(200).optional().describe("Maximum rows to return (default 50)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const gated = await continuousFeatureRefused(authz.user.orgId, "hrmFeedback");
+    const gated = await performanceFeatureRefused(authz.user.orgId);
     if (gated) return gated;
     const a = raw as { subjectEmploymentId?: string; kind?: (typeof feedbackKinds)[number]; limit?: number };
     const limit = Math.min(a.limit ?? 50, 200);
@@ -1917,14 +1911,14 @@ const hrmCalibration: AssistantToolDef = {
     "Calibration sessions over review cycles: entries with proposed beside calibrated ratings, and the missing list. HR-only. Read-only.",
   category: "search",
   gate: { mode: "anyOf", perms: ["hrm.performance.manage"] },
-  feature: "hrmCalibration",
+  feature: "hrmPerformance",
   tier: "module",
   inputSchema: z.object({
     sessionId: uuidInput.optional().describe("One session in full; omit for the session list"),
     cycleId: uuidInput.optional().describe("Keep only sessions over this cycle"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const gated = await continuousFeatureRefused(authz.user.orgId, "hrmCalibration");
+    const gated = await performanceFeatureRefused(authz.user.orgId);
     if (gated) return gated;
     const a = raw as { sessionId?: string; cycleId?: string };
     try {
@@ -1975,7 +1969,6 @@ const hrmCalibration: AssistantToolDef = {
     }
   },
 };
-// HR-17 end
 
 // HR-15: the core own-scope inbox tool rides after every slice tool.
 export const HRM_TOOLS: AssistantToolDef[] = [hrmHeadcount, hrmEmploymentAsOf, hrmChangeRequests, hrmPositionsAsOf, hrmProcesses, hrmLeave, hrmRecruiting, hrmPerformanceCycles, hrmTurnover, hrmBenefits, hrmMe, automationsStatus, hrmComplianceFindings, hrmCertifiedPayroll, hrmCompensation, hrmPayEquity, hrmQualifications, hrmDispatchCheck, hrmOneOnOnes, hrmFeedback, hrmCalibration, hrmDocuments, hrmSurveyResults, hrmOrgChart];
@@ -1995,8 +1988,21 @@ function hr21Refusal(error: unknown): ToolResult {
   return hrmRefusal(error);
 }
 
-async function hr21FeatureRefused(orgId: string, key: string): Promise<ToolResult | null> {
-  if (!(await isFeatureEnabled(orgId, key))) return { ok: false, error: HRM_FEATURE_OFF };
+/**
+ * Each AI capability rides the module that owns its data; the refusal
+ * names that module's documented feature-off code.
+ */
+const AI_MODULE_FEATURE_OFF = {
+  hrm: HRM_FEATURE_OFF,
+  payroll: "payroll_feature_disabled",
+  timeTracking: "time_tracking_feature_disabled",
+} as const;
+
+async function aiModuleFeatureRefused(
+  orgId: string,
+  key: keyof typeof AI_MODULE_FEATURE_OFF,
+): Promise<ToolResult | null> {
+  if (!(await isFeatureEnabled(orgId, key))) return { ok: false, error: AI_MODULE_FEATURE_OFF[key] };
   return null;
 }
 
@@ -2006,14 +2012,14 @@ const hrmExplainPay: AssistantToolDef = {
     "Explain one payslip deterministically: gross by component with the input behind each line, deductions with treatments, employer cost, net, and the diff vs the previous payslip. Own payslips through self-service; anyone else's needs the payroll grant. Read-only; the trace cites record ids.",
   category: "read",
   gate: { mode: "anyOf", perms: ["hrm.self.read", "hrm.employment.read", "payroll.manage"] },
-  feature: "hrmExplainPay",
+  feature: "payroll",
   tier: "module",
   inputSchema: z.object({
     employmentId: uuidInput.describe("Employment whose payslip to explain"),
     stubId: uuidInput.optional().describe("One stub; omit for the latest calculated payslip"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const gated = await hr21FeatureRefused(authz.user.orgId, "hrmExplainPay");
+    const gated = await aiModuleFeatureRefused(authz.user.orgId, "payroll");
     if (gated) return gated;
     const a = raw as { employmentId: string; stubId?: string };
     try {
@@ -2066,8 +2072,8 @@ const payrollAnomalies: AssistantToolDef = {
     "Deterministic pre-run payroll and timesheet checks: scan a period for anomaly flags, list flags with severity/kind/status filters, acknowledge/resolve/false-positive a flag with a reason, or recompute cohort baselines. Block severity refuses the pay-run finalize while open. Reads are read-only; transitions are human decisions recorded to the ledger.",
   category: "search",
   gate: { mode: "anyOf", perms: ["payroll.manage", "time.approve", "hrm.employment.read"] },
-  feature: "hrmPayrollAnomalies",
-  featureAnyOf: ["hrmPayrollAnomalies", "hrmTimeAnomalies"],
+  feature: "payroll",
+  featureAnyOf: ["timeTracking"],
   tier: "module",
   inputSchema: z.object({
     action: z.enum(anomalyActions).describe("scan a period, list flags, transition one flag, or recompute baselines"),
@@ -2098,11 +2104,13 @@ const payrollAnomalies: AssistantToolDef = {
       reason?: string;
       windowPeriods?: number;
     };
+    // Payroll checks ride Payroll, timesheet checks ride Time tracking;
+    // list and transition gate per flag family inside the service.
     const featureKey = a.action === "scan"
-      ? a.timeOnly === true ? "hrmTimeAnomalies" : "hrmPayrollAnomalies"
-      : a.action === "compute_baselines" ? "hrmPayrollAnomalies" : null;
+      ? a.timeOnly === true ? "timeTracking" : "payroll"
+      : a.action === "compute_baselines" ? "payroll" : null;
     if (featureKey) {
-      const gated = await hr21FeatureRefused(authz.user.orgId, featureKey);
+      const gated = await aiModuleFeatureRefused(authz.user.orgId, featureKey);
       if (gated) return gated;
     }
     try {
@@ -2187,14 +2195,14 @@ const aiDraft: AssistantToolDef = {
     mode: "anyOf",
     perms: ["hrm.self.read", "hrm.performance.manage", "hrm.recruiting.read", "hrm.recruiting.manage", "hrm.process.read"],
   },
-  feature: "hrmDrafting",
+  feature: "hrm",
   tier: "module",
   inputSchema: z.object({
     kind: z.enum(draftKinds).describe("What to draft"),
     subjectId: uuidInput.describe("Requisition, review, process template, or offer id"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const gated = await hr21FeatureRefused(authz.user.orgId, "hrmDrafting");
+    const gated = await aiModuleFeatureRefused(authz.user.orgId, "hrm");
     if (gated) return gated;
     const a = raw as { kind: (typeof draftKinds)[number]; subjectId: string };
     try {
@@ -2227,8 +2235,9 @@ const nlReport: AssistantToolDef = {
   description:
     "Answer a question with a validated report-engine definition (never SQL): preview runs it once under the caller's report permissions, save stores the draft for save-as-view. Invalid definitions are refused by name, never repaired silently.",
   category: "read",
+  // No module feature: the tool drafts only over report entities the
+  // caller may already read, and follows the assistant's own gating.
   gate: { mode: "anyOf", perms: ["reports.read"] },
-  feature: "hrmNlReports",
   tier: "module",
   inputSchema: z.object({
     action: z.enum(["preview", "save"]).describe("Run once as a preview, or validate, save the draft and preview"),
@@ -2236,8 +2245,6 @@ const nlReport: AssistantToolDef = {
     definitionJson: z.string().min(1).max(20000).describe("Candidate report definition as JSON (entity, mode, columns, breakouts, measures, filters, sorts, limit)"),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const gated = await hr21FeatureRefused(authz.user.orgId, "hrmNlReports");
-    if (gated) return gated;
     const a = raw as { action: "preview" | "save"; question: string; definitionJson: string };
     let candidate: unknown;
     try {

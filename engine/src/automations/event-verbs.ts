@@ -204,11 +204,11 @@ export async function rescindEmploymentChange(input: {
 }): Promise<{ changeId: string; revision: number }> {
   const reason = requireReason(input.reason, "rescind");
   await requirePermission(input.orgId, input.actorId, "hrm.employment.approve");
-  // Verbs absent while the feature is off (the routes 404 first; this is
-  // the second fence for direct service callers).
-  if (!(await hrmFeatureOn(input.orgId, "hrmEventVerbs"))) {
+  // Verbs ride Human resources: absent while it is off (the routes 404
+  // first; this is the second fence for direct service callers).
+  if (!(await hrmFeatureOn(input.orgId, "hrm"))) {
     throw new EventVerbError(
-      "change event verbs are switched off for this organization — enable them in Company Settings → Features",
+      "Human resources is off for this organization — turn it on in Company Settings → Features before rescinding or correcting a change",
     );
   }
   return withOrgTransaction(input.orgId, async () => {
@@ -502,9 +502,9 @@ export async function correctEmploymentChange(input: {
   prefillPayload?: Record<string, unknown>;
 }): Promise<{ mode: "reapproval" | "direct"; requestId?: string; changeId?: string }> {
   const reason = requireReason(input.reason, "correct");
-  if (!(await hrmFeatureOn(input.orgId, "hrmEventVerbs"))) {
+  if (!(await hrmFeatureOn(input.orgId, "hrm"))) {
     throw new EventVerbError(
-      "change event verbs are switched off for this organization — enable them in Company Settings → Features",
+      "Human resources is off for this organization — turn it on in Company Settings → Features before rescinding or correcting a change",
     );
   }
   return withOrg(input.orgId, async () => {

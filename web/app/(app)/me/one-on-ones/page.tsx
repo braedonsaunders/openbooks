@@ -9,8 +9,8 @@ export async function generateMetadata() {
 
 /**
  * Me 1:1s — upcoming and past conversations with the agenda drawer, plus
- * open feedback requests with the fulfil form. Renders only when hrm,
- * hrmPerformance and hrmOneOnOnes are on — the view 404s otherwise.
+ * open feedback requests with the fulfil form. Renders only when hrm and
+ * hrmPerformance are on — the view 404s otherwise.
  */
 export default async function MeOneOnOnesPage({
   searchParams,

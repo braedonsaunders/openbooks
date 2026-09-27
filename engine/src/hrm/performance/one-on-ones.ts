@@ -55,8 +55,7 @@ import { inputGuards } from "../input-guards.ts";
  * Do not touch packages/payroll. Existing refusal classes are untouched.
  */
 
-export const HRM_PERFORMANCE_CONTINUOUS_KEY = "hrmPerformance" as const;
-export const HRM_ONE_ON_ONES_KEY = "hrmOneOnOnes" as const;
+export const HRM_PERFORMANCE_KEY = "hrmPerformance" as const;
 
 export type OneOnOneStatus = "scheduled" | "held" | "skipped" | "cancelled";
 export type OneOnOneItemKind = "talking_point" | "action_item" | "note";
@@ -65,27 +64,17 @@ export type OneOnOneItemStatus = "open" | "done" | "carried";
 
 const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
-async function assertContinuousFeature(db: SqlExecutor, orgId: string): Promise<void> {
+async function assertOneOnOnesFeature(db: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrm feature is disabled: enable it on Company Settings → Features before scheduling 1:1s",
     );
   }
-  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_CONTINUOUS_KEY))) {
+  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_PERFORMANCE_KEY))) {
     throw new HrmPerformanceError(
       "FEATURE_OFF",
       "hrmPerformance feature is disabled: enable it on Company Settings → Features before scheduling 1:1s",
-    );
-  }
-}
-
-async function assertOneOnOnesFeature(db: SqlExecutor, orgId: string): Promise<void> {
-  await assertContinuousFeature(db, orgId);
-  if (!(await lockAndCheckOrgFeature(db, orgId, HRM_ONE_ON_ONES_KEY))) {
-    throw new HrmPerformanceError(
-      "FEATURE_OFF",
-      "hrmOneOnOnes feature is disabled: enable it on Company Settings → Features before scheduling 1:1s",
     );
   }
 }

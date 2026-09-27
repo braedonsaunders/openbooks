@@ -1,5 +1,4 @@
 import { defineRoute } from "@/lib/api/route";
-import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { canonicalDecimal } from "@/lib/exact-decimal";
@@ -10,9 +9,9 @@ import {
   reopenLine,
 } from "@openbooks/engine/src/hrm/compensation/cycles.ts";
 import { guardPermission } from "../../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { isUuid } from "../../../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../../../compensation/_lib";
+import { meritCycleGate } from "../../../_gate";
 
 export const runtime = "nodejs";
 
@@ -75,9 +74,8 @@ export const PATCH = defineRoute({
       // service) — the route needs only the read grant; the service fences.
       const gate = await guardPermission("hrm.compensation.read");
       if (gate instanceof NextResponse) return gate;
-      if (!(await isFeatureEnabled(gate.user.orgId, "hrmMeritCycles"))) {
-        return notFound("record");
-      }
+      const featureGate = await meritCycleGate(gate.user.orgId);
+      if (featureGate) return featureGate;
       const proposedPct = body.proposedPct ?? null;
       const proposedRate = body.proposedRate ?? null;
       try {
@@ -96,9 +94,8 @@ export const PATCH = defineRoute({
     }
     const gate = await guardPermission("hrm.compensation.approve");
     if (gate instanceof NextResponse) return gate;
-    if (!(await isFeatureEnabled(gate.user.orgId, "hrmMeritCycles"))) {
-      return notFound("record");
-    }
+    const featureGate = await meritCycleGate(gate.user.orgId);
+    if (featureGate) return featureGate;
     const reason = body.reason?.trim() ? body.reason : null;
     try {
       const q = { orgId: gate.user.orgId, actorId: gate.user.id, lineId };

@@ -25,7 +25,6 @@ export default async function BookInterviewPage({ params }: { params: Promise<{ 
   const features = await resolvePublicOrgFeatures(link.interviewId, 'interview')
   if (!features) notFound()
   if (!(await isFeatureEnabled(features.orgId, 'hrmRecruiting'))) notFound()
-  if (!(await isFeatureEnabled(features.orgId, 'hrmInterviewScheduling'))) notFound()
 
   return (
     <main className="mx-auto min-h-screen max-w-2xl bg-white px-6 py-10">

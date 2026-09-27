@@ -4,7 +4,6 @@ import { HrmConstructionError } from "./errors.ts";
 import { requireConstructionScope, requireUnrestrictedHrmScope } from "../authorization.ts";
 import { withOrgTransaction } from "../../platform/db.ts";
 import {
-  HRM_CONSTRUCTION_FEATURE,
   assertConstructionFeature,
   assertEmploymentInScope,
   assertProjectInScope,
@@ -71,7 +70,7 @@ export async function recordFinding(
       `Unknown compliance finding kind ${input.kind} — use one of ${KINDS.join(", ")}.`,
     );
   }
-  await assertConstructionFeature(exec, orgId, HRM_CONSTRUCTION_FEATURE, "Compliance findings");
+  await assertConstructionFeature(exec, orgId, "Compliance findings");
   // No grant or scope gate: findings are evidence appended as a side
   // effect of the engine's own checks (including the approval-time
   // prevailing-wage hook, whose approver may hold no construction grant
@@ -153,7 +152,7 @@ export async function listFindings(
   actorId: string,
   status?: string | null,
 ): Promise<readonly ComplianceFinding[]> {
-  await assertConstructionFeature(exec, orgId, HRM_CONSTRUCTION_FEATURE, "Compliance findings");
+  await assertConstructionFeature(exec, orgId, "Compliance findings");
   requireId(actorId, "actorId");
   if (status !== undefined && status !== null && !["open", "acknowledged", "resolved"].includes(status)) {
     throw new HrmConstructionError(`Unknown finding status ${status} — use open, acknowledged, or resolved.`);
@@ -203,7 +202,7 @@ export async function acknowledgeFinding(
   findingId: string,
 ): Promise<ComplianceFinding> {
   requireId(actorId, "actorId");
-  await assertConstructionFeature(exec, orgId, HRM_CONSTRUCTION_FEATURE, "Compliance findings");
+  await assertConstructionFeature(exec, orgId, "Compliance findings");
   // A transition on B's evidence is a write to B: the finding's anchors
   // fence before the status read. An out-of-scope anchor refuses with the
   // finding's own not-found shape — never the anchor's — so a B flag reads
@@ -246,7 +245,7 @@ export async function resolveFinding(
 ): Promise<ComplianceFinding> {
   requireId(actorId, "actorId");
   const resolvedReason = requireText(reason, "resolvedReason");
-  await assertConstructionFeature(exec, orgId, HRM_CONSTRUCTION_FEATURE, "Compliance findings");
+  await assertConstructionFeature(exec, orgId, "Compliance findings");
   // Same fence as acknowledge: anchors first, status second, so an
   // out-of-scope flag never leaks its lifecycle state.
   const allowed = await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");

@@ -43,7 +43,7 @@ type Harness = {
 
 async function setupDsarDomainsHarness(): Promise<Harness> {
   const org = await createScratchOrg();
-  await enableHrm(org.orgId, "hrmDocuments", "hrmDataSubjectExport");
+  await enableHrm(org.orgId, "hrmDocuments");
   const partyId = randomUUID();
   await db.execute(sql`insert into parties (id, org_id, kind, display_name, email, is_active, custom) values (${partyId}, ${org.orgId}, 'person', 'Sam Subject', 'sam@scratch.test', true, '{}'::jsonb)`);
   const employmentId = randomUUID();

@@ -3844,10 +3844,6 @@
         "circle": "Círculo",
         "polygon": "Polígono"
       },
-      "approvalSubject": {
-        "timesheetWeek": "Semana del parte",
-        "crewTimeBatch": "Lote de cuadrilla"
-      },
       "hrmRetentionAction": {
         "anonymize": "Anonimizar",
         "delete": "Eliminar"
@@ -5031,15 +5027,7 @@
   "features": {
     "hrm": {
       "title": "Recursos humanos",
-      "description": "Registros de empleo con historial a fecha, plantilla y seguimiento de solicitudes de cambio. Lee la base de RR. HH.; nunca dirige la nómina."
-    },
-    "hrmCelebrations": {
-      "title": "Celebraciones del equipo",
-      "description": "Cumpleaños, aniversarios laborales y nuevas incorporaciones en la página de inicio."
-    },
-    "hrmManagerNudges": {
-      "title": "Avisos para responsables",
-      "description": "Avisos de rotación y de reuniones 1:1 en la página de inicio del responsable, limitados a su equipo."
+      "description": "Registros de empleo con historial a fecha, plantilla, solicitudes de cambio con códigos de acción y motivo, y el organigrama. Lee la base de RR. HH.; nunca dirige la nómina."
     },
     "homeAnnouncements": {
       "title": "Anuncios en el inicio",
@@ -5282,197 +5270,37 @@
       "title": "Simulador",
       "description": "Probar recetas contra sujetos reales sin escrituras."
     },
-    "hrmActionReasons": {
-      "title": "Códigos de acción y motivo",
-      "description": "Exigir una acción de RR. HH. y un código de motivo en cada solicitud de cambio."
-    },
-    "hrmEventVerbs": {
-      "title": "Verbos de evento de cambio",
-      "description": "Cancelar, rescindir y corregir cambios de empleo como eventos añadidos."
-    },
     "hrmConstructionCompliance": {
       "title": "Cumplimiento de construcción",
       "description": "Tablas de salario vigente, nóminas certificadas, clases de compensación, proporciones de aprendices y dietas para obra propia. Requiere nómina, proyectos y control horario."
     },
-    "hrmPrevailingWage": {
-      "title": "Salario vigente",
-      "description": "Resolver el salario por ubicación, clasificación y fecha desde tablas declaradas."
-    },
-    "hrmCertifiedPayroll": {
-      "title": "Nómina certificada",
-      "description": "Informes semanales congelados renderizados con los archivos declarados del pack."
-    },
-    "hrmWorkersCompClasses": {
-      "title": "Clases de compensación",
-      "description": "Repartir horas costeadas entre clases por reglas de prioridad."
-    },
-    "hrmApprenticeRatios": {
-      "title": "Proporciones de aprendices",
-      "description": "Exigir proporciones oficial-aprendiz a diario; el incumplimiento se tasa a oficial."
-    },
-    "hrmPerDiem": {
-      "title": "Dietas",
-      "description": "Calcular dietas y viajes desde tiempo aprobado hacia la interfaz de nómina."
-    },
     "hrmCompensation": {
       "title": "Retribución",
-      "description": "Arquitectura y bandas: lo que deben pagar los roles y dónde está cada persona."
-    },
-    "hrmMeritCycles": {
-      "title": "Ciclos de mérito",
-      "description": "Rondas que congelan la verdad de nómina, deciden aumentos y trasladan tarifas."
-    },
-    "hrmHeadcountPlans": {
-      "title": "Planes de plantilla",
-      "description": "Escenarios costeados desde bandas que abren requisiciones al aprobarse."
-    },
-    "hrmPayTransparency": {
-      "title": "Transparencia salarial",
-      "description": "Mediciones congeladas desde la nómina y solicitudes de información."
+      "description": "Arquitectura de puestos y bandas salariales, ciclos de méritos, planes de plantilla costeados y transparencia salarial. Los ciclos de méritos también requieren Nómina."
     },
     "hrmCertifications": {
       "title": "Certificaciones y licencias",
       "description": "Registro de cualificaciones: taxonomía, credenciales, requisitos de asignación y alertas de vencimiento. Desactivar nunca borra datos."
     },
-    "hrmDispatchGating": {
-      "title": "Control de asignaciones",
-      "description": "Rechaza asignaciones sin las cualificaciones requeridas. Requiere proyectos y programación."
-    },
-    "hrmEquipmentQualifications": {
-      "title": "Cualificaciones de equipos",
-      "description": "Declare tipos de cualificación requeridos en los equipos. Requiere equipos."
-    },
-    "hrmCertificationAlerts": {
-      "title": "Alertas de certificación",
-      "description": "Avisos diarios de vencimiento a titulares y responsables por la bandeja."
-    },
     "hrmPerformance": {
       "title": "Desempeño",
-      "description": "El interruptor principal de evaluaciones, objetivos, 1:1, comentarios, calibración, talento y sucesión."
-    },
-    "hrmOneOnOnes": {
-      "title": "1:1",
-      "description": "Conversaciones programadas entre mánager y empleado con agenda continua."
-    },
-    "hrmFeedback": {
-      "title": "Comentarios",
-      "description": "Elogios, comentarios y solicitudes capturados cuando ocurren."
-    },
-    "hrmCompetencies": {
-      "title": "Competencias",
-      "description": "Vocabulario de habilidades reutilizable con niveles, vinculado a evaluaciones y niveles."
-    },
-    "hrmCalibration": {
-      "title": "Calibración",
-      "description": "La matriz de calificaciones sobre un ciclo con auditoría."
-    },
-    "hrmSuccession": {
-      "title": "Talento y sucesión",
-      "description": "Revisiones de talento y planes de sucesión por puesto."
+      "description": "Evaluaciones, objetivos, 1:1, comentarios, competencias, calibración, revisiones de talento y planes de sucesión."
     },
     "hrmDocuments": {
       "title": "Documentos de RR. HH.",
-      "description": "Documentos de RR. HH. de la contratación a la baja con firma electrónica, plantillas y acuses. Desactivar nunca elimina datos."
-    },
-    "hrmDocumentRetention": {
-      "title": "Conservación de documentos",
-      "description": "Reglas de conservación con eliminación auditada tras un período de gracia. Desactivar nunca elimina datos."
-    },
-    "hrmDataSubjectExport": {
-      "title": "Exportaciones de acceso",
-      "description": "Exportaciones de acceso para los interesados con un clic. Desactivar nunca elimina datos."
+      "description": "Documentos de RR. HH. de la contratación a la baja con firma electrónica, plantillas y acuses, además de calendarios de conservación y exportaciones de acceso del interesado. Desactivar nunca elimina datos."
     },
     "hrmSurveys": {
       "title": "Encuestas de compromiso",
       "description": "Encuestas de compromiso y de pulso con resultados por grado de anonimato. Desactivar nunca elimina datos."
     },
-    "hrmPulseSurveys": {
-      "title": "Encuestas de pulso",
-      "description": "Cadencia de pulso recurrente con tendencias. Requiere encuestas."
-    },
-    "hrmOrgChart": {
-      "title": "Organigrama",
-      "description": "El árbol de la organización con vacantes, departamentos y ámbito de control."
-    },
     "fieldTime": {
       "title": "Fichaje en campo",
       "description": "Fichaje móvil y en quiosco con geocerca, foto y cola offline; lotes del capataz; horas de equipo en los partes."
     },
-    "fieldTimeGeofence": {
-      "title": "Geocercas de fichaje",
-      "description": "Comparar la ubicación con círculos y polígonos del proyecto; lo de fuera se marca, nunca se rechaza."
-    },
-    "fieldTimePhoto": {
-      "title": "Fotos de fichaje",
-      "description": "Exigir foto en los fichajes móviles."
-    },
-    "fieldTimeKiosk": {
-      "title": "Quioscos de obra",
-      "description": "Dispositivos PIN compartidos con vuelta automática al inicio."
-    },
-    "fieldTimeCrewEntry": {
-      "title": "Tiempo de cuadrilla",
-      "description": "Lotes del capataz por proyecto y día con firma y etapas."
-    },
-    "fieldTimeEquipment": {
-      "title": "Equipo en el tiempo",
-      "description": "Horas de equipo en partes y líneas, al precio del ítem del equipo. Requiere equipo."
-    },
-    "fieldTimeMultiStageApproval": {
-      "title": "Aprobación de tiempo por etapas",
-      "description": "Cadena de supervisor, jefe de proyecto y nómina para partes y lotes."
-    },
     "hrmRecruiting": {
       "title": "Contratación",
-      "description": "Vacantes, candidatos, entrevistas y ofertas: el camino hasta la contratación."
-    },
-    "hrmStructuredInterviews": {
-      "title": "Entrevistas estructuradas",
-      "description": "Guías de entrevista con criterios y veredictos ciegos del panel."
-    },
-    "hrmInterviewScheduling": {
-      "title": "Programación de entrevistas",
-      "description": "Horarios propuestos con enlaces de autorreserva para candidatos."
-    },
-    "hrmOfferSigning": {
-      "title": "Firma de ofertas",
-      "description": "Ofertas de plantilla en PDF versionados, firmadas en el producto."
-    },
-    "hrmJobBoards": {
-      "title": "Portales de empleo",
-      "description": "Página de carreras interna y publicación con sincronización de resultados."
-    },
-    "hrmCandidateRetention": {
-      "title": "Retención de candidatos",
-      "description": "Consentimientos y reglas de retención: anonimizar o eliminar según programa."
-    },
-    "hrmTalentPool": {
-      "title": "Reserva de talento",
-      "description": "Grupos de candidatos anteriores comparados con vacantes abiertas."
-    },
-    "hrmAiAssist": {
-      "title": "Asistencia de IA",
-      "description": "Interruptor maestro de capacidades deterministas de IA de RR. HH. Nada aquí archiva, aprueba ni paga por sí solo."
-    },
-    "hrmExplainPay": {
-      "title": "Explicaciones de nómina",
-      "description": "Trazas deterministas con diferencia previa, en el cajón de Nómina."
-    },
-    "hrmPayrollAnomalies": {
-      "title": "Anomalías de nómina",
-      "description": "Avisos previos con ciclo de vida; el nivel de bloqueo rechaza la confirmación."
-    },
-    "hrmTimeAnomalies": {
-      "title": "Anomalías de tiempo",
-      "description": "Avisos de partes como insignias de aprobación e inbox."
-    },
-    "hrmDrafting": {
-      "title": "Redacción con evidencia",
-      "description": "Borradores desde fuentes citadas con avisos de lenguaje; nunca se autoenvían."
-    },
-    "hrmNlReports": {
-      "title": "Informes en lenguaje natural",
-      "description": "Definiciones validadas desde preguntas, con vista previa y guardado como vista."
+      "description": "Vacantes, candidatos, entrevistas estructuradas, programación, ofertas con firma en el producto, portales de empleo, conservación de candidatos y bolsas de talento."
     },
     "aiGovernanceLedger": {
       "title": "Registro de gobernanza de IA",

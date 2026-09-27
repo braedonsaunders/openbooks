@@ -59,7 +59,7 @@ stubModules({
     `,
     "@openbooks/engine/src/hrm/field-time/crew.ts": `
       const state = globalThis[Symbol.for('openbooks.crew-batch-post-test')]
-      export async function approveBatchStage() { throw new Error('not under test') }
+      export async function approveBatch() { throw new Error('not under test') }
       export async function postBatch() {
         state.postBatchCalls += 1
         return { chargeDocumentIds: ['${CHARGE_ID}'] }

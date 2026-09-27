@@ -25,7 +25,7 @@ import {
  */
 
 const OFFER_SIGNING_SPEC = {
-  features: ["hrm", "hrmRecruiting", "hrmOfferSigning"],
+  features: ["hrm", "hrmRecruiting"],
   users: [
     { key: "recruiterId", name: "Offer Signing Recruiter", handle: "offer_signing_recruiter", permissions: ["hrm.recruiting.read", "hrm.recruiting.manage"] },
   ],

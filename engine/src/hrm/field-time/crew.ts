@@ -1,7 +1,7 @@
 import { isCivilDate } from "../temporal.ts";
 /**
- * HR-20 crew batch service: foreman batch lifecycle with signatures,
- * multi-stage Flows approval, and posting.
+ * Crew batch service: foreman batch lifecycle with signatures, Flows
+ * approval, and posting.
  *
  * Foreman = the actor holds time.crew.enter (enforced at the route)
  * and is assigned to the project through schedule_resources
@@ -32,21 +32,9 @@ import { EffectiveEmploymentError, resolveEffectiveEmployment } from "../effecti
 import { keyedFingerprint } from "../../platform/secrets.ts";
 import { FieldTimeError, isUniqueViolation, refuse } from "./errors.ts";
 import { taskPairingCode } from "./task-pairing.ts";
-import {
-  FIELD_TIME_CREW_ENTRY_FEATURE,
-  FIELD_TIME_EQUIPMENT_FEATURE,
-  FIELD_TIME_FEATURE,
-  loadFieldTimeSettings,
-} from "./settings.ts";
+import { EQUIPMENT_FEATURE, FIELD_TIME_FEATURE, loadFieldTimeSettings } from "./settings.ts";
 import { checkEquipmentTolerance } from "./pure.ts";
 import { assertNoFieldTimeSourceCollision, lockEmployeeTimeSources } from "./source-collision.ts";
-import {
-  chainComplete,
-  CREW_BATCH_CHAIN,
-  loadChain,
-  nextStage,
-  statusForStage,
-} from "./stages.ts";
 import { CREW_TIME_BATCH_SUBJECT_KIND } from "../../flows/crew-batches-adapter.ts";
 
 export interface CrewLineInput {
@@ -65,12 +53,6 @@ async function requireCrewFeature(orgId: string): Promise<void> {
     refuse(
       "field_time_off",
       "Field time is turned off — turn on fieldTime in Company Settings → Features to enter crew time",
-    );
-  }
-  if (!(await lockAndCheckOrgFeature(db, orgId, FIELD_TIME_CREW_ENTRY_FEATURE))) {
-    refuse(
-      "field_time_crew_off",
-      "Crew time entry is turned off — turn on fieldTimeCrewEntry in Company Settings → Features to enter crew time",
     );
   }
 }
@@ -443,7 +425,7 @@ export async function setBatchLines(input: {
     );
   }
   const settings = await loadFieldTimeSettings(input.orgId);
-  const equipmentOn = await lockAndCheckOrgFeature(db, input.orgId, FIELD_TIME_EQUIPMENT_FEATURE);
+  const equipmentOn = await lockAndCheckOrgFeature(db, input.orgId, EQUIPMENT_FEATURE);
   const cleaned = await validateLines(input.orgId, input.lines, equipmentOn, settings.equipmentToleranceHours);
   await withOrgTransaction(input.orgId, async () => {
     await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
@@ -548,8 +530,9 @@ export async function submitBatch(input: {
     }
   });
   await appendEvent(input.orgId, input.batchId, "submitted", input.actorUserId, null);
-  // The stage chain runs through Flows: tenant on_submit flows gate the
-  // crew_time_batch subject; stage approvals release through gates.
+  // Approval routing runs through Flows: tenant on_submit flows raise
+  // approval gates on the crew_time_batch subject, and the batch is
+  // approved when those gates release it.
   await runRecordFlows(
     { kind: "on_submit", source: "ui" },
     CREW_TIME_BATCH_SUBJECT_KIND,
@@ -583,41 +566,60 @@ export async function withdrawBatch(input: {
   await appendEvent(input.orgId, input.batchId, "withdrawn", input.actorUserId, input.reason ?? null);
 }
 
-/** Approve the current stage. The caller proves approver identity via Flows gates. */
-export async function approveBatchStage(input: {
+/**
+ * A flow that raised approval gates on the batch OWNS it until they
+ * resolve: the gate release calls approveBatch / rejectBatch once no gate
+ * is open, and a direct decision past an open gate would let one approver
+ * override the authored routing, quorum and escalation. With no gates the
+ * check is vacuous and a time approver decides the batch directly.
+ */
+async function assertNoOpenApprovalGates(orgId: string, batchId: string): Promise<void> {
+  const open = (await db.execute<{ n: number }>(sql`
+    select count(*)::int as n from flow_gates
+     where org_id = ${orgId}
+       and subject_kind = ${CREW_TIME_BATCH_SUBJECT_KIND}
+       and subject_id = ${batchId}
+       and status in ('pending', 'escalated')`)).rows[0]?.n ?? 0;
+  if (open > 0) {
+    refuse(
+      "batch_owned_by_flow",
+      "This batch is owned by a pending approval workflow — its approval gates must resolve first",
+    );
+  }
+}
+
+/**
+ * Approve a submitted batch. Flows owns approval routing — who approves, in
+ * what order, with what quorum — and calls this through the release hook
+ * once every gate on the batch has resolved; without an authored flow a
+ * time approver approves directly.
+ */
+export async function approveBatch(input: {
   orgId: string;
   actorUserId: string;
   batchId: string;
   comment?: string | null;
   /** Subsidiaries the actor may write in; null = unrestricted (explicit sentinel, never omitted). */
   allowedSubsidiaryIds: ReadonlySet<string> | null;
-}): Promise<string> {
+}): Promise<"approved"> {
   await requireCrewFeature(input.orgId);
   const batch = await loadBatch(input.orgId, input.batchId);
-  const chain = await loadChain(input.orgId, CREW_BATCH_CHAIN);
-  const stage = nextStage(batch.status, chain);
-  if (!stage) {
+  if (batch.status !== "submitted") {
     refuse("batch_not_approvable", `The batch is ${batch.status} — nothing is awaiting approval`);
   }
-  const status = statusForStage(stage.order);
   await withOrgTransaction(input.orgId, async () => {
     await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
+    await assertNoOpenApprovalGates(input.orgId, input.batchId);
     const moved = (await db.execute<{ n: number }>(sql`
       update crew_time_batches
-         set status = ${status}, updated_at = now(), updated_by = ${input.actorUserId}
-       where org_id = ${input.orgId} and id = ${input.batchId} and status = ${batch.status}`)).rowCount ?? 0;
+         set status = 'approved', updated_at = now(), updated_by = ${input.actorUserId}
+       where org_id = ${input.orgId} and id = ${input.batchId} and status = 'submitted'`)).rowCount ?? 0;
     if (moved !== 1) {
       refuse("batch_moved", "The batch moved while approving — reload and retry");
     }
   });
-  await appendEvent(
-    input.orgId,
-    input.batchId,
-    stage.order === 1 ? "approved_stage_1" : "approved_stage_2",
-    input.actorUserId,
-    input.comment ?? null,
-  );
-  return status;
+  await appendEvent(input.orgId, input.batchId, "approved", input.actorUserId, input.comment ?? null);
+  return "approved";
 }
 
 export async function rejectBatch(input: {
@@ -633,16 +635,16 @@ export async function rejectBatch(input: {
     refuse("reject_reason_required", "Rejecting needs a reason — tell the foreman what to fix");
   }
   const batch = await loadBatch(input.orgId, input.batchId);
-  const chain = await loadChain(input.orgId, CREW_BATCH_CHAIN);
-  if (!nextStage(batch.status, chain)) {
+  if (batch.status !== "submitted") {
     refuse("batch_not_rejectable", `Only a batch in approval can be rejected — this batch is ${batch.status}`);
   }
   await withOrgTransaction(input.orgId, async () => {
     await assertProjectInScope(input.orgId, batch.project_id, input.allowedSubsidiaryIds);
+    await assertNoOpenApprovalGates(input.orgId, input.batchId);
     const moved = (await db.execute<{ n: number }>(sql`
       update crew_time_batches
          set status = 'rejected', submitted_at = null, updated_at = now(), updated_by = ${input.actorUserId}
-       where org_id = ${input.orgId} and id = ${input.batchId} and status = ${batch.status}`)).rowCount ?? 0;
+       where org_id = ${input.orgId} and id = ${input.batchId} and status = 'submitted'`)).rowCount ?? 0;
     if (moved !== 1) refuse("batch_moved", "The batch moved while rejecting — reload and retry");
   });
   await appendEvent(input.orgId, input.batchId, "rejected", input.actorUserId, input.reason.trim());
@@ -680,14 +682,13 @@ type ChargeSpec = {
 /**
  * Readiness + charge specs for posting. Refuses BEFORE the post
  * transaction: a unit with no charge item, an unknown task, or an
- * incomplete chain never reaches the write.
+ * unapproved batch never reaches the write.
  */
 async function planPost(orgId: string, batch: BatchStatusRow): Promise<{ lines: Array<CrewLineInput & { id: string }>; charges: ChargeSpec[] }> {
-  const chain = await loadChain(orgId, CREW_BATCH_CHAIN);
-  if (!chainComplete(batch.status, chain)) {
+  if (batch.status !== "approved") {
     refuse(
       "batch_not_approved",
-      `The batch is ${batch.status} — finish every approval stage before posting`,
+      `The batch is ${batch.status} — it must be approved before posting`,
     );
   }
   const lines = (await db.execute<Required<CrewLineRow>>(sql`
@@ -697,7 +698,7 @@ async function planPost(orgId: string, batch: BatchStatusRow): Promise<{ lines: 
            equipment_hours::text as "equipmentHours", memo
       from crew_time_batch_lines where batch_id = ${batch.id} order by id`)).rows;
   if (lines.length === 0) refuse("batch_empty", "The batch has no lines — nothing to post");
-  const equipmentOn = await lockAndCheckOrgFeature(db, orgId, FIELD_TIME_EQUIPMENT_FEATURE);
+  const equipmentOn = await lockAndCheckOrgFeature(db, orgId, EQUIPMENT_FEATURE);
   const settings = await loadFieldTimeSettings(orgId);
   const charges: ChargeSpec[] = [];
   for (const line of lines) {
@@ -788,7 +789,7 @@ export async function postBatch(input: {
   if (!org) refuse("org_unknown", "The organization is unknown — reload and retry");
 
   // Feature off: equipment columns are ignored on the entries, never stored.
-  const equipmentOn = await lockAndCheckOrgFeature(db, input.orgId, FIELD_TIME_EQUIPMENT_FEATURE);
+  const equipmentOn = await lockAndCheckOrgFeature(db, input.orgId, EQUIPMENT_FEATURE);
   return withOrgTransaction(input.orgId, async () => {
     // The project subsidiary is locked and asserted INSIDE the post
     // transaction: a pre-read would let a concurrent rehome stamp and post

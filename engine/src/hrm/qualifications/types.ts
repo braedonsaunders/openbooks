@@ -5,7 +5,6 @@ import {
 } from "../authorization.ts";
 import { HrmQualificationError } from "./errors.ts";
 import {
-  HRM_CERTIFICATIONS_FEATURE,
   assertQualificationsFeature,
   requireId,
   requireText,
@@ -113,7 +112,7 @@ export async function listQualificationTypes(
   const orgId = requireId(input.orgId, "orgId");
   requireId(input.actorId, "actorId");
   await requireHrmCertificationsRead(exec, orgId, input.actorId);
-  await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification types");
+  await assertQualificationsFeature(exec, orgId, "Qualification types");
   const rows = (await exec.execute<TypeRow>(sql`
     select ${TYPE_COLS} from hrm_qualification_types
      where org_id = ${orgId}::uuid
@@ -143,7 +142,7 @@ export async function createQualificationType(
   const actorId = requireId(input.actorId, "actorId");
   return runInCallerTransaction(exec, async (tx) => {
     await requireHrmCertificationsManage(tx, orgId, actorId);
-    await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification types");
+    await assertQualificationsFeature(tx, orgId, "Qualification types");
     const code = requireText(input.code, "code");
     const name = requireText(input.name, "name");
     const category = requireText(input.category, "category");
@@ -210,7 +209,7 @@ export async function updateQualificationType(
   const typeId = requireId(input.typeId, "typeId");
   return runInCallerTransaction(exec, async (tx) => {
     await requireHrmCertificationsManage(tx, orgId, actorId);
-    await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification types");
+    await assertQualificationsFeature(tx, orgId, "Qualification types");
     const name = input.name === undefined ? undefined : requireText(input.name, "name");
     const category = input.category === undefined ? undefined : requireText(input.category, "category");
     if (category !== undefined) await assertCategoryDeclared(tx, orgId, category);
@@ -278,7 +277,7 @@ export async function declareCategory(
   }
   return runInCallerTransaction(exec, async (tx) => {
     await requireHrmCertificationsManage(tx, orgId, actorId);
-    await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification categories");
+    await assertQualificationsFeature(tx, orgId, "Qualification categories");
     await tx.execute(sql`
       insert into hrm_qualification_settings (org_id, extra_categories, created_by, updated_by)
       values (${orgId}::uuid, array[${category}]::text[], ${actorId}::uuid, ${actorId}::uuid)
@@ -321,7 +320,7 @@ export async function setAlertSchedule(
   const schedule = [...new Set(input.leadDays)].sort((a, b) => b - a);
   return runInCallerTransaction(exec, async (tx) => {
     await requireHrmCertificationsManage(tx, orgId, actorId);
-    await assertQualificationsFeature(tx, orgId, HRM_CERTIFICATIONS_FEATURE, "Alert schedule");
+    await assertQualificationsFeature(tx, orgId, "Alert schedule");
     await tx.execute(sql`
       insert into hrm_qualification_settings (org_id, alert_lead_days, created_by, updated_by)
       values (${orgId}::uuid, ${sql.raw(`array[${schedule.map((d) => `${d}`).join(",")}]::integer[]`)}, ${actorId}::uuid, ${actorId}::uuid)

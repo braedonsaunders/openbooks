@@ -120,19 +120,6 @@ export async function setFeatures(orgId: string, features: Record<string, boolea
   `);
 }
 
-/**
- * Open the recruiting signing/scheduling depth flags. The key list is a
- * parameter because the scheduling suite needs a deeper set than signing.
- */
-export async function enableDepth(orgId: string, keys: readonly string[]): Promise<void> {
-  for (const key of keys) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${`features,${key}`}, ','), 'true'::jsonb, true)
-       where id = ${orgId}`);
-  }
-}
-
 /** Construction suites: shared feature list plus the US home country. */
 export async function enableConstruction(orgId: string): Promise<void> {
   await enableFeatures(orgId, [
@@ -141,7 +128,6 @@ export async function enableConstruction(orgId: string): Promise<void> {
     "projects",
     "timeTracking",
     "hrmConstructionCompliance",
-    "hrmPrevailingWage",
   ]);
   await db.execute(sql`update orgs set country = 'US' where id = ${orgId}`);
 }

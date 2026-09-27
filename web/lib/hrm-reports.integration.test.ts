@@ -70,10 +70,9 @@ async function enableEveryHrmReportFeature(orgId: string): Promise<void> {
     '../../engine/src/organization/feature-registry.ts'
   )
   // Close over the REQUIREMENT GRAPH, not just the declared keys. A
-  // sub-switch is off while its parent is off, and the parents no entity
-  // names (hrmAiAssist above hrmPayrollAnomalies, payroll above that)
-  // were the second and third time this helper went stale. Listing them
-  // by hand is what made it stale twice; the registry already knows.
+  // module is off while a feature it requires is off, and the
+  // requirements no entity names are what made this helper go stale
+  // before. Listing them by hand is the failure; the registry already knows.
   const keys = new Set<string>(['hrm'])
   const visit = (key: string): void => {
     if (keys.has(key)) return
@@ -93,24 +92,6 @@ async function enableEveryHrmReportFeature(orgId: string): Promise<void> {
 }
 // HR-12 end
 // HR-14 end
-// HR-18 begin: the depth entities ride their own sub-switches.
-async function enableRecruitingDepth(orgId: string): Promise<void> {
-  for (const key of [
-    'hrmRecruiting',
-    'hrmStructuredInterviews',
-    'hrmInterviewScheduling',
-    'hrmOfferSigning',
-    'hrmJobBoards',
-    'hrmCandidateRetention',
-    'hrmTalentPool',
-  ] as const) {
-    await db.execute(sql`
-      update orgs
-         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), string_to_array(${`features,${key}`}, ','), 'true'::jsonb, true)
-       where id = ${orgId}`)
-  }
-}
-// HR-18 end
 
 async function grantPermissions(orgId: string, userId: string, permissions: string[]): Promise<void> {
   for (const permission of permissions) {
@@ -538,9 +519,6 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
       // grant, so every entity's switch must be on or the assertion fails on
       // the switch rather than on the gate it is testing.
       await enableEveryHrmReportFeature(scratch.orgId)
-      // HR-18 begin
-      await enableRecruitingDepth(scratch.orgId)
-      // HR-18 end
       second = await mkSubsidiary(scratch.orgId, 'Second Co', scratch.subsidiaryId)
       const empA = await mkEmployment(scratch.orgId, await mkWorker(scratch.orgId, 'Worker Ada'), scratch.subsidiaryId)
       await addVersion(scratch.orgId, empA, 1, 'active', '2026-01-01', null, T0)
@@ -627,8 +605,8 @@ test('subsidiary scope clamps workforce rows and the shared gate refuses', { ski
         'hrm_qualifications',
         'hrm_qualification_alerts',
         // HR-14 end
-        // HR-18 begin: recruiting-depth entities read through their
-        // sub-switches (enabled above) and the recruiting grant.
+        // HR-18 begin: recruiting-depth entities read through Recruiting
+        // (enabled above) and the recruiting grant.
         'hrm_scorecards',
         'hrm_interview_slots',
         'hrm_offers',

@@ -71,14 +71,10 @@ test('mergeTemplateSlots treats a missing row as empty arrays', () => {
 })
 
 test('document setup entities are gated and rehomed', () => {
-  for (const [key, featureKey] of [
-    ['hrm-document-categories', 'hrmDocuments'],
-    ['hrm-document-templates', 'hrmDocuments'],
-    ['hrm-retention-schedules', 'hrmDocumentRetention'],
-  ] as const) {
+  for (const key of ['hrm-document-categories', 'hrm-document-templates', 'hrm-retention-schedules']) {
     const entity = SETUP_ENTITY_BY_KEY.get(key)
     assert.ok(entity, `${key} must be registered`)
-    assert.equal(entity.featureKey, featureKey, `${key} hides while the feature is off`)
+    assert.equal(entity.featureKey, 'hrmDocuments', `${key} hides while HR documents is off`)
     assert.equal(entity.rehomed, true, `${key} must be marked rehomed`)
   }
 })

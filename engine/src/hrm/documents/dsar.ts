@@ -313,14 +313,12 @@ async function claimSpecificExport(
 
 /**
  * Feature fence for the export worker and the download service. The API
- * routes gate on these flags, but a disable between request and build (or
- * between build and download) must stop the worker inside its own
+ * routes gate on HRM and HR documents, but a disable between request and
+ * build (or between build and download) must stop the worker inside its own
  * transaction — the org row lock serializes against the disable, so a
  * build can never assemble a subject's whole data zip for a switched-off
  * feature. Existing export rows are preserved, only gated until re-enable.
  */
-const HRM_DATA_SUBJECT_EXPORT_FEATURE_KEY = "hrmDataSubjectExport";
-
 async function assertDataSubjectExportFeature(exec: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
     throw new HrmDocumentsError(
@@ -332,12 +330,6 @@ async function assertDataSubjectExportFeature(exec: SqlExecutor, orgId: string):
     throw new HrmDocumentsError(
       "REFUSED",
       "exports are unavailable while the hrmDocuments feature is off — enable it under Company Settings → Features; existing exports are preserved",
-    );
-  }
-  if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_DATA_SUBJECT_EXPORT_FEATURE_KEY))) {
-    throw new HrmDocumentsError(
-      "REFUSED",
-      "exports are unavailable while the hrmDataSubjectExport feature is off — enable it under Company Settings → Features; existing exports are preserved",
     );
   }
 }

@@ -4,7 +4,6 @@ import { businessToday, calendarDaysBetween } from "../../platform/business-date
 import { requireAggregateCertificationsRead } from "../authorization.ts";
 import { HrmQualificationError } from "./errors.ts";
 import {
-  HRM_CERTIFICATIONS_FEATURE,
   assertQualificationsFeature,
   requireId,
   type SqlExecutor,
@@ -70,16 +69,15 @@ function scheduleForType(
   return [renewalLeadDays];
 }
 
-/** Orgs with the full alerts chain on (hrm → hrmCertifications → hrmCertificationAlerts). */
+/** Orgs with Certifications and licenses on (hrm → hrmCertifications). */
 export async function listAlertEligibleOrgs(exec: SqlExecutor): Promise<string[]> {
   // Registry fallback shape (non-boolean stored values fall back to the
   // default instead of throwing 22P02); the explicit conjunction is the
-  // hrm → hrmCertifications → hrmCertificationAlerts parent chain.
+  // hrm → hrmCertifications parent chain.
   const rows = (await exec.execute<{ id: string }>(sql`
     select id::text as id from orgs
      where case (settings->'features'->>'hrm') when 'true' then true when 'false' then false else false end
        and case (settings->'features'->>'hrmCertifications') when 'true' then true when 'false' then false else false end
-       and case (settings->'features'->>'hrmCertificationAlerts') when 'true' then true when 'false' then false else false end
   `)).rows;
   return rows.map((row) => row.id);
 }
@@ -279,7 +277,7 @@ export async function listAlerts(
   const orgId = requireId(input.orgId, "orgId");
   const actorId = requireId(input.actorId, "actorId");
   const allowed = await requireAggregateCertificationsRead(exec, orgId, actorId);
-  await assertQualificationsFeature(exec, orgId, HRM_CERTIFICATIONS_FEATURE, "Qualification alerts");
+  await assertQualificationsFeature(exec, orgId, "Qualification alerts");
   const allowedIds = allowed === null ? null : `{${[...allowed].join(",")}}`;
   const rows = (await exec.execute<{
     id: string;

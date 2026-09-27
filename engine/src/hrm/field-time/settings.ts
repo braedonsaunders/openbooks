@@ -1,18 +1,18 @@
 /**
- * HR-20 feature keys and org settings.
+ * Field time feature key and org settings.
  *
- * fieldTime is the parent (parentKey timeTracking, requiresAll
- * projects): office orgs never see a clock. Sub-features hide optional
- * complexity; turning any off stops rendering and writing, never data.
+ * fieldTime is the one switch (parentKey timeTracking, requiresAll
+ * projects): office orgs never see a clock. Everything field time does —
+ * clock, kiosks, geofence checks, photos, crew batches — follows it; what
+ * a tenant tunes is declared here or on the records themselves (project
+ * geofences, kiosk photo rules). Equipment hours additionally need the
+ * Equipment module. Turning field time off stops rendering and writing,
+ * never data.
  */
 
 export const FIELD_TIME_FEATURE = "fieldTime" as const;
-export const FIELD_TIME_GEOFENCE_FEATURE = "fieldTimeGeofence" as const;
-export const FIELD_TIME_PHOTO_FEATURE = "fieldTimePhoto" as const;
-export const FIELD_TIME_KIOSK_FEATURE = "fieldTimeKiosk" as const;
-export const FIELD_TIME_CREW_ENTRY_FEATURE = "fieldTimeCrewEntry" as const;
-export const FIELD_TIME_EQUIPMENT_FEATURE = "fieldTimeEquipment" as const;
-export const FIELD_TIME_MULTI_STAGE_APPROVAL_FEATURE = "fieldTimeMultiStageApproval" as const;
+/** Equipment hours on clock events and crew lines need the Equipment module too. */
+export const EQUIPMENT_FEATURE = "equipment" as const;
 
 export { CREW_TIME_BATCH_SUBJECT_KIND } from "../../flows/crew-batches-adapter.ts";
 

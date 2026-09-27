@@ -3959,10 +3959,6 @@
         "circle": "Kreis",
         "polygon": "Polygon"
       },
-      "approvalSubject": {
-        "timesheetWeek": "Stundenzettelwoche",
-        "crewTimeBatch": "Team-Charge"
-      },
       "hrmRetentionAction": {
         "anonymize": "Anonymisieren",
         "delete": "Löschen"
@@ -5031,15 +5027,7 @@
   "features": {
     "hrm": {
       "title": "Personalwesen",
-      "description": "Beschäftigungsdaten mit Stichtagshistorie, Personalbestand und Nachverfolgung von Änderungsanträgen. Liest die HRM-Grundlage; steuert nie die Lohnabrechnung."
-    },
-    "hrmCelebrations": {
-      "title": "Feiern am Arbeitsplatz",
-      "description": "Geburtstage, Jubiläen und neue Kollegen auf der Startseite."
-    },
-    "hrmManagerNudges": {
-      "title": "Anstöße für Führungskräfte",
-      "description": "Fluktuations- und 1:1-Hinweise auf der Startseite für Führungskräfte, begrenzt auf das eigene Team."
+      "description": "Beschäftigungsdaten mit Stichtagshistorie, Personalbestand, Änderungsanträge mit Maßnahmen- und Begründungscodes sowie das Organigramm. Liest die HRM-Grundlage; steuert nie die Lohnabrechnung."
     },
     "homeAnnouncements": {
       "title": "Ankündigungen auf der Startseite",
@@ -5282,197 +5270,37 @@
       "title": "Simulator",
       "description": "Rezepte ohne Schreibvorgänge an echten Subjekten testen."
     },
-    "hrmActionReasons": {
-      "title": "Aktions- und Grundcodes",
-      "description": "Bei jedem Änderungsantrag eine HR-Aktion und einen Grundcode verlangen."
-    },
-    "hrmEventVerbs": {
-      "title": "Änderungsereignisverben",
-      "description": "Beschäftigungsänderungen als angehängte Ereignisse stornieren, zurücknehmen und korrigieren."
-    },
     "hrmConstructionCompliance": {
       "title": "Bau-Compliance",
       "description": "Tariflohntabellen, zertifizierte Abrechnungen, Gefahrenklassen, Azubi-Quoten und Tagegeld für eigene Bauleistung. Benötigt Lohn, Projekte und Zeiterfassung."
     },
-    "hrmPrevailingWage": {
-      "title": "Tariflohn",
-      "description": "Lohn nach Einsatzort, Klassifizierung und Datum aus erklärten Tafeln auflösen."
-    },
-    "hrmCertifiedPayroll": {
-      "title": "Zertifizierte Abrechnung",
-      "description": "Eingefrorene wöchentliche Berichte, gerendert über die erklärten Pack-Dateien."
-    },
-    "hrmWorkersCompClasses": {
-      "title": "Gefahrenklassen",
-      "description": "Kalkulierte Stunden per Prioritätsregeln auf Gefahrenklassen splitten."
-    },
-    "hrmApprenticeRatios": {
-      "title": "Azubi-Quoten",
-      "description": "Geselle-zu-Azubi-Quoten täglich prüfen; Verstöße werden zum Gesellensatz bepreist."
-    },
-    "hrmPerDiem": {
-      "title": "Tagegeld",
-      "description": "Tagegeld und Fahrtkosten aus genehmigten Zeiten in die Lohnschnittstelle rechnen."
-    },
     "hrmCompensation": {
       "title": "Vergütung",
-      "description": "Stellenarchitektur und Bänder: was Rollen zahlen sollten und wo Personen liegen."
-    },
-    "hrmMeritCycles": {
-      "title": "Meritrunden",
-      "description": "Runden, die die Abrechnungswahrheit einfrieren, Erhöhungen entscheiden und Sätze übertragen."
-    },
-    "hrmHeadcountPlans": {
-      "title": "Personalpläne",
-      "description": "Szenarien, kalkuliert aus Bändern, die bei Genehmigung Ausschreibungen öffnen."
-    },
-    "hrmPayTransparency": {
-      "title": "Entgelttransparenz",
-      "description": "Eingefrorene Kennzahlen aus der Abrechnungswahrheit und Auskunftsersuchen."
+      "description": "Stellenarchitektur und Gehaltsbänder, Leistungsrunden, kalkulierte Personalpläne und Entgelttransparenz. Leistungsrunden erfordern zusätzlich die Lohnabrechnung."
     },
     "hrmCertifications": {
       "title": "Zertifizierungen und Lizenzen",
       "description": "Qualifikationsregister der Mitarbeiter: Taxonomie, Nachweise, Einsatzanforderungen und Ablaufwarnungen. Umschalten löscht keine Daten."
     },
-    "hrmDispatchGating": {
-      "title": "Einsatzsteuerung",
-      "description": "Verweigert Einsatzzuweisungen bei fehlenden Qualifikationen. Benötigt Projekte und Planung."
-    },
-    "hrmEquipmentQualifications": {
-      "title": "Gerätequalifikationen",
-      "description": "Erforderliche Qualifikationstypen an Geräten festlegen. Benötigt Geräte."
-    },
-    "hrmCertificationAlerts": {
-      "title": "Zertifikatswarnungen",
-      "description": "Tägliche Ablaufhinweise an Inhaber und Vorgesetzte über den Posteingang."
-    },
     "hrmPerformance": {
       "title": "Leistung",
-      "description": "Der Hauptschalter für Beurteilungen, Ziele, 1:1s, Feedback, Kalibrierung, Talent und Nachfolge."
-    },
-    "hrmOneOnOnes": {
-      "title": "1:1-Gespräche",
-      "description": "Geplante Gespräche zwischen Führungskraft und Mitarbeiter mit fortlaufender Agenda."
-    },
-    "hrmFeedback": {
-      "title": "Feedback",
-      "description": "Lob, Feedback und Anfragen, erfasst wenn sie entstehen."
-    },
-    "hrmCompetencies": {
-      "title": "Kompetenzen",
-      "description": "Wiederverwendbares Skill-Vokabular mit Stufen, verknüpft mit Beurteilungen und Job-Leveln."
-    },
-    "hrmCalibration": {
-      "title": "Kalibrierung",
-      "description": "Das Bewertungsraster über einen Beurteilungszyklus mit Prüfpfad."
-    },
-    "hrmSuccession": {
-      "title": "Talent & Nachfolge",
-      "description": "Talentbeurteilungen und Nachfolgepläne pro Position."
+      "description": "Beurteilungen, Ziele, 1:1s, Feedback, Kompetenzen, Kalibrierung, Talentrunden und Nachfolgepläne."
     },
     "hrmDocuments": {
       "title": "HR-Dokumente",
-      "description": "HR-Dokumente von der Einstellung bis zum Austritt mit E-Signatur, Vorlagen und Bestätigungen. Das Umschalten löscht niemals Daten."
-    },
-    "hrmDocumentRetention": {
-      "title": "Dokumentaufbewahrung",
-      "description": "Aufbewahrungsregeln mit geprüfter Löschung nach einer Karenzzeit. Das Umschalten löscht niemals Daten."
-    },
-    "hrmDataSubjectExport": {
-      "title": "Auskunftsexporte",
-      "description": "Auskunftsexporte für Betroffene auf Knopfdruck. Das Umschalten löscht niemals Daten."
+      "description": "HR-Dokumente von der Einstellung bis zum Austritt mit E-Signatur, Vorlagen und Bestätigungen, dazu Aufbewahrungsfristen und Auskunftsexporte. Das Umschalten löscht niemals Daten."
     },
     "hrmSurveys": {
       "title": "Mitarbeiterbefragungen",
       "description": "Mitarbeiter- und Pulsbefragungen mit anonymitätsgestuften Ergebnissen. Das Umschalten löscht niemals Daten."
     },
-    "hrmPulseSurveys": {
-      "title": "Pulsbefragungen",
-      "description": "Wiederkehrende Pulstaktung mit Trends. Erfordert Befragungen."
-    },
-    "hrmOrgChart": {
-      "title": "Organigramm",
-      "description": "Der Organisationsbaum mit Vakanzen, Abteilungen und Führungsspannen."
-    },
     "fieldTime": {
       "title": "Zeiterfassung vor Ort",
       "description": "Stempeln per Telefon und Kiosk mit Geofence, Foto und Offline-Warteschlange; Vorarbeiter-Chargen; Gerätestunden auf Einträgen."
     },
-    "fieldTimeGeofence": {
-      "title": "Stempel-Geofences",
-      "description": "Standort gegen Projektkreise und -polygone prüfen; Fixes außerhalb werden markiert, nie verweigert."
-    },
-    "fieldTimePhoto": {
-      "title": "Stempelfotos",
-      "description": "Foto bei mobilen Stempeln verlangen."
-    },
-    "fieldTimeKiosk": {
-      "title": "Baustellen-Kiosks",
-      "description": "Geteilte PIN-Geräte zum Stempeln mit automatischer Rückkehr."
-    },
-    "fieldTimeCrewEntry": {
-      "title": "Teamzeiterfassung",
-      "description": "Vorarbeiter-Chargen pro Projekt und Tag mit Unterschrift und Stufen."
-    },
-    "fieldTimeEquipment": {
-      "title": "Geräte auf Zeit",
-      "description": "Gerätestunden auf Zeiteinträgen und Chargenzeilen, bepreist über den Geräteposten. Braucht Geräte."
-    },
-    "fieldTimeMultiStageApproval": {
-      "title": "Mehrstufige Zeitgenehmigung",
-      "description": "Stufen für Vorgesetzte, Projektleitung und Lohn für Stundenzettel und Team-Chargen."
-    },
     "hrmRecruiting": {
       "title": "Recruiting",
-      "description": "Anforderungen, Kandidaten, Interviews und Angebote: der Weg von der Stelle zur Einstellung."
-    },
-    "hrmStructuredInterviews": {
-      "title": "Strukturierte Interviews",
-      "description": "Interviewleitfäden mit Bewertungskriterien und blinden Panelurteilen."
-    },
-    "hrmInterviewScheduling": {
-      "title": "Interviewplanung",
-      "description": "Vorgeschlagene Termine mit Selbstbuchungslinks für Kandidaten."
-    },
-    "hrmOfferSigning": {
-      "title": "Angebotsunterzeichnung",
-      "description": "Vorlagenangebote als versionierte PDFs, im Produkt signiert."
-    },
-    "hrmJobBoards": {
-      "title": "Stellenbörsen",
-      "description": "Interne Karriereseite und Feed-Veröffentlichung mit Rückmeldung."
-    },
-    "hrmCandidateRetention": {
-      "title": "Kandidatenaufbewahrung",
-      "description": "Einwilligungen und Aufbewahrungsregeln: planmäßig anonymisieren oder löschen."
-    },
-    "hrmTalentPool": {
-      "title": "Talentpool",
-      "description": "Pools früherer Kandidaten, abgeglichen mit offenen Stellen."
-    },
-    "hrmAiAssist": {
-      "title": "AI-Assistenz",
-      "description": "Hauptschalter für deterministische HRM-KI-Fähigkeiten. Nichts hier reicht ein, genehmigt oder zahlt selbstständig."
-    },
-    "hrmExplainPay": {
-      "title": "Abrechnungserklärungen",
-      "description": "Deterministische Abrechnungsspuren mit Vorperiodendifferenz, in der Me-Lohn-Schublade."
-    },
-    "hrmPayrollAnomalies": {
-      "title": "Lohnanomalien",
-      "description": "Vorlauf-Hinweise mit Lebenszyklus; die Stufe Block verweigert die Lohnfreigabe."
-    },
-    "hrmTimeAnomalies": {
-      "title": "Zeitanomalien",
-      "description": "Stundenzettel-Hinweise als Freigabe-Chips und Inbox-Einträge."
-    },
-    "hrmDrafting": {
-      "title": "Beleggestütztes Entwerfen",
-      "description": "Entwürfe aus genannten Belegen mit Sprachhinweisen; Entwürfe werden nie automatisch übernommen."
-    },
-    "hrmNlReports": {
-      "title": "Berichte in natürlicher Sprache",
-      "description": "Geprüfte Berichtsdefinitionen aus Fragen, mit Vorschau und Speichern als Ansicht."
+      "description": "Anforderungen, Kandidaten, strukturierte Interviews, Terminplanung, Angebote mit Signatur im Produkt, Stellenbörsen, Bewerberdaten-Aufbewahrung und Talentpools."
     },
     "aiGovernanceLedger": {
       "title": "KI-Governance-Protokoll",

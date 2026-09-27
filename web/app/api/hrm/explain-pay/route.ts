@@ -27,7 +27,7 @@ export const GET = defineRoute({
       "payroll.manage",
     ]);
     if (gate instanceof NextResponse) return gate;
-    if (!(await isFeatureEnabled(gate.user.orgId, "hrmExplainPay"))) {
+    if (!(await isFeatureEnabled(gate.user.orgId, "payroll"))) {
       return notFound("record");
     }
     const url = new URL(req.url);

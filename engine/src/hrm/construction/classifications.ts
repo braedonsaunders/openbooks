@@ -6,7 +6,6 @@ import {
   requireUnrestrictedHrmScope,
 } from "../authorization.ts";
 import {
-  HRM_CONSTRUCTION_FEATURE,
   assertConstructionFeature,
   assertEmploymentInScope,
   assertScheduleReferenceInScope,
@@ -50,7 +49,7 @@ export async function listClassifications(
   orgId: string,
   actorId: string,
 ): Promise<readonly WorkClassification[]> {
-  await assertConstructionFeature(exec, orgId, HRM_CONSTRUCTION_FEATURE, "Work classifications");
+  await assertConstructionFeature(exec, orgId, "Work classifications");
   requireId(actorId, "actorId");
   await requireHrmConstructionRead(exec, orgId, actorId);
   const rows = (
@@ -108,7 +107,7 @@ export async function createClassification(
     );
   }
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_CONSTRUCTION_FEATURE, "Work classifications");
+    await assertConstructionFeature(exec, orgId, "Work classifications");
     // The trade taxonomy is org-wide reference: creating a class needs
     // unrestricted scope (named 403).
     await requireConstructionScope(exec, orgId, actorId, "hrm.construction.manage");
@@ -155,7 +154,7 @@ export async function assignClassification(
   const classificationId = requireId(input.classificationId, "classificationId");
   const effectiveFrom = requireDate(input.effectiveFrom, "effectiveFrom");
   return withOrgTransaction(orgId, async () => {
-    await assertConstructionFeature(exec, orgId, HRM_CONSTRUCTION_FEATURE, "Work classifications");
+    await assertConstructionFeature(exec, orgId, "Work classifications");
     // The assignment prices one employment's hours: the employment's
     // employer must sit inside the lens, locked shared so a concurrent
     // rehome waits for the check. Missing and out-of-scope employments

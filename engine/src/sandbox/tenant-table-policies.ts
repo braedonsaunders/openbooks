@@ -557,7 +557,6 @@ export const TENANT_TABLE_POLICIES = {
   "tax_report_lines": "clone:catalog-uuid-rebase",
   "tax_return_forms": "clone:catalog-uuid-rebase",
   "temporary_differences": "clone:catalog-uuid-rebase",
-  "time_approval_stages": "clone:catalog-uuid-rebase",
   "time_clock_events": "clone:catalog-uuid-rebase",
   "time_entries": "clone:catalog-uuid-rebase",
   "time_kiosks": "skip:no-copy",

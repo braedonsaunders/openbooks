@@ -399,11 +399,11 @@ async function applyTaskPatch(
       if (units === 'invalid') {
         throw new ScheduleError('assignment units must be a number with no more than four decimal places', 422)
       }
-      // HR-14 dispatch gating: when hrmDispatchGating is on, a block
+      // Dispatch gating: while Certifications and licenses is on, a block
       // requirement refuses the assignment BY NAME and a warn requirement
       // records a warned event beside it — in this same transaction, so
       // the assignment and its warning commit together. The gate itself
-      // passes through untouched when the feature is off. System writes
+      // passes through untouched while the module is off. System writes
       // with no dispatcher identity skip the gate (nothing to authorize
       // the qualification read against); every interactive write names
       // its dispatcher.

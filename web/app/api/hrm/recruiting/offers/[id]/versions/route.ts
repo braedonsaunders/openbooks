@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 /**
  * Offer versions: GET lists the regeneration history, POST renders a new
  * version (never an overwrite — manage gate in the service). 404s while
- * hrm, hrmRecruiting, or hrmOfferSigning is off.
+ * HRM or Recruiting is off.
  */
 export const GET = defineRoute({
   permission: "hrm.recruiting.read",
