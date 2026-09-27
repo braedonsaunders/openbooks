@@ -80,62 +80,6 @@ CREATE TRIGGER segment_values_clear_default_for_wipe
   BEFORE DELETE ON public.segment_values
   FOR EACH ROW EXECUTE FUNCTION public.segment_values_clear_default_for_wipe();
 
-CREATE OR REPLACE FUNCTION public.validate_extra_dims(
-  p_org_id uuid,
-  p_dims jsonb,
-  p_subsidiary_id uuid DEFAULT NULL::uuid
-) RETURNS void
-    LANGUAGE plpgsql STABLE
-    AS $$
-declare d record;
-begin
-  if jsonb_typeof(coalesce(p_dims, '{}'::jsonb)) <> 'object' then
-    raise exception 'custom segment assignments must be an object' using errcode = '23514';
-  end if;
-  for d in
-    select pair.key, pair.value, sd.feature_key, sv.subsidiary_id,
-           sv.subsidiary_include_children
-      from jsonb_each_text(coalesce(p_dims, '{}'::jsonb)) pair
-      left join public.segment_definitions sd
-        on sd.org_id = p_org_id and sd.key = pair.key
-       and sd.source_kind = 'custom' and sd.is_active
-      left join public.segment_values sv
-        on sv.segment_id = sd.id and sv.org_id = sd.org_id
-       and sv.id::text = pair.value and sv.is_active
-  loop
-    if d.subsidiary_include_children is null then
-      raise exception 'invalid custom segment assignment for %', d.key using errcode = '23514';
-    end if;
-    if d.feature_key is not null and not exists (
-      select 1 from public.orgs o
-       where o.id = p_org_id
-         and o.settings->'features'->d.feature_key = 'true'::jsonb
-         and (d.feature_key <> 'fundAccounting'
-              or o.settings->'features'->'nonprofit' = 'true'::jsonb)
-    ) then
-      raise exception 'custom segment % requires feature %; enable it in Company Settings → Features',
-        d.key, d.feature_key using errcode = '23514';
-    end if;
-    if d.subsidiary_id is not null and p_subsidiary_id is not null and not (
-      p_subsidiary_id = d.subsidiary_id or (
-        d.subsidiary_include_children and exists (
-          with recursive descendants as (
-            select id from public.subsidiaries
-             where id = d.subsidiary_id and org_id = p_org_id
-            union all
-            select s.id from public.subsidiaries s
-             join descendants x on s.parent_id = x.id
-             where s.org_id = p_org_id
-          ) select 1 from descendants where id = p_subsidiary_id
-        )
-      )
-    ) then
-      raise exception 'custom segment value % is restricted to another subsidiary', d.value
-        using errcode = '23514';
-    end if;
-  end loop;
-end $$;
-
 CREATE OR REPLACE FUNCTION public.journal_lines_check_balanced_entries(p_entry_ids uuid[]) RETURNS void
     LANGUAGE plpgsql
     AS $$

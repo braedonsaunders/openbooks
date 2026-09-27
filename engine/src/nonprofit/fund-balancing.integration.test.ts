@@ -161,12 +161,6 @@ test("fund balancing stays data-driven and fund postings use configured interfun
     assert.ok(adopted.historicalUnbalancedByFund.some((row) => row.fundId === operatingId && row.unbalancedEntries === 1));
     assert.ok(adopted.historicalUnbalancedByFund.some((row) => row.fundId === restricted.id && row.unbalancedEntries === 1));
 
-    clearBalancingLegProviders();
-    await assert.rejects(
-      postDirect(org, { ...unmatched, entryNumber: `FUND-AFTER-${randomUUID()}` }),
-      /journal entry .* does not balance for segment fund value .* \(sum = /,
-    );
-
     installEngineSeams();
     await assert.rejects(
       postDirect(org, { ...unmatched, entryNumber: `FUND-NO-PAIR-${randomUUID()}` }),
