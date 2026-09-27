@@ -206,6 +206,12 @@ function stripSqlComments(source: string): string {
 }
 
 /**
+ * Migrations add columns idempotently (`ADD COLUMN IF NOT EXISTS`), and the
+ * guarded form creates the column exactly as the bare form does.
+ */
+const ADD_COLUMN = "add\\s+(?:column\\s+)?(?:if\\s+not\\s+exists\\s+)?";
+
+/**
  * True when an earlier PENDING migration creates the object a deferred
  * preflight tripped over, so the preflight runs at apply time instead.
  * Anything else (a genuinely absent object) is a real error, never a
@@ -236,7 +242,7 @@ export function earlierPendingCreatesObject(
     );
     const columnPattern = column
       ? new RegExp(
-          `alter\\s+table\\b[^;]*?\\b${escapeRegExp(table)}\\b[^;]*?\\badd\\s+(?:column\\s+)?${escapeRegExp(column)}\\b`,
+          `alter\\s+table\\b[^;]*?\\b${escapeRegExp(table)}\\b[^;]*?\\b${ADD_COLUMN}${escapeRegExp(column)}\\b`,
           "is",
         )
       : null;
@@ -257,7 +263,7 @@ export function earlierPendingCreatesObject(
     const code = stripSqlComments(content);
     return [...candidates].some((candidate) =>
       new RegExp(
-        `alter\\s+table\\b[^;]*?\\b${escapeRegExp(candidate)}\\b[^;]*?\\badd\\s+(?:column\\s+)?${escapeRegExp(aliasedColumnName)}\\b`,
+        `alter\\s+table\\b[^;]*?\\b${escapeRegExp(candidate)}\\b[^;]*?\\b${ADD_COLUMN}${escapeRegExp(aliasedColumnName)}\\b`,
         "is",
       ).test(code),
     );
