@@ -22,7 +22,8 @@
     "revenueRecognition": "Umsatzrealisierung",
     "fxSettlement": "Währungsausgleich",
     "translation": "Umrechnung",
-    "migration": "Migration"
+    "migration": "Migration",
+    "manufacturing": "Fertigung"
   },
   "detail": {
     "notFound": "Buchung nicht gefunden",

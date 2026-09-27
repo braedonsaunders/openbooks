@@ -50,6 +50,10 @@
       "title": "Projekte & Abrechnung",
       "description": "Projektarten, Rentabilität, Rechnungsstellung und Rechnungsbelege."
     },
+    "manufacturing": {
+      "title": "Fertigung",
+      "description": "Fertigungskonzepte, Produktionsstammdaten und der Kostenfluss von Rohmaterialien über unfertige Erzeugnisse bis zu Fertigwaren."
+    },
     "reporting": {
       "title": "Berichte & Analysen",
       "description": "Abschlüsse, Kontodetails, Dashboards, Analysen und wiederverwendbare Ansichten."

@@ -22,7 +22,8 @@
     "revenueRecognition": "Revenue recognition",
     "fxSettlement": "FX settlement",
     "translation": "Translation",
-    "migration": "Migration"
+    "migration": "Migration",
+    "manufacturing": "Manufacturing"
   },
   "detail": {
     "notFound": "Entry not found",

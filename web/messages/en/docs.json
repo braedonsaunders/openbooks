@@ -50,6 +50,10 @@
       "title": "Projects & Billing",
       "description": "Project types, profitability, invoicing, and invoice backup."
     },
+    "manufacturing": {
+      "title": "Manufacturing",
+      "description": "Manufacturing concepts, production masters, and the flow of costs from raw materials through work in process to finished goods."
+    },
     "reporting": {
       "title": "Reporting & Analytics",
       "description": "Financial statements, ledger detail, dashboards, analytics, and reusable views."

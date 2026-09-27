@@ -22,7 +22,8 @@
     "revenueRecognition": "Reconocimiento de ingresos",
     "fxSettlement": "Liquidación de divisas",
     "translation": "Conversión de moneda",
-    "migration": "Migración"
+    "migration": "Migración",
+    "manufacturing": "Fabricación"
   },
   "detail": {
     "notFound": "Asiento no encontrado",

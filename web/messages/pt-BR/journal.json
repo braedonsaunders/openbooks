@@ -22,7 +22,8 @@
     "revenueRecognition": "Reconhecimento de receita",
     "fxSettlement": "Liquidação cambial",
     "migration": "Migração",
-    "translation": "Conversão"
+    "translation": "Conversão",
+    "manufacturing": "Manufatura"
   },
   "detail": {
     "notFound": "Lançamento não encontrado",
