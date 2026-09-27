@@ -39,8 +39,8 @@ export const POST = defineRoute({
   feature: "hrmSurveys",
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {
-    const params = new URL(req.url).searchParams;
-    const action = params.get("action") ?? "open";
+    const searchParams = new URL(req.url).searchParams;
+    const action = searchParams.get("action") ?? "open";
     try {
       const { id } = params;
       if (action === "close") {
