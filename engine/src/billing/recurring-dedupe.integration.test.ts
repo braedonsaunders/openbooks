@@ -163,8 +163,8 @@ test(
       // for the same occurrence date; the schedule row lock serializes them and
       // the loser replays the winner's committed guard row.
       const [a, b] = await Promise.all([
-        runScheduleNow(scheduleId, actorId, org.date),
-        runScheduleNow(scheduleId, actorId, org.date),
+        runScheduleNow(org.orgId, scheduleId, actorId, org.date),
+        runScheduleNow(org.orgId, scheduleId, actorId, org.date),
       ]);
       assert.equal(a.documentId, b.documentId, "both callers observe the same document");
       assert.equal(await postedInvoiceCount(org.orgId), 1);
@@ -246,7 +246,7 @@ test(
       const currentActor = await createScratchUser(org.orgId, "Current actor", "admin");
       const scheduleId = await seedInvoiceSchedule(org, historicalAuthor);
 
-      const run = await runScheduleNow(scheduleId, currentActor, org.date);
+      const run = await runScheduleNow(org.orgId, scheduleId, currentActor, org.date);
       assert.equal(run.posted, true);
       const provenance = (await db.execute<{
         documentCreatedBy: string | null;

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { moneyRefusal } from "../money/decimal-refusal.ts";
-import { db, orgContext, withBypass, withOrg, type SqlExecutor } from "../platform/db.ts";
+import { db, orgContext, withBypass, withOrg, withOrgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { addCalendarDays, businessToday, calendarDaysBetween } from "../platform/business-date.ts";
 import { now } from "../platform/clock.ts";
@@ -776,7 +776,7 @@ export interface SubscriptionRunResult {
  */
 async function recordSubscriptionTickFailure(orgId: string, subscriptionId: string, message: string): Promise<void> {
   try {
-    await withBypass(async () => db.execute(sql`
+    await withOrgTransaction(orgId, async () => db.execute(sql`
       update subscriptions set last_error = ${message} where id = ${subscriptionId} and org_id = ${orgId}
     `));
   } catch (recordError) {
@@ -877,7 +877,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
       advanced = advanceSubscription(row.nextBillOn, row.interval, row.intervalCount, row.anchorDay);
       const canBill = await prepareAdvancedSubscriptionBilling(row.orgId, row.id, row.nextBillOn);
       if (!canBill) {
-        await withBypass(async () => db.execute(sql`
+        await withOrgTransaction(row.orgId, async () => db.execute(sql`
           update subscriptions set last_error = 'Contract term ended — renewal required' where id = ${row.id} and org_id = ${row.orgId}
         `));
         continue;
@@ -938,7 +938,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
     // after a posted invoice is precisely how a tick used to double-bill.
     // Surface through last_error instead; the claim stays advanced.
     try {
-      await withBypass(async () => {
+      await withOrgTransaction(row.orgId, async () => {
         await db.execute(sql`
           update subscriptions set run_count = run_count + 1, last_invoice_id = ${gen.invoiceId}, last_error = null
            where id = ${row.id} and org_id = ${row.orgId}
@@ -947,7 +947,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       console.error(`[subscriptions] success bookkeeping failed for subscription ${row.id}:`, message);
-      await withBypass(async () => {
+      await withOrgTransaction(row.orgId, async () => {
         await db.execute(sql`
           update subscriptions set last_error = ${`invoiced ${gen.documentNumber} but bookkeeping failed: ${message}`}
            where id = ${row.id} and org_id = ${row.orgId}
@@ -965,6 +965,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
  * (system provenance) — a subscription id is never accepted as an actor.
  */
 export async function billSubscriptionNow(
+  orgId: string,
   subscriptionId: string,
   asOf: string | undefined,
   actor: SubscriptionBillingActorOptions | undefined,
@@ -974,19 +975,18 @@ export async function billSubscriptionNow(
   // Both flags use the registry fallback shape (non-boolean stored values
   // fall back to the default instead of throwing 22P02); the conjunction is
   // the advancedSubscriptions requiresAll ['subscriptionBilling'] chain.
-  const meta = await withBypass(async () =>
-    (await db.execute<{ orgId: string; advancedLifecycle: boolean; advancedEnabled: boolean }>(sql`
-      select s.org_id as "orgId", l.id is not null as "advancedLifecycle",
+  const meta = await withOrgContext(orgId, async () =>
+    (await db.execute<{ advancedLifecycle: boolean; advancedEnabled: boolean }>(sql`
+      select l.id is not null as "advancedLifecycle",
              (case (o.settings->'features'->>'advancedSubscriptions') when 'true' then true when 'false' then false else false end
               and case (o.settings->'features'->>'subscriptionBilling') when 'true' then true when 'false' then false else false end) as "advancedEnabled"
         from subscriptions s join orgs o on o.id = s.org_id
         left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
-       where s.id = ${subscriptionId}
+       where s.id = ${subscriptionId} and s.org_id = ${orgId}
     `)),
   );
-  const orgId = meta.rows[0]?.orgId;
-  if (!orgId) throw new SubscriptionError("subscription not found");
-  if (meta.rows[0]!.advancedLifecycle && !meta.rows[0]!.advancedEnabled) throw new SubscriptionError("advanced subscription lifecycle is disabled");
+  if (!meta.rows[0]) throw new SubscriptionError("subscription not found");
+  if (meta.rows[0].advancedLifecycle && !meta.rows[0].advancedEnabled) throw new SubscriptionError("advanced subscription lifecycle is disabled");
   const today = asOf ?? (await businessToday(orgId));
   const gen = await withOrg(orgId, async () => {
     await lockSubscriptionCustomerForScope(db, orgId, subscriptionId, allowedSubsidiaryIds);
@@ -995,7 +995,7 @@ export async function billSubscriptionNow(
     if (!s) throw new SubscriptionError("subscription not found");
     return billOne(s, today, s.nextBillOn, s.currentPeriodStart, { actorId, source: "bill_now" });
   });
-  await withBypass(async () => {
+  await withOrgTransaction(orgId, async () => {
     await db.execute(sql`
       update subscriptions set run_count = run_count + 1, last_invoice_id = ${gen.invoiceId},
              last_billed_at = now(), last_error = null
@@ -1014,14 +1014,12 @@ type SubDetail = SubRow & {
   runCount: number;
 };
 
-/** Resolve the owning org — the tenant must be known before any scoped read. */
-async function loadSubOrgId(subscriptionId: string): Promise<string> {
-  const meta = await withBypass(async () =>
-    (await db.execute<{ orgId: string }>(sql`select org_id as "orgId" from subscriptions where id = ${subscriptionId}`)),
+/** Refuse a subscription id the caller's organization does not own. */
+async function requireSubscriptionInOrg(orgId: string, subscriptionId: string): Promise<void> {
+  const meta = await withOrgContext(orgId, async () =>
+    (await db.execute<{ id: string }>(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`)),
   );
-  const orgId = meta.rows[0]?.orgId;
-  if (!orgId) throw new SubscriptionError("subscription not found");
-  return orgId;
+  if (!meta.rows[0]) throw new SubscriptionError("subscription not found");
 }
 
 /**
@@ -1071,6 +1069,7 @@ async function loadSubRow(subscriptionId: string, orgId: string): Promise<SubDet
  * engine-initiated system provenance) — never to the subscription itself.
  */
 export async function changeSubscription(
+  orgId: string,
   subscriptionId: string,
   changes: { quantity?: string; priceOverride?: string | null },
   asOf: string | undefined,
@@ -1078,7 +1077,7 @@ export async function changeSubscription(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<{ invoiceId: string | null; documentNumber: string | null; adjustment: string }> {
   const actorId = actor?.actorId ?? null;
-  const orgId = await loadSubOrgId(subscriptionId);
+  await requireSubscriptionInOrg(orgId, subscriptionId);
   const today = asOf ?? (await businessToday(orgId));
   // Serialize the whole change (read → proration → invoice → subscription
   // update) on the subscription row lock, the same way billOne serializes
@@ -1161,13 +1160,14 @@ export async function changeSubscription(
  * engine-initiated system provenance) — never to the subscription itself.
  */
 export async function prorateFirstInvoice(
+  orgId: string,
   subscriptionId: string,
   firstBillOn: string,
   asOf?: string,
   actor?: SubscriptionBillingActorOptions,
 ): Promise<{ invoiceId: string; documentNumber: string; posted: boolean; amount: string }> {
   const actorId = actor?.actorId ?? null;
-  const orgId = await loadSubOrgId(subscriptionId);
+  await requireSubscriptionInOrg(orgId, subscriptionId);
   const today = asOf ?? (await businessToday(orgId));
   // Same single-transaction row lock as changeSubscription: a double-click
   // must not cut two prorated first invoices from the same pre-bill state.

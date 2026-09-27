@@ -274,7 +274,7 @@ export async function tick(): Promise<void> {
         // One statement is the atomic boundary: if the ledger insert fails
         // (including because a manual run is already in flight), PostgreSQL
         // also rolls back the policy advance. A later tick can retry it.
-        run = await withBypassContext(() =>
+        run = await withOrgContext(policy.org_id, () =>
           db.execute<{ id: string }>(sql`
           with claimed as (
             update backup_policies

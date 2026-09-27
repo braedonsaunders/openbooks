@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { enqueueSandboxOp } from "@openbooks/jobs";
-import { db, longPool, withBypassContext } from "../platform/db.ts";
+import { db, longPool, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { REFRESH_CLONE_PROOF_PREFIX, sandboxRefreshLockKey } from "../sandbox/lifecycle.ts";
 
 /**
@@ -100,8 +100,9 @@ export async function releaseStaleSandboxClaims(
 ): Promise<number> {
   // bypass: scheduler-tick — stale refresh claims are found across every organization.
   const stale = (await withBypassContext(() =>
-    db.execute<{ id: string; orgId: string; cadence: string | null; lastError: string | null }>(sql`
-      select id, org_id as "orgId", refresh_schedule as "cadence", last_error as "lastError"
+    db.execute<{ id: string; orgId: string; productionOrgId: string; cadence: string | null; lastError: string | null }>(sql`
+      select id, org_id as "orgId", production_org_id as "productionOrgId",
+             refresh_schedule as "cadence", last_error as "lastError"
         from sandboxes
        where status = 'refreshing'
          and updated_at < now() - make_interval(secs => ${STALE_SANDBOX_CLAIM_MS / 1000})
@@ -118,10 +119,12 @@ export async function releaseStaleSandboxClaims(
       const message = proofExists
         ? "refresh lease expired: worker stopped during clone verification; rerun refresh or delete this sandbox"
         : "refresh worker never started: stale scheduler claim released for re-queue";
-      const done = await withBypassContext(() => db.execute(sql`
+      // A sandbox row is written from its production organization's scope.
+      const done = await withOrgContext(row.productionOrgId, () => db.execute(sql`
         update sandboxes set status = ${proofExists ? "failed" : "ready"},
                last_error = ${message}, updated_at = now()
-         where id = ${row.id} and org_id = ${row.orgId} and status = 'refreshing'
+         where id = ${row.id} and org_id = ${row.orgId} and production_org_id = ${row.productionOrgId}
+           and status = 'refreshing'
            and last_error is not distinct from ${row.lastError}
            and updated_at < now() - make_interval(secs => ${STALE_SANDBOX_CLAIM_MS / 1000})
       `));
@@ -152,11 +155,13 @@ export async function tick(
       db.execute<{
         id: string;
         orgId: string;
+        productionOrgId: string;
         cadence: string;
         keep: boolean | null;
         ageSec: string;
       }>(sql`
-      select id, org_id as "orgId", refresh_schedule as "cadence", refresh_keep_customizations as "keep",
+      select id, org_id as "orgId", production_org_id as "productionOrgId",
+             refresh_schedule as "cadence", refresh_keep_customizations as "keep",
              extract(epoch from (now() - coalesce(last_refresh_at, created_at))) as "ageSec"
         from sandboxes
        where status = 'ready' and refresh_schedule is not null
@@ -166,10 +171,12 @@ export async function tick(
       const window = CADENCE_MS[s.cadence];
       if (!window || Number(s.ageSec) * 1000 < window) continue;
       // Claim: flip ready→refreshing so only one scanner fires it.
-      const claimed = (await withBypassContext(() =>
+      // A sandbox row is written from its production organization's scope.
+      const claimed = (await withOrgContext(s.productionOrgId, () =>
         db.execute(sql`
         update sandboxes set status = 'refreshing'
-         where id = ${s.id} and org_id = ${s.orgId} and status = 'ready'`)));
+         where id = ${s.id} and org_id = ${s.orgId} and production_org_id = ${s.productionOrgId}
+           and status = 'ready'`)));
       if (!claimed.rowCount) continue;
       try {
         // Hand back to 'ready' is done by the refresh op; enqueue it.
@@ -184,10 +191,11 @@ export async function tick(
         // in-flight guard the same way when its enqueue fails). The next tick
         // retries with the same deterministic jobId.
         const message = ((e as Error).message || String(e)).slice(0, 2000);
-        await withBypassContext(() =>
+        await withOrgContext(s.productionOrgId, () =>
           db.execute(sql`
           update sandboxes set status = 'ready', last_error = ${message}, updated_at = now()
-           where id = ${s.id} and org_id = ${s.orgId} and status = 'refreshing'`));
+           where id = ${s.id} and org_id = ${s.orgId} and production_org_id = ${s.productionOrgId}
+             and status = 'refreshing'`));
         console.error(`[sandbox-scheduler] enqueue failed for sandbox ${s.id}; claim released:`, message);
       }
     }

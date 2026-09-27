@@ -137,8 +137,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   try {
     const existing = await db.transaction(tx => ownedEnabled(tx, authz, id));
     if (!existing) return notFound("record");
-    const gen = await runScheduleNow(id, authz.user.id, undefined, {
-      orgId: authz.user.orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds, canPost: can(authz, "gl.post"),
+    const gen = await runScheduleNow(authz.user.orgId, id, authz.user.id, undefined, {
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds, canPost: can(authz, "gl.post"),
     });
     return NextResponse.json(gen);
   } catch (e) {

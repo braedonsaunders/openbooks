@@ -312,7 +312,7 @@ export async function reapStaleSyncRuns(): Promise<number> {
   let reaped = 0;
   for (const run of stale.rows) {
     if (run.connectionId && activeConnections.has(run.connectionId)) continue;
-    const changed = await withBypassContext(() => db.transaction(async (tx) => {
+    const changed = await withOrgContext(run.orgId, () => db.transaction(async (tx) => {
       if (run.connectionId) {
         await tx.execute(sql`
           select pg_advisory_xact_lock(

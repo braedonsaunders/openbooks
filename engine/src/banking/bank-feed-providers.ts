@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrg, type SqlExecutor } from "../platform/db.ts";
+import { db, withBypass, withOrg, withOrgContext, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import {
   importStatement,
   requireBankAccountInScope,
@@ -464,7 +464,7 @@ export async function testBankFeedConnection(
   ctx: { orgId: string },
   credentialSnapshot?: string | null,
 ): Promise<{ ok: boolean; detail?: string }> {
-  const row = await withBypass(async () =>
+  const row = await withOrgContext(ctx.orgId, async () =>
     (await db.execute<{ orgId: string; provider: string; credentials: string | null }>(sql`
       select c.org_id as "orgId", c.provider, c.credentials
         from bank_feed_connections c
@@ -476,9 +476,6 @@ export async function testBankFeedConnection(
   );
   const conn = row.rows[0];
   if (!conn) return { ok: false, detail: "connection not found" };
-  // Defense-in-depth: withBypass skips RLS, so re-prove tenancy on the loaded
-  // row before unsealing anything.
-  if (conn.orgId !== ctx.orgId) throw new Error("bank feed connection belongs to another organization");
   const adapter = getBankFeedAdapter(conn.provider);
   if (!adapter) return { ok: false, detail: "provider is not an API feed" };
   const sealedCredentials = credentialSnapshot === undefined ? conn.credentials : credentialSnapshot;
@@ -653,7 +650,7 @@ async function recordSyncOutcome(
   outcome: FeedSyncOutcome,
 ): Promise<boolean> {
   const lastResult = JSON.stringify({ imported: outcome.imported, duplicates: outcome.duplicates });
-  return withBypass(async () => {
+  return withOrgTransaction(connection.orgId, async () => {
     const result = await db.execute(outcome.error
       ? sql`
         update bank_feed_connections
@@ -727,7 +724,7 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
     // The scan is only a candidate list. Claim the row only if its complete
     // configuration revision and eligibility are still current, and sync
     // exclusively from the values returned by that successful claim.
-    const claimed = await withBypass(async () =>
+    const claimed = await withOrgTransaction(row.orgId, async () =>
       (await db.execute<{
         id: string;
         orgId: string;
@@ -783,7 +780,7 @@ export async function syncBankFeedNow(
   connectionId: string,
   ctx: { orgId: string; userId: string; allowedSubsidiaryIds: ReadonlySet<string> | null },
 ): Promise<FeedSyncOutcome> {
-  const row = await withBypass(async () =>
+  const row = await withOrgContext(ctx.orgId, async () =>
     (await db.execute<{
         id: string;
         orgId: string;
@@ -808,9 +805,6 @@ export async function syncBankFeedNow(
   );
   const conn = row.rows[0];
   if (!conn) throw new FeedError("connection not found");
-  // Defense-in-depth: withBypass skips RLS, so re-prove tenancy on the loaded
-  // row before escalating into it via withOrg in syncOne.
-  if (conn.orgId !== ctx.orgId) throw new Error("bank feed connection belongs to another organization");
   // The route gates the connection's account before calling, and the engine
   // re-proves it here on the freshly loaded row: a sync filing another
   // entity's statements refuses before any network or statement write, and

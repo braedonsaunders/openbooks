@@ -43,13 +43,13 @@ for (const scenario of ["customer_invoice", "tax code", "rate change", "inactive
       if (scenario === "restricted journal") {
         await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({ mode: "list", subsidiaryIds: [org.subsidiaryId] })}::jsonb
           where org_id=${org.orgId} and key='recurring_operator'`);
-        await assert.rejects(() => runScheduleNow(schedule, actor, org.date), { status: 404 });
+        await assert.rejects(() => runScheduleNow(org.orgId, schedule, actor, org.date), { status: 404 });
         assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from documents where org_id=${org.orgId}`)).rows[0]!.count, 1);
         return;
       }
       if (scenario === "inactive member") {
         await db.execute(sql`update tax_codes set is_active=false where id=${taxCode}`);
-        await assert.rejects(() => runScheduleNow(schedule, actor, org.date), /inactive or missing code/);
+        await assert.rejects(() => runScheduleNow(org.orgId, schedule, actor, org.date), /inactive or missing code/);
         assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from documents where org_id=${org.orgId}`)).rows[0]!.count, 1);
         return;
       }
@@ -57,7 +57,7 @@ for (const scenario of ["customer_invoice", "tax code", "rate change", "inactive
         await db.execute(sql`update tax_rates set effective_to='2026-07-14' where tax_code_id=${taxCode}`);
         await db.execute(sql`insert into tax_rates (org_id,tax_code_id,rate_percent,effective_from) values (${org.orgId},${taxCode},'15',${org.date})`);
       }
-      const generated = await runScheduleNow(schedule, actor, org.date);
+      const generated = await runScheduleNow(org.orgId, schedule, actor, org.date);
       const source = (await db.execute(sql`select tax_code_id,tax_group_id,tax_input_amount,tax_amount,tax_overridden,subsidiary_id,extra_dims
         from document_lines where document_id=${template} and line_number=1`)).rows[0];
       const cloned = (await db.execute(sql`select tax_code_id,tax_group_id,tax_input_amount,tax_amount,tax_overridden,subsidiary_id,extra_dims

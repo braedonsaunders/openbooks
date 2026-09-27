@@ -128,7 +128,7 @@ function asDbDate(value: Date | string): Date {
  */
 export async function appendOccurrenceEvents(id: string, orgId: string, events: OccurrenceEvent[]): Promise<boolean> {
   if (events.length === 0) return true;
-  const appended = await withBypassContext(() =>
+  const appended = await withOrgContext(orgId, () =>
     db.execute(sql`
       update script_runs
          set logs = logs || ${JSON.stringify(events)}::jsonb
@@ -185,7 +185,7 @@ export async function claimDueScriptOccurrence(s: DueScript, now = new Date()): 
     // No occurrence is claimed and no source is dispatched. The CAS inside
     // quarantineInvalidScheduledScript means a concurrent admin repair wins
     // cleanly instead of being overwritten by this stale scan result.
-    await withBypassContext(() =>
+    await withOrgContext(s.orgId, () =>
       quarantineInvalidScheduledScript({
         id: s.id,
         orgId: s.orgId,
@@ -206,7 +206,7 @@ export async function claimDueScriptOccurrence(s: DueScript, now = new Date()): 
   }
   const occurrenceKey = scriptOccurrenceKey(s.id, s.nextRunAt);
   const scheduledForIso = asDbDate(s.nextRunAt).toISOString();
-  const claimed = await withBypassContext(() =>
+  const claimed = await withOrgContext(s.orgId, () =>
     db.execute<{ id: string }>(sql`
       with advanced as (
         update user_scripts
@@ -498,12 +498,12 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
        limit ${RECOVERY_BATCH}
     `));
   for (const row of stale.rows) {
-    const transitioned = await withBypassContext(() =>
+    const transitioned = await withOrgContext(row.orgId, () =>
       db.execute(sql`
         update script_runs
            set status = 'dispatch_retry',
                logs = logs || ${JSON.stringify([{ event: "recover", attempt: MAX_OCCURRENCE_ATTEMPTS }])}::jsonb
-         where id = ${row.id} and status = 'queued'
+         where id = ${row.id} and org_id = ${row.orgId} and status = 'queued'
       `));
     if (!transitioned.rowCount) continue; // evidence landed concurrently
     const claimedEvent = (Array.isArray(row.logs) ? row.logs : []).find(
