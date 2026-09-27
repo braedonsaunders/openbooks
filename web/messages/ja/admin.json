@@ -753,6 +753,20 @@
       },
       "learnMore": "詳細はこちら。"
     },
+    "saasMetrics": {
+      "title": "SaaS 指標",
+      "description": "定義を変更すると各月の入力値が変わります。締め済み月を再計算するには再開するか、記録済みの事実を凍結したままにしてください。",
+      "evergreenBookingMonths": {
+        "label": "無期限契約の計上期間（月）",
+        "hint": "サブスクリプションに明示的な更新期間がない場合の計上額を計算します。"
+      },
+      "billingsUsePreTaxSubtotal": {
+        "label": "税引前の請求小計を請求額の計算に使用"
+      },
+      "customerCreditsReduceBillings": {
+        "label": "顧客クレジットを請求額から差し引く"
+      }
+    },
     "approvals": {
       "title": "承認",
       "description": "請求書（仕入）の送信後にリリースされるタイミングを管理します。",
@@ -923,6 +937,8 @@
     "ar_post": "請求書を元帳に記帳",
     "ar_pay": "入金を記録",
     "usage_read": "計測された利用量を表示",
+    "usage_manage": "使用量メーター、料金プラン、インポートした使用量レコードを管理",
+    "usage_bill": "使用量を料金計算し、サブスクリプション料金を請求",
     "reports_read": "レポートを表示",
     "reports_create": "レポートを作成および保存",
     "reports_schedule": "レポート配信をスケジュール",
@@ -2422,6 +2438,8 @@
       "saveFailed": "構成を保存できませんでした。"
     },
     "entities": {
+      "usage-meters": { "title": "使用量メーター", "singular": "使用量メーター", "description": "請求対象の使用量を収集する単位と集計方法を定義します。" },
+      "usage-rating-plans": { "title": "使用量料金プラン", "singular": "使用量料金プラン", "description": "使用量料金プランの通貨とライフサイクルを設定します。" },
       "warehouses": {
         "title": "倉庫",
         "singular": "倉庫",
@@ -2986,6 +3004,7 @@
       }
     },
     "fields": {
+      "aggregation": "集計方法",
       "addressLine1": "住所 1",
       "addressLine2": "住所 2",
       "city": "市区町村",
@@ -3397,6 +3416,7 @@
       "reviewMonths": "レビュー周期（月）"
     },
     "fieldHelp": {
+      "usageAggregation": "unique_count は各レコードの distinct key の異なる値を数えます。",
       "putawayItem": "空欄にするとすべての品目に適用されます。",
       "putawayCapacity": "格納先に置ける品目の上限数量。バルクゾーンでは必須です。固定棚で空欄にすると上限なしになります。",
       "carrierServices": "この配送業者が提供するサービス区分（例：通常便、翌日配達）。出荷ごとにいずれか1つを選択します。",
@@ -3503,6 +3523,17 @@
       "aiRailsReviewMonths": "レビュー周期（月、1〜36）。期限切れはsetupの受信箱に通知。"
     },
     "options": {
+      "usageAggregation": {
+        "sum": "合計",
+        "count": "件数",
+        "max": "最大値",
+        "last": "最後の値",
+        "uniqueCount": "異なる値"
+      },
+      "usageRatingPlanStatus": {
+        "active": "有効",
+        "retired": "廃止"
+      },
       "warehouseStatus": {
         "draft": "下書き",
         "active": "稼働中",

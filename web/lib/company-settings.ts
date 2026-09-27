@@ -119,6 +119,7 @@ export async function updateCompanySettings(
     timeZone?: unknown;
     reportPdfStyle?: unknown;
     fairValueRangePolicy?: unknown;
+    saasMetrics?: unknown;
     requireVendorBillApproval?: unknown;
     requireStockCountReview?: unknown;
   };
@@ -130,6 +131,9 @@ export async function updateCompanySettings(
     body.fairValueRangePolicy !== undefined &&
     !(await isFeatureEnabled(orgId, "revenueRecognition"))
   ) {
+    return { status: 404, body: { error: "not_found" } };
+  }
+  if (body.saasMetrics !== undefined && !(await isFeatureEnabled(orgId, "saasMetrics"))) {
     return { status: 404, body: { error: "not_found" } };
   }
 
@@ -459,6 +463,44 @@ export async function updateCompanySettings(
           fairValueRangePolicy: body.fairValueRangePolicy,
         };
         changes.fairValueRangePolicy = [curPolicy, body.fairValueRangePolicy];
+        settingsChanged = true;
+      }
+    }
+    if (body.saasMetrics !== undefined) {
+      const candidate = body.saasMetrics;
+      if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) {
+        return { status: 400, body: { error: "saasMetrics must be an object" } };
+      }
+      const supplied = candidate as Record<string, unknown>;
+      const evergreenBookingMonths = supplied.evergreenBookingMonths;
+      const billingsUsePreTaxSubtotal = supplied.billingsUsePreTaxSubtotal;
+      const customerCreditsReduceBillings = supplied.customerCreditsReduceBillings;
+      if (typeof evergreenBookingMonths !== "string" || !/^[1-9]\d*$/.test(evergreenBookingMonths)) {
+        return { status: 400, body: { error: "evergreenBookingMonths must be a positive whole number of months" } };
+      }
+      if (typeof billingsUsePreTaxSubtotal !== "boolean") {
+        return { status: 400, body: { error: "billingsUsePreTaxSubtotal must be a boolean" } };
+      }
+      if (typeof customerCreditsReduceBillings !== "boolean") {
+        return { status: 400, body: { error: "customerCreditsReduceBillings must be a boolean" } };
+      }
+      const currentValue = settings.saasMetrics;
+      const current = currentValue !== null && typeof currentValue === "object" && !Array.isArray(currentValue)
+        ? currentValue as Record<string, unknown>
+        : {};
+      const before = {
+        evergreenBookingMonths: current.evergreenBookingMonths ?? "12",
+        billingsUsePreTaxSubtotal: current.billingsUsePreTaxSubtotal ?? true,
+        customerCreditsReduceBillings: current.customerCreditsReduceBillings ?? true,
+      };
+      const next = {
+        evergreenBookingMonths,
+        billingsUsePreTaxSubtotal,
+        customerCreditsReduceBillings,
+      };
+      if (JSON.stringify(before) !== JSON.stringify(next)) {
+        nextSettings.saasMetrics = next;
+        changes.saasMetrics = [before, next];
         settingsChanged = true;
       }
     }

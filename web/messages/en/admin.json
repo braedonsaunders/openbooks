@@ -753,6 +753,20 @@
       },
       "learnMore": "Learn more."
     },
+    "saasMetrics": {
+      "title": "SaaS metrics",
+      "description": "Changing these definitions changes each month's inputs; reopen a closed month to recompute it, or leave its recorded facts frozen.",
+      "evergreenBookingMonths": {
+        "label": "Evergreen booking term (months)",
+        "hint": "Used to calculate bookings when a subscription has no explicit renewal term."
+      },
+      "billingsUsePreTaxSubtotal": {
+        "label": "Calculate billings from the invoice subtotal before tax"
+      },
+      "customerCreditsReduceBillings": {
+        "label": "Reduce billings by customer credits"
+      }
+    },
     "approvals": {
       "title": "Approvals",
       "description": "Control when vendor bills release after submit.",
@@ -912,6 +926,8 @@
     "ar_post": "Post invoices to the ledger",
     "ar_pay": "Record customer payments",
     "usage_read": "View metered usage",
+    "usage_manage": "Manage usage meters, rating plans, and imported usage records",
+    "usage_bill": "Rate usage and bill subscription charges",
     "reports_read": "View reports",
     "reports_create": "Create and save reports",
     "reports_schedule": "Schedule report delivery",
@@ -2350,6 +2366,8 @@
       "saveFailed": "Could not save the configuration."
     },
     "entities": {
+      "usage-meters": { "title": "Usage meters", "singular": "Usage meter", "description": "Define the units and aggregation used to collect billable usage." },
+      "usage-rating-plans": { "title": "Usage rating plans", "singular": "Usage rating plan", "description": "Configure the currency and lifecycle of usage rating plans." },
       "warehouses": {
         "title": "Warehouses",
         "singular": "Warehouse",
@@ -2914,6 +2932,7 @@
       }
     },
     "fields": {
+      "aggregation": "Aggregation",
       "addressLine1": "Address line 1",
       "addressLine2": "Address line 2",
       "city": "City",
@@ -3325,6 +3344,7 @@
       "reviewMonths": "Review cadence (months)"
     },
     "fieldHelp": {
+      "usageAggregation": "unique_count counts distinct values of each record's distinct key.",
       "putawayItem": "Leave blank to apply the rule to every item.",
       "putawayCapacity": "The most the target may hold of the item. Required for a bulk zone; leave blank on a fixed bin for no limit.",
       "carrierServices": "The service levels this carrier offers, such as Ground or Overnight. A shipment chooses one of them.",
@@ -3431,6 +3451,17 @@
       "aiRailsReviewMonths": "Ledger review cadence in months (1–36); overdue capabilities nudge the setup admins' inbox."
     },
     "options": {
+      "usageAggregation": {
+        "sum": "Sum",
+        "count": "Count",
+        "max": "Maximum",
+        "last": "Last value",
+        "uniqueCount": "Distinct values"
+      },
+      "usageRatingPlanStatus": {
+        "active": "Active",
+        "retired": "Retired"
+      },
       "warehouseStatus": {
         "draft": "Draft",
         "active": "Active",

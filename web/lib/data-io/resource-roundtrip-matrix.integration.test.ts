@@ -25,12 +25,13 @@ const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
 async function matrixOrg(): Promise<string> {
   const o = await withBypassContext(() => createScratchOrg())
-  await withBypassContext(() => db.execute(sql`
+  await withOrgContext(o.orgId, () => db.execute(sql`
     update orgs set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('features', jsonb_build_object(
       'payroll', true, 'propertyManagement', true, 'expenses', true,
       'multiCurrency', true, 'inventory', true, 'equipment', true,
       'fixedAssets', true, 'projects', true, 'projectBilling', true,
-      'revenueRecognition', true, 'timeTracking', true, 'multiSubsidiary', true
+      'revenueRecognition', true, 'timeTracking', true, 'multiSubsidiary', true,
+      'subscriptionBilling', true, 'usageBilling', true, 'saasMetrics', true
     )) where id = ${o.orgId}`))
   return o.orgId
 }

@@ -25,6 +25,14 @@ import {
   payrollEmployerLevyOpeningsResource,
 } from './payroll-employer-levy-openings-resource'
 import {
+  SAAS_METRICS_FACTS_DESCRIPTOR,
+  SAAS_METRICS_FACTS_KEY,
+  USAGE_RECORDS_DESCRIPTOR,
+  USAGE_RECORDS_KEY,
+  saasMetricsFactsResource,
+  usageRecordsResource,
+} from './usage-resources'
+import {
   FIXED_ASSETS_DESCRIPTOR,
   FIXED_ASSETS_KEY,
   fixedAssetsResource,
@@ -231,7 +239,9 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
         PRIOR_PAYROLL_REGISTER_DESCRIPTOR,
       ]
     : []
-  return [...setup, ...master, ...fixedAssets, ...records, ...propertyManagement, ...payroll, ...transactions]
+  const usage = featureEnabled(features, 'usageBilling') ? [USAGE_RECORDS_DESCRIPTOR] : []
+  const saasMetrics = featureEnabled(features, 'saasMetrics') ? [SAAS_METRICS_FACTS_DESCRIPTOR] : []
+  return [...setup, ...master, ...fixedAssets, ...records, ...propertyManagement, ...payroll, ...usage, ...saasMetrics, ...transactions]
 }
 
 /** Resolve one resource bound to the org and (for export reads) its visibility scope. */
@@ -264,6 +274,14 @@ export async function getResource(
   if (key === FIXED_ASSETS_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'fixedAssets'))) return null
     return bindReadScope(fixedAssetsResource(orgId), orgId, allowedSubsidiaryIds)
+  }
+  if (key === USAGE_RECORDS_KEY) {
+    if (!(await orgFeatureEnabled(orgId, 'usageBilling'))) return null
+    return bindReadScope(usageRecordsResource(orgId), orgId, allowedSubsidiaryIds)
+  }
+  if (key === SAAS_METRICS_FACTS_KEY) {
+    if (!(await orgFeatureEnabled(orgId, 'saasMetrics'))) return null
+    return bindReadScope(saasMetricsFactsResource(orgId), orgId, allowedSubsidiaryIds)
   }
   const setup = SETUP_ENTITY_BY_KEY.get(key)
   if (setup) {

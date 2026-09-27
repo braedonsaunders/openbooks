@@ -38,6 +38,8 @@ export const PERMISSION_CATALOGUE = [
   "ar.pay",
   // Usage billing: see metered usage and the charges rated from it.
   "usage.read",
+  "usage.manage",
+  "usage.bill",
   // Customer relationship management
   "crm.accounts.read",
   "crm.accounts.create",
@@ -373,7 +375,11 @@ export const PERMISSION_GROUPS: {
   {
     key: "usage",
     labelKey: "permissions.groups.usage",
-    permissions: [{ key: "usage.read", labelKey: permissionLabelKey("usage.read") }],
+    permissions: [
+      { key: "usage.read", labelKey: permissionLabelKey("usage.read") },
+      { key: "usage.manage", labelKey: permissionLabelKey("usage.manage") },
+      { key: "usage.bill", labelKey: permissionLabelKey("usage.bill") },
+    ],
   },
   {
     key: "reports",
@@ -748,6 +754,8 @@ export const BUILT_IN_ROLES: Record<
       "ar.post",
       "ar.pay",
       "usage.read",
+      "usage.manage",
+      "usage.bill",
       "crm.accounts.read",
       "crm.accounts.create",
       "crm.accounts.manage",
@@ -861,6 +869,8 @@ export const BUILT_IN_ROLES: Record<
       "ar.post",
       "ar.pay",
       "usage.read",
+      "usage.manage",
+      "usage.bill",
       "reports.read",
       "reports.create",
       "budgets.read",
@@ -969,7 +979,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.activities.read", "crm.activities.manage",
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage", "crm.forecasts.override", "crm.setup.manage",
-      "parties.read", "parties.manage", "ar.read", "ar.create", "usage.read", "items.read", "reports.read",
+      "parties.read", "parties.manage", "ar.read", "ar.create", "usage.read", "usage.manage", "usage.bill", "items.read", "reports.read",
       "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",
@@ -986,7 +996,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.activities.read", "crm.activities.manage",
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage",
-      "parties.read", "parties.manage", "ar.read", "ar.create", "usage.read", "items.read", "reports.read",
+      "parties.read", "parties.manage", "ar.read", "ar.create", "usage.read", "usage.manage", "usage.bill", "items.read", "reports.read",
       "documents.read", "feedback.use", "data.export", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",
