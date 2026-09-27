@@ -103,16 +103,16 @@ export function defineRoute<
   B extends z.ZodType | undefined = undefined,
 >(
   options: TokenRouteOptions<P, B>,
-): (request: Request, context?: { params?: Promise<unknown> }) => Promise<Response>;
+): (request?: Request, context?: { params?: Promise<unknown> }) => Promise<Response>;
 export function defineRoute<
   P extends z.ZodType | undefined = undefined,
   B extends z.ZodType | undefined = undefined,
 >(
   options: SessionRouteOptions<P, B> | PermissionRouteOptions<P, B>,
-): (request: Request, context?: { params?: Promise<unknown> }) => Promise<Response>;
+): (request?: Request, context?: { params?: Promise<unknown> }) => Promise<Response>;
 export function defineRoute(options: LooseOptions) {
   return async (
-    request: Request,
+    request: Request = new Request("http://localhost"),
     context?: { params?: Promise<unknown> },
   ): Promise<Response> => {
     try {
