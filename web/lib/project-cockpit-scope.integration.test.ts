@@ -166,7 +166,7 @@ const projectSubcontractCases = [
         );
 
         const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
+        const { createScratchOrg, dropScratchOrg } = await import(
           "@openbooks/engine/src/testing/fixtures.ts"
         );
 
@@ -218,7 +218,7 @@ const { randomUUID } = await import("node:crypto");
 const test = (await import("node:test")).default;
 const { sql } = await import('drizzle-orm')
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { projectCostSummary } = await import('./project-costing.ts')
 
 test('project cost actuals and account detail stay in the primary book', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -256,7 +256,7 @@ const consolidatedRows = [
   { label: "project costing unbilled precision", register: async () => {
         const { sql } = await import('drizzle-orm')
         const { db } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { projectUnbilled } = await import('./project-costing.ts')
         
         test('project unbilled labor rounds fractional rate products to ledger precision', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -291,7 +291,7 @@ const { randomUUID } = await import("node:crypto");
 const test = (await import("node:test")).default;
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { rankProjects } = await import('./project-ranking')
 const { marginPercentText } = await import('./financial-decimal')
 
