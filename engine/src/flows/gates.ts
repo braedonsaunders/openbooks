@@ -226,6 +226,9 @@ async function gateSubjectSubsidiaryId(gate: Pick<GateRow, "subjectKind" | "subj
              when g.subject_kind = 'allocation_run' then (
                select ar.subsidiary_id from allocation_runs ar where ar.id=g.subject_id and ar.org_id=g.org_id
              )
+             when g.subject_kind = 'work_order' then (
+               select wo.subsidiary_id from mfg_work_orders wo where wo.id=g.subject_id and wo.org_id=g.org_id
+             )
              when g.subject_kind = 'party_bank_account' then (
                select p.subsidiary_id
                  from party_bank_accounts ba
@@ -1122,6 +1125,14 @@ async function resolveWorklistSubsidiaries(
           ? run.subsidiaryId
           : null;
     }
+  }
+  const workOrders = idsFor("work_order");
+  if (workOrders.length > 0) {
+    const result = await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
+      select id, subsidiary_id as "subsidiaryId" from mfg_work_orders where org_id = ${orgId}
+        and id in (select jsonb_array_elements_text(${JSON.stringify(workOrders)}::jsonb)::uuid)
+    `);
+    apply(result.rows);
   }
 }
 
