@@ -11,7 +11,7 @@ import { stubModules } from '../testing/stub-modules.ts'
 // across currencies while the report translates every leg to the presentation
 // currency. On a year-to-date, multi-currency book the drill's supporting
 // totals agreed with nothing.
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === './money-server' || specifier.endsWith('/money-server')) {

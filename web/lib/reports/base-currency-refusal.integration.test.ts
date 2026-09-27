@@ -25,7 +25,7 @@ import { stubModules } from '../../testing/stub-modules.ts'
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __baseCurrencyRefusalUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
-stubModules({ navigation: false, authz: false, features: false, extra: {
+stubModules({ intl: true, navigation: false, authz: false, features: false, extra: {
     '../../../../lib/feature-gates': 'export async function requireFeatureEnabled(){}',
   } });
 

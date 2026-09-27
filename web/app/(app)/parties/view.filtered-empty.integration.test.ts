@@ -5,7 +5,7 @@ import type { SessionUser } from '../../../lib/auth'
 
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __partiesFilteredEmptyUser: state })
-stubModules({ navigation: false, authz: false, features: false })
+stubModules({ intl: true, navigation: false, authz: false, features: false })
 
 // The session double stays conditioned: it answers only the authz module's
 // own auth import, which no shared stub shape matches.

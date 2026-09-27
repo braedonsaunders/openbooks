@@ -10,7 +10,7 @@ import { stubModules } from '../../testing/stub-modules.ts'
 // open AR/AP item in the organization. Fixture mirrors cash-scope.integration.
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __openItemsScope: state });
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__openItemsScope.user}' };

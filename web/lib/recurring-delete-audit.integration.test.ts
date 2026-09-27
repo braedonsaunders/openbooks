@@ -21,7 +21,7 @@ import { stubModules } from '../testing/stub-modules.ts'
 
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __recurringDeleteAuditUser: state });
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({
   resolve(specifier, context, next) {

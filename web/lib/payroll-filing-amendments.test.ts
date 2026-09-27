@@ -79,7 +79,7 @@ const routeUrls = new Map<string, string>([
 
 await bootJsdomEnvironment({ url: "http://localhost:4800/", matchMediaMatches: false });
 
-stubModules({ navigation: false, authz: false, features: false, extra: {
+stubModules({ intl: true, navigation: false, authz: false, features: false, extra: {
     'next-intl': 'export function useTranslations() { const t = (key) => key; t.has = () => false; return t }export function useLocale(){return "en"}export function useTimeZone(){return "UTC"}',
   } });
 

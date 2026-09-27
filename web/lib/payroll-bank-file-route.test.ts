@@ -106,7 +106,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/payroll/bank-file-artifact.ts', mockUrl('bank-file-artifact')],
 ])
 
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {

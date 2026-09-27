@@ -5,7 +5,7 @@ import type { SessionUser } from './auth';
 import { stubModules } from '../testing/stub-modules.ts'
 const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __crmPartyLifecycleSession: session });
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__crmPartyLifecycleSession.user}' };

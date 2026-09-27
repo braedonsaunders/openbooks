@@ -7,7 +7,7 @@ import { stubModules } from '../../testing/stub-modules.ts'
 
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __fileScope: state })
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({ resolve(specifier, context, nextResolve) {
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__fileScope.user}' }

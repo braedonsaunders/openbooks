@@ -5,7 +5,7 @@ import type { Authz } from '../authz'
 import type { SessionUser } from '../auth'
 import { stubModules } from '../../testing/stub-modules.ts'
 
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 const { sql } = await import('drizzle-orm')
 const { withBypassContext, db, env, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')

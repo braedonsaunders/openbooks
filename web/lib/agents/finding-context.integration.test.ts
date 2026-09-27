@@ -9,7 +9,7 @@ import { stubModules } from '../../testing/stub-modules.ts'
 // readable finding, null for unknown ids and unreadable packs.
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __b06FindingContext: state });
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__b06FindingContext.user}' };

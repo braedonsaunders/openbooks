@@ -10,7 +10,7 @@ import { stubModules } from '../../testing/stub-modules.ts'
 // types (key as value, name as label) so cells and the dropdown resolve
 // them; built-ins keep their static translated options. Needs a fixture
 // database.
-stubModules({ navigation: { pathname: '/projects' }, authz: false, features: false, extra: {
+stubModules({ intl: true, navigation: { pathname: '/projects' }, authz: false, features: false, extra: {
     'next-intl': 'export function useTranslations(){const t=(key)=>key;t.rich=(key)=>key;return t}export function useLocale(){return \'en\'}export function useTimeZone(){return \'UTC\'}',
   } });
 

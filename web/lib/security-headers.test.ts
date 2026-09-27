@@ -18,7 +18,7 @@ const proxyKey = Symbol.for("openbooks.security-headers-proxy-test");
 const proxyState: { nextCalls: Array<{ request?: { headers: Headers } }> } = { nextCalls: [] };
 (globalThis as Record<symbol, unknown>)[proxyKey] = proxyState;
 
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 const proxyHooks = registerHooks({
   resolve(specifier, context, nextResolve) {

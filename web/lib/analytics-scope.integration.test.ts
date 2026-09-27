@@ -12,7 +12,7 @@ const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 const period = { from: '2026-07-01', to: '2026-07-31', label: 'Scope review' };
 Object.assign(globalThis, { __analyticsScope: state, React });
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__analyticsScope.user}' };

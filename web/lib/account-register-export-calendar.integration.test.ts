@@ -12,7 +12,7 @@ import { stubModules } from '../testing/stub-modules.ts'
 // filename names it. The route, the register query, the business-day clock,
 // and both exporters are real; only the access boundary (auth gate,
 // translations) is seammed.
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({
   resolve(specifier, context, nextResolve) {

@@ -5,6 +5,7 @@ import { stubModules } from "../../../testing/stub-modules";
 const state = { orgId: "org", grants: new Set<string>(["items.read"]), allowed: null as Set<string> | null, subsidiaries: [] as Array<{ id: string; name: string }>, pickerSubsidiaries: [] as Array<{ id: string; name: string }> };
 Object.assign(globalThis, { __inventoryViewPermissions: state });
 stubModules({
+  intl: true,
   navigation: false,
   authz: false,
   features: false,

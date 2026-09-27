@@ -5,7 +5,7 @@ import test from "node:test";
 import type { ReportCustomQuery, ReportRuleGroup } from "@openbooks/reports";
 import { stubModules } from '../testing/stub-modules.ts'
 
-stubModules({ navigation: { source: 'export function redirect(){throw new Error("redirect")};export function useRouter(){throw new Error("no router")}' }, authz: false, features: false });
+stubModules({ intl: true, navigation: { source: 'export function redirect(){throw new Error("redirect")};export function useRouter(){throw new Error("no router")}' }, authz: false, features: false });
 
 registerHooks({
   resolve(specifier, context, next) {

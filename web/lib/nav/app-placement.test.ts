@@ -35,7 +35,7 @@ function sqlText(query: unknown): string {
 
 await bootJsdomEnvironment({ url: "http://localhost:4800/", matchMediaMatches: false });
 
-stubModules({ navigation: {}, authz: false, features: false, extra: {
+stubModules({ intl: true, navigation: {}, authz: false, features: false, extra: {
     'next-intl': 'export function useTranslations() { const t = (key) => key; t.has = () => true; return t }',
   } });
 

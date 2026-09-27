@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { stubModules } from '../testing/stub-modules.ts'
 
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
