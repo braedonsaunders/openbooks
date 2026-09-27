@@ -13,8 +13,8 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { voidReportDocument } = await import('../test-document-void.ts')
-const { seedCustomerSecondaryBookReceivable } = await import('../test-report-fixtures.ts')
+const { voidReportDocument } = await import('../../testing/document-void.ts')
+const { seedCustomerSecondaryBookReceivable } = await import('../../testing/report-fixtures.ts')
 const { customersHome } = await import('./customers.ts')
 
 const D = '2026-07-14'

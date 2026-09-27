@@ -24,7 +24,7 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { getAuthz } = await import('../authz');
 const { executeAssistantTool } = await import('./registry');
-const { voidReportDocument } = await import('../test-document-void.ts')
+const { voidReportDocument } = await import('../../testing/document-void.ts')
 
 const PROBE_PERMS = ["ap.read", "ar.read", "parties.read", "projects.read", "reports.read", "assistant.use"];
 
