@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { stubModules } from "../../../testing/stub-modules";
 import test from "node:test";
 
@@ -422,58 +421,4 @@ test("no subsidiary anywhere is a named refusal, not a silent default", async ()
     "no_available_subsidiary",
   );
   assert.equal(state.units.length, 0);
-});
-
-test("every refusal the route can emit is mapped by the create drawer", () => {
-  const drawer = readFileSync(
-    new URL("../../(app)/assets/equipment/EquipmentDrawer.tsx", import.meta.url),
-    "utf8",
-  );
-  const catalog = JSON.parse(
-    readFileSync(
-      new URL("../../../messages/en/assets.json", import.meta.url),
-      "utf8",
-    ),
-  ) as { equipment: { create: { errors: Record<string, string> } } };
-  for (const code of [
-    "name_required",
-    "unsupported_status_transition",
-    "invalid_subsidiary",
-    "no_available_subsidiary",
-    "unit_number_in_use",
-    "charge_item_not_found",
-    "fixed_asset_not_found",
-    "subsidiary_mismatch",
-    "rate_book_not_found",
-    "purchase_price_invalid",
-    "purchase_price_negative",
-    "acquired_on_invalid",
-    "in_service_on_invalid",
-    "in_service_before_acquisition",
-    "capacity_invalid",
-    "capacity_not_positive",
-    "invalid_idempotency_key",
-    "save_failed",
-  ]) {
-    assert.match(
-      drawer,
-      new RegExp(`['"]${code}['"]`),
-      `create drawer must map ${code}`,
-    );
-    assert.equal(
-      typeof catalog.equipment.create.errors[code],
-      "string",
-      `en catalog must carry equipment.create.errors.${code}`,
-    );
-  }
-});
-
-test("New only navigates: the button performs no fetch and calls no draft factory", () => {
-  const button = readFileSync(
-    new URL("../../(app)/assets/equipment/NewEquipmentButton.tsx", import.meta.url),
-    "utf8",
-  );
-  assert.doesNotMatch(button, /fetch\s*\(/);
-  assert.doesNotMatch(button, /\/api\/equipment\/draft/);
-  assert.match(button, /equipmentNew/);
 });

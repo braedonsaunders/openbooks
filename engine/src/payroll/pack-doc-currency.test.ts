@@ -1,3 +1,4 @@
+// source-pin-contract: pack prose currency invariant — no payroll pack source may carry a stale claim about its own installability or coverage; subjects derived from the pack registry, and a registered pack without a source entry fails.
 /**
  * A pack's prose may not contradict the registry it is in.
  *

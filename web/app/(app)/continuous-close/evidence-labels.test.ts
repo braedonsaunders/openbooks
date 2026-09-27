@@ -1,3 +1,4 @@
+// source-pin-contract: evidence-label coverage invariant — every evidence kind an agent pack can emit has a translated label in en/fr/es; kinds extracted from the pack sources, never hand-listed.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFileSync } from "node:fs";

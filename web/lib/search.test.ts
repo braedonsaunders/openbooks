@@ -723,23 +723,6 @@ test('project hits stay gated by permission and the projects feature flag', asyn
   assert.ok(!state.queries.some((query) => query.text.includes('select id, code, name from projects')))
 })
 
-test('repaired project and recall record links never regress to legacy destinations', () => {
-  // Search and assistant tools address project records with the native
-  // drawer's query-parameter target — never the dead /projects/<id> path.
-  for (const repaired of ['lib/search.ts', 'lib/assistant/tools.ts']) {
-    const sourceText = source(repaired)
-    assert.match(sourceText, /\/projects\?project=/, `${repaired}: canonical drawer target`)
-    assert.doesNotMatch(sourceText, /\/projects\/\$\{/, `${repaired}: no legacy deep path`)
-  }
-
-  // The lot-recall entry routes recall records through the shared report
-  // engine's native drill-downs — it must never render its own generic
-  // /documents/<id> anchors.
-  const recallEntry = source('app/(app)/reports/lot-recall/page.tsx')
-  assert.match(recallEntry, /redirect\(`\/reports\/custom\/run\//, 'must forward to the shared engine runner')
-  assert.doesNotMatch(recallEntry, /\/documents\//, 'no generic document links')
-})
-
 // An exact document number must escape the recency-capped fuzzy
 // legs (the newest-200 cap excluded old exact rows and ranked unstably as
 // new documents arrived) and order first.

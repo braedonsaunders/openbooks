@@ -1,3 +1,4 @@
+// source-pin-contract: i18n sweep invariant — the audited financial views render no hard-coded English copy, and each audited view still exists and binds next-intl so the sweep cannot silently guard nothing
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'

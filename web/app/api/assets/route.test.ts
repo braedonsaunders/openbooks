@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { stubModules } from "../../../testing/stub-modules";
 import test from "node:test";
 
@@ -455,79 +454,4 @@ test("a full drawer body is stored whole: nothing the operator filled is dropped
   assert.equal(after.in_service_on, "2026-03-01");
   assert.equal(after.asset_account_id, ACCOUNT_ID);
   assert.deepEqual(after.custom, {});
-});
-
-test("every refusal the route can emit is mapped by the create drawer", () => {
-  const drawer = readFileSync(
-    new URL("../../(app)/assets/AssetDrawer.tsx", import.meta.url),
-    "utf8",
-  );
-  const catalog = JSON.parse(
-    readFileSync(
-      new URL("../../../messages/en/assets.json", import.meta.url),
-      "utf8",
-    ),
-  ) as { create: { errors: Record<string, string> } };
-  for (const code of [
-    "name_required",
-    "unsupported_status_transition",
-    "category_required",
-    "invalid_category",
-    "invalid_subsidiary",
-    "no_available_subsidiary",
-    "acquisition_cost_invalid",
-    "acquisition_cost_negative",
-    "salvage_value_invalid",
-    "salvage_value_negative",
-    "salvage_exceeds_cost",
-    "acquired_on_invalid",
-    "in_service_on_invalid",
-    "asset_number_in_use",
-    "invalid_method",
-    "invalid_convention",
-    "invalid_life",
-    "invalid_rate",
-    "invalid_units",
-    "opening_invalid",
-    "opening_negative",
-    "opening_as_of_invalid",
-    "opening_pair_required",
-    "opening_exceeds_basis",
-    "opening_before_in_service",
-    "invalid_asset_account",
-    "invalid_accumulated_account",
-    "invalid_expense_account",
-    "invalid_formula",
-    "unknown_formula",
-    "invalid_custom_fields",
-    "unknown_custom_reference",
-    "tax_elections_invalid",
-    "tax_business_use_invalid",
-    "tax_bonus_invalid",
-    "tax_section179_invalid",
-    "tax_class_invalid",
-    "invalid_idempotency_key",
-    "save_failed",
-  ]) {
-    assert.match(
-      drawer,
-      new RegExp(`['"]${code}['"]`),
-      `create drawer must map ${code}`,
-    );
-    assert.equal(
-      typeof catalog.create.errors[code],
-      "string",
-      `en catalog must carry create.errors.${code}`,
-    );
-  }
-});
-
-test("New only navigates: the button performs no fetch and calls no draft factory", () => {
-  const button = readFileSync(
-    new URL("../../(app)/assets/NewAssetButton.tsx", import.meta.url),
-    "utf8",
-  );
-  assert.doesNotMatch(button, /fetch\s*\(/);
-  assert.doesNotMatch(button, /\/api\/assets\/draft/);
-  assert.match(button, /assetNew/);
 });

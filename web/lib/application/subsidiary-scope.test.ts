@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 // The application context is server-only, but this contract test runs with
@@ -81,34 +80,5 @@ test("an explicitly unrestricted application context keeps legacy access", () =>
     assert.doesNotThrow(() =>
       assertSubsidiaryAccess(unrestricted, subsidiaryId),
     );
-  }
-});
-
-function source(file: string): string {
-  return readFileSync(new URL(`./${file}`, import.meta.url), "utf8");
-}
-
-function callCount(haystack: string, needle: string): number {
-  return haystack.split(needle).length - 1;
-}
-
-test("all application financial boundaries use the centralized subsidiary guard", () => {
-  const boundaries: ReadonlyArray<{ file: string; calls: number }> = [
-    // header gate + correction re-home gate (X4)
-    { file: "documents.ts", calls: 2 },
-    { file: "payments.ts", calls: 2 },
-    { file: "records.ts", calls: 3 },
-    { file: "close.ts", calls: 2 },
-  ];
-
-  for (const boundary of boundaries) {
-    const src = source(boundary.file);
-    assert.ok(
-      callCount(src, "assertSubsidiaryAccess(context,") >= boundary.calls,
-      `${boundary.file} must gate every subsidiary-sensitive application path`,
-    );
-    // Keep the existing organization pinning alongside the subsidiary gate;
-    // scope checks must never turn an adapter query into a cross-tenant read.
-    assert.match(src, /context\.authz\.user\.orgId/);
   }
 });

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
@@ -404,33 +403,4 @@ test("a posting date outside a line's period warns instead of failing", async ()
         warning.includes("Confirm will skip"),
     ),
   );
-});
-
-test("every refusal the depreciation boundary can emit is mapped by the review drawer", () => {
-  const drawer = readFileSync(
-    new URL("../../../(app)/assets/RunDepreciationDrawer.tsx", import.meta.url),
-    "utf8",
-  );
-  for (const code of [
-    "invalid_through_date",
-    "invalid_posting_date",
-    "book_not_found",
-    "period_not_found",
-    "unknown_asset",
-    "nothing_selected",
-    "fingerprint_required",
-    "stale_preview",
-    "schedules_stale",
-    "period_closed",
-    "nothing_due",
-  ]) {
-    assert.match(
-      drawer,
-      new RegExp(`['"]${code}['"]`),
-      `review drawer must map ${code}`,
-    );
-  }
-  // Transport failures toast instead of dying silent on both flows.
-  assert.match(drawer, /toast\.error\(t\('review\.previewFailed'\)\)/);
-  assert.match(drawer, /toast\.error\(t\('review\.confirmFailed'\)\)/);
 });

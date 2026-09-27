@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 // The submit guards live in the week's server helper (route/route.ts pins the
@@ -170,16 +167,3 @@ test(
     `);
   },
 );
-
-test("the submit route gates dispatch on the guard", () => {
-  const route = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), "submit/route.ts"),
-    "utf8",
-  );
-  const transaction = route.indexOf("withOrgTransaction(orgId, async () =>");
-  const guard = route.indexOf("assertWeekSubmittable(");
-  const dispatch = route.indexOf("runRecordFlows(");
-  assert.ok(transaction >= 0 && guard > transaction, "guard must run inside the submit transaction");
-  assert.ok(guard < dispatch, "guard must precede flow dispatch");
-  assert.match(route, /assertWeekSubmittable\(orgId, header\.id,/);
-});

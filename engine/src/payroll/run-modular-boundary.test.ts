@@ -1,3 +1,4 @@
+// source-pin-contract: pay-run module-shape invariant — the deleted run.ts facade stays deleted and unimported, every run-* operation module stays under 800 lines, and their import graph is acyclic; subjects derived by listing the directory, never hand-listed.
 import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
