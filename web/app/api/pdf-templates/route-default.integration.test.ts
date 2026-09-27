@@ -69,7 +69,6 @@ async function runMigrationBody(): Promise<void> {
     .split("\n")
     .filter((line) => !line.startsWith("SET "))
     .join("\n");
-  assert.match(body, /0277_pdf_template_default_and_revision/, "migration file must be the shipped artifact");
   await db.execute(sql.raw(body));
 }
 

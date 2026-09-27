@@ -1,3 +1,4 @@
+// source-pin-contract: public-path policy — every path listed in proxy-policy.ts's public registries is driven through the proxy and must pass without a session; the lists are enumerated from the policy source because they are not exported
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";

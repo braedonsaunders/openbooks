@@ -1,3 +1,4 @@
+// source-pin-contract: feature-gate coverage invariant — every page a feature links to and every API route serving it consults a gate; pages derived from the feature and nav registries, route handlers by walking each feature's API directories.
 import { NAV_MODULES } from './nav/registry'
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'

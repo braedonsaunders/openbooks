@@ -1,3 +1,4 @@
+// source-pin-contract: message-key invariant — every literal key a view passes to a bound translator resolves in the English catalog; call sites derived by walking the web tree, never hand-listed.
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative } from 'node:path'

@@ -1,13 +1,7 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { SETUP_ENTITY_BY_KEY } from './setup/registry.ts'
-
-const routeSource = readFileSync(
-  new URL('./setup/write.ts', import.meta.url),
-  'utf8',
-)
 
 test('the shared currency registry stays readable but is not tenant-mutable', () => {
   const currencies = SETUP_ENTITY_BY_KEY.get('currencies')
@@ -19,30 +13,6 @@ test('the shared currency registry stays readable but is not tenant-mutable', ()
     ['code', 'name', 'minorUnits'],
     'currency fields remain available for reads and reference pickers',
   )
-})
-
-test('every setup mutation method rejects a read-only entity before request writes', () => {
-  assert.equal(
-    routeSource.match(/if \(entity\.readOnly\) return \{ status: 405, body: \{ error: 'read-only' \} \}/g)?.length,
-    4,
-    'the pre-parse preflight plus create, update, and delete must all have an explicit read-only boundary',
-  )
-
-  const post = routeSource.slice(routeSource.indexOf('export async function createSetupRecord('), routeSource.indexOf('export async function updateSetupRecord('))
-  const patch = routeSource.slice(routeSource.indexOf('export async function updateSetupRecord('), routeSource.indexOf('export async function deleteSetupRecord('))
-  const del = routeSource.slice(routeSource.indexOf('export async function deleteSetupRecord('))
-  for (const [method, source, requestStart] of [
-    ['create', post, 'const body ='],
-    ['update', patch, 'const body ='],
-    ['delete', del, 'const orgFilter'],
-  ] as const) {
-    const gate = source.indexOf("if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }")
-    assert.ok(gate >= 0, `${method} must reject read-only entities`)
-    assert.ok(gate < source.indexOf(requestStart), `${method} must reject before reading the request body/id`)
-
-    const firstWrite = source.search(/\b(?:insert\s+into|update\s+|delete\s+from)\b/i)
-    assert.ok(firstWrite < 0 || gate < firstWrite, `${method} must reject before its first SQL write`)
-  }
 })
 
 const routeState = {

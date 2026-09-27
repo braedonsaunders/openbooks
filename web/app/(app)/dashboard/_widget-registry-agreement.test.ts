@@ -1,3 +1,4 @@
+// source-pin-contract: dashboard registry agreement — the widget, render-case, permission and metric-field registries name the same widget set and every widget's copy key exists in English; sets read from the four registry sources, never hand-listed.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'

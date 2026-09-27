@@ -1,3 +1,4 @@
+// source-pin-contract: the tax-year generator's product is source text — its edition, barrel and stub are read back from the scratch tree it wrote, and the checkout's barrels are read only to prove the generator left them untouched
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";

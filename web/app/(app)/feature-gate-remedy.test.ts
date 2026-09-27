@@ -1,3 +1,4 @@
+// source-pin-contract: feature-remedy invariant — no view or route-gate loader answers a disabled feature with a bare 404 or silent null, and the feature remedy never replaces a grant check; subjects derived by walking web/app/(app) and web/lib/hrm, never hand-listed.
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'

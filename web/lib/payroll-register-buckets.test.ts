@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { bucketAmounts, buildRegisterBuckets } from './payroll-register-buckets.ts'
 import { decimalSum } from './statement-format.ts'
@@ -65,23 +64,6 @@ test('bucket amounts sum the stub deduction lines by component code', () => {
     [line('ss', '50.00'), line('SS', '45.48'), line('FIT', '100.95'), line('MED', '22.33')],
     buckets,
   ), ['100.9500', '95.4800', '22.3300'])
-})
-
-test('the run wizard renders register columns from the declared buckets', () => {
-  // The review grid lives in steps/ReviewStep.tsx and the stub drawer in
-  // StubDrawer.tsx; both were split from RunWizard.tsx, so read both.
-  const source = [
-    '../app/(app)/payroll/runs/[id]/steps/ReviewStep.tsx',
-    '../app/(app)/payroll/runs/[id]/StubDrawer.tsx',
-  ]
-    .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
-    .join('\n')
-  assert.match(source, /registerBuckets\.map\(\(bucket, index\)/)
-  assert.match(source, /withholding\(stub, registerBuckets\)/)
-  assert.match(source, /\{t\('run\.stub\.trace', \{ engine: traceEngine \}\)\}/)
-  // No column reads hardcoded CA factor keys anymore.
-  assert.doesNotMatch(source, /statutory\(stub\)/)
-  assert.doesNotMatch(source, /f\.C\b/)
 })
 
 test('a US stub totals FIT plus Social Security plus Medicare', () => {

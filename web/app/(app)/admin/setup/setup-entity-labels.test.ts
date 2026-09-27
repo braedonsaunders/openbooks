@@ -1,3 +1,4 @@
+// source-pin-contract: setup-label coverage invariant — every registry entity mounted on a Setup surface has a title and description in every locale; mounted keys derived by walking web/app and web/components, never hand-listed.
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'

@@ -1,3 +1,4 @@
+// source-pin-contract: factor-label coverage invariant — every factor a pack's engine can trace resolves to a label rather than its own code; the traced keys are derived by scanning each registered pack's own sources and driving its pure engines, never hand-listed.
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
