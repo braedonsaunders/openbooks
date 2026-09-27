@@ -1051,14 +1051,26 @@ const partyConcentration: AssistantToolDef = {
     // visible legal entities like every other document surface, or
     // hidden-subsidiary revenue and party names leak into the ranking.
     const rows = (await db.execute<Record<string, unknown>>(sql`
-      with ranked as (
+      with document_events as (
+        select d.id as document_id, d.document_date::date as event_date, 1::int as direction
+          from documents d
+         where d.org_id = ${authz.user.orgId} and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+           and d.status in ('posted', 'voided')
+        union all
+        select d.id as document_id, d.voided_at::date as event_date, -1::int as direction
+          from documents d
+         where d.org_id = ${authz.user.orgId} and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+           and d.status = 'voided' and d.voided_at is not null
+      ), ranked as (
         select p.id, p.display_name,
-               sum(case when d.kind in ('customer_credit','vendor_credit') then -abs(d.total) else abs(d.total) end) as amount,
-               count(*)::int as document_count
-          from documents d join parties p on p.id = d.party_id and p.org_id = d.org_id
-         where d.org_id = ${authz.user.orgId} and d.status = 'posted'
+               sum(case when d.kind in ('customer_credit','vendor_credit') then -abs(d.total) else abs(d.total) end * events.direction) as amount,
+               sum(events.direction)::int as document_count
+          from documents d
+          join document_events events on events.document_id = d.id
+          join parties p on p.id = d.party_id and p.org_id = d.org_id
+         where d.org_id = ${authz.user.orgId}
            and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
-           and d.document_date between ${range.from} and ${range.to}
+           and events.event_date between ${range.from}::date and ${range.to}::date
            ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)}
          group by p.id, p.display_name
       ), totals as (select coalesce(sum(amount), 0) as total from ranked)

@@ -159,12 +159,24 @@ export async function vendorData(
       group by p.id, p.display_name, sub.base_currency
     `),
     db.execute<VendorBillRow>(sql`
-      select party_id as id, count(*)::int as bills, max(posting_date) as last_bill
-      from documents
-      where org_id = ${orgId} and kind = 'vendor_bill' and party_id is not null and status = 'posted'
-        and posting_date >= ${from} and posting_date <= ${ref}
-        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
-      group by party_id
+      with bill_movements as (
+        select d.party_id, d.posting_date::date as movement_date, 1::int as direction
+          from documents d
+         where d.org_id = ${orgId} and d.kind = 'vendor_bill' and d.party_id is not null
+           and d.status in ('posted', 'voided') and d.posting_date::date between ${from}::date and ${ref}::date
+           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
+        union all
+        select d.party_id, d.voided_at::date as movement_date, -1::int as direction
+          from documents d
+         where d.org_id = ${orgId} and d.kind = 'vendor_bill' and d.party_id is not null
+           and d.status = 'voided' and d.voided_at is not null
+           and d.voided_at::date between ${from}::date and ${ref}::date
+           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
+      )
+      select party_id as id, sum(direction)::int as bills, max(movement_date) as last_bill
+        from bill_movements
+       group by party_id
+      having sum(direction) <> 0
     `),
     db.execute<MonthSpendRow>(sql`
       with ew as materialized (

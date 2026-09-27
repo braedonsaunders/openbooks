@@ -152,7 +152,7 @@ export async function loadMatch(
     const carryStart = await openingCarryStartDate(orgId, account.id)
     const glWhere = sql`jl.account_id = ${account.id} and jl.org_id = ${orgId}
       and je.book_id = ${bookId} and jl.currency = ${session.currency}
-      and je.status = 'posted' and je.posting_date <= ${session.through_date}
+      and je.status in ('posted', 'reversed') and je.posting_date <= ${session.through_date}
       ${carryStart ? sql`and je.posting_date >= ${carryStart}` : sql``}
       and jl.reconciled_at is null
       and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)

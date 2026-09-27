@@ -108,9 +108,11 @@ export async function loadEquipmentPage(
       select coalesce(sum(e.purchase_price),0) purchase,
              count(*) filter(where e.status='active') active,
              coalesce(sum((select sum(dl.cost_amount) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id
-               where dl.equipment_unit_id=e.id and dl.org_id=e.org_id and d.kind='project_charge' and d.status in ('approved','posted'))),0) recovery,
+               where dl.equipment_unit_id=e.id and dl.org_id=e.org_id and d.kind='project_charge' and d.status in ('approved','posted') -- Live entries only: equipment totals include currently approved and posted charges
+             )),0) recovery,
              coalesce(sum((select sum(dl.bill_amount) from document_lines dl join documents d on d.id=dl.document_id and d.org_id=dl.org_id
-               where dl.equipment_unit_id=e.id and dl.org_id=e.org_id and d.kind='project_charge' and d.status in ('approved','posted'))),0) billable
+               where dl.equipment_unit_id=e.id and dl.org_id=e.org_id and d.kind='project_charge' and d.status in ('approved','posted') -- Live entries only: equipment totals include currently approved and posted charges
+             )),0) billable
         from equipment_units e where e.org_id=${authz.user.orgId} ${allowed}
     `),
     equipmentId && isUuid(equipmentId) ? loadEquipment(equipmentId, authz.user.orgId, authz.allowedSubsidiaryIds) : null,

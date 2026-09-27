@@ -52,6 +52,7 @@
     "check:dependencies": "npm audit --omit=dev --audit-level=moderate",
     "check:history-hygiene": "node scripts/check-history-hygiene.mjs",
     "check:internal-ids": "node scripts/check-internal-ids.mjs",
+    "check:journal-status-filter": "node scripts/check-journal-status-filter.mjs",
     "check:repository-artifacts": "node scripts/check-repository-artifacts.mjs",
     "check:product-neutrality": "node scripts/check-product-neutrality.mjs",
     "check:country-neutrality": "node scripts/check-country-neutrality.mjs",

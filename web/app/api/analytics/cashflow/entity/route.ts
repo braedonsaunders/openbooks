@@ -121,7 +121,7 @@ export const GET = defineRoute({
         left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
         join orgs o on o.id = d.org_id
         where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
-          and d.status = 'posted'
+          and d.status = 'posted' -- Live entries only: the recent-payments drawer lists payments posted today
           and d.kind in (${settlementKinds})
           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}
           ${subsidiaryVisibleFilter(sql`je.subsidiary_id`, gate.allowedSubsidiaryIds)}

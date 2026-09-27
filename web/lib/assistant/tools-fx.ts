@@ -126,7 +126,7 @@ const listFxRevaluations: AssistantToolDef = {
     const a = raw as { periodId?: string; limit?: number };
     const limit = Math.min(a.limit ?? 20, 50);
     const scope = subsidiaryVisibleFilter(sql`e.subsidiary_id`, authz.allowedSubsidiaryIds);
-    let where = sql`e.org_id = ${authz.user.orgId} and e.origin = 'fx_revaluation' and e.status = 'posted'${scope}`;
+    let where = sql`e.org_id = ${authz.user.orgId} and e.origin = 'fx_revaluation' and e.status in ('posted', 'reversed')${scope}`;
     if (a.periodId) where = sql`${where} and e.period_id = ${a.periodId}`;
     const rows = (await db.execute<Record<string, unknown>>(sql`
       select e.id, e.entry_number, e.posting_date, e.memo,

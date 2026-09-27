@@ -223,7 +223,8 @@ async function openDocuments(
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
         left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
        where d.org_id = ${orgId}
-         and d.status = 'posted' and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+         and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
+         and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
          and ${accountScope}
          and e.book_id = ${statementBookExpr(orgId, scope?.bookId)}
          and coalesce(d.posting_date, d.document_date) <= ${asOf}
@@ -749,9 +750,12 @@ export async function agingCurrenciesInScope(
     select distinct d.currency as ccy
       from documents d
       join journal_lines jl on jl.entry_id = d.posted_entry_id and jl.is_open_item
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
      where d.org_id = ${resolvedOrgId}
-       and d.status = 'posted' and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
+       and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date))
+       and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
        and coalesce(d.posting_date, d.document_date) <= ${asOf}
+       and je.book_id = ${statementBookExpr(resolvedOrgId)}
        and ${dimWhere(dims, sql`d`)}
   `);
   const inScope = [...new Set(r.rows.map((x) => x.ccy))].sort();

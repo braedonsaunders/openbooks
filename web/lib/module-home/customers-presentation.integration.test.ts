@@ -145,3 +145,49 @@ test('customers cockpit counts a corrected receivable once from its current post
     await withBypass(() => dropScratchOrg(org.orgId))
   }
 })
+
+test('customers cockpit drops a voided receivable from the current balance', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const { org, cadInvoice } = await seedTwoCurrencyReceivables()
+  try {
+    await withBypass(async () => {
+      const secondaryBook = randomUUID()
+      const secondaryDocument = randomUUID()
+      const secondaryEntry = randomUUID()
+      await db.execute(sql`insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
+        values (${secondaryBook}, ${org.orgId}, 'ALT', 'Alternate', false, true, true)`)
+      await db.execute(sql`insert into documents
+        (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
+        values (${secondaryDocument}, ${org.orgId}, 'customer_invoice', 'INV-ALT-BOOK', ${org.customerId}, ${org.subsidiaryId}, ${D}, ${D}, 'CAD', '1', 'draft', '9000', '0', '9000', '9000')`)
+      await db.execute(sql`insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
+        values (${secondaryEntry}, ${org.orgId}, ${secondaryBook}, ${org.subsidiaryId}, 'INV-ALT-BOOK', ${D}, ${org.periodId}, 'draft', 'manual', ${secondaryDocument})`)
+      await db.execute(sql`insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
+        values (${org.orgId}, ${secondaryEntry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, ${org.customerId}, true, '9000', 'CAD', '9000', '1'),
+               (${org.orgId}, ${secondaryEntry}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${org.customerId}, false, '-9000', 'CAD', '-9000', '1')`)
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${secondaryEntry} and org_id=${org.orgId}`)
+      await db.execute(sql`update documents set status='posted', posted_entry_id=${secondaryEntry}, posting_period_id=${org.periodId}
+        where id=${secondaryDocument} and org_id=${org.orgId}`)
+      const reversalId = randomUUID()
+      await db.execute(sql`insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id, reverses_entry_id)
+        values (${reversalId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`VOID-${reversalId}`}, '2026-07-15', ${org.periodId}, 'draft', 'manual', ${cadInvoice.documentId}, ${cadInvoice.entryId})`)
+      await db.execute(sql`insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
+        values (${org.orgId}, ${reversalId}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, ${org.customerId}, false, '-100.1255', 'CAD', '-100.1255', '1'),
+               (${org.orgId}, ${reversalId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${org.customerId}, false, '100.1255', 'CAD', '100.1255', '1')`)
+      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${reversalId} and org_id=${org.orgId}`)
+      await db.execute(sql`update journal_entries set status='reversed' where id=${cadInvoice.entryId} and org_id=${org.orgId}`)
+      await db.execute(sql`update documents set status='voided', voided_at='2026-07-15 12:00:00+00'::timestamptz, open_balance=0 where id=${cadInvoice.documentId} and org_id=${org.orgId}`)
+    })
+    await pinClock('2026-07-16', async () => {
+      await withOrgContext(org.orgId, async () => {
+        const home = await customersHome(org.orgId)
+        assert.equal(home.arOutstanding, '270.1694', 'the voided CAD invoice no longer changes the current receivable figure')
+        assert.equal(home.openInvoices, 1)
+      })
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})

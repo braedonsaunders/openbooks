@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
+import { activePostingPrimaryBookId } from '@openbooks/engine/src/platform/accounting-books.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
@@ -122,7 +123,7 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
     const n = await countRows(sql`
       select count(*)::int as n
         from documents d
-       where d.org_id = ${orgId} and d.kind = 'pay_run' and d.status = 'posted'`)
+       where d.org_id = ${orgId} and d.kind = 'pay_run' and d.status in ('posted', 'voided')`)
     return {
       blocked: n > 0,
       impacts: n ? [{ labelKey: 'postedPayRuns', count: n }] : [],
@@ -167,15 +168,23 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
   // Accounting integrity: the ledger is partitioned per subsidiary and history is
   // immutable, so once postings span >1 subsidiary you can't collapse to single-entity.
   multiSubsidiary: async (orgId) => {
+    const bookId = await activePostingPrimaryBookId(orgId)
     const n = await countRows(sql`
-      select count(distinct subsidiary_id)::int as n from journal_lines where org_id = ${orgId}`)
+      select count(distinct jl.subsidiary_id)::int as n
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+       where jl.org_id = ${orgId} and je.book_id = ${bookId}`)
     return { blocked: n > 1, impacts: n > 1 ? [{ labelKey: 'subsidiaryTxns', count: n }] : [] }
   },
   // Strict: a single foreign-currency posting makes the ledger's FX history
   // (rates, realized/unrealized gain-loss) load-bearing — can't revert to single-currency.
   multiCurrency: async (orgId) => {
+    const bookId = await activePostingPrimaryBookId(orgId)
     const n = await countRows(sql`
-      select count(*)::int as n from journal_lines where org_id = ${orgId} and fx_rate <> 1`)
+      select count(*)::int as n
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+       where jl.org_id = ${orgId} and je.book_id = ${bookId} and jl.fx_rate <> 1`)
     return { blocked: n > 0, impacts: n > 0 ? [{ labelKey: 'foreignTxns', count: n }] : [] }
   },
   banking: async (orgId) => {
@@ -223,6 +232,7 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
     return { blocked: false, impacts: n ? [{ labelKey: 'inventoryMovements', count: n }] : [] }
   },
   projects: async (orgId) => {
+    const bookId = await activePostingPrimaryBookId(orgId)
     const [all, active, billingRequests, payApplications, retainage, fieldTickets, projectDocuments, projectTime, changeOrders] = await sequential([
       () => countRows(sql`select count(*)::int as n from projects where org_id = ${orgId}`),
       () => countRows(sql`
@@ -238,8 +248,9 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
       () => countRows(sql`
         select count(*)::int as n
           from journal_lines jl
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
           join orgs o on o.id = jl.org_id
-         where jl.org_id = ${orgId}
+         where jl.org_id = ${orgId} and je.book_id = ${bookId}
            and jl.account_id = nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')::uuid
          group by jl.org_id
         having coalesce(sum(jl.amount), 0) <> 0`),
