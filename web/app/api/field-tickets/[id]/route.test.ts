@@ -149,7 +149,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/organization/org-feature-lock.ts', 'mock:org-feature-lock'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@/lib/feature-gates') return { url: 'mock:features', shortCircuit: true }
     // load under the plain runner (same seam as documents.test.ts).
