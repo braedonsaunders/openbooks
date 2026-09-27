@@ -1,5 +1,6 @@
 import { PDFDocument, PDFName } from 'pdf-lib'
 import type { TaxReturnBox } from '@openbooks/engine/src/tax-returns/return.ts'
+import { formatDecimal } from './money-format'
 
 /**
  * Fill a tenant-uploaded official government AcroForm PDF with the computed
@@ -16,8 +17,11 @@ export class OfficialPdfError extends Error {
 
 /** Government forms show whole-dollar/2-decimal amounts; render the box value so. */
 function fmtAmount(v: string): string {
-  const n = Number(v)
-  return Number.isFinite(n) ? n.toFixed(2) : v
+  const formatted = formatDecimal('en', v, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return formatted.includes('∞') ? v : formatted
 }
 
 export interface FillResult {
