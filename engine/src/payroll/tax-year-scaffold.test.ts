@@ -1,4 +1,4 @@
-// source-pin-contract: the tax-year generator's product is source text — its edition, barrel and stub are read back from the scratch tree it wrote, and the checkout's barrels are read only to prove the generator left them untouched
+// source-pin-contract: the generator's product is a draft edition plus runner instructions; the scratch copy proves generated editions stay isolated from the checkout.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -13,7 +13,8 @@ import { unfilledPaths } from "./unfilled.ts";
  * The generator's whole promise is that adding a tax year becomes "fill in the
  * published values and make the goldens pass". This test holds it to both halves
  * of that: it generates a real edition for a synthetic year, proves the pack
- * refuses to calculate with it and that the generated conformance stub FAILS.
+ * refuses to calculate with it and that the operator is directed to the shared
+ * country runner for citation-backed golden and refusal rows.
  *
  * It generates into a THROWAWAY COPY of the engine sources, never the checkout.
  * The generator's job is to write a real edition into the real tree, so the test
@@ -37,8 +38,7 @@ const YEAR = 2099;
  * The throwaway root the generator writes under, holding a copy of engine/src
  * at its repo-relative path so every declared path lands where it would.
  *
- * It lives INSIDE the repo on purpose. The generated conformance stub runs as a
- * child process, and it, the copied year module, and the copied pack modules all
+ * It lives INSIDE the repo on purpose. The copied year module and pack modules
  * resolve `node_modules` and the nearest package.json by walking UP — from
  * engine/.tmp-scaffold-<pid>/ that finds engine/package.json ("type": "module")
  * and the repo's node_modules, exactly as the real sources do. An OS temp
@@ -145,10 +145,11 @@ test("a published year is never overwritten by the generator", () => {
   assert.ok(!existsSync(scratch("engine/src/payroll/us/rates-2026.ts")));
 });
 
-test("the scaffold produces a DRAFT edition whose conformance stub fails until filled", async () => {
+test("the US scaffold produces a DRAFT module and shared-runner row instructions", async () => {
   const support = payrollTaxYearSupport("US");
   // The declared paths are repo-relative, so they land under the throwaway root.
-  assert.ok(support.scaffold.files.length > 0 && support.scaffold.barrels.length > 0);
+  assert.deepEqual(support.scaffold.files.map((file) => file.path), ["engine/src/payroll/us/rates-{year}.ts"]);
+  assert.ok(support.scaffold.barrels.length > 0);
 
   const generated = runGenerator("US");
   assert.equal(generated.status, 0, generated.out);
@@ -160,11 +161,12 @@ test("the scaffold produces a DRAFT edition whose conformance stub fails until f
   assert.match(generated.out, /wired    engine\/src\/payroll\/us\/editions\.ts → (?:[\d, ]*\b)?2099\b/);
   // The instructions are the pack's own, in order, and they name the sources.
   assert.match(generated.out, /Pub 15-T/);
-  assert.match(generated.out, /goldens/);
+  assert.ok(generated.out.includes("GOLDENS to engine/src/payroll/us/pub15t.test.ts"));
+  assert.ok(generated.out.includes('citation: "IRS Pub 15-T (2099)'));
+  assert.ok(generated.out.includes("REFUSALS in engine/src/payroll/us/pub15t.test.ts"));
 
   const modulePath = scratch("engine/src/payroll/us/rates-2099.ts");
-  const testPath = scratch("engine/src/payroll/us/rates-2099.test.ts");
-  assert.ok(existsSync(modulePath) && existsSync(testPath));
+  assert.ok(existsSync(modulePath) && !existsSync(scratch("engine/src/payroll/us/rates-2099.test.ts")));
 
   // 1. The edition is a DRAFT carrying placeholders, so nothing can withhold
   //    from it. Imported dynamically: it has never been loaded in this process.
@@ -182,41 +184,39 @@ test("the scaffold produces a DRAFT edition whose conformance stub fails until f
     /import \{ RATES_2099 \} from "\.\/rates-2099\.ts";[\s\S]*RATES_2099,/,
   );
 
-  // 3. The generated conformance stub FAILS — that is the deliverable. An
-  //    edition nobody has transcribed must not be able to pass a test suite,
-  //    and the failure message must be the instruction. Run from the throwaway
-  //    root, where the copied pack modules the stub imports live.
-  // A clean environment: Node marks its own test children with NODE_TEST_*,
-  // and an inherited marker makes the child report INTO this run instead of
-  // exiting on its own result — which would make a failing stub look green.
-  const childEnv = Object.fromEntries(
-    Object.entries(process.env).filter(([key]) => !key.startsWith("NODE_TEST")),
-  ) as NodeJS.ProcessEnv;
-  const stub = spawnSync(
-    process.execPath,
-    ["--import", "tsx", "--test", "--test-force-exit", "engine/src/payroll/us/rates-2099.test.ts"],
-    { cwd: SCRATCH_ROOT, encoding: "utf8", env: { ...childEnv, OPENBOOKS_TRUSTED_TEST_BYPASS: "1" } },
-  );
-  assert.notEqual(stub.status, 0, "the stub for an untranscribed year must fail");
-  const stubOut = `${stub.stdout ?? ""}${stub.stderr ?? ""}`;
-  // It fails on its OWN assertions, having actually loaded the pack — not
-  // because a module was missing, which would make any broken stub look strict.
-  assert.doesNotMatch(stubOut, /ERR_MODULE_NOT_FOUND/);
-  assert.match(stubOut, /transcribe every 2099 figure from Pub 15-T/);
-  assert.match(stubOut, /paste at least three published 2099 goldens/);
-
-  // 4. Re-running is idempotent and never clobbers work in progress.
+  // 3. Re-running is idempotent and never clobbers work in progress.
   const again = runGenerator("US");
   assert.equal(again.status, 0);
   assert.match(again.out, /exists   engine\/src\/payroll\/us\/rates-2099\.ts/); // source-path: synthetic
 
-  // 5. The checkout never saw any of it: no draft edition beside the real
+  // 4. The checkout never saw any of it: no draft edition beside the real
   //    tables, and the real barrel does not name a year nobody transcribed.
   assert.ok(!existsSync(join(REPO_ROOT, "engine/src/payroll/us/rates-2099.ts")));
   assert.doesNotMatch(
     readFileSync(join(REPO_ROOT, "engine/src/payroll/us/editions.ts"), "utf8"),
     /2099/,
   );
+});
+
+test("US, GB, IE, and SG scaffolds target their shared GOLDENS and REFUSALS tables", () => {
+  const cases = [
+    ["US", "engine/src/payroll/us/rates-{year}.ts", "engine/src/payroll/us/pub15t.test.ts"],
+    ["GB", "engine/src/payroll/gb/rates-{year}.ts", "engine/src/payroll/gb/parity.test.ts"],
+    ["IE", "engine/src/payroll/ie/rates-{year}.ts", "engine/src/payroll/ie/conformance.test.ts"],
+    ["SG", "engine/src/payroll/sg/tax-year-{year}.ts", "engine/src/payroll/sg/cpf.test.ts"],
+  ] as const;
+
+  for (const [country, modulePattern, runner] of cases) {
+    const support = payrollTaxYearSupport(country);
+    assert.deepEqual(support.scaffold.files.map((file) => file.path), [modulePattern], country);
+    const generated = runGenerator(country);
+    assert.equal(generated.status, 0, generated.out);
+    assert.ok(generated.out.includes(`GOLDENS to ${runner}`), country);
+    assert.ok(generated.out.includes(`REFUSALS in ${runner}`), country);
+    assert.ok(generated.out.includes("citation: "), country);
+    const generatedModule = modulePattern.replace("{year}", String(YEAR));
+    assert.ok(!existsSync(scratch(generatedModule.replace(/\.ts$/, ".test.ts"))), country);
+  }
 });
 
 test("the CA scaffold covers Quebec too, because a CA year is not loaded without it", () => {
