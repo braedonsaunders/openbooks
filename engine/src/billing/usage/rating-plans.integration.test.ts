@@ -254,7 +254,7 @@ test("subscription links validate the customer's identity and plan currency", DB
       customerId: org.customerId,
       planVersionId: version.id,
     });
-    assert.deepEqual(validLink.meterIds, input.meterIds);
+    assert.deepEqual([validLink.id.length > 0, validLink.meterIds], [true, input.meterIds]);
 
     const usd = await publishedVersion(org, actor, meter.id, "USD");
     await assert.rejects(
