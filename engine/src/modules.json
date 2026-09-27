@@ -275,6 +275,15 @@
         "records"
       ]
     },
+    "manufacturing": {
+      "description": "Manufacturing masters, planning, execution and ledger postings.",
+      "dependsOn": [
+        "inventory",
+        "journal",
+        "organization",
+        "platform"
+      ]
+    },
     "ledger": {
       "description": "The posting kernel and its orchestration: postDocument, posting effects, script journal writes, document void, delete and correction, billing provenance release.",
       "dependsOn": [
