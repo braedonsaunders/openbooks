@@ -10,6 +10,7 @@ import {
   orgFeatureEnabled,
 } from "../../organization/org-feature-lock.ts";
 import { db, withOrg } from "../../platform/db.ts";
+import { businessToday } from "../../platform/business-date.ts";
 import { UsageBillingError } from "./errors.ts";
 
 export type UsageAggregation = (typeof USAGE_AGGREGATIONS)[number];
@@ -546,7 +547,7 @@ export async function reverseUsageRecord(
       );
     }
     const reversalReason = requiredText(reason, "reason");
-    const reversalDate = dateText(occurredOn ?? new Date().toISOString().slice(0, 10));
+    const reversalDate = dateText(occurredOn ?? (await businessToday(orgId)));
     const subsidiaryId = await customerSubsidiary(orgId, original.customer_id);
     await requireOpenArPeriod(orgId, subsidiaryId, reversalDate);
     const reversedQuantity = neg(parseQuantity(original.quantity));
