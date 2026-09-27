@@ -7,13 +7,13 @@ import type { AllocationRuleVersion, RuleInEffect } from "./types.ts";
 import { definitionHash, validateRuleVersion } from "./validate.ts";
 
 /**
- * Overhead fold — the provisioning/sync service that derives the
- * system-owned post rule from the overhead policy + rate card.
+ * Overhead system rule — derives the system-owned post rule from the
+ * overhead policy + rate card.
  *
- * The legacy writer (overhead-apply.ts) posts DR overhead account [project] /
- * CR the same account untagged per approved time entry. That is exactly a
- * post-mode net_zero_pair allocation on a labor-hours driver, so the kernel
- * owns a system rule for it:
+ * Overhead applied with approved hours is DR overhead account [project] /
+ * CR the same account untagged per approved time entry: a post-mode
+ * net_zero_pair allocation on a labor-hours driver. The kernel owns it as a
+ * system rule:
  *
  *   key   'overhead-net-zero-pair' (allocation_rules.is_system, mode 'post')
  *   driver 'overhead-labor-hours' (native_measure labor_hours, dimension project)
@@ -29,7 +29,7 @@ import { definitionHash, validateRuleVersion } from "./validate.ts";
  * Event binding: the version's documentKinds carries a pseudo-kind no real
  * document bears (OVERHEAD_EVENT_DOCUMENT_KIND), so the entry matchLine /
  * post seam can never select the system rule for a document line — it fires
- * only on the time-approval event through overhead-apply.ts, which resolves
+ * only on the time-approval event through overhead-post.ts, which resolves
  * it by key and worked day.
  */
 
@@ -198,14 +198,36 @@ function checkedUuid(value: string, what: string): string {
   return value;
 }
 
-async function readPolicy(orgId: string): Promise<OverheadPostingPolicy> {
-  const rows = await db.execute<{ c: { mode?: unknown; accountId?: unknown } | null }>(sql`
-    select settings->'overheadApplication' as c from orgs where id = ${orgId}`);
-  const c = rows.rows[0]?.c ?? {};
+/** orgs.settings.overheadApplication as both the rule sync and the posting interpret it. */
+export interface OverheadApplicationSettings {
+  mode: "report_only" | "net_zero_pair" | "off";
+  /** The single "Overhead applied" account both legs post to. */
+  accountId: string | null;
+}
+
+type OverheadTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type OverheadExecutor = Pick<OverheadTransaction, "execute">;
+
+export async function overheadApplicationSettingsFrom(
+  executor: OverheadExecutor,
+  orgId: string,
+  lock = false,
+): Promise<OverheadApplicationSettings> {
+  const r = await executor.execute<{ c: { mode?: unknown; accountId?: unknown } | null }>(sql`
+    select settings->'overheadApplication' as c
+      from orgs
+     where id = ${orgId}
+     ${lock ? sql`for share` : sql``}
+  `);
+  const c = r.rows[0]?.c ?? {};
   return {
     mode: c.mode === "net_zero_pair" ? "net_zero_pair" : c.mode === "off" ? "off" : "report_only",
     accountId: typeof c.accountId === "string" ? c.accountId : null,
   };
+}
+
+export async function overheadApplicationSettings(orgId: string): Promise<OverheadApplicationSettings> {
+  return overheadApplicationSettingsFrom(db, orgId);
 }
 
 async function readHourlyCard(orgId: string): Promise<OverheadRateCardRow[]> {
@@ -314,7 +336,7 @@ export async function syncOverheadSystemRule(orgIdInput: string, actorIdInput: s
       });
     }
 
-    const [policy, card] = await Promise.all([readPolicy(orgId), readHourlyCard(orgId)]);
+    const [policy, card] = await Promise.all([overheadApplicationSettings(orgId), readHourlyCard(orgId)]);
     const derived = deriveOverheadSystemVersion(policy, card);
     const published: PublishedRow[] = (
       await db.execute<Record<string, unknown>>(sql`select id, version_no, effective_from::text as effective_from,
@@ -491,7 +513,7 @@ export interface OverheadRuleBinding {
 /**
  * Resolve the system version in force on a date. Null when the policy is
  * not an active pair or no derived version covers the date — the caller
- * (overhead-apply) lazy-syncs first, so null past that point is fail-closed
+ * (overhead-post) lazy-syncs first, so null past that point is fail-closed
  * evidence of an inconsistency, never a silent fallback.
  */
 export async function resolveOverheadRuleBinding(orgId: string, onDate: string): Promise<OverheadRuleBinding | null> {

@@ -11,7 +11,7 @@ import {
 import {
   applyOverheadForTime,
   reverseOverheadForTime,
-} from "./overhead-apply.ts";
+} from "../allocations/overhead-post.ts";
 import { postPayrollVariance } from "./labor-costing.ts";
 import {
   createScratchOrg,

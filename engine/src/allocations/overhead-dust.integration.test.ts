@@ -7,10 +7,10 @@ import {
   applyOverheadForTime,
   backfillOverhead,
   countUnappliedOverheadTime,
-} from "./overhead-apply.ts";
+} from "./overhead-post.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
-// Regression for B-PRJ-07: when hours x rate rounded to 0.0000 the entry was
+// When hours x rate rounded to 0.0000 the entry was
 // skipped WITHOUT stamping overhead_journal_entry_id, so
 // countUnappliedOverheadTime counted it forever, backfillOverhead broke on
 // the first all-zero batch, and the route answered {ok:true, entries:0}

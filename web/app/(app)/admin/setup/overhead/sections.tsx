@@ -17,10 +17,10 @@ import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
 import {
   countUnappliedOverheadTime,
   listOverheadApplications,
-  overheadApplicationSettings,
-} from '@openbooks/engine/src/projects/overhead-apply.ts'
+} from '@openbooks/engine/src/allocations/overhead-post.ts'
 import {
   getOverheadSystemRuleEvidence,
+  overheadApplicationSettings,
   type OverheadSystemRuleEvidence,
 } from '@openbooks/engine/src/allocations/overhead-sync.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
