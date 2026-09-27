@@ -1,0 +1,1 @@
+No preflight is required. This migration adds new tenant-owned tables and does not transform existing data.
