@@ -695,6 +695,10 @@
           "label": "Fertigungs-WIP",
           "hint": "Materialkosten für laufende Fertigungsaufträge werden hier belastet."
         },
+        "mfgMaterialUsageVariance": {
+          "label": "Materialverbrauchsabweichungskonto",
+          "hint": "Abweichungen beim Materialverbrauch in der Fertigung werden hier gebucht."
+        },
         "laborClearing": {
           "label": "Arbeitsverrechnung",
           "hint": "Wird gutgeschrieben, wenn Arbeit einem Projekt belastet wird; wird durch die Lohnabrechnung ausgeglichen"
@@ -1914,6 +1918,7 @@
         "laborClearing": "Lohnverrechnungskonto",
         "laborWip": "Lohn-WIP- / Auftragskostenkonto",
         "mfgWip": "Fertigungs-WIP-Konto",
+        "mfgMaterialUsageVariance": "Materialverbrauchsabweichungskonto",
         "modeOff": "Aus – nur Satzschnappschuss",
         "modePost": "Standardkosten auf Aufträge buchen",
         "overheadNote": "Gemeinkosten sind nicht Teil dieses Satzes – sie werden vom Gemeinkostenmodell als eigene Schicht angewandt.",

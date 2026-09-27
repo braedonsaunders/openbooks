@@ -704,6 +704,10 @@
           "label": "WIP de manufatura",
           "hint": "Os custos de materiais emitidos para ordens de produção ativas são debitados aqui."
         },
+        "mfgMaterialUsageVariance": {
+          "label": "Conta de variação de consumo de material",
+          "hint": "As variações de consumo de materiais da produção são contabilizadas aqui."
+        },
         "laborClearing": {
           "label": "Compensação de mão de obra",
           "hint": "Creditada quando a mão de obra é apropriada a um projeto; compensada pela folha de pagamento"
@@ -4019,6 +4023,7 @@
         "modePost": "Lançar custo-padrão nas obras",
         "laborWip": "Conta de mão de obra em WIP / custo da obra",
         "mfgWip": "Conta de WIP de manufatura",
+        "mfgMaterialUsageVariance": "Conta de variação de consumo de material",
         "laborClearing": "Conta de compensação de mão de obra",
         "overheadNote": "Indireto não faz parte desta taxa — é aplicado pelo Modelo de indiretos como camada própria.",
         "payrollVariance": "Conta de variação de folha",

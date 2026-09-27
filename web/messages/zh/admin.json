@@ -704,6 +704,10 @@
           "label": "制造在制品",
           "hint": "发料至进行中工单的材料成本记入此处借方。"
         },
+        "mfgMaterialUsageVariance": {
+          "label": "材料用量差异科目",
+          "hint": "生产材料用量差异记入此处。"
+        },
         "laborClearing": {
           "label": "人工清算",
           "hint": "人工计入项目时贷记；由工资核算清算"
@@ -4019,6 +4023,7 @@
         "modePost": "过账标准成本到项目",
         "laborWip": "人工在产 / 项目成本科目",
         "mfgWip": "制造在制品科目",
+        "mfgMaterialUsageVariance": "材料用量差异科目",
         "laborClearing": "人工清算科目",
         "overheadNote": "间接费用不属此费率——由间接费用模型作为独立层应用。",
         "payrollVariance": "工资差异科目",

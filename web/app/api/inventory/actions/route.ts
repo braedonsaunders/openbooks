@@ -11,9 +11,10 @@ import { buildAssembly, reverseAssemblyBuild } from "@openbooks/engine/src/inven
 import { executeIdempotentInventoryAction } from "@openbooks/engine/src/inventory/action-idempotency.ts";
 import { postLandedCostVoucher } from "@openbooks/engine/src/inventory/landed-cost.ts";
 import { reverseInventoryMovement } from "@openbooks/engine/src/inventory/reversal.ts";
+import { reverseMaterialIssue } from "@openbooks/engine/src/manufacturing/completion.ts";
 import { transferInventory } from "@openbooks/engine/src/inventory/transfers.ts";
 import { inventoryErrorStatus } from "@/lib/api/inventory-errors";
-import { guardPermission } from '../../../../lib/authz'
+import { can, guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { INVENTORY_ACTION_PERMISSIONS, type CataloguePermission } from '@openbooks/engine/src/organization/permissions.ts'
@@ -135,19 +136,24 @@ export const POST = defineRoute({
     // The movement's subsidiary and kind live on the row, not in the
     // request, so resolve them server-side and fence restricted callers
     // before any unwind.
-    const source = await db.execute<{ subsidiary_id: string | null; kind: string | null }>(
-      sql`select subsidiary_id, kind from inventory_movements where id = ${body.movementId} and org_id = ${user.orgId}`,
+    const source = await db.execute<{ subsidiary_id: string | null; kind: string | null; origin: string | null }>(
+      sql`select movement.subsidiary_id, movement.kind, entry.origin
+            from inventory_movements movement
+            left join journal_entries entry on entry.org_id=movement.org_id and entry.id=movement.journal_entry_id
+           where movement.id = ${body.movementId} and movement.org_id = ${user.orgId}`,
     )
     const movementSubsidiaryId = source.rows[0]?.subsidiary_id ?? null
     if (!source.rows[0] || (gate.allowedSubsidiaryIds && (!movementSubsidiaryId || !gate.allowedSubsidiaryIds.has(movementSubsidiaryId)))) {
       return notFound("record")
     }
-    // Assembly operations reverse through their own controlled reversal
-    // (consume legs, finished-good layer, and journal as one unit), never
-    // the single-movement path — which refuses them. The dispatch stays
-    // inside this items.reverse-gated, idempotency-wrapped branch, so a
-    // build reversal carries the same authority and replay contract as
-    // every other reversal.
+    // Assembly operations must be handled as complete controlled units.
+    // Manufacturing work-order issues use the manufacturing reversal path;
+    // their completion receipts refuse until a controlled correction exists.
+    // Other assembly movements keep the existing build reversal behavior.
+    const manufacturing = source.rows[0]?.origin === 'manufacturing'
+    if (manufacturing && source.rows[0]?.kind === 'assembly_consume' && !can(gate, 'manufacturing.manage')) {
+      return NextResponse.json({ error: 'missing permission: manufacturing.manage' }, { status: 403 })
+    }
     const isAssemblyLeg = source.rows[0]?.kind === 'assembly_build' || source.rows[0]?.kind === 'assembly_consume'
     try {
       const { value: res, replayed } = await executeIdempotentInventoryAction(
@@ -167,6 +173,7 @@ export const POST = defineRoute({
               reversalDate: body.date!,
               reason: body.memo!,
             }
+            if (manufacturing) return reverseMaterialIssue(user.orgId, user.id, input)
             return isAssemblyLeg
               ? reverseAssemblyBuild(user.orgId, user.id, input)
               : reverseInventoryMovement(user.orgId, user.id, input)
