@@ -22,8 +22,6 @@ import { fileURLToPath } from "node:url";
 
 const requireFromRoot = createRequire(new URL("../package.json", import.meta.url));
 const ts = requireFromRoot("typescript");
-const SELF_PATH = "scripts/check-journal-status-filter.mjs";
-const SELF_TEST = "scripts/check-journal-status-filter.test.mjs";
 const RELATIONS = new Set(["journal_entries", "journal_lines", "documents", "document_lines"]);
 const RESERVED = new Set([
   "as", "cross", "except", "fetch", "for", "full", "group", "having", "inner", "intersect",
