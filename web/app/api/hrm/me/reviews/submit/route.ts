@@ -13,7 +13,7 @@ export const POST = defineRoute({
   permission: "hrm.self.request",
   feature: "hrm",
   body: submitSelfAssessmentBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const review = await submitMySelfAssessment({
         orgId: gate.user.orgId,

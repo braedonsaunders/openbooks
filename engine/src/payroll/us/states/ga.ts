@@ -48,7 +48,7 @@
  */
 import { PayrollError } from "../../error.ts";
 import { D, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
-import { certificateAmount, certificateChoice, certificateCount, certificateFlag }
+import { certificateAmount, certificateChoice, certificateCount }
   from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { defineStateEngine, pairStateRateEditions, type StateEngineContext, US_STATE_PAY_PERIODS } from "./state-engine.ts";

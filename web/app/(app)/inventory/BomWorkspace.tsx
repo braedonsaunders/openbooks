@@ -142,7 +142,6 @@ function BomDrawer({
   const creating = assembly === null
   const [manufacturingEnabled, setManufacturingEnabled] = useState(false)
   const [detailReady, setDetailReady] = useState(false)
-  const [version, setVersion] = useState<string | null>(assembly?.version ?? null)
   const [assemblyItemId, setAssemblyItemId] = useState(assembly?.assemblyItemId ?? '')
   const [lines, setLines] = useState<EditableBomLine[]>(() =>
     assembly?.components.map((line) => editableLine(line)) ?? [editableLine()],
@@ -175,7 +174,6 @@ function BomDrawer({
           const nextLines = loaded.length > 0 ? loaded : [editableLine()]
           setLines(nextLines)
           setOriginalLines(nextLines)
-          setVersion(data.version ?? null)
         }
         setDetailReady(true)
       } catch (error) {
@@ -184,7 +182,7 @@ function BomDrawer({
     }
     void loadBom()
     return () => { current = false }
-  }, [assembly?.assemblyItemId, tCommon])
+  }, [assembly, tCommon])
   const closeGuard = useDirtyClose({
     dirty: assemblyItemId !== (assembly?.assemblyItemId ?? '') ||
       JSON.stringify(lines) !== JSON.stringify(originalLines) || reason !== '',

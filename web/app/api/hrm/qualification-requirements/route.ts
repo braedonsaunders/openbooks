@@ -49,7 +49,7 @@ export const POST = defineRoute({
   permission: "hrm.certifications.manage",
   feature: "hrmCertifications",
   body: setRequirementBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const requirement = await withOrgTransaction(gate.user.orgId, () =>
         setRequirement(db, {

@@ -9,7 +9,7 @@ export const POST = defineRoute({
   permission: "hrm.certifications.read",
   feature: "hrmCertifications",
   body: checkAssignmentBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const verdict = await withOrgTransaction(gate.user.orgId, () =>
         checkAssignment(db, {

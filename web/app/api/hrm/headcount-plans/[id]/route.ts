@@ -24,7 +24,7 @@ export const POST = defineRoute({
     .object({ action: z.enum(["line", "submit", "approve", "close"]) })
     .and(createPlanLineBody.partial()),
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params, body }) => {
+  handler: async ({ request: _req, authz: gate, params, body }) => {
     const { id } = params;
     if (!isUuid(id))
       return NextResponse.json({ error: "invalid plan" }, { status: 400 });

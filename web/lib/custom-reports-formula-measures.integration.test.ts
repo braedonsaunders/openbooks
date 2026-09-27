@@ -12,7 +12,6 @@ const { runCustomQuery, shapeSummarizedRows, summarizeRows } = await import(root
 const { REPORT_ENTITY_MAP } = await import(root + 'packages/reports/src/entities.ts') as typeof import('@openbooks/reports')
 const { reportResultToCsv } = await import(root + 'packages/office/src/index.ts') as typeof import('@openbooks/office')
 
-type Org = Awaited<ReturnType<typeof createScratchOrg>>
 type FixtureDocument = { kind: 'customer_invoice' | 'customer_payment'; posting_date: string; currency: 'CAD'; total: string }
 
 test('filtered formula totals, undefined labels and CSV match the in-memory producer', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

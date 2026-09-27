@@ -34,7 +34,7 @@ export const POST = defineRoute({
   permission: "hrm.performance.manage",
   feature: "hrmSuccession",
   body: createSuccessionPlanBody,
-  handler: async ({ request: req, authz, body }) => {
+  handler: async ({ request: _req, authz, body }) => {
     try {
       const plan = await createSuccessionPlan({
         orgId: authz.user.orgId,

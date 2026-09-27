@@ -11,7 +11,7 @@ export const POST = defineRoute({
   feature: "hrm",
   body: emptyBody,
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params, body }) => {
+  handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = params;
     if (!isUuid(id))
       return NextResponse.json(

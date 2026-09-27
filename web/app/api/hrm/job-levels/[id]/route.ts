@@ -15,7 +15,7 @@ export const PATCH = defineRoute({
   feature: "hrmCompensation",
   body: updateLevelBody,
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params, body }) => {
+  handler: async ({ request: _req, authz: gate, params, body }) => {
     const { id } = params;
     if (!isUuid(id))
       return NextResponse.json({ error: "invalid job level" }, { status: 400 });

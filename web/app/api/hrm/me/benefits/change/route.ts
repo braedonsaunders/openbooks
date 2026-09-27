@@ -13,7 +13,7 @@ export const POST = defineRoute({
   permission: "hrm.self.request",
   feature: "hrm",
   body: changeBenefitBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const enrollment = await changeMyBenefit({
         orgId: gate.user.orgId,

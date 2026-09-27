@@ -53,7 +53,7 @@ export const POST = defineRoute({
   permission: "hrm.position.manage",
   feature: "hrm",
   body: createPositionBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const position = await createPosition({
         orgId: gate.user.orgId,

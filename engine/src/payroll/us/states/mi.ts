@@ -51,7 +51,7 @@
  */
 import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
-import { certificateAmount, certificateCount, certificateFlag } from "../../certificates.ts";
+import { certificateAmount, certificateCount } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import {
   type UsStatePayPeriod,

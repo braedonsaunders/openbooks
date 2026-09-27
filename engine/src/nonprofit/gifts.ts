@@ -5,7 +5,7 @@ import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
-import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { NonprofitError } from "./errors.ts";
 

@@ -14,7 +14,7 @@ export const POST = defineRoute({
   permission: "hrm.benefits.manage",
   feature: "hrm",
   body: benefitPayrollInputsBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       if (body.action === "void") {
         const input = await voidBenefitPayrollInput({

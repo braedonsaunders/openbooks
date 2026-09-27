@@ -11,7 +11,7 @@ export const POST = defineRoute({
   feature: "hrmCertifications",
   body: verifyQualificationBody,
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params, body }) => {
+  handler: async ({ request: _req, authz: gate, params, body }) => {
     try {
       const { id } = params;
       const qualification = await withOrgTransaction(

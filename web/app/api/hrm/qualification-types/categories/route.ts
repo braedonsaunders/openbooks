@@ -10,7 +10,7 @@ export const POST = defineRoute({
   feature: "hrmCertifications",
   scope: "unrestricted",
   body: declareCategoryBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const settings = await declareCategory(db, {
         orgId: gate.user.orgId,

@@ -33,7 +33,7 @@ export const POST = defineRoute({
   permission: "hrm.surveys.manage",
   feature: "hrmSurveys",
   body: saveSurveyBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const survey = await saveSurvey({
         orgId: gate.user.orgId,

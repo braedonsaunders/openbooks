@@ -28,7 +28,7 @@ export const POST = defineRoute({
   permission: "hrm.documents.manage",
   feature: "hrmDocuments",
   body: saveTemplateBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const template = await saveTemplate({
         orgId: gate.user.orgId,

@@ -59,7 +59,7 @@ export function OrderBackorders({
   }, [url, t])
 
   useEffect(() => {
-    void load()
+    queueMicrotask(() => { void load() })
   }, [load])
 
   async function cancelRemainder(line: BackorderLine) {
