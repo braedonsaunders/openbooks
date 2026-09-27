@@ -33,6 +33,10 @@ export function canAddAggregateMeasure(measures: readonly Pick<ReportMeasure, 'f
   return measures.filter((measure) => measure.fn !== 'formula').length < MAX_AGGREGATE_MEASURES
 }
 
+export function canAddFormulaMeasure(measures: readonly Pick<ReportMeasure, 'fn'>[]): boolean {
+  return measures.filter((measure) => measure.fn === 'formula').length < MAX_FORMULA_MEASURES
+}
+
 function sanitizeFormulaExpr(raw: unknown, measureKey: string, depth = 0): ReportFormulaExpr {
   if (depth > MAX_FORMULA_DEPTH || !raw || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new ReportQueryValidationError(`Formula measure '${measureKey}' has an invalid expression`)
