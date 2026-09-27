@@ -7,7 +7,7 @@ export const inboxAndHome: DocArticle = {
   order: 12,
   summary:
     'One inbox where approvals, checklist steps, requests, and notices complete in place, and a home dashboard composed for employees, managers, and admins.',
-  updated: '2026-09-20',
+  updated: '2026-09-27',
   keywords: ['inbox', 'my tasks', 'approvals', 'home', 'dashboard', 'notices', 'persona'],
   related: ['self-service', 'hrm-processes'],
   body: `# Your Inbox and Home
@@ -22,7 +22,7 @@ The badge on the Inbox entry counts pending decisions plus unread notices. Notic
 
 The home dashboard composes itself from what you hold. Everyone gets my tasks, pay, time-off balances with one-tap requests, who's out, upcoming dates, celebrations, announcements, and the ask box. Managers add approvals awaiting them, team absence, overdue team steps, nudges, and team headcount. Admins add the attention rollup, workflow errors, and the compliance calendar. Every tile links where its rows live; a tile with nothing true to say renders empty rather than a zero as a fact.
 
-A dashboard you customized stays yours. Announcements are authored under Setup → Company → Announcements with audience scope and dates. Celebrations and manager nudges are optional modules on Company Settings → Features and hide without deleting anything when off.
+A dashboard you customized stays yours. Announcements are authored under Setup → Company → Announcements with audience scope and dates. Celebrations and manager nudges are part of HRM: they are available whenever HRM is on, and where they appear is set through dashboard layouts like any other widget.
 
 ## Reporting and assistance
 

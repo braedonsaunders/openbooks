@@ -7,7 +7,7 @@ export const continuousPerformance: DocArticle = {
   order: 11,
   summary:
     "What happens between review cycles: 1:1 agendas that carry over, feedback captured when it happens, competencies reused everywhere, a calibration grid with an audit trail, and talent reviews that feed succession.",
-  updated: "2026-09-20",
+  updated: "2026-09-27",
   keywords: [
     "1:1",
     "one-on-one",
@@ -80,9 +80,10 @@ subject never sees their talent review and a candidate has no self
 view; non-HR readers get the uniform refusal, never a filtered list
 that leaks existence.
 
-Each surface hides behind its own switch on Company Settings →
-Features under the hrmPerformance parent: 1:1s, feedback,
-competencies, calibration, and succession. Off hides the tab, widgets,
-tools, and setup — never data, never history.
+1:1s, feedback, competencies, calibration, talent reviews, and
+succession all come with the Performance switch under HRM on Company
+Settings → Features; none has a switch of its own. Turning Performance
+off hides the tabs, widgets, tools, and setup — never data, never
+history.
 `,
 };

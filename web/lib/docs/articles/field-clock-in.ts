@@ -7,7 +7,7 @@ export const fieldClockIn: DocArticle = {
   order: 11,
   summary:
     "How crews clock in from a phone or a site kiosk: projects and cost codes at clock-in, geofence flags, photos, breaks, switches, and the offline queue.",
-  updated: "2026-09-21",
+  updated: "2026-09-27",
   keywords: [
     "clock in",
     "clock out",
@@ -28,6 +28,13 @@ mobile-first clock page and a site kiosk page that record clock events
 and pair them into time entries — the grid stays the office path, and
 both paths land in the same timesheet weeks and the same approvals.
 
+Turn on Field time capture under Time tracking in Company Settings →
+Features (it needs Projects). There are no sub-switches: geofences,
+clock photos, site kiosks, crew time entry, and equipment hours on time
+all come with it (equipment hours also need the Equipment module). What
+varies is configuration — geofences per project, photo rules in
+Timesheets setup and per kiosk.
+
 ## The clock page
 
 Open Time entry, then Clock. One state card tells the truth (clocked
@@ -42,10 +49,18 @@ rounded per the org's declared rounding rule and reduced by breaks per
 the declared break rule. Entries land submitted in the week's timesheet
 and price through the normal labor-costing resolution at approval.
 
+Timesheet approval routing is authored in Flows: a flow on the timesheet
+week record with one approval step per stage — supervisor, project
+manager, payroll, with any quorum. Without a flow, a time approver
+approves the week directly; while a flow's approval gates are open, the
+flow owns the week and it cannot be approved or rejected directly.
+Timesheets setup holds the clock rules and points to Flows for routing.
+
 ## Place and identity are flags, not walls
 
-When the project declares a geofence, the clock checks the device fix
-against it. An outside fix is RECORDED anyway — a worker must be able
+When the project declares an active geofence, the clock checks the
+device fix against it; a project with no active geofence is simply not
+checked. An outside fix is RECORDED anyway — a worker must be able
 to clock — and flagged for the approver, who sees the flag chip in the
 approvals page. The same holds for an unavailable fix (no permission,
 no signal). Raw coordinates never leave the approval drawer and the
@@ -54,7 +69,9 @@ coordinates report; every other surface carries flags only.
 Kiosks are shared devices opened from a device link: the worker finds
 their name, enters their PIN, and clocks. A PIN is a kiosk identity,
 never a password — five wrong tries lock kiosk sign-in for fifteen
-minutes. Kiosks that require photos refuse the clock without one. The
+minutes. The org-wide rule that mobile clock events need a photo lives
+in Timesheets setup, and each kiosk can require a photo on its own; a
+clock that needs a photo refuses without one. The
 kiosk returns to idle after twenty seconds so the next worker starts
 clean.
 

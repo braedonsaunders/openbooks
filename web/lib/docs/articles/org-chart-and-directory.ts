@@ -7,14 +7,14 @@ export const orgChartAndDirectory: DocArticle = {
   order: 15,
   summary:
     'The reporting tree with vacancies as of any date, the searchable people directory, and the cockpit widget — names, titles, departments, and managers only.',
-  updated: '2026-09-21',
+  updated: '2026-09-27',
   keywords: ['org chart', 'directory', 'reporting', 'manager', 'vacancy', 'span of control', 'as-of', 'tree'],
   related: ['positions-and-headcount', 'engagement-surveys'],
   body: `# Org Chart and Directory
 
 The org chart answers one question: who reports to whom, today or on any past date. The tree resolves from live employments with their line-manager edges, open headcount requisitions render as dashed vacancy nodes, and every node carries span of control and layer depth. The directory answers the companion question — who is everyone — as a searchable register over the same read.
 
-Enable the module in Company Settings → Features → HRM → Org chart. Turning it off preserves everything; with the switch off, the tab and the API 404.
+The org chart is part of HRM: it is on whenever HRM is on in Company Settings → Features. Turning HRM off preserves everything; while it is off, the tab and the API 404.
 
 ## The tree
 

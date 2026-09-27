@@ -13,7 +13,7 @@ export const setupCompanyGroup: DocArticle = {
   order: 10,
   summary:
     'Organization identity, control accounts, subsidiaries, intercompany mapping, features, bank feeds, payments, and CRM defaults.',
-  updated: '2026-07-22',
+  updated: '2026-09-27',
   keywords: [
     'company',
     'organization',
@@ -54,9 +54,13 @@ realized adjustment is refused until the realized account is set.
 
 ## Features
 
-**Features** switches cross-company optional modules on or off. A domain with
-material subordinate policies still keeps every feature gate on this single
-authoritative switchboard. Projects, Field Tickets, Subscription Billing, and
+**Features** switches cross-company optional modules on or off. Field time
+capture (under Time tracking) and each HR module (Compensation, Performance,
+Construction compliance, Certifications and licenses, HR documents,
+Engagement surveys, Recruiting, under Human resources) is a single switch:
+everything the module includes is on whenever the module is, and the tunable
+parts are configuration on the module's own setup pages, never a further
+switch. Projects, Field Tickets, Subscription Billing, and
 all other optional capabilities are governed in **Company Settings → Features**;
 module settings pages show status and configuration but never duplicate a switch.
 Turning a feature off hides operational surfaces but never deletes its data —

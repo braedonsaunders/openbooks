@@ -7,7 +7,7 @@ export const certifiedPayrollPrevailingWagePerDiem: DocArticle = {
   order: 10,
   summary:
     "How rate schedules price project hours by classification and date, how frozen certified reports render through the payroll pack's declared files, and how per-diem crosses into payroll.",
-  updated: "2026-09-20",
+  updated: "2026-09-27",
   keywords: [
     "certified payroll",
     "prevailing wage",
@@ -32,6 +32,11 @@ specific schedule in scope, the employment's classification as of the
 day, and prices from the covering line. A day with no covering line is
 refused by name and flagged as a missing-rate finding — it never falls
 back to the employment wage silently.
+
+Turn on Construction compliance under HRM in Company Settings →
+Features; it needs Payroll, Projects, and Time tracking. It is one
+switch: prevailing wage, certified payroll, workers'-comp classes,
+apprentice ratios, and per diem all come with it.
 
 Every rate source, class list, and rule is a pack declaration or an
 org-declared table. The generic layer branches on no jurisdiction: the
