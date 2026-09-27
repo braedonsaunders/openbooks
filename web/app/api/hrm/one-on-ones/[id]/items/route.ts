@@ -1,16 +1,16 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import {
   addOneOnOneItem,
   getOneOnOne,
   setOneOnOneItemDone,
 } from "@openbooks/engine/src/hrm/performance/one-on-ones.ts";
-import { getAuthz } from "../../../../../../lib/authz";
+
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { performanceErrorResponse } from "../../../review-cycles/_lib";
 import { addOneOnOneItemBody, patchOneOnOneItemBody } from "../../bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -27,68 +27,86 @@ async function gated(orgId: string): Promise<boolean> {
  * items; POST adds one; PATCH toggles done. The client checks res.ok
  * before parsing.
  */
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!(await gated(authz.user.orgId))) {
-    return notFound("record");
-  }
-  const { id } = await ctx.params;
-  try {
-    const one = await getOneOnOne({ orgId: authz.user.orgId, actorId: authz.user.id, id });
-    return NextResponse.json({ items: one.items });
-  } catch (e) {
-    return performanceErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: authz, params: routeParams }) => {
+    if (!(await gated(authz.user.orgId))) {
+      return notFound("record");
+    }
+    const { id } = routeParams;
+    try {
+      const one = await getOneOnOne({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        id,
+      });
+      return NextResponse.json({ items: one.items });
+    } catch (e) {
+      return performanceErrorResponse(e);
+    }
+  },
+});
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!(await gated(authz.user.orgId))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, addOneOnOneItemBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  const { id } = await ctx.params;
-  try {
-    const item = await addOneOnOneItem({
-      orgId: authz.user.orgId,
-      actorId: authz.user.id,
-      oneOnOneId: id,
-      kind: body.kind,
-      body: body.body,
-      visibility: body.visibility ?? "shared",
-      assigneePartyId: body.assigneePartyId ?? null,
-      dueOn: body.dueOn ?? null,
-    });
-    return NextResponse.json({ item }, { status: 201 });
-  } catch (e) {
-    return performanceErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string().min(1) }),
+  body: addOneOnOneItemBody,
+  handler: async ({
+    request: req,
+    authz: authz,
+    params: routeParams,
+    body: body,
+  }) => {
+    if (!(await gated(authz.user.orgId))) {
+      return notFound("record");
+    }
 
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!(await gated(authz.user.orgId))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, patchOneOnOneItemBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  const { id } = await ctx.params;
-  try {
-    await setOneOnOneItemDone({
-      orgId: authz.user.orgId,
-      actorId: authz.user.id,
-      oneOnOneId: id,
-      itemId: body.itemId,
-      done: body.done,
-    });
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    return performanceErrorResponse(e);
-  }
-}
+    const { id } = routeParams;
+    try {
+      const item = await addOneOnOneItem({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        oneOnOneId: id,
+        kind: body.kind,
+        body: body.body,
+        visibility: body.visibility ?? "shared",
+        assigneePartyId: body.assigneePartyId ?? null,
+        dueOn: body.dueOn ?? null,
+      });
+      return NextResponse.json({ item }, { status: 201 });
+    } catch (e) {
+      return performanceErrorResponse(e);
+    }
+  },
+});
+
+export const PATCH = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string().min(1) }),
+  body: patchOneOnOneItemBody,
+  handler: async ({
+    request: req,
+    authz: authz,
+    params: routeParams,
+    body: body,
+  }) => {
+    if (!(await gated(authz.user.orgId))) {
+      return notFound("record");
+    }
+
+    const { id } = routeParams;
+    try {
+      await setOneOnOneItemDone({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        oneOnOneId: id,
+        itemId: body.itemId,
+        done: body.done,
+      });
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      return performanceErrorResponse(e);
+    }
+  },
+});

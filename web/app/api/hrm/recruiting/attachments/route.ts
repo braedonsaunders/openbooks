@@ -1,11 +1,10 @@
-import { isFeatureEnabled } from "../../../../../lib/features";
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+
 import { NextResponse } from "next/server";
 import { attachCandidate } from "@openbooks/engine/src/hrm/recruiting/applications.ts";
-import { guardPermission } from "../../../../../lib/authz";
+
 import { recruitingErrorResponse } from "../_lib";
 import { attachCandidateBody } from "./bodies";
-import { notFound } from "@/lib/api/responses";
 
 /**
  * Attach a prospect to an open requisition in ONE server call: the
@@ -14,28 +13,24 @@ import { notFound } from "@/lib/api/responses";
  * can never be orphaned the way the old two-POST island left it when the
  * application POST failed.
  */
-
-export async function POST(req: Request) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, attachCandidateBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const attached = await attachCandidate({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      requisitionId: body.requisitionId,
-      displayName: body.displayName,
-      email: body.email,
-      phone: body.phone,
-      mergeInto: body.mergeInto,
-    });
-    return NextResponse.json({ attached }, { status: 201 });
-  } catch (error) {
-    return recruitingErrorResponse(error);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmRecruiting",
+  body: attachCandidateBody,
+  handler: async ({ request: req, authz: gate, body: body }) => {
+    try {
+      const attached = await attachCandidate({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        requisitionId: body.requisitionId,
+        displayName: body.displayName,
+        email: body.email,
+        phone: body.phone,
+        mergeInto: body.mergeInto,
+      });
+      return NextResponse.json({ attached }, { status: 201 });
+    } catch (error) {
+      return recruitingErrorResponse(error);
+    }
+  },
+});

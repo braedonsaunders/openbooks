@@ -1,12 +1,13 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { closePosting, pausePosting } from "@openbooks/engine/src/hrm/recruiting/postings.ts";
-import { guardPermission } from "../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../lib/features";
+import {
+  closePosting,
+  pausePosting,
+} from "@openbooks/engine/src/hrm/recruiting/postings.ts";
+
 import { recruitingErrorResponse } from "../../_lib";
 import { transitionPostingBody } from "../bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -15,25 +16,35 @@ export const runtime = "nodejs";
  * Closed postings stay closed. 404s while hrm, hrmRecruiting, or
  * hrmJobBoards is off.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (
-    !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
-    !(await isFeatureEnabled(gate.user.orgId, "hrmJobBoards"))
-  ) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  const parsedBody = await parseJsonBody(req, transitionPostingBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const posting =
-      parsedBody.data.action === "pause"
-        ? await pausePosting({ orgId: gate.user.orgId, actorId: gate.user.id, postingId: id })
-        : await closePosting({ orgId: gate.user.orgId, actorId: gate.user.id, postingId: id });
-    return NextResponse.json({ posting });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmJobBoards",
+  params: z.object({ id: z.string().min(1) }),
+  body: transitionPostingBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+
+    try {
+      const posting =
+        body.action === "pause"
+          ? await pausePosting({
+              orgId: gate.user.orgId,
+              actorId: gate.user.id,
+              postingId: id,
+            })
+          : await closePosting({
+              orgId: gate.user.orgId,
+              actorId: gate.user.id,
+              postingId: id,
+            });
+      return NextResponse.json({ posting });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});

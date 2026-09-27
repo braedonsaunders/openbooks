@@ -1,13 +1,14 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { recordConsent, withdrawConsent } from "@openbooks/engine/src/hrm/recruiting/retention.ts";
-import { guardPermission } from "../../../../../../../lib/authz";
+import {
+  recordConsent,
+  withdrawConsent,
+} from "@openbooks/engine/src/hrm/recruiting/retention.ts";
+
 import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../../_lib";
 import { recordConsentBody, withdrawConsentBody } from "./bodies";
 import { z } from "zod";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -23,36 +24,40 @@ async function depthGate(orgId: string) {
   return isFeatureEnabled(orgId, "hrmCandidateRetention");
 }
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  const parsedBody = await parseJsonBody(req, consentActionBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    if ("action" in body && body.action === "withdraw") {
-      await withdrawConsent({
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmCandidateRetention",
+  params: z.object({ id: z.string().min(1) }),
+  body: consentActionBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+
+    try {
+      if ("action" in body && body.action === "withdraw") {
+        await withdrawConsent({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          candidateId: id,
+          purpose: body.purpose,
+        });
+        return NextResponse.json({ withdrawn: id });
+      }
+      const consent = await recordConsent({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         candidateId: id,
         purpose: body.purpose,
+        source: "source" in body ? body.source : undefined,
+        expiresAt: "expiresAt" in body ? body.expiresAt : undefined,
       });
-      return NextResponse.json({ withdrawn: id });
+      return NextResponse.json({ consent }, { status: 201 });
+    } catch (e) {
+      return recruitingErrorResponse(e);
     }
-    const consent = await recordConsent({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      candidateId: id,
-      purpose: body.purpose,
-      source: "source" in body ? body.source : undefined,
-      expiresAt: "expiresAt" in body ? body.expiresAt : undefined,
-    });
-    return NextResponse.json({ consent }, { status: 201 });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+  },
+});

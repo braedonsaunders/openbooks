@@ -1,10 +1,9 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { deleteTalentPool } from "@openbooks/engine/src/hrm/recruiting/pools.ts";
-import { guardPermission } from "../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../lib/features";
-import { recruitingErrorResponse } from "../../_lib";
-import { notFound } from "@/lib/api/responses";
 
+import { recruitingErrorResponse } from "../../_lib";
 
 export const runtime = "nodejs";
 
@@ -13,20 +12,21 @@ export const runtime = "nodejs";
  * are untouched — deleting a pool never deletes a person). 404s while hrm,
  * hrmRecruiting, or hrmTalentPool is off.
  */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (
-    !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
-    !(await isFeatureEnabled(gate.user.orgId, "hrmTalentPool"))
-  ) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  try {
-    await deleteTalentPool({ orgId: gate.user.orgId, actorId: gate.user.id, poolId: id });
-    return NextResponse.json({ deleted: id });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const DELETE = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmTalentPool",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const { id } = routeParams;
+    try {
+      await deleteTalentPool({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        poolId: id,
+      });
+      return NextResponse.json({ deleted: id });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});

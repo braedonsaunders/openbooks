@@ -1,12 +1,14 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { listOfferVersions, renderOfferVersion } from "@openbooks/engine/src/hrm/recruiting/offers-signing.ts";
-import { guardPermission } from "../../../../../../../lib/authz";
+import {
+  listOfferVersions,
+  renderOfferVersion,
+} from "@openbooks/engine/src/hrm/recruiting/offers-signing.ts";
+
 import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../../_lib";
 import { renderOfferVersionBody } from "./bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -20,46 +22,50 @@ async function depthGate(orgId: string) {
   return isFeatureEnabled(orgId, "hrmOfferSigning");
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  try {
-    const versions = await listOfferVersions({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      offerId: id,
-    });
-    return NextResponse.json({ versions });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.recruiting.read",
+  feature: "hrmRecruiting",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const { id } = routeParams;
+    try {
+      const versions = await listOfferVersions({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        offerId: id,
+      });
+      return NextResponse.json({ versions });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  const parsedBody = await parseJsonBody(req, renderOfferVersionBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const version = await renderOfferVersion({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      offerId: id,
-      templateId: body.templateId,
-      selectedClauseKeys: body.selectedClauseKeys,
-      renderedFileId: body.renderedFileId,
-    });
-    return NextResponse.json({ version }, { status: 201 });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmRecruiting",
+  params: z.object({ id: z.string().min(1) }),
+  body: renderOfferVersionBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+
+    try {
+      const version = await renderOfferVersion({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        offerId: id,
+        templateId: body.templateId,
+        selectedClauseKeys: body.selectedClauseKeys,
+        renderedFileId: body.renderedFileId,
+      });
+      return NextResponse.json({ version }, { status: 201 });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});

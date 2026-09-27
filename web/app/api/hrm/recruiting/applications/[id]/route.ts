@@ -1,17 +1,16 @@
-import { isFeatureEnabled } from "../../../../../../lib/features";
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+
 import { NextResponse } from "next/server";
 import {
   moveApplicationStage,
   rejectApplication,
   withdrawApplication,
 } from "@openbooks/engine/src/hrm/recruiting/applications.ts";
-import { guardPermission } from "../../../../../../lib/authz";
+
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";
 import { patchApplicationBody } from "../bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -23,44 +22,52 @@ export const runtime = "nodejs";
  * grant, while reject and withdraw need the grant in full. Every
  * transition appends its evidence in the same transaction.
  */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid application" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, patchApplicationBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    if (body.action === "move") {
-      const application = await moveApplicationStage({
+export const PATCH = defineRoute({
+  permission: "hrm.recruiting.read",
+  feature: "hrmRecruiting",
+  params: z.object({ id: z.string().min(1) }),
+  body: patchApplicationBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+    if (!isUuid(id))
+      return NextResponse.json(
+        { error: "invalid application" },
+        { status: 400 },
+      );
+
+    try {
+      if (body.action === "move") {
+        const application = await moveApplicationStage({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          applicationId: id,
+          toStageId: body.toStageId,
+          reason: body.reason,
+        });
+        return NextResponse.json({ application });
+      }
+      if (body.action === "reject") {
+        const application = await rejectApplication({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          applicationId: id,
+          reason: body.reason,
+        });
+        return NextResponse.json({ application });
+      }
+      const application = await withdrawApplication({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         applicationId: id,
-        toStageId: body.toStageId,
-        reason: body.reason,
       });
       return NextResponse.json({ application });
+    } catch (e) {
+      return recruitingErrorResponse(e);
     }
-    if (body.action === "reject") {
-      const application = await rejectApplication({
-        orgId: gate.user.orgId,
-        actorId: gate.user.id,
-        applicationId: id,
-        reason: body.reason,
-      });
-      return NextResponse.json({ application });
-    }
-    const application = await withdrawApplication({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      applicationId: id,
-    });
-    return NextResponse.json({ application });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+  },
+});

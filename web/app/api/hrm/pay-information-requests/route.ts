@@ -1,14 +1,9 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import {
-  requestPayInformation,
-} from "@openbooks/engine/src/hrm/compensation/pay-transparency.ts";
-import { guardPermission } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
+import { requestPayInformation } from "@openbooks/engine/src/hrm/compensation/pay-transparency.ts";
+
 import { compensationErrorResponse } from "../compensation/_lib";
 import { requestPayInfoBody } from "../compensation/bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -20,22 +15,20 @@ export const runtime = "nodejs";
  * reason. Fulfil/refuse ride comp.manage. The client checks res.ok
  * before parsing.
  */
-export async function POST(req: Request) {
-  const gate = await guardPermission("hrm.self.request");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmPayTransparency"))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, requestPayInfoBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const request = await requestPayInformation({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      employmentId: parsedBody.data.employmentId,
-    });
-    return NextResponse.json({ request }, { status: 201 });
-  } catch (e) {
-    return compensationErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.self.request",
+  feature: "hrmPayTransparency",
+  body: requestPayInfoBody,
+  handler: async ({ request: req, authz: gate, body: body }) => {
+    try {
+      const request = await requestPayInformation({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        employmentId: body.employmentId,
+      });
+      return NextResponse.json({ request }, { status: 201 });
+    } catch (e) {
+      return compensationErrorResponse(e);
+    }
+  },
+});

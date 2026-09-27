@@ -1,13 +1,14 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { loadSettings, setAlertSchedule } from "@openbooks/engine/src/hrm/qualifications/types.ts";
-import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
-import { qualificationErrorResponse } from "../qualifications/_lib";
-import { notFound } from "@/lib/api/responses";
+import {
+  loadSettings,
+  setAlertSchedule,
+} from "@openbooks/engine/src/hrm/qualifications/types.ts";
+import { guardUnrestrictedScope } from "../../../../lib/authz";
 
+import { qualificationErrorResponse } from "../qualifications/_lib";
 
 export const runtime = "nodejs";
 
@@ -25,38 +26,36 @@ const setScheduleBody = z.object({
  * hrm.certifications.read holder: the schedule and vocabulary disclose no
  * per-subsidiary material, and managers need the lead days to act on alerts.
  */
-export async function GET() {
-  const gate = await guardPermission("hrm.certifications.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
-    return notFound("record");
-  }
-  try {
-    const settings = await loadSettings(db, gate.user.orgId);
-    return NextResponse.json({ settings });
-  } catch (e) {
-    return qualificationErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.certifications.read",
+  feature: "hrmCertifications",
+  handler: async ({ request: req, authz: gate }) => {
+    try {
+      const settings = await loadSettings(db, gate.user.orgId);
+      return NextResponse.json({ settings });
+    } catch (e) {
+      return qualificationErrorResponse(e);
+    }
+  },
+});
 
-export async function POST(req: Request) {
-  const gate = await guardPermission("hrm.certifications.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
-    return notFound("record");
-  }
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
-  const parsedBody = await parseJsonBody(req, setScheduleBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const settings = await setAlertSchedule(db, {
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      ...parsedBody.data,
-    });
-    return NextResponse.json({ settings });
-  } catch (e) {
-    return qualificationErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.certifications.manage",
+  feature: "hrmCertifications",
+  body: setScheduleBody,
+  handler: async ({ request: req, authz: gate, body: body }) => {
+    const scopeDenied = guardUnrestrictedScope(gate);
+    if (scopeDenied) return scopeDenied;
+
+    try {
+      const settings = await setAlertSchedule(db, {
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        ...body,
+      });
+      return NextResponse.json({ settings });
+    } catch (e) {
+      return qualificationErrorResponse(e);
+    }
+  },
+});

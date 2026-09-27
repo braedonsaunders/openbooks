@@ -1,16 +1,14 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import {
   linkDependent,
   unlinkDependent,
 } from "@openbooks/engine/src/hrm/benefits/dependents.ts";
-import { guardPermission } from "../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../lib/features";
+
 import { isUuid } from "../../../../../../lib/list-params";
 import { benefitsErrorResponse } from "../../../benefits/_lib";
 import { linkDependentBody } from "../../bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -18,35 +16,43 @@ export const runtime = "nodejs";
  * Cover or uncover a dependent on one election. The engine proves both
  * rows belong to the same employment — a cross-employment link is refused.
  */
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.benefits.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const { id } = await ctx.params;
-  if (!isUuid(id)) return NextResponse.json({ error: "enrollment id must be a uuid" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, linkDependentBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    if (body.action === "link") {
-      await linkDependent({
-        orgId: gate.user.orgId,
-        actorId: gate.user.id,
-        enrollmentId: id,
-        dependentId: body.dependentId,
-      });
-    } else {
-      await unlinkDependent({
-        orgId: gate.user.orgId,
-        actorId: gate.user.id,
-        enrollmentId: id,
-        dependentId: body.dependentId,
-      });
+export const POST = defineRoute({
+  permission: "hrm.benefits.manage",
+  feature: "hrm",
+  params: z.object({ id: z.string().min(1) }),
+  body: linkDependentBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+    if (!isUuid(id))
+      return NextResponse.json(
+        { error: "enrollment id must be a uuid" },
+        { status: 400 },
+      );
+
+    try {
+      if (body.action === "link") {
+        await linkDependent({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          enrollmentId: id,
+          dependentId: body.dependentId,
+        });
+      } else {
+        await unlinkDependent({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          enrollmentId: id,
+          dependentId: body.dependentId,
+        });
+      }
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      return benefitsErrorResponse(e);
     }
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    return benefitsErrorResponse(e);
-  }
-}
+  },
+});

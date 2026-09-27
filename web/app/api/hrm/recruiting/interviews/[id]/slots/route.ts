@@ -1,12 +1,14 @@
-import { parseJsonBody } from "../../../../../../../lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { listInterviewSlots, proposeSlots } from "@openbooks/engine/src/hrm/recruiting/scheduling.ts";
-import { guardPermission } from "../../../../../../../lib/authz";
+import {
+  listInterviewSlots,
+  proposeSlots,
+} from "@openbooks/engine/src/hrm/recruiting/scheduling.ts";
+
 import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../../_lib";
 import { proposeSlotsBody } from "./bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -21,46 +23,50 @@ async function depthGate(orgId: string) {
   return isFeatureEnabled(orgId, "hrmInterviewScheduling");
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  try {
-    const slots = await listInterviewSlots({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      interviewId: id,
-    });
-    return NextResponse.json({ slots });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmInterviewScheduling",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const { id } = routeParams;
+    try {
+      const slots = await listInterviewSlots({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        interviewId: id,
+      });
+      return NextResponse.json({ slots });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  const parsedBody = await parseJsonBody(req, proposeSlotsBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const result = await proposeSlots({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      interviewId: id,
-      windows: body.windows,
-      poolId: body.poolId,
-      expiresAt: body.expiresAt,
-    });
-    return NextResponse.json(result, { status: 201 });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmInterviewScheduling",
+  params: z.object({ id: z.string().min(1) }),
+  body: proposeSlotsBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+
+    try {
+      const result = await proposeSlots({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        interviewId: id,
+        windows: body.windows,
+        poolId: body.poolId,
+        expiresAt: body.expiresAt,
+      });
+      return NextResponse.json(result, { status: 201 });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});

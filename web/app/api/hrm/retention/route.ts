@@ -1,15 +1,13 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import {
   getRetentionOverview,
   getTurnover,
 } from "@openbooks/engine/src/hrm/performance/performance-read.ts";
-import { guardPermission } from "../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../lib/features";
+
 import { isUuid } from "../../../../lib/list-params";
 import { performanceErrorResponse } from "../review-cycles/_lib";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -35,29 +33,31 @@ function monthPeriods(today: string): { start: string; end: string }[] {
   return periods;
 }
 
-export async function GET(req: Request) {
-  const gate = await guardPermission("hrm.retention.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const departmentId = new URL(req.url).searchParams.get("departmentId");
-  if (departmentId !== null && !isUuid(departmentId)) {
-    return NextResponse.json({ error: "departmentId must be a uuid" }, { status: 400 });
-  }
-  try {
-    const today = await businessToday(gate.user.orgId);
-    const [overview, turnover] = await Promise.all([
-      getRetentionOverview({ orgId: gate.user.orgId, actorId: gate.user.id }),
-      getTurnover({
-        orgId: gate.user.orgId,
-        actorId: gate.user.id,
-        periods: monthPeriods(today),
-        ...(departmentId ? { departmentId } : {}),
-      }),
-    ]);
-    return NextResponse.json({ overview, turnover: turnover.periods });
-  } catch (e) {
-    return performanceErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.retention.read",
+  feature: "hrm",
+  handler: async ({ request: req, authz: gate }) => {
+    const departmentId = new URL(req.url).searchParams.get("departmentId");
+    if (departmentId !== null && !isUuid(departmentId)) {
+      return NextResponse.json(
+        { error: "departmentId must be a uuid" },
+        { status: 400 },
+      );
+    }
+    try {
+      const today = await businessToday(gate.user.orgId);
+      const [overview, turnover] = await Promise.all([
+        getRetentionOverview({ orgId: gate.user.orgId, actorId: gate.user.id }),
+        getTurnover({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          periods: monthPeriods(today),
+          ...(departmentId ? { departmentId } : {}),
+        }),
+      ]);
+      return NextResponse.json({ overview, turnover: turnover.periods });
+    } catch (e) {
+      return performanceErrorResponse(e);
+    }
+  },
+});

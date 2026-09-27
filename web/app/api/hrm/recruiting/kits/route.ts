@@ -1,12 +1,13 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { createKit, listKits } from "@openbooks/engine/src/hrm/recruiting/kits.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import {
+  createKit,
+  listKits,
+} from "@openbooks/engine/src/hrm/recruiting/kits.ts";
+
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { recruitingErrorResponse } from "../_lib";
 import { createKitBody } from "./bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -20,41 +21,42 @@ async function depthGate(orgId: string) {
   return isFeatureEnabled(orgId, "hrmStructuredInterviews");
 }
 
-export async function GET(req: Request) {
-  const gate = await guardPermission("hrm.recruiting.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  try {
-    const includeInactive = new URL(req.url).searchParams.get("includeInactive") === "1";
-    const kits = await listKits({ orgId: gate.user.orgId, actorId: gate.user.id, includeInactive });
-    return NextResponse.json({ kits });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.recruiting.read",
+  feature: "hrmStructuredInterviews",
+  handler: async ({ request: req, authz: gate }) => {
+    try {
+      const includeInactive =
+        new URL(req.url).searchParams.get("includeInactive") === "1";
+      const kits = await listKits({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        includeInactive,
+      });
+      return NextResponse.json({ kits });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});
 
-export async function POST(req: Request) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, createKitBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const kit = await createKit({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      name: body.name,
-      pipelineStageId: body.pipelineStageId,
-      instructions: body.instructions,
-      ratingScale: body.ratingScale,
-    });
-    return NextResponse.json({ kit }, { status: 201 });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmStructuredInterviews",
+  body: createKitBody,
+  handler: async ({ request: req, authz: gate, body: body }) => {
+    try {
+      const kit = await createKit({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        name: body.name,
+        pipelineStageId: body.pipelineStageId,
+        instructions: body.instructions,
+        ratingScale: body.ratingScale,
+      });
+      return NextResponse.json({ kit }, { status: 201 });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});

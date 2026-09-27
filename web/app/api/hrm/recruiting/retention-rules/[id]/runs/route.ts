@@ -1,10 +1,12 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { evaluateRetentionRule, listRetentionRuns } from "@openbooks/engine/src/hrm/recruiting/retention.ts";
-import { guardPermission } from "../../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../../lib/features";
-import { recruitingErrorResponse } from "../../../_lib";
-import { notFound } from "@/lib/api/responses";
+import {
+  evaluateRetentionRule,
+  listRetentionRuns,
+} from "@openbooks/engine/src/hrm/recruiting/retention.ts";
 
+import { recruitingErrorResponse } from "../../../_lib";
 
 export const runtime = "nodejs";
 
@@ -16,38 +18,40 @@ export const runtime = "nodejs";
  * Every evaluation appends exactly one run row. 404s while hrm,
  * hrmRecruiting, or hrmCandidateRetention is off.
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.read");
-  if (gate instanceof NextResponse) return gate;
-  if (
-    !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
-    !(await isFeatureEnabled(gate.user.orgId, "hrmCandidateRetention"))
-  ) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  try {
-    const runs = await listRetentionRuns({ orgId: gate.user.orgId, actorId: gate.user.id, ruleId: id });
-    return NextResponse.json({ runs });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.recruiting.read",
+  feature: "hrmCandidateRetention",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const { id } = routeParams;
+    try {
+      const runs = await listRetentionRuns({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        ruleId: id,
+      });
+      return NextResponse.json({ runs });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});
 
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (
-    !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
-    !(await isFeatureEnabled(gate.user.orgId, "hrmCandidateRetention"))
-  ) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  try {
-    const run = await evaluateRetentionRule({ orgId: gate.user.orgId, actorId: gate.user.id, ruleId: id });
-    return NextResponse.json({ run }, { status: 201 });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmCandidateRetention",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const { id } = routeParams;
+    try {
+      const run = await evaluateRetentionRule({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        ruleId: id,
+      });
+      return NextResponse.json({ run }, { status: 201 });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});

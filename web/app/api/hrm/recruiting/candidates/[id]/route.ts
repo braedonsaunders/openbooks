@@ -1,11 +1,11 @@
-import { isFeatureEnabled } from "../../../../../../lib/features";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+
 import { NextResponse } from "next/server";
 import { getCandidateDetail } from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
-import { guardPermission } from "../../../../../../lib/authz";
+
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -14,22 +14,23 @@ export const runtime = "nodejs";
  * contact PII redacted unless the viewer holds hrm.recruiting.read — the
  * hiring manager reaches their own funnel's candidates here.
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid candidate" }, { status: 400 });
-  try {
-    const candidate = await getCandidateDetail({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      candidateId: id,
-    });
-    return NextResponse.json({ candidate });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.recruiting.read",
+  feature: "hrmRecruiting",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const { id } = routeParams;
+    if (!isUuid(id))
+      return NextResponse.json({ error: "invalid candidate" }, { status: 400 });
+    try {
+      const candidate = await getCandidateDetail({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        candidateId: id,
+      });
+      return NextResponse.json({ candidate });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});

@@ -1,12 +1,14 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { deleteKit, setKitActive } from "@openbooks/engine/src/hrm/recruiting/kits.ts";
-import { guardPermission } from "../../../../../../lib/authz";
+import {
+  deleteKit,
+  setKitActive,
+} from "@openbooks/engine/src/hrm/recruiting/kits.ts";
+
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../_lib";
 import { setKitActiveBody } from "../bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -20,39 +22,48 @@ async function depthGate(orgId: string) {
   return isFeatureEnabled(orgId, "hrmStructuredInterviews");
 }
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  const parsedBody = await parseJsonBody(req, setKitActiveBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const kit = await setKitActive({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      kitId: id,
-      isActive: parsedBody.data.isActive,
-    });
-    return NextResponse.json({ kit });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const PATCH = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmStructuredInterviews",
+  params: z.object({ id: z.string().min(1) }),
+  body: setKitActiveBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  try {
-    await deleteKit({ orgId: gate.user.orgId, actorId: gate.user.id, kitId: id });
-    return NextResponse.json({ deleted: id });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+    try {
+      const kit = await setKitActive({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        kitId: id,
+        isActive: body.isActive,
+      });
+      return NextResponse.json({ kit });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});
+
+export const DELETE = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmStructuredInterviews",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const { id } = routeParams;
+    try {
+      await deleteKit({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        kitId: id,
+      });
+      return NextResponse.json({ deleted: id });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});

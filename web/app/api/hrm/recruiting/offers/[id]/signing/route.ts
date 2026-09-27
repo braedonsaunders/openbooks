@@ -1,12 +1,13 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { sendOfferLink, voidOfferSignature } from "@openbooks/engine/src/hrm/recruiting/offers-signing.ts";
-import { guardPermission } from "../../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../../lib/features";
+import {
+  sendOfferLink,
+  voidOfferSignature,
+} from "@openbooks/engine/src/hrm/recruiting/offers-signing.ts";
+
 import { recruitingErrorResponse } from "../../../_lib";
 import { offerSigningBody } from "./bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -15,38 +16,39 @@ export const runtime = "nodejs";
  * POST void pulls an unsigned letter (manage gate in the service). 404s
  * while hrm, hrmRecruiting, or hrmOfferSigning is off.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (
-    !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
-    !(await isFeatureEnabled(gate.user.orgId, "hrmOfferSigning"))
-  ) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  const parsedBody = await parseJsonBody(req, offerSigningBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    if (body.action === "send-link") {
-      const link = await sendOfferLink({
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmOfferSigning",
+  params: z.object({ id: z.string().min(1) }),
+  body: offerSigningBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+
+    try {
+      if (body.action === "send-link") {
+        const link = await sendOfferLink({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          offerId: id,
+          candidateEmail: body.candidateEmail,
+          candidateName: body.candidateName,
+        });
+        return NextResponse.json({ link }, { status: 201 });
+      }
+      await voidOfferSignature({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         offerId: id,
-        candidateEmail: body.candidateEmail,
-        candidateName: body.candidateName,
+        reason: body.reason,
       });
-      return NextResponse.json({ link }, { status: 201 });
+      return NextResponse.json({ voided: id });
+    } catch (e) {
+      return recruitingErrorResponse(e);
     }
-    await voidOfferSignature({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      offerId: id,
-      reason: body.reason,
-    });
-    return NextResponse.json({ voided: id });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+  },
+});

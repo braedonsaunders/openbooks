@@ -1,12 +1,13 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { createOfferTemplate, listOfferTemplates } from "@openbooks/engine/src/hrm/recruiting/offers-signing.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import {
+  createOfferTemplate,
+  listOfferTemplates,
+} from "@openbooks/engine/src/hrm/recruiting/offers-signing.ts";
+
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { recruitingErrorResponse } from "../_lib";
 import { createOfferTemplateBody } from "./bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -20,45 +21,42 @@ async function depthGate(orgId: string) {
   return isFeatureEnabled(orgId, "hrmOfferSigning");
 }
 
-export async function GET(req: Request) {
-  const gate = await guardPermission("hrm.recruiting.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  try {
-    const includeInactive = new URL(req.url).searchParams.get("includeInactive") === "1";
-    const templates = await listOfferTemplates({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      includeInactive,
-    });
-    return NextResponse.json({ templates });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.recruiting.read",
+  feature: "hrmRecruiting",
+  handler: async ({ request: req, authz: gate }) => {
+    try {
+      const includeInactive =
+        new URL(req.url).searchParams.get("includeInactive") === "1";
+      const templates = await listOfferTemplates({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        includeInactive,
+      });
+      return NextResponse.json({ templates });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});
 
-export async function POST(req: Request) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, createOfferTemplateBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const template = await createOfferTemplate({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      name: body.name,
-      bodyTemplate: body.bodyTemplate,
-      clauses: body.clauses,
-      approvalRequired: body.approvalRequired,
-    });
-    return NextResponse.json({ template }, { status: 201 });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmRecruiting",
+  body: createOfferTemplateBody,
+  handler: async ({ request: req, authz: gate, body: body }) => {
+    try {
+      const template = await createOfferTemplate({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        name: body.name,
+        bodyTemplate: body.bodyTemplate,
+        clauses: body.clauses,
+        approvalRequired: body.approvalRequired,
+      });
+      return NextResponse.json({ template }, { status: 201 });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});
