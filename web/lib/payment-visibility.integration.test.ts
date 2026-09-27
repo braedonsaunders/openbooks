@@ -333,7 +333,9 @@ for (const boundary of [
               'SSR drawer must match the API denial',
             )
           } else if (boundary === 'API direction') {
-            const response = await listRuns()
+            const response = await listRuns(
+              new Request('http://test.local/api/payments/runs'),
+            )
             assert.equal(response.status, 200)
             const rows = (await response.json()).runs as Array<{ id: string }>
             assert.ok(rows.some((row) => row.id === runs.VISIBLE))
@@ -383,7 +385,9 @@ for (const boundary of [
             const empty = await getAuthz()
             assert.ok(empty)
             assert.equal(empty.allowedSubsidiaryIds?.size, 0)
-            assert.deepEqual((await (await listRuns()).json()).runs, [])
+            assert.deepEqual((await (await listRuns(
+              new Request('http://test.local/api/payments/runs'),
+            )).json()).runs, [])
             const tree = await RunsSection({
               ...{ orgId: org.orgId },
               sp: { newRun: '1' },
@@ -399,7 +403,9 @@ for (const boundary of [
             const denied = await guardPaymentRunPermission(runs.VISIBLE!)
             assert.equal('status' in denied ? denied.status : 200, 404)
             assert.ok(
-              !(await (await listRuns()).json()).runs.some(
+              !(await (await listRuns(
+                new Request('http://test.local/api/payments/runs'),
+              )).json()).runs.some(
                 (row: { id: string }) => row.id === runs.VISIBLE,
               ),
             )
