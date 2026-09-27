@@ -9,12 +9,12 @@ import {
   presentValueOfLevelStream,
 } from "../money/present-value.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
+import { civilDateFromParts } from "../platform/civil-date.ts";
 
 function dueDate(bookedOn: string, periods: number): string {
   const year = Number(bookedOn.slice(0, 4));
-  const month = Number(bookedOn.slice(5, 7)) - 1;
-  const date = new Date(Date.UTC(year, month + periods, 15));
-  return date.toISOString().slice(0, 10);
+  const month = Number(bookedOn.slice(5, 7));
+  return civilDateFromParts(year, month + periods, 15);
 }
 
 test("five-year pledge PV and amortization close exactly to the promised cash flows", () => {

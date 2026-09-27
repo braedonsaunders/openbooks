@@ -13,6 +13,7 @@ import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
+import { endOfMonth } from "../platform/civil-date.ts";
 import { NonprofitError } from "./errors.ts";
 
 const FEATURE = "pledges";
@@ -163,8 +164,7 @@ function monthIndex(value: string): number {
 }
 function monthKey(value: string): string { return value.slice(0, 7); }
 function monthEnd(month: string): string {
-  const parts = month.split("-");
-  return new Date(Date.UTC(Number(parts[0]), Number(parts[1]), 0)).toISOString().slice(0, 10);
+  return endOfMonth(`${month}-01`);
 }
 function periodFor(bookedOn: string, dueOn: string): number {
   const period = monthIndex(dueOn) - monthIndex(bookedOn);
