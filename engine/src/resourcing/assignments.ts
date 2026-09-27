@@ -25,7 +25,7 @@ type Source = (typeof RES_ASSIGNMENT_SOURCE_VALUES)[number];
 
 interface AssignmentWriteContext {
   orgId: string;
-  actorId: string;
+  actorId: string | null;
   allowedSubsidiaryIds: ReadonlySet<string> | null;
 }
 
@@ -278,6 +278,60 @@ async function assertReferences(
   }
 }
 
+export interface ValidatedAssignmentPlan {
+  plannedHours: string;
+  jobTitle: string | null;
+  figure: AvailabilityFigure | null;
+  booking: Booking;
+  source: Source;
+}
+
+/** Reuse the assignment writer's validation for draft resource requests. */
+export async function validateAssignmentPlan(
+  tx: SqlExecutor,
+  input: UpsertAssignmentInput,
+): Promise<ValidatedAssignmentPlan> {
+  assertSunday(input.weekStart);
+  const plannedHours = readPlannedHours(input.plannedHours);
+  const hasEmployee = Boolean(input.employeePartyId?.trim());
+  const hasJobTitle = Boolean(input.jobTitle?.trim());
+  if (hasEmployee === hasJobTitle) {
+    refuse(
+      "assignment_subject_invalid",
+      "an assignment must identify exactly one employee or generic job title",
+      "choose one employee or use one existing job title",
+      "employeePartyId",
+    );
+  }
+  if (input.employeePartyId && input.employeePartyId !== input.employeePartyId.trim()) {
+    refuse(
+      "assignment_employee_invalid",
+      "employee id contains surrounding whitespace",
+      "choose the employee from the organization list",
+      "employeePartyId",
+    );
+  }
+  const booking = input.booking ?? "hard";
+  const source = input.source ?? "manual";
+  if (!RES_ASSIGNMENT_BOOKING_VALUES.includes(booking)) {
+    refuse("assignment_booking_invalid", `booking value ${booking} is not supported`, "choose soft or hard", "booking");
+  }
+  if (!RES_ASSIGNMENT_SOURCE_VALUES.includes(source)) {
+    refuse("assignment_source_invalid", `source value ${source} is not supported`, "choose manual, request, or pipeline", "source");
+  }
+  const prepared = { ...input, booking, source };
+  await assertOpenProject(tx, input);
+  const figure = await assertValidSubject(tx, prepared);
+  await assertReferences(tx, prepared);
+  return {
+    plannedHours,
+    jobTitle: input.jobTitle?.trim() ?? null,
+    figure,
+    booking,
+    source,
+  };
+}
+
 async function readWeeklyTotals(
   tx: SqlExecutor,
   input: AssignmentWriteContext & AssignmentSubject & { weekStart: string },
@@ -309,51 +363,18 @@ async function readWeeklyTotals(
 
 /** Create or update one project-week/person-or-role assignment. */
 export async function upsertAssignment(input: UpsertAssignmentInput): Promise<AssignmentWriteResult> {
-  assertSunday(input.weekStart);
-  const plannedHours = readPlannedHours(input.plannedHours);
-  const hasEmployee = Boolean(input.employeePartyId?.trim());
-  const hasJobTitle = Boolean(input.jobTitle?.trim());
-  if (hasEmployee === hasJobTitle) {
-    refuse(
-      "assignment_subject_invalid",
-      "an assignment must identify exactly one employee or generic job title",
-      "choose one employee or use one existing job title",
-      "employeePartyId",
-    );
-  }
-  if (input.employeePartyId && input.employeePartyId !== input.employeePartyId.trim()) {
-    refuse(
-      "assignment_employee_invalid",
-      "employee id contains surrounding whitespace",
-      "choose the employee from the organization list",
-      "employeePartyId",
-    );
-  }
-  const booking = input.booking ?? "hard";
-  const source = input.source ?? "manual";
-  if (!RES_ASSIGNMENT_BOOKING_VALUES.includes(booking)) {
-    refuse("assignment_booking_invalid", `booking value ${booking} is not supported`, "choose soft or hard", "booking");
-  }
-  if (!RES_ASSIGNMENT_SOURCE_VALUES.includes(source)) {
-    refuse("assignment_source_invalid", `source value ${source} is not supported`, "choose manual, request, or pipeline", "source");
-  }
-  const prepared = { ...input, booking, source };
-
   return inAssignmentWrite(input, async (tx) => {
-    await assertOpenProject(tx, input);
-    const figure = await assertValidSubject(tx, prepared);
-    await assertReferences(tx, prepared);
-    const jobTitle = input.jobTitle?.trim() ?? null;
+    const validated = await validateAssignmentPlan(tx, input);
     const rowResult = await tx.execute<AssignmentRow>(sql`
       insert into res_assignments (
         org_id, project_id, employee_party_id, job_title, week_start, planned_hours,
         is_billable, bill_item_id, project_task_id, booking, state, source, request_id,
         created_by, updated_by
       ) values (
-        ${input.orgId}, ${input.projectId}, ${input.employeePartyId ?? null}, ${jobTitle},
-        ${input.weekStart}, ${plannedHours}, ${input.isBillable ?? true},
-        ${input.billItemId ?? null}, ${input.projectTaskId ?? null}, ${booking}, 'active',
-        ${source}, ${input.requestId ?? null}, ${input.actorId}, ${input.actorId}
+        ${input.orgId}, ${input.projectId}, ${input.employeePartyId ?? null}, ${validated.jobTitle},
+        ${input.weekStart}, ${validated.plannedHours}, ${input.isBillable ?? true},
+        ${input.billItemId ?? null}, ${input.projectTaskId ?? null}, ${validated.booking}, 'active',
+        ${validated.source}, ${input.requestId ?? null}, ${input.actorId}, ${input.actorId}
       )
       on conflict (org_id, project_id, week_start,
         (coalesce(employee_party_id::text, lower(job_title))))
@@ -363,6 +384,8 @@ export async function upsertAssignment(input: UpsertAssignmentInput): Promise<As
         bill_item_id = excluded.bill_item_id,
         project_task_id = excluded.project_task_id,
         booking = excluded.booking,
+        source = excluded.source,
+        request_id = excluded.request_id,
         state = 'active',
         updated_at = now(),
         updated_by = excluded.updated_by
@@ -373,7 +396,7 @@ export async function upsertAssignment(input: UpsertAssignmentInput): Promise<As
       throw new Error("the assignment upsert did not return its written row");
     }
     const weeklyTotals = input.employeePartyId
-      ? await readWeeklyTotals(tx, input, figure?.netCapacity ?? null)
+      ? await readWeeklyTotals(tx, input, validated.figure?.netCapacity ?? null)
       : null;
     return { assignment, weeklyTotals };
   });
