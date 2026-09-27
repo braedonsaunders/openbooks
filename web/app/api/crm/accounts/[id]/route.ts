@@ -11,6 +11,7 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import '../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../lib/list-params'
 import { loadCrmAccount } from '../../../../../lib/crm'
+import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from '../../../../../lib/custom-fields'
 import { isIsoTimestamp } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
@@ -23,6 +24,7 @@ const requestBodySchema = z.strictObject({
   annualRevenue: z.string().nullable().optional(),
   assignmentReason: z.string().nullable().optional(),
   category: z.string().nullable().optional(),
+  custom: z.record(z.string(), z.json()).optional(),
   employeeCount: optionalCount,
   expectedUpdatedAt: z.string().min(1),
   industry: z.string().nullable().optional(),
@@ -300,14 +302,35 @@ export const PATCH = defineRoute({
       // comparison raced this lock's acquisition, and the stage transitions
       // below bump updated_at (so the field update cannot pin the token
       // itself) — the lock plus this re-check is what serializes two tabs.
-      const locked = await tx.execute<{ revision: string }>(sql`
-        select ${documentRevisionSql(sql`updated_at`)} as revision from crm_account_profiles
+      const locked = await tx.execute<{ revision: string; custom: Record<string, unknown> | null }>(sql`
+        select ${documentRevisionSql(sql`updated_at`)} as revision, custom from crm_account_profiles
          where id = ${row.id} and org_id = ${user.orgId} for update`)
       if (!locked.rows[0] || locked.rows[0].revision !== body.expectedUpdatedAt) {
         return NextResponse.json(
           { error: 'This relationship changed after you opened it; reload and reapply your changes' },
           { status: 409 },
         )
+      }
+      // Custom values merge into the locked profile's bag (same contract as the
+      // opportunity route): the effective bag is validated, supplied references
+      // must belong to this organization, and a cleared value drops out.
+      let mergedCustom: Record<string, unknown> | undefined
+      if (body.custom !== undefined) {
+        const defs = await loadFieldDefs('crm_account_profiles')
+        const unknownKey = unknownCustomFieldKey(defs, body.custom)
+        if (unknownKey) return NextResponse.json({ error: `unknown custom field: ${unknownKey}` }, { status: 422 })
+        const existingCustom = locked.rows[0]!.custom ?? {}
+        const result = validateCustomValues(defs, { ...existingCustom, ...body.custom })
+        if (!result.ok) return NextResponse.json({ error: Object.values(result.errors)[0], fieldErrors: result.errors }, { status: 422 })
+        const suppliedCustom: Record<string, unknown> = {}
+        for (const key of Object.keys(body.custom)) {
+          if (result.cleaned[key] !== undefined) suppliedCustom[key] = result.cleaned[key]
+        }
+        const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
+        if (unowned.length > 0) return NextResponse.json({ error: `${unowned[0]!.label} not found in this organization` }, { status: 422 })
+        mergedCustom = { ...existingCustom }
+        for (const def of defs) delete mergedCustom[def.key]
+        Object.assign(mergedCustom, result.cleaned)
       }
       // A demotion owns the stage, the status and the stage event through the
       // transition helper; the field update below must not re-own the status
@@ -365,6 +388,7 @@ export const PATCH = defineRoute({
           qualification = ${qualification !== undefined ? JSON.stringify(qualification) : sql`qualification`}::jsonb,
           next_action_at = ${body.nextActionAt !== undefined ? textOrNull(body.nextActionAt) : sql`next_action_at`},
           is_active = ${isActive !== undefined ? isActive : sql`is_active`},
+          custom = ${mergedCustom !== undefined ? sql`${JSON.stringify(mergedCustom)}::jsonb` : sql`custom`},
           updated_at = now(), updated_by = ${user.id}
         where id = ${row.id} and org_id = ${user.orgId}`)
       if ((ownerUserId !== undefined && ownerUserId !== row.owner_user_id) || (territoryId !== undefined && territoryId !== row.territory_id)) {

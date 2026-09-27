@@ -19,6 +19,7 @@ import '../../../../../lib/feature-gates';
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadOpportunity } from '../../../../../lib/crm'
+import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from '../../../../../lib/custom-fields'
 import { isIsoCalendarDate } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
@@ -59,6 +60,7 @@ const optionalRangeMoney = (field: string) => z.preprocess(
 const requestBodySchema = z.strictObject({
   competitorNotes: z.string().nullable().optional(),
   currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  custom: z.record(z.string(), z.json()).optional(),
   description: z.string().nullable(),
   expectedCloseDate: z.preprocess((value) => value === '' ? null : value, z.string().refine(isIsoCalendarDate, 'expectedCloseDate must be a valid calendar date').nullable()),
   expectedUpdatedAt: z.string().min(1),
@@ -199,6 +201,7 @@ type LockedOpportunityRow = {
   title: string
   currency: string
   win_loss_reason: string | null
+  custom: Record<string, unknown> | null
   projected_amount: string | number
   weighted_amount: string | number
   is_active: boolean
@@ -539,6 +542,34 @@ export const PATCH = defineRoute({
       // Stage policy is enforced below, against the totals this write produces
       // and the status row locked by this transaction.
 
+      // Custom values merge into the bag of the row locked above, so two saves
+      // of different keys cannot overwrite each other. PATCH values are
+      // partial: the effective bag is validated so a stored value satisfies
+      // an omitted required field.
+      let mergedCustom: Record<string, unknown> | undefined
+      if (body.custom !== undefined) {
+        const defs = await loadFieldDefs('crm_opportunities')
+        const unknownKey = unknownCustomFieldKey(defs, body.custom)
+        if (unknownKey) throw new OpportunityValidationError(`unknown custom field: ${unknownKey}`)
+        const existingCustom = current.custom ?? {}
+        const result = validateCustomValues(defs, { ...existingCustom, ...body.custom })
+        if (!result.ok) throw new OpportunityValidationError(Object.values(result.errors)[0]!)
+        // Reference values are uuid-shaped here but not yet proven to belong to
+        // this organization; supplied values only, so legacy bags cannot lock
+        // unrelated edits.
+        const suppliedCustom: Record<string, unknown> = {}
+        for (const key of Object.keys(body.custom)) {
+          if (result.cleaned[key] !== undefined) suppliedCustom[key] = result.cleaned[key]
+        }
+        const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
+        if (unowned.length > 0) throw new OpportunityValidationError(`${unowned[0]!.label} not found in this organization`)
+        // Defined keys take the validated effective bag (a cleared value drops
+        // out); keys no definition names are preserved as stored.
+        mergedCustom = { ...existingCustom }
+        for (const def of defs) delete mergedCustom[def.key]
+        Object.assign(mergedCustom, result.cleaned)
+      }
+
       // Item and team-member references are mutable too.  Validate them after
       // locking and before the corresponding delete/insert pairs below.
       // (The pre-lock block already rejected a non-array `lines`; re-check here
@@ -686,6 +717,7 @@ export const PATCH = defineRoute({
           range_high = ${rangeHigh !== undefined ? rangeHigh : sql`range_high`},
           next_step = ${body.nextStep !== undefined ? textOrNull(body.nextStep) : sql`next_step`},
           competitor_notes = ${body.competitorNotes !== undefined ? textOrNull(body.competitorNotes) : sql`competitor_notes`},
+          custom = ${mergedCustom !== undefined ? sql`${JSON.stringify(mergedCustom)}::jsonb` : sql`custom`},
           win_loss_reason = ${winLossReason}, description = ${body.description !== undefined ? textOrNull(body.description) : sql`description`},
           closed_at = case when ${nextStatus.is_closed} then coalesce(closed_at, now()) else null end,
           is_active = ${willBeActive},

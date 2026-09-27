@@ -8,6 +8,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import '../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../lib/list-params'
 import { loadActivity } from '../../../../../lib/crm'
+import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from '../../../../../lib/custom-fields'
 import { isIsoTimestamp } from '../../../../../lib/crm-dates'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { notFound } from "@/lib/api/responses";
@@ -28,6 +29,7 @@ const requestBodySchema = z.strictObject({
   expectedUpdatedAt: z.string().refine(isDocumentRevisionToken, 'A current activity revision is required; reload the activity and try again'),
   assignedUserId: z.string().uuid().nullable().optional(),
   body: z.string().nullable().optional(),
+  custom: z.record(z.string(), z.json()).optional(),
   dueAt: activityTimestamp,
   durationMinutes: z.union([
     z.number().int().min(0).max(2147483647),
@@ -178,6 +180,27 @@ export const PATCH = defineRoute({
           : { rows: [] }
         if (!valid.rows.length) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
       }
+      // Custom values merge into the locked row's bag (same contract as the
+      // opportunity route): the effective bag is validated, supplied references
+      // must belong to this organization, and a cleared value drops out.
+      let mergedCustom: Record<string, unknown> | undefined
+      if (body.custom !== undefined) {
+        const defs = await loadFieldDefs('crm_activities')
+        const unknownKey = unknownCustomFieldKey(defs, body.custom)
+        if (unknownKey) return NextResponse.json({ error: `unknown custom field: ${unknownKey}` }, { status: 422 })
+        const existingCustom = (visible.rows[0]!.custom as Record<string, unknown> | null) ?? {}
+        const result = validateCustomValues(defs, { ...existingCustom, ...body.custom })
+        if (!result.ok) return NextResponse.json({ error: Object.values(result.errors)[0], fieldErrors: result.errors }, { status: 422 })
+        const suppliedCustom: Record<string, unknown> = {}
+        for (const key of Object.keys(body.custom)) {
+          if (result.cleaned[key] !== undefined) suppliedCustom[key] = result.cleaned[key]
+        }
+        const unowned = await findUnownedCustomReferences(user.orgId, defs, suppliedCustom)
+        if (unowned.length > 0) return NextResponse.json({ error: `${unowned[0]!.label} not found in this organization` }, { status: 422 })
+        mergedCustom = { ...existingCustom }
+        for (const def of defs) delete mergedCustom[def.key]
+        Object.assign(mergedCustom, result.cleaned)
+      }
       // Child evidence is captured on both sides of the delete/insert pairs so
       // the audit row records what actually changed, not just what was asked.
       const linksBefore = links ? (await tx.execute(sql`select subject_kind, subject_id from crm_activity_links where activity_id = ${id} and org_id = ${user.orgId} order by subject_kind, subject_id`)).rows : null
@@ -196,6 +219,7 @@ export const PATCH = defineRoute({
           reminder_at = ${body.reminderAt !== undefined ? textOrNull(body.reminderAt) : sql`reminder_at`},
           duration_minutes = ${body.durationMinutes !== undefined ? duration : sql`duration_minutes`},
           is_private = ${body.isPrivate !== undefined ? body.isPrivate === true : sql`is_private`},
+          custom = ${mergedCustom !== undefined ? sql`${JSON.stringify(mergedCustom)}::jsonb` : sql`custom`},
           completed_at = case
             when ${body.status ?? null} = 'completed' and completed_at is null then now()
             when ${body.status ?? null} <> 'completed' then null else completed_at end,

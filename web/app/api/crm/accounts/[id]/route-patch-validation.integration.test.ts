@@ -20,7 +20,7 @@ registerHooks({
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
     `)
-    if (specifier === '../../../../../lib/feature-gates') return virtual(`
+    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__crmAccountPatchValidationState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
@@ -150,6 +150,29 @@ test('PATCH audits the actual before/after row, not the request', async () => {
     assert.equal(audit.before.industry, 'Software')
     assert.equal(audit.after.is_active, false)
     assert.equal(audit.after.industry, 'Hardware')
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('PATCH stores custom values only after validating them against the account definitions', async () => {
+  const { org, partyId, profileId } = await fixture()
+  try {
+    await withBypassContext(() => db.execute(sql`
+      insert into custom_field_defs (org_id, target_table, key, label, field_type, config)
+      values (${org.orgId}, 'crm_account_profiles', 'tier', 'Tier', 'select', '{"options":["gold","silver"]}'::jsonb)`))
+    const stored = async () => (await withBypassContext(() => db.execute<{ custom: unknown }>(sql`
+      select custom from crm_account_profiles where id = ${profileId}`))).rows[0]!.custom
+    for (const [custom, status, refusal] of [
+      [{ tier: 'gold' }, 200, null],
+      [{ tier: 'bronze' }, 422, /Tier: invalid option/],
+      [{ region: 'west' }, 422, /unknown custom field: region/],
+    ] as const) {
+      const result = await patch(partyId, { custom, expectedUpdatedAt: await revisionFor(partyId) })
+      assert.equal(result.status, status, JSON.stringify(result.json))
+      if (refusal) assert.match(result.json?.error ?? '', refusal)
+      assert.deepEqual(await stored(), { tier: 'gold' })
+    }
   } finally {
     await dropScratchOrg(org.orgId)
   }
