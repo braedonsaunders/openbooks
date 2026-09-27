@@ -50,6 +50,10 @@
       "title": "Projetos e faturamento",
       "description": "Tipos de projeto, rentabilidade, faturamento e suporte de faturas."
     },
+    "manufacturing": {
+      "title": "Manufatura",
+      "description": "Conceitos de manufatura, cadastros de produção e o fluxo de custos das matérias-primas pelo processo em andamento até os produtos acabados."
+    },
     "reporting": {
       "title": "Relatórios e análises",
       "description": "Demonstrações financeiras, detalhe do razão, painéis, análises e visões reutilizáveis."

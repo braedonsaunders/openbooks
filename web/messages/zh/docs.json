@@ -50,6 +50,10 @@
       "title": "项目与开票",
       "description": "项目类型、盈利能力、开票与发票附件。"
     },
+    "manufacturing": {
+      "title": "生产制造",
+      "description": "制造概念、生产主数据，以及成本从原材料经在制品流转到产成品的过程。"
+    },
     "reporting": {
       "title": "报表与分析",
       "description": "财务报表、总账明细、仪表板、分析与可复用视图。"

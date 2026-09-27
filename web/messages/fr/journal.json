@@ -22,7 +22,8 @@
     "revenueRecognition": "Constatation des produits",
     "fxSettlement": "Règlement de change",
     "translation": "Conversion",
-    "migration": "Migration"
+    "migration": "Migration",
+    "manufacturing": "Fabrication"
   },
   "detail": {
     "notFound": "Écriture introuvable",

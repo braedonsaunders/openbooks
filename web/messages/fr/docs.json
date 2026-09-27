@@ -50,6 +50,10 @@
       "title": "Projets et facturation",
       "description": "Types de projets, rentabilité, facturation et pièces justificatives."
     },
+    "manufacturing": {
+      "title": "Fabrication",
+      "description": "Concepts de fabrication, données de base de production et cheminement des coûts des matières premières aux produits finis, en passant par les encours."
+    },
     "reporting": {
       "title": "États et analyses",
       "description": "États financiers, détail du grand livre, tableaux de bord, analyses et vues réutilisables."
