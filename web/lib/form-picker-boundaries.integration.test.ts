@@ -2,9 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import type { SessionUser } from './auth';
-const root=pathToFileURL(process.cwd()+'/').href;
 const session:{user:SessionUser|null}={user:null};Object.assign(globalThis,{__formPickerSession:session});
 registerHooks({resolve(specifier,context,next){
  if(specifier==='./auth'&&context.parentURL?.endsWith('/web/lib/authz.ts'))return {shortCircuit:true,url:'data:text/javascript,export async function currentUser(){return globalThis.__formPickerSession.user}'};

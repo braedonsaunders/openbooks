@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 import type { SessionUser } from "../auth";
 import type { Authz } from "../authz";
 
 // Same module-graph shim as tool-schema-lint: the tool module is
 // server-only and transitively imports the `@/` alias.
-const root = pathToFileURL(process.cwd() + "/").href;
 const { ALLOCATIONS_TOOLS } = await import("./tools-allocations.ts");
 const { canRunTool } = await import("./gate.ts");
 

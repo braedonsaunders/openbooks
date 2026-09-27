@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 import type { SessionUser } from "./auth";
 import { stubModules } from '../testing/stub-modules.ts'
 
@@ -20,7 +19,6 @@ import { stubModules } from '../testing/stub-modules.ts'
  * document to the authenticated caller.
  */
 
-const root = pathToFileURL(process.cwd() + "/").href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __recurringDeleteAuditUser: state });
 stubModules({ navigation: false, authz: false, features: false });

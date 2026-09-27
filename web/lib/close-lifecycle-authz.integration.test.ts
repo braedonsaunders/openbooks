@@ -15,7 +15,6 @@ const state: { user: SessionUser | null } = { user: null }
 // in production; here the global is the equivalent. Needed since a page import
 // reaches the whole widget registry, and some of those components are JSX.
 Object.assign(globalThis, { __closeLifecycleUser: state, React })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 stubModules({ navigation: false, intl: 'export async function getTranslations(){return (key)=>key}; export async function getLocale(){return "en"}; export async function getFormatter(){return {number:(v,f,o)=>new Intl.NumberFormat("en",typeof f==="object"?f:o).format(Number(v)),dateTime:(v,f,o)=>new Intl.DateTimeFormat("en",typeof f==="object"?f:o).format(v instanceof Date?v:new Date(String(v)))}}', authz: false, features: false });
 
 registerHooks({

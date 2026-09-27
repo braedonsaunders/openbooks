@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { stubModules } from '../../testing/stub-modules.ts'

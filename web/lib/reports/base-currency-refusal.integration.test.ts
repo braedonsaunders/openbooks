@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { SessionUser } from '../auth'
 import { stubModules } from '../../testing/stub-modules.ts'
@@ -23,7 +22,6 @@ import { stubModules } from '../../testing/stub-modules.ts'
  * (mock the database, never the validation). The loaders, the specs,
  * the refusal copy keys and the href run REAL against scratch orgs.
  */
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __baseCurrencyRefusalUser: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

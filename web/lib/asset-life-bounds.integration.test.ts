@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import { sql } from 'drizzle-orm';
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts';
 import { db } from '@openbooks/engine/src/platform/db.ts';
@@ -20,7 +19,6 @@ async function seedAsset(org: ScratchOrg) {
   return { actorId, assetId };
 }
 
-const root = pathToFileURL(process.cwd() + '/').href;
 const state: { gate: { user:{orgId:string;id:string};allowedSubsidiaryIds:null } | null; builds:number }={gate:null,builds:0};
 Object.assign(globalThis,{__assetLifeBounds:state});
 registerHooks({resolve(specifier,context,next){

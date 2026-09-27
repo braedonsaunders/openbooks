@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import pg from 'pg';
 import type { SessionUser } from './auth';
 
-const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __customFieldControls: state });
 registerHooks({ resolve(specifier, context, next) {

@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import type { SessionUser } from './auth'
 
 // A backup read (ar.read) never assembles the packet: generating persists a
 // PDF plus file-cabinet evidence a reader must not be able to create. A GET
 // with no stored packet is a 404 naming the generation remedy, and writes
 // nothing.
-const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __billingBackupSession: session })
 registerHooks({

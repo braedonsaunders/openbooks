@@ -4,7 +4,6 @@ import type { ComponentType, ReactNode } from 'react'
 import { stubModules } from '../testing/stub-modules.ts'
 import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 
-const virtual = (source: string) => ({ shortCircuit: true as const, url: `data:text/javascript,${encodeURIComponent(source)}` })
 await bootJsdomEnvironment({ html: "<!doctype html><html><body></body></html>", url: "http://localhost/", matchMediaMatches: false });
 
 stubModules({ navigation: { source: 'export function useRouter(){return globalThis.__createMenuRouter}' }, intl: false, authz: false, features: false });

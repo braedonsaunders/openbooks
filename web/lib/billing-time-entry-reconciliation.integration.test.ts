@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import type { SessionUser } from './auth'
 
 // Every explicitly selected time entry must actually be billable when the
@@ -9,7 +8,6 @@ import type { SessionUser } from './auth'
 // request invoiced would silently drop the rest. The generator reconciles
 // the selection against the billed entries and refuses naming the ones that
 // cannot be billed, leaving the request open.
-const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __billingTimeSelectionSession: session })
 registerHooks({

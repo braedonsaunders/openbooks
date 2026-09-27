@@ -27,10 +27,6 @@ declare global {
   var __gateFeatures: Record<string, boolean>;
 }
 
-const NAV_MOCK = `
-  export function redirect(url) { throw new Error('REDIRECT:' + url) }
-  export function notFound() { throw new Error('NOT_FOUND') }
-`;
 const AUTH_MOCK = `
   export async function currentUser() { return globalThis.__gateUser }
 `;

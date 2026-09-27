@@ -47,8 +47,6 @@ const reportRunMock = "data:text/javascript," + encodeURIComponent(`
     return { title: 'mock-evidence', dateRangeLabel: '', summary: [], groups: [] };
   }
 `);
-const nextIntlMock = "data:text/javascript," + encodeURIComponent(
-  "export async function getTranslations(){return ((key) => key)}");
 stubModules({ navigation: false, authz: false, features: false });
 
 registerHooks({ resolve(specifier, context, next) {

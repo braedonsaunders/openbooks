@@ -1,9 +1,6 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 
-const root = pathToFileURL(process.cwd() + "/").href;
 const { env, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"

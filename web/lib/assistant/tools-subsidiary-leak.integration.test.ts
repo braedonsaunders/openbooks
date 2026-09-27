@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from '../auth';
 import { stubModules } from '../../testing/stub-modules.ts'
@@ -13,7 +11,6 @@ import { stubModules } from '../../testing/stub-modules.ts'
 // open-items-scope.integration: a VISIBLE root subsidiary and a HIDDEN child,
 // one restricted role, and the same tool-execution entry the chat and MCP
 // server share.
-const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __docScopeLeak: state });
 stubModules({ navigation: false, authz: false, features: false });

@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from '../auth';
 import { stubModules } from '../../testing/stub-modules.ts'
@@ -10,7 +8,6 @@ import { stubModules } from '../../testing/stub-modules.ts'
 // Assignment & SLA proofs (b06, migration 0153): user/role assignment with
 // due dates, comment threads, inbox assignee facets, and the write doorway.
 // Same stubbed harness as inbox.integration.
-const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __b06Assign: state });
 stubModules({ navigation: false, authz: false, features: false });

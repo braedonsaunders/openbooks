@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 import { BUILT_IN_ROLES } from "@openbooks/engine/src/organization/permissions.ts";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
@@ -15,7 +14,6 @@ import type { ApplicationContext } from "./context";
 import type { Authz } from "../authz";
 import type { SessionUser } from "../auth";
 
-const root = pathToFileURL(process.cwd() + "/").href;
 const { applicationContextFromSession } = await import("./context.ts");
 const { getSetupRecord, listSetupRecords } = await import("./setup-read.ts");
 const { ApplicationError } = await import("./errors.ts");

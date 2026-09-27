@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 import { z } from "zod";
 import type { Authz } from "../authz";
 import type { SessionUser } from "../auth";
 
 // Same module-graph shim as tool-schema-lint: the registry is server-only
 // and transitively imported app modules use the `@/` alias.
-const root = pathToFileURL(process.cwd() + "/").href;
 const { ASSISTANT_TOOLS, buildToolRegistry } = await import("./registry");
 const { APPLICATION_TOOLS } = await import("../application/tool-catalog");
 const { FEATURES } = await import("@openbooks/engine/src/organization/feature-registry.ts");

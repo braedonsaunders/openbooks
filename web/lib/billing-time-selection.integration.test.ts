@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import type { SessionUser } from './auth'
 
 // time_selection billing names its entries explicitly: an explicitly empty
 // selection refuses at creation (it would otherwise bill every eligible
 // entry on the project), and a present selection always scopes the invoice —
 // even a final one, which widens only when nothing was selected.
-const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __billingTimeSelectionSession: session })
 registerHooks({

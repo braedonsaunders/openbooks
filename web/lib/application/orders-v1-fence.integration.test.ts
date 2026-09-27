@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 // v1 order conversion requires the caller's revision token: an omitted
 // expectedUpdatedAt used to skip the revision fence entirely, so a stale
 // view could create the downstream document.
-const root = pathToFileURL(process.cwd() + "/").href;
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");

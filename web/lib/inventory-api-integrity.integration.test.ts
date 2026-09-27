@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
@@ -10,7 +9,6 @@ import { receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { withSimClock } from "@openbooks/engine/src/platform/clock.ts";
 
-const root = pathToFileURL(process.cwd() + "/").href;
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __inventoryApiAudit: state });
 registerHooks({

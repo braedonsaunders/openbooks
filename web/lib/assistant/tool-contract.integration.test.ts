@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 import type { Authz } from "../authz";
 import type { SessionUser } from "../auth";
 
 // Same module-graph shim as the other assistant DB tests: the registry is
 // server-only and the transitively imported app modules use the `@/` alias.
-const root = pathToFileURL(process.cwd() + "/").href;
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");

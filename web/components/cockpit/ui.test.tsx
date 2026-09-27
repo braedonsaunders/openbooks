@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 // redo: the shared cockpit StatTile clipped KPI labels, values,
@@ -8,7 +6,6 @@ import test from "node:test";
 // itself (a grid item) could not shrink below its content. Labels/values/
 // sublines must wrap instead of ellipsis, and the card must yield (min-w-0)
 // so narrow grid columns engage wrapping instead of overflowing the page.
-const root = pathToFileURL(process.cwd() + "/").href;
 const React = await import("react");
 const { renderToString } = await import("react-dom/server");
 const { Users } = await import("lucide-react");

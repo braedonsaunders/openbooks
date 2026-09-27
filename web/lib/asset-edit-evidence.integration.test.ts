@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import pg from 'pg';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import { sql } from 'drizzle-orm';
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts';
 import { db, env } from '@openbooks/engine/src/platform/db.ts';
@@ -22,7 +21,6 @@ async function seedAsset(org: ScratchOrg) {
   return { actorId, assetId };
 }
 
-const root = pathToFileURL(process.cwd() + '/').href;
 const state: { gate: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } | null } = { gate: null };
 Object.assign(globalThis, { __assetEditControls: state });
 registerHooks({ resolve(specifier, context, next) {

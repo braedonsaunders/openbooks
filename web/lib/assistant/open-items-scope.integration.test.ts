@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from '../auth';
 import { stubModules } from '../../testing/stub-modules.ts'
@@ -10,7 +8,6 @@ import { stubModules } from '../../testing/stub-modules.ts'
 // Regression coverage (X3): list_open_items called openItems() without the
 // caller's subsidiary allowlist, so a restricted assistant/MCP caller saw every
 // open AR/AP item in the organization. Fixture mirrors cash-scope.integration.
-const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __openItemsScope: state });
 stubModules({ navigation: false, authz: false, features: false });
