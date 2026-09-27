@@ -9,6 +9,7 @@ import {
   type FulfillmentKind,
 } from "@openbooks/engine/src/sales/fulfillment.ts";
 import type { Authz } from "../authz";
+import { isFeatureEnabled } from "../features";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { uuidInput } from "./tools-shared";
 
@@ -64,7 +65,15 @@ const listPickListsTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["orders.fulfill"] },
   feature: "fulfillment",
   inputSchema: listInput,
-  execute: (raw, authz) => listDocuments(PICK_LIST_KIND, raw, authz),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "warehousing"))) {
+      return { ok: false, error: "warehousing_feature_disabled" };
+    }
+    if (!(await isFeatureEnabled(authz.user.orgId, "fulfillment"))) {
+      return { ok: false, error: "fulfillment_feature_disabled" };
+    }
+    return listDocuments(PICK_LIST_KIND, raw, authz);
+  },
 };
 
 const getPickListTool: AssistantToolDef = {
@@ -77,7 +86,15 @@ const getPickListTool: AssistantToolDef = {
   inputSchema: z.object({
     id: uuidInput.describe("Pick list id from list_pick_lists"),
   }),
-  execute: (raw, authz) => getDocument(PICK_LIST_KIND, raw, authz),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "warehousing"))) {
+      return { ok: false, error: "warehousing_feature_disabled" };
+    }
+    if (!(await isFeatureEnabled(authz.user.orgId, "fulfillment"))) {
+      return { ok: false, error: "fulfillment_feature_disabled" };
+    }
+    return getDocument(PICK_LIST_KIND, raw, authz);
+  },
 };
 
 const listShipmentsTool: AssistantToolDef = {
@@ -88,7 +105,15 @@ const listShipmentsTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["orders.fulfill"] },
   feature: "fulfillment",
   inputSchema: listInput,
-  execute: (raw, authz) => listDocuments(SHIPMENT_KIND, raw, authz),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "warehousing"))) {
+      return { ok: false, error: "warehousing_feature_disabled" };
+    }
+    if (!(await isFeatureEnabled(authz.user.orgId, "fulfillment"))) {
+      return { ok: false, error: "fulfillment_feature_disabled" };
+    }
+    return listDocuments(SHIPMENT_KIND, raw, authz);
+  },
 };
 
 const getShipmentTool: AssistantToolDef = {
@@ -101,7 +126,15 @@ const getShipmentTool: AssistantToolDef = {
   inputSchema: z.object({
     id: uuidInput.describe("Shipment id from list_shipments"),
   }),
-  execute: (raw, authz) => getDocument(SHIPMENT_KIND, raw, authz),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "warehousing"))) {
+      return { ok: false, error: "warehousing_feature_disabled" };
+    }
+    if (!(await isFeatureEnabled(authz.user.orgId, "fulfillment"))) {
+      return { ok: false, error: "fulfillment_feature_disabled" };
+    }
+    return getDocument(SHIPMENT_KIND, raw, authz);
+  },
 };
 
 export const FULFILLMENT_TOOLS: AssistantToolDef[] = [
