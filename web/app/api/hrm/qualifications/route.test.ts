@@ -176,6 +176,7 @@ const mockSources = new Map<string, string>([
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmQualificationsRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
+  ["@/lib/features", "mock:features"],
   ["../../../../lib/authz", "mock:authz"],
   ["../../../../../lib/authz", "mock:authz"],
   ["../../../../../../lib/authz", "mock:authz"],
