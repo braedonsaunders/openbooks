@@ -1,0 +1,1 @@
+No preflight is required. This migration adds empty grant tables and a composite identity index over an existing globally unique account-group key; there are no existing grant rows or ambiguous account-group identities to reconcile.
