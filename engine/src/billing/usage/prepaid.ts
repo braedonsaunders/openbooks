@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { usagePrepaidDraws, type usagePrepaidGrants as UsagePrepaidGrantTable } from "@openbooks/schema";
 import { cmp } from "../../money/money.ts";
-import { parseMoney, subMoney } from "../../money/brands.ts";
+import { negMoney, parseMoney, subMoney } from "../../money/brands.ts";
 import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
@@ -36,7 +36,8 @@ const GRANT_COLUMNS = sql`
   created_at as "createdAt", created_by as "createdBy"`;
 const DRAW_COLUMNS = sql`
   id, org_id as "orgId", grant_id as "grantId", run_id as "runId",
-  period_month::text as "periodMonth", amount::text as amount, created_at as "createdAt"`;
+  period_month::text as "periodMonth", amount::text as amount,
+  reverses_draw_id as "reversesDrawId", created_at as "createdAt"`;
 
 function refuse(
   code: string,
@@ -282,5 +283,51 @@ export async function recordPrepaidDraw(
       }
       throw error;
     }
+  });
+}
+
+/** Internal append-only reversal writer used when a usage run is replaced. */
+export async function reversePrepaidDraw(
+  orgId: string,
+  drawIdInput: string,
+): Promise<typeof usagePrepaidDraws.$inferSelect> {
+  return withOrg(orgId, async () => {
+    await lockAndRequireUsageBilling(orgId);
+    const drawId = uuidText(drawIdInput, "draw_id");
+    const original = (await db.execute<{
+      id: string;
+      grantId: string;
+      runId: string | null;
+      periodMonth: string;
+      amount: string;
+      reversesDrawId: string | null;
+    }>(sql`
+      select id, grant_id as "grantId", run_id as "runId",
+             period_month::text as "periodMonth", amount::text as amount,
+             reverses_draw_id as "reversesDrawId"
+        from usage_prepaid_draws
+       where org_id = ${orgId} and id = ${drawId}
+       for update`)).rows[0];
+    if (!original) {
+      refuse("usage_prepaid_draw_not_found", "The prepaid draw does not exist in this organization.", "Choose an original prepaid draw from this organization.", "draw_id");
+    }
+    if (original.reversesDrawId !== null) {
+      refuse("usage_prepaid_draw_reversal_not_allowed", "A prepaid draw reversal cannot itself be reversed.", "Choose the original positive draw; reversal entries are final.", "draw_id", 409);
+    }
+    const priorReversal = (await db.execute<{ id: string }>(sql`
+      select id from usage_prepaid_draws
+       where org_id = ${orgId} and reverses_draw_id = ${drawId}
+       limit 1`)).rows[0];
+    if (priorReversal) {
+      refuse("usage_prepaid_draw_already_reversed", "This prepaid draw already has a reversal.", "Use the existing reversal entry; an original draw may be reversed only once.", "draw_id", 409);
+    }
+    const amount = negMoney(parseMoney(original.amount));
+    const inserted = await db.execute<typeof usagePrepaidDraws.$inferSelect>(sql`
+      insert into usage_prepaid_draws
+        (org_id, grant_id, run_id, period_month, amount, reverses_draw_id)
+      values (${orgId}, ${original.grantId}, ${original.runId}, ${original.periodMonth}, ${amount}, ${original.id})
+      returning ${DRAW_COLUMNS}`);
+    if (inserted.rows.length !== 1) throw new Error("prepaid draw reversal insert returned an unexpected row count");
+    return inserted.rows[0]!;
   });
 }

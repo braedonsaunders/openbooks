@@ -14,7 +14,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { orgs } from "./core";
-import { documentLines, items } from "./documents";
+import { documentLines, documents, items } from "./documents";
 import { parties } from "./parties";
 import { subscriptions } from "./subscriptions";
 import { currencyCode, id, money, orgRef } from "./helpers";
@@ -292,6 +292,57 @@ export const subscriptionUsageLinks = pgTable(
   ],
 );
 
+export const usageRatingRuns = pgTable(
+  "usage_rating_runs",
+  {
+    id: id(),
+    orgId: orgRef(),
+    linkId: uuid("link_id").notNull(),
+    planVersionId: uuid("plan_version_id").notNull(),
+    periodStart: date("period_start").notNull(),
+    periodEnd: date("period_end").notNull(),
+    inputHash: text("input_hash").notNull(),
+    outputHash: text("output_hash").notNull(),
+    status: text("status", { enum: ["active", "superseded"] }).notNull().default("active"),
+    supersedesRunId: uuid("supersedes_run_id"),
+    invoiceId: uuid("invoice_id"),
+    createdBy: uuid("created_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("usage_rating_runs_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("usage_rating_runs_active_window_unique")
+      .on(t.orgId, t.linkId, t.periodStart, t.periodEnd)
+      .where(sql`${t.status} = 'active'`),
+    index("usage_rating_runs_invoice").on(t.orgId, t.invoiceId),
+    check("usage_rating_runs_period_valid", sql`${t.periodStart} <= ${t.periodEnd}`),
+    check("usage_rating_runs_hashes_valid", sql`${t.inputHash} ~ '^[0-9a-f]{64}$' and ${t.outputHash} ~ '^[0-9a-f]{64}$'`),
+    check("usage_rating_runs_status_valid", sql`${t.status} in ('active', 'superseded')`),
+    check("usage_rating_runs_not_self_superseding", sql`${t.supersedesRunId} is null or ${t.supersedesRunId} <> ${t.id}`),
+    foreignKey({ name: "usage_rating_runs_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "usage_rating_runs_link_org_fk",
+      columns: [t.orgId, t.linkId],
+      foreignColumns: [subscriptionUsageLinks.orgId, subscriptionUsageLinks.id],
+    }),
+    foreignKey({
+      name: "usage_rating_runs_version_org_fk",
+      columns: [t.orgId, t.planVersionId],
+      foreignColumns: [usageRatingPlanVersions.orgId, usageRatingPlanVersions.id],
+    }),
+    foreignKey({
+      name: "usage_rating_runs_supersedes_org_fk",
+      columns: [t.orgId, t.supersedesRunId],
+      foreignColumns: [t.orgId, t.id],
+    }),
+    foreignKey({
+      name: "usage_rating_runs_invoice_org_fk",
+      columns: [t.orgId, t.invoiceId],
+      foreignColumns: [documents.orgId, documents.id],
+    }),
+  ],
+);
+
 export const usagePrepaidGrants = pgTable(
   "usage_prepaid_grants",
   {
@@ -334,19 +385,38 @@ export const usagePrepaidDraws = pgTable(
     runId: uuid("run_id"),
     periodMonth: date("period_month").notNull(),
     amount: money("amount").notNull(),
+    reversesDrawId: uuid("reverses_draw_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     uniqueIndex("usage_prepaid_draws_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("usage_prepaid_draws_run_grant_period_unique").on(t.orgId, t.runId, t.grantId, t.periodMonth),
+    uniqueIndex("usage_prepaid_draws_run_grant_period_unique")
+      .on(t.orgId, t.runId, t.grantId, t.periodMonth)
+      .where(sql`${t.reversesDrawId} is null`),
+    uniqueIndex("usage_prepaid_draws_reverses_draw_unique")
+      .on(t.orgId, t.reversesDrawId)
+      .where(sql`${t.reversesDrawId} is not null`),
     index("usage_prepaid_draws_grant_period").on(t.orgId, t.grantId, t.periodMonth),
-    check("usage_prepaid_draws_amount_positive", sql`${t.amount} > 0`),
+    check(
+      "usage_prepaid_draws_amount_positive",
+      sql`(${t.reversesDrawId} is null and ${t.amount} > 0) or (${t.reversesDrawId} is not null and ${t.amount} < 0)`,
+    ),
     check("usage_prepaid_draws_period_month_first", sql`extract(day from ${t.periodMonth}) = 1`),
     foreignKey({ name: "usage_prepaid_draws_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
+    foreignKey({
+      name: "usage_prepaid_draws_reverses_org_fk",
+      columns: [t.orgId, t.reversesDrawId],
+      foreignColumns: [t.orgId, t.id],
+    }),
     foreignKey({
       name: "usage_prepaid_draws_grant_org_fk",
       columns: [t.orgId, t.grantId],
       foreignColumns: [usagePrepaidGrants.orgId, usagePrepaidGrants.id],
+    }),
+    foreignKey({
+      name: "usage_prepaid_draws_run_org_fk",
+      columns: [t.orgId, t.runId],
+      foreignColumns: [usageRatingRuns.orgId, usageRatingRuns.id],
     }),
   ],
 );
