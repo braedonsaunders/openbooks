@@ -97,6 +97,7 @@ const mockSources = new Map<string, string>([
 // the real modules enforce, so every bad-body and bad-amount case behind
 // them reported green untested.
 const mockUrls = new Map<string, string>([
+  ['../../../../../lib/feature-gates', 'mock:gates'],
   ['@/lib/feature-gates', 'mock:gates'],
   ['../../../../../lib/analytics/true-cost-data', 'mock:data'],
   ['../../../../../lib/analytics/true-cost-engine', 'mock:engine'],
@@ -105,7 +106,7 @@ const mockUrls = new Map<string, string>([
 let realAuthzUrl = ''
 let dbRealUrl = ''
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '../../../../../lib/authz') {
       realAuthzUrl = nextResolve(specifier, context).url
@@ -129,7 +130,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?true-cost-config-occ-test'
 const { GET, PUT } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(revision: number): void {
   state.revision = revision
@@ -159,7 +159,7 @@ test('GET exposes the persisted configuration revision', async () => {
 })
 
 test('PUT rejects missing revisions and malformed nested categories before writing', async () => {
-  reset(3); const response = await put({ profiles: [profile] })
+  reset(3); const response = await put({ activeProfileId: profile.id, profiles: [profile] })
   assert.equal(response.status, 409); assert.match((await response.json()).error, /revision is required/)
   assert.equal(state.executed.length, 0)
   reset(3); const malformed = await put({ expectedRevision: 3, activeProfileId: profile.id, profiles: [{ ...profile, customCategories: [{ name: 'Valid', type: 'manual' }, { name: '', type: 'manual' }] }] })

@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { canonicalDecimal } from "../../../../../lib/exact-decimal";
 import type { ForecastCategory } from "../../../../../lib/analytics/cashflow-data";
@@ -16,15 +17,18 @@ import {
 } from "../../../../../lib/cash/category-references";
 
 const MANUAL_AMOUNT_MAX = "100000000.0000";
+const categoryUuid = (field: string) => z.string({ error: `${field} must be a UUID; choose a saved record from this organization` })
+  .uuid({ error: `${field} must be a UUID; choose a saved record from this organization` })
+const categoryUuidList = (field: string) => z.array(categoryUuid(`${field} entry`), { error: `${field} must be a list of UUID references` })
 
 const categoryBase = {
-  id: z.string().uuid().optional(),
+  id: categoryUuid('id').optional(),
   name: z.string().trim().min(1, 'name is required').max(80),
   direction: z.enum(['inflow', 'outflow'], { error: 'direction must be inflow or outflow' }),
   expectedDay: z.number().int().min(0).max(6).optional(),
   expectedWeek: z.number().int().min(1).max(4).optional(),
   adjustmentPct: z.number().finite().min(-90).max(200).optional(),
-  subsidiaryIds: z.array(z.string().uuid()).max(50).optional(),
+  subsidiaryIds: categoryUuidList('subsidiaryIds').max(50).optional(),
 }
 const positiveManualAmount = exactMoney('amount must be an exact decimal string with at most four decimal places')
   .refine((value) => compareMoney(value, '0.0000') > 0, { error: 'amount must be greater than zero' })
@@ -33,31 +37,31 @@ const forecastCategorySchema = z.discriminatedUnion('method', [
   z.object({
     ...categoryBase,
     method: z.literal('gl_history_average'),
-    accountIds: z.array(z.string().uuid()).min(1).max(50),
+    accountIds: categoryUuidList('accountIds').min(1).max(50),
     historyWeeks: z.number().int().min(1).max(52).optional(),
     useNetAmt: z.boolean().optional(),
   }),
   z.object({
     ...categoryBase,
     method: z.literal('vendor_payment_history'),
-    partyIds: z.array(z.string().uuid()).max(50).optional(),
-    partyId: z.string().uuid().optional(),
+    partyIds: categoryUuidList('partyIds').max(50).optional(),
+    partyId: categoryUuid('partyId').optional(),
     partyName: z.string().max(120).optional(),
     historyMonths: z.number().int().min(1).max(36).optional(),
   }).refine((value) => (value.partyIds?.length ?? 0) > 0 || value.partyId !== undefined, { error: 'partyIds or partyId must name at least one vendor' }),
   z.object({
     ...categoryBase,
     method: z.literal('vendor_recurring_average'),
-    partyIds: z.array(z.string().uuid()).max(50).optional(),
-    partyId: z.string().uuid().optional(),
+    partyIds: categoryUuidList('partyIds').max(50).optional(),
+    partyId: categoryUuid('partyId').optional(),
     partyName: z.string().max(120).optional(),
     historyMonths: z.number().int().min(1).max(36).optional(),
   }).refine((value) => (value.partyIds?.length ?? 0) > 0 || value.partyId !== undefined, { error: 'partyIds or partyId must name at least one vendor' }),
   z.object({
     ...categoryBase,
     method: z.literal('credit_card_cycle'),
-    cardAccountIds: z.array(z.string().uuid()).max(20).optional(),
-    accountIds: z.array(z.string().uuid()).max(20).optional(),
+    cardAccountIds: categoryUuidList('cardAccountIds').max(20).optional(),
+    accountIds: categoryUuidList('accountIds').max(20).optional(),
     historyMonths: z.number().int().min(1).max(24).optional(),
     significantPaymentThreshold: exactMoney('significantPaymentThreshold must be an exact decimal string').optional(),
   }).refine((value) => (value.cardAccountIds?.length ?? 0) > 0 || (value.accountIds?.length ?? 0) > 0, { error: 'cardAccountIds or accountIds must name at least one card account' }),
@@ -69,7 +73,7 @@ const forecastCategorySchema = z.discriminatedUnion('method', [
   z.object({
     ...categoryBase,
     method: z.literal('bank_register_history'),
-    bankAccountIds: z.array(z.string().uuid()).min(1).max(20),
+    bankAccountIds: categoryUuidList('bankAccountIds').min(1).max(20),
     historyWeeks: z.number().int().min(1).max(52).optional(),
     memoKeywords: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
     includeTransfers: z.boolean().optional(),
@@ -80,13 +84,14 @@ const forecastCategorySchema = z.discriminatedUnion('method', [
     ...categoryBase,
     method: z.literal('manual_recurring'),
     amount: positiveManualAmount,
-    anchorDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'anchorDate must be YYYY-MM-DD').optional(),
+    anchorDate: z.string({ error: 'anchorDate must be a real YYYY-MM-DD calendar date' })
+      .refine(isIsoCalendarDate, { error: 'anchorDate must be a real YYYY-MM-DD calendar date' }).optional(),
     frequency: z.enum(['weekly', 'biweekly', 'bi_weekly', 'monthly']).optional(),
   }),
 ])
 const requestBodySchema = z.object({
   categories: z.array(forecastCategorySchema).max(50, 'too many categories (max 50)'),
-  expectedRevision: z.number().int().nonnegative('expectedRevision must be a non-negative integer'),
+  expectedRevision: z.number().int().nonnegative('expectedRevision must be a non-negative integer').optional(),
 })
 
 
@@ -330,6 +335,12 @@ export const PUT = defineRoute({
     // Optimistic concurrency: the editor sends the revision it read, and a
     // stale writer gets 409 instead of silently discarding the other edit.
     const expectedRevision = body.expectedRevision
+    if (expectedRevision === undefined) {
+      return NextResponse.json({
+        error: 'expectedRevision required',
+        message: 'Send the revision returned by GET with every replacement.',
+      }, { status: 400 })
+    }
 
     // Sequential: the first invalid index wins, and reference checks stay ordered.
     const cleaned: CleanResult[] = [];

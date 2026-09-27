@@ -41,7 +41,7 @@ const mockPayrollOutputs = `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       specifier === "../../../../lib/authz" &&
@@ -50,8 +50,8 @@ const hooks = registerHooks({
       return { url: "mock:authz", shortCircuit: true };
     }
     if (
-      (specifier === "../../../../lib/feature-gates" || specifier === "@/lib/feature-gates") &&
-      context.parentURL?.includes("payroll/settings")
+      specifier === "@/lib/feature-gates" ||
+      (specifier === "../../../../lib/feature-gates" && context.parentURL?.includes("payroll/settings"))
     ) {
       return { url: "mock:feature-gates", shortCircuit: true };
     }
@@ -100,7 +100,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?payroll-settings-atomicity-test";
 const { GET, PUT, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 const { db, withBypass, withBypassContext, withOrgContext } =
   await import("../../../../../engine/src/platform/db.ts");

@@ -125,11 +125,12 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
+  ['../../../../../lib/authz', 'mock:authz'],
   ['@/lib/authz', 'mock:authz'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
@@ -144,7 +145,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?cashflow-categories-route-test'
 const { PUT, GET } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   state.permissions = new Set(['admin.setup.manage', 'reports.read'])
@@ -154,7 +154,7 @@ function reset(): void {
   state.pendingQueries.length = 0
   state.priorCategories = [
     {
-      id: 'category-old',
+      id: '11111111-1111-4111-8111-111111111111',
       name: 'Old forecast',
       direction: 'outflow',
       method: 'manual_recurring',
@@ -185,11 +185,11 @@ function put(categories: unknown[], expectedRevision: unknown = state.priorRevis
 const todayAnchor = () => new Date().toISOString().slice(0, 10)
 
 const validCategory = {
-  id: 'category-rent',
+  id: '22222222-2222-4222-8222-222222222222',
   name: 'Rent',
   direction: 'outflow',
   method: 'manual_recurring',
-  amount: 1250,
+  amount: '1250',
   frequency: 'monthly',
 }
 
@@ -200,7 +200,7 @@ const expectedValidCategory = {
 }
 
 const fractionalCategory = {
-  id: 'category-fractional',
+  id: '33333333-3333-4333-8333-333333333333',
   name: 'Fractional charge',
   direction: 'outflow',
   method: 'manual_recurring',
@@ -209,7 +209,7 @@ const fractionalCategory = {
 }
 
 const cappedCategory = {
-  id: 'category-capped',
+  id: '44444444-4444-4444-8444-444444444444',
   name: 'Large reserve',
   direction: 'inflow',
   method: 'manual_recurring',
@@ -225,7 +225,7 @@ test('replacement rejects malformed entries atomically instead of dropping them'
   const response = await put([
     validCategory,
     {
-      id: 'category-invalid',
+      id: '55555555-5555-4555-8555-555555555555',
       name: 'Missing amount',
       direction: 'outflow',
       method: 'manual_recurring',
@@ -234,10 +234,9 @@ test('replacement rejects malformed entries atomically instead of dropping them'
   ])
 
   assert.equal(response.status, 400)
-  assert.deepEqual(await response.json(), {
-    error: 'invalid category at index 1',
-    message: 'Each category must include a valid name, method, and method-specific configuration.',
-  })
+  const refusal = (await response.json()) as { error: string; issues: Array<{ path: string }> }
+  assert.match(refusal.error, /exact decimal string with at most four decimal places/)
+  assert.equal(refusal.issues[0]?.path, 'categories.1.amount')
   assert.equal(state.databaseCalls.length, 0, 'invalid replacement never reaches persistence')
   assert.equal(state.transactions, 0, 'invalid replacement never opens a transaction')
   assert.equal(state.committedQueries.length, 0, 'invalid replacement creates no audit or write')
@@ -261,10 +260,9 @@ test('an over-limit manual amount refuses naming the limit instead of clamping',
   const response = await put([validCategory, cappedCategory])
 
   assert.equal(response.status, 400)
-  assert.deepEqual(await response.json(), {
-    error: 'invalid category at index 1',
-    message: 'manual amount 9007199254740993.0000 exceeds the maximum 100000000.0000',
-  })
+  const refusal = (await response.json()) as { error: string; issues: Array<{ path: string }> }
+  assert.match(refusal.error, /amount must not exceed 100000000\.0000/)
+  assert.equal(refusal.issues[0]?.path, 'categories.1.amount')
   assert.equal(state.databaseCalls.length, 0, 'an over-limit replacement never reaches persistence')
   assert.equal(state.transactions, 0, 'an over-limit replacement never opens a transaction')
   assert.equal(state.committedQueries.length, 0, 'an over-limit replacement creates no audit or write')
@@ -293,12 +291,12 @@ test('replacement persists every valid row with exact money and complete audit e
   const audit = state.committedQueries[2]
   assert.ok(audit, 'the replacement writes an audit row')
   assert.match(audit, /insert into audit_log/i)
-  assert.match(audit, /"before":\{"analytics":\{"cashflowCategories":\[\{"id":"category-old"/)
+  assert.match(audit, /"before":\{"analytics":\{"cashflowCategories":\[\{"id":"11111111-1111-4111-8111-111111111111"/)
   assert.match(audit, /"after":\{"analytics":\{"cashflowCategories":\[/)
-  assert.match(audit, /category-rent/)
-  assert.match(audit, /category-fractional/)
+  assert.match(audit, /22222222-2222-4222-8222-222222222222/)
+  assert.match(audit, /33333333-3333-4333-8333-333333333333/)
   assert.match(audit, /"amount":"12\.3456"/)
-  assert.doesNotMatch(audit, /category-capped/)
+  assert.doesNotMatch(audit, /44444444-4444-4444-8444-444444444444/)
 })
 
 test('GET returns the list with its revision', async () => {
@@ -354,15 +352,15 @@ test('a stale replacement gets 409 and writes nothing', async () => {
   assert.doesNotMatch(state.committedQueries[0]!, /insert into audit_log/i)
 })
 
-const ACCT = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
-const PARTY = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
-const GHOST = 'cccccccc-cccc-cccc-cccc-cccccccccccc'
+const ACCT = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const PARTY = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const GHOST = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 
 test('a non-UUID reference refuses before the cast can explode', async () => {
   reset()
   const response = await put([
     {
-      id: 'category-gl',
+      id: '66666666-6666-4666-8666-666666666666',
       name: 'GL',
       direction: 'outflow',
       method: 'gl_history_average',
@@ -370,20 +368,19 @@ test('a non-UUID reference refuses before the cast can explode', async () => {
     },
   ])
   assert.equal(response.status, 400)
-  assert.deepEqual(await response.json(), {
-    error: 'invalid category at index 0',
-    message: 'accountIds "not-a-uuid" is not a valid UUID',
-  })
+  const refusal = (await response.json()) as { error: string; issues: Array<{ path: string }> }
+  assert.match(refusal.error, /accountIds entry must be a UUID/)
+  assert.equal(refusal.issues[0]?.path, 'categories.0.accountIds.0')
   assert.equal(state.transactions, 0, 'a malformed reference never opens a transaction')
 })
 
 test('an unknown reference refuses naming the field instead of forecasting zero', async () => {
   reset()
   for (const [field, category] of [
-    ['accountIds', { id: 'c1', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [GHOST] }],
-    ['partyIds', { id: 'c2', name: 'VP', direction: 'outflow', method: 'vendor_payment_history', partyIds: [GHOST] }],
-    ['cardAccountIds', { id: 'c3', name: 'CC', direction: 'outflow', method: 'credit_card_cycle', cardAccountIds: [GHOST] }],
-    ['bankAccountIds', { id: 'c4', name: 'BR', direction: 'outflow', method: 'bank_register_history', bankAccountIds: [GHOST] }],
+    ['accountIds', { id: '10101010-1010-4010-8010-101010101010', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [GHOST] }],
+    ['partyIds', { id: '20202020-2020-4020-8020-202020202020', name: 'VP', direction: 'outflow', method: 'vendor_payment_history', partyIds: [GHOST] }],
+    ['cardAccountIds', { id: '30303030-3030-4030-8030-303030303030', name: 'CC', direction: 'outflow', method: 'credit_card_cycle', cardAccountIds: [GHOST] }],
+    ['bankAccountIds', { id: '40404040-4040-4040-8040-404040404040', name: 'BR', direction: 'outflow', method: 'bank_register_history', bankAccountIds: [GHOST] }],
   ] as const) {
     const response = await put([category])
     assert.equal(response.status, 400, `${field} must refuse`)
@@ -400,7 +397,7 @@ test('a reference from the wrong table refuses', async () => {
   state.parties.set(PARTY, { is_vendor: true, subsidiary_id: null })
   const response = await put([
     {
-      id: 'category-gl',
+      id: '66666666-6666-4666-8666-666666666666',
       name: 'GL',
       direction: 'outflow',
       method: 'gl_history_average',
@@ -421,14 +418,14 @@ test('references that resolve persist with their ids intact', async () => {
   state.parties.set(PARTY, { is_vendor: true, subsidiary_id: null })
   const response = await put([
     {
-      id: 'category-gl',
+      id: '66666666-6666-4666-8666-666666666666',
       name: 'GL',
       direction: 'outflow',
       method: 'gl_history_average',
       accountIds: [ACCT],
     },
     {
-      id: 'category-vp',
+      id: '77777777-7777-4777-8777-777777777777',
       name: 'VP',
       direction: 'outflow',
       method: 'vendor_payment_history',
@@ -442,15 +439,15 @@ test('references that resolve persist with their ids intact', async () => {
   assert.deepEqual(body.categories[1]?.partyIds, [PARTY])
 })
 
-const SUB_A = 'dddddddd-dddd-dddd-dddd-dddddddddddd'
-const SUB_B = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'
+const SUB_A = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+const SUB_B = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
 
 test('a mistyped account refuses naming the expected type', async () => {
   reset()
   state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: null })
   for (const [field, category, expected] of [
-    ['bankAccountIds', { id: 'c1', name: 'BR', direction: 'outflow', method: 'bank_register_history', bankAccountIds: [ACCT] }, 'must be a bank account (asset_bank), got "expense"'],
-    ['cardAccountIds', { id: 'c2', name: 'CC', direction: 'outflow', method: 'credit_card_cycle', cardAccountIds: [ACCT] }, 'must be a card account (liability_card), got "expense"'],
+    ['bankAccountIds', { id: '50505050-5050-4050-8050-505050505050', name: 'BR', direction: 'outflow', method: 'bank_register_history', bankAccountIds: [ACCT] }, 'must be a bank account (asset_bank), got "expense"'],
+    ['cardAccountIds', { id: '60606060-6060-4060-8060-606060606060', name: 'CC', direction: 'outflow', method: 'credit_card_cycle', cardAccountIds: [ACCT] }, 'must be a card account (liability_card), got "expense"'],
   ] as const) {
     const response = await put([category])
     assert.equal(response.status, 400, `${field} must refuse`)
@@ -468,7 +465,7 @@ test('a summary account refuses as a GL history source', async () => {
   reset()
   state.accounts.set(ACCT, { type: 'expense', is_summary: true, subsidiary_id: null })
   const response = await put([
-    { id: 'c1', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT] },
+    { id: '70707070-7070-4070-8070-707070707070', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT] },
   ])
   assert.equal(response.status, 400)
   assert.deepEqual(await response.json(), {
@@ -482,7 +479,7 @@ test('a party with no vendor role refuses for vendor methods', async () => {
   reset()
   state.parties.set(PARTY, { is_vendor: false, subsidiary_id: null })
   const response = await put([
-    { id: 'c1', name: 'VP', direction: 'outflow', method: 'vendor_payment_history', partyIds: [PARTY] },
+    { id: '80808080-8080-4080-8080-808080808080', name: 'VP', direction: 'outflow', method: 'vendor_payment_history', partyIds: [PARTY] },
   ])
   assert.equal(response.status, 400)
   assert.deepEqual(await response.json(), {
@@ -496,7 +493,7 @@ test('a customer-kind party holding a vendor role saves', async () => {
   reset()
   state.parties.set(PARTY, { is_vendor: true, subsidiary_id: null })
   const response = await put([
-    { id: 'c1', name: 'VP', direction: 'outflow', method: 'vendor_payment_history', partyIds: [PARTY] },
+    { id: '80808080-8080-4080-8080-808080808080', name: 'VP', direction: 'outflow', method: 'vendor_payment_history', partyIds: [PARTY] },
   ])
   assert.equal(response.status, 200)
   const body = (await response.json()) as { ok: boolean; revision: number }
@@ -508,7 +505,7 @@ test('restricted user cannot replace org-wide policy even with an out-of-scope r
   state.accounts.set(ACCT, { type: 'expense', is_summary: false, subsidiary_id: SUB_A })
   state.allowedSubs = new Set([SUB_B])
   const response = await put([
-    { id: 'c1', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT] },
+    { id: '90909090-9090-4090-8090-909090909090', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT] },
   ])
   assert.equal(response.status, 403)
   assert.equal(state.transactions, 0)
@@ -520,7 +517,7 @@ test('references in visible subsidiaries and org-wide rows persist', async () =>
   state.accounts.set(GHOST, { type: 'expense', is_summary: false, subsidiary_id: null })
   state.allowedSubs = null
   const response = await put([
-    { id: 'c1', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT, GHOST] },
+    { id: 'abababab-abab-4bab-8bab-abababababab', name: 'GL', direction: 'outflow', method: 'gl_history_average', accountIds: [ACCT, GHOST] },
   ])
   assert.equal(response.status, 200)
   const body = (await response.json()) as { ok: boolean; revision: number }
@@ -530,15 +527,14 @@ test('references in visible subsidiaries and org-wide rows persist', async () =>
 test('an unknown direction refuses instead of flipping the sign', async () => {
   for (const direction of ['outflwo', 'INCOME', '', null, undefined]) {
     reset()
-    const candidate = { ...validCategory, id: 'category-direction' }
+    const candidate = { ...validCategory, id: '99999999-9999-4999-8999-999999999999' }
     if (direction === undefined) delete (candidate as Record<string, unknown>).direction
     else (candidate as Record<string, unknown>).direction = direction
     const response = await put([candidate])
     assert.equal(response.status, 400, `direction ${String(direction)} must refuse`)
-    assert.deepEqual(await response.json(), {
-      error: 'invalid category at index 0',
-      message: 'Each category must include a valid name, method, and method-specific configuration.',
-    })
+    const refusal = (await response.json()) as { issues: Array<{ path: string; message: string }> }
+    assert.equal(refusal.issues[0]?.path, 'categories.0.direction')
+    assert.match(refusal.issues[0]?.message ?? '', /direction must be inflow or outflow/)
     assert.equal(state.transactions, 0, 'a misspelled direction never opens a transaction')
   }
 })
@@ -547,7 +543,7 @@ test('manual schedules keep an explicit anchor and refuse a malformed one', asyn
   reset()
 
   const anchored = {
-    id: 'category-anchored',
+    id: '88888888-8888-4888-8888-888888888888',
     name: 'Anchored rent',
     direction: 'outflow',
     method: 'manual_recurring',
@@ -561,12 +557,11 @@ test('manual schedules keep an explicit anchor and refuse a malformed one', asyn
 
   for (const bad of ['2026-02-30', '2026-13-01', 'not-a-date', 20260830]) {
     reset()
-    const response = await put([{ ...anchored, id: 'category-bad', anchorDate: bad }])
+    const response = await put([{ ...anchored, id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', anchorDate: bad }])
     assert.equal(response.status, 400, `anchorDate ${String(bad)} must refuse`)
-    assert.deepEqual(await response.json(), {
-      error: 'invalid category at index 0',
-      message: 'Each category must include a valid name, method, and method-specific configuration.',
-    })
+    const refusal = (await response.json()) as { error: string; issues: Array<{ path: string }> }
+    assert.equal(refusal.error, 'anchorDate must be a real YYYY-MM-DD calendar date')
+    assert.equal(refusal.issues[0]?.path, 'categories.0.anchorDate')
     assert.equal(state.transactions, 0, 'a malformed anchor never opens a transaction')
   }
 })
