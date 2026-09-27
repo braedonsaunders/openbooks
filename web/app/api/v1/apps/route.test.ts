@@ -128,7 +128,7 @@ test("POST /api/v1/apps/drafts drafts through draftExtension", async () => {
 
 test("POST /api/v1/apps/drafts refuses a missing reason", async () => {
   const response = await drafts.POST(jsonRequest("http://openbooks.test/api/v1/apps/drafts", "POST", { bundle: {} }));
-  assert.deepEqual([response.status, await response.json()], [422, { error: "reason is required" }]);
+  assert.deepEqual([response.status, await response.json()], [422, { error: "reason is required", code: "invalid_input" }]);
 });
 
 test("GET /api/v1/apps/drafts/[id] reads through getExtensionDraft", async () => {
@@ -150,7 +150,7 @@ test("POST /api/v1/apps/drafts/[id]/activate binds the path draft id", async () 
 
 test("POST /api/v1/apps/drafts/[id]/activate refuses a missing contentHash", async () => {
   const response = await activate.POST(jsonRequest("http://openbooks.test/api/v1/apps/drafts/draft-1/activate", "POST", {}), draftParams);
-  assert.deepEqual([response.status, await response.json()], [422, { error: "contentHash is required" }]);
+  assert.deepEqual([response.status, await response.json()], [422, { error: "contentHash is required", code: "invalid_input" }]);
 });
 
 test("POST /api/v1/apps/drafts/[id]/discard binds the path draft id", async () => {
