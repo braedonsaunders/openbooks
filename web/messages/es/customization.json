@@ -31,6 +31,10 @@
     "budget_scenario": "Presupuesto",
     "revenue_contract": "Contrato de ingresos",
     "equipment_unit": "Unidad de equipo",
+    "resourcing_assignment": "Asignación de recursos",
+    "resourcing_request": "Solicitud de recursos",
+    "resourcing_demand": "Demanda de recursos",
+    "retainer": "Retención",
     "timesheet_week": "Semana de parte de horas",
     "bank_reconciliation": "Conciliación bancaria",
     "bank_statement": "Extracto bancario",
@@ -42,6 +46,25 @@
     "pay_run": "Ciclo de nómina",
     "pick_list": "Lista de preparación",
     "shipment": "Envío"
+  },
+  "resourcing": {
+    "fields": {
+      "booking": "Tipo de reserva",
+      "kind": "Tipo de retención"
+    },
+    "booking": {
+      "hard": "Confirmada",
+      "soft": "Provisional"
+    },
+    "kind": {
+      "hours": "Horas",
+      "fees": "Honorarios"
+    },
+    "status": {
+      "released": "Liberada",
+      "exhausted": "Agotada",
+      "expired": "Vencida"
+    }
   },
   "property": {
     "tabs": {

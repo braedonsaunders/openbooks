@@ -6,9 +6,10 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { resolveProjectActualCosts } from '@openbooks/engine/src/projects/financials.ts'
 import { cmp } from '@openbooks/engine/src/money/money.ts'
-import { isCustomFieldKey, type ListViewConfig } from '@openbooks/customization'
+import { isCustomFieldKey, type FilterClause, type ListViewConfig } from '@openbooks/customization'
 import { displayOpportunityStatusName } from '../crm-status-display'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
+import { dateOrFalse, pushCustomFieldFilter, uuidOrFalse } from '../customization/list-query'
 import {
   CUSTOMER_BASE_JOINS,
   CUSTOMER_BUILT_IN_EXPR,
@@ -225,6 +226,77 @@ const inventoryMovementScopedWhere: EntityListSource['where'] = (
   orgId,
   allowedSubsidiaryIds,
 ) => sql`${inventoryMovementWhere(view, adhoc, orgId)}${subsidiaryVisibleFilter(sql`m.subsidiary_id`, allowedSubsidiaryIds ?? null)}`
+
+type ResourcingSourceWhere = {
+  alias: string
+  columns: Record<string, SQL>
+  dates?: readonly string[]
+  uuids?: readonly string[]
+  booleans?: readonly string[]
+  searchColumns: readonly SQL[]
+  statusKey?: string
+  subsidiary: SQL
+}
+
+function resourcingFilterPredicate(clause: FilterClause, config: ResourcingSourceWhere): SQL {
+  const column = config.columns[clause.key]
+  if (!column) return sql`false`
+  const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
+  if (config.uuids?.includes(clause.key)) {
+    const refused = uuidOrFalse(value)
+    if (refused) return refused
+  }
+  if (config.dates?.includes(clause.key)) {
+    const refused = dateOrFalse(value)
+    if (refused) return refused
+    if (clause.operator === 'between') {
+      const upper = String(clause.to ?? '')
+      const refusedUpper = dateOrFalse(upper)
+      if (refusedUpper) return refusedUpper
+      return sql`${column} between ${value} and ${upper}`
+    }
+    if (clause.operator === 'eq') return sql`${column} = ${value}`
+    if (clause.operator === 'gte') return sql`${column} >= ${value}`
+    if (clause.operator === 'lte') return sql`${column} <= ${value}`
+    return sql`false`
+  }
+  if (config.booleans?.includes(clause.key)) {
+    if (value !== 'true' && value !== 'false') return sql`false`
+    return clause.operator === 'eq' ? sql`${column} = ${value}::boolean` : sql`false`
+  }
+  if (clause.operator === 'eq') return sql`${column} = ${value}`
+  if (clause.operator === 'ne') return sql`${column} <> ${value}`
+  if (clause.operator === 'contains') return sql`${column}::text ilike ${`%${value}%`}`
+  if (clause.operator === 'is_set') return sql`coalesce(${column}::text, '') <> ''`
+  if (clause.operator === 'is_not_set') return sql`coalesce(${column}::text, '') = ''`
+  if (clause.operator === 'in' || clause.operator === 'not_in') {
+    const values = (Array.isArray(clause.value) ? clause.value : [value]).map(String)
+    if (!values.length) return clause.operator === 'in' ? sql`false` : sql`true`
+    const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
+    return clause.operator === 'in' ? sql`${column} in (${list})` : sql`${column} not in (${list})`
+  }
+  return sql`false`
+}
+
+function resourcingWhere(
+  config: ResourcingSourceWhere,
+  view: ListViewConfig,
+  adhoc: EntityAdhoc,
+  orgId: string,
+): SQL {
+  const parts: SQL[] = [sql`${sql.raw(config.alias)}.org_id = ${orgId}`, config.subsidiary]
+  for (const filter of view.filters) {
+    if (pushCustomFieldFilter(parts, filter, config.alias)) continue
+    parts.push(sql`and ${resourcingFilterPredicate(filter, config)}`)
+  }
+  const status = config.statusKey ? adhoc.filters?.[config.statusKey] : undefined
+  if (status && config.statusKey) parts.push(sql`and ${config.columns[config.statusKey]} = ${status}`)
+  if (adhoc.q) {
+    const pattern = `%${adhoc.q}%`
+    parts.push(sql`and (${sql.join(config.searchColumns.map((column) => sql`${column}::text ilike ${pattern}`), sql` or `)})`)
+  }
+  return sql.join(parts, sql` `)
+}
 
 export interface EntityQuickFilterOption {
   value: string
@@ -798,6 +870,131 @@ const SOURCES: Record<string, EntityListSource> = {
     drawerParam: 'equipment',
     basePath: '/assets/equipment',
     statusVariant: (row) => row.status === 'active' ? 'success' : 'secondary',
+  },
+  resourcing_assignment: {
+    recordType: 'resourcing_assignment',
+    table: 'res_assignments',
+    alias: 'ra',
+    customFieldTable: 'res_assignments',
+    baseJoins: sql`inner join projects p on p.id=ra.project_id and p.org_id=ra.org_id
+      left join parties employee on employee.id=ra.employee_party_id and employee.org_id=ra.org_id`,
+    builtInExpr: {
+      project_id: sql`p.name`, employee_party_id: sql`employee.display_name`, job_title: sql`ra.job_title`,
+      week_start: sql`ra.week_start`, planned_hours: sql`ra.planned_hours`, booking: sql`ra.booking`,
+      state: sql`ra.state`, is_billable: sql`ra.is_billable`,
+    },
+    sorts: {
+      project: sql`p.name`, employee: sql`employee.display_name`, role: sql`ra.job_title`,
+      week: sql`ra.week_start`, hours: sql`ra.planned_hours`, booking: sql`ra.booking`, state: sql`ra.state`,
+    },
+    defaultSort: sql`ra.week_start`,
+    statusExpr: sql`ra.state`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'state' }],
+    where: (view, adhoc, orgId, allowedSubsidiaryIds) => resourcingWhere({
+      alias: 'ra',
+      columns: {
+        project_id: sql`ra.project_id`, employee_party_id: sql`ra.employee_party_id`, job_title: sql`ra.job_title`,
+        week_start: sql`ra.week_start`, planned_hours: sql`ra.planned_hours`, booking: sql`ra.booking`,
+        state: sql`ra.state`, is_billable: sql`ra.is_billable`,
+      },
+      dates: ['week_start'], uuids: ['project_id', 'employee_party_id'], booleans: ['is_billable'],
+      searchColumns: [sql`p.name`, sql`employee.display_name`, sql`ra.job_title`], statusKey: 'state',
+      subsidiary: subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null),
+    }, view, adhoc, orgId),
+    drawerParam: 'assignment',
+    basePath: '/resourcing/assignments',
+  },
+  resourcing_request: {
+    recordType: 'resourcing_request',
+    table: 'res_requests',
+    alias: 'rq',
+    customFieldTable: 'res_requests',
+    baseJoins: sql`inner join projects p on p.id=rq.project_id and p.org_id=rq.org_id
+      left join parties employee on employee.id=rq.employee_party_id and employee.org_id=rq.org_id`,
+    builtInExpr: {
+      project_id: sql`p.name`, employee_party_id: sql`employee.display_name`, job_title: sql`rq.job_title`,
+      first_week: sql`rq.first_week`, last_week: sql`rq.last_week`, hours_per_week: sql`rq.hours_per_week`, status: sql`rq.status`,
+    },
+    sorts: {
+      project: sql`p.name`, employee: sql`employee.display_name`, role: sql`rq.job_title`,
+      first_week: sql`rq.first_week`, last_week: sql`rq.last_week`, hours: sql`rq.hours_per_week`, status: sql`rq.status`,
+    },
+    defaultSort: sql`rq.first_week`,
+    statusExpr: sql`rq.status`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
+    where: (view, adhoc, orgId, allowedSubsidiaryIds) => resourcingWhere({
+      alias: 'rq',
+      columns: {
+        project_id: sql`rq.project_id`, employee_party_id: sql`rq.employee_party_id`, job_title: sql`rq.job_title`,
+        first_week: sql`rq.first_week`, last_week: sql`rq.last_week`, hours_per_week: sql`rq.hours_per_week`, status: sql`rq.status`,
+      },
+      dates: ['first_week', 'last_week'], uuids: ['project_id', 'employee_party_id'],
+      searchColumns: [sql`p.name`, sql`employee.display_name`, sql`rq.job_title`], statusKey: 'status',
+      subsidiary: subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null),
+    }, view, adhoc, orgId),
+    drawerParam: 'request',
+    basePath: '/resourcing/requests',
+  },
+  resourcing_demand: {
+    recordType: 'resourcing_demand',
+    table: 'res_demand_lines',
+    alias: 'dl',
+    customFieldTable: 'res_demand_lines',
+    baseJoins: sql`inner join departments d on d.id=dl.department_id and d.org_id=dl.org_id
+      left join crm_opportunities opportunity on opportunity.id=dl.opportunity_id and opportunity.org_id=dl.org_id`,
+    builtInExpr: {
+      department_id: sql`d.name`, job_title: sql`dl.job_title`, first_week: sql`dl.first_week`,
+      last_week: sql`dl.last_week`, hours_per_week: sql`dl.hours_per_week`, note: sql`dl.note`, opportunity_id: sql`opportunity.name`,
+    },
+    sorts: {
+      department: sql`d.name`, role: sql`dl.job_title`, first_week: sql`dl.first_week`,
+      last_week: sql`dl.last_week`, hours: sql`dl.hours_per_week`, opportunity: sql`opportunity.name`,
+    },
+    defaultSort: sql`dl.first_week`,
+    quickFilters: [],
+    where: (view, adhoc, orgId, allowedSubsidiaryIds) => resourcingWhere({
+      alias: 'dl',
+      columns: {
+        department_id: sql`dl.department_id`, job_title: sql`dl.job_title`, first_week: sql`dl.first_week`,
+        last_week: sql`dl.last_week`, hours_per_week: sql`dl.hours_per_week`, note: sql`dl.note`, opportunity_id: sql`dl.opportunity_id`,
+      },
+      dates: ['first_week', 'last_week'], uuids: ['department_id', 'opportunity_id'],
+      searchColumns: [sql`d.name`, sql`dl.job_title`, sql`dl.note`, sql`opportunity.name`],
+      subsidiary: subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null),
+    }, view, adhoc, orgId),
+    drawerParam: 'demand',
+    basePath: '/resourcing/demand',
+  },
+  retainer: {
+    recordType: 'retainer',
+    table: 'res_retainers',
+    alias: 'rt',
+    customFieldTable: 'res_retainers',
+    baseJoins: sql`inner join projects p on p.id=rt.project_id and p.org_id=rt.org_id
+      left join parties customer on customer.id=rt.customer_party_id and customer.org_id=rt.org_id`,
+    builtInExpr: {
+      project_id: sql`p.name`, customer_party_id: sql`customer.display_name`, kind: sql`rt.kind`,
+      total_amount: sql`rt.total_amount`, starts_on: sql`rt.starts_on`, ends_on: sql`rt.ends_on`, state: sql`rt.state`,
+    },
+    sorts: {
+      project: sql`p.name`, customer: sql`customer.display_name`, kind: sql`rt.kind`, amount: sql`rt.total_amount`,
+      start: sql`rt.starts_on`, end: sql`rt.ends_on`, state: sql`rt.state`,
+    },
+    defaultSort: sql`rt.starts_on`,
+    statusExpr: sql`rt.state`,
+    quickFilters: [{ paramKey: 'status', filterKey: 'state' }],
+    where: (view, adhoc, orgId, allowedSubsidiaryIds) => resourcingWhere({
+      alias: 'rt',
+      columns: {
+        project_id: sql`rt.project_id`, customer_party_id: sql`rt.customer_party_id`, kind: sql`rt.kind`,
+        total_amount: sql`rt.total_amount`, starts_on: sql`rt.starts_on`, ends_on: sql`rt.ends_on`, state: sql`rt.state`,
+      },
+      dates: ['starts_on', 'ends_on'], uuids: ['project_id', 'customer_party_id'],
+      searchColumns: [sql`p.name`, sql`customer.display_name`], statusKey: 'state',
+      subsidiary: subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds ?? null),
+    }, view, adhoc, orgId),
+    drawerParam: 'retainer',
+    basePath: '/resourcing/retainers',
   },
   timesheet_week: {
     recordType: 'timesheet_week',

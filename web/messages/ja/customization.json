@@ -28,6 +28,10 @@
     "budget_scenario": "予算",
     "revenue_contract": "収益契約",
     "equipment_unit": "設備ユニット",
+    "resourcing_assignment": "リソース割り当て",
+    "resourcing_request": "リソース依頼",
+    "resourcing_demand": "リソース需要",
+    "retainer": "リテイナー",
     "timesheet_week": "タイムシート週",
     "bank_reconciliation": "銀行照合",
     "bank_statement": "銀行取引明細",
@@ -42,6 +46,25 @@
     "field_ticket": "作業日報",
     "pick_list": "ピッキングリスト",
     "shipment": "出荷"
+  },
+  "resourcing": {
+    "fields": {
+      "booking": "予約区分",
+      "kind": "リテイナー種別"
+    },
+    "booking": {
+      "hard": "確定",
+      "soft": "仮"
+    },
+    "kind": {
+      "hours": "時間",
+      "fees": "料金"
+    },
+    "status": {
+      "released": "解放済み",
+      "exhausted": "消尽",
+      "expired": "期限切れ"
+    }
   },
   "property": {
     "tabs": {

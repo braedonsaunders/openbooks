@@ -28,6 +28,10 @@
     "budget_scenario": "Budget",
     "revenue_contract": "Erlösvertrag",
     "equipment_unit": "Geräteeinheit",
+    "resourcing_assignment": "Ressourcenzuweisung",
+    "resourcing_request": "Ressourcenanfrage",
+    "resourcing_demand": "Ressourcenbedarf",
+    "retainer": "Retainer",
     "timesheet_week": "Stundenzettelwoche",
     "bank_reconciliation": "Bankabstimmung",
     "bank_statement": "Kontoauszug",
@@ -42,6 +46,25 @@
     "field_ticket": "Außendienstbeleg",
     "pick_list": "Kommissionierliste",
     "shipment": "Sendung"
+  },
+  "resourcing": {
+    "fields": {
+      "booking": "Buchungsart",
+      "kind": "Retainertyp"
+    },
+    "booking": {
+      "hard": "Fest",
+      "soft": "Vorläufig"
+    },
+    "kind": {
+      "hours": "Stunden",
+      "fees": "Gebühren"
+    },
+    "status": {
+      "released": "Freigegeben",
+      "exhausted": "Aufgebraucht",
+      "expired": "Abgelaufen"
+    }
   },
   "property": {
     "tabs": {

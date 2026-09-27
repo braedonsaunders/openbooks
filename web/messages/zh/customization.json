@@ -28,6 +28,10 @@
     "budget_scenario": "预算",
     "revenue_contract": "收入合同",
     "equipment_unit": "设备单元",
+    "resourcing_assignment": "资源分配",
+    "resourcing_request": "资源请求",
+    "resourcing_demand": "资源需求",
+    "retainer": "预付服务费",
     "timesheet_week": "工时表周",
     "bank_reconciliation": "银行对账",
     "bank_statement": "银行对账单",
@@ -42,6 +46,25 @@
     "field_ticket": "现场工单",
     "pick_list": "拣货单",
     "shipment": "发运单"
+  },
+  "resourcing": {
+    "fields": {
+      "booking": "预订类型",
+      "kind": "预付服务费类型"
+    },
+    "booking": {
+      "hard": "已确认",
+      "soft": "暂定"
+    },
+    "kind": {
+      "hours": "工时",
+      "fees": "费用"
+    },
+    "status": {
+      "released": "已释放",
+      "exhausted": "已用尽",
+      "expired": "已过期"
+    }
   },
   "property": {
     "tabs": {

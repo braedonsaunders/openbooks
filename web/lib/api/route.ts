@@ -250,6 +250,7 @@ export function defineRoute(options: LooseOptions) {
       const refusal = postingRefusal(error);
       if (refusal) return refusal;
       if (!typedRefusal(error)) throw error;
+      if (error.status === 404 || error.statusCode === 404) return notFound("record");
       return apiErrorResponse(error, { request, details: refusalDetails(error) });
     }
   };
