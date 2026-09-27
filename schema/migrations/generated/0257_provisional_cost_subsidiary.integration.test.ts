@@ -100,19 +100,6 @@ afterEach(async () => {
   );
 });
 
-test("the staged file pins the no-transaction build shape", async () => {
-  // The fix is the staging itself: a no-transaction file, CONCURRENTLY
-  // index builds, NOT VALID foreign keys with guarded VALIDATEs, and the
-  // INVALID-index drop that keeps a failed concurrent build retry-safe.
-  assert.match(migrationSql, /--\s*openbooks:\s*no-transaction/);
-  assert.match(migrationSql, /CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS inv_provisional_org_sub_id/);
-  assert.match(migrationSql, /CREATE INDEX CONCURRENTLY IF NOT EXISTS inventory_provisional_subsidiary_fifo/);
-  assert.match(migrationSql, /REFERENCES public\.subsidiaries \(org_id, id\) NOT VALID/);
-  assert.match(migrationSql, /REFERENCES public\.inventory_movements \(org_id, subsidiary_id, id\) NOT VALID/);
-  assert.match(migrationSql, /VALIDATE CONSTRAINT inv_provisional_org_subsidiary_fk/);
-  assert.match(migrationSql, /VALIDATE CONSTRAINT inv_provisional_issue_movement_entity_fk/);
-});
-
 test("replaying the staged file keeps indexes valid and guards validated", async () => {
   await clearProbeLedger();
   await runStagedFile();

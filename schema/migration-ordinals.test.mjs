@@ -1,3 +1,4 @@
+// source-pin-contract: the bootstrap publishes its migration-filename transition table and ledger convergence between named test-surface markers; the extracted code is executed against scratch ledgers, not matched
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";

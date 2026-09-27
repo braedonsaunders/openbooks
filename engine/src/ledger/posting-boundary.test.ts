@@ -1,3 +1,4 @@
+// source-pin-contract: posting module-shape invariant — the posting.ts facade stays deleted, and each listed posting operation module stays under 800 lines, never imports the facade, and joins an acyclic import graph
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";

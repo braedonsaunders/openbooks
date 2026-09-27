@@ -1,3 +1,4 @@
+// source-pin-contract: payments module-shape invariant — the payments.ts facade stays deleted, every payments module stays under the line bound unless on a shrink-only exemption list, and the operation import graph is acyclic; subjects derived by listing the directory, never hand-listed.
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import test from "node:test";

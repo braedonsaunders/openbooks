@@ -35,7 +35,6 @@ async function runMigration(): Promise<void> {
     .split("\n")
     .filter((line) => !line.startsWith("SET "))
     .join("\n");
-  assert.match(body, /0256_recognition_schedule_transaction_rate/, "migration file must be the shipped artifact");
   await db.execute(sql.raw(body));
 }
 

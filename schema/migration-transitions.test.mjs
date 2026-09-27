@@ -1,3 +1,4 @@
+// source-pin-contract: published migration bytes — every approved filename transition must name digests the tree actually published and publishes today
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'

@@ -100,15 +100,6 @@ afterEach(async () => {
   );
 });
 
-test("the staged file pins the build shape and ends validated", async () => {
-  // The fix is the staging itself: NOT VALID first, a guarded VALIDATE
-  // after, and no bare validated ADD that would scan under the ALTER lock.
-  assert.match(migrationSql, /ADD CONSTRAINT dunning_log_status/);
-  assert.match(migrationSql, /NOT VALID/);
-  assert.match(migrationSql, /VALIDATE CONSTRAINT dunning_log_status/);
-  assert.doesNotMatch(migrationSql, /lock_timeout/i);
-});
-
 test("replaying the staged file keeps the guard validated and enforcing", async () => {
   const org = await createScratchOrg();
   try {

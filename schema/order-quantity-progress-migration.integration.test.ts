@@ -1,3 +1,4 @@
+// source-pin-contract: published migration bytes — 0064 is replayed from its digest-verified published body, and every later published migration is swept for explicit rebuilds of the governed document_lines view against a reviewed list
 /// <reference types="node" />
 
 /**

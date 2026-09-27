@@ -1,3 +1,4 @@
+// source-pin-contract: locale index registration — every catalog file present in a locale directory is imported by that locale's generated index, and every locale registers the same namespace set; subjects derived from the filesystem.
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
