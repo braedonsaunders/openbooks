@@ -1,5 +1,5 @@
+import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { parseReportDrillTarget } from '../../../../lib/report-drill'
 import { overlayLedgerDrillPeriod } from '../../../../lib/report-drill-period'
@@ -10,32 +10,35 @@ import { notFound } from "@/lib/api/responses";
 
 export const runtime = 'nodejs'
 
-export async function GET(request: Request) {
-  const gate = await guardPermission('reports.read')
-  if (gate instanceof NextResponse) return gate
-  const url = new URL(request.url)
-  const target = parseReportDrillTarget(url.searchParams.get('target'))
-  const requestedPage = Number(url.searchParams.get('page') ?? 1)
-  if (!target || !Number.isInteger(requestedPage) || requestedPage < 1 || requestedPage > 100_000) {
-    return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
-  }
-  if (target.kind === 'budget' && !(await isFeatureEnabled(gate.user.orgId, 'budgets'))) {
-    return notFound("record")
-  }
-  if (target.kind === 'time' && !(await isFeatureEnabled(gate.user.orgId, 'timeTracking'))) {
-    return notFound("record")
-  }
-  if (target.kind === 'orders' && !(await isFeatureEnabled(gate.user.orgId, 'orders'))) {
-    return notFound("record")
-  }
-  try {
-    const scoped = await overlayLedgerDrillPeriod(target, {
-      period: url.searchParams.get('period'),
-      from: url.searchParams.get('from'),
-      to: url.searchParams.get('to'),
-    }, gate.user.orgId)
-    return NextResponse.json(await loadReportDrillData(scoped, gate, requestedPage))
-  } catch (error) {
-    return reportDrillErrorResponse(error)
-  }
-}
+export const GET = defineRoute({
+  permission: 'reports.read',
+  feature: { none: "The requested target checks its budgets, time tracking, or orders feature before loading data." },
+  handler: async ({ request: request, authz: routeAuthz }) => {
+    const gate = routeAuthz;
+    const url = new URL(request.url)
+    const target = parseReportDrillTarget(url.searchParams.get('target'))
+    const requestedPage = Number(url.searchParams.get('page') ?? 1)
+    if (!target || !Number.isInteger(requestedPage) || requestedPage < 1 || requestedPage > 100_000) {
+        return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
+      }
+    if (target.kind === 'budget' && !(await isFeatureEnabled(gate.user.orgId, 'budgets'))) {
+        return notFound("record")
+      }
+    if (target.kind === 'time' && !(await isFeatureEnabled(gate.user.orgId, 'timeTracking'))) {
+        return notFound("record")
+      }
+    if (target.kind === 'orders' && !(await isFeatureEnabled(gate.user.orgId, 'orders'))) {
+        return notFound("record")
+      }
+    try {
+        const scoped = await overlayLedgerDrillPeriod(target, {
+          period: url.searchParams.get('period'),
+          from: url.searchParams.get('from'),
+          to: url.searchParams.get('to'),
+        }, gate.user.orgId)
+        return NextResponse.json(await loadReportDrillData(scoped, gate, requestedPage))
+      } catch (error) {
+        return reportDrillErrorResponse(error)
+      }
+  },
+});

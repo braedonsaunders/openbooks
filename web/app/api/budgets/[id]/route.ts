@@ -1,164 +1,176 @@
+import { z } from 'zod';
+import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { BUDGET_KINDS, loadBudgetScenario } from '../../../../lib/budgets'
 import { BudgetMutationError } from '../../../../lib/budget-mutations'
 import { scenarioOutOfScopeSubsidiaryNames } from '../../../../lib/budget-scope'
 import { notFound } from "@/lib/api/responses";
+const PATCHBodySchema1 = z.object({ "bookId": z.string().optional(), "description": z.string().optional(), "expectedRevision": z.unknown().optional(), "fiscalYear": z.unknown().optional(), "kind": z.string().optional(), "name": z.string().optional() }).passthrough();
+
 
 
 export const runtime = 'nodejs'
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('budgets.read', 'budgets')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const scenario = await loadBudgetScenario(id, gate.user.orgId, gate.allowedSubsidiaryIds)
-  if (!scenario) return notFound("record")
-  return NextResponse.json(scenario)
-}
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('budgets.manage', 'budgets')
-  if (gate instanceof NextResponse) return gate
-  const user = gate.user
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>
-  const expectedRevision = Number(body.expectedRevision)
-  if (!Number.isInteger(expectedRevision)) return NextResponse.json({ error: 'invalid_revision' }, { status: 422 })
+export const GET = defineRoute({
+  permission: 'budgets.read',
+  feature: 'budgets',
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams }) => {
+    const params = Promise.resolve(routeParams as { id: string });
+    const gate = routeAuthz;
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    const scenario = await loadBudgetScenario(id, gate.user.orgId, gate.allowedSubsidiaryIds)
+    if (!scenario) return notFound("record")
+    return NextResponse.json(scenario)
+  },
+});
+export const PATCH = defineRoute({
+  permission: 'budgets.manage',
+  feature: 'budgets',
+  body: PATCHBodySchema1,
+  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+    const params = Promise.resolve(routeParams as { id: string });
+    const gate = routeAuthz;
+    const user = gate.user
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
 
-  const name = typeof body.name === 'string' ? body.name.trim() : undefined
-  const description = body.description === null
-    ? null
-    : typeof body.description === 'string'
-      ? body.description.trim().slice(0, 4_000) || null
-      : undefined
-  const kind = body.kind === undefined ? undefined : BUDGET_KINDS.includes(body.kind as unknown as "forecast" | "budget") ? body.kind as string : null
-  const bookId = body.bookId === undefined ? undefined : typeof body.bookId === 'string' && isUuid(body.bookId) ? body.bookId : null
-  const fiscalYearValue = Number(body.fiscalYear)
-  const fiscalYear = body.fiscalYear === undefined
-    ? undefined
-    : Number.isInteger(fiscalYearValue) && fiscalYearValue >= 1900 && fiscalYearValue <= 9999
-      ? fiscalYearValue
-      : null
-  if (name !== undefined && (name.length === 0 || name.length > 200)) {
-    return NextResponse.json({ error: 'invalid_name' }, { status: 422 })
-  }
-  if (kind === null) return NextResponse.json({ error: 'invalid_kind' }, { status: 422 })
-  if (bookId === null || fiscalYear === null) return NextResponse.json({ error: 'invalid_book_or_fiscal_year' }, { status: 422 })
+    const body = (routeBody) as Record<string, unknown>
+    const expectedRevision = Number(body.expectedRevision)
+    if (!Number.isInteger(expectedRevision)) return NextResponse.json({ error: 'invalid_revision' }, { status: 422 })
+    const name = typeof body.name === 'string' ? body.name.trim() : undefined
+    const description = body.description === null
+        ? null
+        : typeof body.description === 'string'
+          ? body.description.trim().slice(0, 4_000) || null
+          : undefined
+    const kind = body.kind === undefined ? undefined : BUDGET_KINDS.includes(body.kind as unknown as "forecast" | "budget") ? body.kind as string : null
+    const bookId = body.bookId === undefined ? undefined : typeof body.bookId === 'string' && isUuid(body.bookId) ? body.bookId : null
+    const fiscalYearValue = Number(body.fiscalYear)
+    const fiscalYear = body.fiscalYear === undefined
+        ? undefined
+        : Number.isInteger(fiscalYearValue) && fiscalYearValue >= 1900 && fiscalYearValue <= 9999
+          ? fiscalYearValue
+          : null
+    if (name !== undefined && (name.length === 0 || name.length > 200)) {
+        return NextResponse.json({ error: 'invalid_name' }, { status: 422 })
+      }
+    if (kind === null) return NextResponse.json({ error: 'invalid_kind' }, { status: 422 })
+    if (bookId === null || fiscalYear === null) return NextResponse.json({ error: 'invalid_book_or_fiscal_year' }, { status: 422 })
+    try {
+        const result = await db.transaction(async (tx) => {
+          const locked = (await tx.execute<Record<string, unknown>>(sql`
+            select name, description, kind, book_id, fiscal_year, status, revision,
+                   exists (select 1 from budget_lines where scenario_id = ${id} and org_id = ${user.orgId}) as has_lines
+              from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
+          `))
+          const before = locked.rows[0]
+          if (!before) throw new BudgetMutationError('not_found', 404)
+          // A rename/re-scope the caller cannot read answers as missing: the
+          // scenario's lines escape their scope, so there is nothing in-scope
+          // to rename — same shape as GET above, never an existence oracle.
+          if ((await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)).length > 0) {
+            throw new BudgetMutationError('not_found', 404)
+          }
+          if (before.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
+          if (Number(before.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
+          const nextBookId = bookId ?? before.book_id
+          const nextFiscalYear = fiscalYear ?? Number(before.fiscal_year)
+          const scopeChanged = nextBookId !== before.book_id || nextFiscalYear !== Number(before.fiscal_year)
+          if (nextBookId !== before.book_id) {
+            const validBook = (await tx.execute(sql`
+              select 1 from accounting_books where id = ${nextBookId} and org_id = ${user.orgId} and is_active
+            `))
+            if (!validBook.rows[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
+          }
+          // Book and fiscal year pin the plan to one ledger and one period set:
+          // reinterpreting existing lines against a different book (or year)
+          // silently reprices the whole plan, so either change refuses with lines
+          // present. The scenario trigger enforces the same rule for writers that
+          // bypass this route.
+          if (nextBookId !== before.book_id && before.has_lines) {
+            throw new BudgetMutationError('budget_scope_has_lines', 409)
+          }
+          if (nextFiscalYear !== Number(before.fiscal_year)) {
+            if (before.has_lines) throw new BudgetMutationError('budget_scope_has_lines', 409)
+            const validYear = (await tx.execute(sql`
+              select 1 from accounting_periods
+               where org_id = ${user.orgId} and fiscal_year = ${nextFiscalYear} and not is_adjustment limit 1
+            `))
+            if (!validYear.rows[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
+          }
+          const nextRevision = expectedRevision + 1
+          await tx.execute(sql`
+            update budget_scenarios set
+              name = ${name !== undefined ? name : sql`name`},
+              description = ${description !== undefined ? description : sql`description`},
+              kind = ${kind !== undefined ? kind : sql`kind`},
+              book_id = ${nextBookId},
+              fiscal_year = ${nextFiscalYear},
+              revision = ${nextRevision}, updated_at = now(), updated_by = ${user.id}
+            where id = ${id} and org_id = ${user.orgId}
+          `)
+          await tx.execute(sql`
+            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
+              ${JSON.stringify({
+                before: { name: before.name, description: before.description, kind: before.kind, bookId: before.book_id, fiscalYear: Number(before.fiscal_year) },
+                after: { name: name ?? before.name, description: description === undefined ? before.description : description, kind: kind ?? before.kind, bookId: nextBookId, fiscalYear: nextFiscalYear },
+                revisionBefore: expectedRevision,
+                revisionAfter: nextRevision,
+              })}::jsonb, ${user.id})
+          `)
+          return { revision: nextRevision, scopeChanged }
+        })
+        return NextResponse.json(result)
+      } catch (error) {
+        if (error instanceof BudgetMutationError) return apiErrorResponse(error)
+        const message = error instanceof Error ? `${error.message} ${String(((error)).cause ?? '')}` : String(error)
+        if (message.includes('budget_scenarios_identity')) {
+          return NextResponse.json({ error: 'scenario_name_already_exists' }, { status: 409 })
+        }
+        throw error
+      }
+  },
+});
 
-  try {
-    const result = await db.transaction(async (tx) => {
-      const locked = (await tx.execute<Record<string, unknown>>(sql`
-        select name, description, kind, book_id, fiscal_year, status, revision,
-               exists (select 1 from budget_lines where scenario_id = ${id} and org_id = ${user.orgId}) as has_lines
-          from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
-      `))
-      const before = locked.rows[0]
-      if (!before) throw new BudgetMutationError('not_found', 404)
-      // A rename/re-scope the caller cannot read answers as missing: the
-      // scenario's lines escape their scope, so there is nothing in-scope
-      // to rename — same shape as GET above, never an existence oracle.
-      if ((await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)).length > 0) {
-        throw new BudgetMutationError('not_found', 404)
+export const DELETE = defineRoute({
+  permission: 'budgets.manage',
+  feature: 'budgets',
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams }) => {
+    const params = Promise.resolve(routeParams as { id: string });
+    const gate = routeAuthz;
+    const user = gate.user
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    try {
+        await db.transaction(async (tx) => {
+          const locked = (await tx.execute<Record<string, unknown>>(sql`
+            select name, status, revision from budget_scenarios
+             where id = ${id} and org_id = ${user.orgId} for update
+          `))
+          const row = locked.rows[0]
+          if (!row) throw new BudgetMutationError('not_found', 404)
+          // Same shape as PATCH: deleting a scenario the caller cannot read
+          // answers as missing.
+          if ((await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)).length > 0) {
+            throw new BudgetMutationError('not_found', 404)
+          }
+          if (row.status !== 'draft') throw new BudgetMutationError('only_drafts_can_be_deleted', 409)
+          await tx.execute(sql`
+            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${user.orgId}, 'budget_scenarios', ${id}, 'delete', ${JSON.stringify(row)}::jsonb, ${user.id})
+          `)
+          await tx.execute(sql`delete from budget_scenarios where id = ${id} and org_id = ${user.orgId}`)
+        })
+        return NextResponse.json({ ok: true })
+      } catch (error) {
+        if (error instanceof BudgetMutationError) return apiErrorResponse(error)
+        throw error
       }
-      if (before.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
-      if (Number(before.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
-      const nextBookId = bookId ?? before.book_id
-      const nextFiscalYear = fiscalYear ?? Number(before.fiscal_year)
-      const scopeChanged = nextBookId !== before.book_id || nextFiscalYear !== Number(before.fiscal_year)
-      if (nextBookId !== before.book_id) {
-        const validBook = (await tx.execute(sql`
-          select 1 from accounting_books where id = ${nextBookId} and org_id = ${user.orgId} and is_active
-        `))
-        if (!validBook.rows[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
-      }
-      // Book and fiscal year pin the plan to one ledger and one period set:
-      // reinterpreting existing lines against a different book (or year)
-      // silently reprices the whole plan, so either change refuses with lines
-      // present. The scenario trigger enforces the same rule for writers that
-      // bypass this route.
-      if (nextBookId !== before.book_id && before.has_lines) {
-        throw new BudgetMutationError('budget_scope_has_lines', 409)
-      }
-      if (nextFiscalYear !== Number(before.fiscal_year)) {
-        if (before.has_lines) throw new BudgetMutationError('budget_scope_has_lines', 409)
-        const validYear = (await tx.execute(sql`
-          select 1 from accounting_periods
-           where org_id = ${user.orgId} and fiscal_year = ${nextFiscalYear} and not is_adjustment limit 1
-        `))
-        if (!validYear.rows[0]) throw new BudgetMutationError('invalid_book_or_fiscal_year')
-      }
-      const nextRevision = expectedRevision + 1
-      await tx.execute(sql`
-        update budget_scenarios set
-          name = ${name !== undefined ? name : sql`name`},
-          description = ${description !== undefined ? description : sql`description`},
-          kind = ${kind !== undefined ? kind : sql`kind`},
-          book_id = ${nextBookId},
-          fiscal_year = ${nextFiscalYear},
-          revision = ${nextRevision}, updated_at = now(), updated_by = ${user.id}
-        where id = ${id} and org_id = ${user.orgId}
-      `)
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
-          ${JSON.stringify({
-            before: { name: before.name, description: before.description, kind: before.kind, bookId: before.book_id, fiscalYear: Number(before.fiscal_year) },
-            after: { name: name ?? before.name, description: description === undefined ? before.description : description, kind: kind ?? before.kind, bookId: nextBookId, fiscalYear: nextFiscalYear },
-            revisionBefore: expectedRevision,
-            revisionAfter: nextRevision,
-          })}::jsonb, ${user.id})
-      `)
-      return { revision: nextRevision, scopeChanged }
-    })
-    return NextResponse.json(result)
-  } catch (error) {
-    if (error instanceof BudgetMutationError) return apiErrorResponse(error)
-    const message = error instanceof Error ? `${error.message} ${String(((error)).cause ?? '')}` : String(error)
-    if (message.includes('budget_scenarios_identity')) {
-      return NextResponse.json({ error: 'scenario_name_already_exists' }, { status: 409 })
-    }
-    throw error
-  }
-}
-
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('budgets.manage', 'budgets')
-  if (gate instanceof NextResponse) return gate
-  const user = gate.user
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  try {
-    await db.transaction(async (tx) => {
-      const locked = (await tx.execute<Record<string, unknown>>(sql`
-        select name, status, revision from budget_scenarios
-         where id = ${id} and org_id = ${user.orgId} for update
-      `))
-      const row = locked.rows[0]
-      if (!row) throw new BudgetMutationError('not_found', 404)
-      // Same shape as PATCH: deleting a scenario the caller cannot read
-      // answers as missing.
-      if ((await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)).length > 0) {
-        throw new BudgetMutationError('not_found', 404)
-      }
-      if (row.status !== 'draft') throw new BudgetMutationError('only_drafts_can_be_deleted', 409)
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${user.orgId}, 'budget_scenarios', ${id}, 'delete', ${JSON.stringify(row)}::jsonb, ${user.id})
-      `)
-      await tx.execute(sql`delete from budget_scenarios where id = ${id} and org_id = ${user.orgId}`)
-    })
-    return NextResponse.json({ ok: true })
-  } catch (error) {
-    if (error instanceof BudgetMutationError) return apiErrorResponse(error)
-    throw error
-  }
-}
+  },
+});

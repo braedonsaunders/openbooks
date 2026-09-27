@@ -1,4 +1,7 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { apiErrorResponse } from '@/lib/api/error-response'
+import { z } from 'zod';
+import { defineRoute } from '@/lib/api/route';
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
   BANK_STATEMENT_PARSER_VERSION,
@@ -17,10 +20,8 @@ import {
   type SkippedStatementRow,
 } from '@openbooks/engine/src/banking/banking.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
-import { bankingErrorResponse } from '../util'
 
 export const runtime = 'nodejs'
 
@@ -68,144 +69,141 @@ function persistMoney(value: unknown): string | null | 'invalid' {
   }
 }
 
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
-  if (gate instanceof NextResponse) return gate
-  const { user } = gate
-  // Browser-uploaded statement bytes ride this body as base64, so the house
-  // 1 MiB default would refuse legitimate statements — 10 MiB matches the
-  // provider-webhook ceiling for the same class of payload.
-  const parsedBody = await parseJsonBody(req, jsonObject, { maxBodyBytes: 10 * 1024 * 1024 });
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as ImportBody
-  const mode = body.mode ?? 'preview'
-
-  if (mode !== 'decode' && mode !== 'columns' && mode !== 'preview' && mode !== 'import') {
-    return NextResponse.json({ error: 'mode must be decode, columns, preview or import' }, { status: 400 })
-  }
-
-  const uploadedBytes = uploadedSourceBytes(body.sourceBytesBase64)
-  if (uploadedBytes === 'invalid') {
-    return NextResponse.json({ error: 'Uploaded statement bytes must be canonical base64' }, { status: 400 })
-  }
-  const sourceContent = uploadedBytes ?? (typeof body.text === 'string' ? body.text : null)
-
-  if (
-    sourceContent === null
-    || (typeof sourceContent === 'string' ? !sourceContent.trim() : sourceContent.byteLength === 0)
-  ) {
-    return NextResponse.json({ error: 'Paste or upload statement text first' }, { status: 400 })
-  }
-
-  try {
-    if (mode === 'decode') {
-      if (
-        body.source !== 'ofx'
-        && body.source !== 'csv'
-        && body.source !== 'camt053'
-        && body.source !== 'bai2'
-        && body.source !== 'mt940'
+export const POST = defineRoute({
+  permission: 'banking.reconcile',
+  feature: 'banking',
+  handler: async ({ request: req, authz: routeAuthz }) => {
+    const gate = routeAuthz;
+    const { user } = gate
+    const routeBodySchema1 = z.object({ "accountId": z.string().optional(), "source": z.union([z.literal("ofx"), z.literal("csv"), z.literal("camt053"), z.literal("bai2"), z.literal("mt940")]).optional(), "text": z.string().optional(), "sourceBytesBase64": z.unknown().optional(), "filename": z.unknown().optional(), "contentType": z.unknown().optional(), "mapping": z.unknown().optional(), "mode": z.union([z.literal("decode"), z.literal("columns"), z.literal("preview"), z.literal("import")]).optional(), "statementDate": z.unknown().optional(), "openingBalance": z.unknown().optional(), "closingBalance": z.unknown().optional() }).passthrough();
+    const parsedBody = await parseJsonBody(req, routeBodySchema1, { maxBodyBytes: 10 * 1024 * 1024 });
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = (parsedBody.data) as ImportBody
+    const mode = body.mode ?? 'preview'
+    if (mode !== 'decode' && mode !== 'columns' && mode !== 'preview' && mode !== 'import') {
+        return NextResponse.json({ error: 'mode must be decode, columns, preview or import' }, { status: 400 })
+      }
+    const uploadedBytes = uploadedSourceBytes(body.sourceBytesBase64)
+    if (uploadedBytes === 'invalid') {
+        return NextResponse.json({ error: 'Uploaded statement bytes must be canonical base64' }, { status: 400 })
+      }
+    const sourceContent = uploadedBytes ?? (typeof body.text === 'string' ? body.text : null)
+    if (
+        sourceContent === null
+        || (typeof sourceContent === 'string' ? !sourceContent.trim() : sourceContent.byteLength === 0)
       ) {
-        return NextResponse.json({ error: 'source must be ofx, csv, camt053, bai2 or mt940' }, { status: 400 })
+        return NextResponse.json({ error: 'Paste or upload statement text first' }, { status: 400 })
       }
-      return NextResponse.json({ text: decodeStatementSourceText(sourceContent, body.source) })
-    }
+    try {
+        if (mode === 'decode') {
+          if (
+            body.source !== 'ofx'
+            && body.source !== 'csv'
+            && body.source !== 'camt053'
+            && body.source !== 'bai2'
+            && body.source !== 'mt940'
+          ) {
+            return NextResponse.json({ error: 'source must be ofx, csv, camt053, bai2 or mt940' }, { status: 400 })
+          }
+          return NextResponse.json({ text: decodeStatementSourceText(sourceContent, body.source) })
+        }
 
-    if (mode === 'columns') {
-      if (body.source !== 'csv') {
-        return NextResponse.json({ error: 'Column detection applies to CSV only' }, { status: 400 })
+        if (mode === 'columns') {
+          if (body.source !== 'csv') {
+            return NextResponse.json({ error: 'Column detection applies to CSV only' }, { status: 400 })
+          }
+          const rows = parseCsvRows(sourceContent)
+          return NextResponse.json({
+            header: rows[0],
+            sample: rows.slice(1, 6),
+            rowCount: rows.length,
+          })
+        }
+
+        if (!body.accountId) {
+          return NextResponse.json({ error: 'accountId required' }, { status: 400 })
+        }
+
+        let lines: ParsedStatementLine[]
+        let skippedLines: SkippedStatementRow[] = []
+        let meta: Omit<ParsedStatement, 'lines'> = {}
+        if (body.source === 'ofx') {
+          const parsed = parseOfx(sourceContent)
+          lines = parsed.lines
+          meta = { currency: parsed.currency, statementDate: parsed.statementDate, closingBalance: parsed.closingBalance }
+        } else if (body.source === 'csv') {
+          if (!body.mapping || body.mapping.date == null || body.mapping.amount == null || body.mapping.description == null) {
+            return NextResponse.json({ error: 'CSV column mapping (date, amount, description) required' }, { status: 400 })
+          }
+          const csvParsed = parseCsv(sourceContent, body.mapping)
+          lines = csvParsed.lines
+          skippedLines = csvParsed.skipped
+        } else if (body.source === 'camt053' || body.source === 'bai2' || body.source === 'mt940') {
+          const parsed =
+            body.source === 'camt053' ? parseCamt053(sourceContent)
+            : body.source === 'bai2' ? parseBai2(sourceContent)
+            : parseMt940(sourceContent)
+          lines = parsed.lines
+          meta = { currency: parsed.currency, statementDate: parsed.statementDate, closingBalance: parsed.closingBalance }
+        } else {
+          return NextResponse.json({ error: 'source must be ofx, csv, camt053, bai2 or mt940' }, { status: 400 })
+        }
+
+        const openingBalance = persistMoney(body.openingBalance)
+        if (openingBalance === 'invalid') {
+          return NextResponse.json({ error: moneyRefusal('Opening balance', body.openingBalance) }, { status: 422 })
+        }
+        const closingFromRequest = persistMoney(body.closingBalance)
+        if (closingFromRequest === 'invalid') {
+          return NextResponse.json({ error: moneyRefusal('Closing balance', body.closingBalance) }, { status: 422 })
+        }
+
+        const result = await importStatement(
+          {
+            accountId: body.accountId,
+            source: body.source,
+            lines,
+            skippedLines,
+            statementDate: body.statementDate ?? meta.statementDate ?? null,
+            openingBalance,
+            closingBalance: closingFromRequest ?? meta.closingBalance ?? null,
+            currency: meta.currency ?? null,
+            sourceEvidence: {
+              content: sourceContent,
+              filename: typeof body.filename === 'string' ? body.filename : null,
+              ...(typeof body.contentType === 'string' ? { contentType: body.contentType } : {}),
+              parserVersion: BANK_STATEMENT_PARSER_VERSION,
+              csvMapping: body.source === 'csv' ? body.mapping : null,
+            },
+            dryRun: mode === 'preview',
+          },
+          {
+            orgId: user.orgId,
+            userId: user.id,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+          },
+        )
+
+        if (mode === 'import' && result.statementId === null) {
+          throw new BankingError(
+            `Nothing imported — all ${result.duplicates} line${result.duplicates === 1 ? '' : 's'} were already on this account`,
+          )
+        }
+
+        return NextResponse.json({
+          statementId: result.statementId,
+          sourceEvidenceRef: result.sourceEvidenceRef,
+          imported: result.imported,
+          duplicates: result.duplicates,
+          possibleDuplicates: result.possibleDuplicates,
+          skipped: result.skipped,
+          statementDate: meta.statementDate ?? null,
+          closingBalance: meta.closingBalance ?? null,
+          currency: meta.currency ?? null,
+          lines: mode === 'preview' ? result.lines : undefined,
+        })
+      } catch (e) {
+        return apiErrorResponse(e)
       }
-      const rows = parseCsvRows(sourceContent)
-      return NextResponse.json({
-        header: rows[0],
-        sample: rows.slice(1, 6),
-        rowCount: rows.length,
-      })
-    }
-
-    if (!body.accountId) {
-      return NextResponse.json({ error: 'accountId required' }, { status: 400 })
-    }
-
-    let lines: ParsedStatementLine[]
-    let skippedLines: SkippedStatementRow[] = []
-    let meta: Omit<ParsedStatement, 'lines'> = {}
-    if (body.source === 'ofx') {
-      const parsed = parseOfx(sourceContent)
-      lines = parsed.lines
-      meta = { currency: parsed.currency, statementDate: parsed.statementDate, closingBalance: parsed.closingBalance }
-    } else if (body.source === 'csv') {
-      if (!body.mapping || body.mapping.date == null || body.mapping.amount == null || body.mapping.description == null) {
-        return NextResponse.json({ error: 'CSV column mapping (date, amount, description) required' }, { status: 400 })
-      }
-      const csvParsed = parseCsv(sourceContent, body.mapping)
-      lines = csvParsed.lines
-      skippedLines = csvParsed.skipped
-    } else if (body.source === 'camt053' || body.source === 'bai2' || body.source === 'mt940') {
-      const parsed =
-        body.source === 'camt053' ? parseCamt053(sourceContent)
-        : body.source === 'bai2' ? parseBai2(sourceContent)
-        : parseMt940(sourceContent)
-      lines = parsed.lines
-      meta = { currency: parsed.currency, statementDate: parsed.statementDate, closingBalance: parsed.closingBalance }
-    } else {
-      return NextResponse.json({ error: 'source must be ofx, csv, camt053, bai2 or mt940' }, { status: 400 })
-    }
-
-    const openingBalance = persistMoney(body.openingBalance)
-    if (openingBalance === 'invalid') {
-      return NextResponse.json({ error: moneyRefusal('Opening balance', body.openingBalance) }, { status: 422 })
-    }
-    const closingFromRequest = persistMoney(body.closingBalance)
-    if (closingFromRequest === 'invalid') {
-      return NextResponse.json({ error: moneyRefusal('Closing balance', body.closingBalance) }, { status: 422 })
-    }
-
-    const result = await importStatement(
-      {
-        accountId: body.accountId,
-        source: body.source,
-        lines,
-        skippedLines,
-        statementDate: body.statementDate ?? meta.statementDate ?? null,
-        openingBalance,
-        closingBalance: closingFromRequest ?? meta.closingBalance ?? null,
-        currency: meta.currency ?? null,
-        sourceEvidence: {
-          content: sourceContent,
-          filename: typeof body.filename === 'string' ? body.filename : null,
-          ...(typeof body.contentType === 'string' ? { contentType: body.contentType } : {}),
-          parserVersion: BANK_STATEMENT_PARSER_VERSION,
-          csvMapping: body.source === 'csv' ? body.mapping : null,
-        },
-        dryRun: mode === 'preview',
-      },
-      {
-        orgId: user.orgId,
-        userId: user.id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      },
-    )
-
-    if (mode === 'import' && result.statementId === null) {
-      throw new BankingError(
-        `Nothing imported — all ${result.duplicates} line${result.duplicates === 1 ? '' : 's'} were already on this account`,
-      )
-    }
-
-    return NextResponse.json({
-      statementId: result.statementId,
-      sourceEvidenceRef: result.sourceEvidenceRef,
-      imported: result.imported,
-      duplicates: result.duplicates,
-      possibleDuplicates: result.possibleDuplicates,
-      skipped: result.skipped,
-      statementDate: meta.statementDate ?? null,
-      closingBalance: meta.closingBalance ?? null,
-      currency: meta.currency ?? null,
-      lines: mode === 'preview' ? result.lines : undefined,
-    })
-  } catch (e) {
-    return bankingErrorResponse(e)
-  }
-}
+  },
+});

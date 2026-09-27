@@ -1,36 +1,40 @@
+import { z } from 'zod';
+import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { applyRulesToAccount, JournalPostingDeniedError } from '../../../../../lib/banking-rules'
-import { bankingErrorResponse } from '../../util'
+const POSTBodySchema1 = z.object({ "accountId": z.string().optional() }).passthrough();
+
 
 export const runtime = 'nodejs'
 
 /** Run active reconciliation rules against an account's unmatched bank lines. */
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
-  if (gate instanceof NextResponse) return gate
-  const { user } = gate
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { accountId?: string }
-  if (!body.accountId || !isUuid(body.accountId)) {
-    return NextResponse.json({ error: 'accountId is required' }, { status: 400 })
-  }
-  try {
-    const result = await applyRulesToAccount(
-      user.orgId,
-      user.id,
-      body.accountId,
-      gate.allowedSubsidiaryIds,
-    )
-    return NextResponse.json(result)
-  } catch (e) {
-    if (e instanceof PostingError) return apiErrorResponse(e, { safeStatus: 422 })
-    if (e instanceof JournalPostingDeniedError) return apiErrorResponse(e)
-    return bankingErrorResponse(e)
-  }
-}
+export const POST = defineRoute({
+  permission: 'banking.reconcile',
+  feature: 'banking',
+  body: POSTBodySchema1,
+  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+    const gate = routeAuthz;
+    const { user } = gate
+
+    const body = (routeBody) as { accountId?: string }
+    if (!body.accountId || !isUuid(body.accountId)) {
+        return NextResponse.json({ error: 'accountId is required' }, { status: 400 })
+      }
+    try {
+        const result = await applyRulesToAccount(
+          user.orgId,
+          user.id,
+          body.accountId,
+          gate.allowedSubsidiaryIds,
+        )
+        return NextResponse.json(result)
+      } catch (e) {
+        if (e instanceof PostingError) return apiErrorResponse(e, { safeStatus: 422 })
+        if (e instanceof JournalPostingDeniedError) return apiErrorResponse(e)
+        return apiErrorResponse(e)
+      }
+  },
+});

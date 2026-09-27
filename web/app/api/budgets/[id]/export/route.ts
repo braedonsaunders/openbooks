@@ -1,10 +1,10 @@
+import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { reportResultToCsv, reportResultToXlsx, type ReportRunResult } from '@openbooks/office'
 import { can } from '../../../../../lib/authz'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { csvResponse, xlsxResponse } from '../../../../../lib/export'
 import { isUuid } from '../../../../../lib/list-params'
@@ -13,91 +13,87 @@ import { notFound } from "@/lib/api/responses";
 
 export const runtime = 'nodejs'
 
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('budgets.read', 'budgets')
-  if (gate instanceof NextResponse) return gate
-  if (!can(gate, 'data.export')) return NextResponse.json({ error: 'missing permission: data.export' }, { status: 403 })
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const format = new URL(req.url).searchParams.get('format') ?? 'xlsx'
-  if (!['csv', 'xlsx'].includes(format)) return NextResponse.json({ error: 'invalid_format' }, { status: 422 })
-
-  const scenario = (await db.execute<{ name: string; fiscal_year: number }>(sql`
-    select name, fiscal_year from budget_scenarios where id = ${id} and org_id = ${gate.user.orgId}
-  `))
-  if (!scenario.rows[0]) return notFound("record")
-  // The exported title and filename carry the scenario's name and year, so
-  // a scenario with NOTHING visible to the caller answers as missing: its
-  // rows would all filter out, leaving only the header as a disclosure
-  // oracle for a scenario the caller must not learn exists. A scenario
-  // with visible lines keeps the house redacted view — 200 with only the
-  // caller's rows, title included (the scenario is already list-visible).
-  if (gate.allowedSubsidiaryIds !== null) {
-    const visible = (await db.execute<{ n: string }>(sql`
-      select count(*) as n from budget_lines
-       where org_id = ${gate.user.orgId} and scenario_id = ${id}
-       ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
-    `))
-    if (Number(visible.rows[0]?.n ?? 0) === 0) {
-      return notFound("record")
-    }
-  }
-  interface BudgetExportRow extends Record<string, unknown> {
-    number: string | null
-    account_name: string
-    period: string
-    subsidiary: string | null
-    department: string | null
-    project: string | null
-    location: string | null
-    class: string | null
-    amount: string
-    note: string | null
-  }
-  const lines = (await db.execute<BudgetExportRow>(sql`
-    select a.number, a.name as account_name, p.name as period,
-           s.name as subsidiary,
-           -- Dimensions export as code with a name fallback: a bare code
-           -- column emits blank for NULL codes, and the import reads blank as
-           -- "no dimension" — silently re-homing the line. Either form
-           -- resolves on import, so the round-trip is exact.
-           coalesce(d.code, d.name) as department,
-           coalesce(pr.code, pr.name) as project,
-           coalesce(loc.code, loc.name) as location,
-           coalesce(c.code, c.name) as class,
-           (case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end)::text as amount, bl.note
-      from budget_lines bl
-      join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
-      join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
-      left join subsidiaries s on s.id = bl.subsidiary_id and s.org_id = bl.org_id
-      left join departments d on d.id = bl.department_id and d.org_id = bl.org_id
-      left join projects pr on pr.id = bl.project_id and pr.org_id = bl.org_id
-      left join locations loc on loc.id = bl.location_id and loc.org_id = bl.org_id
-      left join classes c on c.id = bl.class_id and c.org_id = bl.org_id
-     where bl.org_id = ${gate.user.orgId} and bl.scenario_id = ${id}
-       ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-     order by a.number nulls last, a.name, p.period_number, s.name, d.code, pr.code, loc.code, c.code
-  `))
-
-  const result: ReportRunResult = {
-    groups: [{
-      kind: 'results',
-      title: scenario.rows[0].name,
-      columns: ['Account Number', 'Account Name', 'Period', 'Subsidiary', 'Department', 'Project', 'Location', 'Class', 'Amount', 'Note'],
-      rows: lines.rows.map((row) => [
-        row.number ?? '', row.account_name, row.period, row.subsidiary ?? '', row.department ?? '', row.project ?? '',
-        row.location ?? '', row.class ?? '', row.amount, row.note ?? '',
-      ]),
-      isEmpty: lines.rows.length === 0,
-    }],
-    summary: [],
-    rowCount: lines.rows.length,
-  }
-  const stamp = await businessToday(gate.user.orgId)
-  const filename = `${scenario.rows[0].name}-${scenario.rows[0].fiscal_year}-${stamp}`
-  if (format === 'csv') return csvResponse(reportResultToCsv(result), filename)
-  return xlsxResponse(await reportResultToXlsx(result, {
-    reportName: scenario.rows[0].name,
-    generatedAt: new Date(`${stamp}T00:00:00Z`),
-  }), filename)
-}
+export const GET = defineRoute({
+  permission: 'budgets.read',
+  feature: 'budgets',
+  handler: async ({ request: req, authz: routeAuthz, params: routeParams }) => {
+    const params = Promise.resolve(routeParams as { id: string });
+    const gate = routeAuthz;
+    if (!can(gate, 'data.export')) return NextResponse.json({ error: 'missing permission: data.export' }, { status: 403 })
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    const format = new URL(req.url).searchParams.get('format') ?? 'xlsx'
+    if (!['csv', 'xlsx'].includes(format)) return NextResponse.json({ error: 'invalid_format' }, { status: 422 })
+    const scenario = (await db.execute<{ name: string; fiscal_year: number }>(sql`
+        select name, fiscal_year from budget_scenarios where id = ${id} and org_id = ${gate.user.orgId}
+      `))
+    if (!scenario.rows[0]) return notFound("record")
+    if (gate.allowedSubsidiaryIds !== null) {
+        const visible = (await db.execute<{ n: string }>(sql`
+          select count(*) as n from budget_lines
+           where org_id = ${gate.user.orgId} and scenario_id = ${id}
+           ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
+        `))
+        if (Number(visible.rows[0]?.n ?? 0) === 0) {
+          return notFound("record")
+        }
+      }
+    interface BudgetExportRow extends Record<string, unknown> {
+        number: string | null
+        account_name: string
+        period: string
+        subsidiary: string | null
+        department: string | null
+        project: string | null
+        location: string | null
+        class: string | null
+        amount: string
+        note: string | null
+      }
+    const lines = (await db.execute<BudgetExportRow>(sql`
+        select a.number, a.name as account_name, p.name as period,
+               s.name as subsidiary,
+               -- Dimensions export as code with a name fallback: a bare code
+               -- column emits blank for NULL codes, and the import reads blank as
+               -- "no dimension" — silently re-homing the line. Either form
+               -- resolves on import, so the round-trip is exact.
+               coalesce(d.code, d.name) as department,
+               coalesce(pr.code, pr.name) as project,
+               coalesce(loc.code, loc.name) as location,
+               coalesce(c.code, c.name) as class,
+               (case when a.type in ('income', 'income_other') then -bl.amount else bl.amount end)::text as amount, bl.note
+          from budget_lines bl
+          join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
+          join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
+          left join subsidiaries s on s.id = bl.subsidiary_id and s.org_id = bl.org_id
+          left join departments d on d.id = bl.department_id and d.org_id = bl.org_id
+          left join projects pr on pr.id = bl.project_id and pr.org_id = bl.org_id
+          left join locations loc on loc.id = bl.location_id and loc.org_id = bl.org_id
+          left join classes c on c.id = bl.class_id and c.org_id = bl.org_id
+         where bl.org_id = ${gate.user.orgId} and bl.scenario_id = ${id}
+           ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
+         order by a.number nulls last, a.name, p.period_number, s.name, d.code, pr.code, loc.code, c.code
+      `))
+    const result: ReportRunResult = {
+        groups: [{
+          kind: 'results',
+          title: scenario.rows[0].name,
+          columns: ['Account Number', 'Account Name', 'Period', 'Subsidiary', 'Department', 'Project', 'Location', 'Class', 'Amount', 'Note'],
+          rows: lines.rows.map((row) => [
+            row.number ?? '', row.account_name, row.period, row.subsidiary ?? '', row.department ?? '', row.project ?? '',
+            row.location ?? '', row.class ?? '', row.amount, row.note ?? '',
+          ]),
+          isEmpty: lines.rows.length === 0,
+        }],
+        summary: [],
+        rowCount: lines.rows.length,
+      }
+    const stamp = await businessToday(gate.user.orgId)
+    const filename = `${scenario.rows[0].name}-${scenario.rows[0].fiscal_year}-${stamp}`
+    if (format === 'csv') return csvResponse(reportResultToCsv(result), filename)
+    return xlsxResponse(await reportResultToXlsx(result, {
+        reportName: scenario.rows[0].name,
+        generatedAt: new Date(`${stamp}T00:00:00Z`),
+      }), filename)
+  },
+});

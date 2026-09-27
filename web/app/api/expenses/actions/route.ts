@@ -1,5 +1,6 @@
+import { z } from 'zod';
+import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -18,6 +19,8 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 import { notFound } from "@/lib/api/responses";
+const POSTBodySchema1 = z.object({ "action": z.union([z.literal("submit"), z.literal("post"), z.literal("recall")]), "documentId": z.string().optional(), "expectedUpdatedAt": z.string().optional() }).passthrough();
+
 
 
 export const runtime = 'nodejs'
@@ -165,121 +168,119 @@ async function recallExpenseReport(input: {
   })
 }
 
-export async function POST(req: Request) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  const user = authz.user
-  // This route resolves authz itself rather than through guardPermission (the
-  // permission differs per action), so it carries the feature gate inline. A
-  // disabled module must not keep a submit/post path open. 404, not 403 — an
-  // off feature is indistinguishable from an absent API.
-  if (!(await isFeatureEnabled(user.orgId, 'expenses'))) {
-    return notFound("record")
-  }
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    action: 'submit' | 'post' | 'recall'
-    documentId?: string
-    expectedUpdatedAt?: string
-  }
+export const POST = defineRoute({
+  public: 'session',
+  body: POSTBodySchema1,
+  handler: async ({ request: req , body: routeBody }) => {
+    const authz = await getAuthz()
+    if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    const user = authz.user
+    if (!(await isFeatureEnabled(user.orgId, 'expenses'))) {
+        return notFound("record")
+      }
 
-  try {
-    switch (body.action) {
-      case 'submit': {
-        if (!can(authz, 'expenses.create')) {
-          return NextResponse.json({ error: 'missing permission: expenses.create' }, { status: 403 })
-        }
-        if (!body.documentId || !(await expenseReport(body.documentId, authz))) {
-          return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
-        }
-        const documentId: string = body.documentId
-        // The submission runs in this transaction so a refused routing throws
-        // inside it: without the wrapper the submission's own transaction
-        // would commit its before_submit script effects before the 422.
-        // The catch below answers the same 422 after the rollback.
-        // The scope is rechecked under the document lock first (the inner
-        // submit joins this transaction): a rehome that lands after the
-        // expenseReport probe blocks here instead of riding the submit.
-        const submission = await withOrgTransaction(user.orgId, async () => {
-          if (!(await lockedExpenseInScope(documentId, authz))) return null
-          const inner = await submitAndReleaseIfUngated('expense_report', documentId, user.id)
-          if (inner.flowError) {
-            throw new ApprovalRoutingError(inner.flowError)
+    const body = (routeBody) as {
+        action: 'submit' | 'post' | 'recall'
+        documentId?: string
+        expectedUpdatedAt?: string
+      }
+    try {
+        switch (body.action) {
+          case 'submit': {
+            if (!can(authz, 'expenses.create')) {
+              return NextResponse.json({ error: 'missing permission: expenses.create' }, { status: 403 })
+            }
+            if (!body.documentId || !(await expenseReport(body.documentId, authz))) {
+              return notFound('record')
+            }
+            const documentId: string = body.documentId
+            // The submission runs in this transaction so a refused routing throws
+            // inside it: without the wrapper the submission's own transaction
+            // would commit its before_submit script effects before the 422.
+            // The catch below answers the same 422 after the rollback.
+            // The scope is rechecked under the document lock first (the inner
+            // submit joins this transaction): a rehome that lands after the
+            // expenseReport probe blocks here instead of riding the submit.
+            const submission = await withOrgTransaction(user.orgId, async () => {
+              if (!(await lockedExpenseInScope(documentId, authz))) return null
+              const inner = await submitAndReleaseIfUngated('expense_report', documentId, user.id)
+              if (inner.flowError) {
+                throw new ApprovalRoutingError(inner.flowError)
+              }
+              return inner
+            })
+            if (!submission) return notFound('record')
+            return NextResponse.json({ ok: true, requestId: submission.runId, autoApproved: submission.autoApproved })
           }
-          return inner
-        })
-        if (!submission) return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
-        return NextResponse.json({ ok: true, requestId: submission.runId, autoApproved: submission.autoApproved })
-      }
-      case 'post': {
-        if (!can(authz, 'ap.post')) {
-          return NextResponse.json({ error: 'missing permission: ap.post' }, { status: 403 })
-        }
-        if (!body.documentId) {
-          return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
-        }
-        const expense = await expenseReport(body.documentId, authz)
-        if (!expense) return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
-        if (expense.status !== 'approved') {
-          return NextResponse.json(
-            { error: `expense report is ${expense.status}; only an approved report can be posted` },
-            { status: 422 },
-          )
-        }
-        const deps = { control: await loadRequiredControlAccounts(user.orgId) }
-        const documentId: string = body.documentId
-        // Post joins this transaction: the scope is rechecked under the
-        // document lock first, so a rehome that lands after the
-        // expenseReport probe blocks here instead of riding the post.
-        const entryId = await withOrgTransaction(user.orgId, async () => {
-          if (!(await lockedExpenseInScope(documentId, authz))) return null
-          return postDocument(documentId, deps, {
-            audit: { actorId: user.id, source: 'ui' },
-          })
-        })
-        if (!entryId) return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
-        return NextResponse.json({ ok: true, entryId })
-      }
-      case 'recall': {
-        if (!can(authz, 'expenses.create')) {
-          return NextResponse.json({ error: 'missing permission: expenses.create' }, { status: 403 })
-        }
-        if (!body.documentId || !(await expenseReport(body.documentId, authz))) {
-          return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
-        }
-        try {
-          const outcome = await recallExpenseReport({
-            documentId: body.documentId,
-            orgId: user.orgId,
-            actorId: user.id,
-            expectedUpdatedAt: body.expectedUpdatedAt,
-            isAdmin: user.isSuperAdmin || user.roles.some((role) => role.key === 'admin'),
-            allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-          })
-          return NextResponse.json({ ok: true, ...outcome })
-        } catch (e) {
-          if (e instanceof DocumentEditError) {
-            return apiErrorResponse(e)
+          case 'post': {
+            if (!can(authz, 'ap.post')) {
+              return NextResponse.json({ error: 'missing permission: ap.post' }, { status: 403 })
+            }
+            if (!body.documentId) {
+              return notFound('record')
+            }
+            const expense = await expenseReport(body.documentId, authz)
+            if (!expense) return notFound('record')
+            if (expense.status !== 'approved') {
+              return NextResponse.json(
+                { error: `expense report is ${expense.status}; only an approved report can be posted` },
+                { status: 422 },
+              )
+            }
+            const deps = { control: await loadRequiredControlAccounts(user.orgId) }
+            const documentId: string = body.documentId
+            // Post joins this transaction: the scope is rechecked under the
+            // document lock first, so a rehome that lands after the
+            // expenseReport probe blocks here instead of riding the post.
+            const entryId = await withOrgTransaction(user.orgId, async () => {
+              if (!(await lockedExpenseInScope(documentId, authz))) return null
+              return postDocument(documentId, deps, {
+                audit: { actorId: user.id, source: 'ui' },
+              })
+            })
+            if (!entryId) return notFound('record')
+            return NextResponse.json({ ok: true, entryId })
           }
-          throw e
+          case 'recall': {
+            if (!can(authz, 'expenses.create')) {
+              return NextResponse.json({ error: 'missing permission: expenses.create' }, { status: 403 })
+            }
+            if (!body.documentId || !(await expenseReport(body.documentId, authz))) {
+              return notFound('record')
+            }
+            try {
+              const outcome = await recallExpenseReport({
+                documentId: body.documentId,
+                orgId: user.orgId,
+                actorId: user.id,
+                expectedUpdatedAt: body.expectedUpdatedAt,
+                isAdmin: user.isSuperAdmin || user.roles.some((role) => role.key === 'admin'),
+                allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+              })
+              return NextResponse.json({ ok: true, ...outcome })
+            } catch (e) {
+              if (e instanceof DocumentEditError) {
+                return apiErrorResponse(e)
+              }
+              throw e
+            }
+          }
+          default:
+            return NextResponse.json({ error: 'unknown action' }, { status: 400 })
         }
+      } catch (e) {
+        // Posting refusals (kernel rules or unconfigured org control accounts)
+        // and submission lifecycle refusals (a double-clicked or replayed submit
+        // on a report that already left draft) are request-state failures, not
+        // server defects. Revision-fence refusals carry their own status; the
+        // status-less named refusals below travel with safeStatus 422.
+        const unprocessable =
+          e instanceof PostingError ||
+          e instanceof ControlAccountsIncompleteError ||
+          e instanceof SubmitError ||
+          e instanceof ExpenseValidationError ||
+          e instanceof ApprovalRoutingError
+        return apiErrorResponse(e, unprocessable ? { safeStatus: 422 } : {})
       }
-      default:
-        return NextResponse.json({ error: 'unknown action' }, { status: 400 })
-    }
-  } catch (e) {
-    // Posting refusals (kernel rules or unconfigured org control accounts)
-    // and submission lifecycle refusals (a double-clicked or replayed submit
-    // on a report that already left draft) are request-state failures, not
-    // server defects. Revision-fence refusals carry their own status; the
-    // status-less named refusals below travel with safeStatus 422.
-    const unprocessable =
-      e instanceof PostingError ||
-      e instanceof ControlAccountsIncompleteError ||
-      e instanceof SubmitError ||
-      e instanceof ExpenseValidationError ||
-      e instanceof ApprovalRoutingError
-    return apiErrorResponse(e, unprocessable ? { safeStatus: 422 } : {})
-  }
-}
+  },
+});
