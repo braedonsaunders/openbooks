@@ -29,12 +29,23 @@ registerHooks({
       return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers")
       return virtual("export function cookies() { throw new Error('no cookies in route test') }");
+    const parent = context.parentURL ?? "";
     if (
-      specifier.endsWith("/lib/authz") &&
-      context.parentURL?.includes("/api/hrm/qualification-settings/")
+      (specifier.endsWith("/lib/authz") &&
+        (parent.includes("/api/hrm/qualification-settings/") ||
+          parent.endsWith("/web/lib/api/route.ts"))) ||
+      (specifier === "./authz" && parent.endsWith("/web/lib/feature-gates.ts"))
     ) {
       return virtual(`
-        export { guardUnrestrictedScope } from ${JSON.stringify(authzUrl)};
+        export { guardUnrestrictedScope, guardRootSubsidiaryScope } from ${JSON.stringify(authzUrl)};
+        export async function getAuthz() {
+          const s = globalThis.__qualSettingsScopeState;
+          return {
+            user: { orgId: s.orgId, id: s.actorId },
+            permissions: new Set(['hrm.certifications.read', 'hrm.certifications.manage']),
+            allowedSubsidiaryIds: s.allowedSubsidiaryIds,
+          };
+        }
         export async function guardPermission() {
           const s = globalThis.__qualSettingsScopeState;
           return {
