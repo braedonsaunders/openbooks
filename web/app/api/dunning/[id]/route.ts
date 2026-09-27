@@ -20,7 +20,7 @@ const PATCHBodySchema1 = z.object({
   gracePeriodDays: gracePeriodDaysSchema.optional(), isActive: z.boolean().optional(),
   minBalance: z.string().nullable().optional(), name: z.string().trim().min(1).optional(),
   replyTo: z.string().email().nullable().optional(), stages: z.array(stageSchema).optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 
@@ -105,7 +105,7 @@ export const PATCH = defineRoute({
   permission: 'documents.manage',
   feature: { none: "This always-on route is governed by documents.manage; the existing route has no separate feature gate." },
   body: PATCHBodySchema1,
-  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const authz = routeAuthz;
     const scopeDenied = guardUnrestrictedScope(authz);
@@ -235,7 +235,7 @@ export const PATCH = defineRoute({
 export const DELETE = defineRoute({
   permission: 'documents.manage',
   feature: { none: "This always-on route is governed by documents.manage; the existing route has no separate feature gate." },
-  handler: async ({ request: _req, authz: routeAuthz, params: routeParams }) => {
+  handler: async ({ authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const authz = routeAuthz;
     const scopeDenied = guardUnrestrictedScope(authz);

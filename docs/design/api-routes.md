@@ -43,6 +43,8 @@ export const POST = defineRoute({
 - `body` and `params` are zod schemas. Bodies parse through the shared JSON
   boundary; failures answer before the handler runs. Omit `body` on reads
   that take no input.
+- Route bodies must validate JSON fields and refuse empty objects; an opaque
+  JSON field needs a field-specific reason.
 - Gate order is fixed: permission (or public) → feature → scope → params →
   body → handler. A named business refusal thrown anywhere (an error class
   with a 4xx status) becomes a 4xx carrying its code and remedy. Anything

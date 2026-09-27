@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -40,7 +40,7 @@ import {
   updateCamPool,
 } from "@openbooks/engine/src/property/management.ts";
 import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { guardPermission } from "../../../lib/authz";
+import { can, guardPermission } from "../../../lib/authz";
 import type { Authz } from "../../../lib/authz";
 import {
   findUnownedCustomReferences,
@@ -378,360 +378,7 @@ async function refuseDisabledLeaseChargeInventory(
   return null;
 }
 
-async function legacyPOST(request: Request) {
-  const parsedBody = await parseJsonBody(request, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as unknown as Record<string, unknown>;
-  const action = String(body.action ?? "");
-  if (!knownActions.has(action))
-    return NextResponse.json({ error: "unknown action" }, { status: 400 });
-  const permission = glActions.has(action)
-    ? "gl.post"
-    : billingActions.has(action)
-      ? "ar.create"
-      : "ar.create";
-  const authz = await guardPermission(permission);
-  if (authz instanceof NextResponse) return authz;
-  const feature = await guardPropertyManagementFeature(authz.user.orgId);
-  if (feature) return feature;
-  const subsidiary = await guardSubsidiaryAccess(authz, action, body);
-  if (subsidiary) return subsidiary;
-  const assetGate = await refuseDisabledPropertyFixedAsset(
-    authz.user.orgId,
-    action,
-    body,
-  );
-  if (assetGate) return assetGate;
-  const currencyGate = await refuseDisabledPropertyCurrency(
-    authz.user.orgId,
-    action,
-    body,
-  );
-  if (currencyGate) return currencyGate;
-  const inventoryGate = await refuseDisabledLeaseChargeInventory(
-    authz.user.orgId,
-    action,
-    body,
-  );
-  if (inventoryGate) return inventoryGate;
-  // The caller's subsidiary fence rides every engine call: each service
-  // locks the parent row and rechecks scope inside its own transaction, so
-  // the unlocked precheck above cannot be raced by a concurrent rehome.
-  const common = { orgId: authz.user.orgId, actorId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds };
-  // Audit correlation for financial-term writes (createLease, updateLease,
-  // addCharge, addEscalation): a caller-supplied correlation id lands in
-  // audit_log.request_id next to its actor.
-  const requestCorrelation = {
-    requestId: (request.headers.get("x-request-id") ?? "").trim().slice(0, 256) || null,
-  };
-  try {
-    let result: unknown;
-    switch (action) {
-      case "createProperty": {
-        // createManagedProperty stores body.custom verbatim, so shape AND
-        // ownership are fenced here before anything persists.
-        const createDefs = await loadFieldDefs("managed_properties");
-        const createValidation = validateCustomValues(createDefs, customBag(body.custom));
-        if (!createValidation.ok) {
-          return NextResponse.json(
-            {
-              error:
-                Object.values(createValidation.errors)[0] ?? "Invalid custom fields",
-              errors: createValidation.errors,
-            },
-            { status: 400 },
-          );
-        }
-        const unownedCreateRefs = await findUnownedCustomReferences(common.orgId, createDefs, createValidation.cleaned);
-        if (unownedCreateRefs.length > 0) {
-          return NextResponse.json(
-            { error: `${unownedCreateRefs[0]!.label} not found in this organization` },
-            { status: 404 },
-          );
-        }
-        result = await createManagedProperty({ ...body, custom: createValidation.cleaned, ...common } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; currency?: string | null; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; });
-        break;
-      }
-      case "updateProperty": {
-        const updateDefs = await loadFieldDefs("managed_properties");
-        const validation = validateCustomValues(
-          updateDefs,
-          customBag(body.custom),
-        );
-        if (!validation.ok) {
-          return NextResponse.json(
-            {
-              error:
-                Object.values(validation.errors)[0] ?? "Invalid custom fields",
-              errors: validation.errors,
-            },
-            { status: 400 },
-          );
-        }
-        // The engine replaces the bag whole, so the full cleaned bag is
-        // newly stored: refuse foreign or dangling reference ids with a
-        // tenant-opaque 404 instead of persisting a cross-tenant pointer.
-        const unownedUpdateRefs = await findUnownedCustomReferences(common.orgId, updateDefs, validation.cleaned);
-        if (unownedUpdateRefs.length > 0) {
-          return NextResponse.json(
-            { error: `${unownedUpdateRefs[0]!.label} not found in this organization` },
-            { status: 404 },
-          );
-        }
-        result = await updateManagedProperty({
-          ...body,
-          custom: validation.cleaned,
-          ...common,
-        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; status: string; currency?: string; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; reason?: string | null; });
-        break;
-      }
-      case "deleteProperty":
-        result = await deleteManagedProperty(
-          common.orgId,
-          common.actorId,
-          common.allowedSubsidiaryIds,
-          String(body.propertyId),
-        );
-        break;
-      case "createUnit":
-        result = await createPropertyUnit({
-          ...body,
-          ...common,
-          rentableArea: persistMoney(body.rentableArea),
-        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; });
-        break;
-      case "updateUnit":
-        result = await updatePropertyUnit({
-          ...body,
-          ...common,
-          rentableArea: persistMoney(body.rentableArea),
-        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; unitId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; status?: string; reason?: string | null; });
-        break;
-      case "deleteUnit":
-        result = await deletePropertyUnit(
-          common.orgId,
-          common.actorId,
-          common.allowedSubsidiaryIds,
-          String(body.unitId),
-        );
-        break;
-      case "createLease":
-        result = await createPropertyLease({
-          ...body,
-          ...common,
-          ...requestCorrelation,
-          baseRent: requireMoney(body.baseRent),
-          securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
-          camSharePercent: persistMoney(body.camSharePercent),
-          lateFeeValue: persistMoney(body.lateFeeValue) ?? "0",
-        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string; startsOn: string; endsOn?: string | null; baseRent: string; billingDay?: number; paymentTermsDays?: number; securityDepositRequired?: string; camMethod?: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null; lateFeeType?: "none" | "fixed" | "percent"; lateFeeValue?: string; graceDays?: number; autoInvoice?: boolean; autoPost?: boolean; });
-        break;
-      case "updateLease":
-        result = await updatePropertyLease({
-          ...body,
-          ...common,
-          ...requestCorrelation,
-          baseRent: requireMoney(body.baseRent),
-          securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
-          camSharePercent: persistMoney(body.camSharePercent),
-          lateFeeValue: persistMoney(body.lateFeeValue) ?? "0",
-        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string; startsOn: string; endsOn?: string | null; baseRent: string; billingDay: number; paymentTermsDays: number; securityDepositRequired: string; camMethod: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null; lateFeeType: "none" | "fixed" | "percent"; lateFeeValue: string; graceDays: number; autoInvoice: boolean; autoPost: boolean; });
-        break;
-      case "cancelLease":
-        result = await cancelPropertyLease(
-          common.orgId,
-          common.actorId,
-          common.allowedSubsidiaryIds,
-          String(body.leaseId),
-        );
-        break;
-      case "activateLease":
-        result = await activatePropertyLease(
-          common.orgId,
-          common.actorId,
-          common.allowedSubsidiaryIds,
-          String(body.leaseId),
-        );
-        break;
-      case "terminateLease":
-        result = await terminatePropertyLease(
-          common.orgId,
-          common.actorId,
-          common.allowedSubsidiaryIds,
-          String(body.leaseId),
-          String(body.terminatedOn),
-          String(body.reason ?? ""),
-        );
-        break;
-      case "addCharge":
-        result = await addLeaseCharge({
-          ...body,
-          ...common,
-          ...requestCorrelation,
-          amount: requireMoney(body.amount),
-        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null; });
-        break;
-      case "addEscalation":
-        result = await addLeaseEscalation({
-          ...body,
-          ...common,
-          ...requestCorrelation,
-          value: requireMoney(body.value),
-        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string; });
-        break;
-      case "applyEscalation":
-        result = await applyLeaseEscalation(
-          common.orgId,
-          common.actorId,
-          common.allowedSubsidiaryIds,
-          String(body.escalationId),
-        );
-        break;
-      case "scheduleLease":
-        result = await scheduleLeaseCharges(
-          common.orgId,
-          common.actorId,
-          common.allowedSubsidiaryIds,
-          String(body.leaseId),
-          dateOrUndefined(body.throughOn),
-        );
-        break;
-      case "billRent":
-        result = await billDueLeaseCharges(
-          common.orgId,
-          common.actorId,
-          common.allowedSubsidiaryIds,
-          dateOrUndefined(body.asOf),
-          body.leaseId == null ? undefined : String(body.leaseId),
-          body.propertyId == null ? undefined : String(body.propertyId),
-        );
-        break;
-      case "assessLateFees":
-        result = await assessLeaseLateFees(
-          common.orgId,
-          common.actorId,
-          common.allowedSubsidiaryIds,
-          dateOrUndefined(body.asOf),
-          body.leaseId == null ? undefined : String(body.leaseId),
-          body.propertyId == null ? undefined : String(body.propertyId),
-        );
-        break;
-      case "levelRent": {
-        // Levelling scopes by lease only: a propertyId without a leaseId
-        // would silently widen to the whole portfolio, so it is refused.
-        if (body.propertyId != null && body.leaseId == null)
-          return NextResponse.json(
-            { error: "levelRent scopes by lease; pass leaseId without propertyId" },
-            { status: 400 },
-          );
-        result = await levelLeaseRentStraightLine(
-          common.orgId,
-          common.actorId,
-          {
-            asOf: dateOrUndefined(body.asOf) ?? (await businessToday(common.orgId)),
-            ...(body.leaseId == null ? {} : { onlyLeaseId: String(body.leaseId) }),
-            allowedSubsidiaryIds: common.allowedSubsidiaryIds,
-          },
-        );
-        break;
-      }
-      case "recordDeposit":
-        result = await recordSecurityDeposit({
-          ...body,
-          ...common,
-          amount: requireMoney(body.amount),
-        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null; importKey?: string | null; });
-        break;
-      case "reverseDeposit":
-        result = await reverseSecurityDepositTransaction({
-          ...body,
-          ...common,
-        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; transactionId: string; occurredOn: string; reason: string; });
-        break;
-      case "createCamPool":
-        result = await createCamPool({
-          ...body,
-          ...common,
-          budgetAmount: requireMoney(body.budgetAmount),
-        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[]; });
-        break;
-      case "updateCamPool":
-        result = await updateCamPool({
-          ...body,
-          ...common,
-          budgetAmount: requireMoney(body.budgetAmount),
-        } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[]; });
-        break;
-      case "cancelCamPool":
-        await cancelCamPool(common.orgId, common.actorId, common.allowedSubsidiaryIds, String(body.poolId));
-        break;
-      case "reopenCamPool":
-        await reopenFinalizedCamPool(
-          common.orgId,
-          common.actorId,
-          common.allowedSubsidiaryIds,
-          String(body.poolId),
-          String(body.reason ?? ""),
-        );
-        break;
-      case "finalizeCam":
-        result = await finalizeCamPool(
-          common.orgId,
-          common.actorId,
-          common.allowedSubsidiaryIds,
-          String(body.poolId),
-        );
-        break;
-      case "billCam":
-        result = await billCamReconciliation(
-          common.orgId,
-          common.actorId,
-          common.allowedSubsidiaryIds,
-          String(body.poolId),
-          dateOrUndefined(body.invoiceDate),
-        );
-        break;
-      default:
-        return NextResponse.json({ error: "unknown action" }, { status: 400 });
-    }
-    return NextResponse.json(result ?? { ok: true }, {
-      status:
-        action.startsWith("create") ||
-        action.startsWith("add") ||
-        action === "recordDeposit"
-          ? 201
-          : 200,
-    });
-  } catch (error) {
-    // A subsidiary refusal inside an engine transaction is the uniform
-    // not-found: the rehome-race denial must not reveal the record exists.
-    if (error instanceof ScopeNotFoundError)
-      return notFound("record");
-    if (error instanceof PropertyManagementError)
-      return apiErrorResponse(error);
-    // Drizzle wraps driver errors, so the PostgreSQL code can sit on `cause`.
-    const pgCode = error as { code?: string; cause?: { code?: string } };
-    const code = pgCode.code ?? pgCode.cause?.code;
-    if (code === "23505")
-      return NextResponse.json(
-        {
-          error:
-            "That code, number, or active unit assignment is already in use",
-        },
-        { status: 409 },
-      );
-    if (code === "23P01")
-      return NextResponse.json(
-        { error: "A base-rent charge already covers that effective window" },
-        { status: 409 },
-      );
-    console.error("[property-management] action failed", error);
-    return NextResponse.json(
-      { error: "Property management action failed" },
-      { status: 500 },
-    );
-  }
-}
+
 
 export const GET = defineRoute({
   permission: "ar.read",
@@ -742,10 +389,362 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   body: requestBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ request, body, authz: routeAuthz }) => {
+
+
+
+
+    const action = String(body.action ?? "");
+    if (!knownActions.has(action))
+      return NextResponse.json({ error: "unknown action" }, { status: 400 });
+    const permission = glActions.has(action)
+      ? "gl.post"
+      : billingActions.has(action)
+        ? "ar.create"
+        : "ar.create";
+    const authz = routeAuthz;
+    if (!can(authz, permission)) {
+      return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 });
+    }
+
+    const feature = await guardPropertyManagementFeature(authz.user.orgId);
+    if (feature) return feature;
+    const subsidiary = await guardSubsidiaryAccess(authz, action, body);
+    if (subsidiary) return subsidiary;
+    const assetGate = await refuseDisabledPropertyFixedAsset(
+      authz.user.orgId,
+      action,
+      body,
+    );
+    if (assetGate) return assetGate;
+    const currencyGate = await refuseDisabledPropertyCurrency(
+      authz.user.orgId,
+      action,
+      body,
+    );
+    if (currencyGate) return currencyGate;
+    const inventoryGate = await refuseDisabledLeaseChargeInventory(
+      authz.user.orgId,
+      action,
+      body,
+    );
+    if (inventoryGate) return inventoryGate;
+    // The caller's subsidiary fence rides every engine call: each service
+    // locks the parent row and rechecks scope inside its own transaction, so
+    // the unlocked precheck above cannot be raced by a concurrent rehome.
+    const common = { orgId: authz.user.orgId, actorId: authz.user.id, allowedSubsidiaryIds: authz.allowedSubsidiaryIds };
+    // Audit correlation for financial-term writes (createLease, updateLease,
+    // addCharge, addEscalation): a caller-supplied correlation id lands in
+    // audit_log.request_id next to its actor.
+    const requestCorrelation = {
+      requestId: (request.headers.get("x-request-id") ?? "").trim().slice(0, 256) || null,
+    };
+    try {
+      let result: unknown;
+      switch (action) {
+        case "createProperty": {
+          // createManagedProperty stores body.custom verbatim, so shape AND
+          // ownership are fenced here before anything persists.
+          const createDefs = await loadFieldDefs("managed_properties");
+          const createValidation = validateCustomValues(createDefs, customBag(body.custom));
+          if (!createValidation.ok) {
+            return NextResponse.json(
+              {
+                error:
+                  Object.values(createValidation.errors)[0] ?? "Invalid custom fields",
+                errors: createValidation.errors,
+              },
+              { status: 400 },
+            );
+          }
+          const unownedCreateRefs = await findUnownedCustomReferences(common.orgId, createDefs, createValidation.cleaned);
+          if (unownedCreateRefs.length > 0) {
+            return NextResponse.json(
+              { error: `${unownedCreateRefs[0]!.label} not found in this organization` },
+              { status: 404 },
+            );
+          }
+          result = await createManagedProperty({ ...body, custom: createValidation.cleaned, ...common } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; currency?: string | null; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; });
+          break;
+        }
+        case "updateProperty": {
+          const updateDefs = await loadFieldDefs("managed_properties");
+          const validation = validateCustomValues(
+            updateDefs,
+            customBag(body.custom),
+          );
+          if (!validation.ok) {
+            return NextResponse.json(
+              {
+                error:
+                  Object.values(validation.errors)[0] ?? "Invalid custom fields",
+                errors: validation.errors,
+              },
+              { status: 400 },
+            );
+          }
+          // The engine replaces the bag whole, so the full cleaned bag is
+          // newly stored: refuse foreign or dangling reference ids with a
+          // tenant-opaque 404 instead of persisting a cross-tenant pointer.
+          const unownedUpdateRefs = await findUnownedCustomReferences(common.orgId, updateDefs, validation.cleaned);
+          if (unownedUpdateRefs.length > 0) {
+            return NextResponse.json(
+              { error: `${unownedUpdateRefs[0]!.label} not found in this organization` },
+              { status: 404 },
+            );
+          }
+          result = await updateManagedProperty({
+            ...body,
+            custom: validation.cleaned,
+            ...common,
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null; code: string; name: string; propertyType: string; status: string; currency?: string; address?: Record<string, string>; rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null; custom?: Record<string, unknown>; reason?: string | null; });
+          break;
+        }
+        case "deleteProperty":
+          result = await deleteManagedProperty(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            String(body.propertyId),
+          );
+          break;
+        case "createUnit":
+          result = await createPropertyUnit({
+            ...body,
+            ...common,
+            rentableArea: persistMoney(body.rentableArea),
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; });
+          break;
+        case "updateUnit":
+          result = await updatePropertyUnit({
+            ...body,
+            ...common,
+            rentableArea: persistMoney(body.rentableArea),
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; unitId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; status?: string; reason?: string | null; });
+          break;
+        case "deleteUnit":
+          result = await deletePropertyUnit(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            String(body.unitId),
+          );
+          break;
+        case "createLease":
+          result = await createPropertyLease({
+            ...body,
+            ...common,
+            ...requestCorrelation,
+            baseRent: requireMoney(body.baseRent),
+            securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
+            camSharePercent: persistMoney(body.camSharePercent),
+            lateFeeValue: persistMoney(body.lateFeeValue) ?? "0",
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string; startsOn: string; endsOn?: string | null; baseRent: string; billingDay?: number; paymentTermsDays?: number; securityDepositRequired?: string; camMethod?: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null; lateFeeType?: "none" | "fixed" | "percent"; lateFeeValue?: string; graceDays?: number; autoInvoice?: boolean; autoPost?: boolean; });
+          break;
+        case "updateLease":
+          result = await updatePropertyLease({
+            ...body,
+            ...common,
+            ...requestCorrelation,
+            baseRent: requireMoney(body.baseRent),
+            securityDepositRequired: persistMoney(body.securityDepositRequired) ?? "0",
+            camSharePercent: persistMoney(body.camSharePercent),
+            lateFeeValue: persistMoney(body.lateFeeValue) ?? "0",
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string; startsOn: string; endsOn?: string | null; baseRent: string; billingDay: number; paymentTermsDays: number; securityDepositRequired: string; camMethod: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null; lateFeeType: "none" | "fixed" | "percent"; lateFeeValue: string; graceDays: number; autoInvoice: boolean; autoPost: boolean; });
+          break;
+        case "cancelLease":
+          result = await cancelPropertyLease(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            String(body.leaseId),
+          );
+          break;
+        case "activateLease":
+          result = await activatePropertyLease(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            String(body.leaseId),
+          );
+          break;
+        case "terminateLease":
+          result = await terminatePropertyLease(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            String(body.leaseId),
+            String(body.terminatedOn),
+            String(body.reason ?? ""),
+          );
+          break;
+        case "addCharge":
+          result = await addLeaseCharge({
+            ...body,
+            ...common,
+            ...requestCorrelation,
+            amount: requireMoney(body.amount),
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null; });
+          break;
+        case "addEscalation":
+          result = await addLeaseEscalation({
+            ...body,
+            ...common,
+            ...requestCorrelation,
+            value: requireMoney(body.value),
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string; });
+          break;
+        case "applyEscalation":
+          result = await applyLeaseEscalation(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            String(body.escalationId),
+          );
+          break;
+        case "scheduleLease":
+          result = await scheduleLeaseCharges(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            String(body.leaseId),
+            dateOrUndefined(body.throughOn),
+          );
+          break;
+        case "billRent":
+          result = await billDueLeaseCharges(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            dateOrUndefined(body.asOf),
+            body.leaseId == null ? undefined : String(body.leaseId),
+            body.propertyId == null ? undefined : String(body.propertyId),
+          );
+          break;
+        case "assessLateFees":
+          result = await assessLeaseLateFees(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            dateOrUndefined(body.asOf),
+            body.leaseId == null ? undefined : String(body.leaseId),
+            body.propertyId == null ? undefined : String(body.propertyId),
+          );
+          break;
+        case "levelRent": {
+          // Levelling scopes by lease only: a propertyId without a leaseId
+          // would silently widen to the whole portfolio, so it is refused.
+          if (body.propertyId != null && body.leaseId == null)
+            return NextResponse.json(
+              { error: "levelRent scopes by lease; pass leaseId without propertyId" },
+              { status: 400 },
+            );
+          result = await levelLeaseRentStraightLine(
+            common.orgId,
+            common.actorId,
+            {
+              asOf: dateOrUndefined(body.asOf) ?? (await businessToday(common.orgId)),
+              ...(body.leaseId == null ? {} : { onlyLeaseId: String(body.leaseId) }),
+              allowedSubsidiaryIds: common.allowedSubsidiaryIds,
+            },
+          );
+          break;
+        }
+        case "recordDeposit":
+          result = await recordSecurityDeposit({
+            ...body,
+            ...common,
+            amount: requireMoney(body.amount),
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null; importKey?: string | null; });
+          break;
+        case "reverseDeposit":
+          result = await reverseSecurityDepositTransaction({
+            ...body,
+            ...common,
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; transactionId: string; occurredOn: string; reason: string; });
+          break;
+        case "createCamPool":
+          result = await createCamPool({
+            ...body,
+            ...common,
+            budgetAmount: requireMoney(body.budgetAmount),
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[]; });
+          break;
+        case "updateCamPool":
+          result = await updateCamPool({
+            ...body,
+            ...common,
+            budgetAmount: requireMoney(body.budgetAmount),
+          } as unknown as { orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[]; });
+          break;
+        case "cancelCamPool":
+          await cancelCamPool(common.orgId, common.actorId, common.allowedSubsidiaryIds, String(body.poolId));
+          break;
+        case "reopenCamPool":
+          await reopenFinalizedCamPool(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            String(body.poolId),
+            String(body.reason ?? ""),
+          );
+          break;
+        case "finalizeCam":
+          result = await finalizeCamPool(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            String(body.poolId),
+          );
+          break;
+        case "billCam":
+          result = await billCamReconciliation(
+            common.orgId,
+            common.actorId,
+            common.allowedSubsidiaryIds,
+            String(body.poolId),
+            dateOrUndefined(body.invoiceDate),
+          );
+          break;
+        default:
+          return NextResponse.json({ error: "unknown action" }, { status: 400 });
+      }
+      return NextResponse.json(result ?? { ok: true }, {
+        status:
+          action.startsWith("create") ||
+          action.startsWith("add") ||
+          action === "recordDeposit"
+            ? 201
+            : 200,
+      });
+    } catch (error) {
+      // A subsidiary refusal inside an engine transaction is the uniform
+      // not-found: the rehome-race denial must not reveal the record exists.
+      if (error instanceof ScopeNotFoundError)
+        return notFound("record");
+      if (error instanceof PropertyManagementError)
+        return apiErrorResponse(error);
+      // Drizzle wraps driver errors, so the PostgreSQL code can sit on `cause`.
+      const pgCode = error as { code?: string; cause?: { code?: string } };
+      const code = pgCode.code ?? pgCode.cause?.code;
+      if (code === "23505")
+        return NextResponse.json(
+          {
+            error:
+              "That code, number, or active unit assignment is already in use",
+          },
+          { status: 409 },
+        );
+      if (code === "23P01")
+        return NextResponse.json(
+          { error: "A base-rent charge already covers that effective window" },
+          { status: 409 },
+        );
+      console.error("[property-management] action failed", error);
+      return NextResponse.json(
+        { error: "Property management action failed" },
+        { status: 500 },
+      );
+    }
   },
 });

@@ -6,10 +6,10 @@ import { readV1JsonObject, withV1Request } from "../../../../lib/api/v1-request"
 import { clearLayout, listLayouts, setLayout } from "../../../../lib/application/page-layouts";
 
 const setLayoutBody = z.looseObject({
-  route: z.unknown().optional(),
-  spec: z.unknown().optional(),
+  route: z.json().optional(),
+  spec: z.json().optional(),
   note: z.string().nullable().optional(),
-  scope: z.unknown().optional(),
+  scope: z.json().optional(),
 });
 
 export const runtime = "nodejs";

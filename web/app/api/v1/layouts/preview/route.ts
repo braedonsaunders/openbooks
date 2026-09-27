@@ -6,9 +6,9 @@ import { readV1JsonObject, withV1Request } from "../../../../../lib/api/v1-reque
 import { previewLayout } from "../../../../../lib/application/page-layouts";
 
 const previewLayoutBody = z.looseObject({
-  route: z.unknown().optional(),
-  spec: z.unknown().optional(),
-  params: z.unknown().optional(),
+  route: z.json().optional(),
+  spec: z.json().optional(),
+  params: z.json().optional(),
 });
 
 export const runtime = "nodejs";

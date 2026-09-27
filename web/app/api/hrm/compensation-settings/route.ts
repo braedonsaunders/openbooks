@@ -38,7 +38,7 @@ const settingsBody = z.object({
     .regex(/^\d+(\.\d+)?$/)
     .nullable()
     .optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 export const GET = defineRoute({
   permission: "hrm.compensation.read",
   feature: "hrmCompensation",
@@ -52,7 +52,7 @@ export const PUT = defineRoute({
   feature: "hrmCompensation",
   scope: "unrestricted",
   body: settingsBody,
-  handler: async ({ request: _req, authz: gate, body }) => {
+  handler: async ({ authz: gate, body }) => {
     try {
       const next = await updateCompensationSettings({
         orgId: gate.user.orgId,

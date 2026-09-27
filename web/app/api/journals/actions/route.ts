@@ -13,7 +13,7 @@ import {
   loadRequiredControlAccounts,
 } from '@openbooks/engine/src/records/control-accounts.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
-import { parseJsonBody, uuidId } from '../../../../lib/api/json'
+import { uuidId } from '../../../../lib/api/json'
 import { partylessControlLines } from '../../../../lib/journal-warnings'
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 import { notFound } from "@/lib/api/responses";
@@ -34,113 +34,109 @@ const journalActionBody = z.object({
  * Flow configuration: no gate releases it immediately, while any authored
  * single- or multi-leg gate topology leaves it pending until Flow resolves.
  */
-async function legacyPOST(req: Request) {
-  const parsed = await parseJsonBody(req, journalActionBody)
-  if (!parsed.ok) return parsed.response
-  const { documentId } = parsed.data
 
-  try {
-    switch (parsed.data.action) {
-      case 'post': {
-        const gate = await guardPermission('gl.post')
-        if (gate instanceof NextResponse) return gate
-        const outcome = await withOrgTransaction(gate.user.orgId, async () => {
-          // Serialize the lifecycle and posting decision at the aggregate root.
-          // If posting fails, the draft→approved release rolls back with it.
-          const owned = (await db.execute<{ id: string; status: string; subsidiaryId: string | null }>(sql`
-            select id, status, subsidiary_id as "subsidiaryId" from documents
-             where id = ${documentId} and kind = 'journal' and org_id = ${gate.user.orgId}
-             for update
-          `))
-          if (!owned.rows[0]) return { kind: 'not_found' as const }
-          const scopeDenied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
-          if (scopeDenied) return { kind: 'scope_denied' as const, response: scopeDenied }
-          const previousStatus = owned.rows[0].status
-          if (previousStatus === 'draft') {
-            const submission = await submitAndReleaseIfUngated(
-              'journal',
-              documentId,
-              gate.user.id,
-            )
-            // A refused routing throws: answering 422 from inside this
-            // transaction would commit the submission's script effects
-            // alongside the refusal. The catch below answers the same 422
-            // after the rollback.
-            if (submission.flowError) {
-              throw new ApprovalRoutingError(submission.flowError)
-            }
-            if (submission.gated) {
-              return { kind: 'pending' as const, requestId: submission.runId }
-            }
-          } else if (previousStatus !== 'approved') {
-            return { kind: 'invalid_status' as const, status: previousStatus }
-          }
-
-          // Defer after-post scripts/flows until the database transaction has
-          // durably committed. Financial writes remain inside this transaction.
-          const entryId = await postDocument(documentId, {
-            control: await loadRequiredControlAccounts(gate.user.orgId),
-          }, {
-            deferEffects: true,
-            audit: { actorId: gate.user.id, source: 'ui' },
-          })
-          // A party-less AR/AP-control leg posts legitimately but sits
-          // outside every subledger: report it on the response instead of
-          // accepting the journal silently. The drawer pins the
-          // warning on the record; the aging carries the balance explicitly.
-          const partyless = await partylessControlLines(gate.user.orgId, entryId)
-          const warnings = partyless.length > 0
-            ? [{ code: 'partyless_control_lines' as const, accounts: partyless }]
-            : []
-          return { kind: 'posted' as const, entryId, previousStatus, warnings }
-        })
-
-        if (outcome.kind === 'not_found') {
-          return notFound("record")
-        }
-        if (outcome.kind === 'scope_denied') {
-          return outcome.response
-        }
-        if (outcome.kind === 'pending') {
-          return NextResponse.json(
-            { ok: true, pendingApproval: true, requestId: outcome.requestId },
-            { status: 202 },
-          )
-        }
-        if (outcome.kind === 'invalid_status') {
-          return NextResponse.json(
-            { error: `journal is ${outcome.status}; only an approved journal can be posted` },
-            { status: 422 },
-          )
-        }
-        await runPostDocumentEffects(documentId, outcome.previousStatus)
-        return NextResponse.json({ ok: true, entryId: outcome.entryId, warnings: outcome.warnings })
-      }
-      default:
-        return NextResponse.json({ error: 'unknown action' }, { status: 400 })
-    }
-  } catch (e) {
-    // Posting refusals (kernel rules or unconfigured org control accounts)
-    // and refused approval routings (already rolled back) are request-state
-    // failures, not server defects.
-    if (
-      e instanceof PostingError ||
-      e instanceof ControlAccountsIncompleteError ||
-      e instanceof ApprovalRoutingError
-    )
-      return apiErrorResponse(e, { safeStatus: 422 })
-    return apiErrorResponse(e)
-  }
-}
 
 export const POST = defineRoute({
   permission: "gl.post",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   body: journalActionBody,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ body }) => {
+
+
+
+
+
+    try {
+      switch (body.action) {
+        case 'post': {
+          const gate = await guardPermission('gl.post')
+          if (gate instanceof NextResponse) return gate
+          const outcome = await withOrgTransaction(gate.user.orgId, async () => {
+            // Serialize the lifecycle and posting decision at the aggregate root.
+            // If posting fails, the draft→approved release rolls back with it.
+            const owned = (await db.execute<{ id: string; status: string; subsidiaryId: string | null }>(sql`
+              select id, status, subsidiary_id as "subsidiaryId" from documents
+               where id = ${documentId} and kind = 'journal' and org_id = ${gate.user.orgId}
+               for update
+            `))
+            if (!owned.rows[0]) return { kind: 'not_found' as const }
+            const scopeDenied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
+            if (scopeDenied) return { kind: 'scope_denied' as const, response: scopeDenied }
+            const previousStatus = owned.rows[0].status
+            if (previousStatus === 'draft') {
+              const submission = await submitAndReleaseIfUngated(
+                'journal',
+                documentId,
+                gate.user.id,
+              )
+              // A refused routing throws: answering 422 from inside this
+              // transaction would commit the submission's script effects
+              // alongside the refusal. The catch below answers the same 422
+              // after the rollback.
+              if (submission.flowError) {
+                throw new ApprovalRoutingError(submission.flowError)
+              }
+              if (submission.gated) {
+                return { kind: 'pending' as const, requestId: submission.runId }
+              }
+            } else if (previousStatus !== 'approved') {
+              return { kind: 'invalid_status' as const, status: previousStatus }
+            }
+
+            // Defer after-post scripts/flows until the database transaction has
+            // durably committed. Financial writes remain inside this transaction.
+            const entryId = await postDocument(documentId, {
+              control: await loadRequiredControlAccounts(gate.user.orgId),
+            }, {
+              deferEffects: true,
+              audit: { actorId: gate.user.id, source: 'ui' },
+            })
+            // A party-less AR/AP-control leg posts legitimately but sits
+            // outside every subledger: report it on the response instead of
+            // accepting the journal silently. The drawer pins the
+            // warning on the record; the aging carries the balance explicitly.
+            const partyless = await partylessControlLines(gate.user.orgId, entryId)
+            const warnings = partyless.length > 0
+              ? [{ code: 'partyless_control_lines' as const, accounts: partyless }]
+              : []
+            return { kind: 'posted' as const, entryId, previousStatus, warnings }
+          })
+
+          if (outcome.kind === 'not_found') {
+            return notFound("record")
+          }
+          if (outcome.kind === 'scope_denied') {
+            return outcome.response
+          }
+          if (outcome.kind === 'pending') {
+            return NextResponse.json(
+              { ok: true, pendingApproval: true, requestId: outcome.requestId },
+              { status: 202 },
+            )
+          }
+          if (outcome.kind === 'invalid_status') {
+            return NextResponse.json(
+              { error: `journal is ${outcome.status}; only an approved journal can be posted` },
+              { status: 422 },
+            )
+          }
+          await runPostDocumentEffects(documentId, outcome.previousStatus)
+          return NextResponse.json({ ok: true, entryId: outcome.entryId, warnings: outcome.warnings })
+        }
+        default:
+          return NextResponse.json({ error: 'unknown action' }, { status: 400 })
+      }
+    } catch (e) {
+      // Posting refusals (kernel rules or unconfigured org control accounts)
+      // and refused approval routings (already rolled back) are request-state
+      // failures, not server defects.
+      if (
+        e instanceof PostingError ||
+        e instanceof ControlAccountsIncompleteError ||
+        e instanceof ApprovalRoutingError
+      )
+        return apiErrorResponse(e, { safeStatus: 422 })
+      return apiErrorResponse(e)
+    }
   },
 });

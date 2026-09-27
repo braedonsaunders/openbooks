@@ -39,7 +39,7 @@ const projectCreateBody = z.object({
     backupRequired: z.boolean().nullable().optional(),
     backupType: z.enum(["costed_timesheets", "timesheets_purchases", "purchases", "purchases_shop_time", "quote_only", "none"]).nullable().optional(),
   }).nullable().optional(),
-  custom: z.record(z.string(), z.unknown()).optional(),
+  custom: z.record(z.string(), z.json()).optional(),
   contractValue: z.union([exactMoney(), z.null()]).optional(),
   siteJurisdiction: z.string().nullable().optional(),
   projectTypeId: uuidId.nullable().optional(),

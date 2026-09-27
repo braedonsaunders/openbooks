@@ -19,7 +19,7 @@ const Body = z.object({
   startsOn: z.string(),
   endsOn: z.string(),
   retainerItemId: z.string().uuid(),
-  custom: z.record(z.string(), z.unknown()).optional(),
+  custom: z.record(z.string(), z.json()).optional(),
 }).strict();
 const Params = z.object({}).strict();
 

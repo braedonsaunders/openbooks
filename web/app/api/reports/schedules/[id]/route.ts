@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -20,6 +19,12 @@ const PATCHBodySchema1 = z.object({
   hour: z.number().int().min(0).max(23).optional(), minute: z.number().int().min(0).max(59).optional(),
   timezone: z.string().min(1).optional(), recipientEmails: z.array(z.string().email()).optional(),
   active: z.boolean().optional(), reason: z.string().optional(),
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
+const DELETEBodySchema = z.union([
+  z.object({ reason: z.string().optional() }),
+  z.undefined(),
+]).refine((body) => body === undefined || Object.keys(body).length > 0, {
+  message: 'A delete reason is required when a request body is provided.',
 });
 
 
@@ -148,27 +153,14 @@ export const PATCH = defineRoute({
 export const DELETE = defineRoute({
   permission: 'reports.schedule',
   feature: { none: "This always-on route is governed by reports.schedule; the existing route has no separate feature gate." },
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams }) => {
+  body: DELETEBodySchema,
+  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { user } = gate
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
-    let reason: unknown
-    const raw = await req.text().catch(() => '')
-    if (raw.trim().length > 0) {
-        const routeBodySchema2 = z.object({ reason: z.string().optional() });
-    const parsedBody = await parseJsonBody(
-          new Request('http://internal/schedule-delete', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: raw,
-          }),
-          routeBodySchema2,
-        )
-        if (!parsedBody.ok) return parsedBody.response
-        reason = (parsedBody.data as { reason?: unknown }).reason
-      }
+    const reason = routeBody?.reason
     return withOrgTransaction(user.orgId, async () => {
         // A delete is terminal for the schedule's delivery configuration. Keep the
         // exact locked row in the same transaction as both the delete and audit.

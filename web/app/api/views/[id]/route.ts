@@ -2,20 +2,13 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { validateOrgReportQuery } from '@/lib/custom-record-report-catalog'
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from 'next/server'
 import { validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { canRunReportEntity, guardReportEntity } from '../../../../lib/report-authz'
-import {
-  deleteView,
-  loadView,
-  updateView,
-  uniqueViewSlug,
-  slugifyViewName,
-  type ViewScope,
-} from '../../../../lib/views'
+import { deleteView, loadView, updateView, uniqueViewSlug, slugifyViewName } from '../../../../lib/views'
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.object({
@@ -47,68 +40,7 @@ async function legacyGET(_req: Request, { params }: { params: Promise<{ id: stri
 }
 
 /** Autosave: update name/description/query/layout/scope/allowedRoles. */
-async function legacyPATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('reports.create')
-  if (gate instanceof NextResponse) return gate
-  const { user, permissions } = gate
-  const { id } = await params
-  const isAdmin = permissions.has('*')
 
-  if (!isUuid(id)) return notFound("record")
-  const existing = await loadView(user.orgId, id, user.id, permissions)
-  if (!existing) return notFound("record")
-  if (!(await canRunReportEntity(gate, existing.query))) {
-    return notFound("record")
-  }
-
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    name?: string
-    description?: string | null
-    query?: unknown
-    layout?: unknown
-    scope?: ViewScope
-    allowedRoles?: string[] | null
-  }
-
-  let slug = existing.slug
-  if (typeof body.name === 'string' && body.name.trim() && body.name.trim() !== existing.name) {
-    slug = await uniqueViewSlug(user.orgId, slugifyViewName(body.name.trim()), id)
-  }
-  const layout =
-    body.layout !== undefined
-      ? (validateReportLayout(body.layout) as Record<string, unknown>)
-      : existing.layout
-
-  let query = existing.query
-  if (body.query !== undefined) {
-    try {
-      query = await validateOrgReportQuery(gate, body.query)
-    } catch (err) {
-      return apiErrorResponse(err)
-    }
-    const denied = await guardReportEntity(gate, query)
-    if (denied) return denied
-  }
-
-  const res = await updateView(user.orgId, id, user.id, isAdmin, {
-    name: body.name,
-    slug: slug !== existing.slug ? slug : undefined,
-    description: body.description,
-    query: body.query !== undefined ? query : undefined,
-    layout,
-    scope: body.scope,
-    allowedRoles: body.allowedRoles,
-  })
-  if (!res.ok) return NextResponse.json({ error: res.error }, { status: 422 })
-
-  const view = await loadView(user.orgId, id, user.id, permissions)
-  if (!view || !(await canRunReportEntity(gate, view.query))) {
-    return notFound("record")
-  }
-  return NextResponse.json({ view })
-}
 
 /** Delete (owner or admin only). */
 async function legacyDELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -134,11 +66,61 @@ export const PATCH = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "id": z.string() }),
   body: requestBodySchema,
-  handler: async ({ request, body, params }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPATCH(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  handler: async ({ body, params, authz: routeAuthz }) => {
+
+    const gate = routeAuthz
+
+    const { user, permissions } = gate
+    const { id } = params
+    const isAdmin = permissions.has('*')
+
+    if (!isUuid(id)) return notFound("record")
+    const existing = await loadView(user.orgId, id, user.id, permissions)
+    if (!existing) return notFound("record")
+    if (!(await canRunReportEntity(gate, existing.query))) {
+      return notFound("record")
+    }
+
+
+
+
+
+    let slug = existing.slug
+    if (typeof body.name === 'string' && body.name.trim() && body.name.trim() !== existing.name) {
+      slug = await uniqueViewSlug(user.orgId, slugifyViewName(body.name.trim()), id)
+    }
+    const layout =
+      body.layout !== undefined
+        ? (validateReportLayout(body.layout) as Record<string, unknown>)
+        : existing.layout
+
+    let query = existing.query
+    if (body.query !== undefined) {
+      try {
+        query = await validateOrgReportQuery(gate, body.query)
+      } catch (err) {
+        return apiErrorResponse(err)
+      }
+      const denied = await guardReportEntity(gate, query)
+      if (denied) return denied
+    }
+
+    const res = await updateView(user.orgId, id, user.id, isAdmin, {
+      name: body.name,
+      slug: slug !== existing.slug ? slug : undefined,
+      description: body.description,
+      query: body.query !== undefined ? query : undefined,
+      layout,
+      scope: body.scope,
+      allowedRoles: body.allowedRoles,
+    })
+    if (!res.ok) return NextResponse.json({ error: res.error }, { status: 422 })
+
+    const view = await loadView(user.orgId, id, user.id, permissions)
+    if (!view || !(await canRunReportEntity(gate, view.query))) {
+      return notFound("record")
+    }
+    return NextResponse.json({ view })
   },
 });
 

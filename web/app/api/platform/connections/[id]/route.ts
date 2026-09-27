@@ -31,7 +31,7 @@ export const runtime = "nodejs";
 // Connector config fields are versioned by the source manifest at runtime.
 const connectionPatchBody = z.object({
   displayName: z.string().optional(),
-  config: z.record(z.string(), z.unknown()).optional(),
+  config: z.record(z.string(), z.json()).optional(),
   secrets: z.record(z.string(), z.string()).optional(),
   mirrorEnabled: z.boolean().optional(),
   mirrorSchedule: z.string().optional(),

@@ -9,7 +9,7 @@ import { defineRoute } from '@/lib/api/route'
 import { warehouseAddressBody } from '@/lib/warehouses'
 
 const params = z.object({ id: uuidId })
-const updateBody = z.object({ name: z.string().trim().min(1).max(200).optional(), ...warehouseAddressBody })
+const updateBody = z.object({ name: z.string().trim().min(1).max(200).optional(), ...warehouseAddressBody }).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." })
 
 /** One warehouse with its locations and ordered putaway rules. */
 export const GET = defineRoute({

@@ -2,11 +2,11 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardCloseScope } from "@/lib/close-scope";
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from "next/server";
 import { startCloseRun } from "@openbooks/engine/src/close/run-start.ts";
 import { CloseError } from "@openbooks/engine/src/periods/period-policy.ts";
-import { guardFeaturePermission } from "../../../../lib/feature-gates";
+
 import { isUuid } from "../../../../lib/list-params";
 
 const requestBodySchema = z.object({
@@ -91,68 +91,64 @@ function parseCloseRunSubsidiaryIds(
   return requested;
 }
 
-async function legacyPOST(req: Request) {
-  const gate = await guardFeaturePermission("close.run", "continuousClose");
-  if (gate instanceof NextResponse) return gate;
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>;
-  const periodId = typeof body.periodId === "string" ? body.periodId : "";
-  const bookId = typeof body.bookId === "string" ? body.bookId : "";
-  if (!isUuid(periodId) || !isUuid(bookId)) {
-    return NextResponse.json(
-      { error: "valid periodId and bookId are required" },
-      { status: 400 },
-    );
-  }
-  const blueprintId =
-    typeof body.blueprintId === "string" && isUuid(body.blueprintId)
-      ? body.blueprintId
-      : undefined;
-  const reportingPackageId =
-    typeof body.reportingPackageId === "string" &&
-    isUuid(body.reportingPackageId)
-      ? body.reportingPackageId
-      : undefined;
-  const subsidiaryIds = parseCloseRunSubsidiaryIds(
-    body,
-    gate.allowedSubsidiaryIds,
-  );
-  if (subsidiaryIds instanceof Response) return subsidiaryIds;
-  const scopeDenied = guardCloseScope(gate);
-  if (scopeDenied) return scopeDenied;
-  try {
-    const runId = await startCloseRun({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      periodId,
-      bookId,
-      blueprintId,
-      reportingPackageId,
-      targetCloseDate:
-        typeof body.targetCloseDate === "string"
-          ? body.targetCloseDate
-          : undefined,
-      // Preserve the explicit null org-wide sentinel end-to-end. Restricted
-      // omissions are resolved to their concrete allowed IDs above.
-      subsidiaryIds,
-    });
-    return NextResponse.json({ ok: true, runId });
-  } catch (error) {
-    if (error instanceof CloseError)
-      return apiErrorResponse(error, { safeStatus: 422 });
-    throw error;
-  }
-}
+
 
 export const POST = defineRoute({
   permission: "close.run",
   feature: "continuousClose",
   body: requestBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const gate = routeAuthz;
+
+
+
+
+    const periodId = typeof body.periodId === "string" ? body.periodId : "";
+    const bookId = typeof body.bookId === "string" ? body.bookId : "";
+    if (!isUuid(periodId) || !isUuid(bookId)) {
+      return NextResponse.json(
+        { error: "valid periodId and bookId are required" },
+        { status: 400 },
+      );
+    }
+    const blueprintId =
+      typeof body.blueprintId === "string" && isUuid(body.blueprintId)
+        ? body.blueprintId
+        : undefined;
+    const reportingPackageId =
+      typeof body.reportingPackageId === "string" &&
+      isUuid(body.reportingPackageId)
+        ? body.reportingPackageId
+        : undefined;
+    const subsidiaryIds = parseCloseRunSubsidiaryIds(
+      body,
+      gate.allowedSubsidiaryIds,
+    );
+    if (subsidiaryIds instanceof Response) return subsidiaryIds;
+    const scopeDenied = guardCloseScope(gate);
+    if (scopeDenied) return scopeDenied;
+    try {
+      const runId = await startCloseRun({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        periodId,
+        bookId,
+        blueprintId,
+        reportingPackageId,
+        targetCloseDate:
+          typeof body.targetCloseDate === "string"
+            ? body.targetCloseDate
+            : undefined,
+        // Preserve the explicit null org-wide sentinel end-to-end. Restricted
+        // omissions are resolved to their concrete allowed IDs above.
+        subsidiaryIds,
+      });
+      return NextResponse.json({ ok: true, runId });
+    } catch (error) {
+      if (error instanceof CloseError)
+        return apiErrorResponse(error, { safeStatus: 422 });
+      throw error;
+    }
   },
 });

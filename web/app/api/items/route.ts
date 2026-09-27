@@ -59,7 +59,7 @@ const itemCreateSchema = z.object({
   taxCodeId: nullableText,
   showOnTimesheet: z.boolean().optional(),
   isActive: z.boolean().optional(),
-  custom: z.record(z.string(), z.unknown()).optional(),
+  custom: z.record(z.string(), z.json()).optional(),
   recognitionRuleId: nullableText,
   deferredAccountId: nullableText,
   createPlansOn: z.string().optional(),

@@ -15,7 +15,7 @@ import { lockScheduleAccount } from '../_lib'
 import { notFound } from "@/lib/api/responses";
 const PATCHBodySchema1 = z.object({
   action: z.enum(['run', 'toggle']).optional(), isActive: z.boolean().optional(), expectedExternalAccountId: z.string().nullable().optional(),
-});
+}).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
 
 

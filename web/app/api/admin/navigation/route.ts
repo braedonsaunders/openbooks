@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
+
 import { pgTextArrayLiteral } from "@/lib/pg-array";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -97,91 +97,87 @@ async function guardNavManage(): Promise<Authz | NextResponse> {
   return NextResponse.json({ error: 'missing permission: admin.nav.manage' }, { status: 403 });
 }
 
-async function legacyPUT(req: Request) {
-  const gate = await guardNavManage()
-  if (gate instanceof NextResponse) return gate
-  const { user } = gate
 
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const { config, expectedUpdatedAt } = (parsedBody.data) as { config?: unknown; expectedUpdatedAt?: unknown }
-  if (!validate(config)) return NextResponse.json({ error: 'invalid nav config' }, { status: 400 })
-  if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null && (typeof expectedUpdatedAt !== 'string' || Number.isNaN(Date.parse(expectedUpdatedAt)))) {
-    return NextResponse.json({ error: 'invalid nav config' }, { status: 400 })
-  }
-
-  const configuredAppKeys = config.groups.flatMap((group) =>
-    group.items.flatMap((item) => (item.kind === 'app' ? [item.appKey] : [])),
-  )
-  if (configuredAppKeys.length > 0) {
-    const installed = (await db.execute<{ key: string }>(sql`
-      select key from apps where org_id = ${user.orgId} and key = any(${pgTextArrayLiteral(configuredAppKeys)}::text[])
-    `))
-    if (installed.rows.length !== configuredAppKeys.length) {
-      return NextResponse.json({ error: 'navigation references an unknown app' }, { status: 400 })
-    }
-  }
-
-  const outcome = await db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${user.orgId}`}, 0))`);
-    const before = (await tx.execute<{ id: string; config: OrgNavConfig; updated_at: Date }>(sql`
-      select id, config, updated_at from org_nav_configs where org_id = ${user.orgId} limit 1 for update
-    `))
-    // Optimistic fence for the full-config write: the editor sends the row
-    // version it loaded, compared while holding the row lock. updated_at is
-    // the compare token (millisecond compare after a Date round trip — two
-    // administrators saving within the same millisecond of one read is the
-    // accepted residual; every human-scale race is rejected). An absent
-    // expectation is a legacy writer and stays unfenced.
-    if (expectedUpdatedAt !== undefined) {
-      const current = before.rows[0]?.updated_at ?? null
-      const expectedTime = expectedUpdatedAt === null ? null : Date.parse(expectedUpdatedAt)
-      const currentTime = current === null ? null : new Date(current).getTime()
-      if (expectedTime !== currentTime) return { conflict: true as const }
-    }
-    const owned = new Map((before.rows[0]?.config.groups ?? []).flatMap((group) => group.items).flatMap((item) => item.kind === 'link' && item.extensionKey ? [[item.href, item] as const] : []))
-    for (const group of config.groups) for (const item of group.items) if (item.kind === 'link') {
-      const source = owned.get(item.href)
-      // Preserve installer provenance across editor round trips; only the installer can mint it.
-      if (source) { item.extensionKey = source.extensionKey; item.requiredPermission = source.requiredPermission }
-      else { delete item.extensionKey; delete item.requiredPermission }
-    }
-    const saved = (await tx.execute<{ id: string; updated_at: Date }>(sql`
-      insert into org_nav_configs (org_id, config, created_by, updated_by)
-      values (${user.orgId}, ${JSON.stringify(config)}, ${user.id}, ${user.id})
-      on conflict (org_id) do update set
-        config = excluded.config,
-        updated_at = now(),
-        updated_by = ${user.id}
-      where org_nav_configs.org_id = ${user.orgId}
-      returning id, updated_at
-    `))
-    await tx.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (
-        ${user.orgId},
-        'org_nav_configs',
-        ${saved.rows[0]!.id},
-        ${before.rows[0] ? 'update' : 'insert'},
-        ${JSON.stringify({ before: before.rows[0]?.config ?? null, after: config })}::jsonb,
-        ${user.id}
-      )
-    `)
-    return { conflict: false as const, id: saved.rows[0]!.id, updatedAt: saved.rows[0]!.updated_at }
-  })
-  if (outcome.conflict) {
-    return NextResponse.json({ error: 'navigation config changed since loaded' }, { status: 409 })
-  }
-  return NextResponse.json({ ok: true, revision: new Date(outcome.updatedAt).toISOString() })
-}
 
 export const PUT = defineRoute({
   public: "session",
   body: requestBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPUT(replayRequest as never);
+  handler: async ({  }) => {
+
+    const gate = await guardNavManage()
+    if (gate instanceof NextResponse) return gate
+    const { user } = gate
+
+
+
+
+    if (!validate(config)) return NextResponse.json({ error: 'invalid nav config' }, { status: 400 })
+    if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null && (typeof expectedUpdatedAt !== 'string' || Number.isNaN(Date.parse(expectedUpdatedAt)))) {
+      return NextResponse.json({ error: 'invalid nav config' }, { status: 400 })
+    }
+
+    const configuredAppKeys = config.groups.flatMap((group) =>
+      group.items.flatMap((item) => (item.kind === 'app' ? [item.appKey] : [])),
+    )
+    if (configuredAppKeys.length > 0) {
+      const installed = (await db.execute<{ key: string }>(sql`
+        select key from apps where org_id = ${user.orgId} and key = any(${pgTextArrayLiteral(configuredAppKeys)}::text[])
+      `))
+      if (installed.rows.length !== configuredAppKeys.length) {
+        return NextResponse.json({ error: 'navigation references an unknown app' }, { status: 400 })
+      }
+    }
+
+    const outcome = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`extension-projections:${user.orgId}`}, 0))`);
+      const before = (await tx.execute<{ id: string; config: OrgNavConfig; updated_at: Date }>(sql`
+        select id, config, updated_at from org_nav_configs where org_id = ${user.orgId} limit 1 for update
+      `))
+      // Optimistic fence for the full-config write: the editor sends the row
+      // version it loaded, compared while holding the row lock. updated_at is
+      // the compare token (millisecond compare after a Date round trip — two
+      // administrators saving within the same millisecond of one read is the
+      // accepted residual; every human-scale race is rejected). An absent
+      // expectation is a legacy writer and stays unfenced.
+      if (expectedUpdatedAt !== undefined) {
+        const current = before.rows[0]?.updated_at ?? null
+        const expectedTime = expectedUpdatedAt === null ? null : Date.parse(expectedUpdatedAt)
+        const currentTime = current === null ? null : new Date(current).getTime()
+        if (expectedTime !== currentTime) return { conflict: true as const }
+      }
+      const owned = new Map((before.rows[0]?.config.groups ?? []).flatMap((group) => group.items).flatMap((item) => item.kind === 'link' && item.extensionKey ? [[item.href, item] as const] : []))
+      for (const group of config.groups) for (const item of group.items) if (item.kind === 'link') {
+        const source = owned.get(item.href)
+        // Preserve installer provenance across editor round trips; only the installer can mint it.
+        if (source) { item.extensionKey = source.extensionKey; item.requiredPermission = source.requiredPermission }
+        else { delete item.extensionKey; delete item.requiredPermission }
+      }
+      const saved = (await tx.execute<{ id: string; updated_at: Date }>(sql`
+        insert into org_nav_configs (org_id, config, created_by, updated_by)
+        values (${user.orgId}, ${JSON.stringify(config)}, ${user.id}, ${user.id})
+        on conflict (org_id) do update set
+          config = excluded.config,
+          updated_at = now(),
+          updated_by = ${user.id}
+        where org_nav_configs.org_id = ${user.orgId}
+        returning id, updated_at
+      `))
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (
+          ${user.orgId},
+          'org_nav_configs',
+          ${saved.rows[0]!.id},
+          ${before.rows[0] ? 'update' : 'insert'},
+          ${JSON.stringify({ before: before.rows[0]?.config ?? null, after: config })}::jsonb,
+          ${user.id}
+        )
+      `)
+      return { conflict: false as const, id: saved.rows[0]!.id, updatedAt: saved.rows[0]!.updated_at }
+    })
+    if (outcome.conflict) {
+      return NextResponse.json({ error: 'navigation config changed since loaded' }, { status: 409 })
+    }
+    return NextResponse.json({ ok: true, revision: new Date(outcome.updatedAt).toISOString() })
   },
 });

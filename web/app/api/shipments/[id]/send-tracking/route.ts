@@ -13,7 +13,7 @@ export const POST = defineRoute({
   feature: 'fulfillment',
   params: z.object({ id: z.string().uuid() }),
   body: z.object({
-    to: z.string().email().max(320).optional(),
+    to: z.string().email().max(320),
     message: z.string().max(2000).optional(),
   }),
   handler: async ({ authz, params: { id }, body }) => {

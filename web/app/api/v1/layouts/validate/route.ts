@@ -5,7 +5,7 @@ import { ApplicationError } from "../../../../../lib/application/errors";
 import { readV1JsonObject, withV1Request } from "../../../../../lib/api/v1-request";
 import { validateLayout } from "../../../../../lib/application/page-layouts";
 
-const validateLayoutBody = z.looseObject({ spec: z.unknown().optional() });
+const validateLayoutBody = z.looseObject({ spec: z.json().optional() });
 
 export const runtime = "nodejs";
 

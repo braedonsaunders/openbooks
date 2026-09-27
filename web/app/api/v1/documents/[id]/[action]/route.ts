@@ -22,7 +22,7 @@ const voidDocumentBody = z.looseObject({
   reversalPeriodId: z.string().nullable().optional(),
 });
 const correctDocumentBody = z.looseObject({
-  correction: z.record(z.string(), z.unknown()),
+  correction: z.record(z.string(), z.json()),
 });
 
 /** POST /api/v1/documents/:id/:action — document lifecycle through the application layer. */

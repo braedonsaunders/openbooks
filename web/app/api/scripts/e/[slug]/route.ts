@@ -52,7 +52,7 @@ async function handle(req: Request, slug: string, user: Authz['user'], body: Rec
 }
 
 /** 405 names POST. Next.js maps HEAD onto GET, so neither executes the script. */
-const endpointBody = z.record(z.string(), z.unknown())
+const endpointBody = z.record(z.string(), z.json())
 
 export const GET = defineRoute({
   public: 'session',

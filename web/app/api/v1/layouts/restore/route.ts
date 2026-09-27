@@ -6,8 +6,8 @@ import { readV1JsonObject, withV1Request } from "../../../../../lib/api/v1-reque
 import { restoreLayout } from "../../../../../lib/application/page-layouts";
 
 const restoreLayoutBody = z.looseObject({
-  route: z.unknown().optional(),
-  versionId: z.unknown().optional(),
+  route: z.json().optional(),
+  versionId: z.json().optional(),
 });
 
 export const runtime = "nodejs";

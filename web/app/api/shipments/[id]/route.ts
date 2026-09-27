@@ -38,7 +38,7 @@ const updateBody = z.object({
     carton: z.string().max(60).nullable(),
   })).max(500).optional(),
   /** Header custom-field values; validated against the record type's definitions. */
-  custom: z.record(z.string(), z.unknown()).optional(),
+  custom: z.record(z.string(), z.json()).optional(),
 }).refine((body) => body.carrier !== undefined || body.cartons !== undefined || body.custom !== undefined, {
   message: 'send a carrier, cartons or custom fields to change',
 })

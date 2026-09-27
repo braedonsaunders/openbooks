@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
-import { parseJsonBody } from "@/lib/api/json";
+
 import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { evaluateLogicRule, planAutomation, type EvalContext } from '@openbooks/forms-core'
@@ -151,64 +151,7 @@ async function legacyGET(req: Request) {
   return NextResponse.json({ buttons })
 }
 
-async function legacyPOST(req: Request) {
-  const authz = await requireFlowsSession()
-  if (authz instanceof NextResponse) return authz
 
-  const parsedBody = await parseJsonBody(req, requestBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    subjectKind?: string
-    subjectId?: string
-    buttonId?: string
-  }
-  if (!body.subjectKind || !isUuid(body.subjectId ?? '') || !body.buttonId) {
-    return NextResponse.json({ error: 'subjectKind, subjectId, buttonId required' }, { status: 400 })
-  }
-
-  const buttons = await withOrgContext(authz.user.orgId, () =>
-    availableButtons(authz, body.subjectKind!, body.subjectId!),
-  )
-  if (buttons instanceof NextResponse) return buttons
-  if (!buttons.some((b) => b.buttonId === body.buttonId)) {
-    return NextResponse.json({ error: 'this action is not available' }, { status: 404 })
-  }
-
-  // The request's subsidiary scope travels into the dispatch: the
-  // availability check above is a precheck, and the engine re-verifies it
-  // under lock before any effect lands — otherwise a party
-  // rehome between check and effect runs a permitted button on a record
-  // that just left the caller's legal entity.
-  const result = await withOrgContext(authz.user.orgId, () =>
-    runRecordFlows(
-      { kind: 'manual', buttonId: body.buttonId! },
-      body.subjectKind!,
-      body.subjectId!,
-      {
-        orgId: authz.user.orgId,
-        userId: authz.user.id,
-        allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
-      },
-    ),
-  )
-  // A dispatch-level failure leaves NO runs behind (the dispatch threw before
-  // any flow ran). Reporting 200 ok:true for that would toast success for
-  // work that never ran — refuse loudly with the dispatch reason instead.
-  if (result.failed && result.runs.length === 0) {
-    return NextResponse.json(
-      { error: result.error ?? 'flow dispatch failed' },
-      { status: 500 },
-    )
-  }
-  const failed = result.failed || result.runs.some((r) => r.status === 'failed')
-  const reason = failed ? dispatchFailureReason(result) : null
-  return NextResponse.json({
-    ok: !failed,
-    runs: result.runs,
-    gatesCreated: result.gatesCreated,
-    ...(reason ? { error: reason } : {}),
-  })
-}
 
 export const GET = defineRoute({
   public: "session",
@@ -218,10 +161,60 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   body: requestBodySchema,
-  handler: async ({ request, body }) => {
-    const replayHeaders = new Headers(request.headers);
-    replayHeaders.delete("content-length");
-    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
-    return legacyPOST(replayRequest as never);
+  handler: async ({ body, authz: routeAuthz }) => {
+
+    const authz = routeAuthz
+
+
+
+
+
+    if (!body.subjectKind || !isUuid(body.subjectId ?? '') || !body.buttonId) {
+      return NextResponse.json({ error: 'subjectKind, subjectId, buttonId required' }, { status: 400 })
+    }
+
+    const buttons = await withOrgContext(authz.user.orgId, () =>
+      availableButtons(authz, body.subjectKind!, body.subjectId!),
+    )
+    if (buttons instanceof NextResponse) return buttons
+    if (!buttons.some((b) => b.buttonId === body.buttonId)) {
+      return NextResponse.json({ error: 'this action is not available' }, { status: 404 })
+    }
+
+    // The request's subsidiary scope travels into the dispatch: the
+    // availability check above is a precheck, and the engine re-verifies it
+    // under lock before any effect lands — otherwise a party
+    // rehome between check and effect runs a permitted button on a record
+    // that just left the caller's legal entity.
+    const result = await withOrgContext(authz.user.orgId, () =>
+      runRecordFlows(
+        { kind: 'manual', buttonId: body.buttonId! },
+        body.subjectKind!,
+        body.subjectId!,
+        {
+          orgId: authz.user.orgId,
+          userId: authz.user.id,
+          allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+        },
+      ),
+    )
+    // A dispatch-level failure leaves NO runs behind (the dispatch threw before
+    // any flow ran). Reporting 200 ok:true for that would toast success for
+    // work that never ran — refuse loudly with the dispatch reason instead.
+    if (result.failed && result.runs.length === 0) {
+      return NextResponse.json(
+        { error: result.error ?? 'flow dispatch failed' },
+        { status: 500 },
+      )
+    }
+    const failed = result.failed || result.runs.some((r) => r.status === 'failed')
+    const reason = failed ? dispatchFailureReason(result) : null
+    return NextResponse.json({
+      ok: !failed,
+      runs: result.runs,
+      gatesCreated: result.gatesCreated,
+      ...(reason ? { error: reason } : {}),
+    })
   },
-});
+
+  feature: "flows",});

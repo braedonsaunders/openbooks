@@ -89,7 +89,7 @@ const itemPatchSchema = z.object({
   taxCodeId: nullableText,
   showOnTimesheet: z.boolean().optional(),
   isActive: z.boolean().optional(),
-  custom: z.record(z.string(), z.unknown()).optional(),
+  custom: z.record(z.string(), z.json()).optional(),
   recognitionRuleId: nullableText,
   deferredAccountId: nullableText,
   createPlansOn: z.string().optional(),
@@ -97,7 +97,7 @@ const itemPatchSchema = z.object({
   standaloneSellingPrice: nullableMoney,
   reason: nullableText,
   changeReason: nullableText,
-}).strict()
+}).strict().refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." })
 type PatchBody = z.output<typeof itemPatchSchema>
 
 const CREATE_PLANS_ON = ['billing', 'fulfillment', 'arrangement'] as const
