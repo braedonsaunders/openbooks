@@ -36,18 +36,25 @@ export async function resolveScanValue(input: {
     return { ok: false, message: 'scan_network_error', candidates: [] }
   }
   if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { error?: string; candidates?: ScanResolution[] }
+    const body = await response.json().catch(() => ({})) as { error?: string }
     return {
       ok: false,
       message: body.error ?? 'scan_network_error',
-      candidates: (body.candidates ?? []).map((candidate) => candidate.label),
+      candidates: [],
     }
   }
-  const body = await response.json() as { resolution: ScanResolution }
+  const body = await response.json() as
+    | { result: 'matched'; match: ScanResolution }
+    | { result: 'ambiguous'; candidates: ScanResolution[] }
+    | { result: 'none' }
+  if (body.result === 'ambiguous') {
+    return { ok: false, message: 'scan_ambiguous', candidates: body.candidates.map((candidate) => candidate.label) }
+  }
+  if (body.result === 'none') return { ok: false, message: 'scan_not_found', candidates: [] }
   return {
     ok: true,
-    value: body.resolution.id,
-    label: body.resolution.label,
-    unit: body.resolution.unit,
+    value: body.match.id,
+    label: body.match.label,
+    unit: body.match.unit,
   }
 }

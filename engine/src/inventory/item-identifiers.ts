@@ -17,6 +17,11 @@ export type ScanResolution = ScanCandidate & {
   field: ScanField;
 }
 
+export type ScanLookupResult =
+  | { result: "matched"; match: ScanResolution }
+  | { result: "ambiguous"; candidates: readonly ScanCandidate[] }
+  | { result: "none" };
+
 export class ScanRefusal extends InventoryError {
   constructor(
     message: string,
@@ -190,6 +195,23 @@ export async function resolveScan(
   if (matches.length === 0) return refuseUnknown(input.field, value);
   if (matches.length > 1) return refuseAmbiguous(input.field, value, matches);
   return { ...matches[0]!, field: input.field };
+}
+
+/** Return lookup outcomes as data for interactive pickers. Callers that need
+ * exactly one record can use resolveScan, which raises a typed refusal. */
+export async function resolveScanResult(
+  runner: Runner,
+  orgId: string,
+  input: ResolveScanInput,
+): Promise<ScanLookupResult> {
+  try {
+    return { result: "matched", match: await resolveScan(runner, orgId, input) };
+  } catch (error) {
+    if (!(error instanceof ScanRefusal)) throw error;
+    if (error.code === "ambiguous_scan") return { result: "ambiguous", candidates: error.candidates };
+    if (error.code === "scan_not_found") return { result: "none" };
+    throw error;
+  }
 }
 
 /** Validate an optional scan unit against the item's stored base unit and
