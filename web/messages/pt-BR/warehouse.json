@@ -1,0 +1,96 @@
+{
+  "home": {
+    "title": "Armazém",
+    "description": "Armazéns, estoque aguardando armazenagem e valor em estoque conciliado com as contas de controle de estoque.",
+    "vitals": {
+      "active": "Armazéns ativos",
+      "suspended": "Armazéns suspensos",
+      "staged": "Linhas aguardando armazenagem"
+    }
+  },
+  "status": {
+    "draft": "Rascunho",
+    "active": "Ativo",
+    "suspended": "Suspenso",
+    "retired": "Desativado"
+  },
+  "warehouses": {
+    "empty": "Ainda não há armazéns. Crie um para começar a receber estoque nele.",
+    "unassigned": "Fora de qualquer armazém",
+    "actionsFor": "Ações para {code}",
+    "columns": {
+      "code": "Código",
+      "name": "Nome",
+      "status": "Situação",
+      "value": "Valor em estoque",
+      "actions": "Ações"
+    }
+  },
+  "tieOut": {
+    "title": "Estoque por armazém",
+    "hint": "Valor em estoque de cada armazém ao lado do saldo lançado das contas de controle de estoque.",
+    "layers": "Valor em estoque",
+    "control": "Saldo de controle de estoque",
+    "difference": "Diferença",
+    "tiesOut": "Conciliado"
+  },
+  "lifecycle": {
+    "reason": "Motivo",
+    "failed": "Não foi possível alterar a situação do armazém.",
+    "activate": {
+      "action": "Ativar",
+      "done": "{code} está ativo."
+    },
+    "suspend": {
+      "action": "Suspender",
+      "title": "Suspender {code}",
+      "confirm": "Suspender",
+      "done": "{code} está suspenso e não aceita entradas."
+    },
+    "retire": {
+      "action": "Desativar",
+      "title": "Desativar {code}",
+      "confirm": "Desativar",
+      "done": "{code} foi desativado."
+    }
+  },
+  "putaway": {
+    "title": "Estoque aguardando armazenagem",
+    "hint": "Estoque em locais de preparação. Armazenar move-o para a posição escolhida pelas regras de armazenagem.",
+    "empty": "Nada está aguardando em um local de preparação.",
+    "action": "Armazenar",
+    "failed": "Não foi possível armazenar o estoque.",
+    "done": "{item} armazenado em {bin}.",
+    "columns": {
+      "warehouse": "Armazém",
+      "staging": "Local de preparação",
+      "item": "Item",
+      "quantity": "Quantidade",
+      "action": "Ação"
+    }
+  },
+  "create": {
+    "new": "Novo armazém",
+    "title": "Novo armazém",
+    "description": "O armazém começa como rascunho e não aceita estoque até ser ativado.",
+    "save": "Criar armazém",
+    "missing": "Informe um código e um nome e escolha um local.",
+    "failed": "Não foi possível criar o armazém."
+  },
+  "fields": {
+    "code": "Código",
+    "name": "Nome",
+    "location": "Local",
+    "chooseLocation": "Escolha um local",
+    "addressLine1": "Endereço, linha 1",
+    "addressLine2": "Endereço, linha 2",
+    "city": "Cidade",
+    "region": "Estado ou região",
+    "postalCode": "CEP",
+    "country": "Código do país"
+  },
+  "setup": {
+    "warehouses": "Dados do armazém",
+    "rules": "Regras de armazenagem"
+  }
+}

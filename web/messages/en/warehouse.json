@@ -1,0 +1,96 @@
+{
+  "home": {
+    "title": "Warehouse",
+    "description": "Warehouses, stock awaiting putaway, and on-hand value tied out to the inventory control accounts.",
+    "vitals": {
+      "active": "Active warehouses",
+      "suspended": "Suspended warehouses",
+      "staged": "Lines awaiting putaway"
+    }
+  },
+  "status": {
+    "draft": "Draft",
+    "active": "Active",
+    "suspended": "Suspended",
+    "retired": "Retired"
+  },
+  "warehouses": {
+    "empty": "No warehouses yet. Create one to start receiving stock into it.",
+    "unassigned": "Not in a warehouse",
+    "actionsFor": "Actions for {code}",
+    "columns": {
+      "code": "Code",
+      "name": "Name",
+      "status": "Status",
+      "value": "On-hand value",
+      "actions": "Actions"
+    }
+  },
+  "tieOut": {
+    "title": "Stock by warehouse",
+    "hint": "On-hand value in each warehouse beside the posted balance of the inventory control accounts.",
+    "layers": "On-hand value",
+    "control": "Inventory control balance",
+    "difference": "Difference",
+    "tiesOut": "Ties out"
+  },
+  "lifecycle": {
+    "reason": "Reason",
+    "failed": "The warehouse status could not be changed.",
+    "activate": {
+      "action": "Activate",
+      "done": "{code} is active."
+    },
+    "suspend": {
+      "action": "Suspend",
+      "title": "Suspend {code}",
+      "confirm": "Suspend",
+      "done": "{code} is suspended and takes no inbound stock."
+    },
+    "retire": {
+      "action": "Retire",
+      "title": "Retire {code}",
+      "confirm": "Retire",
+      "done": "{code} is retired."
+    }
+  },
+  "putaway": {
+    "title": "Stock awaiting putaway",
+    "hint": "Stock in staging locations. Put away moves it to the bin the putaway rules choose.",
+    "empty": "Nothing is waiting in a staging location.",
+    "action": "Put away",
+    "failed": "The stock could not be put away.",
+    "done": "{item} put away to {bin}.",
+    "columns": {
+      "warehouse": "Warehouse",
+      "staging": "Staging location",
+      "item": "Item",
+      "quantity": "Quantity",
+      "action": "Action"
+    }
+  },
+  "create": {
+    "new": "New warehouse",
+    "title": "New warehouse",
+    "description": "The warehouse starts in draft and takes no stock until you activate it.",
+    "save": "Create warehouse",
+    "missing": "Enter a code and a name, and choose a location.",
+    "failed": "The warehouse could not be created."
+  },
+  "fields": {
+    "code": "Code",
+    "name": "Name",
+    "location": "Location",
+    "chooseLocation": "Choose a location",
+    "addressLine1": "Address line 1",
+    "addressLine2": "Address line 2",
+    "city": "City",
+    "region": "Region",
+    "postalCode": "Postal code",
+    "country": "Country code"
+  },
+  "setup": {
+    "warehouses": "Warehouse details",
+    "rules": "Putaway rules"
+  }
+}

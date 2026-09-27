@@ -1,0 +1,96 @@
+{
+  "home": {
+    "title": "Lager",
+    "description": "Lager, einzulagernder Bestand und Bestandswert im Abgleich mit den Bestandskontrollkonten.",
+    "vitals": {
+      "active": "Aktive Lager",
+      "suspended": "Gesperrte Lager",
+      "staged": "Positionen zur Einlagerung"
+    }
+  },
+  "status": {
+    "draft": "Entwurf",
+    "active": "Aktiv",
+    "suspended": "Gesperrt",
+    "retired": "Stillgelegt"
+  },
+  "warehouses": {
+    "empty": "Noch keine Lager. Legen Sie eines an, um Bestand darin zu empfangen.",
+    "unassigned": "Keinem Lager zugeordnet",
+    "actionsFor": "Aktionen für {code}",
+    "columns": {
+      "code": "Kürzel",
+      "name": "Bezeichnung",
+      "status": "Zustand",
+      "value": "Bestandswert",
+      "actions": "Aktionen"
+    }
+  },
+  "tieOut": {
+    "title": "Bestand nach Lager",
+    "hint": "Bestandswert je Lager neben dem gebuchten Saldo der Bestandskontrollkonten.",
+    "layers": "Bestandswert",
+    "control": "Saldo der Bestandskontrollkonten",
+    "difference": "Differenz",
+    "tiesOut": "Stimmt überein"
+  },
+  "lifecycle": {
+    "reason": "Begründung",
+    "failed": "Der Lagerzustand konnte nicht geändert werden.",
+    "activate": {
+      "action": "Aktivieren",
+      "done": "{code} ist aktiv."
+    },
+    "suspend": {
+      "action": "Sperren",
+      "title": "{code} sperren",
+      "confirm": "Sperren",
+      "done": "{code} ist gesperrt und nimmt keinen Zugang mehr an."
+    },
+    "retire": {
+      "action": "Stilllegen",
+      "title": "{code} stilllegen",
+      "confirm": "Stilllegen",
+      "done": "{code} ist stillgelegt."
+    }
+  },
+  "putaway": {
+    "title": "Bestand zur Einlagerung",
+    "hint": "Bestand in Bereitstellungsplätzen. Einlagern bewegt ihn auf den Lagerplatz, den die Einlagerungsregeln bestimmen.",
+    "empty": "In keinem Bereitstellungsplatz wartet Bestand.",
+    "action": "Einlagern",
+    "failed": "Der Bestand konnte nicht eingelagert werden.",
+    "done": "{item} auf {bin} eingelagert.",
+    "columns": {
+      "warehouse": "Lager",
+      "staging": "Bereitstellungsplatz",
+      "item": "Artikel",
+      "quantity": "Menge",
+      "action": "Aktion"
+    }
+  },
+  "create": {
+    "new": "Neues Lager",
+    "title": "Neues Lager",
+    "description": "Das Lager beginnt als Entwurf und nimmt erst nach der Aktivierung Bestand an.",
+    "save": "Lager anlegen",
+    "missing": "Geben Sie Kürzel und Bezeichnung ein und wählen Sie einen Standort.",
+    "failed": "Das Lager konnte nicht angelegt werden."
+  },
+  "fields": {
+    "code": "Kürzel",
+    "name": "Bezeichnung",
+    "location": "Standort",
+    "chooseLocation": "Standort wählen",
+    "addressLine1": "Adresszeile 1",
+    "addressLine2": "Adresszeile 2",
+    "city": "Ort",
+    "region": "Bundesland/Region",
+    "postalCode": "Postleitzahl",
+    "country": "Ländercode"
+  },
+  "setup": {
+    "warehouses": "Lagerdetails",
+    "rules": "Einlagerungsregeln"
+  }
+}

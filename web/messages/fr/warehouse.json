@@ -1,0 +1,96 @@
+{
+  "home": {
+    "title": "Entrepôt",
+    "description": "Entrepôts, stock en attente de rangement et valeur en stock rapprochée des comptes de contrôle des stocks.",
+    "vitals": {
+      "active": "Entrepôts actifs",
+      "suspended": "Entrepôts suspendus",
+      "staged": "Lignes en attente de rangement"
+    }
+  },
+  "status": {
+    "draft": "Brouillon",
+    "active": "Actif",
+    "suspended": "Suspendu",
+    "retired": "Retiré"
+  },
+  "warehouses": {
+    "empty": "Aucun entrepôt pour l’instant. Créez-en un pour commencer à y recevoir du stock.",
+    "unassigned": "Hors de tout entrepôt",
+    "actionsFor": "Opérations pour {code}",
+    "columns": {
+      "code": "Identifiant",
+      "name": "Nom",
+      "status": "Statut",
+      "value": "Valeur en stock",
+      "actions": "Opérations"
+    }
+  },
+  "tieOut": {
+    "title": "Stock par entrepôt",
+    "hint": "Valeur en stock de chaque entrepôt à côté du solde comptabilisé des comptes de contrôle des stocks.",
+    "layers": "Valeur en stock",
+    "control": "Solde de contrôle des stocks",
+    "difference": "Écart",
+    "tiesOut": "Concordant"
+  },
+  "lifecycle": {
+    "reason": "Motif",
+    "failed": "Le statut de l’entrepôt n’a pas pu être modifié.",
+    "activate": {
+      "action": "Activer",
+      "done": "{code} est actif."
+    },
+    "suspend": {
+      "action": "Suspendre",
+      "title": "Suspendre {code}",
+      "confirm": "Suspendre",
+      "done": "{code} est suspendu et n’accepte plus d’entrées."
+    },
+    "retire": {
+      "action": "Retirer",
+      "title": "Retirer {code}",
+      "confirm": "Retirer",
+      "done": "{code} est retiré."
+    }
+  },
+  "putaway": {
+    "title": "Stock en attente de rangement",
+    "hint": "Stock en zone de préparation. Ranger le déplace vers l’emplacement choisi par les règles de rangement.",
+    "empty": "Rien n’attend en zone de préparation.",
+    "action": "Ranger",
+    "failed": "Le stock n’a pas pu être rangé.",
+    "done": "{item} rangé en {bin}.",
+    "columns": {
+      "warehouse": "Entrepôt",
+      "staging": "Zone de préparation",
+      "item": "Article",
+      "quantity": "Quantité",
+      "action": "Opération"
+    }
+  },
+  "create": {
+    "new": "Nouvel entrepôt",
+    "title": "Nouvel entrepôt",
+    "description": "L’entrepôt démarre en brouillon et n’accepte aucun stock avant son activation.",
+    "save": "Créer l’entrepôt",
+    "missing": "Saisissez un identifiant et un nom, puis choisissez un site.",
+    "failed": "L’entrepôt n’a pas pu être créé."
+  },
+  "fields": {
+    "code": "Identifiant",
+    "name": "Nom",
+    "location": "Site",
+    "chooseLocation": "Choisissez un site",
+    "addressLine1": "Adresse, ligne 1",
+    "addressLine2": "Adresse, ligne 2",
+    "city": "Ville",
+    "region": "Région ou province",
+    "postalCode": "Code postal",
+    "country": "Code pays"
+  },
+  "setup": {
+    "warehouses": "Détails de l’entrepôt",
+    "rules": "Règles de rangement"
+  }
+}
