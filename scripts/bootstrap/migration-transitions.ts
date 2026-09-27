@@ -1611,4 +1611,40 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
     strategy: "restamp",
     reason: "the interim revision also granted the query-catalog owner reads on the new manufacturing tables; the current file does not need them, and a database that ran it keeps only redundant read grants",
   },
+  {
+    filename: "generated/0433_fund_balancing.sql",
+    from: "30bb6fe49575c16631462ae2a11a6b3802b6994035f22d68e4f578c3b1a0b232",
+    to: "80c83645a0a0adc546fa1102ce1c6bcbc06c2a37b16dc6b8b10b028c305922a5",
+    strategy: "restamp",
+    reason:
+      "0433 is unpublished: no tagged release carries the interim digests; the restamp "
+      + "covers throwaway and template databases only. The first interim blob contained "
+      + "an obsolete validate_extra_dims function; the current file replaces it with "
+      + "sandbox-wipe default cleanup behavior. Reapplication is unsafe because the "
+      + "migration creates indexes, columns, a constraint, and a trigger without "
+      + "IF NOT EXISTS guards.",
+  },
+  {
+    filename: "generated/0433_fund_balancing.sql",
+    from: "6c9d9df35e4da826df0c3bde840b6736c2aa3b5b9ed86e3077ca9d4a3061b621",
+    to: "80c83645a0a0adc546fa1102ce1c6bcbc06c2a37b16dc6b8b10b028c305922a5",
+    strategy: "restamp",
+    reason:
+      "0433 is unpublished: no tagged release carries the interim digests; the restamp "
+      + "covers throwaway and template databases only. This interim blob added the "
+      + "sandbox-wipe default cleanup trigger while retaining validate_extra_dims; the "
+      + "current file keeps the trigger and removes that obsolete function. Reapplication "
+      + "is unsafe because the migration creates indexes, columns, a constraint, and "
+      + "a trigger without IF NOT EXISTS guards.",
+  },
+  {
+    filename: "generated/0440_connector_replay_authorization_guard.sql",
+    from: "a9dabead323a5794a9220346b11f5ab7e36cecf61e7d9ea190ecd7c8c2adeb5d",
+    to: "5bf20c923c1afbf79669424325992586cdf7ad09ab36be16083e434f31436fcb",
+    strategy: "restamp",
+    reason:
+      "the migration logic is unchanged; its preflight now accepts the exact source-module-aware "
+      + "guard body and uses PostgreSQL's core SHA-256 function instead of pgcrypto. "
+      + "Only the preflight check and digest change, so restamp the ledger.",
+  },
 ];
