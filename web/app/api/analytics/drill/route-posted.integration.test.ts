@@ -19,7 +19,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import('drizzle-orm');
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
-const { voidScratchDocument } = await import('../../../../lib/test-document-void.ts')
+const { voidReportDocument } = await import('../../../../lib/test-document-void.ts')
 const { GET } = await import('./route.ts');
 
 const FROM = '2026-07-01';
@@ -88,14 +88,7 @@ test('analytics drill reads the posted statement-book population only', async ()
       assert.deepEqual(partyBody.entries.map(({ docNumber, entryId }) => [docNumber, entryId]), [['POSTED-INV', invoiceEntry]], 'append-only source corrections drill through the authoritative current posting once');
     });
 
-    const voidResult = await voidScratchDocument({
-      orgId: org.orgId,
-      documentId: postedInvoice,
-      actorName: 'Analytics Drill Void Operator',
-      reason: 'Customer invoice was entered in error',
-      reversalDate: '2026-08-05',
-    })
-    assert.ok(voidResult.reversalEntryId)
+    await voidReportDocument(org.orgId, postedInvoice, '2026-08-05')
     await withOrgContext(org.orgId, async () => {
       const historicalRes = await GET(
         new Request(`http://drillposted.local/api/analytics/drill?party=${vendor}&from=${FROM}&to=${TO}`),

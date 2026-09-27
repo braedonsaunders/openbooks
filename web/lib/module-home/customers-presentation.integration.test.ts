@@ -13,7 +13,8 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { voidScratchDocument } = await import('../test-document-void.ts')
+const { voidReportDocument } = await import('../test-document-void.ts')
+const { seedCustomerSecondaryBookReceivable } = await import('../test-report-fixtures.ts')
 const { customersHome } = await import('./customers.ts')
 
 const D = '2026-07-14'
@@ -72,8 +73,8 @@ async function seedTwoCurrencyReceivables() {
  * receivables and 135 CAD of weekly collections per 100 collected — not 200
  * and 100.
  */
-test('customers cockpit translates every receivable functional to presentation', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { org, usCust } = await seedTwoCurrencyReceivables()
+test('customers cockpit translates receivables and excludes voided or secondary-book amounts', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const { org, usCust, cadInvoice } = await seedTwoCurrencyReceivables()
   try {
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
@@ -85,6 +86,13 @@ test('customers cockpit translates every receivable functional to presentation',
         assert.equal(usRow.open, '270.1694')
       })
     })
+    await seedCustomerSecondaryBookReceivable(org, D)
+    await voidReportDocument(org.orgId, cadInvoice.documentId, '2026-07-15')
+    await pinClock('2026-07-15', async () => withOrgContext(org.orgId, async () => {
+      const home = await customersHome(org.orgId)
+      assert.equal(home.arOutstanding, '270.1694')
+      assert.equal(home.openInvoices, 1)
+    }))
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
   }
@@ -141,47 +149,6 @@ test('customers cockpit counts a corrected receivable once from its current post
         assert.equal(row.open, '250.0000', 'the roster uses the corrected posting amount')
         assert.equal(row.openInvoices, 1, 'the earlier posting is not counted as a second open invoice')
       })
-    })
-  } finally {
-    await withBypass(() => dropScratchOrg(org.orgId))
-  }
-})
-
-test('customers cockpit drops a voided receivable from the current balance', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { org, cadInvoice } = await seedTwoCurrencyReceivables()
-  try {
-    await withBypass(async () => {
-      const secondaryBook = randomUUID()
-      const secondaryDocument = randomUUID()
-      const secondaryEntry = randomUUID()
-      await db.execute(sql`insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-        values (${secondaryBook}, ${org.orgId}, 'ALT', 'Alternate', false, true, true)`)
-      await db.execute(sql`insert into documents
-        (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
-        values (${secondaryDocument}, ${org.orgId}, 'customer_invoice', 'INV-ALT-BOOK', ${org.customerId}, ${org.subsidiaryId}, ${D}, ${D}, 'CAD', '1', 'draft', '9000', '0', '9000', '9000')`)
-      await db.execute(sql`insert into journal_entries
-        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
-        values (${secondaryEntry}, ${org.orgId}, ${secondaryBook}, ${org.subsidiaryId}, 'INV-ALT-BOOK', ${D}, ${org.periodId}, 'draft', 'manual', ${secondaryDocument})`)
-      await db.execute(sql`insert into journal_lines
-        (org_id, entry_id, line_number, account_id, subsidiary_id, party_id, is_open_item, amount, currency, txn_amount, fx_rate)
-        values (${org.orgId}, ${secondaryEntry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, ${org.customerId}, true, '9000', 'CAD', '9000', '1'),
-               (${org.orgId}, ${secondaryEntry}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${org.customerId}, false, '-9000', 'CAD', '-9000', '1')`)
-      await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${secondaryEntry} and org_id=${org.orgId}`)
-      await db.execute(sql`update documents set status='posted', posted_entry_id=${secondaryEntry}, posting_period_id=${org.periodId}
-        where id=${secondaryDocument} and org_id=${org.orgId}`)
-    })
-    const voidResult = await voidScratchDocument({
-      actorName: 'Receivables Void Operator',
-      documentId: cadInvoice.documentId,
-      orgId: org.orgId,
-      reason: 'Invoice was entered in error',
-      reversalDate: '2026-07-15',
-    })
-    assert.ok(voidResult.reversalEntryId)
-    await withOrgContext(org.orgId, async () => {
-      const home = await customersHome(org.orgId)
-      assert.equal(home.arOutstanding, '270.1694', 'the voided CAD invoice no longer changes the current receivable figure')
-      assert.equal(home.openInvoices, 1)
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))

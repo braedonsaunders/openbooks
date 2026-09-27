@@ -13,7 +13,7 @@ const { sql } = await import('drizzle-orm')
 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { voidScratchDocument } = await import('../test-document-void.ts')
+const { voidReportDocument } = await import('../test-document-void.ts')
 const { vendorData } = await import('./vendor-data')
 
 const D = '2026-07-14'
@@ -91,14 +91,7 @@ async function seedTwoCurrencySpend() {
 test('vendor performance translates every spend functional to presentation', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const { org, usVend, cadBillDocumentId } = await seedTwoCurrencySpend()
   try {
-    const voidResult = await voidScratchDocument({
-      orgId: org.orgId,
-      documentId: cadBillDocumentId,
-      actorName: 'Vendor Report Void Operator',
-      reason: 'Vendor invoice was entered in error',
-      reversalDate: '2026-08-05',
-    })
-    assert.ok(voidResult.reversalEntryId)
+    await voidReportDocument(org.orgId, cadBillDocumentId, '2026-08-05')
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
         const data = await vendorData(P, org.orgId, null)

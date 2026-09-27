@@ -21,7 +21,7 @@ const { sql } = await import('drizzle-orm');
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { calculateForecast } = await import('./crm');
-const { voidScratchDocument } = await import('./test-document-void.ts')
+const { voidReportDocument } = await import('./test-document-void.ts')
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const PERIOD = { periodStart: '2026-07-01', periodEnd: '2026-07-31' } as const;
@@ -72,14 +72,7 @@ test('a voided invoice remains in its posting period and offsets its void period
   const { org, invoiceId } = await fixture();
   try {
     assert.equal(await closed(org.orgId), '100.0000', 'closed revenue uses the invoice subtotal, not tax')
-    const voidResult = await voidScratchDocument({
-      orgId: org.orgId,
-      documentId: invoiceId,
-      actorName: 'CRM Forecast Void Operator',
-      reason: 'Customer invoice was entered in error',
-      reversalDate: '2026-08-05',
-    })
-    assert.ok(voidResult.reversalEntryId)
+    await voidReportDocument(org.orgId, invoiceId, '2026-08-05')
     assert.equal(await closed(org.orgId), '100.0000');
     assert.equal(await closed(org.orgId, undefined, { periodStart: '2026-08-01', periodEnd: '2026-08-31' }), '-100.0000')
   } finally {

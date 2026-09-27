@@ -24,7 +24,7 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { getAuthz } = await import('../authz');
 const { executeAssistantTool } = await import('./registry');
-const { voidScratchDocument } = await import('../test-document-void.ts')
+const { voidReportDocument } = await import('../test-document-void.ts')
 
 const PROBE_PERMS = ["ap.read", "ar.read", "parties.read", "projects.read", "reports.read", "assistant.use"];
 
@@ -116,14 +116,7 @@ test('party_concentration scopes posted documents to the caller subsidiary', { s
         await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
       }
     });
-    const voidResult = await voidScratchDocument({
-      orgId: org.orgId,
-      documentId: visibleInvoiceId,
-      actorName: 'Party Report Void Operator',
-      reason: 'Customer invoice was entered in error',
-      reversalDate: '2026-08-05',
-    })
-    assert.ok(voidResult.reversalEntryId)
+    await voidReportDocument(org.orgId, visibleInvoiceId, '2026-08-05')
     await withOrgContext(org.orgId, async () => {
       const authz = await getAuthz();
       assert.ok(authz);

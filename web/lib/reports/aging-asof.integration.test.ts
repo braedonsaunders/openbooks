@@ -19,7 +19,7 @@ const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/s
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
 const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
 const { agingByParty, agingDetail } = (await import(root + 'web/lib/reports/aging.ts')) as typeof import('./aging')
-const { voidScratchDocument } = await import('../test-document-void.ts')
+const { voidReportDocument } = await import('../test-document-void.ts')
 const { partnerBalances } = (await import(root + 'web/lib/reports/statements.ts')) as typeof import('./statements')
 const { partyRegister, partnerStatement } = (await import(root + 'web/lib/reports/registers.ts')) as typeof import('./registers')
 
@@ -82,13 +82,7 @@ async function seedArScenario(): Promise<{ org: ScratchOrg; voidDate: string }> 
     const ePayAug = await postEntry(org, aug, '2026-08-05', 'PAYA', [[org.accounts.bank, '500.0000', null], [org.accounts.ar, '-500.0000', org.customerId]])
     await applyLines(org, await lineId(ePayAug, org.accounts.ar), await lineId(eInv, org.accounts.ar), '500.0000', '2026-08-05')
   })
-  const voidResult = await voidScratchDocument({
-    orgId: org.orgId,
-    documentId: voidedDoc,
-    actorName: 'Aging Void Operator',
-    reason: 'Customer invoice was entered in error',
-    reversalDate: '2026-08-20',
-  })
+  const voidResult = await voidReportDocument(org.orgId, voidedDoc, '2026-08-20')
   return { org, voidDate: voidResult.voidedDate }
 }
 
