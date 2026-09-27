@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import type { Money } from "../money/brands.ts";
 import { addMoney, cmpMoney, negMoney } from "../money/brands.ts";
 import { fromUnits, isZero, toUnits } from "../money/money.ts";
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { loadSubsidiaryContext, restrictionAdmits, uuidArray } from "../organization/subsidiaries.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { fundFeatureOff, fundPostingRefusal } from "./errors.ts";
@@ -348,10 +348,8 @@ export const fundBalancingLegProvider: BalancingLegProvider = async (
   for (const row of lookup.rows) if (row.fundId) values.set(row.fundId, row);
   const effectiveIds = lines.map((line) => rawFundId(line, defaultValueId));
   const hasNonDefaultFund = effectiveIds.some((fundId) => fundId !== null && fundId !== defaultValueId);
-  if (hasNonDefaultFund) {
-    if (!(await orgFeatureEnabled(ctx.orgId, FEATURE_KEY, runner))) throw fundFeatureOff();
-    await acquireOrgFeatureGateLock(runner, ctx.orgId);
-    if (!(await lockAndCheckOrgFeature(runner, ctx.orgId, FEATURE_KEY))) throw fundFeatureOff();
+  if (hasNonDefaultFund && !(await lockAndCheckOrgFeature(runner, ctx.orgId, FEATURE_KEY))) {
+    throw fundFeatureOff();
   }
 
   const lineAssignments = lines.map((line, index) => ({ line, fundId: effectiveIds[index]! }));

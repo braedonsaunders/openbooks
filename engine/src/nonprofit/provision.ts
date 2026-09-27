@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { fundFeatureOff, NonprofitError } from "./errors.ts";
 import type { BudgetaryControl, FundKind } from "./funds.ts";
@@ -91,8 +91,6 @@ function validateClassification(code: string, value: FundClassification | undefi
 }
 
 async function assertFundAccountingEnabled(orgId: string): Promise<void> {
-  await acquireOrgFeatureGateLock(db, orgId);
-  if (!(await orgFeatureEnabled(orgId, "fundAccounting", db))) throw fundFeatureOff();
   if (!(await lockAndCheckOrgFeature(db, orgId, "fundAccounting"))) throw fundFeatureOff();
 }
 
