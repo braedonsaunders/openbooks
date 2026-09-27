@@ -897,6 +897,18 @@
       "deferred_revenue_runoff": {
         "label": "Abgrenzungsauflösung",
         "description": "Noch nicht gebuchte künftige Umsatzrealisierungen nach Monat, Abgrenzungskonto, Buch und Währung."
+      },
+      "fund_ledger_lines": {
+        "label": "Fondsbuchungszeilen",
+        "description": "Gebuchte Journalzeilen mit Fondscode, Fondsname und Beschränkungsklasse."
+      },
+      "functional_ledger_lines": {
+        "label": "Funktionale Buchungszeilen",
+        "description": "Gebuchte Aufwandszeilen mit den wirksamen Funktionen von Abteilungen und Projekten."
+      },
+      "grant_pipeline": {
+        "label": "Fördermittelpipeline",
+        "description": "Förderzusagen, Fördergeber, Laufzeiten, Status und zugehörige Fondsklassifikation."
       }
     },
     "columns": {
@@ -2020,6 +2032,98 @@
         "schedule_status": "Planstatus",
         "obligation_status": "Verpflichtungsstatus",
         "journal_entry_id": "Journalbuchung (ID)"
+      },
+      "fund_ledger_lines": {
+        "posting_date": "Buchungsdatum",
+        "entry_number": "Buchung Nr.",
+        "entry_status": "Buchungsstatus",
+        "origin": "Herkunft",
+        "account_number": "Konto Nr.",
+        "account_name": "Konto",
+        "account_type": "Kontotyp",
+        "party_name": "Geschäftspartner",
+        "department": "Abteilung",
+        "project": "Projekt",
+        "location": "Standort",
+        "class": "Klasse",
+        "memo": "Notiz",
+        "amount": "Betrag (Basis)",
+        "debit": "Soll",
+        "credit": "Haben",
+        "currency": "Währung",
+        "txn_amount": "Betrag (Transaktion)",
+        "quantity": "Menge",
+        "unit": "Einheit",
+        "due_date": "Fälligkeitsdatum",
+        "is_open_item": "Offener Posten",
+        "open_amount": "Offener Betrag (Basis)",
+        "has_open_balance": "Offener Saldo",
+        "reconciled_at": "Abgestimmt am",
+        "entry_id": "Buchung (ID)",
+        "account_id": "Konto (ID)",
+        "party_id": "Geschäftspartner (ID)",
+        "equipment": "Ausrüstung",
+        "base_currency": "Funktionale Währung",
+        "book": "Rechnungslegungsbuch",
+        "book_code": "Buchcode",
+        "book_id": "Buch-ID",
+        "fund_id": "Fonds (ID)",
+        "fund_code": "Fondscode",
+        "fund_name": "Fonds",
+        "restriction_class": "Beschränkungsklasse"
+      },
+      "functional_ledger_lines": {
+        "posting_date": "Buchungsdatum",
+        "entry_number": "Buchung Nr.",
+        "entry_status": "Buchungsstatus",
+        "origin": "Herkunft",
+        "account_number": "Konto Nr.",
+        "account_name": "Konto",
+        "account_type": "Kontotyp",
+        "party_name": "Geschäftspartner",
+        "department": "Abteilung",
+        "project": "Projekt",
+        "location": "Standort",
+        "class": "Klasse",
+        "memo": "Notiz",
+        "amount": "Betrag (Basis)",
+        "debit": "Soll",
+        "credit": "Haben",
+        "currency": "Währung",
+        "txn_amount": "Betrag (Transaktion)",
+        "quantity": "Menge",
+        "unit": "Einheit",
+        "due_date": "Fälligkeitsdatum",
+        "is_open_item": "Offener Posten",
+        "open_amount": "Offener Betrag (Basis)",
+        "has_open_balance": "Offener Saldo",
+        "reconciled_at": "Abgestimmt am",
+        "entry_id": "Buchung (ID)",
+        "account_id": "Konto (ID)",
+        "party_id": "Geschäftspartner (ID)",
+        "equipment": "Ausrüstung",
+        "base_currency": "Funktionale Währung",
+        "book": "Rechnungslegungsbuch",
+        "book_code": "Buchcode",
+        "book_id": "Buch-ID",
+        "functional_category": "Funktion",
+        "program_key": "Programm",
+        "mapping_status": "Zuordnungsstatus"
+      },
+      "grant_pipeline": {
+        "grant_code": "Fördercode",
+        "grant_name": "Förderung",
+        "sponsor_name": "Fördergeber",
+        "sponsor_kind": "Fördergebertyp",
+        "determination": "Einstufung",
+        "award_amount": "Förderbetrag",
+        "period_from": "Zeitraum ab",
+        "period_to": "Zeitraum bis",
+        "status": "Zustand",
+        "fund_code": "Fondscode",
+        "fund_name": "Fonds",
+        "restriction_class": "Beschränkungsklasse",
+        "base_currency": "Basiswährung"
       }
     },
     "enumValues": {
@@ -2305,6 +2409,26 @@
     "backorders": {
       "name": "Rückstände",
       "description": "Noch geschuldete Lagerpositionen von Kundenaufträgen – bestellt, erfüllt, storniert und offen nach Kunde und Artikel."
+    },
+    "statement-of-financial-position": {
+      "name": "Bilanz nach Vermögensklasse",
+      "description": "Gebuchte Salden nach Konto, Fonds und Beschränkungsklasse."
+    },
+    "statement-of-activities": {
+      "name": "Tätigkeitsrechnung",
+      "description": "Gebuchte Erträge, Aufwendungen und Bruttofreigaben nach Klasse."
+    },
+    "functional-expense-matrix": {
+      "name": "Funktionale Aufwandsmatrix",
+      "description": "Gebuchte Aufwendungen nach natürlichem Konto und Funktion."
+    },
+    "cash-flow-reconciliation": {
+      "name": "Kapitalflussabstimmung",
+      "description": "Gebuchte Zahlungsmittelbewegungen mit Abstimmung des Nettovermögens."
+    },
+    "grant-pipeline": {
+      "name": "Fördermittelpipeline",
+      "description": "Förderzusagen, Fördergeber, Laufzeiten, Status und Fondsklassifikation."
     }
   },
   "generalLedger": {
@@ -2324,7 +2448,31 @@
     "empty": "Keine gebuchten Buchungen in dieser Periode.",
     "truncated": "Es werden die ersten 4.000 Zeilen angezeigt – grenzen Sie die Periode ein, um alles zu sehen.",
     "otherOrigin": "Sonstige",
-    "origins": {"document": "Beleg", "manual": "Manuell", "payroll": "Lohnabrechnung", "labor_burden": "Arbeitskostenumlage", "depreciation": "Abschreibung", "disposal": "Abgang", "revaluation": "Neubewertung", "revenue_recognition": "Umsatzrealisierung", "inventory": "Bestand", "lease": "Leasing", "allocation": "Umlage", "intercompany": "Konzernintern", "fx_settlement": "Währungsabrechnung", "fx_revaluation": "Währungsneubewertung", "translation": "Währungsumrechnung", "closing": "Abschluss", "migration": "Migration", "tax_provision": "Steuerrückstellung", "pledge": "Spendenzusage", "gift": "Spende", "grant": "Zuschuss", "release": "Freigabe aus Zweckbindungen", "manufacturing": "Fertigung"},
+    "origins": {
+      "document": "Beleg",
+      "manual": "Manuell",
+      "payroll": "Lohnabrechnung",
+      "labor_burden": "Arbeitskostenumlage",
+      "depreciation": "Abschreibung",
+      "disposal": "Abgang",
+      "revaluation": "Neubewertung",
+      "revenue_recognition": "Umsatzrealisierung",
+      "inventory": "Bestand",
+      "lease": "Leasing",
+      "allocation": "Umlage",
+      "intercompany": "Konzernintern",
+      "fx_settlement": "Währungsabrechnung",
+      "fx_revaluation": "Währungsneubewertung",
+      "translation": "Währungsumrechnung",
+      "closing": "Abschluss",
+      "migration": "Migration",
+      "tax_provision": "Steuerrückstellung",
+      "pledge": "Spendenzusage",
+      "gift": "Spende",
+      "grant": "Zuschuss",
+      "release": "Freigabe aus Zweckbindungen",
+      "manufacturing": "Fertigung"
+    },
     "columns": {
       "detail": "Geschäftspartner / Notiz"
     }

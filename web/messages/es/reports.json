@@ -897,6 +897,18 @@
       "deferred_revenue_runoff": {
         "label": "Previsión de ingresos diferidos",
         "description": "Reconocimiento futuro aún no contabilizado por mes, cuenta de diferimiento, libro y moneda."
+      },
+      "fund_ledger_lines": {
+        "label": "Líneas del mayor de fondos",
+        "description": "Líneas de diario registradas con código, nombre y clase de restricción del fondo."
+      },
+      "functional_ledger_lines": {
+        "label": "Líneas funcionales del mayor",
+        "description": "Gastos registrados con las funciones vigentes de departamentos y proyectos."
+      },
+      "grant_pipeline": {
+        "label": "Cartera de subvenciones",
+        "description": "Subvenciones, patrocinadores, períodos, estado y clasificación del fondo asociado."
       }
     },
     "columns": {
@@ -2020,6 +2032,98 @@
         "schedule_status": "Estado del programa",
         "obligation_status": "Estado de la obligación",
         "journal_entry_id": "Asiento contable (id)"
+      },
+      "fund_ledger_lines": {
+        "posting_date": "Fecha de contabilización",
+        "entry_number": "N.º de asiento",
+        "entry_status": "Estado del asiento",
+        "origin": "Origen",
+        "account_number": "N.º de cuenta",
+        "account_name": "Cuenta",
+        "account_type": "Tipo de cuenta",
+        "party_name": "Tercero",
+        "department": "Departamento",
+        "project": "Proyecto",
+        "location": "Ubicación",
+        "class": "Clase",
+        "memo": "Nota",
+        "amount": "Importe (base)",
+        "debit": "Débito",
+        "credit": "Crédito",
+        "currency": "Moneda",
+        "txn_amount": "Importe (transacción)",
+        "quantity": "Cantidad",
+        "unit": "Unidad",
+        "due_date": "Fecha de vencimiento",
+        "is_open_item": "Partida abierta",
+        "open_amount": "Importe abierto (base)",
+        "has_open_balance": "Con saldo abierto",
+        "reconciled_at": "Fecha de conciliación",
+        "entry_id": "Asiento (id)",
+        "account_id": "Cuenta (id)",
+        "party_id": "Tercero (id)",
+        "equipment": "Equipo",
+        "base_currency": "Moneda funcional",
+        "book": "Libro contable",
+        "book_code": "Código del libro",
+        "book_id": "ID del libro",
+        "fund_id": "Fondo (id)",
+        "fund_code": "Código del fondo",
+        "fund_name": "Fondo",
+        "restriction_class": "Clase de restricción"
+      },
+      "functional_ledger_lines": {
+        "posting_date": "Fecha de contabilización",
+        "entry_number": "N.º de asiento",
+        "entry_status": "Estado del asiento",
+        "origin": "Origen",
+        "account_number": "N.º de cuenta",
+        "account_name": "Cuenta",
+        "account_type": "Tipo de cuenta",
+        "party_name": "Tercero",
+        "department": "Departamento",
+        "project": "Proyecto",
+        "location": "Ubicación",
+        "class": "Clase",
+        "memo": "Nota",
+        "amount": "Importe (base)",
+        "debit": "Débito",
+        "credit": "Crédito",
+        "currency": "Moneda",
+        "txn_amount": "Importe (transacción)",
+        "quantity": "Cantidad",
+        "unit": "Unidad",
+        "due_date": "Fecha de vencimiento",
+        "is_open_item": "Partida abierta",
+        "open_amount": "Importe abierto (base)",
+        "has_open_balance": "Con saldo abierto",
+        "reconciled_at": "Fecha de conciliación",
+        "entry_id": "Asiento (id)",
+        "account_id": "Cuenta (id)",
+        "party_id": "Tercero (id)",
+        "equipment": "Equipo",
+        "base_currency": "Moneda funcional",
+        "book": "Libro contable",
+        "book_code": "Código del libro",
+        "book_id": "ID del libro",
+        "functional_category": "Función",
+        "program_key": "Programa",
+        "mapping_status": "Estado de asignación"
+      },
+      "grant_pipeline": {
+        "grant_code": "Código de subvención",
+        "grant_name": "Subvención",
+        "sponsor_name": "Patrocinador",
+        "sponsor_kind": "Tipo de patrocinador",
+        "determination": "Clasificación",
+        "award_amount": "Importe adjudicado",
+        "period_from": "Período desde",
+        "period_to": "Período hasta",
+        "status": "Estado",
+        "fund_code": "Código del fondo",
+        "fund_name": "Fondo",
+        "restriction_class": "Clase de restricción",
+        "base_currency": "Moneda base"
       }
     },
     "enumValues": {
@@ -2285,6 +2389,26 @@
     "backorders": {
       "name": "Pedidos pendientes",
       "description": "Líneas de inventario de pedidos de venta aún adeudadas: pedida, entregada, cancelada y pendiente por cliente y artículo."
+    },
+    "statement-of-financial-position": {
+      "name": "Estado de situación financiera",
+      "description": "Saldos registrados por cuenta, fondo y clase de restricción."
+    },
+    "statement-of-activities": {
+      "name": "Estado de actividades",
+      "description": "Ingresos, gastos y liberaciones brutas registrados por clase."
+    },
+    "functional-expense-matrix": {
+      "name": "Matriz de gastos funcionales",
+      "description": "Gastos registrados por cuenta natural y función."
+    },
+    "cash-flow-reconciliation": {
+      "name": "Conciliación del flujo de efectivo",
+      "description": "Movimientos de efectivo registrados con conciliación de activos netos."
+    },
+    "grant-pipeline": {
+      "name": "Cartera de subvenciones",
+      "description": "Subvenciones, patrocinadores, períodos, estado y clasificación del fondo."
     }
   },
   "generalLedger": {
@@ -2304,7 +2428,31 @@
     "empty": "Sin asientos registrados en este período.",
     "truncated": "Mostrando las primeras 4.000 líneas — reduzca el período para ver todo.",
     "otherOrigin": "Otro",
-    "origins": {"document": "Documento", "manual": "Manual", "payroll": "Nómina", "labor_burden": "Costes laborales indirectos", "depreciation": "Depreciación", "disposal": "Baja", "revaluation": "Revalorización", "revenue_recognition": "Reconocimiento de ingresos", "inventory": "Inventario", "lease": "Arrendamiento", "allocation": "Asignación", "intercompany": "Intercompañía", "fx_settlement": "Liquidación de divisas", "fx_revaluation": "Revalorización de divisas", "translation": "Conversión de divisas", "closing": "Cierre", "migration": "Migración", "tax_provision": "Provisión fiscal", "pledge": "Promesa de donación", "gift": "Donación", "grant": "Subvención", "release": "Liberación de restricciones", "manufacturing": "Fabricación"},
+    "origins": {
+      "document": "Documento",
+      "manual": "Manual",
+      "payroll": "Nómina",
+      "labor_burden": "Costes laborales indirectos",
+      "depreciation": "Depreciación",
+      "disposal": "Baja",
+      "revaluation": "Revalorización",
+      "revenue_recognition": "Reconocimiento de ingresos",
+      "inventory": "Inventario",
+      "lease": "Arrendamiento",
+      "allocation": "Asignación",
+      "intercompany": "Intercompañía",
+      "fx_settlement": "Liquidación de divisas",
+      "fx_revaluation": "Revalorización de divisas",
+      "translation": "Conversión de divisas",
+      "closing": "Cierre",
+      "migration": "Migración",
+      "tax_provision": "Provisión fiscal",
+      "pledge": "Promesa de donación",
+      "gift": "Donación",
+      "grant": "Subvención",
+      "release": "Liberación de restricciones",
+      "manufacturing": "Fabricación"
+    },
     "columns": {
       "detail": "Tercero / nota"
     }

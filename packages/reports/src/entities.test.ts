@@ -79,6 +79,30 @@ test('allocation run and lineage entities are allocations-gated with org-pinned 
   assert.deepEqual(compiled.values, ['00000000-0000-4000-8000-000000000001'])
 })
 
+test('nonprofit report sources are feature-gated and keep every joined row in its organization', () => {
+  const fundLines = REPORT_ENTITY_MAP.fund_ledger_lines!
+  const functional = REPORT_ENTITY_MAP.functional_ledger_lines!
+  const grants = REPORT_ENTITY_MAP.grant_pipeline!
+  assert.equal(fundLines.featureKey, 'fundAccounting')
+  assert.equal(fundLines.requiredPermission, 'nonprofit.report')
+  assert.equal(functional.featureKey, 'functionalExpenses')
+  assert.equal(functional.requiredPermission, 'nonprofit.report')
+  assert.deepEqual(functional.columns.map((column) => column.key).filter((key) =>
+    ['fund_id', 'fund_code', 'fund_name', 'restriction_class'].includes(key)), [])
+  assert.equal(grants.featureKey, 'grantManagement')
+  assert.equal(grants.requiredPermission, 'nonprofit.report')
+  assert.deepEqual(fundLines.baseFilter?.rules[0], { field: 'entry_status', op: 'in', value: ['posted', 'reversed'] })
+  assert.match(fundLines.from, /fund\.org_id = jl\.org_id/)
+  assert.match(functional.from, /fm_department\.org_id = jl\.org_id/)
+  assert.match(functional.from, /fm_department\.effective_from <= je\.posting_date/)
+  assert.match(grants.from, /sponsor\.org_id = g\.org_id/)
+  const compiled = compileCustomQuery(fundLines, {
+    entity: fundLines.key, mode: 'rows', columns: ['account_number', 'fund_code', 'restriction_class'],
+    filters: null, limit: 10,
+  }, '00000000-0000-4000-8000-000000000001')
+  assert.match(compiled.text, /WHERE jl\.org_id = \$1/)
+})
+
 test('every inventory lot movement join is pinned to the base organization', () => {
   const entity = REPORT_ENTITY_MAP.inventory_lot_movements!
   const joins = entity.from.split('\n').filter((line) => /\bJOIN\b/i.test(line))
@@ -132,4 +156,3 @@ test('crm entities declare crm featureKey, permissions, and safe scope', () => {
     rules: [{ field: 'is_private', op: 'is_false' }],
   })
 })
-

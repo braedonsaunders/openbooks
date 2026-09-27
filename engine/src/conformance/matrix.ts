@@ -28,6 +28,7 @@ import { REVENUE_CASES } from "./cases/revenue.ts";
 import { RESOURCING_CASES } from "./cases/resourcing.ts";
 import { NONPROFIT_GRANT_CASES } from "./cases/nonprofit-grants.ts";
 import { NONPROFIT_CONTRIBUTION_CASES } from "./cases/nonprofit-contributions.ts";
+import { NONPROFIT_FUNCTIONAL_CASES } from "./cases/nonprofit-functional.ts";
 import type { ConformanceCase } from "./types.ts";
 
 export const CONFORMANCE_CORPUS: readonly ConformanceCase[] = [
@@ -47,6 +48,7 @@ export const CONFORMANCE_CORPUS: readonly ConformanceCase[] = [
   ...RESOURCING_CASES,
   ...NONPROFIT_CASES,
   ...NONPROFIT_CONTRIBUTION_CASES,
+  ...NONPROFIT_FUNCTIONAL_CASES,
 ];
 
 /**

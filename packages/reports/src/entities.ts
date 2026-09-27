@@ -1693,6 +1693,121 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   // HR-20 end
 ]
 
+const ledgerLineEntity = REPORT_ENTITIES.find((entity) => entity.key === 'ledger_lines')!
+const postedLedgerFilter: ReportRuleGroup = {
+  combinator: 'and',
+  rules: [{ field: 'entry_status', op: 'in', value: ['posted', 'reversed'] }],
+}
+
+const fundLedgerLines: ReportEntity = {
+  ...ledgerLineEntity,
+  key: 'fund_ledger_lines',
+  label: 'Fund ledger lines',
+  description: 'Posted journal lines with fund code, fund name, and restriction class.',
+  from: `${ledgerLineEntity.from}
+      LEFT JOIN funds fund ON fund.org_id = jl.org_id AND fund.id::text = jl.extra_dims->>'fund'
+      LEFT JOIN segment_values fund_value ON fund_value.org_id = fund.org_id AND fund_value.id = fund.id`,
+  columns: [
+    ...ledgerLineEntity.columns,
+    { key: 'fund_id', label: 'Fund (id)', kind: 'uuid', expr: 'fund.id' },
+    { key: 'fund_code', label: 'Fund code', kind: 'text', expr: 'fund_value.code' },
+    { key: 'fund_name', label: 'Fund', kind: 'text', expr: 'fund_value.name' },
+    { key: 'restriction_class', label: 'Restriction class', kind: 'text', expr: 'fund.restriction_class' },
+  ],
+  featureKey: 'fundAccounting',
+  requiredPermission: 'nonprofit.report',
+  baseFilter: postedLedgerFilter,
+}
+
+const functionalLedgerLines: ReportEntity = {
+  ...ledgerLineEntity,
+  key: 'functional_ledger_lines',
+  label: 'Functional ledger lines',
+  description: 'Posted expense lines with their effective department and project functions.',
+  from: `${ledgerLineEntity.from}
+      LEFT JOIN functional_mappings fm_department
+        ON fm_department.org_id = jl.org_id AND fm_department.department_id = jl.department_id
+       AND fm_department.effective_from <= je.posting_date
+       AND (fm_department.effective_to IS NULL OR fm_department.effective_to >= je.posting_date)
+      LEFT JOIN functional_mappings fm_project
+        ON fm_project.org_id = jl.org_id AND fm_project.project_id = jl.project_id
+       AND fm_project.effective_from <= je.posting_date
+       AND (fm_project.effective_to IS NULL OR fm_project.effective_to >= je.posting_date)`,
+  columns: [
+    ...ledgerLineEntity.columns,
+    {
+      key: 'functional_category', label: 'Function', kind: 'enum',
+      expr: `CASE
+        WHEN fm_department.id IS NOT NULL AND fm_project.id IS NOT NULL
+         AND (fm_department.function IS DISTINCT FROM fm_project.function
+           OR fm_department.program_key IS DISTINCT FROM fm_project.program_key) THEN NULL
+        ELSE coalesce(fm_department.function, fm_project.function)
+      END`,
+      options: ['program', 'management_general', 'fundraising'],
+    },
+    {
+      key: 'program_key', label: 'Program', kind: 'text',
+      expr: `CASE
+        WHEN fm_department.id IS NOT NULL AND fm_project.id IS NOT NULL
+         AND (fm_department.function IS DISTINCT FROM fm_project.function
+           OR fm_department.program_key IS DISTINCT FROM fm_project.program_key) THEN NULL
+        ELSE coalesce(fm_department.program_key, fm_project.program_key)
+      END`,
+    },
+    {
+      key: 'mapping_status', label: 'Mapping status', kind: 'enum',
+      expr: `CASE
+        WHEN fm_department.id IS NOT NULL AND fm_project.id IS NOT NULL
+         AND (fm_department.function IS DISTINCT FROM fm_project.function
+           OR fm_department.program_key IS DISTINCT FROM fm_project.program_key) THEN 'conflict'
+        WHEN fm_department.id IS NULL AND fm_project.id IS NULL THEN 'unmapped'
+        ELSE 'mapped'
+      END`,
+      options: ['mapped', 'unmapped', 'conflict'],
+    },
+  ],
+  featureKey: 'functionalExpenses',
+  requiredPermission: 'nonprofit.report',
+  baseFilter: postedLedgerFilter,
+}
+
+const grantPipeline: ReportEntity = {
+  key: 'grant_pipeline',
+  label: 'Grant pipeline',
+  category: 'nonprofit',
+  description: 'Grant awards, sponsors, periods, status, and associated fund classification.',
+  from: `grants g
+      JOIN funds grant_fund ON grant_fund.org_id = g.org_id AND grant_fund.id = g.fund_id
+      JOIN segment_values grant_fund_value ON grant_fund_value.org_id = grant_fund.org_id
+       AND grant_fund_value.id = grant_fund.id
+      JOIN parties sponsor ON sponsor.org_id = g.org_id AND sponsor.id = g.sponsor_party_id
+      JOIN orgs grant_org ON grant_org.id = g.org_id`,
+  orgColumn: 'g.org_id',
+  subsidiaryScope: null,
+  featureKey: 'grantManagement',
+  requiredPermission: 'nonprofit.report',
+  baseCurrencyColumn: 'base_currency',
+  columns: [
+    { key: 'grant_code', label: 'Grant code', kind: 'text', expr: 'g.code' },
+    { key: 'grant_name', label: 'Grant', kind: 'text', expr: 'g.name' },
+    { key: 'sponsor_name', label: 'Sponsor', kind: 'text', expr: 'sponsor.display_name' },
+    { key: 'sponsor_kind', label: 'Sponsor type', kind: 'enum', expr: 'g.sponsor_kind', options: ['government', 'foundation', 'corporate'] },
+    { key: 'determination', label: 'Determination', kind: 'enum', expr: 'g.determination', options: ['contribution_unconditional', 'contribution_conditional', 'exchange'] },
+    { key: 'award_amount', label: 'Award amount', kind: 'money', expr: 'g.award_amount', baseMoney: true },
+    { key: 'period_from', label: 'Period from', kind: 'date', expr: 'g.period_from' },
+    { key: 'period_to', label: 'Period to', kind: 'date', expr: 'g.period_to' },
+    { key: 'status', label: 'Status', kind: 'enum', expr: 'g.status', options: ['draft', 'awarded', 'active', 'closed_out', 'closed', 'void'] },
+    { key: 'fund_code', label: 'Fund code', kind: 'text', expr: 'grant_fund_value.code' },
+    { key: 'fund_name', label: 'Fund', kind: 'text', expr: 'grant_fund_value.name' },
+    { key: 'restriction_class', label: 'Restriction class', kind: 'text', expr: 'grant_fund.restriction_class' },
+    { key: 'base_currency', label: 'Base currency', kind: 'text', expr: 'grant_org.base_currency' },
+  ],
+  defaultSort: { column: 'period_to', direction: 'asc' },
+  defaultPeriodField: 'period_from',
+}
+
+REPORT_ENTITIES.push(fundLedgerLines, functionalLedgerLines, grantPipeline)
+
 export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.assign(
   Object.create(null) as Record<string, ReportEntity>,
   Object.fromEntries(REPORT_ENTITIES.map((e) => [e.key, e])),
