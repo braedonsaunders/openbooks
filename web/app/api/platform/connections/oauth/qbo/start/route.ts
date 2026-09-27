@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { authorizeUrl, type QboApp } from '@openbooks/engine/src/connectors/qbo.ts'
-import { unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
+import { SecretIntegrityError, unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { guardPermission, guardUnrestrictedScope } from '../../../../../../../lib/authz'
 import { storageIdentityError } from '../../../_storage-identity'
@@ -33,7 +33,13 @@ export async function GET(req: Request) {
     throw e
   })
   if (!conn || conn.source !== 'qbo') return notFound("record")
-  const secret = conn.secrets == null ? null : unsealJson<{ clientId?: string }>(conn.secrets, { orgId: gate.user.orgId, purpose: "connection.secrets" })
+  // A tampered credential reads as a missing one — re-enter it — never a 500.
+  let secret: { clientId?: string } | null = null
+  try {
+    secret = conn.secrets == null ? null : unsealJson<{ clientId?: string }>(conn.secrets, { orgId: gate.user.orgId, purpose: "connection.secrets" })
+  } catch (error) {
+    if (!(error instanceof SecretIntegrityError)) throw error
+  }
   if (!secret?.clientId) {
     return NextResponse.json({ error: 'connection has no Client ID — save the app credentials first' }, { status: 400 })
   }

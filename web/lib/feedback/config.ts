@@ -2,7 +2,7 @@ import 'server-only'
 
 import { eq, sql } from 'drizzle-orm'
 import { db, withBypass, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
-import { sealSecret, unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
+import { sealSecret, SecretIntegrityError, unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
 import { PLATFORM_SETTINGS_ID, platformSettings } from '@openbooks/schema'
 
 /**
@@ -152,8 +152,14 @@ export async function isFeedbackReady(): Promise<boolean> {
 export async function getFeedbackToken(): Promise<string | null> {
   const raw = await readStored()
   // Installation-wide secret on the org-less platform_settings singleton:
-  // the seal scope carries the fixed system id.
-  return raw.token ? unsealSecret(raw.token, { orgId: "system", purpose: "feedback.token" }) : null
+  // the seal scope carries the fixed system id. A tampered token reads as
+  // unconfigured, never a 500.
+  try {
+    return raw.token ? unsealSecret(raw.token, { orgId: "system", purpose: "feedback.token" }) : null
+  } catch (error) {
+    if (!(error instanceof SecretIntegrityError)) throw error
+    return null
+  }
 }
 
 /** The decrypted destination, or null when reporting is off or incomplete. */
@@ -164,7 +170,14 @@ export async function getFeedbackRuntime(): Promise<FeedbackRuntime | null> {
   const repo = typeof raw.repo === 'string' ? raw.repo.trim() : ''
   if (!OWNER_RE.test(owner)) return null
   if (!REPO_RE.test(repo) || repo === '.' || repo === '..') return null
-  const token = unsealSecret(raw.token, { orgId: "system", purpose: "feedback.token" })
+  // A tampered token reads as unconfigured — reporting answers 503
+  // unavailable by its existing rule — never a 500.
+  let token: string | null = null
+  try {
+    token = unsealSecret(raw.token, { orgId: "system", purpose: "feedback.token" })
+  } catch (error) {
+    if (!(error instanceof SecretIntegrityError)) throw error
+  }
   if (!token) return null
   return {
     owner,

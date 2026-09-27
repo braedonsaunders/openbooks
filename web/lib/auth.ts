@@ -15,7 +15,7 @@ import {
 } from "@openbooks/engine/src/platform/db.ts";
 import { resolveActiveEnv } from "./org-access";
 import { setRequestOrg } from "./request-org";
-import { sealSecret, unsealSecret } from "./secrets";
+import { sealSecret, SecretIntegrityError, unsealSecret } from "./secrets";
 import {
   AUTH_EVENT_RETENTION_DAYS,
   DEPLOYMENT_LOGIN_ATTEMPT_LIMIT,
@@ -641,6 +641,23 @@ function consumeMfaCredential(input: {
   };
 }
 
+/**
+ * A tampered MFA factor is server-side evidence, never caller output: log
+ * the call-site name with the org, purpose, and key id the refusal names.
+ * Tamper and a wrong code stay indistinguishable to the caller by design.
+ * These functions take an AuthRequestContext, not the request, so no
+ * request id exists at this layer — the user id scopes the log instead.
+ */
+function logMfaIntegrityFailure(error: SecretIntegrityError, site: string, userId: string): void {
+  console.error("[auth] MFA credential failed integrity check:", {
+    site,
+    userId,
+    orgId: error.orgId,
+    purpose: error.purpose,
+    keyId: error.keyId,
+  });
+}
+
 /** Complete a password/OIDC login after TOTP or one-time recovery verification. */
 export async function completeMfaLogin(
   rawChallengeToken: string | undefined,
@@ -700,9 +717,18 @@ export async function completeMfaLogin(
        for update
     `));
     const factor = factorResult.rows[0];
-    const secret = factor
-      ? unsealSecret(factor.secretEncrypted, { orgId: challenge.userId, purpose: "auth.mfa.secret" })
-      : null;
+    // A tampered factor reads as a wrong code, never a 500: the failure
+    // branch below still writes its mfa_failure audit row and the caller
+    // still refuses invalid credentials.
+    let secret: string | null = null;
+    if (factor) {
+      try {
+        secret = unsealSecret(factor.secretEncrypted, { orgId: challenge.userId, purpose: "auth.mfa.secret" });
+      } catch (error) {
+        if (!(error instanceof SecretIntegrityError)) throw error;
+        logMfaIntegrityFailure(error, "completeMfaLogin", challenge.userId);
+      }
+    }
     const consumed = factor && secret ? consumeMfaCredential({
       userId: challenge.userId,
       secret,
@@ -916,9 +942,17 @@ export async function confirmMfaSetup(
       await db.execute(sql`delete from auth_mfa_factors where user_id = ${userId} and enabled_at is null`);
       return null;
     }
-    const secret = unsealSecret(factor.secretEncrypted, { orgId: userId, purpose: "auth.mfa.secret" });
-    if (!secret) return null;
-    const step = verifyTotpCode(secret, suppliedCode);
+    // A tampered pending factor counts as a wrong code — it consumes a
+    // setup attempt exactly like one — never a 500, and never a hint that
+    // the factor (rather than the code) is at fault.
+    let secret: string | null = null;
+    try {
+      secret = unsealSecret(factor.secretEncrypted, { orgId: userId, purpose: "auth.mfa.secret" });
+    } catch (error) {
+      if (!(error instanceof SecretIntegrityError)) throw error;
+      logMfaIntegrityFailure(error, "confirmMfaSetup", userId);
+    }
+    const step = secret ? verifyTotpCode(secret, suppliedCode) : null;
     if (step === null) {
       const nextAttempt = factor.setupAttemptCount + 1;
       if (nextAttempt >= MFA_SETUP_ATTEMPT_LIMIT) {
@@ -978,9 +1012,18 @@ async function verifyEnabledMfaFactor(userId: string, suppliedCode: string) {
       from auth_mfa_factors where user_id = ${userId} and enabled_at is not null for update
   `));
   const factor = result.rows[0];
-  const secret = factor
-    ? unsealSecret(factor.secretEncrypted, { orgId: userId, purpose: "auth.mfa.secret" })
-    : null;
+  // A tampered enabled factor reads as a wrong code: the caller still writes
+  // its mfa_failure audit row and refuses invalid_credentials, and tamper
+  // stays indistinguishable from a wrong code to the caller.
+  let secret: string | null = null;
+  if (factor) {
+    try {
+      secret = unsealSecret(factor.secretEncrypted, { orgId: userId, purpose: "auth.mfa.secret" });
+    } catch (error) {
+      if (!(error instanceof SecretIntegrityError)) throw error;
+      logMfaIntegrityFailure(error, "verifyEnabledMfaFactor", userId);
+    }
+  }
   if (!factor || !secret) return null;
   const recoveryCodeHashes = Array.isArray(factor.recoveryCodeHashes) ? factor.recoveryCodeHashes : [];
   const consumed = consumeMfaCredential({

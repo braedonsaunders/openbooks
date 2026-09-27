@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { sealSecret, unsealSecret } from "../secrets";
+import { sealSecret, SecretIntegrityError, unsealSecret } from "../secrets";
 import {
   isAiProvider,
   validateAiBaseUrlLive,
@@ -243,10 +243,17 @@ export function normalizeAgentSettingInput(
 export async function getOrgAiConfig(orgId: string): Promise<AiConfig | null> {
   const { ai, orgName } = await readAi(orgId);
   if (ai.enabled === false) return null;
-  const apiKey =
-    ai.keyEncrypted == null
-      ? null
-      : unsealSecret(ai.keyEncrypted, { orgId, purpose: "assistant.ai.key" });
+  // A tampered key reads as unconfigured — the chat answers "AI is not
+  // configured" by its existing rule — never a 500.
+  let apiKey: string | null = null;
+  try {
+    apiKey =
+      ai.keyEncrypted == null
+        ? null
+        : unsealSecret(ai.keyEncrypted, { orgId, purpose: "assistant.ai.key" });
+  } catch (error) {
+    if (!(error instanceof SecretIntegrityError)) throw error;
+  }
   if (!apiKey) return null;
   return {
     provider: normProvider(ai.provider),

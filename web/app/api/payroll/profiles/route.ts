@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { sealSecret, unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
+import { sealSecret, SecretIntegrityError, unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
 import { listFilingAccounts } from '@openbooks/engine/src/payroll/filing.ts'
 import {
   employmentJurisdictionsOf,
@@ -502,7 +502,14 @@ export async function GET(req: Request) {
         select sin_encrypted as sealed from employee_payroll_profiles
          where org_id = ${gate.user.orgId} and employee_party_id = ${employee}
       `)).rows[0]?.sealed
-      const drawerIdentifier = sealed == null ? null : unsealSecret(sealed, { orgId: gate.user.orgId, purpose: "payroll.employee.sin" });
+      // A tampered identifier degrades to unconfigured — the same derived
+      // facts as a profile with no identifier yet — never a 500.
+      let drawerIdentifier: string | null = null
+      try {
+        drawerIdentifier = sealed == null ? null : unsealSecret(sealed, { orgId: gate.user.orgId, purpose: "payroll.employee.sin" });
+      } catch (error) {
+        if (!(error instanceof SecretIntegrityError)) throw error
+      }
       for (const derived of drawerDeriveHook({ identifier: drawerIdentifier }) ?? []) {
         derivedProfileColumns[derived.column] = derived.value
       }
@@ -973,7 +980,15 @@ export async function POST(req: Request) {
           select sin_encrypted as sealed from employee_payroll_profiles
            where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
         `)).rows[0]?.sealed
-        effectiveIdentifier = stored == null ? null : unsealSecret(stored, { orgId, purpose: "payroll.employee.sin" })
+        // A tampered identifier degrades to unconfigured, exactly as before
+        // seals failed closed: the derivation below runs on null and the
+        // save refuses or prefills by its existing rules, never a 500.
+        try {
+          effectiveIdentifier = stored == null ? null : unsealSecret(stored, { orgId, purpose: "payroll.employee.sin" })
+        } catch (error) {
+          if (!(error instanceof SecretIntegrityError)) throw error
+          effectiveIdentifier = null
+        }
       }
       const identifierLabel = PAYROLL_COUNTRY_PACKS[country]?.employeeIdentifier.label ?? 'identifier'
       for (const derived of deriveHook({ identifier: effectiveIdentifier }) ?? []) {

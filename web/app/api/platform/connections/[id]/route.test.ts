@@ -8,6 +8,7 @@ const routeState = {
   deleteRows: [] as Array<{ id: string }>,
   deletes: 0,
   audits: 0,
+  secrets: "sealed",
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
   routeState;
@@ -59,7 +60,7 @@ const mockSources = new Map<string, string>([
                     authKind: "oauth2",
                     status: "active",
                     config: { environment: "sandbox" },
-                    secrets: "sealed",
+                    secrets: state.secrets,
                     mirrorEnabled: false,
                     mirrorSchedule: "daily",
                     postedChangePolicy: "review_required",
@@ -121,8 +122,26 @@ const mockSources = new Map<string, string>([
   [
     "mock:secrets",
     `
+      export class SecretIntegrityError extends Error {
+        constructor(orgId, purpose, keyId, detail) {
+          super(
+            "stored secret for org " + orgId + " purpose " + purpose + " (key " + keyId + ") cannot be unsealed: " + detail + ". " +
+            "Re-enter the credential on its settings page and save again, or re-run scripts/rotate-data-key.ts " +
+            "with the key that sealed it configured",
+          )
+          this.name = "SecretIntegrityError"
+          this.orgId = orgId
+          this.purpose = purpose
+          this.keyId = keyId
+        }
+      }
       export function sealJson() { return "sealed" }
-      export function unsealJson() { return {} }
+      export function unsealJson(stored) {
+        if (stored === "tampered") {
+          throw new SecretIntegrityError("org-1", "connection.secrets", "k1", "authentication failed — the blob was tampered with")
+        }
+        return {}
+      }
     `,
   ],
   [
@@ -238,6 +257,31 @@ for (const key of ["realmId", "tenantId", "companyId", "companyName"] as const) 
     assert.equal(routeState.persisted, 0, "must not merge callback-owned OAuth identity");
   });
 }
+
+test("PATCH routes a tampered stored credential to the 400 re-enter refusal, persisting nothing", async () => {
+  routeState.persisted = 0;
+  routeState.secrets = "tampered";
+  try {
+    const response = await PATCH(
+      new Request("http://openbooks.test/api/platform/connections/connection-1", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ secrets: { clientSecret: "rotated-value" } }),
+      }),
+      { params: Promise.resolve({ id: "connection-1" }) },
+    );
+    assert.equal(response.status, 400, "a tampered credential must refuse, never 500");
+    if (!response.ok) {
+      const body = (await response.json()) as { error?: string };
+      assert.match(String(body.error), /Re-enter the credential|rotate-data-key/);
+    } else {
+      assert.fail("expected the tampered credential to refuse");
+    }
+    assert.equal(routeState.persisted, 0, "a refused merge must not persist");
+  } finally {
+    routeState.secrets = "sealed";
+  }
+});
 
 test("DELETE matching zero rows is a failure with no audit", async () => {
   routeState.deleteRows = [];
