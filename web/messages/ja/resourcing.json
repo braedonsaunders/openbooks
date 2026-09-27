@@ -1,4 +1,5 @@
 {
+  "prefill": { "badge": "予定 {hours} 時間" },
   "demand": {
     "basis": {
       "manual": "手動入力",

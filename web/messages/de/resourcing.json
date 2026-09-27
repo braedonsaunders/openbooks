@@ -1,4 +1,5 @@
 {
+  "prefill": { "badge": "Geplant: {hours} Std." },
   "demand": {
     "basis": {
       "manual": "Manuelle Eingabe",

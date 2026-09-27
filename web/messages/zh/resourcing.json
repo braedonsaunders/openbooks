@@ -1,4 +1,5 @@
 {
+  "prefill": { "badge": "计划 {hours} 小时" },
   "demand": {
     "basis": {
       "manual": "手动录入",
