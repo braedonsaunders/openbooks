@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { stubModules } from '../../../../testing/stub-modules'
+import { stubModules, withAuthzTestSurface, withPlatformDbTestSurface } from '../../../../testing/stub-modules'
 import test from 'node:test'
 
 const stateKey = Symbol.for('openbooks.project-detail-route-test')
@@ -33,12 +33,32 @@ const routeState: RouteState = {
 // mocked: hand doubles cannot produce the refusals the real modules enforce.
 
 stubModules({
-  navigation: false,
+  navigation: true,
   intl: false,
-  authz: false,
-  features: false,
+  authz: {
+    source: withAuthzTestSurface(`
+      const state = globalThis[Symbol.for('openbooks.project-detail-route-test')]
+      export async function guardPermission() { return state.authz }
+      export function guardSubsidiaryScope(authz, subsidiaryId) {
+        if (authz.allowedSubsidiaryIds === null) return null
+        if (subsidiaryId !== null && subsidiaryId !== undefined && authz.allowedSubsidiaryIds.has(String(subsidiaryId))) return null
+        return new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json' } })
+      }
+      export function subsidiariesInScope(authz, ids) {
+        return authz.allowedSubsidiaryIds === null || ids.every((id) => id !== null && id !== undefined && authz.allowedSubsidiaryIds.has(id))
+      }
+    `),
+  },
+  features: {
+    source: `
+      const state = globalThis[Symbol.for('openbooks.project-detail-route-test')]
+      export async function guardFeaturePermission() { return state.authz }
+      export async function isFeatureEnabled() { return true }
+      export async function acquireFeatureGateLock() {}
+    `,
+  },
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/src/platform/db.ts": withPlatformDbTestSurface(`
       const state = globalThis[Symbol.for('openbooks.project-detail-route-test')]
       export const db = {
         execute: async (query) => {
@@ -58,27 +78,11 @@ stubModules({
         },
       }
       export function withOrgTransaction(_orgId, work) { return work() }
-    `,
-    "../../../../lib/authz": `
-      const state = globalThis[Symbol.for('openbooks.project-detail-route-test')]
-      export async function guardPermission() { return state.authz }
-      export function guardSubsidiaryScope(authz, subsidiaryId) {
-        if (authz.allowedSubsidiaryIds === null) return null
-        if (subsidiaryId !== null && subsidiaryId !== undefined && authz.allowedSubsidiaryIds.has(String(subsidiaryId))) return null
-        return new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json' } })
-      }
-      export function subsidiariesInScope(authz, ids) {
-        return authz.allowedSubsidiaryIds === null || ids.every((id) => id !== null && id !== undefined && authz.allowedSubsidiaryIds.has(id))
-      }
-    `,
+    `),
     "../../../../lib/custom-fields": `
       export async function loadFieldDefs() { return [] }
       export function validateCustomValues() { return { ok: true, cleaned: {} } }
       export async function findUnownedCustomReferences() { return [] }
-    `,
-    "../../../../lib/features": `
-      export async function isFeatureEnabled() { return true }
-      export async function acquireFeatureGateLock() {}
     `,
     "../../../../lib/projects-gate": `
       export async function guardProjectsFeature() { return null }

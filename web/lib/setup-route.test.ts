@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '../testing/stub-modules'
 import { SETUP_ENTITY_BY_KEY } from './setup/registry.ts'
 
 test('the shared currency registry stays readable but is not tenant-mutable', () => {
@@ -75,6 +76,9 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === '@/lib/authz' && context.parentURL?.endsWith('/web/lib/api/route.ts')) {
+      return { url: 'mock:authz', shortCircuit: true }
+    }
     const routeParent = context.parentURL?.includes('%5Bentity%5D') || context.parentURL?.includes('[entity]')
     if (specifier === '../../../../../lib/authz' && routeParent) {
       return { url: 'mock:authz', shortCircuit: true }
@@ -85,7 +89,7 @@ const hooks = registerHooks({
     if (specifier === '@openbooks/engine/src/platform/db.ts') {
       return { url: 'mock:db', shortCircuit: true }
     }
-    if (['@openbooks/engine/src/payroll/error.ts', '@openbooks/engine/src/payroll/fences.ts', '@openbooks/engine/src/payroll/run-allocation.ts', '@openbooks/engine/src/payroll/run-calculation-evidence.ts', '@openbooks/engine/src/payroll/run-calculation.ts', '@openbooks/engine/src/payroll/run-calendar.ts', '@openbooks/engine/src/payroll/run-commit.ts', '@openbooks/engine/src/payroll/run-contracts.ts', '@openbooks/engine/src/payroll/run-lifecycle.ts', '@openbooks/engine/src/payroll/run-protection.ts', '@openbooks/engine/src/payroll/run-setup.ts', '@openbooks/engine/src/payroll/run-stub-records.ts', '@openbooks/engine/src/payroll/scope.ts'].includes(specifier)) {
+    if (['@openbooks/engine/src/payroll/fences.ts', '@openbooks/engine/src/payroll/run-allocation.ts', '@openbooks/engine/src/payroll/run-calculation-evidence.ts', '@openbooks/engine/src/payroll/run-calculation.ts', '@openbooks/engine/src/payroll/run-calendar.ts', '@openbooks/engine/src/payroll/run-commit.ts', '@openbooks/engine/src/payroll/run-contracts.ts', '@openbooks/engine/src/payroll/run-lifecycle.ts', '@openbooks/engine/src/payroll/run-protection.ts', '@openbooks/engine/src/payroll/run-setup.ts', '@openbooks/engine/src/payroll/run-stub-records.ts', '@openbooks/engine/src/payroll/scope.ts'].includes(specifier)) {
       return { url: 'mock:payroll-run', shortCircuit: true }
     }
     if (specifier === '@openbooks/engine/src/payroll/filing-registry.ts') {
@@ -99,16 +103,19 @@ const hooks = registerHooks({
     return nextLoad(url, context)
   },
 })
+stubModules({
+  navigation: true,
+  authz: { source: mockSources.get('mock:authz')! },
+  features: { source: mockSources.get('mock:features')! },
+})
 
 // Register tests before awaiting route evaluation: --test-force-exit may mark
 // a test declared after a top-level await as cancelled even after its body has
 // completed. Keeping the import promise in the test also lets the hook remain
 // active until every intercepted dependency has loaded.
 const routeUrl = '../app/api/admin/setup/[entity]/route.ts?currency-route-test'
-const routeReady = import(routeUrl).then((module) => {
-  hooks.deregister()
-  return module as typeof import('../app/api/admin/setup/[entity]/route.ts')
-})
+const routeReady = import(routeUrl).then((module) => module as typeof import('../app/api/admin/setup/[entity]/route.ts'))
+test.after(() => hooks.deregister())
 
 test('currency mutations fail closed before parsing or touching the database', async () => {
   const { POST, PATCH, DELETE } = await routeReady
