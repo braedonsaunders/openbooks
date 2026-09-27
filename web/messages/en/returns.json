@@ -1,0 +1,45 @@
+{
+  "list": {
+    "title": "Return Authorizations",
+    "description": "Authorize customer returns, receive goods, inspect each line and record its disposition.",
+    "columns": {
+      "source": "Source document",
+      "stage": "Return stage"
+    }
+  },
+  "actions": {
+    "new": "New return authorization"
+  },
+  "workflow": {
+    "title": "Return workflow",
+    "requested": "Record the quantities received from the customer, or reject this request with a reason.",
+    "inspection": "Choose how many received units to accept and where accepted goods should go.",
+    "line": "Line {number}",
+    "receivedQuantity": "Quantity received",
+    "acceptedQuantity": "Quantity accepted",
+    "receivedSummary": "{quantity} received of {authorized} authorized",
+    "disposition": "Disposition",
+    "location": "Stock location",
+    "vendor": "Supplier",
+    "restock": "Restock",
+    "scrap": "Scrap",
+    "vendorReturn": "Return to supplier",
+    "receive": "Record receipt",
+    "inspect": "Complete inspection",
+    "reject": "Reject return",
+    "received": "Received quantities recorded",
+    "completed": "Inspection completed and customer credit issued",
+    "awaitingApproval": "Inspection is recorded; the customer credit is awaiting approval.",
+    "rejected": "Return authorization rejected",
+    "receiveFailed": "Could not record received quantities",
+    "inspectFailed": "Could not complete inspection",
+    "rejectFailed": "Could not reject the return",
+    "rejectTitle": "Reject {number}",
+    "reason": "Reason",
+    "reasonPlaceholder": "Explain why the return is rejected",
+    "emailReceived": "Email receipt update",
+    "emailDecision": "Email final decision",
+    "emailSent": "Email sent",
+    "emailFailed": "Could not send the return update"
+  }
+}

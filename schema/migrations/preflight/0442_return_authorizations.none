@@ -1,0 +1,1 @@
+A new return authorization side-table set has no existing rows to migrate or reconcile. Return history remains in the existing customer-credit and inventory ledgers; the new tables record only authorizations and inspection decisions going forward.

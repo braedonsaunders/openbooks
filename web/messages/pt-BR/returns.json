@@ -1,0 +1,45 @@
+{
+  "list": {
+    "title": "Autorizações de devolução",
+    "description": "Autorize devoluções de clientes, receba os produtos, inspecione cada linha e registre a destinação.",
+    "columns": {
+      "source": "Documento de origem",
+      "stage": "Etapa da devolução"
+    }
+  },
+  "actions": {
+    "new": "Nova autorização de devolução"
+  },
+  "workflow": {
+    "title": "Fluxo de devolução",
+    "requested": "Registre as quantidades recebidas do cliente ou rejeite a solicitação com um motivo.",
+    "inspection": "Escolha a quantidade aceita e onde os produtos aceitos devem ficar.",
+    "line": "Linha {number}",
+    "receivedQuantity": "Quantidade recebida",
+    "acceptedQuantity": "Quantidade aceita",
+    "receivedSummary": "{quantity} recebidas de {authorized} autorizadas",
+    "disposition": "Destinação",
+    "location": "Local de estoque",
+    "vendor": "Fornecedor",
+    "restock": "Repor estoque",
+    "scrap": "Descartar",
+    "vendorReturn": "Devolver ao fornecedor",
+    "receive": "Registrar recebimento",
+    "inspect": "Concluir inspeção",
+    "reject": "Rejeitar devolução",
+    "received": "Quantidades recebidas registradas",
+    "completed": "Inspeção concluída e crédito ao cliente emitido",
+    "awaitingApproval": "A inspeção foi registrada; o crédito ao cliente aguarda aprovação.",
+    "rejected": "Autorização de devolução rejeitada",
+    "receiveFailed": "Não foi possível registrar as quantidades recebidas",
+    "inspectFailed": "Não foi possível concluir a inspeção",
+    "rejectFailed": "Não foi possível rejeitar a devolução",
+    "rejectTitle": "Rejeitar {number}",
+    "reason": "Motivo",
+    "reasonPlaceholder": "Explique por que a devolução está sendo rejeitada",
+    "emailReceived": "Enviar aviso de recebimento",
+    "emailDecision": "Enviar decisão final por e-mail",
+    "emailSent": "E-mail enviado",
+    "emailFailed": "Não foi possível enviar a atualização da devolução"
+  }
+}
