@@ -10,6 +10,7 @@ import { runDunningForOrg } from "../receivables/dunning.ts";
 import type { SimOrg } from "./world.ts";
 import type { Profile } from "./profiles/index.ts";
 import { addCalendarDays } from "../platform/civil-date.ts";
+import { recomputeSaasUsageMetrics, runSaasUsageDay } from "./saas-usage.ts";
 
 /**
  * The deterministic "RevOps autopilot" for a SaaS company — the mechanical stand-in
@@ -29,6 +30,7 @@ interface SaasResult {
   obligationsBuilt: number;
   recognized: number;
   dunned: number;
+  dunningCall?: { orgId: string; asOf: string };
   changed: number;
   actions: number;
 }
@@ -71,6 +73,8 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
   if (world.subscriptions.length === 0) return res;
   const a = world.accounts;
 
+  await runSaasUsageDay(profile, world, today);
+
   // 1. Bill every due subscription (monthly + annual cycles). Posts to deferred.
   const run = await runDueSubscriptions(today);
   res.billed = run.posted;
@@ -80,7 +84,13 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
   const fresh = (await db.execute<{ id: string }>(sql`
     select d.id from documents d
      where d.org_id = ${world.orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
-       and coalesce((d.custom->'sim'->>'obligated')::boolean, false) = false`));
+       and coalesce((d.custom->'sim'->>'obligated')::boolean, false) = false
+       and exists (
+         select 1 from document_lines line
+         join items item on item.org_id = line.org_id and item.id = line.item_id
+         where line.org_id = d.org_id and line.document_id = d.id
+           and item.recognition_rule_id is not null
+       )`));
   for (const inv of fresh.rows) {
     try {
       const r = await createObligationsFromInvoice(inv.id, world.orgId, world.actors.controller);
@@ -95,6 +105,8 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
       const rec = await runRevenueRecognition(world.orgId, today, world.actors.controller);
       res.recognized = rec.posted;
     } catch (e) { console.error(`[saas ${today}] recognition skipped: ${(e as Error).message}`); }
+
+    if (profile.meteredProducts?.length) await recomputeSaasUsageMetrics(world);
 
     const payroll = profile.saasMonthlyPayroll ?? "0";
     if (cmp(payroll, "0") > 0 && a.bank && a.rdExpense && a.smExpense && a.gaExpense) {
@@ -127,7 +139,9 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
       // scheduler entry point scans every production org, so use the explicit
       // tenant runner here to keep this simulation's collections work inside
       // its own org.
-      const d = await runDunningForOrg(world.orgId, today);
+      const dunningCall = { orgId: world.orgId, asOf: today };
+      res.dunningCall = dunningCall;
+      const d = await runDunningForOrg(dunningCall.orgId, dunningCall.asOf);
       res.dunned = d.scanned; // subscribers evaluated by the dunning policy this cycle
     } catch (e) { console.error(`[saas ${today}] dunning skipped: ${(e as Error).message}`); }
   }
@@ -135,8 +149,12 @@ export async function autopilotSaas(profile: Profile, world: SimOrg, today: stri
   // 5. Expansion + churn: seat upgrades (prorated) and the occasional cancellation.
   if (dayOfMonth(today) === 18) {
     const seed = Number(today.slice(5, 7)); // month, for a deterministic pick
-    const active = (await db.execute<{ id: string; quantity: string }>(sql`
-      select id, quantity from subscriptions where org_id = ${world.orgId} and status = 'active' order by id`));
+    const active = (await db.execute<{ id: string; quantity: string; customerName: string }>(sql`
+      select s.id, s.quantity::text as quantity, customer.display_name as "customerName"
+        from subscriptions s
+        join parties customer on customer.org_id = s.org_id and customer.id = s.customer_id
+       where s.org_id = ${world.orgId} and s.status = 'active'
+       order by customer.display_name, s.id`));
     if (active.rows.length > 0) {
       // Expansion: bump seats on one subscription. Exact integer bump on the
       // 8dp quantity grid (same rendered text as the old float path for every

@@ -40,7 +40,7 @@ export const SAMPLE_COMPANY_PROFILES = [
     industryKey: "it_software_saas",
     profileId: "saas",
     companyName: "Northstar Cloud",
-    focus: ["subscriptions", "deferred revenue", "revenue recognition", "dunning"],
+    focus: ["subscriptions", "deferred revenue", "revenue recognition", "dunning", "usage billing", "SaaS metrics"],
   },
   {
     industryKey: "accounting_firm",

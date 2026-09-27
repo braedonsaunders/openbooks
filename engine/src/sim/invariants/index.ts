@@ -8,6 +8,7 @@ import { PostingError } from "../../journal/posting-contracts.ts";
 import { runScenario, type Checkpoint } from "../../golden/scenario.ts";
 import { postingDeps } from "../activities/documents.ts";
 import type { SimOrg, SimPeriod } from "../world.ts";
+import { saasUsageMonthInvariant } from "../saas-usage.ts";
 
 /**
  * The oracle. Cheap checks run after every persona action; the full golden-
@@ -91,6 +92,7 @@ export async function fullInvariants(orgId: string, at: string, gitSha: string |
   const failures: InvariantFailure[] = checkpoint.checks
     .filter((c) => !c.ok)
     .map((c) => ({ invariant: c.name, detail: c.detail }));
+  failures.push(...await saasUsageMonthInvariant(orgId));
   return { pass: failures.length === 0, failures, checkpoint };
 }
 
