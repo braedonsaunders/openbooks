@@ -1,5 +1,6 @@
 export * from "./core";
 export * from "./segments";
+export * from "./nonprofit";
 export * from "./subsidiaries";
 export * from "./coa";
 export * from "./parties";

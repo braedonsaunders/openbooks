@@ -178,6 +178,8 @@ export const TENANT_TABLE_POLICIES = {
   "form_responses": "clone:catalog-uuid-rebase",
   "form_template_versions": "clone:catalog-uuid-rebase",
   "form_templates": "clone:catalog-uuid-rebase",
+  "fund_pairs": "clone:catalog-uuid-rebase",
+  "funds": "clone:catalog-uuid-rebase",
   "fx_provider_configs": "clone:catalog-uuid-rebase",
   "fx_provider_runs": "clone:catalog-uuid-rebase",
   "fx_rates": "clone:catalog-uuid-rebase",
