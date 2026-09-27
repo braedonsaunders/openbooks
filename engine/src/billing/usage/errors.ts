@@ -10,7 +10,8 @@
  * This module imports nothing, so the pure rating kernel and the database
  * services share one refusal identity without importing each other.
  */
-export type UsageBillingCode = "prepaid_overage_disallowed";
+/** A stable snake_case refusal code; each service names its own and never reuses one. */
+export type UsageBillingCode = string;
 
 export class UsageBillingError extends Error {
   readonly code: UsageBillingCode;
