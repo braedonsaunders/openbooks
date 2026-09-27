@@ -30,26 +30,28 @@ async function addBin(org: ScratchOrg, code: string): Promise<string> {
 
 async function postSale(org: ScratchOrg): Promise<string[]> {
   const documentId = randomUUID()
-  await db.execute(sql`
-    insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
-                           currency, fx_rate, status, subtotal, tax_total, total, custom)
-    values (${documentId}, ${org.orgId}, 'customer_invoice', ${`INV-RMA-${documentId.slice(0, 8)}`}, ${org.customerId},
-            ${org.subsidiaryId}, ${org.date}, ${org.date}, 'CAD', 1, 'draft', '30', '0', '30', '{}'::jsonb)`)
-  for (let lineNumber = 1; lineNumber <= 3; lineNumber++) {
-    const lineId = randomUUID()
+  await withBypassContext(async () => {
     await db.execute(sql`
-      insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price,
-                                  amount, tax_amount, is_billable, quantity_fulfilled, quantity_billed,
-                                  stock_location_id, custom, tax_overridden)
-      values (${lineId}, ${org.orgId}, ${documentId}, ${lineNumber}, ${org.items.fifo}, ${org.accounts.revenue},
-              '1', '10', '10', '0', false, '0', '0', ${org.stockLocationId}, '{}'::jsonb, false)`)
-  }
-  const approved = await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId} returning id`)
-  assert.equal(approved.rows.length, 1)
+      insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date,
+                             currency, fx_rate, status, subtotal, tax_total, total, custom)
+      values (${documentId}, ${org.orgId}, 'customer_invoice', ${`INV-RMA-${documentId.slice(0, 8)}`}, ${org.customerId},
+              ${org.subsidiaryId}, ${org.date}, ${org.date}, 'CAD', 1, 'draft', '30', '0', '30', '{}'::jsonb)`)
+    for (let lineNumber = 1; lineNumber <= 3; lineNumber++) {
+      const lineId = randomUUID()
+      await db.execute(sql`
+        insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price,
+                                    amount, tax_amount, is_billable, quantity_fulfilled, quantity_billed,
+                                    stock_location_id, custom, tax_overridden)
+        values (${lineId}, ${org.orgId}, ${documentId}, ${lineNumber}, ${org.items.fifo}, ${org.accounts.revenue},
+                '1', '10', '10', '0', false, '0', '0', ${org.stockLocationId}, '{}'::jsonb, false)`)
+    }
+    const approved = await db.execute(sql`update documents set status = 'approved' where id = ${documentId} and org_id = ${org.orgId} returning id`)
+    assert.equal(approved.rows.length, 1)
+  })
   await postDocument(documentId, postingDeps(org))
-  const issues = (await db.execute<{ id: string }>(sql`
+  const issues = (await withBypassContext(() => db.execute<{ id: string }>(sql`
     select m.id from inventory_movements m join document_lines l on l.id = m.document_line_id and l.org_id = m.org_id
-     where m.org_id = ${org.orgId} and l.document_id = ${documentId} and m.kind = 'issue' order by l.line_number`)).rows
+     where m.org_id = ${org.orgId} and l.document_id = ${documentId} and m.kind = 'issue' order by l.line_number`))).rows
   assert.equal(issues.length, 3)
   return issues.map(({ id }) => id)
 }
