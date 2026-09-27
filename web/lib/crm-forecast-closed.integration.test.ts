@@ -63,7 +63,7 @@ async function fixture() {
 async function postCredit(org: { orgId: string; bookId: string; subsidiaryId: string; periodId: string; accounts: { revenue: string; ar: string } }, partyId: string, number: string, subtotal: string) {
   await postDocument(org, { kind: 'customer_credit', number, date: '2026-07-20', partyId, subtotal, taxTotal: '0.0000', total: subtotal });
 }
-async function closed(orgId: string, ownerUserId?: string, period = PERIOD) {
+async function closed(orgId: string, ownerUserId?: string, period: { periodStart: string; periodEnd: string } = PERIOD) {
   const rows = await calculateForecast({ orgId, ...period, ownerUserId }) as { currency: string; closed_amount: string }[];
   return rows.find((row) => row.currency === 'CAD')?.closed_amount;
 }
