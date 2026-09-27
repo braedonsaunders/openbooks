@@ -60,6 +60,7 @@ const mockSources = new Map<string, string>([
         },
       }
       export async function withOrgTransaction(_orgId, work) { return work() }
+      export async function withOrgContext(_orgId, work) { return work() }
       export async function withBypassContext(work) { return work() }
     `,
   ],
