@@ -15,9 +15,69 @@ import {
   resolveOrgEmailTransport,
 } from '@openbooks/engine/src/delivery/email-config.ts'
 import { deriveEmailDeliveryKey, sendVia, shipmentTrackingEmail } from '@openbooks/emails'
+import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
 import { fulfillSalesOrderInTx } from './order-cycle'
 
 type Scope = ReadonlySet<string> | null
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+/**
+ * Save header custom-field values on a draft pick list or shipment through
+ * the same customization validation every document edit uses: values merge
+ * over the stored bag, are validated against the record type's definitions
+ * (unknown keys dropped, required fields enforced), references must belong
+ * to this organization, and an explicit null clears a value. Once the
+ * document leaves draft its values are final, like its lines.
+ */
+export async function saveFulfillmentCustom(
+  tx: Tx,
+  orgId: string,
+  actorId: string,
+  input: { documentId: string; kind: 'pick_list' | 'shipment'; custom: Record<string, unknown> },
+): Promise<Record<string, unknown>> {
+  const current = (await tx.execute<{ custom: Record<string, unknown> | null; document_number: string; status: string; stage: string }>(sql`
+    select d.custom, d.document_number, d.status, fd.stage
+      from documents d
+      join fulfillment_documents fd on fd.document_id = d.id and fd.org_id = d.org_id
+     where d.org_id = ${orgId} and d.id = ${input.documentId} and d.kind = ${input.kind}
+     for update of d`)).rows[0]
+  if (!current) throw new FulfillmentRefusal(`${input.kind === 'pick_list' ? 'Pick list' : 'Shipment'} not found`, 'not_found', 404)
+  if (current.status !== 'draft' || current.stage !== 'open') {
+    throw new FulfillmentRefusal(
+      `${current.document_number} is ${current.stage === 'done' ? 'complete' : current.status}; custom fields change only on a draft`,
+      'wrong_stage',
+      409,
+    )
+  }
+  const defs = await loadFieldDefs('documents', input.kind)
+  const existing = current.custom ?? {}
+  const validated = validateCustomValues(defs, { ...existing, ...input.custom })
+  if (!validated.ok) throw new FulfillmentRefusal(Object.values(validated.errors)[0]!, 'invalid_input', 422)
+  const supplied: Record<string, unknown> = {}
+  for (const key of Object.keys(input.custom)) {
+    if (validated.cleaned[key] !== undefined) supplied[key] = validated.cleaned[key]
+  }
+  const [unowned] = await findUnownedCustomReferences(orgId, defs, supplied)
+  if (unowned) throw new FulfillmentRefusal(`${unowned.label} not found in this organization`, 'not_found', 404)
+  const next: Record<string, unknown> = { ...existing, ...validated.cleaned }
+  for (const def of defs) {
+    if (Object.prototype.hasOwnProperty.call(input.custom, def.key) && input.custom[def.key] == null) delete next[def.key]
+  }
+  const saved = await tx.execute<{ id: string }>(sql`
+    update documents set custom = ${JSON.stringify(next)}::jsonb, updated_at = now(), updated_by = ${actorId}
+     where org_id = ${orgId} and id = ${input.documentId} and status = 'draft'
+    returning id`)
+  if (saved.rows.length === 0) {
+    throw new FulfillmentRefusal(`${current.document_number} changed while its custom fields were being saved`, 'changed_concurrently', 409, 'Reload and try again')
+  }
+  const audited = await tx.execute<{ id: string }>(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'documents', ${input.documentId}, 'update',
+            ${JSON.stringify({ mode: 'custom_fields_set', before: existing, after: next })}::jsonb, ${actorId})
+    returning id`)
+  if (audited.rows.length === 0) throw new Error('custom-field change was not audited')
+  return next
+}
 
 export interface CompletedShipment {
   shipmentId: string

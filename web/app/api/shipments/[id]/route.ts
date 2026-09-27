@@ -11,6 +11,7 @@ import { uuidId } from '@/lib/api/json'
 import { notFound } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'
 import { guardSubsidiaryScope } from '@/lib/authz'
+import { saveFulfillmentCustom } from '@/lib/shipments'
 
 const params = z.object({ id: z.string().uuid() })
 
@@ -36,11 +37,13 @@ const updateBody = z.object({
     lineId: uuidId,
     carton: z.string().max(60).nullable(),
   })).max(500).optional(),
-}).refine((body) => body.carrier !== undefined || body.cartons !== undefined, {
-  message: 'send a carrier or cartons to change',
+  /** Header custom-field values; validated against the record type's definitions. */
+  custom: z.record(z.string(), z.unknown()).optional(),
+}).refine((body) => body.carrier !== undefined || body.cartons !== undefined || body.custom !== undefined, {
+  message: 'send a carrier, cartons or custom fields to change',
 })
 
-/** Change a draft shipment's carrier, service, tracking number or cartons. */
+/** Change a draft shipment's carrier, service, tracking number, cartons or custom fields. */
 export const PATCH = defineRoute({
   permission: 'orders.fulfill',
   feature: 'fulfillment',
@@ -57,6 +60,9 @@ export const PATCH = defineRoute({
       }
       if (body.cartons) {
         await setShipmentCartons(tx, orgId, authz.user.id, { shipmentId: id, cartons: body.cartons, allowedSubsidiaryIds })
+      }
+      if (body.custom) {
+        await saveFulfillmentCustom(tx, orgId, authz.user.id, { documentId: id, kind: 'shipment', custom: body.custom })
       }
     })
     const shipment = await getFulfillmentDocument(db, orgId, id, allowedSubsidiaryIds)

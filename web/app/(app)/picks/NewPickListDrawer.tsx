@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { isCustomFieldKey, type HeaderFieldPlacement } from '@openbooks/customization'
+import { customFieldDefKey, isCustomFieldKey, type HeaderFieldPlacement } from '@openbooks/customization'
 import type { PickCandidateLine } from '@openbooks/engine/src/sales/fulfillment.ts'
 import { Button, FieldLabel, Input, Label, Select } from '@openbooks/ui'
 import { useAppAction } from '@/lib/use-app-action'
@@ -15,6 +15,7 @@ import { fromQuantityUnits, toQuantityUnits } from '@/lib/order-cycle-math'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
+import { CustomFieldInput } from '../../../components/custom-field-input'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { confirmDialog } from '../../../lib/confirm'
 import { fulfillmentRequest } from '../_fulfillment/fulfillment-client'
@@ -93,6 +94,8 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
   const [warehouseId, setWarehouseId] = useState<string>('')
   const [documentDate, setDocumentDate] = useState(data.today)
   const [memo, setMemo] = useState('')
+  const [custom, setCustom] = useState<Record<string, unknown>>({})
+  const defByKey = useMemo(() => new Map(data.headerDefs.map((def) => [def.key, def])), [data.headerDefs])
   const [dirty, setDirty] = useState(false)
 
   const load = useCallback(async () => {
@@ -197,6 +200,7 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
           // Quantities travel exactly as typed; the server classifies an
           // unreadable one and names the pick line it sits on.
           lines: chosen.map((row) => ({ salesOrderLineId: row.salesOrderLineId, binId: row.binId, quantity: row.quantity.trim() })),
+          ...(Object.keys(custom).length > 0 ? { custom } : {}),
         },
       }, t('create.failed')),
       {
@@ -212,9 +216,20 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
   }
 
   const renderField = (placement: HeaderFieldPlacement, editable: boolean): ReactNode => {
-    // Custom header fields are shown on the saved pick list; creation
-    // captures the built-in fields only.
-    if (isCustomFieldKey(placement.key)) return null
+    // Custom header fields save with the pick list; the server validates
+    // them against the record type's definitions.
+    if (isCustomFieldKey(placement.key)) {
+      const def = defByKey.get(customFieldDefKey(placement.key))
+      if (!def) return null
+      return (
+        <CustomFieldInput
+          def={{ ...def, label: placement.labelOverride?.trim() || def.label }}
+          value={custom[def.key]}
+          readOnly={!editable}
+          onChange={(value) => { setCustom((current) => ({ ...current, [def.key]: value })); setDirty(true) }}
+        />
+      )
+    }
     const override = placement.labelOverride?.trim()
     const value = (label: string, content: ReactNode) => (
       <>

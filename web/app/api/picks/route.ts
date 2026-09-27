@@ -6,6 +6,7 @@ import { isoDate, uuidId } from '@/lib/api/json'
 import { created, notFound } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'
 import { guardSubsidiaryScope } from '@/lib/authz'
+import { saveFulfillmentCustom } from '@/lib/shipments'
 
 /** Quantities travel as decimal text so they never cross a float; the
  *  engine classifies an unreadable value and names the remedy. */
@@ -20,6 +21,8 @@ const createBody = z.object({
     lotId: uuidId.nullable().optional(),
     serialId: uuidId.nullable().optional(),
   })).min(1).max(500),
+  /** Header custom-field values; validated against the record type's definitions. */
+  custom: z.record(z.string(), z.unknown()).optional(),
 })
 
 /** Create a draft pick list reserving bin stock for an issued sales order. */
@@ -33,9 +36,12 @@ export const POST = defineRoute({
     if (!order) return notFound('sales_order', body.salesOrderId)
     // Out of scope answers exactly like an absent order.
     if (guardSubsidiaryScope(authz, order.subsidiaryId)) return notFound('sales_order', body.salesOrderId)
-    const pickList = await db.transaction((tx) =>
-      createPickList(tx, orgId, authz.user.id, { ...body, allowedSubsidiaryIds: authz.allowedSubsidiaryIds }),
-    )
+    const { custom, ...input } = body
+    const pickList = await db.transaction(async (tx) => {
+      const createdPickList = await createPickList(tx, orgId, authz.user.id, { ...input, allowedSubsidiaryIds: authz.allowedSubsidiaryIds })
+      if (custom) await saveFulfillmentCustom(tx, orgId, authz.user.id, { documentId: createdPickList.id, kind: 'pick_list', custom })
+      return createdPickList
+    })
     return created({ pickList })
   },
 })
