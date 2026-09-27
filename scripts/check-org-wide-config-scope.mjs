@@ -36,10 +36,13 @@ function actionArm(source, action) {
   return source.slice(match.index, next ? match.index + match[0].length + next.index : source.length);
 }
 
+// The unrestricted-scope guard, called directly or declared on a shared route
+// factory route (`scope: "unrestricted"`), which calls the same guard first.
+const UNRESTRICTED_GUARD = /guardUnrestrictedScope\s*\(|\bscope:\s*["']unrestricted["']/;
 // An arm may classify and guard inline, or delegate both to one local helper
 // (end/delete share a locked scope resolver); either way the pair must be there.
 function classifiesAndGuards(text) {
-  return /isOrgWideWageScope\s*\(/.test(text) && /guardUnrestrictedScope\s*\(/.test(text);
+  return /isOrgWideWageScope\s*\(/.test(text) && UNRESTRICTED_GUARD.test(text);
 }
 function assertLaborRateMutationGuard(source, action) {
   const arm = actionArm(source, action);
@@ -50,6 +53,14 @@ function handlerArm(source, method) {
   const marker = new RegExp(`export\\s+async\\s+function\\s+${method}\\s*\\(`);
   const match = marker.exec(source);
   if (!match) {
+    // A route built with the shared route factory declares each method as
+    // `export const METHOD = defineRoute({ ... })`; its arm runs to the next export.
+    const defined = new RegExp(`export\\s+const\\s+${method}\\s*=\\s*defineRoute\\s*\\(`).exec(source);
+    if (defined) {
+      const rest = source.slice(defined.index + defined[0].length);
+      const next = /\nexport\s+/.exec(rest);
+      return source.slice(defined.index, next ? defined.index + defined[0].length + next.index : source.length);
+    }
     // A route may expose a factory-created handler so tests can inject the
     // permission and persistence boundaries without replacing app modules.
     const factory = new RegExp(`export\\s+const\\s+${method}\\s*=\\s*(create\\w+Handler)\\s*\\(`).exec(source);
@@ -82,7 +93,7 @@ for (const file of routes) {
   if (/setFeedbackSettings\s*\(/.test(source) && /publicPraiseBy|public_praise_by/.test(source)) {
     touched.push("orgs.settings.hrm_feedback.public_praise_by");
     const post = handlerArm(source, "POST");
-    assert.match(post, /guardUnrestrictedScope\s*\(/,
+    assert.match(post, UNRESTRICTED_GUARD,
       `${file} writes org-wide orgs.settings policy without a POST unrestricted-scope guard`);
   }
   if (touched.length === 0) continue;
@@ -101,12 +112,12 @@ for (const file of routes) {
     for (const method of ["POST", "PATCH", "DELETE"]) {
       const arm = handlerArm(source, method);
       if (/\b(?:insert\s+into|update|delete\s+from)\s+(?:public\.)?project_types\b/i.test(arm)) {
-        assert.match(arm, /guardUnrestrictedScope\s*\(/,
+        assert.match(arm, UNRESTRICTED_GUARD,
           `${file} writes org-wide project_types without a ${method} unrestricted-scope guard`);
       }
     }
   }
-  assert.match(source, /guardUnrestrictedScope\s*\(/,
+  assert.match(source, UNRESTRICTED_GUARD,
     `${file} writes org-wide configuration (${touched.join(", ")}) without guardUnrestrictedScope`);
 }
 
@@ -125,7 +136,7 @@ for (const file of routes) {
     if (!new RegExp(`\\b${command}\\s*\\(`).test(source)) continue;
     const arm = handlerArm(source, method);
     assert.match(arm, new RegExp(`\\b${command}\\s*\\(`), `${file} no longer dispatches ${command} from ${method}`);
-    assert.match(arm, /guardUnrestrictedScope\s*\(/,
+    assert.match(arm, UNRESTRICTED_GUARD,
       `${file} dispatches org-wide qualification command ${command} without a ${method} unrestricted-scope guard`);
     qualificationWrites.push({ file, command });
   }
@@ -143,7 +154,7 @@ const connectorRoutes = globSync("web/app/api/platform/connections/**/route.ts",
   .sort();
 for (const file of connectorRoutes) {
   const source = readFileSync(join(root, file), "utf8");
-  assert.match(source, /guardUnrestrictedScope\s*\(/, `${file} exposes org-wide connector state without guardUnrestrictedScope`);
+  assert.match(source, UNRESTRICTED_GUARD, `${file} exposes org-wide connector state without guardUnrestrictedScope`);
 }
 
 // These org-wide settings commands persist policy/secrets beneath orgs.settings
@@ -167,7 +178,7 @@ for (const file of routes) {
       const arm = handlerArm(source, method);
       assert.match(arm, new RegExp(`\\b${writer}\\s*\\(`),
         `${file} no longer calls ${writer} from its ${method} handler; update the derived writer map`);
-      assert.match(arm, /guardUnrestrictedScope\s*\(/,
+      assert.match(arm, UNRESTRICTED_GUARD,
         `${file} writes ${target} without a ${method} unrestricted-scope guard`);
     }
     orgSettingsWrites.push({ file, target });
@@ -190,7 +201,7 @@ for (const file of routes) {
   if (!get) continue;
   for (const [signal, target] of orgSettingsReaders) {
     if (!new RegExp(`\\b${signal}\\b`).test(get)) continue;
-    assert.match(get, /guardUnrestrictedScope\s*\(/,
+    assert.match(get, UNRESTRICTED_GUARD,
       `${file} reads ${target} without a GET unrestricted-scope guard`);
     orgWideConfigReaders.push({ file, target });
   }
@@ -198,7 +209,7 @@ for (const file of routes) {
 for (const file of globSync("web/app/**/view.ts", { cwd: root }).sort()) {
   const source = readFileSync(join(root, file), "utf8");
   if (!/\bbank_match_rules\b/.test(source)) continue;
-  assert.match(source, /guardUnrestrictedScope\s*\(/,
+  assert.match(source, UNRESTRICTED_GUARD,
     `${file} reads org-wide banking rules without an unrestricted-scope guard`);
   const guardAt = source.indexOf("if (guardUnrestrictedScope(authz)) forbidden()");
   const firstReadAt = source.search(/\bdb\.execute(?:<[^>]+>)?\s*\(/);
