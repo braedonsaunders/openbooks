@@ -1597,4 +1597,18 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
     strategy: "restamp",
     reason: "0439 restored to its published bytes; the guard revision moved forward to 0440, which is idempotent over v2's state",
   },
+  {
+    filename: "generated/0432_manufacturing_bom_time_catalog.sql",
+    from: "340f7aef0cad5fed198e84edae10ef2cb843071582167554d8fadbbd0dcb7f5f",
+    to: "57b98ced2a6969f2915ef3d51db85dcbbe179d0fdd167fb916b31b181e06d61c",
+    strategy: "restamp",
+    reason: "comment-only: the current file adds an explanatory comment to one ON CONFLICT clause",
+  },
+  {
+    filename: "generated/0432_manufacturing_bom_time_catalog.sql",
+    from: "f2c9c223fb81d63bc37a1959435b44902e1860a5d7c916f3051345cfee8dc568",
+    to: "57b98ced2a6969f2915ef3d51db85dcbbe179d0fdd167fb916b31b181e06d61c",
+    strategy: "restamp",
+    reason: "the interim revision also granted the query-catalog owner reads on the new manufacturing tables; the current file does not need them, and a database that ran it keeps only redundant read grants",
+  },
 ];
