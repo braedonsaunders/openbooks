@@ -48,7 +48,6 @@ export const dynamic = 'force-dynamic'
 
 /** employee_payroll_profiles.stub_delivery. */
 const STUB_DELIVERY_OPTIONS = ['email', 'print', 'both'] as const
-const STUB_DELIVERIES = new Set<string>(STUB_DELIVERY_OPTIONS)
 
 /**
  * employee_payroll_profiles.payment_method — the payroll-owned override of the
@@ -56,7 +55,6 @@ const STUB_DELIVERIES = new Set<string>(STUB_DELIVERY_OPTIONS)
  * (engine/src/payroll/payment-method.ts) decides from there.
  */
 const PAYMENT_METHOD_OPTIONS = ['eft', 'cheque'] as const
-const PAYMENT_METHODS = new Set<string>(PAYMENT_METHOD_OPTIONS)
 
 const optionalCount = z.union([z.number().int(), z.string().trim().regex(/^\d*$/)]).nullable().optional()
 const optionalPackCount = z.union([z.number(), z.string()]).nullable().optional()
@@ -717,17 +715,8 @@ export const POST = defineRoute({
     if (filingAccountId !== null && !isUuid(filingAccountId)) {
       return NextResponse.json({ error: 'invalid filingAccountId' }, { status: 422 })
     }
-    const stubDelivery = STUB_DELIVERIES.has(String(body.stubDelivery ?? 'email'))
-      ? String(body.stubDelivery ?? 'email')
-      : null
-    if (stubDelivery === null) {
-      return NextResponse.json({ error: 'invalid stubDelivery' }, { status: 422 })
-    }
-    const paymentMethod = body.paymentMethod == null || body.paymentMethod === ''
-      ? null : String(body.paymentMethod)
-    if (paymentMethod !== null && !PAYMENT_METHODS.has(paymentMethod)) {
-      return NextResponse.json({ error: 'invalid paymentMethod' }, { status: 422 })
-    }
+    const stubDelivery = body.stubDelivery ?? 'email'
+    const paymentMethod = body.paymentMethod ?? null
 
     const federalClaimBounds = profileColumnCountBounds(country, 'federal_claim_code')
     const provincialClaimBounds = profileColumnCountBounds(country, 'provincial_claim_code')
