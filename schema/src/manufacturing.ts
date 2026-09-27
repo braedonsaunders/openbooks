@@ -14,6 +14,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, money, orgRef } from "./helpers";
+import { items } from "./documents";
 
 export const mfgWorkCenters = pgTable(
   "mfg_work_centers",
@@ -208,6 +209,7 @@ export const mfgWorkOrders = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
     closedAt: timestamp("closed_at", { withTimezone: true }),
     holdReason: text("hold_reason"),
+    holdPriorStatus: text("hold_prior_status", { enum: ["released", "in_progress"] }),
     cancelReason: text("cancel_reason"),
     standardCostSnapshot: money("standard_cost_snapshot"),
     costCollected: money("cost_collected").notNull().default("0"),
@@ -258,6 +260,14 @@ export const mfgWorkOrders = pgTable(
       sql`${t.status} <> 'on_hold' or (${t.holdReason} is not null and length(btrim(${t.holdReason})) > 0)`,
     ),
     check(
+      "mfg_work_orders_hold_prior_status_check",
+      sql`${t.holdPriorStatus} is null or ${t.holdPriorStatus} in ('released', 'in_progress')`,
+    ),
+    check(
+      "mfg_work_orders_hold_prior_status_state_check",
+      sql`(${t.status} = 'on_hold') = (${t.holdPriorStatus} is not null)`,
+    ),
+    check(
       "mfg_work_orders_short_close_reason",
       sql`${t.status} <> 'closed' or ${t.quantityCompleted} >= ${t.quantityOrdered}
           or (${t.shortCloseReason} is not null and length(btrim(${t.shortCloseReason})) > 0)`,
@@ -290,6 +300,8 @@ export const mfgWoOperations = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     measuredQty: money("measured_qty"),
+    qualityGate: text("quality_gate", { enum: ["none", "measure"] }).notNull(),
+    backflushAt: text("backflush_at", { enum: ["none", "start", "finish"] }).notNull(),
     ...auditColumns,
   },
   (t) => [
@@ -308,6 +320,8 @@ export const mfgWoOperations = pgTable(
     }),
     index("mfg_wo_operations_org_center").on(t.orgId, t.workCenterId, t.workOrderId),
     check("mfg_wo_operations_status_check", sql`${t.status} in ('pending', 'running', 'paused', 'done')`),
+    check("mfg_wo_operations_quality_gate_check", sql`${t.qualityGate} in ('none', 'measure')`),
+    check("mfg_wo_operations_backflush_check", sql`${t.backflushAt} in ('none', 'start', 'finish')`),
     check("mfg_wo_operations_sequence_positive", sql`${t.sequence} > 0`),
     check(
       "mfg_wo_operations_minutes_nonnegative",
@@ -345,6 +359,8 @@ export const mfgWoMaterials = pgTable(
     waivedAt: timestamp("waived_at", { withTimezone: true }),
     waivedBy: uuid("waived_by"),
     waiveReason: text("waive_reason"),
+    quantityPer: money("quantity_per").notNull(),
+    scrapPct: money("scrap_pct").notNull().default("0"),
     ...auditColumns,
   },
   (t) => [
@@ -357,8 +373,9 @@ export const mfgWoMaterials = pgTable(
     index("mfg_wo_materials_org_order").on(t.orgId, t.workOrderId, t.componentItemId),
     check(
       "mfg_wo_materials_quantities_nonnegative",
-      sql`${t.requiredQty} >= 0 and ${t.issuedQty} >= 0 and ${t.backflushQty} >= 0 and ${t.shortageQty} >= 0`,
+      sql`${t.requiredQty} >= 0 and ${t.issuedQty} >= 0 and ${t.backflushQty} >= 0 and ${t.shortageQty} >= 0 and ${t.quantityPer} >= 0`,
     ),
+    check("mfg_wo_materials_scrap_pct_check", sql`${t.scrapPct} >= 0 and ${t.scrapPct} < 100`),
     check("mfg_wo_materials_operation_sequence", sql`${t.operationSeq} is null or ${t.operationSeq} > 0`),
     check("mfg_wo_materials_tracking_check", sql`${t.lotSerialPolicy} in ('none', 'lot', 'serial')`),
     check(
@@ -367,6 +384,33 @@ export const mfgWoMaterials = pgTable(
           or (${t.waivedAt} is not null and ${t.waivedBy} is not null
               and ${t.waiveReason} is not null and length(btrim(${t.waiveReason})) > 0)`,
     ),
+  ],
+);
+
+export const mfgWoByproducts = pgTable(
+  "mfg_wo_byproducts",
+  {
+    id: id(),
+    orgId: orgRef(),
+    workOrderId: uuid("work_order_id").notNull(),
+    itemId: uuid("item_id").notNull(),
+    quantityPer: money("quantity_per").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("mfg_wo_byproducts_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("mfg_wo_byproducts_org_work_order_item_unique").on(t.orgId, t.workOrderId, t.itemId),
+    foreignKey({
+      name: "mfg_wo_byproducts_work_order_fk",
+      columns: [t.orgId, t.workOrderId],
+      foreignColumns: [mfgWorkOrders.orgId, mfgWorkOrders.id],
+    }),
+    foreignKey({
+      name: "mfg_wo_byproducts_item_fk",
+      columns: [t.orgId, t.itemId],
+      foreignColumns: [items.orgId, items.id],
+    }),
+    check("mfg_wo_byproducts_quantity_nonnegative", sql`${t.quantityPer} >= 0`),
   ],
 );
 
