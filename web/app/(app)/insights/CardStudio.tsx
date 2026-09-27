@@ -17,12 +17,10 @@ import {
   type CardSaveDraft,
 } from './card-save'
 import {
-  AGG_FUNCTIONS,
   FILTER_OPERATOR_MAP,
   getSource,
   insightSourceForFeatureState,
   operatorsForType,
-  type AggFn,
   type DateBin,
   type FilterOp,
   type InsightQuery,
@@ -30,23 +28,30 @@ import {
   type VizSettings,
   type VizType,
 } from '@openbooks/analytics'
+import { REPORT_ENTITY_MAP, type ReportMeasure } from '@openbooks/reports'
 import { InsightResultView } from '@openbooks/analytics/viz'
 import { Badge, Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
+import { MeasureEditor } from '../reports/query-config'
 import { VIZ_META } from './viz-meta'
 import type { CardRow } from '../../api/insights/_lib'
 
 const field = 'space-y-1.5'
 const DATE_BINS: DateBin[] = ['day', 'week', 'month', 'quarter', 'year']
 
-type MeasureState = { field: string | ''; agg: AggFn }
 type DimensionState = { field: string; bin: DateBin | '' }
 type FilterState = { field: string; op: FilterOp; value: string }
 
-function toQuery(sourceKey: string, measures: MeasureState[], dimensions: DimensionState[], filters: FilterState[]): InsightQuery {
+function measureForEditor(measure: NonNullable<InsightQuery['measures']>[number]): ReportMeasure {
+  const fn = measure.fn ?? measure.agg ?? 'count'
+  const column = measure.column ?? measure.field
+  return { ...measure, fn, ...(column ? { column } : {}) } as ReportMeasure
+}
+
+function toQuery(sourceKey: string, measures: ReportMeasure[], dimensions: DimensionState[], filters: FilterState[]): InsightQuery {
   const source = getSource(sourceKey)
   return {
     source: sourceKey,
-    measures: measures.map((m) => (m.agg === 'count' ? { agg: 'count' } : { agg: m.agg, field: m.field })),
+    measures,
     dimensions: dimensions.map((d) => {
       const f = source?.fields.find((x) => x.key === d.field)
       return d.bin && f?.canBin ? { field: d.field, bin: d.bin } : { field: d.field }
@@ -102,8 +107,8 @@ export function CardStudio({
   const [description, setDescription] = useState(card.description ?? '')
   const [sourceKey, setSourceKey] = useState(initialQuery.source ?? 'ledger_lines')
 
-  const [measures, setMeasures] = useState<MeasureState[]>(
-    (initialQuery.measures ?? []).map((m) => ({ field: m.field ?? '', agg: m.agg ?? 'count' })),
+  const [measures, setMeasures] = useState<ReportMeasure[]>(
+    (initialQuery.measures ?? []).map(measureForEditor),
   )
   const [dimensions, setDimensions] = useState<DimensionState[]>(
     (initialQuery.dimensions ?? []).map((d) => ({ field: d.field, bin: (d.bin as DateBin) ?? '' })),
@@ -134,7 +139,6 @@ export function CardStudio({
   const enumLabel = (v: string) =>
     tCatalog.has(`catalog.enumValues.${v}`) ? tCatalog(`catalog.enumValues.${v}`) : v.replace(/_/g, ' ')
   const dimensionFields = useMemo(() => source?.fields.filter((f) => f.canDimension) ?? [], [source])
-  const measureFields = useMemo(() => source?.fields.filter((f) => f.canMeasure) ?? [], [source])
   const allFields = source?.fields ?? []
 
   const query = useMemo(() => toQuery(sourceKey, measures, dimensions, filters), [sourceKey, measures, dimensions, filters])
@@ -428,7 +432,9 @@ export function CardStudio({
       // The status is checked before the body is trusted: the server's named
       // refusal (and remedy) wins over the generic fallback.
       if (!res.ok) {
-        toast.error(await readApiErrorMessage(res, t('cards.createDraftFailed')))
+        const message = await readApiErrorMessage(res, t('cards.createDraftFailed'))
+        dispatchSave({ type: 'save-refused', message, conflict: res.status === 409 })
+        toast.error(message)
         return
       }
       const data = (await res.json().catch(() => null)) as { id?: unknown } | null
@@ -440,6 +446,7 @@ export function CardStudio({
       router.replace(`/insights?card=${data.id}`)
       router.refresh()
     } catch {
+      dispatchSave({ type: 'save-refused', message: t('cards.createDraftFailed'), conflict: false })
       toast.error(t('cards.createDraftFailed'))
     } finally {
       setBusy(false)
@@ -452,7 +459,7 @@ export function CardStudio({
     const ns = getSource(next)
     if (!ns) return
     const keys = new Set(ns.fields.map((f) => f.key))
-    setMeasures((ms) => ms.filter((m) => m.agg === 'count' || keys.has(m.field)))
+    setMeasures((ms) => ms.filter((measure) => measure.fn === 'count' || measure.fn === 'formula' || (measure.column ? keys.has(measure.column) : false)))
     setDimensions((ds) => ds.filter((d) => keys.has(d.field)))
     setFilters((fs) => fs.filter((f) => keys.has(f.field)))
     setVizSettings({})
@@ -605,61 +612,14 @@ export function CardStudio({
 
           {/* -- measures ---------------------------------------------- */}
           <section className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cardStudio.measuresTitle')}</h3>
-              {!ro ? (
-                <Button variant="outline" size="sm" onClick={() => setMeasures([...measures, { agg: 'count', field: '' }])}>
-                  <Plus size={14} /> {tCommon('actions.add')}
-                </Button>
-              ) : null}
-            </div>
-            {measures.length === 0 ? (
-              <p className="text-xs text-slate-500 dark:text-slate-400">{t('cardStudio.measuresEmpty')}</p>
-            ) : (
-              measures.map((m, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <Select
-                    aria-label={`${t('cardStudio.measuresTitle')} ${i + 1}: ${t(`aggs.${m.agg}`)}`}
-                    value={m.agg}
-                    onChange={(e) => {
-                      const agg = e.target.value as AggFn
-                      setMeasures(measures.map((x, j) => (j === i ? { ...x, agg } : x)))
-                    }}
-                    disabled={ro}
-                    className="w-28"
-                  >
-                    {AGG_FUNCTIONS.map((a) => (
-                      <option key={a.key} value={a.key}>
-                        {t(`aggs.${a.key}`)}
-                      </option>
-                    ))}
-                  </Select>
-                  {m.agg !== 'count' ? (
-                    <Select
-                      aria-label={`${t('cardStudio.measuresTitle')} ${i + 1}: ${fieldLabel(m.field)}`}
-                      value={m.field}
-                      onChange={(e) => setMeasures(measures.map((x, j) => (j === i ? { ...x, field: e.target.value } : x)))}
-                      disabled={ro}
-                      className="flex-1"
-                    >
-                      <option value="">{t('cardStudio.selectFieldPlaceholder')}</option>
-                      {measureFields.map((f) => (
-                        <option key={f.key} value={f.key}>
-                          {fieldLabel(f.key)}
-                        </option>
-                      ))}
-                    </Select>
-                  ) : (
-                    <span className="flex-1 text-sm text-slate-500 dark:text-slate-400">{t('cardStudio.ofRows')}</span>
-                  )}
-                  {!ro ? (
-                    <Button variant="ghost" size="sm" aria-label={t('cardStudio.removeMeasure')} onClick={() => setMeasures(measures.filter((_, j) => j !== i))}>
-                      <Trash2 size={14} />
-                    </Button>
-                  ) : null}
-                </div>
-              ))
-            )}
+            <MeasureEditor
+              entity={REPORT_ENTITY_MAP[sourceKey]!}
+              measures={measures}
+              onChange={setMeasures}
+              inventoryEnabled={inventoryEnabled}
+              disabled={ro}
+              error={previewError ?? save.error}
+            />
           </section>
 
           {/* -- dimensions -------------------------------------------- */}

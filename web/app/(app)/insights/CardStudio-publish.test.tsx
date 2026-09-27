@@ -14,6 +14,7 @@ declare global {
   var __studioPublishImpl: (() => Promise<Response>) | undefined
   var __studioQueryImpl: (() => Promise<Response>) | undefined
   var __studioDeleteImpl: (() => Promise<Response>) | undefined
+  var __studioSavedPayloads: Array<Record<string, unknown>> | undefined
 }
 
 Object.assign(globalThis, {
@@ -21,6 +22,7 @@ Object.assign(globalThis, {
   __studioPublishImpl: undefined as (() => Promise<Response>) | undefined,
   __studioQueryImpl: undefined as (() => Promise<Response>) | undefined,
   __studioDeleteImpl: undefined as (() => Promise<Response>) | undefined,
+  __studioSavedPayloads: [] as Array<Record<string, unknown>>,
 })
 stubModules({
   navigation: {
@@ -65,6 +67,7 @@ const card = {
 async function mount(options?: {
   confirm?: boolean
   create?: boolean
+  query?: unknown
   queryImpl?: () => Promise<Response>
   deleteImpl?: () => Promise<Response>
 }) {
@@ -74,6 +77,7 @@ async function mount(options?: {
   // may fire while the mount ticks are still flushing.
   ;(globalThis as Record<string, unknown>).__studioQueryImpl = options?.queryImpl
   ;(globalThis as Record<string, unknown>).__studioDeleteImpl = options?.deleteImpl
+  globalThis.__studioSavedPayloads = []
   globalThis.fetch = (async (url: unknown, init?: { method?: string }) => {
     if (String(url) === '/api/insights/query') {
       return (
@@ -83,6 +87,10 @@ async function mount(options?: {
     }
     if (String(url) === '/api/insights/cards/card-1/publish') {
       return (globalThis.__studioPublishImpl ?? (async () => Response.json({ updated_at: 'x' })))()
+    }
+    if (String(url) === '/api/insights/cards/card-1' && init?.method === 'PATCH') {
+      globalThis.__studioSavedPayloads?.push(JSON.parse(String((init as RequestInit).body ?? '{}')) as Record<string, unknown>)
+      return Response.json({ updated_at: '2026-02-01T00:00:00.000Z' })
     }
     if (String(url) === '/api/insights/cards/card-1' && init?.method === 'DELETE') {
       return (globalThis.__studioDeleteImpl ?? (async () => Response.json({})))()
@@ -94,7 +102,7 @@ async function mount(options?: {
   const root = createRoot(host)
   const studio = (
     <CardStudio
-      card={{ ...card }}
+      card={{ ...card, ...(options?.query ? { query: options.query as typeof card.query } : {}) }}
       canCreate={options?.create ?? false}
       canPublish
       sourceKeys={['ledger_lines']}
@@ -139,6 +147,14 @@ async function clickPublish(scope: ParentNode) {
 
 function errors(): string[] {
   return (globalThis.__studioToasts ?? []).filter((t) => t.kind === 'error').map((t) => t.message)
+}
+
+async function changeInput(input: HTMLInputElement, value: string) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')?.set?.call(input, value)
+    input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await tick()
+  })
 }
 
 test('a non-JSON 500 on publish names the failure and releases the button', async (t) => {
@@ -235,4 +251,17 @@ test('a non-JSON 500 on delete names the failure and releases the button (F4T-16
   assert.match(errors().join('\n'), /Could not delete the card \(status 500\)/)
   const del = findButton(document.body, 'Delete')
   assert.equal(del.disabled, false, 'busy releases after the failed delete')
+})
+
+test('a stored filtered formula measure survives card autosave', async (t) => {
+  const measures = [
+    { fn: 'sum', column: 'amount', key: 'amount', label: 'Amount', filter: { combinator: 'and', rules: [{ field: 'entry_status', op: 'eq', value: 'posted' }] } },
+    { fn: 'formula', key: 'margin', label: 'Margin', expr: { op: '/', left: { ref: 'amount' }, right: { ref: 'amount' } }, format: 'ratio' },
+  ]
+  const { host, root } = await mount({ create: true, query: { source: 'ledger_lines', measures, dimensions: [], filters: [] } })
+  t.after(async () => { await act(async () => root.unmount()); host.remove() })
+  await changeInput(document.body.querySelector('input')!, 'Revenue')
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 850)) })
+  const saved = globalThis.__studioSavedPayloads?.[0] as { query: { measures: unknown[] } } | undefined
+  assert.deepEqual(saved?.query.measures, measures)
 })
