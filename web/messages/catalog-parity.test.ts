@@ -255,6 +255,10 @@ const COGNATES = new Set<string>([
   // French spells section/question and their plurals exactly like English.
   'fr:admin.setup.reviewBuilder.cardSummary|{sections, plural, one {# section} other {# sections}} · {questions, plural, one {# question} other {# questions}}',
   'fr:admin.setup.reviewBuilder.questionCount|{count, plural, one {# question} other {# questions}}',
+  // French spells the financial term “ratio” identically.
+  'fr:reports.formats.ratio|Ratio',
+  // “Production” is spelled identically in French.
+  'fr:admin.roles.named.production.name|Production',
   'ja:admin.features.apiAccess.title|REST API',
   'pt-BR:admin.features.scripts.title|Scripts',
   'pt-BR:admin.sandboxes.changeSets.tables.user_scripts|Scripts',

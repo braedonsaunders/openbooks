@@ -881,6 +881,22 @@
       "backorders": {
         "label": "Backorders",
         "description": "Approved sales-order stock lines still owed to the customer — ordered, fulfilled, cancelled and open quantity per line, with customer, item and stock location."
+      },
+      "saas_metrics_subscriptions": {
+        "label": "SaaS subscription metrics",
+        "description": "Monthly subscription movements with customer and plan names."
+      },
+      "saas_metrics_facts": {
+        "label": "SaaS monthly facts",
+        "description": "Monthly additive facts by legal entity, including their revenue basis."
+      },
+      "saas_metrics_cohorts": {
+        "label": "SaaS cohorts",
+        "description": "Monthly customer and MRR levels by subscription cohort."
+      },
+      "deferred_revenue_runoff": {
+        "label": "Deferred revenue runoff",
+        "description": "Unposted future recognition by month, deferred account, book and currency."
       }
     },
     "columns": {
@@ -1938,6 +1954,72 @@
         "document_id": "Order (id)",
         "item_id": "Item (id)",
         "transaction_entry_id": "Transaction entry (id)"
+      },
+      "saas_metrics_subscriptions": {
+        "month": "Month",
+        "subsidiary": "Subsidiary",
+        "customer": "Customer",
+        "plan": "Plan",
+        "subscription_id": "Subscription (id)",
+        "cohort_month": "Cohort month",
+        "movement": "Movement",
+        "mrr_start": "Opening MRR",
+        "mrr_end": "Closing MRR",
+        "new_mrr": "New MRR",
+        "expansion_mrr": "Expansion MRR",
+        "contraction_mrr": "Contraction MRR",
+        "churned_mrr": "Churned MRR",
+        "reactivation_mrr": "Reactivated MRR",
+        "recognized_revenue": "Recognised revenue",
+        "deferred_delta": "Deferred revenue change"
+      },
+      "saas_metrics_facts": {
+        "month": "Month",
+        "subsidiary": "Subsidiary",
+        "basis": "Revenue basis",
+        "mrr_start": "Opening MRR",
+        "mrr_end": "Closing MRR",
+        "new_mrr": "New MRR",
+        "expansion_mrr": "Expansion MRR",
+        "contraction_mrr": "Contraction MRR",
+        "churned_mrr": "Churned MRR",
+        "reactivation_mrr": "Reactivated MRR",
+        "recognized_revenue": "Recognised revenue",
+        "deferred_delta": "Deferred revenue change",
+        "mrr_at_risk": "MRR at risk",
+        "customers_start": "Starting customers",
+        "customers_end": "Ending customers",
+        "customers_new": "New customers",
+        "customers_churned": "Churned customers",
+        "customers_reactivated": "Reactivated customers",
+        "gl_revenue": "GL revenue",
+        "gl_cogs": "GL cost of goods sold",
+        "bookings": "Bookings",
+        "billings": "Billings",
+        "deferred_balance": "Deferred balance"
+      },
+      "saas_metrics_cohorts": {
+        "cohort_month": "Cohort month",
+        "month": "Month",
+        "months_since_start": "Months since start",
+        "subsidiary": "Subsidiary",
+        "start_mrr": "Starting MRR",
+        "mrr": "Cohort MRR",
+        "start_customers": "Starting customers",
+        "customers": "Cohort customers"
+      },
+      "deferred_revenue_runoff": {
+        "month": "Month",
+        "future_month": "Future month",
+        "deferred_account": "Deferred account",
+        "deferred_account_id": "Deferred account (id)",
+        "contract_number": "Contract",
+        "book_id": "Book (id)",
+        "currency": "Currency",
+        "amount": "Planned recognition",
+        "schedule_status": "Schedule status",
+        "obligation_status": "Obligation status",
+        "journal_entry_id": "Journal entry (id)"
       }
     },
     "enumValues": {
