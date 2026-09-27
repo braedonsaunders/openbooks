@@ -365,6 +365,7 @@ export const TENANT_TABLE_POLICIES = {
   "mfg_routings": "clone:catalog-uuid-rebase",
   "mfg_scrap_events": "clone:catalog-uuid-rebase",
   "mfg_scrap_reasons": "clone:catalog-uuid-rebase",
+  "mfg_wo_byproducts": "clone:catalog-uuid-rebase",
   "mfg_wo_materials": "clone:catalog-uuid-rebase",
   "mfg_wo_operations": "clone:catalog-uuid-rebase",
   "mfg_work_center_rates": "clone:catalog-uuid-rebase",
