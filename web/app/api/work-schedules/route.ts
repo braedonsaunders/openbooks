@@ -10,6 +10,8 @@ import { isUuid } from '../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { parseCycleDays } from '../../../lib/work-schedule-days'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 
@@ -67,7 +69,7 @@ function scopedGate(gate: Authz): Authz {
 
 /** Record-level scope denials answer exactly like not-found (a uniform 404). */
 function hidden() {
-  return NextResponse.json({ error: 'not found' }, { status: 404 })
+  return notFound("record")
 }
 
 export async function GET() {

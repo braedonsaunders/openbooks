@@ -12,13 +12,13 @@ import { postLandedCostVoucher } from "@openbooks/engine/src/inventory/landed-co
 import { reverseInventoryMovement } from "@openbooks/engine/src/inventory/reversal.ts";
 import { transferInventory } from "@openbooks/engine/src/inventory/transfers.ts";
 import { inventoryErrorStatus } from "@/lib/api/inventory-errors";
-import { recordNotFoundResponse } from "../../../../lib/api/record-not-found";
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { INVENTORY_ACTION_PERMISSIONS, type CataloguePermission } from '@openbooks/engine/src/organization/permissions.ts'
 import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { notFound } from "@/lib/api/responses";
 
 export const runtime = 'nodejs'
 
@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     )
     const movementSubsidiaryId = source.rows[0]?.subsidiary_id ?? null
     if (!source.rows[0] || (gate.allowedSubsidiaryIds && (!movementSubsidiaryId || !gate.allowedSubsidiaryIds.has(movementSubsidiaryId)))) {
-      return recordNotFoundResponse()
+      return notFound("record")
     }
     // Assembly operations reverse through their own controlled reversal
     // (consume legs, finished-good layer, and journal as one unit), never

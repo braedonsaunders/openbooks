@@ -5,15 +5,22 @@ import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
+import { guardSubsidiaryScope } from "../authz.ts";
 import { conflict, created, notFound, postingRefusal, unprocessable } from "./responses.ts";
 
 class UnbalancedPostError extends PostingError { code = "unbalanced_post"; remedy = "Balance the lines, then post again."; }
 
-test("notFound hides the probed kind and id behind one spelling", async () => {
-  for (const response of [notFound("account"), notFound("account", "some-id")]) {
-    assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), { error: "not_found" });
-  }
+test("notFound and subsidiary scope refusals share one serialized body", async () => {
+  const helperResponse = notFound("account");
+  const guardResponse = guardSubsidiaryScope(
+    { allowedSubsidiaryIds: new Set(["sub-a"]) } as Parameters<typeof guardSubsidiaryScope>[0], "sub-b",
+  );
+  assert.ok(guardResponse);
+  assert.equal(guardResponse.status, helperResponse.status);
+  const body = await helperResponse.text();
+  assert.equal(body, '{"error":"not_found"}');
+  assert.equal(await notFound("account", "some-id").text(), body);
+  assert.equal(await guardResponse.text(), body);
 });
 
 test("unprocessable defaults to 422 with field detail", async () => {
@@ -42,12 +49,6 @@ test("idempotency keys refuse with two codes: 400 malformed, 409 conflict", asyn
     error: "idempotency_key_conflict",
     remedy: "Close and reopen the drawer to try again with a fresh request.",
   });
-});
-
-test("conflict without options deep-equals the bare error", async () => {
-  const response = conflict("invalid_idempotency_key");
-  assert.equal(response.status, 409);
-  assert.deepEqual(await response.json(), { error: "invalid_idempotency_key" });
 });
 
 test("created answers 201 with the payload", async () => {

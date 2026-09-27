@@ -5,6 +5,7 @@ import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { civilDate } from "../documents/bodies";
+import { notFound } from "@/lib/api/responses";
 
 /**
  * GET /api/hrm/org-chart?asOf=YYYY-MM-DD[&root=...] — the tree, or
@@ -12,15 +13,16 @@ import { civilDate } from "../documents/bodies";
  * hrm.employment.read OR hrm.self.read (fenced in the service); the
  * hrmOrgChart switch gates the surface.
  */
+
 export async function GET(req: Request) {
   const hr = await guardPermission("hrm.employment.read");
   const actor = hr instanceof NextResponse ? await guardPermission("hrm.self.read") : hr;
   if (actor instanceof NextResponse) return actor;
   if (!(await isFeatureEnabled(actor.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   if (!(await isFeatureEnabled(actor.user.orgId, "hrmOrgChart"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     const params = new URL(req.url).searchParams;

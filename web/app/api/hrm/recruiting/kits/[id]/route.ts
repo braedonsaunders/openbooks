@@ -5,6 +5,8 @@ import { guardPermission } from "../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../_lib";
 import { setKitActiveBody } from "../bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -22,7 +24,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await depthGate(gate.user.orgId))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   const parsedBody = await parseJsonBody(req, setKitActiveBody);
@@ -44,7 +46,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await depthGate(gate.user.orgId))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   try {

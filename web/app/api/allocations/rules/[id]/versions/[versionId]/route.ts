@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { getRuleVersion, updateDraftVersion } from '../../../../../../../../engine/src/allocations/index.ts'
 import { guardAllocations } from '../../../../../../../lib/allocations-gate'
 import { allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../../../_lib.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -50,7 +52,7 @@ export async function GET(
   try {
     const found = await getRuleVersion(gate.user.orgId, versionParam, gate.allowedSubsidiaryIds)
     if (found.version.ruleId !== ruleId) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     return NextResponse.json(found)
   } catch (error) {
@@ -86,7 +88,7 @@ export async function PATCH(
   try {
     const current = await getRuleVersion(gate.user.orgId, versionParam, gate.allowedSubsidiaryIds)
     if (current.version.ruleId !== ruleId) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     const updated = await updateDraftVersion(
       versionParam,

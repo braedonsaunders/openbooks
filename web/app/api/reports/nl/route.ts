@@ -9,6 +9,8 @@ import { executeReport } from "../../../../lib/custom-reports";
 import { aiRailsErrorResponse, requireAnyPerm } from "../../../../lib/ai-rails";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { canRunReportEntity, hiddenReportEntityKeys } from "../../../../lib/report-authz";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -29,7 +31,7 @@ export async function POST(req: Request) {
   const authz = await requireAnyPerm(["reports.read"]);
   if (authz instanceof NextResponse) return authz;
   if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, nlBody);
   if (!parsedBody.ok) return parsedBody.response;
@@ -100,7 +102,7 @@ export async function GET() {
   const authz = await requireAnyPerm(["reports.read"]);
   if (authz instanceof NextResponse) return authz;
   if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     const drafts = await listNlDrafts(db, { orgId: authz.user.orgId, actorId: authz.user.id });
@@ -124,7 +126,7 @@ export async function PATCH(req: Request) {
   const authz = await requireAnyPerm(["reports.read"]);
   if (authz instanceof NextResponse) return authz;
   if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, nlTransitionBody);
   if (!parsedBody.ok) return parsedBody.response;

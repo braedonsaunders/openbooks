@@ -13,6 +13,8 @@ import { isUuid } from '../../../../../lib/list-params'
 import { bankingErrorResponse } from '../../util'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -23,7 +25,7 @@ export async function GET(_req: Request, { params }: Params) {
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   try {
     const rec = (await db.execute<Record<string, unknown>>(sql`
       select r.id, r.account_id, r.through_date, r.statement_balance, r.status,
@@ -34,7 +36,7 @@ export async function GET(_req: Request, { params }: Params) {
         join accounts a on a.id = r.account_id and a.org_id = r.org_id
        where r.id = ${id} and r.org_id = ${user.orgId}
     `))
-    if (!rec.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!rec.rows[0]) return notFound("record")
     // A session on another entity's account (or a shared account, for a
     // restricted caller) reads exactly like a missing session.
     const scoped = guardSubsidiaryScope(gate, rec.rows[0].account_subsidiary_id as string | null)
@@ -58,7 +60,7 @@ export async function PATCH(req: Request, { params }: Params) {
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { throughDate?: string; statementBalance?: string }
@@ -91,7 +93,7 @@ export async function DELETE(_req: Request, { params }: Params) {
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   try {
     await discardReconciliation(id, {
       orgId: user.orgId,

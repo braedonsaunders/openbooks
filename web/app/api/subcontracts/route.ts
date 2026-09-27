@@ -36,6 +36,8 @@ import { isFeatureEnabled } from "../../../lib/features";
 import { isUuid } from "../../../lib/list-params";
 import { guardSubcontractsFeature } from "../../../lib/subcontracts-gate";
 import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -97,7 +99,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ subcontracts: rows.rows });
   }
 
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   try {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
@@ -117,7 +119,7 @@ export async function GET(request: Request) {
      where s.org_id = ${orgId} and s.id = ${id}
        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds)}
   `));
-  if (!contract.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!contract.rows[0]) return notFound("record");
   // A subcontract on a project outside the caller's scope is a missing one.
   const { projectSubsidiaryId, ...subcontract } = contract.rows[0];
   const denied = guardSubsidiaryScope(authz, projectSubsidiaryId);
@@ -195,7 +197,7 @@ export async function GET(request: Request) {
   }
   throw new Error("Subcontract detail snapshot could not be refreshed");
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (error instanceof ScopeNotFoundError) return notFound("record");
     throw error;
   }
 }
@@ -295,7 +297,7 @@ export async function POST(request: Request) {
   // outside the caller's subsidiary scope is indistinguishable from a missing one.
   const scope = await actionProjectSubsidiary(orgId, action, body);
   if (scope) {
-    if (!scope.found) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (!scope.found) return notFound("record");
     const denied = guardSubsidiaryScope(authz, scope.subsidiaryId);
     if (denied) return denied;
   }
@@ -319,7 +321,7 @@ export async function POST(request: Request) {
           body.currency !== undefined &&
           !(await isFeatureEnabled(orgId, "multiCurrency"))
         ) {
-          return NextResponse.json({ error: "not found" }, { status: 404 });
+          return notFound("record");
         }
         const originalCommitment = exactMoney(body.originalCommitment);
         if (originalCommitment === null) return invalidDecimal("Original commitment", body.originalCommitment);
@@ -480,7 +482,7 @@ export async function POST(request: Request) {
     // (reload, then re-enter) and the client can tell it apart from a 422.
     if (error instanceof SubcontractConflictError) return apiErrorResponse(error, { safeStatus: 409 });
     if (error instanceof SubcontractError) return apiErrorResponse(error, { safeStatus: 422 });
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (error instanceof ScopeNotFoundError) return notFound("record");
     const code = (error as { code?: string }).code;
     if (code === "23505") return NextResponse.json({ error: "That number is already in use" }, { status: 409 });
     console.error("[subcontracts] action failed", error);

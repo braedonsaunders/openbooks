@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../lib/authz";
 import { createDraftJournal } from "../../../../lib/journals";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -73,7 +75,7 @@ function scopeErrorResponse(error: unknown): NextResponse | null {
         { status: 422 },
       );
     case "subsidiary_not_allowed":
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      return notFound("record");
     case "no_available_subsidiary":
       return NextResponse.json(
         { error: "no_available_subsidiary" },
@@ -104,7 +106,7 @@ export async function POST(req: Request) {
     gate.allowedSubsidiaryIds !== null &&
     !gate.allowedSubsidiaryIds.has(subsidiaryId)
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   // Empty restricted scope can never produce a legal journal. Leave the
   // one-versus-many legal-entity decision to the service's database check.

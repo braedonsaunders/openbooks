@@ -10,6 +10,8 @@ import {
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -27,7 +29,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
   const { id } = await ctx.params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   if (gate.allowedSubsidiaryIds !== null) {
     const ids = [...gate.allowedSubsidiaryIds]
     const register = (await db.execute<{ id: string }>(sql`
@@ -44,7 +46,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
        }`)).rows[0]
     // The direct probe is intentionally indistinguishable from a nonexistent
     // register. An empty allowed set therefore denies every register.
-    if (!register) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!register) return notFound("record")
     // Keep the direct record twin explicit as well as the aggregate NOT EXISTS
     // probe above; both paths intentionally return the same 404 response.
     const sample = (await db.execute<{ subsidiaryId: string | null }>(sql`

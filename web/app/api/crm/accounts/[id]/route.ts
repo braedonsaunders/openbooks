@@ -13,6 +13,8 @@ import { isIsoTimestamp } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -50,11 +52,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('crm.accounts.read', 'crm')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const orgId = gate.user.orgId
   const visible = (await db.execute(sql`
     select 1 from parties where id = ${id} and org_id = ${orgId}${crmSharedScope(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}`))
-  if (!visible.rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!visible.rows.length) return notFound("record")
   const [account, statuses, owners, territories, sources] = await Promise.all([
     loadCrmAccount(id, orgId, gate.allowedSubsidiaryIds),
     db.execute<{ id: string; name: string; lifecycle_stage: string; is_default: boolean }>(sql`
@@ -90,7 +92,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const created = await db.transaction(async (tx) => {
     const party = (await tx.execute<{ id: string }>(sql`
       select id from parties where id = ${id} and org_id = ${user.orgId}${crmSharedScope(sql`subsidiary_id`, gate.allowedSubsidiaryIds)} for update`))
@@ -117,7 +119,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       values (${user.orgId}, ${profile.rows[0]!.id}, ${stage}, 'manual', 'Relationship tracking started', ${user.id}, ${user.id})`)
     return 'created' as const
   })
-  if (created === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (created === 'missing') return notFound("record")
   const account = await loadCrmAccount(id, user.orgId, gate.allowedSubsidiaryIds)
   return NextResponse.json({ account })
 }
@@ -127,7 +129,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as Record<string, unknown>
@@ -136,7 +138,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       from crm_account_profiles cp join parties p on p.id = cp.party_id and p.org_id = cp.org_id
      where cp.party_id = ${id} and cp.org_id = ${user.orgId}${crmSharedScope(sql`p.subsidiary_id`,gate.allowedSubsidiaryIds)}`))
   const row = current.rows[0]
-  if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!row) return notFound("record")
   // Mandatory optimistic-concurrency evidence (same contract as the party,
   // bank-account, and opportunity saves): the relationship tab holds its
   // fields in local state, so two tabs must 409 instead of silently
@@ -247,7 +249,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const denied = await db.transaction(async (tx) => {
     const visible = await tx.execute(sql`select id from parties where id=${id} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)} for update`)
-    if (!visible.rows.length) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!visible.rows.length) return notFound("record")
     // Re-check the token under the profile lock: the pre-transaction
     // comparison raced this lock's acquisition, and the stage transitions
     // below bump updated_at (so the field update cannot pin the token

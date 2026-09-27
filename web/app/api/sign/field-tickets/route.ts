@@ -8,6 +8,8 @@ import { validateSigningRequest, verifySigningToken } from '../../../../lib/fiel
 import { acquireFeatureGateLock } from '../../../../lib/features'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -65,7 +67,7 @@ export async function POST(req: Request) {
     // capability is gone.
     await acquireFeatureGateLock(verified.orgId)
     if (!(await lockAndCheckOrgFeature(db, verified.orgId, 'fieldTickets'))) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     // Serialize signers of this request BEFORE any check or write; the lock is
     // transaction-scoped on the pinned connection, so it holds until commit.

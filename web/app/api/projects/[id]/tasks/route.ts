@@ -12,13 +12,15 @@ import {
   parseWorkBreakdownTaskInput,
   ProjectWorkBreakdownError,
 } from '../../../../../lib/project-work-breakdown-validation'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
 async function errorResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof ProjectWorkBreakdownError) {
     // A missing project or task reads as a bare 404: existence stays hidden.
-    if (error.status === 404) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error.status === 404) return notFound("record")
     return apiErrorResponse(error)
   }
   throw error
@@ -30,7 +32,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const feature = await guardProjectsFeature(gate.user.orgId)
   if (feature) return feature
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   try {
     return NextResponse.json({
@@ -47,7 +49,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const feature = await guardProjectsFeature(gate.user.orgId)
   if (feature) return feature
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   try {
     const parsedBody = await parseJsonBody(request, jsonObject);

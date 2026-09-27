@@ -3,6 +3,8 @@ import 'server-only'
 import { NextResponse } from 'next/server'
 import { allocationRunErrorResponse } from '../../../lib/allocations-run-error'
 import { isUuid } from '../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export { allocationRunErrorResponse }
 
@@ -16,7 +18,7 @@ export { allocationErrorResponse, allocationWriteErrorResponse } from '../../../
 
 /** UUID path params 404 like the rest of the app's record routes. */
 export function requireRuleId(id: string): string | NextResponse {
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   return id
 }
 

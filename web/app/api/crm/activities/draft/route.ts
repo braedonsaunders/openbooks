@@ -5,6 +5,8 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -12,7 +14,7 @@ export async function POST(req: NextRequest) {
   const gate = await guardFeaturePermission('crm.activities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  if (gate.allowedSubsidiaryIds?.size === 0) return NextResponse.json({error:'not found'},{status:404})
+  if (gate.allowedSubsidiaryIds?.size === 0) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as { subjectKind?: string; subjectId?: string; kind?: string }
@@ -29,7 +31,7 @@ export async function POST(req: NextRequest) {
       const valid = exists
         ? await tx.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`${body.subjectKind}`,sql`${body.subjectId}`,gate.allowedSubsidiaryIds)}`)
         : { rows: [] }
-      if (!valid.rows.length) return NextResponse.json({error:'not found'},{status:404})
+      if (!valid.rows.length) return notFound("record")
     }
     const inserted = (await tx.execute<{ id: string }>(sql`
       insert into crm_activities

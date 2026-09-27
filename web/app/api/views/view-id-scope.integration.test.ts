@@ -126,7 +126,7 @@ registerHooks({
             export async function updateView(_org, id, _user, _admin, patch) {
               state.updates.push({ id, patch })
               const row = state.views.find((view) => view.id === id)
-              if (!row) return { ok: false, error: 'not found' }
+              if (!row) return { ok: false, error: 'not_found' }
               if (patch.query !== undefined) row.query = patch.query
               if (patch.name !== undefined) row.name = patch.name
               return { ok: true }
@@ -164,26 +164,26 @@ test("every view verb answers a malformed id with 404", async () => {
   for (const id of ["not-a-uuid", "new"]) {
     const got = await GET(json("GET"), params(id));
     assert.equal(got.status, 404, `GET ${id}`);
-    assert.deepEqual(await got.json(), { error: "not found" });
+    assert.deepEqual(await got.json(), { error: "not_found" });
 
     const patched = await PATCH(json("PATCH", { name: "Renamed" }), params(id));
     assert.equal(patched.status, 404, `PATCH ${id}`);
-    assert.deepEqual(await patched.json(), { error: "not found" });
+    assert.deepEqual(await patched.json(), { error: "not_found" });
 
     const deleted = await DELETE(json("DELETE"), params(id));
     assert.equal(deleted.status, 404, `DELETE ${id}`);
-    assert.deepEqual(await deleted.json(), { error: "not found" });
+    assert.deepEqual(await deleted.json(), { error: "not_found" });
 
     const ran = await run(json("POST"), params(id));
     assert.equal(ran.status, 404, `run ${id}`);
-    assert.deepEqual(await ran.json(), { error: "not found" });
+    assert.deepEqual(await ran.json(), { error: "not_found" });
 
     const exported = await exportView(
       new Request(`http://audit.local/api/views/${id}/export?format=csv`),
       params(id),
     );
     assert.equal(exported.status, 404, `export ${id}`);
-    assert.deepEqual(await exported.json(), { error: "not found" });
+    assert.deepEqual(await exported.json(), { error: "not_found" });
   }
 });
 
@@ -215,7 +215,7 @@ test("GET /api/views/[id] 404s a pay_stubs plan when the caller lacks payroll.re
   assert.equal(denied.status, 404);
   const body = (await denied.json()) as { error?: string; view?: { query?: unknown } };
   assert.equal(body.view, undefined);
-  assert.deepEqual(body, { error: "not found" });
+  assert.deepEqual(body, { error: "not_found" });
 
   const allowed = await GET(json("GET"), params(LEDGER_ID));
   assert.equal(allowed.status, 200);

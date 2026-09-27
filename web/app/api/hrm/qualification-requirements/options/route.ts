@@ -4,6 +4,8 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../lib/features'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -15,7 +17,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission('hrm.certifications.manage')
   if (gate instanceof NextResponse) return gate
   if (!(await isFeatureEnabled(gate.user.orgId, 'hrmCertifications'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const params = new URL(req.url).searchParams
   const subjectKind = params.get('subjectKind')

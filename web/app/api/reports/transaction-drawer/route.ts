@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getAuthz } from '../../../../lib/authz'
 import { loadRelatedTransactionDrawerData } from '../../../../components/related-transaction-drawer'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -18,5 +20,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
   }
   const data = await loadRelatedTransactionDrawerData({ id, kind, authz: gate, formLayoutId })
-  return data ? NextResponse.json(data) : NextResponse.json({ error: 'not_found' }, { status: 404 })
+  return data ? NextResponse.json(data) : notFound("record")
 }

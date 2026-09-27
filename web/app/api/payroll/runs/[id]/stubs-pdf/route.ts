@@ -9,6 +9,8 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
 import { mergedRunStubsPdf } from '../../../../../../lib/payroll-outputs'
 import { pdfResponse, safeName } from '../../../../../../lib/export'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -23,13 +25,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select d.subsidiary_id as "subsidiaryId"
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
-  if (!owned) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!owned) return notFound("record")
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
   if (denied) return denied
   const set = new URL(req.url).searchParams.get('set') === 'print' ? 'print' : 'all'
@@ -45,7 +47,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     // An opaque run fails closed exactly like a missing one: no stub bytes
     // for a caller who does not own the complete population.
     if (error instanceof PayrollError) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     const rendererRefusal = rendererUnavailableResponse(error)
     if (rendererRefusal) return rendererRefusal

@@ -7,6 +7,8 @@ import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiar
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -26,14 +28,14 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     select subsidiary_id as "subsidiaryId" from payment_links
      where id = ${id} and org_id = ${gate.user.orgId}
   `));
-  if (!owned.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!owned.rows[0]) return notFound("record");
   const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId);
   if (denied) return denied;
   try {
     await voidPaymentLink(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds);
     return NextResponse.json({ ok: true });
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (e instanceof ScopeNotFoundError) return notFound("record");
     if (e instanceof PaymentAcceptanceError) return apiErrorResponse(e, { safeStatus: 422 });
     return apiErrorResponse(e);
   }

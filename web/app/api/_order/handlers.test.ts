@@ -1294,7 +1294,7 @@ test('a malformed [id] segment is a plain 404 on every order handler, never a uu
     ])
     for (const [index, response] of responses.entries()) {
       assert.equal(response.status, 404, `${['GET', 'PATCH', 'DELETE', 'convert'][index]} ${JSON.stringify(id)}`)
-      assert.deepEqual(await response.json(), { error: 'not found' })
+      assert.deepEqual(await response.json(), { error: 'not_found' })
     }
     assert.equal(harness.lockAttempts, 0)
     assert.equal(harness.headerWrites, 0)

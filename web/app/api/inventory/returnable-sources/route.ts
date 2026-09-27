@@ -10,6 +10,8 @@ import { isUuid } from '../../../../lib/list-params'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { createPermission } from '../../../../lib/document-kinds'
 import { isDocKindEnabled } from '../../../../lib/documents.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -49,7 +51,7 @@ export async function GET(req: Request) {
     !(await isFeatureEnabled(gate.user.orgId, 'inventory')) ||
     !(await isDocKindEnabled(gate.user.orgId, rules.creditKind))
   ) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   const partyId = url.searchParams.get('partyId') ?? ''
@@ -66,7 +68,7 @@ export async function GET(req: Request) {
     select subsidiary_id as "subsidiaryId" from parties
      where id = ${partyId} and org_id = ${gate.user.orgId}
   `))
-  if (!party.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!party.rows[0]) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 

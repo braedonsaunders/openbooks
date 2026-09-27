@@ -184,7 +184,7 @@ const getOrder: AssistantToolDef = {
     const a = raw as { kind: OrderKind; id: string };
     if (!can(authz, kindPerm(a.kind))) return { ok: false, error: "forbidden" };
     const payload = await loadOrder(a.id, authz.user.orgId, a.kind, authz.allowedSubsidiaryIds);
-    if (!payload) return { ok: false, error: "not found" };
+    if (!payload) return { ok: false, error: "not_found" };
     const fulfil = (await db.execute<{ id: string; quantity: string; quantity_fulfilled: string; quantity_billed: string }>(sql`
       select l.id, l.quantity::text as quantity,
              coalesce(l.quantity_fulfilled, 0)::text as quantity_fulfilled,

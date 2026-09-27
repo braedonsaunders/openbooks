@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { isRetainedFileEvidence, replaceFile } from '../../../../../../lib/file-cabinet'
 import { isUuid } from '../../../../../../lib/list-params'
 import { fileViewer, isAllowedContentType, MAX_BYTES, requireFileAccess, requireSession } from '../../../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -10,7 +12,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // Replacing (new version) needs Editor+ on the file.
   const access = await requireFileAccess(gate, id, 'editor')
   if (access) return access
@@ -48,7 +50,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         { status: 409 },
       )
     }
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   return NextResponse.json({ ok: true })
 }

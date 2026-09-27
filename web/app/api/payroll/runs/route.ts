@@ -13,6 +13,8 @@ import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { isUuid } from '../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 
@@ -122,7 +124,7 @@ export async function POST(req: Request) {
       const visible = people.rows.filter((person) =>
         subsidiaryScopeAllows(gate.allowedSubsidiaryIds, person.subsidiaryId, { orgWideNull: true }))
       if (visible.length !== namedEmployees.length) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   }
@@ -140,7 +142,7 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof ScopeNotFoundError) return notFound("record")
     if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
     throw e
   }

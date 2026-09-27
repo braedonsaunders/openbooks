@@ -7,6 +7,8 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { ensureDefaultCategory } from '../../../assets/categories/_ensure'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -61,7 +63,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   // turning Fixed Assets off must stop new register rows without touching
   // units that already exist.
   if (!(await isFeatureEnabled(gate.user.orgId, 'fixedAssets'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const { id } = await params
   // A malformed id names no unit: same answer as an unknown one, never a

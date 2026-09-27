@@ -5,6 +5,8 @@ import { parseReportDrillTarget } from '../../../../lib/report-drill'
 import { overlayLedgerDrillPeriod } from '../../../../lib/report-drill-period'
 import { loadReportDrillData } from '../../../../lib/report-drill-data'
 import { reportDrillErrorResponse } from '../../../../lib/report-drill-error'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -18,13 +20,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'invalid_request' }, { status: 400 })
   }
   if (target.kind === 'budget' && !(await isFeatureEnabled(gate.user.orgId, 'budgets'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   if (target.kind === 'time' && !(await isFeatureEnabled(gate.user.orgId, 'timeTracking'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   if (target.kind === 'orders' && !(await isFeatureEnabled(gate.user.orgId, 'orders'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   try {
     const scoped = await overlayLedgerDrillPeriod(target, {

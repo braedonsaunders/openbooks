@@ -2,11 +2,13 @@ import { NextResponse } from 'next/server'
 import { generatePaymentFileArtifact } from '@openbooks/engine/src/payments/operations.ts'
 import { isUuid } from '@/lib/list-params'
 import { guardPaymentRunPermission, paymentErrorResponse } from '@/app/api/payments/lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string; fileId: string }> }) {
   const { id, fileId } = await params
-  if (!isUuid(id) || !isUuid(fileId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id) || !isUuid(fileId)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
   try { const file = await generatePaymentFileArtifact(id, gate.user.orgId, gate.user.id, { reprocessFileId: fileId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }); return NextResponse.json({ id: file.id, filename: file.filename }) }

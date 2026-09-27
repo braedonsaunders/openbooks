@@ -13,6 +13,8 @@ import type { ImportFormat } from '../../../../../lib/data-io/types'
 import { BudgetMutationError, normalizeBudgetAmount, type BudgetCellInput } from '../../../../../lib/budget-mutations'
 import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../../../../../lib/budget-scope'
 import { PNL_TYPES } from '../../../../../lib/account-types'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -93,7 +95,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // Spreadsheet bytes ride this body, so the house 1 MiB default would
   // refuse legitimate budget workbooks — 10 MiB matches the bank-import
   // ceiling for the same class of payload.
@@ -127,7 +129,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     select fiscal_year, status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId}
   `))
   const scenario = scenarioResult.rows[0]
-  if (!scenario) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!scenario) return notFound("record")
   if (scenario.status !== 'draft') return NextResponse.json({ error: 'budget_is_locked' }, { status: 409 })
   // Scenario owner-scope gate BEFORE the lookup loads below (which resolve
   // every subsidiary and project name): an import rewrites the scenario's

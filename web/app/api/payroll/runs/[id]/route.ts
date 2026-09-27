@@ -27,6 +27,8 @@ import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { decimalNullRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 
@@ -105,7 +107,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const orgId = gate.user.orgId
 
   return db.transaction(async (tx) => {
@@ -123,14 +125,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
        where r.org_id = ${orgId} and r.document_id = ${id}
          for share of r,d`))
     const run = runs.rows[0]
-    if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!run) return notFound("record")
     const denied = guardSubsidiaryScope(gate, run.subsidiaryId as string | null | undefined)
     if (denied) return denied
 
     try {
       await lockAndCheckPayrollRunPopulation(tx, orgId, id, gate.allowedSubsidiaryIds)
     } catch (error) {
-      if (error instanceof PayrollError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (error instanceof PayrollError) return notFound("record")
       throw error
     }
 
@@ -190,7 +192,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('payroll.run', 'payroll')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // Resolve and gate the owning document before parsing or dispatching any
   // action. Every mutation below eventually reaches a shared engine service;
   // keeping this check ahead of that dispatch prevents an out-of-scope run
@@ -200,7 +202,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
-  if (!owned) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!owned) return notFound("record")
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
   if (denied) return denied
   const parsedBody = await parseJsonBody(req, jsonObject);
@@ -622,7 +624,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           from pay_runs r
           join documents d on d.id = r.document_id and d.org_id = r.org_id
          where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
-      if (!owned) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (!owned) return notFound("record")
       const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
       if (denied) return denied
       const result = await attributePayRunEntity({
@@ -681,13 +683,13 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await guardFeaturePermission('payroll.run', 'payroll')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select d.subsidiary_id as "subsidiaryId"
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
-  if (!owned) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!owned) return notFound("record")
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
   if (denied) return denied
   try {

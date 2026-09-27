@@ -5,11 +5,13 @@ import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { saveSurveyBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export async function gateSurveys(orgId: string): Promise<NextResponse | null> {
-  if (!(await isFeatureEnabled(orgId, "hrm"))) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!(await isFeatureEnabled(orgId, "hrm"))) return notFound("record");
   if (!(await isFeatureEnabled(orgId, "hrmSurveys"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   return null;
 }

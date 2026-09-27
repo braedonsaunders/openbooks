@@ -11,8 +11,10 @@ import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/src/o
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '@/lib/authz'
 import { isMaskedFileContentError } from '@/lib/file-storage'
 import { isUuid } from '../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
 
 /** ap.pay for vendor payments, ar.pay for customer receipts. */
+
 export function paymentPermission(kind: PaymentKind): 'ap.pay' | 'ar.pay' {
   return kind === 'vendor_payment' ? 'ap.pay' : 'ar.pay'
 }
@@ -31,7 +33,7 @@ export async function paymentErrorResponse(e: unknown): Promise<NextResponse> {
   // Scope denials are record denials: the uniform 404, never a 500 and never
   // a message naming the hidden subsidiary.
   if (e instanceof ScopeNotFoundError) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   if (e instanceof PaymentError || e instanceof PostingError) {
     return apiErrorResponse(e, { safeStatus: 422 })
@@ -59,23 +61,23 @@ export async function guardPaymentRunPermission(
     assertAnyPermission((permission) => can(authz, permission), [payPerm, receivePerm])
   } catch (error) {
     if (error instanceof ScopeNotFoundError) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     throw error
   }
-  if (!isUuid(runId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(runId)) return notFound("record")
   const row = await db.execute<{ direction: string }>(sql`
     select r.direction from payment_runs r
      where r.id = ${runId} and ${paymentRunScopeSql(authz)}
   `)
   const run = row.rows[0]
-  if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!run) return notFound("record")
   // Wrong-direction callers learn nothing either: the direction-specific
   // permission fails closed with the same uniform 404, so an ap.pay-only
   // caller cannot distinguish an existing inbound run from a missing id
   // (and symmetrically for ar.pay-only vs outbound, both capabilities).
   const permission = `${run.direction === 'inbound' ? 'ar' : 'ap'}.${capability}`
-  if (!can(authz, permission)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!can(authz, permission)) return notFound("record")
   return authz
 }
 
@@ -94,7 +96,7 @@ export async function assertAllocationTargetsInScope(
   // 500. The payment-run bill selection keeps the same boundary (uuidId at
   // the schema, not-found below).
   for (const lineId of openLineIds) {
-    if (!isUuid(lineId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!isUuid(lineId)) return notFound("record")
   }
   const rows = (await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
     select jl.id, jl.subsidiary_id as "subsidiaryId"
@@ -105,7 +107,7 @@ export async function assertAllocationTargetsInScope(
   for (const lineId of openLineIds) {
     // An id that does not resolve in this org fails closed the same way —
     // it is indistinguishable from one outside the caller's scope.
-    if (!byId.has(lineId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!byId.has(lineId)) return notFound("record")
     const denied = guardSubsidiaryScope(authz, byId.get(lineId))
     if (denied) return denied
   }

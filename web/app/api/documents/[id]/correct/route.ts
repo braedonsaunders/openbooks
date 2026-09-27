@@ -15,6 +15,8 @@ import { createPostedCorrectionDraft, runPostedCorrectionDraftFlows, isDocKindEn
 import { DocumentEditError } from "../../../../../../engine/src/records/document-edit-policy.ts";
 import { type DocumentEditInput } from "../../../../../../engine/src/ledger/document-input.ts";
 import { isUuid } from '../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -25,18 +27,18 @@ export async function POST(
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const found = (await db.execute<{ kind: string; status: string; subsidiaryId: string | null }>(sql`
     select kind, status, subsidiary_id as "subsidiaryId"
       from documents
      where id = ${id} and org_id = ${authz.user.orgId}
   `))
   const source = found.rows[0]
-  if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!source) return notFound("record")
   const denied = guardSubsidiaryScope(authz, source.subsidiaryId)
   if (denied) return denied
   if (!(await isDocKindEnabled(authz.user.orgId, source.kind))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   if (!DOC_KINDS[source.kind]) {
     return NextResponse.json(
@@ -47,7 +49,7 @@ export async function POST(
   // Read before correction: without the kind's read grant the record
   // answers as missing, like GET /api/documents/[id].
   if (!canReadDocumentKind(authz, source.kind)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const requiredPermissions = [
     createPermission(source.kind),

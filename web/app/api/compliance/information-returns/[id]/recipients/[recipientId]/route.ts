@@ -9,6 +9,8 @@ import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -34,10 +36,10 @@ export async function PATCH(
   if (blocked) return blocked
   const { orgId, id: actorId } = gate.user
   const { id, recipientId } = await params
-  if (!isUuid(id) || !isUuid(recipientId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id) || !isUuid(recipientId)) return notFound("record")
   // Entity isolation before the body is even parsed (same 404 as a missing filing).
   const filingScope = await loadInformationReturnFilingScope(orgId, id)
-  if (!filingScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!filingScope) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
   if (scopeDenied) return scopeDenied
 

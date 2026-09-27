@@ -9,6 +9,8 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
 import { taxReturnExportData } from '../../../../../../lib/tax-filing'
 import { exportDataToCsv, exportDataToPdf, exportDataToXlsx, orgBranding, resolveLayout, type Translator } from '../../../../../../lib/report-pdf'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -17,7 +19,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const format = new URL(req.url).searchParams.get('format')?.toLowerCase() ?? 'pdf'
   if (!['pdf', 'xlsx', 'csv'].includes(format)) return NextResponse.json({ error: 'invalid format' }, { status: 422 })
 
@@ -42,7 +44,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
            registration_id, registration_number
       from tax_filings where id = ${id} and org_id = ${gate.user.orgId} limit 1`))
   const row = saved.rows[0]
-  if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!row) return notFound("record")
   // This immutable snapshot records the exact subsidiaries whose activity the
   // return includes. Apply the row gate after the org-bound lookup so a
   // restricted filer can reprint its own in-scope filing. A null snapshot

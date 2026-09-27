@@ -12,7 +12,8 @@ import { assetBankHygieneWarning } from '../../../../lib/accounts-hygiene'
 import { isUuid } from '../../../../lib/list-params'
 import { loadAccount, orgBaseCurrency } from '../_lib'
 import { accountInputFields } from '../_input'
-import { recordNotFoundResponse } from '../../../../lib/api/record-not-found'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -54,9 +55,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const gate = await guardPermission('gl.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const payload = await loadAccount(id, gate.user.orgId, gate.allowedSubsidiaryIds)
-  if (!payload) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!payload) return notFound("record")
   // Entity-owned accounts are visible only inside the caller's scope; the
   // shared chart (null subsidiary) reads for everyone.
   const denied = guardSubsidiaryScope(gate, payload.account.subsidiary_id as string | null, { orgWideNull: true })
@@ -68,10 +69,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const gate = await guardPermission('gl.manage')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const existingPayload = await loadAccount(id, gate.user.orgId, gate.allowedSubsidiaryIds)
-  if (!existingPayload) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!existingPayload) return notFound("record")
   const existing = (existingPayload.account)
   // Reads hide out-of-scope entity accounts; the shared chart reads for all.
   const readDenied = guardSubsidiaryScope(gate, existing.subsidiary_id as string | null, { orgWideNull: true })
@@ -94,11 +95,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const restriction = textOrNull(body.currencyRestriction)?.toUpperCase() ?? null
     const base = await orgBaseCurrency(gate.user.orgId)
     if (!(nextReconcilable && restriction && base && restriction === base)) {
-      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+      return notFound("record")
     }
   }
   if (body.eliminate !== undefined && !(await subsidiaryFeatureEnabled(gate.user.orgId))) {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    return notFound("record")
   }
 
   if (body.name !== undefined && typeof body.name !== 'string') return bad('name_required', 'name')
@@ -123,9 +124,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       select type, subsidiary_id from accounts
        where id = ${effectiveParentId} and org_id = ${gate.user.orgId}
     `))
-    if (!parent.rows[0]) return recordNotFoundResponse()
+    if (!parent.rows[0]) return notFound("record")
     if (guardSubsidiaryScope(gate, parent.rows[0].subsidiary_id, { orgWideNull: true })) {
-      return recordNotFoundResponse()
+      return notFound("record")
     }
     if (parent.rows[0].type !== nextType) {
       return bad('parent_type_mismatch', 'type')
@@ -308,7 +309,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       `)
     })
   } catch (error) {
-    if (error instanceof PatchNotFound) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    if (error instanceof PatchNotFound) return notFound("record")
     if (error instanceof PatchInvalid) return bad(error.code, error.field)
     const cause = error && typeof error === 'object' ? (error as { cause?: unknown }).cause : undefined
     const constraint = cause && typeof cause === 'object'

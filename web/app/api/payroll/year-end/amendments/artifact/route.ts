@@ -7,6 +7,8 @@ import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { suppliedValue } from '../../../../../../lib/payroll-decimal-refusal'
 import { guardPayrollFilingData, guardPayrollFilingRowIds } from '../../../subsidiary-scope'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +42,7 @@ export async function GET(req: Request) {
       from payroll_filing_submissions
      where org_id = ${gate.user.orgId} and id = ${id}
   `)).rows[0]
-  if (!submission) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!submission) return notFound("record")
   const rows = (await db.execute<{ rowId: string }>(sql`
     select row_id as "rowId"
       from payroll_filing_submission_slips

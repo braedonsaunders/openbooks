@@ -4,6 +4,8 @@ import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { automationErrorResponse } from "../../_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -12,7 +14,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const gate = await guardPermission("automations.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "automations"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await ctx.params;
   if (!isUuid(id)) return NextResponse.json({ error: "automation id must be a uuid" }, { status: 400 });

@@ -13,6 +13,8 @@ import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
 import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { serializeLedgerDecimal } from "./ledger-decimal";
 import type { SQL } from "drizzle-orm";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -102,7 +104,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "account or party, plus valid from/to calendar dates (from <= to) required" }, { status: 400 });
   }
   if ((account && !isUuid(account)) || (party && !isUuid(party))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
 
   // The same legal-entity scope as the parent aggregates (spend-velocity and

@@ -5,6 +5,8 @@ import { IncomeTaxProvisionError, postProvisionRun } from "@openbooks/engine/src
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardPermission, guardUnrestrictedScope } from "../../../../../../lib/authz";
 import { isUuid } from "../../../../../../lib/list-params";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -27,7 +29,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       select id from tax_provision_runs where org_id = ${gate.user.orgId} and id = ${id}
     `))
   ).rows[0];
-  if (!owned) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!owned) return notFound("record");
   try {
     const result = await postProvisionRun(gate.user.orgId, id, gate.user.id);
     return NextResponse.json(result);

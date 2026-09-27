@@ -171,11 +171,11 @@ const getSubcontract: AssistantToolDef = {
           from subcontract_change_orders where org_id = s.org_id and subcontract_id = s.id) ch on true
        where s.org_id = ${orgId} and s.id = ${id}
     `));
-    if (!contract.rows[0]) return { ok: false, error: "not found" };
+    if (!contract.rows[0]) return { ok: false, error: "not_found" };
     const { projectSubsidiaryId, ...subcontract } = contract.rows[0] as Record<string, unknown> & { projectSubsidiaryId: string | null };
     // A subcontract on a project outside the caller's scope is a missing one.
     if (authz.allowedSubsidiaryIds && !authz.allowedSubsidiaryIds.has(String(projectSubsidiaryId))) {
-      return { ok: false, error: "not found" };
+      return { ok: false, error: "not_found" };
     }
     const [sov, changes, applications, lines, controls, releases] = await Promise.all([
       db.execute(sql`
@@ -309,7 +309,7 @@ const getWipPrebill: AssistantToolDef = {
     }
     const a = raw as { id: string };
     const detail = await loadPrebill(authz.user.orgId, a.id, authz.allowedSubsidiaryIds);
-    if (!detail) return { ok: false, error: "not found" };
+    if (!detail) return { ok: false, error: "not_found" };
     const d = detail as unknown as Record<string, unknown>;
     return {
       ok: true,

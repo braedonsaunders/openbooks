@@ -126,7 +126,7 @@ const getAsset: AssistantToolDef = {
     });
     // The locked loader returns null for both missing and out-of-scope assets.
     if (!payload) {
-      return { ok: false, error: "not found" };
+      return { ok: false, error: "not_found" };
     }
     return { ok: true, data: { ...payload, href: "/assets" } };
   },
@@ -225,7 +225,7 @@ const getLeaseAgreement: AssistantToolDef = {
       return { ok: false, error: "fixedAssets_feature_disabled" };
     const input = raw as { id: string };
     const payload = await loadLease(authz.user.orgId, input.id, authz.allowedSubsidiaryIds);
-    if (!payload) return { ok: false, error: "not found" };
+    if (!payload) return { ok: false, error: "not_found" };
     return { ok: true, data: { ...payload, href: `/assets/leases?lease=${input.id}` } };
   },
 };

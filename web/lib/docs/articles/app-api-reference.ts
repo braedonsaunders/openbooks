@@ -704,7 +704,7 @@ Returns one record or **null**. Costs 5 governance units.
 
 ~~~javascript
 const row = ob.records.get('expense-request', request.body.id);
-if (!row) return { status: 404, body: { error: 'not found' } };
+if (!row) return { status: 404, body: { error: 'not_found' } };
 ~~~
 
 # Backend platform record API: ob.platform

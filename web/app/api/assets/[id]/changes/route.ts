@@ -12,7 +12,7 @@ import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.
 import { guardFeaturePermission } from "@/lib/feature-gates";
 import { exactMoney, parseJsonBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
-import { recordNotFoundResponse } from "../../../../../lib/api/record-not-found";
+import { notFound } from "@/lib/api/responses";
 export const runtime = "nodejs";
 const date = z.string().refine(isIsoCalendarDate, "enter a calendar date");
 const plan = z.array(z.object({ date, amount: exactMoney() })).max(1200);
@@ -146,10 +146,10 @@ export async function GET(
         return { deniedGroupScope: true as const };
       return { subsidiaries, books, groupBooks };
     });
-    if ("deniedGroupScope" in result) return recordNotFoundResponse();
+    if ("deniedGroupScope" in result) return notFound("record");
     return NextResponse.json(result);
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return recordNotFoundResponse();
+    if (error instanceof ScopeNotFoundError) return notFound("record");
     throw error;
   }
 }

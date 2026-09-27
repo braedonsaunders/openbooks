@@ -21,6 +21,8 @@ import {
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 
@@ -94,9 +96,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const run = await loadRun(gate.user.orgId, id)
-  if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!run) return notFound("record")
   const denied = guardSubsidiaryScope(gate, run.subsidiaryId)
   if (denied) return denied
 
@@ -183,9 +185,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('payroll.run', 'payroll')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const run = await loadRun(gate.user.orgId, id)
-  if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!run) return notFound("record")
   const denied = guardSubsidiaryScope(gate, run.subsidiaryId)
   if (denied) return denied
   if (run.runStatus !== 'draft' && run.runStatus !== 'calculated') {

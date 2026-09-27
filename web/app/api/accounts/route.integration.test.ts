@@ -268,7 +268,7 @@ test(
       // refusal stores nothing.
       const mintB = await POST(postRequest(randomUUID(), { name: 'B cash', type: 'asset_other', subsidiaryId: entityB }));
       assert.equal(mintB.status, 404);
-      assert.deepEqual(await mintB.json(), { error: 'not found' });
+      assert.deepEqual(await mintB.json(), { error: 'not_found' });
       // The shared chart is visible, so its refusal names the remedy (403)
       // instead of hiding behind the record-level 404.
       const mintShared = await POST(postRequest(randomUUID(), { name: 'Shared cash', type: 'asset_other' }));

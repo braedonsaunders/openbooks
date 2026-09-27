@@ -9,6 +9,8 @@ import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -24,7 +26,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const feature = await guardProjectsFeature(gate.user.orgId)
   if (feature) return feature
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -107,7 +109,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return syncProjectRevenueContractsInTransaction(tx, orgId, gate.user.id, today, id)
   })
   if (sync instanceof NextResponse) return sync
-  if (!sync) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!sync) return notFound("record")
 
   // The engine owns the Projects gate and names its skip: an override saved
   // while the sync is skipped must warn, never read back as applied progress.

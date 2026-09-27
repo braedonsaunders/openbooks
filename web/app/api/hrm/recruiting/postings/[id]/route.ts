@@ -5,6 +5,8 @@ import { guardPermission } from "../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../_lib";
 import { transitionPostingBody } from "../bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -20,7 +22,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
     !(await isFeatureEnabled(gate.user.orgId, "hrmJobBoards"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   const parsedBody = await parseJsonBody(req, transitionPostingBody);

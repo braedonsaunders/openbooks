@@ -14,6 +14,8 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { benefitsErrorResponse } from "../benefits/_lib";
 import { enrollmentPostBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -30,7 +32,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission("hrm.benefits.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const url = new URL(req.url);
   const employmentId = url.searchParams.get("employmentId");
@@ -76,7 +78,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission(body.selfService ? "hrm.benefits.read" : "hrm.benefits.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     if (body.action === "waive") {

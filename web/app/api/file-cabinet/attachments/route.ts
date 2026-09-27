@@ -16,6 +16,8 @@ import {
   MAX_BYTES,
   requireSession,
 } from '../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -34,10 +36,10 @@ export async function GET(req: Request) {
   if (!gate) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const target = await loadAttachmentTarget(gate.user.orgId, targetTable, targetId)
   if (!target || !attachmentTargetInScope(gate, target)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const permission = attachmentReadPermission(targetTable, target.kind)
-  if (!permission) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!permission) return notFound("record")
   if (!can(gate, permission)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   const items = await listVisibleAttachments(gate.user.orgId, targetTable, targetId, fileViewer(gate))
   return NextResponse.json({ attachments: items })
@@ -69,7 +71,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'unsupported targetTable' }, { status: 422 })
     }
     const target = await loadAttachmentTarget(gate.user.orgId, targetTable, targetId)
-    if (!target || !attachmentTargetInScope(gate, target)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!target || !attachmentTargetInScope(gate, target)) return notFound("record")
     if (!canMutateFiles(gate, targetTable, target.kind)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
     if (!isAllowedContentType(file.type)) {
       return NextResponse.json({ error: `unsupported file type: ${file.type || 'unknown'}` }, { status: 415 })
@@ -114,7 +116,7 @@ export async function POST(req: Request) {
   }
   const targetTable = String(body.targetTable)
   const target = await loadAttachmentTarget(gate.user.orgId, targetTable, targetId)
-  if (!target || !attachmentTargetInScope(gate, target)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!target || !attachmentTargetInScope(gate, target)) return notFound("record")
   if (!canMutateFiles(gate, targetTable, target.kind)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   // The file must belong to the caller's org and be visible to them —
   // blocks cross-org links and attaching out of someone else's private folder.

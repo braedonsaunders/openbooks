@@ -20,6 +20,8 @@ import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { isFeatureEnabled } from '../../../lib/features'
 import { guardProjectsFeature } from '../../../lib/projects-gate'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -63,7 +65,7 @@ export async function GET(req: Request) {
   if (!projectId || !isUuid(projectId)) return NextResponse.json({ error: 'projectId required' }, { status: 400 })
   const project = ((await db.execute(sql`select subsidiary_id from projects where id = ${projectId} and org_id = ${gate.user.orgId}`)))
   if (!project.rows[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(project.rows[0].subsidiary_id)))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const r = (await db.execute(sql`
     select d.id, d.document_number as "documentNumber", d.document_date as "documentDate", d.status,
@@ -97,7 +99,7 @@ export async function POST(req: Request) {
   }
   const project = ((await db.execute(sql`select subsidiary_id from projects where id = ${body.projectId} and org_id = ${gate.user.orgId}`)))
   if (!project.rows[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(project.rows[0].subsidiary_id)))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const lines: ChargeLineInput[] = []
   for (const line of body.lines) {
@@ -116,7 +118,7 @@ export async function POST(req: Request) {
     lines.push({ ...line, quantity, costRate, billRate })
   }
   if (lines.some((line) => line.equipmentUnitId) && !(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   if (!(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
     for (const line of lines) {
@@ -124,7 +126,7 @@ export async function POST(req: Request) {
       const item = (await db.execute<{ kind: string }>(sql`
         select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
       if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   }
@@ -134,7 +136,7 @@ export async function POST(req: Request) {
       const item = (await db.execute<{ kind: string }>(sql`
         select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
       if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   }
@@ -162,7 +164,7 @@ export async function POST(req: Request) {
     // The in-transaction scope recheck refuses exactly like the pre-read
     // above (a concurrent rehome moved the project after it), never a 422.
     if (e instanceof ChargeNotFoundError) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     // Creation commits before approval/posting so a lifecycle failure must
     // identify the durable charge instead of inviting a duplicate retry.

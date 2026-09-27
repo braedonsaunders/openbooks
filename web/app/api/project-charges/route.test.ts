@@ -174,7 +174,7 @@ test('POST answers a concurrent rehome exactly like the pre-read 404', async () 
   const response = await post()
 
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
   assert.equal(routeState.createCalls, 1)
 })
 

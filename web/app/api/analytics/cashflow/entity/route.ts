@@ -11,6 +11,8 @@ import { toISO } from "../../../../../lib/cash/core";
 import { openItems } from "../../../../../lib/cash/open-items";
 import { isUuid } from "../../../../../lib/list-params";
 import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -30,7 +32,7 @@ export async function GET(req: Request) {
   const party = url.searchParams.get("party");
   const side = url.searchParams.get("side") === "ap" ? "ap" : "ar";
   if (!party) return NextResponse.json({ error: "party required" }, { status: 400 });
-  if (!isUuid(party)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(party)) return notFound("record");
 
   // The party is the record boundary.  A null-subsidiary party is an
   // org-wide identity, but every transaction leg below still has to be
@@ -41,7 +43,7 @@ export async function GET(req: Request) {
      where id = ${party} and org_id = ${user.orgId}
      limit 1
   `);
-  if (!partyRow.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!partyRow.rows[0]) return notFound("record");
   const scopeDenied = guardSubsidiaryScope(gate, partyRow.rows[0].subsidiaryId, { orgWideNull: true });
   if (scopeDenied) return scopeDenied;
 

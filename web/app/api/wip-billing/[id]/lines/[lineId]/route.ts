@@ -9,6 +9,8 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { holdPrebillLine, updatePrebillLine } from '../../../../../../lib/wip-billing'
 import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { guardWipBillingFeature } from '../../../../../../lib/wip-billing-gate'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -32,7 +34,7 @@ export async function PATCH(
   const feature = await guardWipBillingFeature(gate.user.orgId)
   if (feature) return feature
   const { id, lineId } = await params
-  if (!isUuid(id) || !isUuid(lineId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id) || !isUuid(lineId)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown> | null

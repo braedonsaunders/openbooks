@@ -13,7 +13,8 @@ import { assetBankHygieneWarning } from '../../../lib/accounts-hygiene'
 import { isUuid } from '../../../lib/list-params'
 import { loadAccount, orgBaseCurrency } from './_lib'
 import { accountInputFields } from './_input'
-import { recordNotFoundResponse } from '../../../lib/api/record-not-found'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -58,11 +59,11 @@ export async function POST(request: Request) {
     const restriction = body.currencyRestriction?.toUpperCase() ?? null
     const base = await orgBaseCurrency(gate.user.orgId)
     if (!(body.reconcilable === true && restriction && base && restriction === base)) {
-      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+      return notFound("record")
     }
   }
   if (body.eliminate !== undefined && !(await subsidiaryFeatureEnabled(gate.user.orgId))) {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    return notFound("record")
   }
 
   const name = body.name?.trim() ?? ''
@@ -157,12 +158,12 @@ export async function POST(request: Request) {
           await lockScopeRow(tx, gate.user.orgId, 'account', parentId, gate.allowedSubsidiaryIds, 'share', { orgWideNull: true })
         } catch (error) {
           if (!(error instanceof ScopeNotFoundError)) throw error
-          return recordNotFoundResponse()
+          return notFound("record")
         }
         const parent = (await tx.execute<{ is_summary: boolean; is_active: boolean; type: string; subsidiary_id: string | null }>(sql`
           select is_summary, is_active, type, subsidiary_id from accounts where id = ${parentId} and org_id = ${gate.user.orgId}
         `)).rows[0]
-        if (!parent) return recordNotFoundResponse()
+        if (!parent) return notFound("record")
         if (!parent.is_summary) return bad('parent_must_be_summary', 'parentId')
         if (!parent.is_active) return bad('inactive_parent', 'parentId')
         if (parent.type !== body.type) return bad('parent_type_mismatch', 'parentId')
@@ -253,7 +254,7 @@ export async function POST(request: Request) {
       : String(error)
     if (message.includes('accounts_org_number')) return bad('number_in_use', 'number')
     if (message.includes('idempotency_key_conflict')) return bad('invalid_idempotency_key', undefined, 409)
-    if (message.includes('parent_not_found')) return recordNotFoundResponse()
+    if (message.includes('parent_not_found')) return notFound("record")
     if (message.includes('inactive_parent')) return bad('inactive_parent', 'parentId')
     if (message.includes('parent_must_be_summary')) return bad('parent_must_be_summary', 'parentId')
     if (message.includes('parent_type_mismatch')) return bad('parent_type_mismatch', 'parentId')

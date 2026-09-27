@@ -5,6 +5,8 @@ import { guardPermission } from "../../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../../_lib";
 import { renderOfferVersionBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -22,7 +24,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission("hrm.recruiting.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await depthGate(gate.user.orgId))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   try {
@@ -41,7 +43,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await depthGate(gate.user.orgId))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   const parsedBody = await parseJsonBody(req, renderOfferVersionBody);

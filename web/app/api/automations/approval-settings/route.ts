@@ -6,6 +6,8 @@ import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { approvalSettingsBody } from "../bodies";
 import { automationErrorResponse } from "../_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -14,7 +16,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission("automations.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "automations"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const url = new URL(req.url);
   const subjectKind = url.searchParams.get("subject");
@@ -31,7 +33,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("automations.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "automations"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, approvalSettingsBody);
   if (!parsedBody.ok) return parsedBody.response;

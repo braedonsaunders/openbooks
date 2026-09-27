@@ -12,6 +12,8 @@ import { DocumentEditError } from "../../../../engine/src/records/document-edit-
 import { loadDocument } from "../../../../engine/src/ledger/document-service.ts";
 import { createPermission, isDocumentCreateKind } from "../../../lib/document-kinds.ts";
 import type { DocumentEditInput } from "../../../../engine/src/ledger/document-input.ts";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -75,7 +77,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `missing permission: ${editPerm}` }, { status: 403 })
   }
   if (!(await isDocKindEnabled(user.orgId, kind))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   // A restricted caller may not home a record into a subsidiary they cannot
   // see — even one that exists and is active. Mirrors PATCH.
@@ -126,7 +128,7 @@ export async function POST(req: Request) {
       const item = (await db.execute<{ kind: string }>(sql`
         select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
       if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   }
@@ -138,7 +140,7 @@ export async function POST(req: Request) {
       const item = (await db.execute<{ kind: string }>(sql`
         select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
       if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   }
@@ -193,7 +195,7 @@ export async function POST(req: Request) {
   // replayed key — an out-of-scope replay meets the uniform not-found.
   if (created.status === 'replayed') {
     const doc = await loadDocument(created.id, user.orgId)
-    if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!doc) return notFound("record")
     const replayDenied = guardSubsidiaryScope(
       authz,
       doc.doc.subsidiary_id as string | null,
@@ -214,7 +216,7 @@ export async function POST(req: Request) {
   }
 
   const doc = await loadDocument(created.id, user.orgId)
-  if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!doc) return notFound("record")
   // Same scope load as the replay path above: the row is read back after
   // the create, so a rehome in between must not disclose it here either.
   const createdDenied = guardSubsidiaryScope(

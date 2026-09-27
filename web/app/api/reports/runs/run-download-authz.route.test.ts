@@ -149,9 +149,9 @@ test('a run id that does not resolve in the caller organization is 404, not the 
   const rendered = await artifact(new Request('http://openbooks.test/api/reports/runs/x/artifact'), params)
 
   assert.equal(download.status, 404)
-  assert.deepEqual(await download.json(), { error: 'not found' })
+  assert.deepEqual(await download.json(), { error: 'not_found' })
   assert.equal(rendered.status, 404)
-  assert.deepEqual(await rendered.json(), { error: 'not found' })
+  assert.deepEqual(await rendered.json(), { error: 'not_found' })
 })
 
 test('CSV download refuses when the caller cannot cover the original snapshot', async () => {

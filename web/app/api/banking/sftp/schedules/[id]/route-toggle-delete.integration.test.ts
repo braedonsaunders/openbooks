@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
  * The toggle branch (`{ isActive }`) and DELETE ignored the affected row
  * count, so a valid UUID for a missing or foreign-tenant schedule returned
  * 200 `{ok:true}` with no observable effect. Both must return the same
- * 404 `{error:'not found'}` the `action=run` branch already returns, keeping
+ * 404 `{error:'not_found'}` the `action=run` branch already returns, keeping
  * other-org identifiers indistinguishable from absent (tenant
  * non-disclosure).
  *
@@ -276,7 +276,7 @@ test(
         isActive: false,
       });
       assert.equal(outcome.status, 404);
-      assert.deepEqual(outcome.body, { error: "not found" });
+      assert.deepEqual(outcome.body, { error: "not_found" });
     } finally {
       await withBypass(() => dropScratchOrg(fixture.orgId));
     }
@@ -320,7 +320,7 @@ test(
         await deleteStatus(fixture, "not-a-uuid"),
       ]) {
         assert.equal(outcome.status, 404);
-        assert.deepEqual(outcome.body, { error: "not found" });
+        assert.deepEqual(outcome.body, { error: "not_found" });
       }
       assert.deepEqual(await scheduleState(scheduleId), { isActive: true });
     } finally {
@@ -368,7 +368,7 @@ test(
         action: "run",
       });
       assert.equal(missing.status, 404);
-      assert.deepEqual(missing.body, { error: "not found" });
+      assert.deepEqual(missing.body, { error: "not_found" });
       assert.equal(routeState.runCalls.length, 0);
 
       const scheduleId = await createSchedule(fixture);
@@ -461,7 +461,7 @@ test(
       authorize(fixture);
       const outcome = await deleteStatus(fixture, randomUUID());
       assert.equal(outcome.status, 404);
-      assert.deepEqual(outcome.body, { error: "not found" });
+      assert.deepEqual(outcome.body, { error: "not_found" });
     } finally {
       await withBypass(() => dropScratchOrg(fixture.orgId));
     }

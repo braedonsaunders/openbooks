@@ -416,7 +416,7 @@ test('omitted currency uses the org base with multi-currency off; explicit curre
       // existing multi-currency feature policy, exactly like PATCH.
       const gated = await post({ ...all.customer_invoice, currency: 'USD' }, randomUUID())
       assert.equal(gated.status, 404)
-      assert.deepEqual(await gated.json(), { error: 'not found' })
+      assert.deepEqual(await gated.json(), { error: 'not_found' })
     })
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))

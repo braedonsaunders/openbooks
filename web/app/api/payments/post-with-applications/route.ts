@@ -16,6 +16,8 @@ import { DocumentEditError, requireDocumentEditRevision } from "../../../../../e
 import { exactMoney, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { assertAllocationTargetsInScope, paymentErrorResponse, paymentPermission } from '../lib'
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -60,7 +62,7 @@ export async function POST(req: Request) {
      where id = ${documentId} and kind in ('vendor_payment', 'customer_payment')
        and org_id = ${authz.user.orgId}
   `))
-  if (!r.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!r.rows[0]) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(authz, r.rows[0].subsidiaryId)
   if (scopeDenied) return scopeDenied
   const targetsDenied = await assertAllocationTargetsInScope(authz, (allocations ?? []).map(item => item.openLineId))
@@ -149,7 +151,7 @@ export async function POST(req: Request) {
       return { kind: 'posted' as const, result, previousStatus }
     })
     if (outcome.kind === 'not_found') {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     if (outcome.kind === 'pending') {
       return NextResponse.json(
@@ -166,7 +168,7 @@ export async function POST(req: Request) {
     await runPostDocumentEffects(documentId, outcome.previousStatus)
     return NextResponse.json({ ok: true, ...outcome.result })
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 })
+    if (e instanceof ScopeNotFoundError) return notFound("record")
     // The engine fence fired under the row lock: someone saved first.
     if (e instanceof PaymentRevisionConflictError) {
       return apiErrorResponse(e, { safeStatus: 409 })

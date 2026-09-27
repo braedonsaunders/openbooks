@@ -15,6 +15,8 @@ import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { partylessControlLines } from '../../../../lib/journal-warnings'
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -93,7 +95,7 @@ export async function POST(req: Request) {
         })
 
         if (outcome.kind === 'not_found') {
-          return NextResponse.json({ error: 'not found' }, { status: 404 })
+          return notFound("record")
         }
         if (outcome.kind === 'scope_denied') {
           return outcome.response

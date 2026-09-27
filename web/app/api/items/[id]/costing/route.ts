@@ -15,6 +15,8 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -53,7 +55,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id) || !(await loadItem(id, gate.user.orgId))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   // updated_at doubles as the optimistic-concurrency revision token callers
   // echo back as expectedUpdatedAt.
@@ -96,7 +98,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const { orgId, id: actorId } = gate.user
   const { id } = await params
   if (!isUuid(id) || !(await loadItem(id, orgId))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   const parsedBody = await parseJsonBody(req, jsonObject);

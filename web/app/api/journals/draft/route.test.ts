@@ -135,7 +135,7 @@ test("an explicit subsidiary outside the restricted scope is indistinguishable f
   const response = await POST(request({ subsidiaryId: OTHER_ID }));
 
   assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { error: "not found" });
+  assert.deepEqual(await response.json(), { error: "not_found" });
   assert.equal(state.calls.length, 0);
 });
 

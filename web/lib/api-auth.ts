@@ -17,6 +17,7 @@ import {
 import type { SessionUser } from "./auth";
 import { allowedSubsidiaryIds } from "./subsidiaries";
 import { isFeatureEnabled } from "./features";
+import { notFound } from "@/lib/api/responses";
 
 /**
  * API-key authentication for the versioned REST API (`/api/v1/*`).
@@ -34,6 +35,7 @@ import { isFeatureEnabled } from "./features";
  * creation. At rest we keep the SHA-256 hash (for lookup) and a 4-char tail
  * preview. Every authenticated request records an `api_key_events` row.
  */
+
 
 const KEY_PREFIX = "ob_live_";
 
@@ -331,5 +333,5 @@ export async function guardApiKeyFeature(
 ): Promise<NextResponse | null> {
   return (await isFeatureEnabled(auth.user.orgId, featureKey))
     ? null
-    : NextResponse.json({ error: "not found" }, { status: 404 });
+    : notFound("record");
 }

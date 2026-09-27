@@ -12,6 +12,8 @@ import { normalizeCountryCode } from '../../../lib/countries'
 import { isIsoCalendarDate } from '../../../lib/crm-dates'
 import { loadParty } from './_lib'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../lib/exact-decimal'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -108,7 +110,7 @@ export async function POST(request: Request) {
   // turning the feature back on restores the same assignment.
   const employeeInput = asRecord(asRecord(body.roles).employee)
   if (employeeInput.workerCompGroupId !== undefined && !(await isFeatureEnabled(user.orgId, 'payroll'))) {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    return notFound("record")
   }
   // Customer/vendor currency is Multi-currency configuration living on the
   // role. Turning that switch off must refuse a new write; the stored code
@@ -119,7 +121,7 @@ export async function POST(request: Request) {
     (customerInput.currency !== undefined || vendorInput.currency !== undefined) &&
     !(await isFeatureEnabled(user.orgId, 'multiCurrency'))
   ) {
-    return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    return notFound("record")
   }
 
   if (body.kind !== undefined && !PARTY_KINDS.includes(body.kind as (typeof PARTY_KINDS)[number])) {

@@ -5,6 +5,8 @@ import { resolveFlag } from "@openbooks/engine/src/hrm/ai/anomalies.ts";
 import { aiRailsErrorResponse, requireAnyPerm } from "../../../../../lib/ai-rails";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -26,7 +28,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     !(await isFeatureEnabled(gate.user.orgId, "hrmPayrollAnomalies")) &&
     !(await isFeatureEnabled(gate.user.orgId, "hrmTimeAnomalies"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   if (!isUuid(id)) {

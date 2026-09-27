@@ -5,13 +5,15 @@ import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { saveTemplateBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 async function gateDocuments(orgId: string): Promise<NextResponse | null> {
   // Feature-off reads and writes 404: a disabled surface is
   // indistinguishable from a missing one, and the service refuses anyway.
-  if (!(await isFeatureEnabled(orgId, "hrm"))) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!(await isFeatureEnabled(orgId, "hrm"))) return notFound("record");
   if (!(await isFeatureEnabled(orgId, "hrmDocuments"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   return null;
 }

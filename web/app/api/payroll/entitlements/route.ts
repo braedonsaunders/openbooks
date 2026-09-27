@@ -5,6 +5,8 @@ import { entitlementBalances } from '@openbooks/engine/src/payroll/entitlements.
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 
@@ -43,7 +45,7 @@ export async function GET(req: Request) {
        for share of p
     `))
     const employeeRow = currencyRes.rows[0]
-    if (!employeeRow) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!employeeRow) return notFound("record")
     const denied = guardSubsidiaryScope(gate, employeeRow.subsidiaryId)
     if (denied) return denied
     const currency = employeeRow.currency ?? 'CAD'

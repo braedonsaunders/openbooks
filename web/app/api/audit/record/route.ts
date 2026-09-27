@@ -4,6 +4,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 const ACTIONS = ['insert', 'update', 'delete', 'post', 'void', 'approve', 'reject'] as const
 
@@ -40,7 +42,7 @@ export async function GET(request: NextRequest) {
   try {
     assertAnyPermission((permission) => can(authz, permission), family)
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof ScopeNotFoundError) return notFound("record")
     throw error
   }
 
@@ -61,7 +63,7 @@ export async function GET(request: NextRequest) {
         select org_id, 'labor_rate_card' as kind, created_at, created_by, updated_at, updated_by
           from item_rate_versions where id = ${recordId} and org_id = ${authz.user.orgId}`))
   const metadata = record.rows[0]
-  if (!metadata) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!metadata) return notFound("record")
   if (table === 'item_rate_versions') {
     // Rate-card versions carry no subsidiary_id of their own: their
     // subsidiary lineage lives in labor_rate_version_scopes, so the shared
@@ -82,7 +84,7 @@ export async function GET(request: NextRequest) {
         .map((row) => row.subsidiaryId)
         .filter((id): id is string => id !== null)
       if (named.length > 0 && !named.some((id) => allowed.has(id))) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   } else {
@@ -94,7 +96,7 @@ export async function GET(request: NextRequest) {
   // Wrong-kind callers learn nothing either: the kind-specific permission
   // fails closed with the same uniform 404, so an ar.read-only caller cannot
   // distinguish an existing AP bill from a missing id (and symmetrically).
-  if (!can(authz, permission)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!can(authz, permission)) return notFound("record")
 
   const q = request.nextUrl.searchParams.get('q')?.trim().slice(0, 120) ?? ''
   const requestedAction = request.nextUrl.searchParams.get('action') ?? ''

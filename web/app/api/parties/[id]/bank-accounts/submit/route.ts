@@ -8,6 +8,7 @@ import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-acco
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { denyLockedOutsidePartyScope, denyOutsidePartyScope } from '../party-scope'
+import { notFound } from "@/lib/api/responses";
 
 /**
  * A submit refusal raised INSIDE the submit transaction so the dispatch rolls
@@ -16,6 +17,7 @@ import { denyLockedOutsidePartyScope, denyOutsidePartyScope } from '../party-sco
  * the refusal and could later release the record. The outer catch maps this
  * to the 422 the surface renders.
  */
+
 class BankAccountSubmitError extends Error {}
 
 export const runtime = 'nodejs'
@@ -65,7 +67,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
        where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
        for update
     `))
-    if (existing.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (existing.rows.length === 0) return notFound("record")
     const account = existing.rows[0]!
     if (account.retiredAt) {
       return NextResponse.json(

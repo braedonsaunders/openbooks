@@ -8,6 +8,8 @@ import {
 import { getAuthz, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { performanceErrorResponse } from "../../review-cycles/_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -28,7 +30,7 @@ export async function GET(req: Request) {
     !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||
     !(await isFeatureEnabled(authz.user.orgId, "hrmFeedback"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   void req;
   try {
@@ -49,7 +51,7 @@ export async function POST(req: Request) {
     !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||
     !(await isFeatureEnabled(authz.user.orgId, "hrmFeedback"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, settingsBody);
   if (!parsedBody.ok) return parsedBody.response;

@@ -32,7 +32,7 @@ const authzMock = "data:text/javascript," + encodeURIComponent(`
   export function guardSubsidiaryScope(gate, subsidiaryId) {
     if (gate.allowedSubsidiaryIds === null || gate.allowedSubsidiaryIds === undefined) return null;
     if (subsidiaryId && gate.allowedSubsidiaryIds.has(subsidiaryId)) return null;
-    return Response.json({ error: 'not found' }, { status: 404 });
+    return Response.json({ error: 'not_found' }, { status: 404 });
   }
 `);
 // resolveDefinitionToExportData requires a Next request scope (report authz
@@ -125,7 +125,7 @@ test("stub PDF hides a run carrying an out-of-scope employee", { skip: !process.
     // JSON would throw instead of reporting the 200.
     const refusedBody = await refused.clone().text();
     assert.equal(refused.status, 404, JSON.stringify(refusedBody.slice(0, 200)));
-    assert.deepEqual(JSON.parse(refusedBody), { error: "not found" });
+    assert.deepEqual(JSON.parse(refusedBody), { error: "not_found" });
 
     // The run IS printable: the unrestricted control receives the stub PDF,
     // proving the scoped refusal above is the population check at work.

@@ -37,7 +37,7 @@ stubModules({
         const scope = authz?.allowedSubsidiaryIds ?? null
         if (scope === null) return null
         if (subsidiaryId && scope.has(subsidiaryId)) return null
-        return NextResponse.json({ error: "not found" }, { status: 404 })
+        return NextResponse.json({ error: "not_found" }, { status: 404 })
       }
     `,
     "@/lib/compliance": `

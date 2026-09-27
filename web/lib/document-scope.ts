@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardSubsidiaryScope, type Authz } from './authz'
+import { notFound } from "@/lib/api/responses";
 
 /**
  * Locked subsidiary recheck for document write routes (actions, PATCH,
@@ -18,6 +19,7 @@ import { guardSubsidiaryScope, type Authz } from './authz'
  * deleted row answers as missing. Denials are the uniform 404, never an
  * oracle.
  */
+
 export async function lockedDocumentScopeDenied(
   authz: Authz,
   id: string,
@@ -27,6 +29,6 @@ export async function lockedDocumentScopeDenied(
      where id = ${id} and org_id = ${authz.user.orgId} for update
   `))
   const row = relocked.rows[0]
-  if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!row) return notFound("record")
   return guardSubsidiaryScope(authz, row.subsidiaryId)
 }

@@ -10,6 +10,7 @@ import {
 import type { Authz } from '../../../lib/authz'
 import { guardSubsidiaryScope } from '../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import { notFound } from "@/lib/api/responses";
 
 /**
  * The subsidiary-scope denial as a throwable, for guards that must run
@@ -21,6 +22,7 @@ import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
  * PayrollError nor a concurrency fence), so the transaction rolls back with
  * nothing persisted.
  */
+
 export class FilingScopeDenied {
   constructor(readonly response: Response) {}
 }
@@ -46,7 +48,7 @@ export async function guardPayrollEmployees(
        for share of p
   `)).rows
   // An unresolved employee id is indistinguishable from an out-of-scope one.
-  if (rows.length !== ids.length) return notFound()
+  if (rows.length !== ids.length) return notFound("payroll record")
   for (const row of rows) {
     const denied = guardSubsidiaryScope(gate, row.subsidiaryId)
     if (denied) return denied
@@ -70,7 +72,7 @@ export async function guardPayrollFilingAccounts(
        and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
        and (${includeInactive} or is_active)
   `)).rows
-  if (rows.length !== ids.length) return notFound()
+  if (rows.length !== ids.length) return notFound("payroll record")
   for (const row of rows) {
     const denied = await guardPayrollSubsidiaryOrRoot(gate, row.subsidiaryId)
     if (denied) return denied
@@ -85,7 +87,7 @@ export async function guardPayrollVendor(gate: Authz, partyId: string): Promise<
       from parties
      where org_id = ${gate.user.orgId} and id = ${partyId}
   `)).rows
-  if (rows.length !== 1) return notFound()
+  if (rows.length !== 1) return notFound("payroll record")
   // Remittance bills are posted to the active root entity. A null-subsidiary
   // vendor is an org-wide party, so resolve it to that same root rather than
   // accidentally allowing a bill for a root the caller cannot see.
@@ -144,7 +146,7 @@ export async function guardPayrollFilingRowIds(
   try {
     declared = yearEndFiling(country, filing)
   } catch {
-    return notFound()
+    return notFound("payroll record")
   }
   const parsed = rowIds.map((rowId) => declared.parseRowId(rowId))
   if (parsed.some((row) => row === null)) {
@@ -157,7 +159,7 @@ export async function guardPayrollFilingRowIds(
   // sources than the ROE needs its own executor — cadence routes it to the
   // ROE's, loudly documented here, rather than to a wrong one silently.
   const kind = filingGuardKind(country, filing)
-  if (kind === null) return notFound()
+  if (kind === null) return notFound("payroll record")
   // monthly periodic returns (e.g. ES Modelo 111 mensual) aggregate by filing account exactly like quarterly ones
   if (kind === 'quarterly' || kind === 'monthly') return guardPayroll941Rows(gate, country, rowIds, taxYear)
   const employees = parsed.flatMap((row) => row!.employees)
@@ -199,7 +201,7 @@ async function guardPayroll941Rows(
        )`), sql` or `)})
   `)).rows
   const resolved = new Set(sources.map(row => `${row.account ?? ''}:${row.quarter}`))
-  if (requested.some(row => !resolved.has(row.id))) return notFound()
+  if (requested.some(row => !resolved.has(row.id))) return notFound("payroll record")
   for (const row of sources) {
     const denied = guardSubsidiaryScope(gate, row.subsidiaryId)
     if (denied) return denied
@@ -228,7 +230,7 @@ async function guardPayrollFilingEmployees(
   employeeIds: readonly string[],
   taxYear: number,
 ): Promise<Response | null> {
-  if (!Number.isInteger(taxYear) || taxYear < 2020 || taxYear > 2100) return notFound()
+  if (!Number.isInteger(taxYear) || taxYear < 2020 || taxYear > 2100) return notFound("payroll record")
   const ids = [...new Set(employeeIds)]
   if (ids.length === 0) return null
   const rows = (await db.execute<{ employeeId: string; subsidiaryId: string | null }>(sql`
@@ -277,7 +279,7 @@ export async function guardPayrollRoeEmployees(
   const employeeDenied = await guardPayrollEmployees(gate, ids)
   if (employeeDenied) return employeeDenied
   const sources = await roeSourceScope(gate.user.orgId, ids)
-  if (new Set(sources.map(row => row.employeeId)).size !== ids.length) return notFound()
+  if (new Set(sources.map(row => row.employeeId)).size !== ids.length) return notFound("payroll record")
   for (const row of sources) {
     if (row.sourceDocumentId) {
       const denied = guardSubsidiaryScope(gate, row.sourceSubsidiaryId)
@@ -351,10 +353,6 @@ async function activeRoot(gate: Authz): Promise<string | null> {
  *   input reaches the database untested (queue item 34: the result was a
  *   database error, the wrong error class, for privileged callers).
  */
-function notFound(): Response {
-  return Response.json({ error: 'not found' }, { status: 404 })
-}
-
 /** Actor-independent: the request's inputs do not fit the declared grammar. */
 function malformedInput(message: string): Response {
   return NextResponse.json({ error: message }, { status: 422 })

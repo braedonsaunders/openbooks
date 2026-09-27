@@ -174,7 +174,7 @@ stubModules({
        if (allowed === null || (subsidiaryId == null && opts.orgWideNull === true) || (subsidiaryId != null && allowed.has(subsidiaryId))) {
          return null
        }
-       return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
+       return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 })
      }
      export function guardUnrestrictedScope(authz) {
        try {

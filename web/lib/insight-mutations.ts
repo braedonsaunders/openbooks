@@ -5,6 +5,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { Authz } from './authz'
 import { insightVisibilitySql } from './insight-access'
 import { auditSetupChange } from './setup/audit'
+import { notFound } from "@/lib/api/responses";
+
 
 type InsightTable = 'insight_cards' | 'insight_dashboards'
 type Executor = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -49,7 +51,7 @@ export async function mutateInsight(
         before = row.rows[0]?.snapshot ?? null
         revision = row.rows[0]?.revision ?? null
         if (!before)
-          return NextResponse.json({ error: 'not found' }, { status: 404 })
+          return notFound("record")
       }
       const response = await work(tx, before, revision)
       if (response.status >= 400) throw new RejectedMutation(response)

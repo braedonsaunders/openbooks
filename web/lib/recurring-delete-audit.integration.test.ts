@@ -86,7 +86,7 @@ test("deleting a missing schedule reports not found and writes no audit", async 
     const missing = randomUUID();
     const response = await withOrgContext(orgId, () => detail.DELETE(request("DELETE"), paramsFor(missing)));
     assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), { error: "not found" });
+    assert.deepEqual(await response.json(), { error: "not_found" });
     assert.deepEqual(await auditRows(orgId, missing), [], "a refused delete must not invent audit history");
   } finally { state.user = null; await dropScratchOrg(orgId); }
 });

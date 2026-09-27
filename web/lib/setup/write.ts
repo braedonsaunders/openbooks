@@ -1808,7 +1808,7 @@ export async function createSetupRecord(
     // switch off must refuse a new write; omitting currency keeps the
     // org base so a book can still be created and stored books stay.
     if (body.currency !== undefined && !multiCurrency) {
-      return { status: 404, body: { error: 'not found' } }
+      return { status: 404, body: { error: 'not_found' } }
     }
     try {
       const id = await setupWriteTransaction(entity, orgId, body, undefined, (tx) =>
@@ -2091,7 +2091,7 @@ export async function updateSetupRecord(
   const id = String(body.id ?? '')
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !UUID_RE.test(id)) {
-    return { status: 404, body: { error: 'not found' } }
+    return { status: 404, body: { error: 'not_found' } }
   }
 
   if (entity.dataSource === 'extension-settings') {
@@ -2154,7 +2154,7 @@ export async function updateSetupRecord(
     // switch off must refuse a write; omitting currency keeps the
     // stored book.
     if (body.currency !== undefined && !multiCurrency) {
-      return { status: 404, body: { error: 'not found' } }
+      return { status: 404, body: { error: 'not_found' } }
     }
     try {
       await setupWriteTransaction(entity, orgId, body, id, (tx) =>
@@ -2593,7 +2593,7 @@ export async function updateSetupRecord(
       }
       return true
     }, scopeOptions)
-    if (!found) return { status: 404, body: { error: 'not found' } }
+    if (!found) return { status: 404, body: { error: 'not_found' } }
     return { status: 200, body: { id, ...(scheduleRescope ? { rescope: scheduleRescope } : {}) } }
   } catch (e) {
     if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
@@ -2652,7 +2652,7 @@ export async function deleteSetupRecord(
 
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (idColumn(entity) === 'id' && !UUID_RE.test(id)) {
-    return { status: 404, body: { error: 'not found' } }
+    return { status: 404, body: { error: 'not_found' } }
   }
 
   const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
@@ -2689,7 +2689,7 @@ export async function deleteSetupRecord(
       }, tx)
       return true
     }, scopeOptions)
-    if (!found) return { status: 404, body: { error: 'not found' } }
+    if (!found) return { status: 404, body: { error: 'not_found' } }
     return { status: 200, body: { ok: true } }
   } catch (e) {
     if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }

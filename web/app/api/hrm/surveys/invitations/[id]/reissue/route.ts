@@ -3,6 +3,7 @@ import { reissueInvitationToken } from "@openbooks/engine/src/hrm/surveys/respon
 import { guardPermission } from "../../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "../../../../documents/_lib";
+import { notFound } from "@/lib/api/responses";
 
 /**
  * POST /api/hrm/surveys/invitations/[id]/reissue — re-mint one open
@@ -10,14 +11,15 @@ import { hrmDocumentsErrorResponse } from "../../../../documents/_lib";
  * fresh token for the /survey/[token] page. The service refuses
  * answered invitations, closed surveys, and anyone else's invitation.
  */
+
 export async function POST(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission("hrm.self.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmSurveys"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     const { id } = await ctx.params;

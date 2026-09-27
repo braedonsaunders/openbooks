@@ -12,6 +12,8 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { sftpImportScheduleRunLockKey } from '@openbooks/engine/src/sftp/import-job.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -50,19 +52,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (unrestricted) return unrestricted
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { action?: string; isActive?: boolean }
   if (body.action !== 'rotate' && body.action !== 'toggle') {
     return NextResponse.json({ error: "action must be 'toggle' or 'rotate'" }, { status: 400 })
   }
-  let notFound = false
+  let recordMissing = false
   if (body.action === 'rotate') {
     const password = randomBytes(18).toString('base64url')
     const username = await db.transaction(async (tx) => {
       const before = await currentRow(tx, id, user.orgId)
-      if (!before) { notFound = true; return null }
+      if (!before) { recordMissing = true; return null }
       const after = (await tx.execute<SftpServerAuditRow & { id: string; username: string }>(sql`
         update sftp_servers set password_encrypted = ${encryptSecret(password, user.orgId)}, updated_at = now(), updated_by = ${user.id}
          where id = ${id} and org_id = ${user.orgId}
@@ -78,7 +80,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }, tx)
       return after.username
     })
-    if (notFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (recordMissing) return notFound("record")
     // The password just changed: end this process's live sessions for the
     // login now. Sessions on any other listener die on their next operation
     // through the daemon's liveness fence; revokeSftpSessions never throws.
@@ -89,7 +91,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let refused: NextResponse | null = null
   await db.transaction(async (tx) => {
     const before = await currentRow(tx, id, user.orgId)
-    if (!before) { notFound = true; return }
+    if (!before) { recordMissing = true; return }
     // Reactivation is the update path that can reintroduce shared folders:
     // refuse waking a server whose root is equal to, inside, or containing
     // an ACTIVE sibling's root. The target row is already locked by
@@ -159,7 +161,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }, tx)
   })
   if (refused) return refused
-  if (notFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (recordMissing) return notFound("record")
   if (!nextActive) {
     // The login was just disabled: end this process's live sessions now.
     // Any other listener's sessions die on their next operation through
@@ -178,15 +180,15 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (unrestricted) return unrestricted
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const { response: invalidBody, reason } = await deletionReason(req)
   if (invalidBody) return invalidBody
-  let notFound = false
+  let recordMissing = false
   let refused: NextResponse | null = null
   try {
     await db.transaction(async (tx) => {
       const before = await currentRow(tx, id, user.orgId)
-      if (!before) { notFound = true; return }
+      if (!before) { recordMissing = true; return }
       // A server that still delivers payment files or feeds statement
       // imports cannot vanish: bank profiles hold a RESTRICT foreign key
       // and import schedules hold the 0242 composite tenant FK
@@ -237,7 +239,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     throw e
   }
   if (refused) return refused
-  if (notFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (recordMissing) return notFound("record")
   // The login row is gone: end this process's live sessions now. Any other
   // listener's sessions die on their next operation through the daemon's
   // liveness fence; revokeSftpSessions never throws.

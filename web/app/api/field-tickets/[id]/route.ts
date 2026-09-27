@@ -20,6 +20,8 @@ import {
   updateTicketHeader,
 } from '../../../../lib/field-tickets'
 import { sendTicketForSignature } from '../../../../lib/field-ticket-signing'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -47,7 +49,7 @@ async function guardTicketScope(authz: Authz, ticketId: string): Promise<NextRes
       join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
      where d.id = ${ticketId} and d.org_id = ${authz.user.orgId} and d.kind = 'field_ticket'
   `)
-  if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!owned.rows[0]) return notFound("record")
   // A few route unit fakes omit the optional field; production Authz always
   // supplies null (unrestricted) or a concrete set.
   const scopedAuthz = authz.allowedSubsidiaryIds === undefined
@@ -63,7 +65,7 @@ async function guardProjectScope(authz: Authz, projectId: string): Promise<NextR
       from projects p
      where p.id = ${projectId} and p.org_id = ${authz.user.orgId} and p.is_active
   `)
-  if (!project.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!project.rows[0]) return notFound("record")
   const scopedAuthz = authz.allowedSubsidiaryIds === undefined
     ? { ...authz, allowedSubsidiaryIds: null }
     : authz
@@ -90,8 +92,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission('time.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
+  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return notFound("record")
   const denied = await guardTicketScope(gate, id)
   if (denied) return denied
   try {
@@ -108,8 +110,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardPermission('time.manage')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
+  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return notFound("record")
   const denied = await guardTicketScope(gate, id)
   if (denied) return denied
   const parsedBody = await parseJsonBody(req, jsonObject);
@@ -157,13 +159,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 /** Ticket drafting/submission actions. Approval decisions live only in Flows. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const gate = await guardPermission('time.manage')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
   const userId = gate.user.id
-  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return notFound("record")
 
   const denied = await guardTicketScope(gate, id)
   if (denied) return denied
@@ -208,20 +210,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       const expectedRevision = preflightRevision as string
       const equipmentUnitId = typeof body.equipmentUnitId === 'string' && isUuid(body.equipmentUnitId) ? body.equipmentUnitId : null
       if (equipmentUnitId && !(await isFeatureEnabled(orgId, 'equipment'))) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
       if (typeof body.itemId === 'string' && isUuid(body.itemId) && !(await isFeatureEnabled(orgId, 'equipment'))) {
         const item = (await db.execute<{ kind: string }>(sql`
           select kind from items where id = ${body.itemId} and org_id = ${orgId}`))
         if (item.rows[0]?.kind === 'equipment_charge') {
-          return NextResponse.json({ error: 'not found' }, { status: 404 })
+          return notFound("record")
         }
       }
       if (typeof body.itemId === 'string' && isUuid(body.itemId) && !(await isFeatureEnabled(orgId, 'inventory'))) {
         const item = (await db.execute<{ kind: string }>(sql`
           select kind from items where id = ${body.itemId} and org_id = ${orgId}`))
         if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-          return NextResponse.json({ error: 'not found' }, { status: 404 })
+          return notFound("record")
         }
       }
       await addTicketLine(orgId, userId, id, {
@@ -274,8 +276,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const gate = await guardPermission('time.manage')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
+  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return notFound("record")
   const denied = await guardTicketScope(gate, id)
   if (denied) return denied
   const parsedBody = await parseJsonBody(req, jsonObject);

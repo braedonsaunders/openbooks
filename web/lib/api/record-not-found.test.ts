@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
-import { hrmAuthorizationResponse, recordNotFoundResponse } from "./record-not-found.ts";
+import { hrmAuthorizationResponse } from "./record-not-found.ts";
 
 test("record visibility failures share one response while missing grants remain forbidden", async () => {
   const hiddenRecords = [
@@ -10,8 +10,6 @@ test("record visibility failures share one response while missing grants remain 
     new HrmAuthorizationError("account is not visible in this organization"),
   ];
   const hiddenResponses = hiddenRecords.map(hrmAuthorizationResponse);
-  hiddenResponses.push(recordNotFoundResponse());
-
   for (const response of hiddenResponses) {
     assert.equal(response.status, 404);
     assert.deepEqual(await response.clone().json(), { error: "not_found" });

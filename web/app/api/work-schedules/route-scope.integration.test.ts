@@ -151,10 +151,10 @@ test("save cannot create a pattern for another subsidiary's worker or entity", a
     const before = await scheduleCount(org.orgId);
     const forWorker = await post({ action: "save", ...WEEK, employeePartyId: empB });
     assert.equal(forWorker.status, 404);
-    assert.deepEqual(await forWorker.json(), { error: "not found" });
+    assert.deepEqual(await forWorker.json(), { error: "not_found" });
     const forEntity = await post({ action: "save", ...WEEK, subsidiaryId: branchId });
     assert.equal(forEntity.status, 404);
-    assert.deepEqual(await forEntity.json(), { error: "not found" });
+    assert.deepEqual(await forEntity.json(), { error: "not_found" });
     assert.equal(await scheduleCount(org.orgId), before, "refused saves write nothing");
   } finally {
     state.allowedSubsidiaryIds = null;
@@ -183,10 +183,10 @@ test("save and delete cannot touch another subsidiary's pattern", async () => {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
     const edit = await post({ action: "save", id: scheduleB, ...WEEK, employeePartyId: empA });
     assert.equal(edit.status, 404);
-    assert.deepEqual(await edit.json(), { error: "not found" });
+    assert.deepEqual(await edit.json(), { error: "not_found" });
     const remove = await post({ action: "delete", id: scheduleB });
     assert.equal(remove.status, 404);
-    assert.deepEqual(await remove.json(), { error: "not found" });
+    assert.deepEqual(await remove.json(), { error: "not_found" });
     const rows = (
       await withBypassContext(() =>
         db.execute<{ n: number }>(

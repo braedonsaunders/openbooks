@@ -5,6 +5,7 @@ import { attachCandidate } from "@openbooks/engine/src/hrm/recruiting/applicatio
 import { guardPermission } from "../../../../../lib/authz";
 import { recruitingErrorResponse } from "../_lib";
 import { attachCandidateBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
 
 /**
  * Attach a prospect to an open requisition in ONE server call: the
@@ -13,11 +14,12 @@ import { attachCandidateBody } from "./bodies";
  * can never be orphaned the way the old two-POST island left it when the
  * application POST failed.
  */
+
 export async function POST(req: Request) {
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, attachCandidateBody);
   if (!parsedBody.ok) return parsedBody.response;

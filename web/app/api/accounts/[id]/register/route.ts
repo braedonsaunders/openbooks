@@ -24,6 +24,8 @@ import { reportCsvOptions } from '../../../../../lib/report-labels'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../lib/export'
 import { decimalCmp, decimalSum } from '../../../../../lib/statement-format'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -46,7 +48,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'missing permission: gl.read or reports.read' }, { status: 403 })
   }
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const query = new URL(request.url).searchParams
   const page = Math.max(1, Math.min(100_000, Number(query.get('page')) || 1))
@@ -90,7 +92,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     bookId,
       can(gate, 'payroll.read'),
     )
-    if (!result.account) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    if (!result.account) return notFound("record")
     if (result.total > MAX_EXPORT_LINES) {
       return NextResponse.json(
         { error: 'export_too_large', maximumLines: MAX_EXPORT_LINES, actualLines: result.total },
@@ -175,6 +177,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     bookId,
     can(gate, 'payroll.read'),
   )
-  if (!result.account) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!result.account) return notFound("record")
   return NextResponse.json({ ...result, page, perPage: PER_PAGE })
 }

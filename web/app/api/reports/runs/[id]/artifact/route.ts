@@ -5,6 +5,8 @@ import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { reportArtifactAccessDetail } from '../../../../../../lib/report-execution-context'
 import { blobResponse } from '../../../../../../lib/blob-response'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -13,7 +15,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const result = (await db.execute<{ filename: string; content_type: string; bytes: Buffer; content_hash: string; authorization_snapshot: unknown }>(sql`
     select a.filename, a.content_type, a.bytes, a.content_hash, r.authorization_snapshot
       from report_run_artifacts a
@@ -22,7 +24,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
      where r.id=${id} and r.org_id=${gate.user.orgId}
   `))
   const row = result.rows[0]
-  if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!row) return notFound("record")
   // Content recorded at render time names its own permission set (e.g. a
   // payroll-bearing GL names payroll.read): refuse those viewers by name
   // rather than re-rendering per viewer.

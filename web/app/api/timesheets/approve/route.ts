@@ -5,6 +5,8 @@ import { isUuid } from '../../../../lib/list-params'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { approveSubmittedTimeEntries } from '../../../../lib/time-approval'
 import { isIsoDate, loadWeek, pinTimesheetEmployee, weekStart } from '../_lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -46,7 +48,7 @@ export async function POST(req: Request) {
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof ScopeNotFoundError) return notFound("record")
     const message = error instanceof Error ? error.message : String(error)
     // Guard rejections carry their own sentence: nothing submitted (422), or
     // the week's approval workflow still owns it (409). Anything else is a

@@ -6,6 +6,8 @@ import { insightDashboardPins } from '@openbooks/schema/src/insights.ts'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { loadDashboard } from '../../../_lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -18,10 +20,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const dashboard = await loadDashboard(id, user.orgId)
-  if (!dashboard) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!dashboard) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;

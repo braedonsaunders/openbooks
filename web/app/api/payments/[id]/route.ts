@@ -14,6 +14,8 @@ import { isUuid } from '../../../../lib/list-params'
 import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse, assertAllocationTargetsInScope, paymentPermission } from '../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -67,12 +69,12 @@ async function gateForDocument(
 ): Promise<{ authz: Authz; kind: PaymentKind } | NextResponse> {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   try {
     assertAnyPermission((permission) => can(authz, permission), ['ap.pay', 'ar.pay'])
   } catch (error) {
     if (error instanceof ScopeNotFoundError) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     throw error
   }
@@ -81,7 +83,7 @@ async function gateForDocument(
      where id = ${id} and kind in ('vendor_payment', 'customer_payment')
        and org_id = ${orgId ?? authz.user.orgId}
   `))
-  if (!r.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!r.rows[0]) return notFound("record")
   const denied = guardSubsidiaryScope(authz, r.rows[0].subsidiaryId)
   if (denied) return denied
   const kind = r.rows[0].kind
@@ -90,7 +92,7 @@ async function gateForDocument(
   // caller cannot distinguish an existing customer receipt from a missing id.
   const perm = paymentPermission(kind)
   if (!can(authz, perm)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   return { authz, kind }
 }
@@ -102,7 +104,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const payment = await loadPaymentDocument(
     id, gate.kind, gate.authz.user.orgId, gate.authz.allowedSubsidiaryIds,
   )
-  if (!payment) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!payment) return notFound("record")
   return NextResponse.json(payment)
 }
 
@@ -169,7 +171,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (e instanceof PaymentRevisionConflictError) {
       return apiErrorResponse(e, { safeStatus: 409 })
     }
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 })
+    if (e instanceof ScopeNotFoundError) return notFound("record")
     return paymentErrorResponse(e)
   }
 }
@@ -185,7 +187,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     })
     return NextResponse.json({ ok: true })
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 })
+    if (e instanceof ScopeNotFoundError) return notFound("record")
     if (e instanceof DeleteError) return apiErrorResponse(e)
     throw e
   }

@@ -15,11 +15,11 @@ import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } fr
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
-import { recordNotFoundResponse } from "../../../../lib/api/record-not-found";
 import {
   INVENTORY_ADVANCED_ACTION_PERMISSIONS,
   type CataloguePermission,
 } from "@openbooks/engine/src/organization/permissions.ts";
+import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
 
@@ -331,7 +331,7 @@ export async function POST(req: Request) {
       case "shipTransfer": {
         if (!body.id) return NextResponse.json({ error: "transfer order required" }, { status: 422 });
         if (!(await orderSubsidiaryInScope(body.id))) {
-          return recordNotFoundResponse();
+          return notFound("record");
         }
         const { value: res, replayed } = await withOrgTransaction(orgId, async () => {
           await lockedOrderFence(body.id!);
@@ -346,7 +346,7 @@ export async function POST(req: Request) {
       case "receiveTransfer": {
         if (!body.id) return NextResponse.json({ error: "transfer order required" }, { status: 422 });
         if (!(await orderSubsidiaryInScope(body.id))) {
-          return recordNotFoundResponse();
+          return notFound("record");
         }
         const { value: res, replayed } = await withOrgTransaction(orgId, async () => {
           await lockedOrderFence(body.id!);
@@ -407,7 +407,7 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: "reversal reason must be between 5 and 500 characters" }, { status: 422 });
         }
         if (!(await voucherSubsidiaryInScope(body.id))) {
-          return recordNotFoundResponse();
+          return notFound("record");
         }
         const { value: res, replayed } = await withOrgTransaction(orgId, async () => {
           await lockedVoucherFence(body.id!);
@@ -438,7 +438,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   } catch (e) {
-    if (e instanceof InventoryNotFoundError) return recordNotFoundResponse();
+    if (e instanceof InventoryNotFoundError) return notFound("record");
     // One shared mapping keeps real ownership refusals at 403, key reuse at
     // 409, hidden records at 404, and validation refusals at 422.
     return apiErrorResponse(e, { safeStatus: inventoryErrorStatus(e) });

@@ -42,13 +42,13 @@ test("run CSV and artifact downloads answer a malformed id with 404", async () =
       params(id),
     );
     assert.equal(download.status, 404, `csv ${id}`);
-    assert.deepEqual(await download.json(), { error: "not found" });
+    assert.deepEqual(await download.json(), { error: "not_found" });
 
     const rendered = await artifact(
       new Request("http://audit.local/api/reports/runs/x/artifact"),
       params(id),
     );
     assert.equal(rendered.status, 404, `artifact ${id}`);
-    assert.deepEqual(await rendered.json(), { error: "not found" });
+    assert.deepEqual(await rendered.json(), { error: "not_found" });
   }
 });

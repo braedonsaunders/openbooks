@@ -10,6 +10,8 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -26,7 +28,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('assets.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Body
@@ -56,7 +58,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     select 1 from fixed_assets where id = ${id} and org_id = ${gate.user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
   `))
-  if (!visible.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!visible.rows[0]) return notFound("record")
 
   // The scope rides into both locked writes: the visibility precheck above
   // races a concurrent PATCH moving the asset to a restricted subsidiary.

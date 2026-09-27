@@ -106,7 +106,7 @@ test('waiver printable PDF fails closed on another entity\u2019s waiver', async 
     await withOrgContext(org.orgId, async () => {
       const denied = await waiverPdf(new Request('http://openbooks.test'), params(hiddenWaiver))
       assert.equal(denied.status, 404, 'hidden-entity waiver PDF must 404')
-      assert.deepEqual(await denied.json(), { error: 'not found' })
+      assert.deepEqual(await denied.json(), { error: 'not_found' })
 
       const allowed = await waiverPdf(new Request('http://openbooks.test'), params(visibleWaiver))
       assert.equal(allowed.status, 200, 'visible waiver PDF must render')

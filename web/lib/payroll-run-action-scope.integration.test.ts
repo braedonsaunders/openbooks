@@ -94,7 +94,7 @@ test("payroll detail rechecks employee ownership after a concurrent transfer", {
     await writer.query("commit");
     const response = await pending;
     assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), { error: "not found" });
+    assert.deepEqual(await response.json(), { error: "not_found" });
     state.gate = { ...state.gate, allowedSubsidiaryIds: null };
     assert.equal((await read()).status, 200);
   } finally {

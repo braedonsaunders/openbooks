@@ -10,14 +10,16 @@ import { getAuthz, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { canReadFlowSubject } from '../../../lib/flow-subject-authz'
 import { allocationScopeVisible } from '@openbooks/engine/src/organization/allocation-scope.ts'
+import { notFound } from "@/lib/api/responses";
 
 /** Session + Flows feature gate for /api/flows/* (pages already 404 when off). */
+
 export async function requireFlowsSession(): Promise<Authz | NextResponse> {
   const authz = await getAuthz();
   if (!authz)
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await isFeatureEnabled(authz.user.orgId, "flows"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   return authz;
 }

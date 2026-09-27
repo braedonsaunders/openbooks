@@ -7,6 +7,8 @@ import { guardPermission, guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { isFeatureEnabled } from '../../../lib/features'
 import { createFieldTicket, FieldTicketError, FieldTicketNotFoundError, TICKET_PERIODS, type TicketPeriod } from '../../../lib/field-tickets'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -15,7 +17,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission('time.read')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
-  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return notFound("record")
 
   const url = new URL(req.url)
   const status = url.searchParams.get('status')
@@ -66,7 +68,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission('time.manage')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
-  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -80,7 +82,7 @@ export async function POST(req: Request) {
       from projects p
      where p.id = ${body.projectId} and p.org_id = ${orgId} and p.is_active
   `))
-  if (!scopedProject.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!scopedProject.rows[0]) return notFound("record")
   const projectDenied = guardSubsidiaryScope(
     gate.allowedSubsidiaryIds === undefined ? { ...gate, allowedSubsidiaryIds: null } : gate,
     scopedProject.rows[0].subsidiaryId,

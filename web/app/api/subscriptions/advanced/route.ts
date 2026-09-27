@@ -21,6 +21,8 @@ import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { isFeatureEnabled } from "../../../../lib/features";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -75,7 +77,7 @@ export async function POST(req: Request) {
         // switch off must refuse a new write; omitting the field copies the
         // plan's stored code so turning the feature back on restores it.
         if (body.currency !== undefined && !(await isFeatureEnabled(authz.user.orgId, "multiCurrency"))) {
-          return NextResponse.json({ error: "not found" }, { status: 404 });
+          return notFound("record");
         }
         if (!body.planId || !body.effectiveFrom) return NextResponse.json({ error: "plan and effective date are required" }, { status: 400 });
         const components: Array<{

@@ -8,6 +8,8 @@ import {
 import { guardPermission, guardUnrestrictedScope } from "../../../../../../lib/authz";
 import { storageIdentityError } from "../../_storage-identity";
 import { connectionConfigUrlRefusal } from "../../_connector-guard";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -73,7 +75,7 @@ export async function POST(
     if (storageIdentityError(e)) return null;
     throw e;
   });
-  if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!row) return notFound("record");
   const urlError = await connectionConfigUrlRefusal(row.config);
   if (urlError) {
     // A refused connector URL is a validation refusal on a found connection

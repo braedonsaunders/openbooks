@@ -15,6 +15,8 @@ import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isCalendarDate } from '../../../../../lib/setup/coerce'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -142,7 +144,7 @@ export async function PATCH(req: Request) {
       return apiErrorResponse(error)
     }
   }
-  if (typeof b.id !== 'string' || !isUuid(b.id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (typeof b.id !== 'string' || !isUuid(b.id)) return notFound("record")
   const id = b.id
   if (typeof b.billingMethod !== 'string' || !['time_and_materials', 'fixed_price', 'cost_plus'].includes(b.billingMethod))
     return NextResponse.json({ error: 'Billing classification is required' }, { status: 422 })
@@ -260,7 +262,7 @@ export async function PATCH(req: Request) {
   } catch (e) {
     return apiErrorResponse(e)
   }
-  if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!updated) return notFound("record")
   return NextResponse.json({ ok: true })
 }
 
@@ -274,7 +276,7 @@ export async function DELETE(req: Request) {
   if (feature) return feature
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')
-  if (!id || !isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!id || !isUuid(id)) return notFound("record")
   // Once a financial policy exists the project type is accounting configuration.
   // Archive it; do not erase the type or its policy history even if unused.
   const result = await db.transaction(async (tx) => {
@@ -289,6 +291,6 @@ export async function DELETE(req: Request) {
               ${JSON.stringify({ before: before.rows[0] })}, ${gate.user.id})`)
     return true
   })
-  if (result === null) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (result === null) return notFound("record")
   return NextResponse.json({ ok: true, archived: true })
 }

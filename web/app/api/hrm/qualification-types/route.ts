@@ -9,6 +9,8 @@ import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { qualificationErrorResponse } from "../qualifications/_lib";
 import { createQualificationTypeBody } from "../qualifications/bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -17,7 +19,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission("hrm.certifications.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const includeInactive = new URL(req.url).searchParams.get("includeInactive") === "1";
   try {
@@ -36,7 +38,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.certifications.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const scopeDenied = guardUnrestrictedScope(gate);
   if (scopeDenied) return scopeDenied;

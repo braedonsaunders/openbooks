@@ -10,6 +10,8 @@ import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } fr
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -100,7 +102,7 @@ export async function POST(req: Request) {
         from accounting_books
        where id = ${body.bookId} and org_id = ${gate.user.orgId} and is_active
        limit 1`)
-    if (!book.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!book.rows[0]) return notFound("record")
     bookId = book.rows[0].id
   } else {
     bookId = await primaryBook(gate.user.orgId)
@@ -120,7 +122,7 @@ export async function POST(req: Request) {
     // A malformed id names nothing: same answer as a subsidiary in another
     // org, and answered before the id reaches SQL (a raw uuid comparison
     // throws 22P02 out of the handler as a 500).
-    if (!isUuid(requestedSubsidiaryId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!isUuid(requestedSubsidiaryId)) return notFound("record")
     const requestedDenied = guardSubsidiaryScope(gate, requestedSubsidiaryId)
     if (requestedDenied) return requestedDenied
     const subsidiary = await db.execute<{ id: string }>(sql`
@@ -128,7 +130,7 @@ export async function POST(req: Request) {
         from subsidiaries
        where id = ${requestedSubsidiaryId} and org_id = ${gate.user.orgId}
        limit 1`)
-    if (!subsidiary.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!subsidiary.rows[0]) return notFound("record")
     subsidiaryId = subsidiary.rows[0].id
   } else {
     subsidiaryId = await rootSubsidiary(gate.user.orgId)

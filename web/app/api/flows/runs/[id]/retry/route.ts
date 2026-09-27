@@ -7,6 +7,8 @@ import { loadFlowSubjectSubsidiary } from '../../../_lib'
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -25,7 +27,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const orgId = gate.user.orgId
   const run = (await db.execute<{ subjectKind: string; subjectId: string }>(sql`
@@ -33,7 +35,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       from flow_runs
      where id = ${id} and org_id = ${orgId}
   `)).rows[0]
-  if (!run) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!run) return notFound("record")
 
   const subsidiaryDenied = guardSubsidiaryScope(
     gate,

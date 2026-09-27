@@ -130,7 +130,7 @@ export async function updateCompanySettings(
     body.fairValueRangePolicy !== undefined &&
     !(await isFeatureEnabled(orgId, "revenueRecognition"))
   ) {
-    return { status: 404, body: { error: "not found" } };
+    return { status: 404, body: { error: "not_found" } };
   }
 
   // Lock first, then re-read, derive, persist, and audit through one

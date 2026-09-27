@@ -1,4 +1,5 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { notFound } from "@/lib/api/responses";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
@@ -17,13 +18,20 @@ export const runtime = 'nodejs'
  */
 const PERMISSION = 'admin.setup.manage'
 
+function setupWriteResponse(result: { status: number; body: Record<string, unknown> }) {
+  if (result.status === 404 && (result.body.error === 'not_found' || result.body.error === 'not found')) {
+    return notFound("setup record");
+  }
+  return NextResponse.json(result.body, { status: result.status });
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ entity: string }> }) {
   const gate = await guardPermission(PERMISSION)
   if (gate instanceof NextResponse) return gate
   const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
   const entityKey = (await params).entity
   const refused = await preflightSetupWrite(actor, entityKey, 'create')
-  if (refused) return NextResponse.json(refused.body, { status: refused.status })
+  if (refused) return setupWriteResponse(refused)
   // Creates are idempotent on the caller's key, which becomes the new row's
   // id: the drawer mints one UUID per mounted create session and reuses it
   // across retries and timeouts. The key is required (400, no write) and only
@@ -40,7 +48,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const result = await createSetupRecord(actor, entityKey, parsedBody.data as Record<string, unknown>, { requestId })
-  return NextResponse.json(result.body, { status: result.status })
+  return setupWriteResponse(result)
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ entity: string }> }) {
@@ -49,11 +57,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
   const entityKey = (await params).entity
   const refused = await preflightSetupWrite(actor, entityKey, 'update')
-  if (refused) return NextResponse.json(refused.body, { status: refused.status })
+  if (refused) return setupWriteResponse(refused)
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
   const result = await updateSetupRecord(actor, entityKey, parsedBody2.data as Record<string, unknown>)
-  return NextResponse.json(result.body, { status: result.status })
+  return setupWriteResponse(result)
 }
 
 export async function DELETE(req: Request, { params }: { params: Promise<{ entity: string }> }) {
@@ -62,9 +70,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
   const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
   const entityKey = (await params).entity
   const refused = await preflightSetupWrite(actor, entityKey, 'delete')
-  if (refused) return NextResponse.json(refused.body, { status: refused.status })
+  if (refused) return setupWriteResponse(refused)
   const url = new URL(req.url)
   const id = url.searchParams.get('id') ?? ''
   const result = await deleteSetupRecord(actor, entityKey, id)
-  return NextResponse.json(result.body, { status: result.status })
+  return setupWriteResponse(result)
 }

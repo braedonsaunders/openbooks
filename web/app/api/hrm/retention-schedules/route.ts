@@ -5,14 +5,16 @@ import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { saveScheduleBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 async function gateRetention(orgId: string): Promise<NextResponse | null> {
-  if (!(await isFeatureEnabled(orgId, "hrm"))) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!(await isFeatureEnabled(orgId, "hrm"))) return notFound("record");
   if (!(await isFeatureEnabled(orgId, "hrmDocuments"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   if (!(await isFeatureEnabled(orgId, "hrmDocumentRetention"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   return null;
 }

@@ -64,7 +64,7 @@ const mockAuthz = `
   }
   export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {
     if (subsidiaryScopeAllows(authz.allowedSubsidiaryIds, subsidiaryId, opts)) return null
-    return new Response(JSON.stringify({ error: 'not found' }), {
+    return new Response(JSON.stringify({ error: 'not_found' }), {
       status: 404,
       headers: { 'content-type': 'application/json' },
     })

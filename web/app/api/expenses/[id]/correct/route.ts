@@ -13,6 +13,8 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { DocumentEditError, requireDocumentEditRevision, validateCorrectionReason } from "../../../../../../engine/src/records/document-edit-policy.ts";
 import { type ExpenseCorrectionBody, createExpenseCorrectionDraft } from '../../../../../lib/expense-edit'
 import { isUuid } from '../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -37,7 +39,7 @@ export async function POST(
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const found = (await db.execute<{
     status: string
     subsidiaryId: string | null
@@ -50,7 +52,7 @@ export async function POST(
      where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}
   `))
   const source = found.rows[0]
-  if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!source) return notFound("record")
   const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
   if (denied) return denied
   if (!can(gate, 'expenses.create')) {

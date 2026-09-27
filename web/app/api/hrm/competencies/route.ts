@@ -11,6 +11,8 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { performanceErrorResponse } from "../review-cycles/_lib";
 import { addCompetencyLevelBody, createCompetencyBody } from "../competency-frameworks/bodies";
 import { z } from "zod";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -31,7 +33,7 @@ export async function POST(req: Request) {
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await gated(authz.user.orgId))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   // One read, one boundary: the union lets parseJsonBody own the stream and
   // the 400 while still accepting either shape (a level carries competencyId,

@@ -7,8 +7,10 @@ import { parseFormSchema } from '@openbooks/forms-core'
 import { guardPermission } from '../../../../../lib/authz'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { getLatestVersion, getTemplateByKey } from '../../_lib'
+import { notFound } from "@/lib/api/responses";
 
 /** Short content identity for audit evidence (schema bodies live on their rows). */
+
 function schemaHash(schema: unknown): string {
   return createHash('sha256').update(JSON.stringify(schema)).digest('hex')
 }
@@ -25,7 +27,7 @@ export async function GET(_req: Request, { params }: Params) {
   const { key } = await params
 
   const template = await getTemplateByKey(user.orgId, key)
-  if (!template) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!template) return notFound("record")
 
   const versions = ((await db.execute(sql`
     select id, version, changelog, published_at, created_at
@@ -54,7 +56,7 @@ export async function PUT(req: Request, { params }: Params) {
   const { key } = await params
 
   const template = await getTemplateByKey(user.orgId, key)
-  if (!template) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!template) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -265,7 +267,7 @@ export async function PUT(req: Request, { params }: Params) {
       return { kind: 'ok' as const }
     })
     if (outcome.kind === 'not-found') {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
   }
 
@@ -280,7 +282,7 @@ export async function DELETE(_req: Request, { params }: Params) {
   const { key } = await params
 
   const template = await getTemplateByKey(user.orgId, key)
-  if (!template) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!template) return notFound("record")
 
   const outcome = await db.transaction(async (tx) => {
     const locked = await tx.execute(sql`
@@ -315,7 +317,7 @@ export async function DELETE(_req: Request, { params }: Params) {
     return { kind: 'ok' as const }
   })
   if (outcome.kind === 'not-found') {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   return NextResponse.json({ ok: true })
 }

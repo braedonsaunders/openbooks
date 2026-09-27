@@ -239,7 +239,7 @@ test("an allowed GET continues through the handler", async () => {
 async function assertNotFound(response: Response): Promise<void> {
   assert.equal(response.status, 404);
   assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/);
-  assert.deepEqual(await response.json(), { error: "not found" });
+  assert.deepEqual(await response.json(), { error: "not_found" });
 }
 
 // ---------------------------------------------------------------------------

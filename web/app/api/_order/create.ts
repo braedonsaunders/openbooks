@@ -22,6 +22,7 @@ import {
   orderTaxProfileMap,
 } from './lib'
 import { overallItemQuantities, resolveLinePriceBasis, selectPostableOrderLines, type OrderLineInput } from './line-selection'
+import { notFound } from "@/lib/api/responses";
 
 /**
  * Shared collection-POST for the three order-cycle modules (quote /
@@ -44,6 +45,7 @@ import { overallItemQuantities, resolveLinePriceBasis, selectPostableOrderLines,
  * convert, void and delete stay on the existing [id] routes, so lifecycle
  * semantics after persistence are unchanged.
  */
+
 
 export interface OrderCreateConfig {
   kind: OrderKind
@@ -296,7 +298,7 @@ export async function createOrder(
       const item = (await db.execute<{ kind: string }>(sql`
         select kind from items where id = ${l.itemId} and org_id = ${user.orgId}`))
       if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   }

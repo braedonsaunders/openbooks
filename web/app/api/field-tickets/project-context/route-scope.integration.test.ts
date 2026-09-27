@@ -67,7 +67,7 @@ test('project context hides another subsidiary before loading customer and task 
   state.queries.length = 0
   const response = await projectContext(new Request(`http://localhost/api/field-tickets/project-context?projectId=${PROJECT_B}`))
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
   assert.equal(state.queries.length, 1, 'the task detail query never runs for the hidden project')
 })
 
@@ -77,7 +77,7 @@ test('item-rate preview hides another subsidiary before resolving its price comp
   const query = new URLSearchParams({ projectId: PROJECT_B, itemId: ITEM_ID, quantity: '1', onDate: '2026-09-24' })
   const response = await itemRate(new Request(`http://localhost/api/field-tickets/item-rate?${query}`))
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
   assert.equal(state.queries.length, 1, 'the shared item price and rate-book reads never run for the hidden project')
   assert.equal(state.rateCalls, 0)
 })

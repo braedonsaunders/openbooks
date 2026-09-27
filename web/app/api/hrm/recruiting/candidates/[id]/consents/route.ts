@@ -6,6 +6,8 @@ import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../../_lib";
 import { recordConsentBody, withdrawConsentBody } from "./bodies";
 import { z } from "zod";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -25,7 +27,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await depthGate(gate.user.orgId))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   const parsedBody = await parseJsonBody(req, consentActionBody);

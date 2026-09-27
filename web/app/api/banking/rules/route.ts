@@ -7,6 +7,8 @@ import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { validateCriteria, validateOutcome } from '../../../../lib/banking-rules-validate'
 import { lockBankMatchRuleSet } from '../../../../lib/banking-rule-set-lock'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -86,7 +88,7 @@ export async function PATCH(req: Request) {
   // A malformed id would surface as a Postgres uuid throw and a raw 500;
   // resolve it through the same 404 as an unknown rule.
   if (typeof body.id !== 'string' || !isUuid(body.id)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   if (!body.name || String(body.name).trim() === '' || String(body.name).length > 200) {
     return NextResponse.json({ error: 'name required (max 200 chars)' }, { status: 400 })
@@ -123,6 +125,6 @@ export async function PATCH(req: Request) {
     `)
     return false
   })
-  if (missing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (missing) return notFound("record")
   return NextResponse.json({ ok: true })
 }

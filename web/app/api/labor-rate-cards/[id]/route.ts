@@ -22,6 +22,8 @@ import {
   ADJUSTMENT_TARGET_TYPES,
   ADJUSTMENT_TEXT_TARGETS,
 } from "../../../../lib/rate-adjustment-types";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -188,7 +190,7 @@ export async function PUT(
     body.currency !== undefined &&
     !(await isFeatureEnabled(gate.user.orgId, "multiCurrency"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   if (body.currency !== undefined && !/^[A-Z]{3}$/.test(body.currency))
     return error("currency");
@@ -361,7 +363,7 @@ export async function PUT(
       const item = (await db.execute<{ kind: string }>(sql`
         select kind from items where id = ${line.itemId} and org_id = ${orgId}`));
       if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-        return NextResponse.json({ error: "not found" }, { status: 404 });
+        return notFound("record");
       }
     }
     for (const adjustment of adjustments) {
@@ -370,7 +372,7 @@ export async function PUT(
         const item = (await db.execute<{ kind: string }>(sql`
           select kind from items where id = ${target.targetValueId} and org_id = ${orgId}`));
         if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-          return NextResponse.json({ error: "not found" }, { status: 404 });
+          return notFound("record");
         }
       }
     }

@@ -3,6 +3,8 @@ import { guardPermission } from "../../../../../lib/authz";
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../../../lib/pdf-templates/catalog";
 import { listPdfTemplates } from "../../../../../lib/pdf-templates/store";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -17,7 +19,7 @@ export async function GET(
   const gate = await guardPermission(meta.readPermission);
   if (gate instanceof NextResponse) return gate;
   if (!(await isDocKindEnabled(gate.user.orgId, recordType))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const rows = await listPdfTemplates(gate.user.orgId, recordType);
   return NextResponse.json({

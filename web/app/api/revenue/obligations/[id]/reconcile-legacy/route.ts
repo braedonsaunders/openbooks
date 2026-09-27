@@ -11,6 +11,8 @@ import { guardFeaturePermission } from '@/lib/feature-gates'
 import { parseJsonBody } from '@/lib/api/json'
 import { isUuid } from '@/lib/list-params'
 import { auditSetupChange } from '@/lib/setup/audit'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -59,7 +61,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof ScopeNotFoundError) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     if (e instanceof RevenueRecognitionError) {
       return apiErrorResponse(e, { safeStatus: 422 })

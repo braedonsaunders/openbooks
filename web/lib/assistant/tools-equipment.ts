@@ -126,7 +126,7 @@ const getEquipment: AssistantToolDef = {
     // out-of-scope unit answers exactly like a missing one.
     const data = await loadEquipment(a.id, authz.user.orgId, authz.allowedSubsidiaryIds);
     if (!data) {
-      return { ok: false, error: "not found" };
+      return { ok: false, error: "not_found" };
     }
     const unit = data.unit as Record<string, unknown>;
     const metrics = data.metrics as Record<string, unknown>;

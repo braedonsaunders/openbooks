@@ -149,7 +149,7 @@ test('DELETE hides an out-of-scope target exactly like a missing attachment', as
   const response = await del()
 
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
   assert.deepEqual(routeState.detachCalls, [], 'nothing is detached from a hidden record')
 })
 

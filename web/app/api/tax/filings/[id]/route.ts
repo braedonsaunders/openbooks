@@ -5,6 +5,8 @@ import { TaxFilingError, markTaxFilingFiled } from '@openbooks/engine/src/tax-re
 import { guardPermission, guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { TAX_FILING_WRITE_PERMISSION } from '../../../../../lib/tax-filing-permission'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -13,7 +15,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardPermission(TAX_FILING_WRITE_PERMISSION)
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // A tax filing snapshot is an organization-wide statutory position: the
   // engine recomputes every subsidiary's ledger before certifying it. That
   // makes this an org-wide write (canonical shape 2 in
@@ -33,7 +35,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ id: updated.id, filed_at: updated.filedAt })
   } catch (error) {
     if (error instanceof TaxFilingError) {
-      if (error.code === 'not-found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (error.code === 'not-found') return notFound("record")
       // Every 409 carries its machine-readable code: the drawer localizes
       // the refusal (period-not-closed names the close-the-period remedy)
       // instead of swallowing it into a generic save failure (F-x5-001).

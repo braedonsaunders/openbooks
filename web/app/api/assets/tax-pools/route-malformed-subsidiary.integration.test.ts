@@ -32,7 +32,7 @@ const hooks = registerHooks({
               "export function guardSubsidiaryScope(gate,id){ " +
               "if(gate.allowedSubsidiaryIds===null)return null; " +
               "if(id&&gate.allowedSubsidiaryIds.has(id))return null; " +
-              "return new Response(JSON.stringify({error:'not found'}),{status:404}) }",
+              "return new Response(JSON.stringify({error:'not_found'}),{status:404}) }",
           ),
       };
     }

@@ -74,7 +74,7 @@ test('a caller with no document permission learns nothing from an existing id', 
   auditState.permissions = []
   const response = await get('documents', EXISTING_ID)
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
 })
 
 test('the same caller gets the identical answer for a missing id', async () => {
@@ -82,7 +82,7 @@ test('the same caller gets the identical answer for a missing id', async () => {
   auditState.permissions = []
   const response = await get('documents', MISSING_ID)
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
 })
 
 test('a caller with the wrong kind permission gets the uniform 404, not a 403', async () => {
@@ -90,7 +90,7 @@ test('a caller with the wrong kind permission gets the uniform 404, not a 403', 
   auditState.permissions = ['ar.read']
   const response = await get('documents', EXISTING_ID)
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
 })
 
 test('a caller with the kind permission still reads the record', async () => {

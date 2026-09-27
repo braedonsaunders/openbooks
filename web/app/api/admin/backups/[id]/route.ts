@@ -7,6 +7,8 @@ import {
 } from "@openbooks/engine/src/backup/backup.ts";
 import { guardPermission } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -21,7 +23,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const actor = gate.user;
   const { orgId } = actor;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
 
   const res = (await db.execute<{
       id: string;

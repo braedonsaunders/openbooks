@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server'
 import { RevaluationError, RevaluationFeatureDisabledError, runRevaluation } from '@openbooks/engine/src/close/fx-revaluation.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -61,7 +63,7 @@ export async function POST(req: Request) {
     return NextResponse.json(result)
   } catch (e: unknown) {
     if (e instanceof RevaluationFeatureDisabledError) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     // Every RevaluationError throw site is request state, not a server
     // defect: unconfigured book/control account, an unknown or closed

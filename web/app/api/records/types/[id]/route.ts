@@ -13,6 +13,8 @@ import {
   typeKeyError,
 } from '../../../../../lib/record-schema'
 import type { FormSection } from '@openbooks/forms-core'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -32,9 +34,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission('records.manage_types')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const type = await loadRecordTypeById(gate.user.orgId, id)
-  if (!type) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!type) return notFound("record")
   return NextResponse.json({ type })
 }
 
@@ -50,10 +52,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const type = await loadRecordTypeById(user.orgId, id)
-  if (!type) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!type) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -221,12 +223,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     })
     return { kind: 'ok' as const }
   })
-  if (outcome.kind === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (outcome.kind === 'not_found') return notFound("record")
   if (outcome.kind === 'conflict') return NextResponse.json(TYPE_REVISION_CONFLICT, { status: 409 })
   if (outcome.kind === 'response') return outcome.response
 
   const updated = await loadRecordTypeById(user.orgId, id)
-  if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!updated) return notFound("record")
   return NextResponse.json({ type: updated, issues })
 }
 
@@ -236,7 +238,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const outcome = await withOrgTransaction(user.orgId, async () => {
     const locked = (await db.execute<{ status: string; snapshot: Record<string, unknown> }>(sql`
@@ -311,7 +313,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     })
     return { kind: 'ok' as const }
   })
-  if (outcome.kind === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (outcome.kind === 'not_found') return notFound("record")
   if (outcome.kind === 'response') return outcome.response
   return NextResponse.json({ ok: true })
 }

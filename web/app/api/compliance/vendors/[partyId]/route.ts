@@ -8,6 +8,8 @@ import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -65,7 +67,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
   if (blocked) return blocked
   const { orgId, id: actorId } = gate.user
   const { partyId } = await params
-  if (!isUuid(partyId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(partyId)) return notFound("record")
   // The vendor is the record boundary: a restricted caller may only touch
   // compliance identity for parties inside their fence (null-subsidiary
   // parties are org-wide, mirroring the party lists and the bank-detail
@@ -73,7 +75,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
   const partyScope = await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from parties
      where id = ${partyId} and org_id = ${orgId}`)
-  if (!partyScope.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!partyScope.rows[0]) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(gate, partyScope.rows[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 
@@ -148,7 +150,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
   }
 
   const reason = auditReason(body.reason)
-  let notFound = false
+  let recordMissing = false
   try {
     await withOrgTransaction(orgId, async () => {
       // Lock the authoritative tenant row before reading its before-state.
@@ -162,7 +164,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
          for update`)
       const before = role.rows[0]
       if (!before) {
-        notFound = true
+        recordMissing = true
         return
       }
 
@@ -185,7 +187,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
       // update means it vanished under the lock — still the vendor-missing
       // refusal, raised through the flag like the pre-lock read.
       if (!after) {
-        notFound = true
+        recordMissing = true
         return
       }
 
@@ -198,7 +200,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ partyI
         values (${orgId}, 'vendor_roles', ${partyId}, 'update',
                 ${JSON.stringify({ reason, before, after })}::jsonb, ${actorId})`)
     })
-    if (notFound) return NextResponse.json({ error: 'this party is not a vendor' }, { status: 404 })
+    if (recordMissing) return NextResponse.json({ error: 'this party is not a vendor' }, { status: 404 })
     return NextResponse.json({ partyId })
   } catch (e) {
     return complianceWriteFailure(e)

@@ -11,6 +11,8 @@ import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth, i
 import { calculateForecast } from '../../../../lib/crm'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
   const gate = await guardFeaturePermission('crm.forecasts.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   // Stored forecasts aggregate the whole organization and lack entity lineage.
-  if (gate.allowedSubsidiaryIds !== null) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (gate.allowedSubsidiaryIds !== null) return notFound("record")
   const { user } = gate
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;

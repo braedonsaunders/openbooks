@@ -9,6 +9,8 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { changeRequestErrorResponse } from "./_lib";
 import { createChangeRequestBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -22,7 +24,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission("hrm.employment.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const url = new URL(req.url);
   const employmentId = url.searchParams.get("employment");
@@ -47,7 +49,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.employment.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, createChangeRequestBody);
   if (!parsedBody.ok) return parsedBody.response;

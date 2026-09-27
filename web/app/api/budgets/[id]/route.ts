@@ -8,6 +8,8 @@ import { isUuid } from '../../../../lib/list-params'
 import { BUDGET_KINDS, loadBudgetScenario } from '../../../../lib/budgets'
 import { BudgetMutationError } from '../../../../lib/budget-mutations'
 import { scenarioOutOfScopeSubsidiaryNames } from '../../../../lib/budget-scope'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -15,9 +17,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('budgets.read', 'budgets')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const scenario = await loadBudgetScenario(id, gate.user.orgId, gate.allowedSubsidiaryIds)
-  if (!scenario) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!scenario) return notFound("record")
   return NextResponse.json(scenario)
 }
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -25,7 +27,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>
@@ -133,7 +135,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   try {
     await db.transaction(async (tx) => {
       const locked = (await tx.execute<Record<string, unknown>>(sql`

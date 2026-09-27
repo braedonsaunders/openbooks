@@ -3,6 +3,8 @@ import { retractFeedback } from "@openbooks/engine/src/hrm/performance/feedback.
 import { getAuthz } from "../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { performanceErrorResponse } from "../../../review-cycles/_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -19,7 +21,7 @@ export async function POST(_req: Request, ctx: { params: Promise<{ id: string }>
     !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||
     !(await isFeatureEnabled(authz.user.orgId, "hrmFeedback"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await ctx.params;
   try {

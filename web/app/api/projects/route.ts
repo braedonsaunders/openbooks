@@ -15,6 +15,8 @@ import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-
 import { guardProjectsFeature } from '../../../lib/projects-gate'
 import { listScopedPartyOptions } from '../../../lib/scoped-options'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../lib/features'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -346,7 +348,7 @@ export async function POST(request: Request) {
   if (featureRefused) {
     return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
   }
-  if (scopeRefused) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (scopeRefused) return notFound("record")
 
   const payload = await loadProject(requestId, user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return bad('save_failed', undefined, 500)

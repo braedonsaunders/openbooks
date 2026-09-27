@@ -75,7 +75,7 @@ test('schedule PATCH on a missing id answers 404, never ok:true', async () => {
   try {
     const response = await patch('schedules', randomUUID(), { name: 'Ghost rename' })
     assert.equal(response.status, 404, `expected 404, got ${response.status}: ${JSON.stringify(await response.clone().json())}`)
-    assert.deepEqual(await response.json(), { error: 'not found' })
+    assert.deepEqual(await response.json(), { error: 'not_found' })
   } finally {
     await dropScratchOrg(org.orgId)
   }
@@ -86,7 +86,7 @@ test('mandate PATCH on a missing id answers 404, never ok:true', async () => {
   try {
     const response = await patch('mandates', randomUUID(), { status: 'suspended' })
     assert.equal(response.status, 404, `expected 404, got ${response.status}: ${JSON.stringify(await response.clone().json())}`)
-    assert.deepEqual(await response.json(), { error: 'not found' })
+    assert.deepEqual(await response.json(), { error: 'not_found' })
   } finally {
     await dropScratchOrg(org.orgId)
   }

@@ -10,6 +10,8 @@ import { pdfResponse } from "../../../../lib/export";
 import { PDF_RECORD_TYPE_BY_KEY, sampleValues } from "../../../../lib/pdf-templates/catalog";
 import { mergeAndPrintPdf } from "../../../../lib/pdf-templates/render";
 import { findSamplePdfRecordId, loadPdfRecordValues } from "../../../../lib/pdf-templates/values";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -47,7 +49,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: `missing permission: ${meta.readPermission}` }, { status: 403 });
   }
   if (!(await isDocKindEnabled(user.orgId, meta.key))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
 
   let compiledHtml: string;

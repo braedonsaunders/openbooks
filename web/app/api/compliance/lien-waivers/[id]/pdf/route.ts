@@ -12,6 +12,8 @@ import { renderLienWaiverPdf } from '@/lib/lien-waiver-pdf'
 import { isLienWaiverExecutedSnapshot } from '@/lib/lien-waiver-form'
 import { isUuid } from '@/lib/list-params'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -34,10 +36,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (blocked) return blocked
   const { orgId } = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const w = await loadLienWaiverPrintSource(orgId, id)
-  if (!w) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!w) return notFound("record")
   const denied = guardSubsidiaryScope(gate, w.projectSubsidiaryId)
   if (denied) return denied
 

@@ -20,6 +20,8 @@ import {
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
 import { isUuid } from '../../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -48,12 +50,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   // A malformed id names no script: same answer as an unknown one, never a
   // PostgreSQL uuid cast error escaping as a 500.
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const existing = (await db.execute<{ trigger_point: string; cron: string | null; is_active: boolean; cursor: string | null }>(sql`
     select trigger_point, cron, is_active, next_run_at::text as cursor from user_scripts where id = ${id} and org_id = ${user.orgId}
   `))
-  if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!existing.rows[0]) return notFound("record")
   const kind = existing.rows[0].trigger_point
   if (!existing.rows[0].is_active) return NextResponse.json({ error: 'Activate this script before running it.', code: 'SCRIPT_INACTIVE' }, { status: 409 })
   if (kind !== 'scheduled' && kind !== 'bulk') return NextResponse.json({ error: 'Run now is available only for scheduled and bulk scripts.', code: 'SCRIPT_TRIGGER_NOT_RUNNABLE' }, { status: 422 })

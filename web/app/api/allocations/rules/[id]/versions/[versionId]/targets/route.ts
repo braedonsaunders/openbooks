@@ -7,6 +7,8 @@ import {
 } from '../../../../../../../../../engine/src/allocations/index.ts'
 import { guardAllocations } from '../../../../../../../../lib/allocations-gate'
 import { allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../../../../_lib.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -63,7 +65,7 @@ export async function PUT(
   try {
     const current = await getRuleVersion(gate.user.orgId, versionParam, gate.allowedSubsidiaryIds)
     if (current.version.ruleId !== ruleId) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     const saved = await replaceTargets(
       versionParam,

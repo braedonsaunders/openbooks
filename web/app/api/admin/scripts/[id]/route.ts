@@ -4,6 +4,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -14,10 +16,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const missing = await db.transaction(async (tx) => {
-    if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return notFound("record")
     // Snapshot the whole row first: a hard delete leaves no other trace of a
     // script that could fire on future documents.
     const existing = (await tx.execute<Record<string, unknown>>(sql`
@@ -40,6 +42,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     return false
   })
   if (missing instanceof NextResponse) return missing
-  if (missing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (missing) return notFound("record")
   return NextResponse.json({ ok: true })
 }

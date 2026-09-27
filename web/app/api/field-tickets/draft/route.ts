@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { createFieldTicket, FieldTicketError, FieldTicketNotFoundError } from '../../../../lib/field-tickets'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -15,7 +17,7 @@ export async function POST() {
   const gate = await guardPermission('time.manage')
   if (gate instanceof NextResponse) return gate
   if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   try {
     const created = await createFieldTicket(gate.user.orgId, gate.user.id, {

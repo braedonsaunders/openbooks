@@ -6,6 +6,8 @@ import { assertRunPayeesInScope } from '@openbooks/engine/src/payments/run-readi
 import { refuseMaskedStorageKind } from '../../../../../../lib/file-storage'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardPaymentRunPermission, paymentErrorResponse } from '../../../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -15,7 +17,7 @@ export const runtime = 'nodejs'
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
 
@@ -56,7 +58,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 /** Generate and persist a new file artifact for an approved run. */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
   try {

@@ -13,6 +13,8 @@ import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { constructionErrorResponse } from "../_lib";
 import { addScheduleLineBody, createScheduleBody, resolveWageBody, updateScheduleScopeBody } from "../bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -21,7 +23,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission("hrm.construction.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmConstructionCompliance"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     const scheduleId = new URL(req.url).searchParams.get("scheduleId");
@@ -44,7 +46,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.construction.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmConstructionCompliance"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, createScheduleBody);
   if (!parsedBody.ok) return parsedBody.response;
@@ -65,7 +67,7 @@ export async function PUT(req: Request) {
   const gate = await guardPermission("hrm.construction.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmConstructionCompliance"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const url = new URL(req.url);
   if (url.searchParams.get("resolve") === "1") {

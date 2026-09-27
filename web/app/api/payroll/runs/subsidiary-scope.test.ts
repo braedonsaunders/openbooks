@@ -87,7 +87,7 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors, seedWorkerEmployment }
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 
-const NOT_FOUND = JSON.stringify({ error: "not found" });
+const NOT_FOUND = JSON.stringify({ error: "not_found" });
 
 // Production scopes every route read through the request org; the mocked
 // authz stands in for the request here, so each route call runs inside the

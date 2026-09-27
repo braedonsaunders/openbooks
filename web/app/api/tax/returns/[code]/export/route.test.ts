@@ -67,9 +67,9 @@ stubModules({
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: allowed }
       }
       export function guardSubsidiaryScope(authz, subsidiaryId) {
-        if (subsidiaryId === null) return { status: 404, json: async () => ({ error: 'not found' }) }
+        if (subsidiaryId === null) return { status: 404, json: async () => ({ error: 'not_found' }) }
         if (!authz.allowedSubsidiaryIds.has(subsidiaryId)) {
-          return { status: 404, json: async () => ({ error: 'not found' }) }
+          return { status: 404, json: async () => ({ error: 'not_found' }) }
         }
         return null
       }

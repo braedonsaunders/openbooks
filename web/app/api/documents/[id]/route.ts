@@ -18,6 +18,8 @@ import { DOC_KINDS, createPermission } from "../../../../lib/document-kinds.ts";
 import { canReadDocumentKind } from "../../../../lib/flow-subject-authz.ts";
 import { lockedDocumentScopeDenied } from "../../../../lib/document-scope.ts";
 import { type DocumentEditCurrent, type DocumentEditInput } from "../../../../../engine/src/ledger/document-input.ts";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -30,20 +32,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   // A malformed id would surface as a Postgres uuid throw and a raw 500;
   // resolve it through the same 404 as an unknown id.
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   // Org-scoped existence + kind lookup BEFORE anything is disclosed.
   const owned = (await db.execute<{ kind: string; subsidiaryId: string | null }>(
     sql`select kind, subsidiary_id as "subsidiaryId" from documents where id = ${id} and org_id = ${authz.user.orgId}`,
   ))
   const row = owned.rows[0]
-  if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!row) return notFound("record")
   // Subsidiary scope before anything else about the record is disclosed —
   // an out-of-scope document reads exactly like a nonexistent one.
   const denied = guardSubsidiaryScope(authz, row.subsidiaryId)
   if (denied) return denied
   if (!(await isDocKindEnabled(authz.user.orgId, row.kind))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   if (!DOC_KINDS[row.kind]) {
     return NextResponse.json({ error: `kind "${row.kind}" is not served here` }, { status: 422 })
@@ -55,11 +57,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // exists and which family it belongs to. A caller who CAN read keeps the
   // actionable 403 for a missing edit permission on writes below.
   if (!canReadDocumentKind(authz, row.kind)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   const doc = await loadDocument(id, authz.user.orgId)
-  if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!doc) return notFound("record")
   // Recheck on the loaded row: a rehome that landed between the precheck
   // and this read must not disclose another subsidiary's document.
   const redisclosed = guardSubsidiaryScope(authz, doc.doc.subsidiary_id as string | null)
@@ -80,7 +82,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const user = authz.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const owned = (await db.execute<(DocumentEditCurrent & { subsidiaryId: string | null })>(
     sql`select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
@@ -91,11 +93,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           from documents where id = ${id} and org_id = ${user.orgId}`,
   ))
   const row = owned.rows[0]
-  if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!row) return notFound("record")
   const denied = guardSubsidiaryScope(authz, row.subsidiaryId)
   if (denied) return denied
   if (!(await isDocKindEnabled(user.orgId, row.kind))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const cfg = DOC_KINDS[row.kind]
   if (!cfg) return NextResponse.json({ error: `kind "${row.kind}" is not editable here` }, { status: 422 })
@@ -103,7 +105,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // missing (same shape as GET above); the 403 below stays for callers who
   // can read but may not edit.
   if (!canReadDocumentKind(authz, row.kind)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const editPerm = row.kind === 'project_charge' ? 'projects.manage' : createPermission(row.kind)
   if (!can(authz, editPerm)) {
@@ -154,7 +156,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const item = (await db.execute<{ kind: string }>(sql`
         select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
       if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   }
@@ -170,7 +172,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const item = (await db.execute<{ kind: string }>(sql`
         select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
       if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   }
@@ -204,22 +206,22 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const owned = (await db.execute<{ kind: string; subsidiaryId: string | null }>(
     sql`select kind, subsidiary_id as "subsidiaryId" from documents where id = ${id} and org_id = ${authz.user.orgId}`,
   ))
   const row = owned.rows[0]
-  if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!row) return notFound("record")
   const denied = guardSubsidiaryScope(authz, row.subsidiaryId)
   if (denied) return denied
   if (!(await isDocKindEnabled(authz.user.orgId, row.kind))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const cfg = DOC_KINDS[row.kind]
   if (!cfg) return NextResponse.json({ error: `kind "${row.kind}" is not editable here` }, { status: 422 })
   // Same read-before-edit shape as PATCH: no read grant, no record.
   if (!canReadDocumentKind(authz, row.kind)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const editPerm = row.kind === 'project_charge' ? 'projects.manage' : createPermission(row.kind)
   if (!can(authz, editPerm)) {
@@ -264,7 +266,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     if (denied) return denied
     return NextResponse.json({ ok: true })
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof ScopeNotFoundError) return notFound("record")
     if (e instanceof DeleteError) return apiErrorResponse(e)
     throw e
   }

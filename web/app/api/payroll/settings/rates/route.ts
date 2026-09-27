@@ -24,6 +24,8 @@ import { guardRootSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { decimalNullRefusal, moneyRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 
@@ -308,7 +310,7 @@ export async function DELETE(req: Request) {
   if (!isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
   try {
     const removed = await deleteStatutoryRate(gate.user.orgId, gate.user.id, id)
-    if (!removed) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!removed) return notFound("record")
     return NextResponse.json({ ok: true })
   } catch (error) {
     // `deleteStatutoryRate` RETIRES the open row (stamps superseded_on, writes

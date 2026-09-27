@@ -237,7 +237,7 @@ async function raceOnce(): Promise<void> {
       const response = await pending;
       assert.equal(settled, true);
       assert.equal(response.status, 404, JSON.stringify(await response.clone().json()));
-      assert.deepEqual(await response.json(), { error: 'not found' });
+      assert.deepEqual(await response.json(), { error: 'not_found' });
     } finally {
       // Roll back before releasing: on a retry the holder's transaction is
       // still open, and a pooled connection never rolls back on its own —

@@ -14,6 +14,8 @@ import {
   type AnalyticsDashboard,
   type ConfigField,
 } from "../../../../../lib/analytics/config";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -44,7 +46,7 @@ async function gateDashboard(permission: string, dashboard: string) {
   if (gate instanceof NextResponse) return gate;
   const featureKey = DASHBOARD_FEATURE[dashboard];
   if (featureKey && !(await isFeatureEnabled(gate.user.orgId, featureKey))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   return gate;
 }

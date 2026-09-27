@@ -9,6 +9,8 @@ import { refreshCloseRun } from "@openbooks/engine/src/close/run-automation.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -34,7 +36,7 @@ export async function POST(
   const scopeDenied = guardCloseScope(gate);
   if (scopeDenied) return scopeDenied;
   if (body.action === "publish" && !(await isFeatureEnabled(gate.user.orgId, "advancedClose"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     if (body.action === "refresh") {

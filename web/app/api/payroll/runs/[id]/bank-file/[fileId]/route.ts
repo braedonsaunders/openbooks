@@ -7,6 +7,8 @@ import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { guardFeaturePermission } from '../../../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../../../lib/authz'
 import { isUuid } from '../../../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -38,7 +40,7 @@ export async function POST(
   if (gate instanceof NextResponse) return gate
   const { id, fileId } = await params
   if (!isUuid(id) || !isUuid(fileId)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   // The artifact must belong to the run in the URL: an id alone must not be a
@@ -50,7 +52,7 @@ export async function POST(
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where f.org_id = ${gate.user.orgId} and f.id = ${fileId} and f.pay_run_document_id = ${id}
   `))
-  if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!owned.rows[0]) return notFound("record")
   const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
   if (denied) return denied
 

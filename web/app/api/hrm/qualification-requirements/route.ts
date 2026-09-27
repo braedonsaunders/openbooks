@@ -9,6 +9,8 @@ import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { qualificationErrorResponse } from "../qualifications/_lib";
 import { setRequirementBody } from "../qualifications/bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -17,7 +19,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission("hrm.certifications.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const params = new URL(req.url).searchParams;
   const subjectKindRaw = params.get("subjectKind");
@@ -47,7 +49,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.certifications.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, setRequirementBody);
   if (!parsedBody.ok) return parsedBody.response;

@@ -19,7 +19,7 @@ const { randomUUID } = await import('node:crypto')
 const construction = await import('../app/api/construction/route')
 const subcontracts = await import('../app/api/subcontracts/route')
 
-const NOT_FOUND = { error: 'not found' }
+const NOT_FOUND = { error: 'not_found' }
 const post = (handler: (req: Request) => Promise<Response>, orgId: string, body: Record<string, unknown>) =>
   withOrgContext(orgId, () => handler(new Request('http://audit.local/api', { method: 'POST', body: JSON.stringify(body) })))
 const get = (handler: (req: Request) => Promise<Response>, orgId: string, query: string) =>

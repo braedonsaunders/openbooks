@@ -5,6 +5,8 @@ import { createApplication } from "@openbooks/engine/src/hrm/recruiting/applicat
 import { guardPermission } from "../../../../../lib/authz";
 import { recruitingErrorResponse } from "../_lib";
 import { createApplicationBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -17,7 +19,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, createApplicationBody);
   if (!parsedBody.ok) return parsedBody.response;

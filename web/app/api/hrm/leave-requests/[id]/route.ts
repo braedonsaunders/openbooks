@@ -11,6 +11,8 @@ import { can, getAuthz } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { leaveErrorResponse } from "../_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -24,7 +26,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await isFeatureEnabled(authz.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await ctx.params;
   if (!isUuid(id)) return NextResponse.json({ error: "request id must be a uuid" }, { status: 400 });

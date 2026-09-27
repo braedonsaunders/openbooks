@@ -15,6 +15,8 @@ import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/
 import { maskTin, type RecipientFormData } from '@/lib/information-return-form'
 import { renderInformationReturnBatchPdf, renderInformationReturnPdf } from '@/lib/information-return-pdf'
 import { isUuid } from '@/lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -46,12 +48,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (blocked) return blocked
   const { orgId } = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const recipientId = new URL(req.url).searchParams.get('recipientId')
-  if (recipientId && !isUuid(recipientId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (recipientId && !isUuid(recipientId)) return notFound("record")
   // Entity isolation before any filing detail is read (same 404 as a missing filing).
   const filingScope = await loadInformationReturnFilingScope(orgId, id)
-  if (!filingScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!filingScope) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
   if (scopeDenied) return scopeDenied
 
@@ -71,7 +73,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
      where f.org_id = ${orgId} and f.id = ${id}
   `))
   const filing = filings.rows[0]
-  if (!filing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!filing) return notFound("record")
   if (!canFurnishRecipientCopies(filing.status)) {
     return NextResponse.json(
       { error: `a ${filing.status} filing is not frozen — finalize it before furnishing recipient copies` },
@@ -172,7 +174,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (blocked) return blocked
   const { orgId, id: actorId } = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject)
   if (!parsedBody.ok) return parsedBody.response
@@ -180,13 +182,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   let recipientId: string | null = null
   if (rawRecipientId !== null) {
     if (typeof rawRecipientId !== 'string' || !isUuid(rawRecipientId)) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     recipientId = rawRecipientId
   }
   // Entity isolation before any filing detail is read (same 404 as a missing filing).
   const filingScope = await loadInformationReturnFilingScope(orgId, id)
-  if (!filingScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!filingScope) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
   if (scopeDenied) return scopeDenied
 

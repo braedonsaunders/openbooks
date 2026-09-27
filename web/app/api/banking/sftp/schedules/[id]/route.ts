@@ -12,6 +12,8 @@ import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardSubsidiaryScope, type Authz } from '../../../../../../lib/authz'
 import { lockScheduleAccount } from '../_lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 const requestId = (req: Request) => req.headers.get('x-request-id')?.trim() || randomUUID()
@@ -79,7 +81,7 @@ async function refuseUnexecutedRun(scheduleId: string, orgId: string): Promise<N
   const row = diagnosis.rows[0]
   // Deleted between the ownership check and the scan: same answer as never
   // owned, never a fabricated result.
-  if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!row) return notFound("record")
   if (!row.schedule_active) {
     return NextResponse.json(
       { error: 'Activate this schedule before running it.', code: 'SCHEDULE_INACTIVE' },
@@ -155,7 +157,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { action?: string; isActive?: boolean; expectedExternalAccountId?: unknown }
@@ -217,8 +219,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }, tx)
       return after
     })
-    if (!bound) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    if ('scope' in bound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!bound) return notFound("record")
+    if ('scope' in bound) return notFound("record")
     if ('busy' in bound) {
       return NextResponse.json(
         { error: 'This schedule is being scanned; wait for the scan to finish before changing its expected bank account.' },
@@ -242,7 +244,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.action === 'run') {
     // Scoped run: activate-scan just this org's schedules and report this one.
     const owned = (await db.execute(sql`select id from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}`))
-    if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!owned.rows[0]) return notFound("record")
     // A manual run imports that account's statements: an A-restricted actor
     // must never trigger (or observe) a run filing B's lines.
     const runScoped = await requireScheduleScope(gate, id)
@@ -273,7 +275,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         { status: 409 },
       )
     }
-    if (mine?.notRun === 'account-scope') return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (mine?.notRun === 'account-scope') return notFound("record")
     if (mine?.notRun === 'inactive') return await refuseUnexecutedRun(id, user.orgId)
     if (mine?.notRun === 'configuration-conflict') {
       return NextResponse.json({ error: mine.errors[0] ?? 'SFTP schedule configuration prevents this run.' }, { status: 409 })
@@ -377,8 +379,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }, tx)
     return after
   })
-  if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if ('scope' in updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!updated) return notFound("record")
+  if ('scope' in updated) return notFound("record")
   if ('busy' in updated) {
     return NextResponse.json(
       { error: 'This schedule is being scanned; wait for the scan to finish before changing its active state.' },
@@ -394,7 +396,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const deleteScoped = await requireScheduleScope(gate, id)
   if (deleteScoped) return deleteScoped
   // Same zero-row rule as the toggle above: a delete that matches nothing
@@ -437,8 +439,8 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     }, tx)
     return removed
   })
-  if (!deleted) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if ('scope' in deleted) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!deleted) return notFound("record")
+  if ('scope' in deleted) return notFound("record")
   if ('busy' in deleted) {
     return NextResponse.json(
       { error: 'This schedule is being scanned; wait for the scan to finish before deleting it.' },

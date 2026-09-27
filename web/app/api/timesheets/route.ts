@@ -252,7 +252,7 @@ async function save(req: Request) {
       const item = (await db.execute<{ kind: string }>(sql`
         select kind from items where id = ${p.itemId} and org_id = ${orgId}`))
       if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   }
@@ -272,7 +272,7 @@ async function save(req: Request) {
       const item = (await db.execute<{ kind: string }>(sql`
         select kind from items where id = ${p.itemId} and org_id = ${orgId}`))
       if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   }
@@ -478,7 +478,7 @@ async function save(req: Request) {
     return false
     })
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof ScopeNotFoundError) return notFound("record")
     throw error
   }
   if (staleRevision !== null) {

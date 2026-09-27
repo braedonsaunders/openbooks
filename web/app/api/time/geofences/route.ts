@@ -12,6 +12,8 @@ import { guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -21,7 +23,7 @@ function bad(error: string, status = 422) {
 
 /** Record-level scope denials answer exactly like not-found (a uniform 404). */
 function hidden() {
-  return NextResponse.json({ error: 'not found' }, { status: 404 })
+  return notFound("record")
 }
 
 type SqlExecutor = Pick<typeof db, 'execute'>

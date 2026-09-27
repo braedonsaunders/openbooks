@@ -11,6 +11,8 @@ import { PDF_RECORD_TYPE_BY_KEY } from "../../../lib/pdf-templates/catalog";
 import { prettifyTemplateHtml } from "../../../lib/pdf-templates/prettify";
 import { starterTemplate } from "../../../lib/pdf-templates/starters";
 import { listVisiblePdfTemplates, type PdfTemplateRow } from "../../../lib/pdf-templates/store";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -23,7 +25,7 @@ export async function GET(req: Request) {
   if (recordType && !PDF_RECORD_TYPE_BY_KEY[recordType])
     return NextResponse.json({ error: "unknown record type" }, { status: 400 });
   if (recordType && !(await isDocKindEnabled(user.orgId, recordType))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const rows = await listVisiblePdfTemplates(user.orgId, recordType);
   // The list payload doesn't need the (potentially large) HTML bodies.
@@ -69,7 +71,7 @@ export async function POST(req: Request) {
   const meta = body.recordType ? PDF_RECORD_TYPE_BY_KEY[body.recordType] : undefined;
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
   if (!(await isDocKindEnabled(user.orgId, meta.key))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   if (!body.name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
   if (body.isDefault !== undefined && typeof body.isDefault !== "boolean") {

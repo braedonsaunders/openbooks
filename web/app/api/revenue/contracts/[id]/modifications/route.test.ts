@@ -37,7 +37,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `import {NextResponse} from 'next/server';export async function guardFeaturePermission(...args){const s=globalThis[Symbol.for('revenue-modification-route')];s.gateArgs=args;if(!s.allowed)return NextResponse.json({error:'missing permission'},{status:403});if(!s.featureEnabled)return NextResponse.json({error:'not found'},{status:404});return {user:{id:'actor',orgId:'org'}}}`,
+        source: `import {NextResponse} from 'next/server';export async function guardFeaturePermission(...args){const s=globalThis[Symbol.for('revenue-modification-route')];s.gateArgs=args;if(!s.allowed)return NextResponse.json({error:'missing permission'},{status:403});if(!s.featureEnabled)return NextResponse.json({error:'not_found'},{status:404});return {user:{id:'actor',orgId:'org'}}}`,
       };
     if (url === "mock:revenue-change-command")
       return {

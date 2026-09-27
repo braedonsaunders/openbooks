@@ -114,7 +114,7 @@ test('information-return by-id routes fail closed on another entity\'s filing', 
           )],
         ] as const) {
           assert.equal(response.status, 404, `${label} must 404 for filing ${id}`)
-          assert.deepEqual(await response.json(), { error: 'not found' }, `${label} must use the list-miss body`)
+          assert.deepEqual(await response.json(), { error: 'not_found' }, `${label} must use the list-miss body`)
         }
         // Nothing happened to the hidden filing: no compute evidence was written.
         const audits = await db.execute<{ n: number }>(sql`

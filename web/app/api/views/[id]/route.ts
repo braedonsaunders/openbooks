@@ -14,6 +14,8 @@ import {
   slugifyViewName,
   type ViewScope,
 } from '../../../../lib/views'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -23,11 +25,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { user, permissions } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const view = await loadView(user.orgId, id, user.id, permissions)
-  if (!view) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!view) return notFound("record")
   if (!(await canRunReportEntity(gate, view.query))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   return NextResponse.json({ view })
 }
@@ -40,11 +42,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params
   const isAdmin = permissions.has('*')
 
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const existing = await loadView(user.orgId, id, user.id, permissions)
-  if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!existing) return notFound("record")
   if (!(await canRunReportEntity(gate, existing.query))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   const parsedBody = await parseJsonBody(req, jsonObject);
@@ -91,7 +93,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const view = await loadView(user.orgId, id, user.id, permissions)
   if (!view || !(await canRunReportEntity(gate, view.query))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   return NextResponse.json({ view })
 }
@@ -102,7 +104,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const { user, permissions } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const ok = await deleteView(user.orgId, id, user.id, permissions.has('*'))
   if (!ok) return NextResponse.json({ error: 'You can only delete your own views.' }, { status: 403 })
   return NextResponse.json({ ok: true })

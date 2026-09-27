@@ -10,6 +10,8 @@ import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -46,7 +48,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (blocked) return blocked
   const { orgId, id: actorId } = authz.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -135,21 +137,21 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
          for update
       `))
       const record = locked.rows[0]
-      if (!record) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (!record) return notFound("record")
       // Subsidiary fence runs before every lifecycle and concurrency check:
       // a hidden record reads as 404 no matter which revision or action the
       // caller names, so the refusal never oracles what it cannot see.
       const fencedParty = (await tx.execute<{ subsidiaryId: string | null }>(sql`
         select subsidiary_id as "subsidiaryId" from parties where org_id = ${orgId} and id = ${record['party_id']}
       `)).rows[0]
-      if (!fencedParty) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (!fencedParty) return notFound("record")
       const fencedPartyDenied = guardSubsidiaryScope(authz, fencedParty.subsidiaryId, { orgWideNull: true })
       if (fencedPartyDenied) return fencedPartyDenied
       if (record['project_id'] !== null && record['project_id'] !== undefined) {
         const fencedProject = (await tx.execute<{ subsidiaryId: string | null }>(sql`
           select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${record['project_id']}
         `)).rows[0]
-        if (!fencedProject) return NextResponse.json({ error: 'not found' }, { status: 404 })
+        if (!fencedProject) return notFound("record")
         const fencedProjectDenied = guardSubsidiaryScope(authz, fencedProject.subsidiaryId, { orgWideNull: true })
         if (fencedProjectDenied) return fencedProjectDenied
       }

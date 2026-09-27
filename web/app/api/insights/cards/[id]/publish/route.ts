@@ -8,6 +8,8 @@ import { validateInsightQuery } from '@openbooks/analytics'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { loadCard } from '../../../_lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -38,10 +40,10 @@ export async function POST(
   const user = gate.user
   const { id } = await params
   if (!isUuid(id))
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
 
   const card = await loadCard(id, user.orgId)
-  if (!card) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!card) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject)
   if (!parsedBody.ok) return parsedBody.response

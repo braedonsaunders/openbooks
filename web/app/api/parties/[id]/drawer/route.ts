@@ -9,6 +9,8 @@ import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryUiOptions, subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { loadParty } from '../../_lib'
 import { loadComplianceClasses, loadVendorComplianceClass } from '../../../../../lib/compliance'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -17,12 +19,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const gate = await guardPermission('parties.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // Party record boundary (null-subsidiary parties are org-wide).
   const scope = (await db.execute<{ subsidiaryId: string | null }>(
     sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`,
   ))
-  if (!scope.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!scope.rows[0]) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 
@@ -45,7 +47,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     isFeatureEnabled(gate.user.orgId, 'multiCurrency'),
     isFeatureEnabled(gate.user.orgId, 'subcontractorCompliance'),
   ])
-  if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!payload) return notFound("record")
   const requestedRole = new URL(request.url).searchParams.get('role')
   const role = requestedRole === 'customer' || requestedRole === 'vendor' || requestedRole === 'employee'
     ? requestedRole

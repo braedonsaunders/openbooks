@@ -11,6 +11,8 @@ import {
 import { abortActiveRun } from "../../../../../lib/assistant/owned-runs";
 import { createDbOwnedRunStore } from "../../../../../lib/assistant/owned-runs-db";
 import { markTitleRenamed } from "../../../../../lib/assistant/conversation-title";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -28,7 +30,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   if (!UUID_RE.test(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
   if (!(await ownsConversation(gate, id, SCOPE))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { searchParams } = new URL(req.url);
   const before = searchParams.get("before");
@@ -60,7 +62,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: "title required" }, { status: 400 });
   }
   const renamed = await renameConversation(gate, id, SCOPE, body.title);
-  if (!renamed) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!renamed) return notFound("record");
   // A user rename wins forever: record the source so a later turn never
   // overwrites it with a generated title. Best-effort, never throws.
   await markTitleRenamed(gate, id);
@@ -76,6 +78,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   // conversations' runs are untouched (different rows, different runs).
   await abortActiveRun(createDbOwnedRunStore(gate), id);
   const deleted = await deleteConversation(gate, id, SCOPE);
-  if (!deleted) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!deleted) return notFound("record");
   return NextResponse.json({ ok: true });
 }

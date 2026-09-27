@@ -8,6 +8,8 @@ import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 import { isUuid } from "../../../../lib/list-params";
 import { isValidEmailAddress } from "@openbooks/emails";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -97,7 +99,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   // A malformed id names nothing: same answer as a policy in another org.
   if (!isUuid(id) || !(await owned(authz.user.orgId, id))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -232,7 +234,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const scopeDenied = guardUnrestrictedScope(authz);
   if (scopeDenied) return scopeDenied;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   await db.transaction(async (tx) => {
     // Snapshot policy and ladder first: deletion removes the only record of
     // how this org chased overdue invoices.

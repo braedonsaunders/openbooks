@@ -38,6 +38,8 @@ import {
   type AssetConvention,
   type AssetMethod,
 } from '../_fields'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -143,7 +145,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const gate = await guardFeaturePermission('assets.read', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const search = new URL(req.url).searchParams
   const page = Number.parseInt(search.get('page') ?? '1', 10)
   const payload = await loadAsset(id, gate.user.orgId, {
@@ -154,7 +156,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     perPage: 25,
   })
   if (!payload) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   return NextResponse.json(payload)
 }
@@ -173,7 +175,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const existRes = (await db.execute<ExistingAsset>(sql`
     select id, subsidiary_id, status, custom, acquisition_cost, salvage_value, in_service_on,
@@ -184,7 +186,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
   `))
   const existing = existRes.rows[0]
-  if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!existing) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -582,12 +584,12 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const visible = (await db.execute<{ status: string }>(sql`
     select status from fixed_assets where id = ${id} and org_id = ${user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
   `))
-  if (!visible.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!visible.rows[0]) return notFound("record")
   // Only a draft that was never placed in service may be hard-deleted. Any
   // other status — in service, fully depreciated, disposed, written off —
   // owns financial meaning and leaves only through the lifecycle
@@ -670,7 +672,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       { status: 409 },
     )
   }
-  if (!deleted) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!deleted) return notFound("record")
 
   return NextResponse.json({ ok: true })
 }

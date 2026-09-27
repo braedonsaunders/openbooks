@@ -9,6 +9,8 @@ import { getFileBlob } from '../../../../../lib/file-cabinet'
 import { blobResponse } from '../../../../../lib/blob-response'
 import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -29,7 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const gate = await guardPermission('ap.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   return withScopeSnapshot(gate.user.orgId, async () => {
   const capture = (await db.execute<{ file_id: string }>(sql`
     select ci.file_id
@@ -40,7 +42,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
      ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
   `))
   const fileId = capture.rows[0]?.file_id
-  if (!fileId) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!fileId) return notFound("record")
   let blob: Awaited<ReturnType<typeof getFileBlob>>
   try {
     blob = await getFileBlob(gate.user.orgId, fileId, {
@@ -55,7 +57,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
     throw err
   }
-  if (!blob) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!blob) return notFound("record")
   return blobResponse(request, blob, { fallbackName: 'document' })
   })
 }

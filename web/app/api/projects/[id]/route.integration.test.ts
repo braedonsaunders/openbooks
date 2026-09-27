@@ -65,7 +65,7 @@ stubModules({
       export function guardSubsidiaryScope(authz, subsidiaryId) {
         if (authz.allowedSubsidiaryIds === null) return null
         if (subsidiaryId !== null && subsidiaryId !== undefined && authz.allowedSubsidiaryIds.has(String(subsidiaryId))) return null
-        return new Response(JSON.stringify({ error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } })
+        return new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json' } })
       }
       export function subsidiariesInScope(authz, ids) {
         return authz.allowedSubsidiaryIds === null || ids.every((id) => id !== null && id !== undefined && authz.allowedSubsidiaryIds.has(id))
@@ -130,7 +130,7 @@ test('GET hides a project outside the caller subsidiary scope', async () => {
   const response = await GET(new Request('http://openbooks.test'), params())
 
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
 })
 
 test('PATCH rejects moving a project into an out-of-scope subsidiary without writing', async () => {

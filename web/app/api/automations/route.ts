@@ -8,6 +8,8 @@ import { guardPermission } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 import { createAutomationBody } from "./bodies";
 import { automationErrorResponse } from "./_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -16,7 +18,7 @@ export async function GET() {
   const gate = await guardPermission("automations.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "automations"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     const automations = await listAutomations(gate.user.orgId, gate.user.id);
@@ -30,7 +32,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("automations.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "automations"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, createAutomationBody);
   if (!parsedBody.ok) return parsedBody.response;

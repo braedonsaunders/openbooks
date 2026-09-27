@@ -4,6 +4,8 @@ import { decidePaymentFile } from '@openbooks/engine/src/payments/operations.ts'
 import { isUuid } from '@/lib/list-params'
 import { parseJsonBody } from '@/lib/api/json'
 import { guardPaymentRunPermission, paymentErrorResponse } from '@/app/api/payments/lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -14,7 +16,7 @@ const fileDecisionBody = z.object({
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string; fileId: string }> }) {
   const { id, fileId } = await params
-  if (!isUuid(id) || !isUuid(fileId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id) || !isUuid(fileId)) return notFound("record")
   const gate = await guardPaymentRunPermission(id, 'approve')
   if (gate instanceof NextResponse) return gate
   const parsed = await parseJsonBody(req, fileDecisionBody)

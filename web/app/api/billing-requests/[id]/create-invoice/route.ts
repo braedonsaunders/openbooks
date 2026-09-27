@@ -6,6 +6,8 @@ import { generateInvoiceFromBillingRequest, BillingError } from '../../../../../
 import { isRendererUnavailable } from '../../../../../lib/api/pdf-renderer'
 import { assembleInvoiceBackup, InvoiceBackupSourceAccessError, type BackupType } from '../../../../../lib/invoice-backup'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -16,7 +18,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const feature = await guardProjectsFeature(gate.user.orgId)
   if (feature) return feature
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   try {
     const result = await generateInvoiceFromBillingRequest(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds)
     // A backup-required request leaves the draft with its packet already
@@ -48,12 +50,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     }
     return NextResponse.json({ documentId: result.id, documentNumber: result.documentNumber, backup })
   } catch (e) {
-    if (e instanceof BillingError && e.message === 'Billing request not found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof BillingError && e.message === 'Billing request not found') return notFound("record")
     if (e instanceof BillingError && e.message === 'Inventory is disabled') {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     if (e instanceof BillingError && e.message === 'Equipment is disabled') {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     return apiErrorResponse(e)
   }

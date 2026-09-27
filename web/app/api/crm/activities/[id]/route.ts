@@ -8,6 +8,8 @@ import { isUuid } from '../../../../../lib/list-params'
 import { loadActivity } from '../../../../../lib/crm'
 import { isIsoTimestamp } from '../../../../../lib/crm-dates'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -51,7 +53,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   const activity = isUuid(id) ? await loadActivity(id, gate.user.orgId, gate.allowedSubsidiaryIds) : null
-  return activity ? NextResponse.json(activity) : NextResponse.json({ error: 'not found' }, { status: 404 })
+  return activity ? NextResponse.json(activity) : notFound("record")
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -59,9 +61,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const current = (await db.execute(sql`select a.* from crm_activities a where a.id = ${id} and a.org_id = ${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)}`))
-  if (!current.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!current.rows[0]) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as typeof parsedBody.data & { expectedUpdatedAt?: unknown }
@@ -120,7 +122,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const denied = await db.transaction(async (tx) => {
     const visible=await tx.execute(sql`select a.* from crm_activities a where a.id=${id} and a.org_id=${user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)} for update of a`)
-    if (!visible.rows.length) return NextResponse.json({error:'not found'},{status:404})
+    if (!visible.rows.length) return notFound("record")
     // Compared against the row locked by this write transaction, never the
     // preflight snapshot (which may have gone stale during validation). A
     // separate projection keeps the audit before-image free of computed keys.
@@ -215,7 +217,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await guardFeaturePermission('crm.activities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const deleted = await db.transaction(async (tx) => {
     const visible=await tx.execute(sql`select a.* from crm_activities a where a.id=${id} and a.org_id=${gate.user.orgId}${crmActivityScope(gate.allowedSubsidiaryIds)} for update of a`)
     if (!visible.rows.length) return {rows:[]}
@@ -232,5 +234,5 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       values (${gate.user.orgId}, 'crm_activities', ${id}, 'delete', ${JSON.stringify({ before, links: linksBefore, participants: participantsBefore, after: null })}::jsonb, ${gate.user.id})`)
     return removed
   }) as unknown as { rows: unknown[] }
-  return deleted.rows[0] ? NextResponse.json({ ok: true }) : NextResponse.json({ error: 'not found' }, { status: 404 })
+  return deleted.rows[0] ? NextResponse.json({ ok: true }) : notFound("record")
 }

@@ -15,11 +15,13 @@ import { executeIdempotent } from "../../../../lib/application/idempotency";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "./_lib";
 import { generateDocumentBody, previewMergeBody, uploadDocumentBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export async function gateDocuments(orgId: string): Promise<NextResponse | null> {
-  if (!(await isFeatureEnabled(orgId, "hrm"))) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!(await isFeatureEnabled(orgId, "hrm"))) return notFound("record");
   if (!(await isFeatureEnabled(orgId, "hrmDocuments"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   return null;
 }

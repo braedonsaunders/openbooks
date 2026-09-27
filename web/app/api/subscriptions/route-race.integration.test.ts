@@ -26,7 +26,7 @@ registerHooks({
         }
         export function guardSubsidiaryScope(authz, subsidiaryId, opts = {}) {
           if (authz.allowedSubsidiaryIds === null || (subsidiaryId == null && opts.orgWideNull) || authz.allowedSubsidiaryIds.has(subsidiaryId)) return null;
-          return new Response(JSON.stringify({error:'not found'}), {status:404});
+          return new Response(JSON.stringify({error:'not_found'}), {status:404});
         }
         export function guardUnrestrictedScope(authz) {
           return authz.allowedSubsidiaryIds === null ? null : new Response(JSON.stringify({error:'requires unrestricted subsidiary access'}), {status:403});
@@ -324,7 +324,7 @@ test("change and bill-now refuse after a customer rehome while waiting on its ro
 
       const response = await pending;
       assert.equal(response.status, 404, `${action}: ${JSON.stringify(await response.clone().json())}`);
-      assert.deepEqual(await response.json(), { error: "not found" });
+      assert.deepEqual(await response.json(), { error: "not_found" });
       const after = (await withBypassContext(() => db.execute<{ quantity: string; runCount: number; lastInvoiceId: string | null }>(sql`
         select quantity::text as quantity, run_count as "runCount", last_invoice_id as "lastInvoiceId"
           from subscriptions where id = ${subscriptionId} and org_id = ${orgId}`))).rows[0]!;

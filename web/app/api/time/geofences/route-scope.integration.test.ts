@@ -140,7 +140,7 @@ test("save cannot create a fence on another subsidiary's project", async () => {
     const before = await fenceCount(org.orgId);
     const response = await post({ ...CIRCLE, projectId: projectB });
     assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), { error: "not found" });
+    assert.deepEqual(await response.json(), { error: "not_found" });
     assert.equal(await fenceCount(org.orgId), before, "a refused save writes nothing");
   } finally {
     state.allowedSubsidiaryIds = null;
@@ -155,11 +155,11 @@ test("save cannot edit another subsidiary's fence or point at its project", asyn
     // Editing B's fence by id reads as not-found.
     const editHidden = await post({ id: fenceB, ...CIRCLE, projectId: projectB });
     assert.equal(editHidden.status, 404);
-    assert.deepEqual(await editHidden.json(), { error: "not found" });
+    assert.deepEqual(await editHidden.json(), { error: "not_found" });
     // Declaring B's project on A's fence reads as not-found too.
     const moveAway = await post({ id: fenceA, ...CIRCLE, projectId: projectB });
     assert.equal(moveAway.status, 404);
-    assert.deepEqual(await moveAway.json(), { error: "not found" });
+    assert.deepEqual(await moveAway.json(), { error: "not_found" });
     assert.equal(await fenceProject(org.orgId, fenceA), projectA, "a refused edit changes nothing");
   } finally {
     state.allowedSubsidiaryIds = null;
@@ -173,7 +173,7 @@ test("delete cannot retire another subsidiary's fence", async () => {
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
     const response = await post({ action: "delete", id: fenceB });
     assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), { error: "not found" });
+    assert.deepEqual(await response.json(), { error: "not_found" });
     assert.notEqual(await fenceProject(org.orgId, fenceB), null, "a refused delete removes nothing");
   } finally {
     state.allowedSubsidiaryIds = null;

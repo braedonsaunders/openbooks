@@ -13,6 +13,8 @@ import { DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTra
 import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";
 import { type ExpenseEditBody, persistExpenseEdit, prepareExpenseEdit } from '../../../../lib/expense-edit'
 import { loadExpenseReport } from '../../../../lib/expenses'
+import { notFound } from "@/lib/api/responses";
+
 
 type RouteTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -25,7 +27,7 @@ export const runtime = 'nodejs'
  * 22P02, surfacing as an empty-body 500.
  */
 function malformedId(id: string): NextResponse | null {
-  return isUuid(id) ? null : NextResponse.json({ error: 'not found' }, { status: 404 })
+  return isUuid(id) ? null : notFound("record")
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -35,7 +37,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const malformed = malformedId(id)
   if (malformed) return malformed
   const report = await loadExpenseReport(id, gate.user.orgId, gate.allowedSubsidiaryIds)
-  if (!report) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!report) return notFound("record")
   // Authorize the subsidiary from the same snapshot as the returned content.
   const denied = guardSubsidiaryScope(gate, report.doc.subsidiary_id as string | null)
   if (denied) return denied
@@ -62,7 +64,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; custom: Record<string, unknown> | null; payment_card_id: string | null }>(
     sql`select status, document_date, subsidiary_id as "subsidiaryId", custom, payment_card_id from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
   ))
-  if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!existing.rows[0]) return notFound("record")
   const denied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
   if (denied) return denied
   if (existing.rows[0].status !== 'draft') {
@@ -182,7 +184,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const report = await loadExpenseReport(id, user.orgId, gate.allowedSubsidiaryIds)
-  if (!report) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!report) return notFound("record")
   const responseDenied = guardSubsidiaryScope(gate, report.doc.subsidiary_id as string | null)
   if (responseDenied) return responseDenied
   return NextResponse.json(report)
@@ -198,7 +200,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const owned = (await db.execute<{ subsidiaryId: string | null }>(
     sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${gate.user.orgId}`,
   ))
-  if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!owned.rows[0]) return notFound("record")
   const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
   if (denied) return denied
   // Mandatory optimistic-concurrency evidence — same contract as the PATCH
@@ -224,7 +226,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     })
     return NextResponse.json({ ok: true })
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof ScopeNotFoundError) return notFound("record")
     // The engine fence carries its own 409; every other refusal stays 422.
     if (e instanceof DeleteError) return apiErrorResponse(e)
     throw e

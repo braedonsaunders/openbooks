@@ -10,6 +10,8 @@ import {
   deleteDriverValue,
   updateDriverValue,
 } from "../../../../../../engine/src/allocations/driver-admin.ts";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -36,7 +38,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const scopeDenied = guardUnrestrictedScope(gate);
   if (scopeDenied) return scopeDenied;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   const parsedBody = await parseJsonBody(req, valuePatchSchema);
   if (!parsedBody.ok) return parsedBody.response;
   try {
@@ -53,7 +55,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   const scopeDenied = guardUnrestrictedScope(gate);
   if (scopeDenied) return scopeDenied;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   try {
     await deleteDriverValue(gate.user.orgId, gate.user.id, id);
     return NextResponse.json({ ok: true });

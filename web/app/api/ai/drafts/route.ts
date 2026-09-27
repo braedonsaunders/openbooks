@@ -5,6 +5,8 @@ import { draftWithEvidence, DRAFT_KINDS } from "@openbooks/engine/src/hrm/ai/dra
 import { markDecisionOutcome } from "@openbooks/engine/src/hrm/ai/governance.ts";
 import { aiRailsErrorResponse, requireAnyPerm } from "../../../../lib/ai-rails";
 import { isFeatureEnabled } from "../../../../lib/features";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -37,7 +39,7 @@ export async function POST(req: Request) {
   ]);
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmDrafting"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, draftBody);
   if (!parsedBody.ok) return parsedBody.response;
@@ -65,7 +67,7 @@ export async function PATCH(req: Request) {
   ]);
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmDrafting"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, outcomeBody);
   if (!parsedBody.ok) return parsedBody.response;
