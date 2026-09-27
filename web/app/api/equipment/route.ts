@@ -12,24 +12,37 @@ import { resolveIdempotentReplay } from '../../../lib/api/idempotency'
 
 export const runtime = "nodejs";
 
-// Typed collection body (never jsonObject: the financial-boundary ceiling
-// only shrinks). Shape-only here — every domain refusal below keeps its
-// stable snake code so the drawer can name the remedy.
-const createEquipmentSchema = z.looseObject({
-  name: z.string().optional(),
+// Typed creation boundary. Domain and existence refusals below retain the
+// stable codes the drawer uses to name the remedy.
+const OPTIONAL_UUID_REMEDIES: Record<string, string> = {
+  subsidiaryId: 'select an active legal entity from this organization',
+  chargeItemId: 'select an active equipment charge item',
+  fixedAssetId: 'select a fixed asset in this legal entity',
+  rateBookId: 'select an active project rate book',
+}
+const optionalUuidField = (field: keyof typeof OPTIONAL_UUID_REMEDIES) => z.preprocess(
+  (value) => value === '' ? null : value,
+  z.string({ error: `${field} must be a UUID; ${OPTIONAL_UUID_REMEDIES[field]}` })
+    .uuid({ error: `${field} must be a UUID; ${OPTIONAL_UUID_REMEDIES[field]}` })
+    .nullable()
+    .optional(),
+)
+
+const createEquipmentSchema = z.strictObject({
+  name: z.string().trim().min(1, 'name is required'),
   unitNumber: z.string().optional().nullable(),
   description: z.string().optional().nullable(),
-  subsidiaryId: z.string().optional().nullable(),
-  chargeItemId: z.string().optional().nullable(),
-  fixedAssetId: z.string().optional().nullable(),
-  rateBookId: z.string().optional().nullable(),
+  subsidiaryId: optionalUuidField('subsidiaryId'),
+  chargeItemId: optionalUuidField('chargeItemId'),
+  fixedAssetId: optionalUuidField('fixedAssetId'),
+  rateBookId: optionalUuidField('rateBookId'),
   purchasePrice: z.string({ error: "purchasePrice must be a decimal string; JSON numbers are refused to preserve precision" }).optional().nullable(),
   acquiredOn: z.string().optional().nullable(),
   inServiceOn: z.string().optional().nullable(),
   serialNumber: z.string().optional().nullable(),
   capacityQuantity: z.string({ error: "capacityQuantity must be a decimal string; JSON numbers are refused to preserve precision" }).optional().nullable(),
   capacityUnit: z.string().optional().nullable(),
-  status: z.string().optional(),
+  status: z.enum(['draft', 'active'], { error: 'status must be draft when creating equipment; create a draft, then activate it after setting a charge item' }).optional(),
 });
 
 class EquipmentIdempotencyConflict extends Error {

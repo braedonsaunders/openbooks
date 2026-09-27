@@ -17,7 +17,11 @@ type DraftStage = (typeof DRAFT_STAGES)[number]
 // Bodyless-tolerant on the shared boundary: {} or an empty body means a lead,
 // and only the optional stage is read. The zod boundary still refuses array
 // and non-object bodies the hand parse accepted.
-const draftBody = z.looseObject({ lifecycleStage: z.string().optional() })
+const draftBody = z.strictObject({
+  lifecycleStage: z.enum(DRAFT_STAGES, {
+    error: `lifecycleStage must be one of ${DRAFT_STAGES.join(', ')}`,
+  }).optional(),
+})
 
 export const POST = defineRoute({
   permission: 'crm.accounts.create',
