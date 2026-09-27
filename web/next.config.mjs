@@ -29,6 +29,16 @@ const config = {
   // already holds the Turbopack compilation, and it ran a GitHub runner out of
   // memory (exit 143 at "Running TypeScript", 2026-09-24).
   typescript: { ignoreBuildErrors: true },
+  // Latency without architecture change: partial prerendering and `use cache`
+  // stay OFF. The (app) shell is force-dynamic per request (session authz,
+  // nav, org currency), so a static shell with dynamic holes would need the
+  // auth-dependent reads split out of the layout first. Likewise the setup
+  // registry module itself is pure static data, while its database reads are
+  // tenant-scoped and write-sensitive with no invalidation wiring — caching
+  // either without the org in the key (or without invalidation) risks
+  // cross-tenant or stale reads. Navigation latency is instead carried by the
+  // (app) loading skeleton, the Suspense boundary around the layout children,
+  // and explicit prefetch on the shell nav links.
   // Both loopback names serve the same local development instance.
   allowedDevOrigins: ["127.0.0.1", "localhost"],
   transpilePackages: ["@openbooks/engine", "@openbooks/schema"],

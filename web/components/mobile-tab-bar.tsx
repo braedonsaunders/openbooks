@@ -49,7 +49,7 @@ export function MobileTabBar({ groups }: { groups: SidebarNavGroup[] }) {
       {tabs.map((t) => {
         const active = activeHref === t.href
         return (
-          <Link key={t.href} href={t.href as never} className={tabClass(active)}>
+          <Link key={t.href} href={t.href as never} prefetch className={tabClass(active)}>
             <span className="relative inline-flex">
               <NavIcon iconKey={t.iconKey} size={20} />
               {t.badgeCountHref ? (

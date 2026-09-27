@@ -176,6 +176,7 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
                 // (hover still opens the dropdown for direct child access).
                 <Link
                   href={group.groupHref as never}
+                  prefetch
                   aria-haspopup="menu"
                   aria-expanded={open}
                   aria-current={groupActive ? 'true' : undefined}
@@ -351,6 +352,7 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
         // More-menu's onClick closes it); hover still opens the child flyout.
         <Link
           href={group.groupHref as never}
+          prefetch
           role="menuitem"
           aria-haspopup="menu"
           aria-expanded={open}
@@ -420,6 +422,7 @@ function MenuItemLink({ item, active }: { item: SidebarNavItem; active: boolean 
   ) : (
     <Link
       href={item.href as never}
+      prefetch
       aria-current={active ? 'page' : undefined}
       role="menuitem"
       data-walkthrough={`nav:${item.href}`}
@@ -451,6 +454,7 @@ function MenuSection({
       {href ? (
         <Link
           href={href as never}
+          prefetch
           role="menuitem"
           aria-current={selfActive ? 'page' : undefined}
           data-walkthrough={`nav:${href}`}
