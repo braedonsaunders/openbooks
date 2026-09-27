@@ -133,7 +133,7 @@ async function wipAccount(tx: SqlExecutor, orgId: string): Promise<string> {
     select settings->'controlAccounts'->>'mfgWip' as account_id
       from orgs where id=${orgId} for share`)).rows[0];
   if (!org) throw new ManufacturingNotFoundError();
-  const remedy = "Map Manufacturing WIP in Setup → Control accounts.";
+  const remedy = "Map Manufacturing WIP under Setup → Company & Accounting → Control accounts.";
   if (!org.account_id || !isUuid(org.account_id)) {
     refuse("The Manufacturing WIP control account role mfgWip is not mapped.", "mfg_wip_account_missing", remedy);
   }

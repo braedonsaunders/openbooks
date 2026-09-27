@@ -153,7 +153,7 @@ const cases: Case[] = [
   { name: "missing manufacturing WIP mapping refuses by role", run: async (f) => {
     const order = await prepare(f); await stock(f, "3", "2");
     await withBypassContext(() => db.execute(sql`update orgs set settings=settings#-'{controlAccounts,mfgWip}' where id=${f.org.orgId} returning id`));
-    await refuses(issue(f, order.id, order.materialId), "mfg_wip_account_missing", "role mfgWip", "Map Manufacturing WIP in Setup → Control accounts.");
+    await refuses(issue(f, order.id, order.materialId), "mfg_wip_account_missing", "role mfgWip", "Map Manufacturing WIP under Setup → Company & Accounting → Control accounts.");
   } },
   { name: "operation tolerance refusal names percentage and remedy", run: async (f) => {
     const order = await prepare(f); await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
