@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { after, before, test } from "node:test";
+import { afterEach, beforeEach, test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
@@ -8,7 +8,7 @@ import { assertWriteRows, createRetainer, draftHoursDrawdown } from "./retainers
 import { ResourcingRefusal } from "./errors.ts";
 let org: ScratchOrg;
 let actorId: string;
-before(async () => {
+beforeEach(async () => {
   org = await withBypassContext(() => createScratchOrg());
   actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   const rows = await withBypassContext(() => db.execute<{ id: string }>(sql`
@@ -19,7 +19,7 @@ before(async () => {
   `));
   assertWriteRows(rows.rows, 1, "test feature setup");
 });
-after(async () => { if (org) await withBypassContext(() => dropScratchOrg(org.orgId)); });
+afterEach(async () => { if (org) await withBypassContext(() => dropScratchOrg(org.orgId)); });
 
 test("hours drawdown selects only approved, billable, in-window, undrawn entries", async () => {
   const selected = randomUUID(), held = randomUUID();
