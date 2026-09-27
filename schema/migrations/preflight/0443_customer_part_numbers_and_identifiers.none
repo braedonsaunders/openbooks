@@ -1,0 +1,1 @@
+No preflight is required. This migration adds two empty tenant-owned reference tables with enforced organization-scoped item and customer identities; it does not reinterpret or transform existing rows.
