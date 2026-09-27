@@ -43,6 +43,7 @@ export type UpsertAssignmentInput = AssignmentWriteContext & AssignmentSubject &
   booking?: Booking;
   source?: Source;
   requestId?: string | null;
+  custom?: Record<string, unknown>;
 };
 
 export interface AssignmentWeeklyTotals {
@@ -369,12 +370,12 @@ export async function upsertAssignment(input: UpsertAssignmentInput): Promise<As
       insert into res_assignments (
         org_id, project_id, employee_party_id, job_title, week_start, planned_hours,
         is_billable, bill_item_id, project_task_id, booking, state, source, request_id,
-        created_by, updated_by
+        custom, created_by, updated_by
       ) values (
         ${input.orgId}, ${input.projectId}, ${input.employeePartyId ?? null}, ${validated.jobTitle},
         ${input.weekStart}, ${validated.plannedHours}, ${input.isBillable ?? true},
         ${input.billItemId ?? null}, ${input.projectTaskId ?? null}, ${validated.booking}, 'active',
-        ${validated.source}, ${input.requestId ?? null}, ${input.actorId}, ${input.actorId}
+        ${validated.source}, ${input.requestId ?? null}, ${input.custom ?? {}}, ${input.actorId}, ${input.actorId}
       )
       on conflict (org_id, project_id, week_start,
         (coalesce(employee_party_id::text, lower(job_title))))
@@ -386,6 +387,7 @@ export async function upsertAssignment(input: UpsertAssignmentInput): Promise<As
         booking = excluded.booking,
         source = excluded.source,
         request_id = excluded.request_id,
+        custom = case when ${input.custom === undefined} then res_assignments.custom else excluded.custom end,
         state = 'active',
         updated_at = now(),
         updated_by = excluded.updated_by
