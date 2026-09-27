@@ -5,7 +5,12 @@ import type { ReportMeasure } from './types'
 import { compileCustomQuery } from './custom-query'
 import { evaluateFormulaMeasures } from './formula'
 import { shapeSummarizedRows, summarizeRows, type InMemoryReportMeasure } from './run'
-import { validateCustomQuery } from './validate'
+import {
+  canAddAggregateMeasure,
+  MAX_AGGREGATE_MEASURES,
+  MAX_FORMULA_MEASURES,
+  validateCustomQuery,
+} from './validate'
 const entity: ReportEntity = {
   key: 'facts', label: 'Facts', category: 'test', description: 'Test facts', from: 'fact_rows f', orgColumn: 'f.org_id', timeKey: 'period',
   columns: [
@@ -25,6 +30,56 @@ const entity: ReportEntity = {
 function formula(key: string, expr: ReportMeasure['expr'], format: ReportMeasure['format'] = 'ratio', extra: Partial<ReportMeasure> = {}): Omit<ReportMeasure, 'filter'> {
   return { fn: 'formula', key, label: key, expr, format, ...extra }
 }
+
+test('the report builder caps aggregates independently from formulas', () => {
+  const aggregates = Array.from({ length: MAX_AGGREGATE_MEASURES }, (_, index) => ({ fn: 'count' as const, key: `rows_${index}` }))
+  const formulas = [formula('ratio_a', { ref: 'rows_0' }), formula('ratio_b', { ref: 'rows_0' })]
+  assert.equal(canAddAggregateMeasure([...aggregates.slice(0, -1), ...formulas]), true)
+  assert.equal(canAddAggregateMeasure([...aggregates, ...formulas]), false)
+})
+
+test('query limits refuse overflow and preserve every measure, breakout and sort at each limit', () => {
+  const aggregates = Array.from({ length: MAX_AGGREGATE_MEASURES }, (_, index) => ({
+    fn: 'count' as const, key: `aggregate_${index}`,
+  }))
+  const formulas = Array.from({ length: MAX_FORMULA_MEASURES }, (_, index) => formula(`formula_${index}`, {
+    op: '/', left: { ref: 'aggregate_0' }, right: { const: '2' },
+  }))
+  const breakouts = ['period', 'week', 'month', 'subsidiary', 'status', 'segment'].map((column) => ({ column }))
+  const sorts = ['period', 'week', 'month'].map((column) => ({ column, direction: 'asc' as const }))
+  const exactPlan = validateCustomQuery({
+    entity: entity.key, mode: 'summarize', columns: [], breakouts, measures: [...aggregates, ...formulas], sorts,
+  }, { [entity.key]: entity })
+  assert.equal(exactPlan.measures?.length, MAX_AGGREGATE_MEASURES + MAX_FORMULA_MEASURES)
+  assert.equal(exactPlan.measures?.at(-1)?.key, `formula_${MAX_FORMULA_MEASURES - 1}`)
+  assert.equal(exactPlan.breakouts?.length, 6)
+  assert.equal(exactPlan.breakouts?.at(-1)?.column, 'segment')
+  assert.equal(exactPlan.sorts?.length, 3)
+  assert.equal(exactPlan.sorts?.at(-1)?.column, 'month')
+
+  const fourFormulaPlan = validateCustomQuery({
+    entity: entity.key, mode: 'summarize', columns: [],
+    measures: [...aggregates, ...formulas.slice(0, 4)],
+  }, { [entity.key]: entity })
+  assert.equal(fourFormulaPlan.measures?.length, MAX_AGGREGATE_MEASURES + 4)
+  assert.equal(fourFormulaPlan.measures?.at(-1)?.key, 'formula_3')
+
+  assert.throws(() => validateCustomQuery({
+    entity: entity.key, mode: 'summarize', columns: [], measures: [...aggregates, { fn: 'count', key: 'aggregate_8' }],
+  }, { [entity.key]: entity }), new RegExp(`at most ${MAX_AGGREGATE_MEASURES} aggregate measures; this one has ${MAX_AGGREGATE_MEASURES + 1}`))
+  assert.throws(() => validateCustomQuery({
+    entity: entity.key, mode: 'summarize', columns: [], measures: [
+      { fn: 'count', key: 'aggregate_0' }, ...formulas,
+      formula('formula_8', { op: '/', left: { ref: 'aggregate_0' }, right: { const: '2' } }),
+    ],
+  }, { [entity.key]: entity }), new RegExp(`at most ${MAX_FORMULA_MEASURES} formula measures; this one has ${MAX_FORMULA_MEASURES + 1}`))
+  assert.throws(() => validateCustomQuery({
+    entity: entity.key, mode: 'summarize', columns: [], breakouts: [...breakouts, { column: 'amount' }],
+  }, { [entity.key]: entity }), /at most 6 breakouts; this one has 7/)
+  assert.throws(() => validateCustomQuery({
+    entity: entity.key, mode: 'summarize', columns: [], sorts: [...sorts, { column: 'subsidiary', direction: 'asc' }],
+  }, { [entity.key]: entity }), /at most 3 sort levels; this one has 4/)
+})
 
 test('formula arithmetic stays rational until one half-away-from-zero rounding', () => {
   const measures = [

@@ -8,6 +8,7 @@ import {
   defaultColumnsFor,
   REPORT_AGG_FNS,
   REPORT_TEMPORAL_BINS,
+  canAddAggregateMeasure,
   type ReportAggFn,
   type ReportBreakout,
   type ReportCustomQuery,
@@ -441,7 +442,7 @@ export function SummarizeConfig({
       {section !== 'grouping' ? <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label>{t('measures')}</Label>
-          {measures.length < 8 ? (
+          {canAddAggregateMeasure(measures) ? (
             <Button
               type="button"
               variant="ghost"

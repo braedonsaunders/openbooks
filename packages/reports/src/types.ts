@@ -140,7 +140,7 @@ export type ReportCustomQuery = {
   filters?: ReportRuleGroup | null
   /** Rows mode: bucket detail rows into titled sections by this column. */
   groupBy?: string | null
-  /** Ordered sort levels; the engine caps this at three. */
+  /** Ordered sort levels; the validator refuses plans above its configured limit. */
   sorts?: { column: string; direction: 'asc' | 'desc' }[] | null
   /** Rows mode: per-column display-label overrides, keyed by column key. */
   columnLabels?: Record<string, string> | null

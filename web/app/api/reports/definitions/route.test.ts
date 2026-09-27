@@ -14,6 +14,7 @@ const stateKey = Symbol.for('openbooks.report-definitions-create-test')
 const ORG_ID = '00000000-0000-4000-8000-00000000d001'
 const USER_ID = '00000000-0000-4000-8000-00000000d002'
 const OTHER_ORG = '00000000-0000-4000-8000-00000000d003'
+const realValidatorUrl = new URL('../../../../../packages/reports/src/validate.ts', import.meta.url).href
 
 interface DefinitionRow {
   id: string
@@ -203,8 +204,8 @@ const mockSources = new Map<string, string>([
   ],
   [
     'mock:catalog',
-    `class ReportQueryValidationError extends Error { constructor(m) { super(m); this.name = 'ReportQueryValidationError' } }
-     export async function validateOrgReportQuery(_gate, query) { if (!query || typeof query !== 'object' || Array.isArray(query)) throw new ReportQueryValidationError('Invalid report query'); return query }`,
+    `import { validateCustomQuery } from '${realValidatorUrl}'
+     export async function validateOrgReportQuery(_gate, query) { return validateCustomQuery(query) }`,
   ],
   [
     'mock:report-authz',
@@ -272,6 +273,12 @@ const QUERY = {
   filters: null,
   limit: 1000,
 }
+const SANITIZED_QUERY = {
+  ...QUERY,
+  breakouts: [],
+  measures: [],
+  groupBy: null,
+}
 
 const BODY = {
   name: 'Monthly close',
@@ -311,7 +318,7 @@ test('report Save creates and audits once, replays exactly, and refuses changed 
   assert.equal(createdBody.definition.id, key)
   assert.equal(state.auditInserts, 1)
   assert.equal(state.auditAfter.get(key)?.org_id, ORG_ID)
-  assert.deepEqual(state.auditAfter.get(key)?.query, QUERY)
+  assert.deepEqual(state.auditAfter.get(key)?.query, SANITIZED_QUERY)
 
   const replay = await post(key, BODY)
   assert.equal(replay.status, 200)
@@ -342,4 +349,20 @@ test('report create refuses malformed plans and foreign key collisions without w
   assert.equal(foreign.status, 409)
   assert.deepEqual(await foreign.json(), { error: 'invalid_idempotency_key' })
   assert.equal(state.auditInserts, 0)
+})
+
+test('report create returns the real measure-limit refusal to the user', async () => {
+  reset()
+  const overLimit = {
+    ...QUERY,
+    mode: 'summarize',
+    columns: [],
+    measures: Array.from({ length: 9 }, (_, index) => ({ fn: 'count', key: `count_${index}` })),
+  }
+  const response = await post('00000000-0000-4000-8000-00000000d013', { ...BODY, query: overLimit })
+  assert.equal(response.status, 422)
+  assert.deepEqual(await response.json(), {
+    error: 'A summary can have at most 8 aggregate measures; this one has 9.',
+  })
+  assert.equal(state.transactionQueries.length, 0)
 })

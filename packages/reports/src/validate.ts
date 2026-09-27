@@ -22,10 +22,16 @@ import {
 const MAX_DEPTH = 5
 const MAX_RULES = 60
 const MAX_BREAKOUTS = 6
-const MAX_MEASURES = 8
 const MAX_SORT_LEVELS = 3
 const MAX_LABEL_LEN = 80
 const MAX_FORMULA_DEPTH = 12
+
+export const MAX_AGGREGATE_MEASURES = 8
+export const MAX_FORMULA_MEASURES = 8
+
+export function canAddAggregateMeasure(measures: readonly Pick<ReportMeasure, 'fn'>[]): boolean {
+  return measures.filter((measure) => measure.fn !== 'formula').length < MAX_AGGREGATE_MEASURES
+}
 
 function sanitizeFormulaExpr(raw: unknown, measureKey: string, depth = 0): ReportFormulaExpr {
   if (depth > MAX_FORMULA_DEPTH || !raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -227,8 +233,10 @@ export function validateCustomQuery(
             : undefined
           return [{ column: o.column, ...(bin ? { bin } : {}) }]
         })
-        .slice(0, MAX_BREAKOUTS)
     : []
+  if (breakouts.length > MAX_BREAKOUTS) {
+    throw new ReportQueryValidationError(`A summary can have at most ${MAX_BREAKOUTS} breakouts; this one has ${breakouts.length}.`)
+  }
 
   const measureFilters = new WeakMap<ReportMeasure, unknown>()
   let measures: ReportMeasure[] = Array.isArray(q.measures)
@@ -265,7 +273,7 @@ export function validateCustomQuery(
               measure.undefinedLabel = o.undefinedLabel.trim()
             }
             if (o.guards !== undefined) {
-              if (!Array.isArray(o.guards) || o.guards.length > MAX_MEASURES) {
+              if (!Array.isArray(o.guards) || o.guards.length > MAX_FORMULA_MEASURES) {
                 throw new ReportQueryValidationError(`Formula measure '${key ?? label ?? 'unnamed formula'}' has invalid guards`)
               }
               measure.guards = o.guards.map((rawGuard) => {
@@ -281,8 +289,15 @@ export function validateCustomQuery(
           }
           return [measure]
         })
-        .slice(0, MAX_MEASURES)
     : []
+  const aggregateMeasureCount = measures.filter((measure) => measure.fn !== 'formula').length
+  if (aggregateMeasureCount > MAX_AGGREGATE_MEASURES) {
+    throw new ReportQueryValidationError(`A summary can have at most ${MAX_AGGREGATE_MEASURES} aggregate measures; this one has ${aggregateMeasureCount}.`)
+  }
+  const formulaMeasureCount = measures.filter((measure) => measure.fn === 'formula').length
+  if (formulaMeasureCount > MAX_FORMULA_MEASURES) {
+    throw new ReportQueryValidationError(`A summary can have at most ${MAX_FORMULA_MEASURES} formula measures; this one has ${formulaMeasureCount}.`)
+  }
 
   if (mode === 'rows' && columns.length === 0) {
     throw new ReportQueryValidationError('Pick at least one column to include')
@@ -422,14 +437,16 @@ export function validateCustomQuery(
       direction: s.direction === 'asc' ? ('asc' as const) : ('desc' as const),
     }
   }
-  // Multi-level sort: valid columns only, deduped, capped.
+  // Multi-level sort: valid columns only, deduped, and limited.
   const seenSortCols = new Set<string>()
   const sorts = Array.isArray(q.sorts)
     ? (q.sorts as unknown[])
         .map(sanitizeSort)
         .filter((s): s is NonNullable<typeof s> => s !== null && !seenSortCols.has(s.column) && !!seenSortCols.add(s.column))
-        .slice(0, MAX_SORT_LEVELS)
     : []
+  if (sorts.length > MAX_SORT_LEVELS) {
+    throw new ReportQueryValidationError(`A query can have at most ${MAX_SORT_LEVELS} sort levels; this one has ${sorts.length}.`)
+  }
   // Column-label overrides: only for columns actually selected, trimmed + capped.
   const columnLabels: Record<string, string> = {}
   if (q.columnLabels && typeof q.columnLabels === 'object' && !Array.isArray(q.columnLabels)) {
