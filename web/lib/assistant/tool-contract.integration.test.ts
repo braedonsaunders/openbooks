@@ -179,6 +179,7 @@ const EMPTY_STORE: Record<string, string> = {
 const FEATURE_OFF = new Set([
   "bank_feeds_feature_disabled",
   "feature_disabled",
+  "warehousing_feature_disabled",
   "multi_currency_feature_disabled",
   "budgets_feature_disabled",
   "allocations_feature_disabled",
@@ -363,6 +364,8 @@ test("assistant read-tool contract harness", DB_ONLY, async (t) => {
         get_equipment: { id: randomUUID() },
         get_subcontract: { id: randomUUID() },
         get_wip_prebill: { id: randomUUID() },
+        get_warehouse: { id: randomUUID() },
+        get_item_availability: { itemId: org.items.fifo },
         get_close_run_status: { runId: randomUUID() },
         hrm_employment_as_of: { employmentId: randomUUID(), asOf: "2026-06-15" },
         get_allocation_rule: { ruleId: randomUUID() },

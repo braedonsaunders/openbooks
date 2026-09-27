@@ -2459,7 +2459,7 @@
     },
     "backorders": {
       "name": "Pedidos em atraso",
-      "description": "Linhas de estoque de pedidos de venda ainda devidas — pedida, atendida, cancelada e em aberto por cliente e item."
+      "description": "Estoque devido nos pedidos: quantidades solicitadas, atendidas, canceladas e abertas."
     },
     "statement-of-financial-position": {
       "name": "Demonstração da posição financeira",

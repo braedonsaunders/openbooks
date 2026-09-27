@@ -7,6 +7,7 @@ import { saveExtensionSettingRow } from './extension-settings'
 import { createHomeAnnouncementRow, deleteHomeAnnouncementRow, saveHomeAnnouncementRow } from './home-announcements'
 import { sql } from 'drizzle-orm'
 import { CurrencyError, updateFxRate } from '@openbooks/engine/src/fx/currencies.ts'
+import { assertStockLocationDeletionAllowed, WarehouseRefusal } from '@openbooks/engine/src/inventory/warehouses.ts'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { toUnits } from '@openbooks/engine/src/money/money.ts'
 import { compileFormula } from '@openbooks/engine/src/assets/depreciation-formula.ts'
@@ -2684,6 +2685,7 @@ export async function deleteSetupRecord(
       }
       const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
       if (!before) return false
+      if (entity.key === 'stock-locations') await assertStockLocationDeletionAllowed(tx, orgId, id)
       if (entity.key === 'item-rate-books' && before.is_default) throw new Error('default-required')
       if (entity.key === 'account-groups') {
         const pinned = await tx.execute(sql`select 1 from account_group_members where group_id = ${id} and org_id = ${orgId} limit 1`)
@@ -2713,6 +2715,9 @@ export async function deleteSetupRecord(
     if (!found) return { status: 404, body: { error: 'not_found' } }
     return { status: 200, body: { ok: true } }
   } catch (e) {
+    if (e instanceof WarehouseRefusal) {
+      return { status: e.status, body: { error: e.message, code: e.code, remedy: e.remedy } }
+    }
     if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
     if (e instanceof Error && e.message === 'default-required') {
       return { status: 409, body: { error: 'default-required' } }

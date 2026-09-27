@@ -2439,7 +2439,7 @@
     },
     "backorders": {
       "name": "Reliquats de commande",
-      "description": "Lignes de stock des commandes client encore dues : commandée, livrée, annulée et restante par client et article."
+      "description": "Stock restant dû sur les commandes : quantités commandées, livrées, annulées et ouvertes."
     },
     "statement-of-financial-position": {
       "name": "État de la situation financière",
