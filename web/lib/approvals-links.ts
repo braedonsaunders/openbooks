@@ -28,6 +28,9 @@ const ORDER_HREF: Record<string, (id: string) => string> = {
   hrm_employment_change_request: (id) => `/hrm/change-requests?request=${id}`,
   // Leave requests open their dialog on the leave queue.
   hrm_leave_request: (id) => `/hrm/leave?request=${id}`,
+  // Resource requests open their drawer on the requests list; the URL mirrors
+  // the engine adapter's deepLink.
+  resourcing_request: (id) => `/resourcing/requests?request=${id}`,
   // Compensation cycles open their record page.
   hrm_comp_cycle: (id) => `/hrm/compensation/cycles/${id}`,
   // Timesheet weeks open their flyout; crew batches open on the crew page.
