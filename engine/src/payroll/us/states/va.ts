@@ -118,10 +118,6 @@ export const VA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "VA",
 }];
 
-export function vaRatesForPayDate(payDate: string): VaYearRates {
-  return VA_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /**
  * The annualizing divisor. The interface marks daily as 260 or 365 worked
  * days, but the Pay Period Conversion Table prints Daily = 300 — so daily
@@ -155,7 +151,7 @@ export function vaAnnualTax(taxable: bigint, rates: VaYearRates): { tax: bigint;
  * the regular wages. `compute` aggregates, which is always permitted.
  */
 export function vaSupplementalFlat(payDate: string, supplemental: string): string {
-  const rates = vaRatesForPayDate(payDate);
+  const rates = VA_STATE_ENGINE.ratesForPayDate(payDate);
   return D(mulRateCents(max0(U(supplemental)), rates.supplementalRate));
 }
 

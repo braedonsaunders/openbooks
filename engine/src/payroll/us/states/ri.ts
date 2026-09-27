@@ -163,10 +163,6 @@ export const RI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "RI",
 }];
 
-export function riRatesForPayDate(payDate: string): RiYearRates {
-  return RI_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 export function riPeriodTax(taxable: bigint, period: RiPeriod): bigint {
   if (taxable <= 0n) return 0n;
   const table = RI_TABLES_2026[period];

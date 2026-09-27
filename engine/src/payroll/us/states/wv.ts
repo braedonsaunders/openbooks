@@ -268,10 +268,6 @@ export const WV_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "WV",
 }];
 
-export function wvRatesForPayDate(payDate: string): WvYearRates {
-  return WV_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 function wvPeriodFor(periodsPerYear: number): WvPeriod {
   return WV_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, WV_PERIODS, 260) as WvPeriod;
 }
@@ -296,7 +292,7 @@ export function wvPercentageMethod(input: {
   schedule: WvSchedule;
   exemptions: number;
 }): { tax: bigint; factors: Record<string, string> } {
-  const rates = wvRatesForPayDate(input.payDate);
+  const rates = WV_STATE_ENGINE.ratesForPayDate(input.payDate);
   const period = wvPeriodFor(input.periodsPerYear);
   const values = rates.schedules[input.schedule][period];
   const factors: Record<string, string> = {

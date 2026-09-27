@@ -80,10 +80,6 @@ export const KY_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "KY",
 }];
 
-export function kyRatesForPayDate(payDate: string): KyYearRates {
-  return KY_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 function compute(
   input: UsStateWithholdingInput,
   rates: KyYearRates,

@@ -127,10 +127,6 @@ export const PA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "PA",
 }];
 
-export function paRatesForPayDate(payDate: string): PaYearRates {
-  return PA_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 // ---------------------------------------------------------------------------
 // Pennsylvania personal income tax
 // ---------------------------------------------------------------------------
@@ -178,7 +174,7 @@ function computePa(
  * the nearest whole cent", which is half-up to the cent — `mulRateCents`.
  */
 export function paUcEmployeeWithholding(payDate: string, grossWages: string): string {
-  const rates = paRatesForPayDate(payDate);
+  const rates = PA_STATE_ENGINE.ratesForPayDate(payDate);
   return D(mulRateCents(U(grossWages), rates.ucEmployeeRate));
 }
 
@@ -228,7 +224,7 @@ export function philadelphiaRateFor(
   payDate: string,
   basis: "resident" | "nonresident",
 ): { rate: string; effectiveFrom: string } {
-  const rates = paRatesForPayDate(payDate);
+  const rates = PA_STATE_ENGINE.ratesForPayDate(payDate);
   const period = rates.philadelphia.find((entry) =>
     payDate >= entry.effectiveFrom && (entry.effectiveTo == null || payDate < entry.effectiveTo));
   if (!period) {

@@ -99,10 +99,6 @@ export const ME_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "ME",
 }];
 
-export function meRatesForPayDate(payDate: string): MeYearRates {
-  return ME_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 export function meRoundToDollar(units: bigint): bigint {
   return roundDiv(units, DOLLAR) * DOLLAR;
 }

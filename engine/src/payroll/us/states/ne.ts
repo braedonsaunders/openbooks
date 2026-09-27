@@ -113,10 +113,6 @@ export const NE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "NE",
 }];
 
-export function neRatesForPayDate(payDate: string): NeYearRates {
-  return NE_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 export function neAnnualTax(taxable: bigint, married: boolean, rates: NeYearRates): bigint {
   if (taxable <= 0n) return 0n;
   const brackets = married ? rates.married : rates.single;

@@ -134,10 +134,6 @@ export const MN_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "MN",
 }];
 
-export function mnRatesForPayDate(payDate: string): MnYearRates {
-  return MN_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /**
  * W-4MN marital-status boxes onto the two Step-5 charts.
  *
@@ -179,7 +175,7 @@ export function mnAnnualTax(taxable: bigint, schedule: MnSchedule, rates: MnYear
  * regular-wage engine; Method 1 is used only when the payment is combined.
  */
 export function mnSupplementalFlat(payDate: string, supplemental: string): string {
-  const rates = mnRatesForPayDate(payDate);
+  const rates = MN_STATE_ENGINE.ratesForPayDate(payDate);
   return D(mulRateCents(U(supplemental), rates.supplementalRate));
 }
 

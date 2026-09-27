@@ -206,10 +206,6 @@ export const OR_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "OR",
 }];
 
-export function orRatesForPayDate(payDate: string): OrYearRates {
-  return OR_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 const DOLLAR = 10_000n;
 const RATE6 = 1_000_000n;
 
@@ -360,7 +356,7 @@ export function orAnnualWithholding(input: OrAnnualInput): OrAnnualResult {
  * wages), which is always permitted.
  */
 export function orSupplementalFlat(payDate: string, supplemental: string): string {
-  const rates = orRatesForPayDate(payDate);
+  const rates = OR_STATE_ENGINE.ratesForPayDate(payDate);
   return D(mulRateCents(U(supplemental), rates.supplementalRate));
 }
 

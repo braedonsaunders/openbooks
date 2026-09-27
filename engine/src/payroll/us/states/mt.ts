@@ -190,10 +190,6 @@ export const MT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "MT",
 }];
 
-export function mtRatesForPayDate(payDate: string): MtYearRates {
-  return MT_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 export function mtRoundToDollar(units: bigint): bigint {
   return roundDiv(units, DOLLAR) * DOLLAR;
 }

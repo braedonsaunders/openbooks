@@ -74,10 +74,6 @@ export const AR_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "AR",
 }];
 
-export function arRatesForPayDate(payDate: string): ArYearRates {
-  return AR_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /** Round half-up to the nearest whole dollar — Step 3 "round that result". */
 export function arRoundToDollar(units: bigint): bigint {
   return roundDiv(units, DOLLAR) * DOLLAR;

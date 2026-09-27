@@ -103,10 +103,6 @@ export const AZ_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "AZ",
 }];
 
-export function azRatesForPayDate(payDate: string): AzYearRates {
-  return AZ_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 export function azRateForPrintedPercent(printed: string): string {
   return pctToRate(printed);
 }

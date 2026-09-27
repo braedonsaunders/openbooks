@@ -248,7 +248,7 @@ export { CO_WITHHOLDING, CO_RATES_2026 } from "./co.ts";
 export { CT_WITHHOLDING, CT_RATES_2026 } from "./ct.ts";
 export {
   DC_WITHHOLDING, DC_RATES_2026, DC_TAX_YEAR_EDITIONS, dcAllowancePerPeriod,
-  dcDivisorForPeriod, dcRatesForPayDate, dcScaledBrackets,
+  dcDivisorForPeriod, dcScaledBrackets,
 } from "./dc.ts";
 export { AL_WITHHOLDING, AL_RATES_2026 } from "./al.ts";
 export { AR_WITHHOLDING, AR_RATES_2026 } from "./ar.ts";

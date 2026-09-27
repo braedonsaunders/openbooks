@@ -119,10 +119,6 @@ export const IA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "IA",
 }];
 
-export function iaRatesForPayDate(payDate: string): IaYearRates {
-  return IA_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /**
  * 2024-or-later IA W-4 marital status onto columns A / B / C.
  *

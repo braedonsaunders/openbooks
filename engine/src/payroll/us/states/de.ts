@@ -75,10 +75,6 @@ export const DE_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "DE",
 }];
 
-export function deRatesForPayDate(payDate: string): DeYearRates {
-  return DE_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /**
  * The publication's own daily factor. Our interface marks daily as 260 or 365;
  * Section 17 Step 1 annualizes daily wages × 300.

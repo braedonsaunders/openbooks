@@ -96,10 +96,6 @@ export const CO_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "CO",
 }];
 
-export function coRatesForPayDate(payDate: string): CoYearRates {
-  return CO_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 function compute(
   input: UsStateWithholdingInput,
   rates: CoYearRates,
@@ -243,7 +239,7 @@ function compute(
 export function coFamliWithholding(
   payDate: string, coveredWages: string,
 ): { employee: string; employer: string } {
-  const rates = coRatesForPayDate(payDate);
+  const rates = CO_STATE_ENGINE.ratesForPayDate(payDate);
   return {
     employee: D(mulRateCents(U(coveredWages), rates.famliEmployeeRate)),
     employer: D(mulRateCents(U(coveredWages), rates.famliEmployerRate)),

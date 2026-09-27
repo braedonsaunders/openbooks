@@ -126,10 +126,6 @@ export const ND_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "ND",
 }];
 
-export function ndRatesForPayDate(payDate: string): NdYearRates {
-  return ND_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 export function ndRoundToDollar(units: bigint): bigint {
   return roundDiv(units, DOLLAR) * DOLLAR;
 }

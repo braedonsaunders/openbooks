@@ -210,10 +210,6 @@ export const VT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "VT",
 }];
 
-export function vtRatesForPayDate(payDate: string): VtYearRates {
-  return VT_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 export function vtPeriodTax(taxable: bigint, period: VtPeriod, married: boolean): bigint {
   if (taxable <= 0n) return 0n;
   const brackets = married ? VT_TABLES_2026[period].married : VT_TABLES_2026[period].single;

@@ -559,10 +559,6 @@ export const NJ_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "NJ",
 }];
 
-export function njRatesForPayDate(payDate: string): NjYearRates {
-  return NJ_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 function njPeriodFor(periodsPerYear: number): NjPeriod {
   return NJ_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, NJ_PERIODS) as NjPeriod;
 }

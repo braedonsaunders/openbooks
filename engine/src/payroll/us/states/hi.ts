@@ -100,10 +100,6 @@ export const HI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "HI",
 }];
 
-export function hiRatesForPayDate(payDate: string): HiYearRates {
-  return HI_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 export function hiAnnualTax(taxable: bigint, married: boolean, rates: HiYearRates): bigint {
   if (taxable <= 0n) return 0n;
   const brackets = married ? rates.married : rates.single;

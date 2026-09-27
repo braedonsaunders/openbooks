@@ -85,10 +85,6 @@ export const MS_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "MS",
 }];
 
-export function msRatesForPayDate(payDate: string): MsYearRates {
-  return MS_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 export function msRoundToDollar(units: bigint): bigint {
   return roundDiv(units, DOLLAR) * DOLLAR;
 }

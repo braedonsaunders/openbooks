@@ -382,10 +382,6 @@ export const CA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "CA",
 }];
 
-export function caRatesForPayDate(payDate: string): CaYearRates {
-  return CA_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 // ---------------------------------------------------------------------------
 // Column and schedule selection
 // ---------------------------------------------------------------------------
@@ -586,7 +582,7 @@ export function caAnnualizedMethod(input: {
   regularAllowances?: number;
   estimatedDeductionAllowances?: number;
 }): { annualTax: string; perPeriod: string } {
-  const rates = caRatesForPayDate(input.payDate);
+  const rates = CA_STATE_ENGINE.ratesForPayDate(input.payDate);
   const regular = input.regularAllowances ?? 0;
   const estimated = input.estimatedDeductionAllowances ?? 0;
   const column = columnFor(input.filingStatus, regular + estimated);
@@ -609,7 +605,7 @@ export function caAnnualizedMethod(input: {
  * annual cap, at the year's published rate (2026: 1.3%).
  */
 export function caSdiWithholding(payDate: string, coveredWages: string): string {
-  const rates = caRatesForPayDate(payDate);
+  const rates = CA_STATE_ENGINE.ratesForPayDate(payDate);
   return D(mulRateCents(U(coveredWages), rates.sdiRate));
 }
 
@@ -645,7 +641,7 @@ export const CA_FACTOR_LABELS: Readonly<Record<string, string>> = {
 export function caEttWithholding(
   payDate: string, subjectWages: string, ytdSubjectWages: string,
 ): string {
-  const rates = caRatesForPayDate(payDate);
+  const rates = CA_STATE_ENGINE.ratesForPayDate(payDate);
   return D(mulRateCents(
     max0(bmin(U(subjectWages), U(rates.ettWageBase) - U(ytdSubjectWages))),
     rates.ettRate,

@@ -138,10 +138,6 @@ export const MA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "MA",
 }];
 
-export function maRatesForPayDate(payDate: string): MaYearRates {
-  return MA_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /**
  * Circular M's own list of pay-period divisors, which is NOT the pack's general
  * one: step 3 says "52 for weekly, 12 for monthly, 24 for semimonthly and 26 OR
@@ -321,7 +317,7 @@ export function maSupplementalWithholding(input: {
   /** Steps 1–3, for an M-4P payee. Omitted for an employee bonus. */
   m4pAdjustments?: string;
 }): { tax: string; factors: Record<string, string> } {
-  const rates = maRatesForPayDate(input.payDate);
+  const rates = MA_STATE_ENGINE.ratesForPayDate(input.payDate);
   const threshold = U(rates.surtaxThreshold);
 
   // Step 3's result: the payment less any M-4P adjustments.

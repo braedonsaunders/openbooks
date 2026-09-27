@@ -114,10 +114,6 @@ export const CT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "CT",
 }];
 
-export function ctRatesForPayDate(payDate: string): CtYearRates {
-  return CT_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 const THOUSAND = U("1000");
 
 /**
@@ -647,7 +643,7 @@ function compute(
 export function ctPaidLeaveWithholding(
   payDate: string, ficaWages: string, ytdFicaWages: string,
 ): string {
-  const rates = ctRatesForPayDate(payDate);
+  const rates = CT_STATE_ENGINE.ratesForPayDate(payDate);
   return D(mulRateCents(
     max0(bmin(U(ficaWages), U(rates.ctplWageBase) - U(ytdFicaWages))),
     rates.ctplRate,

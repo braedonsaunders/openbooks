@@ -202,10 +202,6 @@ export const DC_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "DC",
 }];
 
-export function dcRatesForPayDate(payDate: string): DcYearRates {
-  return DC_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /**
  * The divisor FR-230's tables are scaled on: the pay periods in the year,
  * except daily, which the booklet prints on a 365-day divisor (Table 1 daily
@@ -352,7 +348,7 @@ function compute(
  * quarter, accrued beside income tax, never folded into it.
  */
 export function dcOpflWithholding(payDate: string, coveredWages: string): string {
-  const rates = dcRatesForPayDate(payDate);
+  const rates = DC_STATE_ENGINE.ratesForPayDate(payDate);
   const rate = rates.opflRate;
   if (rate == null) {
     throw new PayrollError(

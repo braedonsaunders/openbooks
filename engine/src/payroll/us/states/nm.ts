@@ -479,10 +479,6 @@ export const NM_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "NM",
 }];
 
-export function nmRatesForPayDate(payDate: string): NmYearRates {
-  return NM_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 function nmPeriodFor(periodsPerYear: number): NmPeriod {
   // The daily tables are 260-calibrated (single $61.90 = $16,100 ÷ 260), so
   // a 365-day daily payroll has no printed table — refused like the KS/MO

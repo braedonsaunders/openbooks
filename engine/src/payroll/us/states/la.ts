@@ -64,10 +64,6 @@ export const LA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "LA",
 }];
 
-export function laRatesForPayDate(payDate: string): LaYearRates {
-  return LA_STATE_ENGINE.ratesForPayDate(payDate);
-}
-
 /**
  * R-1306: deduction per period is D/N, rounded to the cent the way the
  * publication prints 12,875/52 = 247.60 and 25,750/26 = 990.38. A negative

@@ -123,12 +123,6 @@ export const ID_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "ID",
 }];
 
-export function idRatesForPayDate(payDate: string): IdYearRates {
-  const rates = ID_STATE_ENGINE.ratesForPayDate(payDate);
-  requireIdEditionEffective(payDate);
-  return rates;
-}
-
 function requireIdEditionEffective(payDate: string): void {
   if (payDate < ID_SUNSET_EDITION_FROM) {
     throw new PayrollError(
