@@ -4,7 +4,7 @@ import { defineRoute } from '@/lib/api/route'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { createPaymentRun } from "@openbooks/engine/src/payments/run-creation.ts";
+import { createPaymentRun as createPaymentRunInEngine } from "@openbooks/engine/src/payments/run-creation.ts";
 import { guardPermission } from '../../../../lib/authz'
 import { isoDate, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse } from '../lib'
@@ -72,7 +72,7 @@ async function createPaymentRun(req: Request) {
   }
 
   try {
-    const run = await createPaymentRun({
+    const run = await createPaymentRunInEngine({
       orgId: user.orgId,
       createdBy: user.id,
       paymentBankProfileId: body.paymentBankProfileId,

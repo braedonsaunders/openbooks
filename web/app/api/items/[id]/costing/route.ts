@@ -136,7 +136,7 @@ export const PUT = defineRoute({
     )
   }
   const expectedRevision = body.expectedUpdatedAt
-  for (const key of ['assetAccountId', 'cogsAccountId', 'adjustmentAccountId', 'varianceAccountId', 'receivedNotBilledAccountId']) {
+  for (const key of ['assetAccountId', 'cogsAccountId', 'adjustmentAccountId', 'varianceAccountId', 'receivedNotBilledAccountId'] as const) {
     const value = body[key]
     if (value !== undefined && value !== null && value !== '' && (typeof value !== 'string' || !isUuid(value))) {
       return NextResponse.json({ error: `${key} must be a valid account identifier` }, { status: 422 })

@@ -109,7 +109,7 @@ test("project duplicates list, preview, and merge through the routes", async () 
       nsId: "7",
     });
 
-    const listRes = await listDuplicates();
+    const listRes = await listDuplicates(new Request("http://openbooks.test/api/projects/duplicates"));
     assert.equal(listRes.status, 200);
     const listed = (await listRes.json()) as {
       groups: { kind: string; projects: { id: string }[] }[];
@@ -144,7 +144,7 @@ test("project duplicates list, preview, and merge through the routes", async () 
     assert.equal(committed.alreadyMerged, false);
     assert.ok(committed.auditId);
 
-    const relistRes = await listDuplicates();
+    const relistRes = await listDuplicates(new Request("http://openbooks.test/api/projects/duplicates"));
     const relisted = (await relistRes.json()) as {
       groups: { kind: string; projects: { id: string }[] }[];
     };
