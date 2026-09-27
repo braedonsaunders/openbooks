@@ -18,6 +18,7 @@ import { LaborCostingWizard } from './LaborCostingWizard'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 import { apiJson } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
+import { createMoneyFormatter } from '@/lib/money-format'
 
 export interface RateRow {
   id: string
@@ -56,17 +57,11 @@ function rateState(row: RateRow, today: string): 'current' | 'scheduled' | 'ende
 }
 
 function formatRate(value: string, currency: string, locale: string): string {
-  try {
-    return new Intl.NumberFormat(locale, {
-      style: 'currency',
-      currency,
-      currencyDisplay: 'code',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(Number(value))
-  } catch {
-    return `${currency} ${Number(value).toFixed(2)}`
-  }
+  return createMoneyFormatter(locale, currency).money(value, {
+    currencyDisplay: 'code',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
 }
 
 /** Mirror of engine computeCostRate for the live preview (display only). */

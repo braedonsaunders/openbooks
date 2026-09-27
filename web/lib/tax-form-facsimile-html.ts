@@ -1,4 +1,5 @@
 import type { TaxReturnResult, TaxReturnBox } from '@openbooks/engine/src/tax-returns/return.ts'
+import { formatDecimal } from './money-format'
 
 /**
  * Self-authored, form-faithful facsimiles of government indirect-tax returns —
@@ -71,10 +72,10 @@ const NEGATIVE_ZERO_TEXT = /^-0+(?:\.0+)?$/
 function formatExactFacsimileValue(value: string): string | null {
   const normalized = value.trim()
   if (!EXACT_DECIMAL_TEXT.test(normalized)) return null
-  return new Intl.NumberFormat('en-US', {
+  return formatDecimal('en-US', normalized, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(normalized as never)
+  })
 }
 
 export function fmtFacsimileAmount(value: string): string {

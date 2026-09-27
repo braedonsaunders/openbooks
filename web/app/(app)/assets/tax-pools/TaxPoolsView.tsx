@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Play, Settings2 } from 'lucide-react'
 import { Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
 import { decimalCmp } from '../../../../lib/statement-format'
+import { formatDecimal } from '../../../../lib/money-format'
 
 type Line = {
   classCode: string
@@ -22,7 +23,7 @@ type Line = {
 type RunResult = { regime: string; taxYear: number; lines: Line[]; totals: { allowance: string; recapture: string; terminalLoss: string } }
 
 export function formatTaxPoolAmount(value: string, locale: string): string {
-  return new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value as never)
+  return formatDecimal(locale, value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 export function TaxPoolsView({

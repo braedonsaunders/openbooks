@@ -1,3 +1,5 @@
+import { formatDecimal } from './money-format'
+
 /**
  * Lien-waiver forms — self-authored, statute-shaped facsimiles.
  *
@@ -112,10 +114,10 @@ const EXACT_AMOUNT_TEXT = /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/
 export function formatWaiverAmount(amount: string, currency: string): string {
   const exact = amount.trim()
   if (!EXACT_AMOUNT_TEXT.test(exact)) return `${esc(currency)} ${esc(amount)}`
-  const formatted = new Intl.NumberFormat('en-US', {
+  const formatted = formatDecimal('en-US', exact, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(exact as never)
+  })
   return `${esc(currency)} ${formatted}`
 }
 
