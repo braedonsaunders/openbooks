@@ -8,6 +8,9 @@ import { resolveScan, ScanRefusal, validateIdentifierUnit } from "./item-identif
 
 const skip = !process.env.OPENBOOKS_DB_URL;
 
+const setupResourcesModule = "../../../web/lib/data-io/setup-resources.ts";
+const setupRegistryModule = "../../../web/lib/setup/registry.ts";
+
 test("exact scan resolution is tenant-bound and refuses ambiguity with distinct candidates", { skip }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   const other = await withBypassContext(() => createScratchOrg());
@@ -89,5 +92,50 @@ test("exact scan resolution is tenant-bound and refuses ambiguity with distinct 
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
     await withBypassContext(() => dropScratchOrg(other.orgId));
+  }
+});
+
+test("setup imports enforce identifier validation and entity write permission", { skip }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}',
+      coalesce(settings->'features', '{}'::jsonb) || '{"barcodeScanning":true}'::jsonb)
+      where id = ${org.orgId}`));
+
+    const resourceModule = await import(setupResourcesModule) as {
+      setupResource: (entity: Record<string, unknown>, orgId: string) => {
+        write: (rows: Record<string, unknown>[], mode: "insert", ctx: {
+          orgId: string; actorId: string; dryRun: boolean; permissions?: ReadonlySet<string>
+        }) => Promise<{ created: number; failed: number; errors: { message: string }[] }>
+      }
+    };
+    const registryModule = await import(setupRegistryModule) as {
+      SETUP_ENTITY_BY_KEY: Map<string, Record<string, unknown>>
+    };
+    const entity = registryModule.SETUP_ENTITY_BY_KEY.get("item-identifiers");
+    assert.ok(entity);
+    const resource = resourceModule.setupResource(entity, org.orgId);
+    const item = (await db.execute<{ item_ref: string }>(sql`
+      select coalesce(code, name) as item_ref from items where org_id = ${org.orgId} and id = ${org.items.fifo}`)).rows[0];
+    assert.ok(item);
+    const row = { itemId: item.item_ref, kind: "gtin", value: `GTIN-${randomUUID()}`, unit: "crate" };
+    const actorId = randomUUID();
+
+    const denied = await resource.write([row], "insert", {
+      orgId: org.orgId, actorId, dryRun: true, permissions: new Set(),
+    });
+    assert.equal(denied.created, 0);
+    assert.equal(denied.failed, 1);
+    assert.match(denied.errors[0]!.message, /items\.manage.*grant it to the importing role and retry/);
+
+    const invalidUnit = await resource.write([row], "insert", {
+      orgId: org.orgId, actorId, dryRun: true, permissions: new Set(["items.manage"]),
+    });
+    assert.equal(invalidUnit.created, 0);
+    assert.equal(invalidUnit.failed, 1);
+    assert.match(invalidUnit.errors[0]!.message, /unit crate is not a base or converted unit/);
+    assert.match(invalidUnit.errors[0]!.message, /use the item's base unit or add this unit to its inventory conversions/);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
   }
 });
