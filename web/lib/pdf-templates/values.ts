@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { addCalendarDays, businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { documentBalanceDueLateral } from '@openbooks/engine/src/records/balance-due.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { orgFeatureEnabled } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { add, cmp, isZero, mul, neg, sum } from '@openbooks/engine/src/money/money.ts'
 import { amountInWords } from '@openbooks/engine/src/payroll/cheques.ts'
 import { incomeTaxWithholdingSystemKeys } from '@openbooks/engine/src/payroll/packs.ts'
@@ -186,6 +187,23 @@ async function loadDocumentValues(
     .filter(Boolean)
     .join(', ')
 
+  const dropShipAddress = meta.docKind === 'purchase_order'
+    && await orgFeatureEnabled(orgId, 'dropShipping', db)
+    ? (await db.execute<{ ship_to_address: Record<string, unknown> }>(sql`
+        select ship_to_address
+          from drop_ship_orders
+         where org_id = ${orgId} and purchase_order_id = ${id}
+      `)).rows[0]?.ship_to_address ?? null
+    : null
+  const shipToAddress = dropShipAddress
+    ? [
+        dropShipAddress.line1,
+        dropShipAddress.line2,
+        [dropShipAddress.city, dropShipAddress.region, dropShipAddress.postalCode].filter(Boolean).join(', '),
+        dropShipAddress.country,
+      ].filter(Boolean).join(', ')
+    : ''
+
   const subtotal = String(doc.subtotal ?? '0')
   const taxTotal = String(doc.tax_total ?? '0')
   const total = String(doc.total ?? '0')
@@ -202,6 +220,10 @@ async function loadDocumentValues(
     party_email: doc.party_email ?? '',
     party_phone: doc.party_phone ?? '',
     party_address: address,
+    ...(meta.docKind === 'purchase_order' ? {
+      ship_to_name: dropShipAddress?.label ?? '',
+      ship_to_address: shipToAddress,
+    } : {}),
     subtotal: money(subtotal),
     tax_total: money(taxTotal),
     total: money(total),

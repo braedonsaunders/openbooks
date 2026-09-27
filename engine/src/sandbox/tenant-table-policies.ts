@@ -137,6 +137,8 @@ export const TENANT_TABLE_POLICIES = {
   "document_lines": "clone:catalog-uuid-rebase",
   "document_links": "clone:catalog-uuid-rebase",
   "documents": "clone:catalog-uuid-rebase",
+  "drop_ship_lines": "clone:catalog-uuid-rebase",
+  "drop_ship_orders": "clone:catalog-uuid-rebase",
   "dunning_log": "clone:catalog-uuid-rebase",
   "dunning_policies": "clone:catalog-uuid-rebase",
   "dunning_stages": "clone:catalog-uuid-rebase",

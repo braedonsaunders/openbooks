@@ -65,6 +65,22 @@
     "linksTitle": "オリジン / 変換先",
     "linkCreatedFrom": "作成元",
     "linkConvertedInto": "変換先",
+    "dropShip": {
+      "routeLine": "仕入先から顧客へ直送",
+      "unrouteLine": "直送指定を解除",
+      "routed": "仕入先直送に指定済み",
+      "unrouted": "直送指定を解除しました",
+      "routedLines": "仕入先直送",
+      "selectVendor": "仕入先を選択…",
+      "createPurchaseOrder": "直送発注書を作成",
+      "purchaseOrderCreated": "発注書 {number} を作成しました",
+      "purchaseOrderLinked": "直送発注書",
+      "confirmVendorShipment": "仕入先の出荷を確認",
+      "confirmTitle": "仕入先の出荷を確認しますか？",
+      "confirmAllMessage": "{count} 件の発注明細の残数量を確認します。在庫を受け入れずに受領と出荷を記録します。",
+      "confirm": "出荷を確認",
+      "confirmed": "仕入先の出荷を {number} として確認しました"
+    },
     "backorders": {
       "tab": "受注残",
       "loading": "受注残を読み込み中…",

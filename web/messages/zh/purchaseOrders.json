@@ -65,6 +65,22 @@
     "linksTitle": "来源／转换为",
     "linkCreatedFrom": "创建自",
     "linkConvertedInto": "转换为",
+    "dropShip": {
+      "routeLine": "指定供应商直发",
+      "unrouteLine": "取消供应商直发指定",
+      "routed": "已指定供应商直发",
+      "unrouted": "已取消直发指定",
+      "routedLines": "供应商直发",
+      "selectVendor": "选择供应商……",
+      "createPurchaseOrder": "创建直发采购订单",
+      "purchaseOrderCreated": "采购订单 {number} 已创建",
+      "purchaseOrderLinked": "直发采购订单",
+      "confirmVendorShipment": "确认供应商发货",
+      "confirmTitle": "确认供应商发货？",
+      "confirmAllMessage": "确认 {count} 个采购订单行的剩余数量。此操作记录收货和履约，但不增加库存。",
+      "confirm": "确认发货",
+      "confirmed": "供应商发货已确认为 {number}"
+    },
     "backorders": {
       "tab": "欠交订单",
       "loading": "正在加载欠交订单…",

@@ -198,6 +198,7 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // A shipment's ship-to snapshot is the customer's delivery address, and a
   // parcel tracking number locates a person's delivery: both are removed.
   { tableName: "fulfillment_documents", columnName: "ship_to_address", transform: "null_out" },
+  { tableName: "drop_ship_orders", columnName: "ship_to_address", transform: "null_out" },
   { tableName: "fulfillment_documents", columnName: "tracking_number", transform: "redact" },
   // D2b: contacts are people at a customer/vendor company, faked exactly
   // like party and user identity. Title/role stay: a job function ("Billing")

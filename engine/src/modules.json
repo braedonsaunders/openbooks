@@ -154,6 +154,7 @@
         "projects",
         "resourcing",
         "revenue",
+        "sales",
         "tax",
         "tax-returns",
         "testing"
@@ -519,6 +520,7 @@
         "inventory",
         "money",
         "organization",
+        "periods",
         "platform",
         "receivables",
         "records"

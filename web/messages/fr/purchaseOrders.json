@@ -61,6 +61,22 @@
     "linksTitle": "Origine / Converti en",
     "linkCreatedFrom": "Créé à partir de",
     "linkConvertedInto": "Converti en",
+    "dropShip": {
+      "routeLine": "Confier au fournisseur",
+      "unrouteLine": "Retirer l’affectation fournisseur",
+      "routed": "Confié au fournisseur",
+      "unrouted": "Affectation fournisseur retirée",
+      "routedLines": "Expéditions directes du fournisseur",
+      "selectVendor": "Sélectionner un fournisseur…",
+      "createPurchaseOrder": "Créer un bon de commande direct",
+      "purchaseOrderCreated": "Bon de commande {number} créé",
+      "purchaseOrderLinked": "Commande directe",
+      "confirmVendorShipment": "Confirmer l’expédition du fournisseur",
+      "confirmTitle": "Confirmer l’expédition du fournisseur ?",
+      "confirmAllMessage": "Confirmez la quantité restante de {count} ligne(s) de commande. Cette action enregistre une réception et une expédition sans entrée en stock.",
+      "confirm": "Confirmer l’expédition",
+      "confirmed": "Expédition du fournisseur confirmée sous {number}"
+    },
     "backorders": {
       "tab": "Reliquats",
       "loading": "Chargement des reliquats…",

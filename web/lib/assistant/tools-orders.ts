@@ -8,6 +8,7 @@ import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { loadOrder } from "../../app/api/_order/lib";
 import { orderedNetOfCancelledSql } from "@openbooks/engine/src/records/order-line-remainders.ts";
 import { backorderPosition } from "@openbooks/engine/src/sales/backorders.ts";
+import { dropShipOrderStatus } from "@openbooks/engine/src/sales/drop-ship.ts";
 import {
   billableRemainderQuantityUnits,
   fromQuantityUnits,
@@ -194,7 +195,22 @@ const getOrder: AssistantToolDef = {
     `)).rows;
     const fulfilById = new Map(fulfil.map((f) => [f.id, f]));
     const doc = payload.doc as Record<string, unknown>;
-    const lines = (payload.lines as Record<string, unknown>[]).map((l) => {
+    let dropShip: unknown = undefined;
+    if (await isFeatureEnabled(authz.user.orgId, "dropShipping")) {
+      let salesOrderId = a.kind === "sales_order" ? a.id : null;
+      if (a.kind === "purchase_order") {
+        salesOrderId = (await db.execute<{ sales_order_id: string }>(sql`
+          select sales_order_id from drop_ship_orders
+           where org_id = ${authz.user.orgId} and purchase_order_id = ${a.id}`)).rows[0]?.sales_order_id ?? null;
+      }
+      if (salesOrderId) {
+        dropShip = {
+          salesOrderId,
+          lines: await dropShipOrderStatus(db, authz.user.orgId, salesOrderId, authz.allowedSubsidiaryIds),
+        };
+      }
+    }
+    const lines = (payload.lines as Record<string, unknown>[]).map((l): Record<string, unknown> => {
       const f = fulfilById.get(l.id as string);
       const ordered = String(f?.quantity ?? l.quantity ?? "0");
       const fulfilled = String(f?.quantity_fulfilled ?? "0");
@@ -219,12 +235,20 @@ const getOrder: AssistantToolDef = {
         fulfilment: fulfilmentStatus(toQuantityUnits(ordered) - toQuantityUnits(cancelled), toQuantityUnits(fulfilled)),
       };
     });
+    const header: Record<string, unknown> = {
+      ...doc,
+      subtotal: money(doc.subtotal),
+      tax_total: money(doc.tax_total),
+      total: money(doc.total),
+      open_balance: money(doc.open_balance),
+    };
     return {
       ok: true,
       data: {
-        header: { ...doc, subtotal: money(doc.subtotal), tax_total: money(doc.tax_total), total: money(doc.total), open_balance: money(doc.open_balance) },
+        header,
         lines,
         links: payload.links,
+        ...(dropShip === undefined ? {} : { dropShip }),
         href: a.kind === "purchase_order" ? "/purchase-orders" : "/sales-orders",
       },
     };

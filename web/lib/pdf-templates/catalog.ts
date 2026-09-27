@@ -92,6 +92,7 @@ function docType(meta: {
   hasParty: boolean
   hasDue: boolean
   hasReference: boolean
+  extraFields?: PdfMergeField[]
 }): PdfRecordTypeMeta {
   return {
     key: meta.key,
@@ -104,6 +105,7 @@ function docType(meta: {
       ...DOC_COMMON.slice(0, 4),
       ...(meta.hasReference ? [REFERENCE_FIELD] : []),
       ...(meta.hasParty ? PARTY_FIELDS : []),
+      ...(meta.extraFields ?? []),
       ...(meta.hasDue ? DUE_FIELDS : []),
       ...DOC_COMMON.slice(4),
     ],
@@ -380,7 +382,10 @@ export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   docType({ key: 'customer_credit', docTitle: 'Credit Memo', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
   docType({ key: 'quote', docTitle: 'Quote', partyHeading: 'Prepared for', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
   docType({ key: 'sales_order', docTitle: 'Sales Order', partyHeading: 'Sold to', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'purchase_order', docTitle: 'Purchase Order', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: false, hasReference: true }),
+  docType({ key: 'purchase_order', docTitle: 'Purchase Order', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: false, hasReference: true, extraFields: [
+    { key: 'ship_to_name', label: 'Ship-to name', sample: 'Acme — Site 4 receiving' },
+    { key: 'ship_to_address', label: 'Ship-to address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2, CA' },
+  ] }),
   docType({ key: 'vendor_bill', docTitle: 'Bill', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: true, hasReference: true }),
   docType({ key: 'vendor_credit', docTitle: 'Vendor Credit', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: true, hasReference: true }),
   docType({ key: 'vendor_payment', docTitle: 'Payment Remittance', partyHeading: 'Paid to', readPermission: 'ap.read', hasParty: true, hasDue: false, hasReference: true }),
