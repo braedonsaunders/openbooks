@@ -18,6 +18,8 @@
     "journal": "Journal",
     "field_ticket": "Arbeitsschein",
     "shipment": "Lieferschein zur Sendung",
+    "shipment_carton_label": "Versandkartonetiketten",
+    "shipment_shipping_label": "Versandetikett",
     "journal_entry": "Journalbuchung",
     "pay_stub": "Gehaltsabrechnung",
     "payroll_cheque": "Gehaltscheck"
@@ -29,6 +31,7 @@
     "paperLetter": "Letter",
     "paperA4": "A4",
     "paperLegal": "Legal",
+    "paper4x6": "Etikett 4 × 6 Zoll",
     "default": "Standard",
     "builtInStarter": "Integrierte Startvorlage",
     "builtIn": "Integriert",

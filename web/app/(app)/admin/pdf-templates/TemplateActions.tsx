@@ -27,11 +27,20 @@ export function NewTemplateButton({
   recordType,
   asDuplicateOfStarter = false,
   defaultName,
+  starterDesign,
 }: {
   recordType: string
   asDuplicateOfStarter?: boolean
   /** Pre-filled template name (e.g. "Customer invoice starter"). */
   defaultName?: string
+  starterDesign?: {
+    sourceHtml: string
+    headerHtml: string
+    footerHtml: string
+    paperSize: string
+    orientation: string
+    marginMm: number
+  }
 }) {
   const t = useTranslations('pdfTemplates')
   const router = useRouter()
@@ -45,7 +54,7 @@ export function NewTemplateButton({
       const res = await fetch('/api/pdf-templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recordType, name: name.trim() }),
+        body: JSON.stringify({ recordType, name: name.trim(), ...starterDesign }),
       })
       // The status is checked before the body is parsed: a non-JSON error
       // body must toast the failure, never an unhandled rejection with no

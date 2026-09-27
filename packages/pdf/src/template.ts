@@ -22,8 +22,10 @@
 //     conditional elements with `data-if="path"`; `expandRepeatMarkers`
 //     expands them into `{{#each}}` / `{{#if}}` blocks at compile time, capped
 //     at `nestingDepth` nested markers like the renderer itself.
+//     Templates may also use `{{barcode path}}` for a Code 128 B/C symbol.
 
 import DOMPurify from 'isomorphic-dompurify'
+import { renderCode128Svg } from './barcode'
 
 /**
  * Header/footer fragment and print-setup validation the sanitizer can
@@ -140,12 +142,14 @@ type Frame = { data: Record<string, unknown>; item?: unknown; meta?: Record<stri
 type TplNode =
   | { t: 'text'; v: string }
   | { t: 'var'; expr: string; raw: boolean }
+  | { t: 'barcode'; expr: string }
   | { t: 'each'; expr: string; body: TplNode[] }
   | { t: 'if'; expr: string; body: TplNode[]; alt: TplNode[] }
 
 type Tok =
   | { k: 'text'; v: string }
   | { k: 'var'; expr: string; raw: boolean }
+  | { k: 'barcode'; expr: string }
   | { k: 'open'; block: 'each' | 'if'; expr: string }
   | { k: 'else' }
   | { k: 'close'; block: 'each' | 'if' }
@@ -207,6 +211,12 @@ function tokenize(tpl: string): Tok[] {
         const expr = inner.slice(3).trim()
         if (!expr) throw new Error('Document template #if block requires a value path.')
         push({ k: 'open', block: 'if', expr })
+      } else if (inner.startsWith('barcode') && (inner.length === 7 || /\s/.test(inner[7]!))) {
+        const expr = inner.slice(7).trim()
+        if (!/^[A-Za-z0-9_.]+$/.test(expr)) {
+          throw new Error('Document template barcode requires a value path.')
+        }
+        push({ k: 'barcode', expr })
       } else if (inner.startsWith('#')) {
         throw new Error(`Document template contains an unsupported block "${inner}".`)
       } else {
@@ -257,6 +267,8 @@ function parseBlock(
       addNode(state, nodes, { t: 'text', v: token.v })
     } else if (token.k === 'var') {
       addNode(state, nodes, { t: 'var', expr: token.expr, raw: token.raw })
+    } else if (token.k === 'barcode') {
+      addNode(state, nodes, { t: 'barcode', expr: token.expr })
     } else {
       if (depth >= TEMPLATE_RENDER_LIMITS.nestingDepth) {
         throw new Error(
@@ -344,6 +356,9 @@ function renderNodes(nodes: TplNode[], stack: Frame[], state: RenderState): void
   for (const n of nodes) {
     if (n.t === 'text') {
       state.out.append(n.v)
+    } else if (n.t === 'barcode') {
+      const value = plainValue(resolvePath(n.expr, stack))
+      if (value) state.out.append(renderCode128Svg(value))
     } else if (n.t === 'var') {
       const v = resolvePath(n.expr, stack)
       const raw = n.raw && state.allowRawValues

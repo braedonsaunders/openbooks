@@ -18,6 +18,8 @@
     "journal": "Journal",
     "field_ticket": "Field ticket",
     "shipment": "Shipment packing slip",
+    "shipment_carton_label": "Shipment carton labels",
+    "shipment_shipping_label": "Shipping label",
     "journal_entry": "Journal entry",
     "pay_stub": "Pay stub",
     "payroll_cheque": "Payroll cheque"
@@ -29,6 +31,7 @@
     "paperLetter": "Letter",
     "paperA4": "A4",
     "paperLegal": "Legal",
+    "paper4x6": "4 × 6 in label",
     "default": "Default",
     "builtInStarter": "Built-in starter",
     "builtIn": "Built-in",

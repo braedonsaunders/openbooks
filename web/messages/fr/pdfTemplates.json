@@ -18,6 +18,8 @@
     "journal": "Journal",
     "field_ticket": "Bon de travail",
     "shipment": "Bordereau d’expédition",
+    "shipment_carton_label": "Étiquettes de colis d’expédition",
+    "shipment_shipping_label": "Étiquette d’expédition",
     "journal_entry": "Écriture de journal",
     "pay_stub": "Bulletin de paie",
     "payroll_cheque": "Chèque de paie"
@@ -29,6 +31,7 @@
     "paperLetter": "Lettre",
     "paperA4": "A4",
     "paperLegal": "Légal",
+    "paper4x6": "Étiquette 4 × 6 po",
     "default": "Par défaut",
     "builtInStarter": "Design intégré",
     "starterHint": "Imprimé lorsqu'aucun modèle personnalisé n'existe — dupliquez-le pour le personnaliser",

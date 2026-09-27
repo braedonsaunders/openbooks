@@ -8,7 +8,7 @@
 // top of pdfkit (pure JS, no Chromium) instead of HTML + Puppeteer.
 
 /** Paper sizes a document can print on. */
-export const PDF_PAPER_SIZES = ['letter', 'a4', 'legal'] as const
+export const PDF_PAPER_SIZES = ['letter', 'a4', 'legal', '4x6'] as const
 export type PdfPaperSize = (typeof PDF_PAPER_SIZES)[number]
 
 /** Compact shrinks type and cell padding so more rows fit per page. */

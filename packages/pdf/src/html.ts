@@ -87,6 +87,19 @@ export function assertPrintablePage(paperSize: unknown, marginMm: unknown): asse
 export async function renderHtmlDocumentPdf(input: HtmlDocumentPdfInput): Promise<Buffer> {
   assertPrintablePage(input.paperSize, input.marginMm)
   const formatMap = { letter: 'Letter', a4: 'A4', legal: 'Legal' } as const
+  const customSize = input.paperSize === '4x6'
+  const pageDimensions = customSize
+    ? input.orientation === 'landscape'
+      ? { width: '6in', height: '4in' }
+      : { width: '4in', height: '6in' }
+    : {
+        format:
+          input.paperSize === 'letter'
+            ? formatMap.letter
+            : input.paperSize === 'a4'
+              ? formatMap.a4
+              : formatMap.legal,
+      }
   const m = `${input.marginMm}mm`
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     *{box-sizing:border-box;} body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:#0f172a;}
@@ -104,8 +117,8 @@ export async function renderHtmlDocumentPdf(input: HtmlDocumentPdfInput): Promis
   return sharedPdfPool().withPage(async (page: Page) => {
     await page.setContent(html, { waitUntil: 'load', timeout: 30_000 })
     const pdf = await page.pdf({
-      format: formatMap[input.paperSize],
-      landscape: input.orientation === 'landscape',
+      ...pageDimensions,
+      landscape: customSize ? false : input.orientation === 'landscape',
       printBackground: true,
       margin: { top: m, bottom: m, left: m, right: m },
       displayHeaderFooter: Boolean(input.headerHtml || input.footerHtml),

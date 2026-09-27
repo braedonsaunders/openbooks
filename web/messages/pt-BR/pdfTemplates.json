@@ -18,6 +18,8 @@
     "journal": "Diário",
     "field_ticket": "Ordem de serviço",
     "shipment": "Romaneio da remessa",
+    "shipment_carton_label": "Etiquetas de caixas da remessa",
+    "shipment_shipping_label": "Etiqueta de envio",
     "journal_entry": "Lançamento contábil",
     "pay_stub": "Demonstrativo de pagamento",
     "payroll_cheque": "Cheque de pagamento"
@@ -29,6 +31,7 @@
     "paperLetter": "Carta",
     "paperA4": "A4",
     "paperLegal": "Ofício",
+    "paper4x6": "Etiqueta 4 × 6 pol",
     "default": "Padrão",
     "builtInStarter": "Modelo inicial integrado",
     "builtIn": "Integrado",

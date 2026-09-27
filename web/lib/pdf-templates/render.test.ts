@@ -69,6 +69,9 @@ registerHooks({
 
 const renderModuleUrl = './render.ts?body-sanitization-test'
 const { mergeAndPrintPdf } = (await import(renderModuleUrl)) as typeof import('./render')
+const { PDF_RECORD_TYPE_BY_KEY } = await import('./catalog')
+const { starterTemplate } = await import('./starters')
+const { compileTemplateHtml } = await import('@openbooks/pdf')
 
 test('the live PDF body path cannot emit triple-brace record markup', async () => {
   state.input = null
@@ -224,4 +227,44 @@ test('data:-document hrefs from record values are stripped; safe text survives',
   )
   assert.doesNotMatch(String(captured.bodyHtml), /<script/i)
   assert.doesNotMatch(String(captured.bodyHtml), /onmouseover="alert/i)
+})
+
+test('shipment carton and shipping starters render 4x6 labels with their Code 128 values', async () => {
+  const values = {
+    org_name: 'Northwind Industrial Ltd.',
+    document_number: 'SHP-000042',
+    warehouse_name: 'MAIN · Main warehouse',
+    warehouse_address: '10 Dock Road, Toronto, ON M5V 1K2, CA',
+    ship_to_name: 'Acme — Site 4 receiving',
+    ship_to_address: '400 King St W, Toronto, ON M5V 1K2, CA',
+    carrier_name: 'Northline Freight',
+    carrier_service: 'Ground',
+    tracking_number: '1Z999AA10123456784',
+    cartons: [{ carton: 'C1', carton_number: '1', carton_total: '1', barcode: 'SHP-000042-C1' }],
+  }
+  const cases = [
+    { key: 'shipment_carton_label', barcode: 'SHP-000042-C1' },
+    { key: 'shipment_shipping_label', barcode: '1Z999AA10123456784' },
+  ]
+
+  for (const item of cases) {
+    state.input = null
+    const starter = starterTemplate(PDF_RECORD_TYPE_BY_KEY[item.key]!)
+    const { compiledHtml } = compileTemplateHtml(starter.sourceHtml)
+    await mergeAndPrintPdf(
+      {
+        compiledHtml,
+        paperSize: starter.paperSize ?? 'letter',
+        orientation: starter.orientation ?? 'portrait',
+        marginMm: starter.marginMm ?? 14,
+        headerHtml: starter.headerHtml || null,
+        footerHtml: starter.footerHtml || null,
+      },
+      values,
+    )
+    const captured = readCapturedInput()
+    assert.equal(captured.paperSize, '4x6')
+    assert.match(captured.bodyHtml, /<svg\b/)
+    assert.match(captured.bodyHtml, new RegExp(`<text[^>]*>${item.barcode}</text>`))
+  }
 })

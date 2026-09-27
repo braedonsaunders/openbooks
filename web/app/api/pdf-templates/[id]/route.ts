@@ -10,6 +10,7 @@ import { assertPrintablePage, compileTemplateHtml, PDF_MARGIN_MM_MAX, PDF_MARGIN
 import { describeDbError, pgErrorCode } from "../../../../lib/setup/coerce";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isUuid } from "../../../../lib/list-params";
+import { PDF_RECORD_TYPE_BY_KEY } from "../../../../lib/pdf-templates/catalog";
 import { prettifyTemplateHtml } from "../../../../lib/pdf-templates/prettify";
 import { getPdfTemplate, getVisiblePdfTemplate } from "../../../../lib/pdf-templates/store";
 import { notFound } from "@/lib/api/responses";
@@ -54,7 +55,8 @@ async function legacyPATCH(req: Request, { params }: Params, injectedGate?: Auth
   if (!isUuid(id)) return notFound("record");
   const existing = await getPdfTemplate(user.orgId, id);
   if (!existing) return notFound("record");
-  if (!(await isDocKindEnabled(user.orgId, existing.recordType))) {
+  const docKind = PDF_RECORD_TYPE_BY_KEY[existing.recordType]?.docKind ?? existing.recordType;
+  if (!(await isDocKindEnabled(user.orgId, docKind))) {
     return notFound("record");
   }
 
@@ -180,7 +182,8 @@ async function legacyDELETE(_req: Request, { params }: Params, injectedGate?: Au
   if (!isUuid(id)) return notFound("record");
   const existing = await getPdfTemplate(user.orgId, id);
   if (!existing) return notFound("record");
-  if (!(await isDocKindEnabled(user.orgId, existing.recordType))) {
+  const docKind = PDF_RECORD_TYPE_BY_KEY[existing.recordType]?.docKind ?? existing.recordType;
+  if (!(await isDocKindEnabled(user.orgId, docKind))) {
     return notFound("record");
   }
   // The removed design's before-image rides the row lock, so the delete

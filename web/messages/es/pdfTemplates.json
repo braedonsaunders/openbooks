@@ -18,6 +18,8 @@
     "journal": "Diario",
     "field_ticket": "Parte de trabajo",
     "shipment": "Albarán de envío",
+    "shipment_carton_label": "Etiquetas de cajas de envío",
+    "shipment_shipping_label": "Etiqueta de envío",
     "journal_entry": "Asiento contable",
     "pay_stub": "Recibo de nómina",
     "payroll_cheque": "Cheque de nómina"
@@ -29,6 +31,7 @@
     "paperLetter": "Carta",
     "paperA4": "A4",
     "paperLegal": "Legal",
+    "paper4x6": "Etiqueta de 4 × 6 pulg",
     "default": "Predeterminada",
     "builtInStarter": "Diseño integrado",
     "starterHint": "Se imprime cuando no existe una plantilla personalizada — duplíquelo para personalizarlo",

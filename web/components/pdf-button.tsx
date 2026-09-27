@@ -11,7 +11,17 @@ import { toast } from 'sonner'
 import { FileText } from 'lucide-react'
 import { Button, ContextMenu, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
 
-export function PdfButton({ recordType, recordId }: { recordType: string; recordId: string }) {
+export function PdfButton({
+  recordType,
+  recordId,
+  label,
+  disabled = false,
+}: {
+  recordType: string
+  recordId: string
+  label?: string
+  disabled?: boolean
+}) {
   const t = useTranslations('pdfTemplates')
   const menu = useContextMenu()
   const [items, setItems] = useState<ContextMenuEntry[] | null>(null)
@@ -52,9 +62,9 @@ export function PdfButton({ recordType, recordId }: { recordType: string; record
 
   return (
     <>
-      <Button variant="outline" onClick={onClick} disabled={busy}>
+      <Button variant="outline" onClick={onClick} disabled={busy || disabled}>
         <FileText size={15} className="mr-1.5" />
-        {t('pdfButton.label')}
+        {label ?? t('pdfButton.label')}
       </Button>
       <ContextMenu open={menu.open} position={menu.position} items={items ?? []} onClose={menu.close} />
     </>

@@ -18,6 +18,8 @@
     "journal": "日记账",
     "field_ticket": "现场工单",
     "shipment": "发运装箱单",
+    "shipment_carton_label": "发运箱标签",
+    "shipment_shipping_label": "发运标签",
     "journal_entry": "日记账分录",
     "pay_stub": "工资单",
     "payroll_cheque": "工资支票"
@@ -29,6 +31,7 @@
     "paperLetter": "Letter",
     "paperA4": "A4",
     "paperLegal": "Legal",
+    "paper4x6": "4 × 6 英寸标签",
     "default": "默认",
     "builtInStarter": "内置起始模板",
     "builtIn": "内置",

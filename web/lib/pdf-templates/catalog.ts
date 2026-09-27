@@ -273,6 +273,50 @@ const SHIPMENT: PdfRecordTypeMeta = {
   ],
 }
 
+const SHIPMENT_CARTON_LABEL: PdfRecordTypeMeta = {
+  ...SHIPMENT,
+  key: 'shipment_carton_label',
+  labelKey: 'shipment_carton_label',
+  docTitle: 'Carton Label',
+  fields: [
+    { key: 'document_number', label: 'Shipment number', sample: 'SHP-000042' },
+    { key: 'ship_to_name', label: 'Ship-to name', sample: 'Acme — Site 4 receiving' },
+    { key: 'ship_to_address', label: 'Ship-to address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2, CA' },
+    { key: 'warehouse_name', label: 'Ship from warehouse', sample: 'MAIN · Main warehouse' },
+    { key: 'warehouse_address', label: 'Ship-from address', sample: '400 King St W, Toronto, ON M5V 1K2, CA' },
+  ],
+  collections: [
+    {
+      key: 'cartons',
+      label: 'Cartons',
+      fields: [
+        { key: 'carton', label: 'Carton', sample: 'C1' },
+        { key: 'carton_number', label: 'Carton number', sample: '1' },
+        { key: 'carton_total', label: 'Carton count', sample: '2' },
+        { key: 'barcode', label: 'Shipment and carton barcode', sample: 'SHP-000042-C1' },
+      ],
+    },
+  ],
+}
+
+const SHIPMENT_SHIPPING_LABEL: PdfRecordTypeMeta = {
+  ...SHIPMENT,
+  key: 'shipment_shipping_label',
+  labelKey: 'shipment_shipping_label',
+  docTitle: 'Shipping Label',
+  fields: [
+    { key: 'document_number', label: 'Shipment number', sample: 'SHP-000042' },
+    { key: 'ship_to_name', label: 'Ship-to name', sample: 'Acme — Site 4 receiving' },
+    { key: 'ship_to_address', label: 'Ship-to address', sample: '400 King St W, Suite 300, Toronto, ON M5V 1K2, CA' },
+    { key: 'warehouse_name', label: 'Ship-from warehouse', sample: 'MAIN · Main warehouse' },
+    { key: 'warehouse_address', label: 'Ship-from address', sample: '400 King St W, Toronto, ON M5V 1K2, CA' },
+    { key: 'carrier_name', label: 'Carrier', sample: 'Northline Freight' },
+    { key: 'carrier_service', label: 'Service', sample: 'Ground' },
+    { key: 'tracking_number', label: 'Tracking number', sample: '1Z999AA10123456784' },
+  ],
+  collections: [],
+}
+
 const PAY_STUB: PdfRecordTypeMeta = {
   key: 'pay_stub',
   labelKey: 'pay_stub',
@@ -398,6 +442,8 @@ export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   docType({ key: 'card_refund', docTitle: 'Card Refund', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
   docType({ key: 'journal', docTitle: 'Journal Entry', partyHeading: null, readPermission: 'gl.read', hasParty: false, hasDue: false, hasReference: false }),
   SHIPMENT,
+  SHIPMENT_CARTON_LABEL,
+  SHIPMENT_SHIPPING_LABEL,
   FIELD_TICKET,
   JOURNAL_ENTRY,
   PAY_STUB,

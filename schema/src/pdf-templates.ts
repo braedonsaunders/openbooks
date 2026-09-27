@@ -20,7 +20,7 @@ import { auditColumns, id, orgRef } from "./helpers";
  * form_layouts.is_default.
  */
 
-export const PDF_PAPER_SIZE = ["letter", "a4", "legal"] as const;
+export const PDF_PAPER_SIZE = ["letter", "a4", "legal", "4x6"] as const;
 export const PDF_ORIENTATION = ["portrait", "landscape"] as const;
 
 export const pdfTemplates = pgTable(

@@ -20,7 +20,7 @@ async function listRecordPdfOptions(
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
   const gate = await guardPermission(meta.readPermission);
   if (gate instanceof NextResponse) return gate;
-  if (!(await isDocKindEnabled(gate.user.orgId, recordType))) {
+  if (!(await isDocKindEnabled(gate.user.orgId, meta.docKind ?? meta.key))) {
     return notFound("record");
   }
   const rows = await listPdfTemplates(gate.user.orgId, recordType);
