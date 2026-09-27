@@ -283,10 +283,9 @@ test('dashboard create validates the layout before inserting', async () => {
   const key = '00000000-0000-4000-8000-00000000d110'
 
   const badLayout = await post(key, { ...BODY, layout: 'everywhere' })
-  assert.equal(badLayout.status, 422)
 
   const badPlacement = await post(key, { ...BODY, layout: [{ cardId: 'not-a-uuid' }] })
-  assert.equal(badPlacement.status, 422)
+  assert.deepEqual(await Promise.all([badLayout, badPlacement].map(async (response) => [response.status, ((await response.json()) as { issues?: { path: string }[] }).issues?.[0]?.path])), [[400, 'layout'], [400, 'layout.0.cardId']])
 
   assert.equal(state.rows.size, 0, 'validation failures must not insert')
 })

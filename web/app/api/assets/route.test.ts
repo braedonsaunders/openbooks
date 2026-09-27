@@ -325,22 +325,15 @@ test("unconfigured inputs are refused by name, never stored as zero", async () =
     { ...baseBody(), acquiredOn: "2026-02-30" },
     { ...baseBody(), status: "active" },
   ];
-  const codes = [
-    "name_required",
-    "category_required",
-    "invalid_category",
-    "invalid_subsidiary",
-    "acquisition_cost_invalid",
-    "acquisition_cost_negative",
-    "salvage_exceeds_cost",
-    "acquired_on_invalid",
-    "unsupported_status_transition",
-  ];
+  const codes = ["name_required", "", "invalid_category", "invalid_subsidiary", "", "acquisition_cost_negative", "salvage_exceeds_cost", "", ""];
+  const schemaFields = new Map([[1, "categoryId"], [4, "acquisitionCost"], [7, "acquiredOn"], [8, "status"]]);
   for (let index = 0; index < bodies.length; index += 1) {
     const key = `00000000-0000-4000-8000-000000003${String(index + 1).padStart(3, "0")}`;
     const res = await post(key, bodies[index]!);
-    assert.equal(res.status, 422);
-    assert.equal(((await res.json()) as { error: string }).error, codes[index]);
+    const responseBody = (await res.json()) as { error: string; issues?: { path: string }[] };
+    assert.equal(res.status, schemaFields.has(index) ? 400 : 422);
+    if (schemaFields.has(index)) assert.equal(responseBody.issues?.[0]?.path, schemaFields.get(index));
+    else assert.equal(responseBody.error, codes[index]);
   }
   assert.equal(state.assets.length, 0);
   assert.equal(state.audits.length, 0);
@@ -351,7 +344,7 @@ test("financial JSON numbers are refused with a decimal-string remedy before ass
   const response = await post(KEY_A, { ...baseBody(), acquisitionCost: 100.25 });
   assert.equal(response.status, 400);
   const body = (await response.json()) as { error: string; issues?: { path: string; message: string }[] };
-  assert.match(body.error, /decimal string, not a JSON number/);
+  assert.match(body.error, /decimal string.*JSON numbers are refused/);
   assert.equal(body.issues?.[0]?.path, "acquisitionCost");
   assert.equal(state.assets.length, 0);
   assert.equal(state.audits.length, 0);
@@ -422,23 +415,26 @@ test("the full drawer body is validated with named refusals, never dropped", asy
     { ...baseBody(), inServiceOn: "2026-02-30" },
   ];
   const codes = [
-    "invalid_method",
+    "",
     "invalid_life",
-    "invalid_rate",
+    "",
     "invalid_units",
-    "invalid_convention",
+    "",
     "opening_pair_required",
     "opening_exceeds_basis",
     "invalid_asset_account",
-    "invalid_formula",
+    "",
     "tax_business_use_invalid",
-    "in_service_on_invalid",
+    "",
   ];
+  const schemaFields = new Map([[0, "method"], [2, "ratePercent"], [4, "convention"], [8, "depreciationMethodId"], [10, "inServiceOn"]]);
   for (let index = 0; index < bodies.length; index += 1) {
     const key = `00000000-0000-4000-8000-000000004${String(index + 1).padStart(3, "0")}`;
     const res = await post(key, bodies[index]!);
-    assert.equal(res.status, 422);
-    assert.equal(((await res.json()) as { error: string }).error, codes[index]);
+    const responseBody = (await res.json()) as { error: string; issues?: { path: string }[] };
+    assert.equal(res.status, schemaFields.has(index) ? 400 : 422);
+    if (schemaFields.has(index)) assert.equal(responseBody.issues?.[0]?.path, schemaFields.get(index));
+    else assert.equal(responseBody.error, codes[index]);
   }
   assert.equal(state.assets.length, 0);
   assert.equal(state.audits.length, 0);

@@ -101,9 +101,7 @@ const mockDb = `
   export async function withOrgTransaction(_orgId, work) {
     return work()
   }
-  export async function withBypassContext(work) {
-    return work()
-  }
+  export async function withBypassContext(orgOrWork, work) { return (work ?? orgOrWork)() } export { withBypassContext as withOrgContext }
 `;
 
 const mockSources = new Map<string, string>([
@@ -185,7 +183,7 @@ test("empty selection is refused by name before any rebuild", async () => {
   assert.equal(res.status, 422);
   assert.equal(
     ((await res.json()) as { error: string }).error,
-    "nothing_selected",
+    "select at least one asset",
   );
   assert.deepEqual(state.built, []);
 });

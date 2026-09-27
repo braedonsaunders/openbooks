@@ -173,10 +173,8 @@ test('PATCH rejects a missing revision token before any write', async () => {
 
   const response = await patch({ name: 'No token' })
 
-  assert.equal(response.status, 409)
-  assert.deepEqual(await response.json(), {
-    error: 'the dashboard revision is required; reload and review the latest revision',
-  })
+  const body = (await response.json()) as { error: string; issues?: { path: string }[] }
+  assert.deepEqual([response.status, body.issues?.[0]?.path, body.error], [400, 'expectedUpdatedAt', 'expectedUpdatedAt is required; reload and review the latest revision'])
   assert.ok(!routeState.calls.some((call) => call.kind === 'tx-execute'), 'no transactional write ran')
 })
 

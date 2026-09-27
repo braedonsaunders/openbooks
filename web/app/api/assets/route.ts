@@ -45,7 +45,15 @@ export { runtime } from "@/lib/api/route";
 // create and edit), so nothing the operator fills in is silently dropped.
 const amount = (field: string) =>
   exactMoney(`${field} must be a decimal string; JSON numbers are refused`);
-const blankAmount = (field: string) => z.union([z.literal(""), amount(field)]);
+const blankAmount = (field: string) => z.preprocess((value, context) => {
+  if (value === "") return "";
+  const parsed = amount(field).safeParse(value);
+  if (!parsed.success) {
+    context.addIssue({ code: "custom", message: parsed.error.issues[0]?.message ?? `${field} must be a decimal string` });
+    return z.NEVER;
+  }
+  return parsed.data;
+}, z.string());
 const nullableDate = (field: string) =>
   z.union([isoDate(`${field} must be a valid calendar date`), z.literal("")]).nullable();
 const nullableId = z.string().uuid("must be a valid id").nullable();
@@ -56,23 +64,23 @@ const taxElection = z.strictObject({
   section179: blankAmount("Section 179 amount").optional(),
 });
 const createAssetSchema = z.strictObject({
-  name: z.string().trim().min(1, "name is required"),
+  name: z.string({ error: "name is required" }),
   assetNumber: z.string().trim().max(80).nullable().optional(),
   description: z.string().nullable().optional(),
-  categoryId: z.string().uuid("categoryId must be a valid id"),
+  categoryId: z.string({ error: "categoryId is required" }).uuid("categoryId must be a valid id"),
   subsidiaryId: nullableId.optional(),
-  acquisitionCost: z.union([z.literal(""), amount("Acquisition cost")]).nullable().optional(),
-  salvageValue: z.union([z.literal(""), amount("Salvage value")]).nullable().optional(),
+  acquisitionCost: blankAmount("Acquisition cost").nullable().optional(),
+  salvageValue: blankAmount("Salvage value").nullable().optional(),
   acquiredOn: nullableDate("acquiredOn").optional(),
   inServiceOn: nullableDate("inServiceOn").optional(),
-  openingAccumulated: z.union([z.literal(""), amount("Opening accumulated depreciation")]).nullable().optional(),
+  openingAccumulated: blankAmount("Opening accumulated depreciation").nullable().optional(),
   openingAsOf: nullableDate("openingAsOf").optional(),
   serialNumber: z.string().trim().max(200).nullable().optional(),
   method: z.enum(ASSET_METHODS).nullable().optional(),
   depreciationMethodId: nullableId.optional(),
   lifeMonths: z.union([z.number().int(), z.string().regex(/^\d+$/, "lifeMonths must be a whole number")]).nullable().optional(),
-  ratePercent: z.union([z.literal(""), amount("Rate percent")]).nullable().optional(),
-  unitsTotal: z.union([z.literal(""), amount("Units total")]).nullable().optional(),
+  ratePercent: blankAmount("Rate percent").nullable().optional(),
+  unitsTotal: blankAmount("Units total").nullable().optional(),
   convention: z.enum(ASSET_CONVENTIONS).nullable().optional(),
   assetAccountId: nullableId.optional(),
   accumulatedDepreciationAccountId: nullableId.optional(),

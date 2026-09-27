@@ -11,7 +11,7 @@ import {
 } from "../../../../lib/file-zip";
 import { fileViewer } from "../lib";
 const postBodySchema0 = z.strictObject({
-  fileIds: z.array(z.string().uuid("fileIds must contain valid ids")).min(1, "select at least one file").max(MAX_ZIP_FILES),
+  fileIds: z.array(z.string().uuid("fileIds must contain valid ids")).min(1, "select at least one file"),
 });
 
 export { runtime } from "@/lib/api/route";
@@ -25,10 +25,6 @@ export const POST = defineRoute({
   },
   body: postBodySchema0,
   handler: async ({ authz: gate, body }) => {
-    // Drop non-UUID entries before the manifest: filesZipManifest binds every id
-    // through a `value::uuid` cast, so a single malformed string would abort the
-    // whole query with an unhandled error (HTTP 500). The sibling bulk-action
-    // route applies the same isUuid contract to its id lists.
     const fileIds = body.fileIds;
     if (fileIds.length > MAX_ZIP_FILES) {
       return NextResponse.json(

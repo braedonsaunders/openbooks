@@ -245,10 +245,10 @@ function post(body: Record<string, unknown>): Promise<Response> {
 }
 
 test("GET hides batches and provider configs from other subsidiaries", async () => {
-  routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
+  routeState.allowedSubsidiaryIds = new Set(["00000000-0000-4000-8000-0000000000a1"]);
   routeState.batchRows = [
-    { id: "batch-a", subsidiaryId: "sub-a", netAmount: "10.0000" },
-    { id: "batch-b", subsidiaryId: "sub-b", netAmount: "20.0000" },
+    { id: "batch-a", subsidiaryId: "00000000-0000-4000-8000-0000000000a1", netAmount: "10.0000" },
+    { id: "batch-b", subsidiaryId: "00000000-0000-4000-8000-0000000000b1", netAmount: "20.0000" },
   ];
 
   const response = await GET(new Request("http://openbooks.test/api/psp/settlements"));
@@ -262,24 +262,24 @@ test("GET hides batches and provider configs from other subsidiaries", async () 
 // The import form asks for the posting subsidiary up front, so
 // GET carries the picker's options under the same scope as the batches.
 test("GET lists in-scope subsidiaries for the import picker", async () => {
-  routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
+  routeState.allowedSubsidiaryIds = new Set(["00000000-0000-4000-8000-0000000000a1"]);
   routeState.batchRows = [];
   routeState.subsidiaryRows = [
-    { id: "sub-a", name: "Main Co", baseCurrency: "USD" },
-    { id: "sub-b", name: "Second Co", baseCurrency: "USD" },
+    { id: "00000000-0000-4000-8000-0000000000a1", name: "Main Co", baseCurrency: "USD" },
+    { id: "00000000-0000-4000-8000-0000000000b1", name: "Second Co", baseCurrency: "USD" },
   ];
 
   const response = await GET(new Request("http://openbooks.test/api/psp/settlements"));
 
   assert.equal(response.status, 200);
   const payload = await response.json() as { subsidiaries: Array<{ id: string }> };
-  assert.deepEqual(payload.subsidiaries.map((sub) => sub.id), ["sub-a"]);
+  assert.deepEqual(payload.subsidiaries.map((sub) => sub.id), ["00000000-0000-4000-8000-0000000000a1"]);
 });
 
 test("GET omits subsidiary options for single-entity orgs", async () => {
   routeState.allowedSubsidiaryIds = null;
   routeState.batchRows = [];
-  routeState.subsidiaryRows = [{ id: "sub-a", name: "Main Co", baseCurrency: "USD" }];
+  routeState.subsidiaryRows = [{ id: "00000000-0000-4000-8000-0000000000a1", name: "Main Co", baseCurrency: "USD" }];
   routeState.multiSubsidiary = false;
 
   const response = await GET(new Request("http://openbooks.test/api/psp/settlements"));
@@ -367,7 +367,7 @@ test("saveConfig preserves a JSON false value", async () => {
 
 test("saveConfig refuses restricted setup authority before saving org-wide provider policy", async () => {
   reset(["admin.setup.manage"]);
-  routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
+  routeState.allowedSubsidiaryIds = new Set(["00000000-0000-4000-8000-0000000000a1"]);
 
   const response = await post({
     action: "saveConfig",
@@ -424,7 +424,7 @@ for (const scenario of reconciliationActions) {
 
 test("restricted import requires an in-scope subsidiary", async () => {
   reset(["banking.reconcile"]);
-  routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
+  routeState.allowedSubsidiaryIds = new Set(["00000000-0000-4000-8000-0000000000a1"]);
 
   const response = await post({
     action: "import",
@@ -432,7 +432,7 @@ test("restricted import requires an in-scope subsidiary", async () => {
     externalRef: "payout-other",
     settlementDate: "2026-08-24",
     transactions: [{ id: "transaction-1", type: "charge", amount: 100, currency: "USD" }],
-    subsidiaryId: "sub-b",
+    subsidiaryId: "00000000-0000-4000-8000-0000000000b1",
   });
 
   assert.equal(response.status, 404);
@@ -441,7 +441,7 @@ test("restricted import requires an in-scope subsidiary", async () => {
 
 test("restricted import dispatches an in-scope subsidiary", async () => {
   reset(["banking.reconcile"]);
-  routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
+  routeState.allowedSubsidiaryIds = new Set(["00000000-0000-4000-8000-0000000000a1"]);
 
   const response = await post({
     action: "import",
@@ -449,19 +449,19 @@ test("restricted import dispatches an in-scope subsidiary", async () => {
     externalRef: "payout-own",
     settlementDate: "2026-08-24",
     transactions: [{ id: "transaction-1", type: "charge", amount: 100, currency: "USD" }],
-    subsidiaryId: "sub-a",
+    subsidiaryId: "00000000-0000-4000-8000-0000000000a1",
   });
 
   assert.equal(response.status, 200);
-  assert.deepEqual((routeState.domainCalls[0]?.input as { accounts: { subsidiaryId: string } }).accounts.subsidiaryId, "sub-a");
-  assert.deepEqual((routeState.domainCalls[0]?.input as { allowedSubsidiaryIds: Set<string> }).allowedSubsidiaryIds, new Set(["sub-a"]));
+  assert.deepEqual((routeState.domainCalls[0]?.input as { accounts: { subsidiaryId: string } }).accounts.subsidiaryId, "00000000-0000-4000-8000-0000000000a1");
+  assert.deepEqual((routeState.domainCalls[0]?.input as { allowedSubsidiaryIds: Set<string> }).allowedSubsidiaryIds, new Set(["00000000-0000-4000-8000-0000000000a1"]));
 });
 
 for (const action of ["post", "reverse"] as const) {
   test(`restricted ${action} cannot reach another subsidiary's batch`, async () => {
     reset(["banking.reconcile"]);
-    routeState.allowedSubsidiaryIds = new Set(["sub-a"]);
-    routeState.batchSubsidiaryId = "sub-b";
+    routeState.allowedSubsidiaryIds = new Set(["00000000-0000-4000-8000-0000000000a1"]);
+    routeState.batchSubsidiaryId = "00000000-0000-4000-8000-0000000000b1";
 
     const response = await post(
       action === "post"
