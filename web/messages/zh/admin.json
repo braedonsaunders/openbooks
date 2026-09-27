@@ -753,6 +753,20 @@
       },
       "learnMore": "了解更多。"
     },
+    "saasMetrics": {
+      "title": "SaaS 指标",
+      "description": "更改这些定义会改变每个月的输入；重新打开已结账月份以重新计算，或将已记录的数据保持冻结。",
+      "evergreenBookingMonths": {
+        "label": "长期合同计费期限（月）",
+        "hint": "订阅没有明确续订期限时，用此值计算预订额。"
+      },
+      "billingsUsePreTaxSubtotal": {
+        "label": "按税前发票小计计算账单金额"
+      },
+      "customerCreditsReduceBillings": {
+        "label": "从账单金额中扣除客户贷项"
+      }
+    },
     "approvals": {
       "title": "审批",
       "description": "控制供应商账单在提交后何时下达。",
@@ -923,6 +937,8 @@
     "ar_post": "将发票过账至总账",
     "ar_pay": "记录客户收款",
     "usage_read": "查看计量用量",
+    "usage_manage": "管理用量计量器、费率计划和导入的用量记录",
+    "usage_bill": "为用量定价并开具订阅费用账单",
     "reports_read": "查看报表",
     "reports_create": "创建并保存报表",
     "reports_schedule": "安排报表发送",
@@ -2350,6 +2366,8 @@
       "saveFailed": "无法保存配置。"
     },
     "entities": {
+      "usage-meters": { "title": "用量计量器", "singular": "用量计量器", "description": "定义收集可计费用量所使用的单位和聚合方式。" },
+      "usage-rating-plans": { "title": "用量费率计划", "singular": "用量费率计划", "description": "配置用量费率计划的币种和生命周期。" },
       "warehouses": {
         "title": "仓库",
         "singular": "仓库",
@@ -2914,6 +2932,7 @@
       }
     },
     "fields": {
+      "aggregation": "聚合方式",
       "addressLine1": "地址行 1",
       "addressLine2": "地址行 2",
       "city": "城市",
@@ -3325,6 +3344,7 @@
       "reviewMonths": "评审周期（月）"
     },
     "fieldHelp": {
+      "usageAggregation": "unique_count 按每条记录的 distinct key 统计不同值。",
       "putawayItem": "留空则规则适用于所有物料。",
       "putawayCapacity": "目标位置可存放该物料的最大数量。批量区必填；固定库位留空表示不限。",
       "carrierServices": "该承运商提供的服务级别，例如标准或次日达。每张发货单从中选择一个。",
@@ -3431,6 +3451,17 @@
       "aiRailsReviewMonths": "评审周期（月，1–36）；逾期能力会通知 setup 收件箱。"
     },
     "options": {
+      "usageAggregation": {
+        "sum": "求和",
+        "count": "计数",
+        "max": "最大值",
+        "last": "最后一个值",
+        "uniqueCount": "不同值数量"
+      },
+      "usageRatingPlanStatus": {
+        "active": "有效",
+        "retired": "已停用"
+      },
       "warehouseStatus": {
         "draft": "草稿",
         "active": "启用",

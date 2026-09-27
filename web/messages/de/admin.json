@@ -753,6 +753,20 @@
       },
       "learnMore": "Mehr erfahren."
     },
+    "saasMetrics": {
+      "title": "SaaS-Kennzahlen",
+      "description": "Eine Änderung dieser Definitionen ändert die Eingaben jedes Monats; öffnen Sie einen abgeschlossenen Monat zur Neuberechnung erneut oder lassen Sie seine gespeicherten Werte eingefroren.",
+      "evergreenBookingMonths": {
+        "label": "Unbefristete Buchungslaufzeit (Monate)",
+        "hint": "Dient zur Berechnung von Buchungen, wenn ein Abonnement keine explizite Verlängerungslaufzeit hat."
+      },
+      "billingsUsePreTaxSubtotal": {
+        "label": "Abrechnungen anhand der Zwischensumme vor Steuern berechnen"
+      },
+      "customerCreditsReduceBillings": {
+        "label": "Kunden-Gutschriften von den Abrechnungen abziehen"
+      }
+    },
     "approvals": {
       "title": "Genehmigungen",
       "description": "Steuern, wann Lieferantenrechnungen nach dem Einreichen freigegeben werden.",
@@ -923,6 +937,8 @@
     "ar_post": "Ausgangsrechnungen im Hauptbuch buchen",
     "ar_pay": "Kundenzahlungen erfassen",
     "usage_read": "Gemessene Nutzung anzeigen",
+    "usage_manage": "Nutzungsmesser, Tarifpläne und importierte Nutzungsdatensätze verwalten",
+    "usage_bill": "Nutzung tarifieren und Abonnementgebühren abrechnen",
     "reports_read": "Berichte anzeigen",
     "reports_create": "Berichte erstellen und speichern",
     "reports_schedule": "Berichtszustellung planen",
@@ -2422,6 +2438,8 @@
       "saveFailed": "Die Konfiguration konnte nicht gespeichert werden."
     },
     "entities": {
+      "usage-meters": { "title": "Nutzungsmesser", "singular": "Nutzungsmesser", "description": "Legen Sie Einheiten und Aggregation für abrechenbare Nutzung fest." },
+      "usage-rating-plans": { "title": "Nutzungstarifpläne", "singular": "Nutzungstarifplan", "description": "Legen Sie Währung und Lebenszyklus von Nutzungstarifplänen fest." },
       "warehouses": {
         "title": "Lager",
         "singular": "Lager",
@@ -2986,6 +3004,7 @@
       }
     },
     "fields": {
+      "aggregation": "Aggregation",
       "addressLine1": "Adresszeile 1",
       "addressLine2": "Adresszeile 2",
       "city": "Ort",
@@ -3397,6 +3416,7 @@
       "reviewMonths": "Prüfrhythmus (Monate)"
     },
     "fieldHelp": {
+      "usageAggregation": "unique_count zählt die unterschiedlichen Werte des Distinct Keys jedes Datensatzes.",
       "putawayItem": "Leer lassen, damit die Regel für alle Artikel gilt.",
       "putawayCapacity": "Die Höchstmenge des Artikels am Ziel. Für eine Blockzone erforderlich; bei einem festen Lagerplatz leer lassen für keine Begrenzung.",
       "carrierServices": "Die Versandarten dieses Dienstleisters, etwa Standard oder Express. Eine Sendung wählt eine davon.",
@@ -3503,6 +3523,17 @@
       "aiRailsReviewMonths": "Prüfrhythmus in Monaten (1–36); überfällige Fähigkeiten melden sich im Setup-Postfach."
     },
     "options": {
+      "usageAggregation": {
+        "sum": "Summe",
+        "count": "Anzahl",
+        "max": "Maximum",
+        "last": "Letzter Wert",
+        "uniqueCount": "Unterschiedliche Werte"
+      },
+      "usageRatingPlanStatus": {
+        "active": "Aktiv",
+        "retired": "Stillgelegt"
+      },
       "warehouseStatus": {
         "draft": "Entwurf",
         "active": "Aktiv",

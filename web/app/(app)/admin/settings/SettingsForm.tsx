@@ -62,6 +62,11 @@ type Initial = {
   defaultLocale: Locale
   reportPdfStyle: 'formal' | 'modern'
   fairValueRangePolicy: 'warn' | 'off'
+  saasMetrics?: {
+    evergreenBookingMonths: string
+    billingsUsePreTaxSubtotal: boolean
+    customerCreditsReduceBillings: boolean
+  }
   requireVendorBillApproval: boolean
   requireStockCountReview: boolean
   controlAccounts: ControlAccounts
@@ -104,6 +109,7 @@ export function SettingsForm({
   timeZones,
   multiSubsidiary = false,
   revenueRecognition = false,
+  saasMetricsEnabled = false,
   vendorBillFlowConfigured,
 }: {
   initial: Initial
@@ -117,6 +123,8 @@ export function SettingsForm({
   /** Company Settings → Features. The fair-value range policy is Revenue
    *  Recognition configuration; hide and omit it when that switch is off. */
   revenueRecognition?: boolean
+  /** SaaS metrics definitions belong to the gated feature and stay stored when it is disabled. */
+  saasMetricsEnabled?: boolean
   /** Whether an enabled vendor-bill approval flow exists. The loader always
    *  resolves this; when false the Approvals card warns that bills release
    *  with no approver (or that submits will be refused once required). */
@@ -128,7 +136,14 @@ export function SettingsForm({
   const countries = useMemo(() => countryOptions(locale), [locale])
   const router = useRouter()
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState(initial)
+  const [form, setForm] = useState({
+    ...initial,
+    saasMetrics: initial.saasMetrics ?? {
+      evergreenBookingMonths: '12',
+      billingsUsePreTaxSubtotal: true,
+      customerCreditsReduceBillings: true,
+    },
+  })
   // Save-attempt marker: the required error shows once a save is attempted
   // with a blank name and clears as soon as typing resumes
   // (a toast alone leaves the field looking saved-but-blank until reload).
@@ -168,14 +183,18 @@ export function SettingsForm({
       return
     }
     setSaving(true)
-    const { fairValueRangePolicy, ...rest } = form
+    const { fairValueRangePolicy, saasMetrics, ...rest } = form
     const res = await fetch('/api/admin/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       // The vendor-bill approval requirement is a plain org boolean with no
       // feature fence — it always travels. The fair-value policy stays gated
       // on Revenue Recognition above.
-      body: JSON.stringify(revenueRecognition ? { ...rest, fairValueRangePolicy } : rest),
+      body: JSON.stringify({
+        ...rest,
+        ...(revenueRecognition ? { fairValueRangePolicy } : {}),
+        ...(saasMetricsEnabled ? { saasMetrics } : {}),
+      }),
     })
     setSaving(false)
     if (!res.ok) {
@@ -404,6 +423,55 @@ export function SettingsForm({
         </CardContent>
       </Card> : null}
 
+      {saasMetricsEnabled ? <Card>
+        <CardHeader>
+          <CardTitle>{t('saasMetrics.title')}</CardTitle>
+          <CardDescription>{t('saasMetrics.description')}</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <FieldLabel htmlFor="evergreenBookingMonths" help={t('saasMetrics.evergreenBookingMonths.hint')}>
+              {t('saasMetrics.evergreenBookingMonths.label')}
+            </FieldLabel>
+            <Input
+              id="evergreenBookingMonths"
+              type="number"
+              min={1}
+              step={1}
+              value={form.saasMetrics.evergreenBookingMonths}
+              onChange={(e) => setForm((f) => ({
+                ...f,
+                saasMetrics: { ...f.saasMetrics, evergreenBookingMonths: e.target.value },
+              }))}
+            />
+          </div>
+          <label className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={form.saasMetrics.billingsUsePreTaxSubtotal}
+              onChange={(e) => setForm((f) => ({
+                ...f,
+                saasMetrics: { ...f.saasMetrics, billingsUsePreTaxSubtotal: e.target.checked },
+              }))}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+            />
+            <span>{t('saasMetrics.billingsUsePreTaxSubtotal.label')}</span>
+          </label>
+          <label className="flex items-start gap-3 text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={form.saasMetrics.customerCreditsReduceBillings}
+              onChange={(e) => setForm((f) => ({
+                ...f,
+                saasMetrics: { ...f.saasMetrics, customerCreditsReduceBillings: e.target.checked },
+              }))}
+              className="mt-1 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+            />
+            <span>{t('saasMetrics.customerCreditsReduceBillings.label')}</span>
+          </label>
+        </CardContent>
+      </Card> : null}
+
       {/* Approvals — vendor-bill release policy */}
       <Card>
         <CardHeader>
@@ -492,7 +560,14 @@ export function SettingsForm({
       </Card>
 
       <div className="flex items-center justify-end gap-3">
-        <Button variant="outline" disabled={saving} onClick={() => setForm(initial)}>
+        <Button variant="outline" disabled={saving} onClick={() => setForm({
+          ...initial,
+          saasMetrics: initial.saasMetrics ?? {
+            evergreenBookingMonths: '12',
+            billingsUsePreTaxSubtotal: true,
+            customerCreditsReduceBillings: true,
+          },
+        })}>
           {tCommon('actions.reset')}
         </Button>
         <Button disabled={saving} onClick={save}>

@@ -8,7 +8,7 @@ import { createHomeAnnouncementRow, deleteHomeAnnouncementRow, saveHomeAnnouncem
 import { sql } from 'drizzle-orm'
 import { CurrencyError, updateFxRate } from '@openbooks/engine/src/fx/currencies.ts'
 import { assertStockLocationDeletionAllowed, WarehouseRefusal } from '@openbooks/engine/src/inventory/warehouses.ts'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { toUnits } from '@openbooks/engine/src/money/money.ts'
 import { compileFormula } from '@openbooks/engine/src/assets/depreciation-formula.ts'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
@@ -52,6 +52,15 @@ import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'
 import { taxRegistrationFormProblem } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
 import { saveSetupBook } from './books'
+import {
+  createUsageMeter,
+  deactivateUsageMeter,
+  reactivateUsageMeter,
+  updateUsageMeter,
+  type UsageAggregation,
+} from '@openbooks/engine/src/billing/usage/records.ts'
+import { createUsageRatingPlan, retireUsageRatingPlan } from '@openbooks/engine/src/billing/usage/rating-plans.ts'
+import { UsageBillingError } from '@openbooks/engine/src/billing/usage/errors.ts'
 
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
 import { featureEnabled, featureGateLockKey, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../features'
@@ -1844,7 +1853,7 @@ export async function createSetupRecord(
   // the duplicate row IS this key's own row, the claim inside the transaction
   // replays an exact retry (200) or refuses a changed payload (409) instead
   // of misreporting the retry as a natural-key duplicate.
-  if (entity.naturalKey) {
+  if (entity.naturalKey && entity.key !== 'usage-meters' && entity.key !== 'usage-rating-plans') {
     const col = toSnake(entity.naturalKey)
     const val = String(body[entity.naturalKey] ?? '')
     const orgFilter = entity.orgScoped ? sql` and org_id = ${orgId}` : sql``
@@ -1918,6 +1927,48 @@ export async function createSetupRecord(
     cols.map((c) => sql`${bindSetupValue(c.value)}`),
     sql`, `,
   )
+
+  if (entity.key === 'usage-meters' || entity.key === 'usage-rating-plans') {
+    const match = setupCreateMatch()
+    const claimMatch = { orgId, table: entity.table, key: requestId, match, orgScoped: entity.orgScoped }
+    try {
+      const id = await withOrgTransaction(orgId, () => setupWriteTransaction(entity, orgId, body, undefined, async (tx) => {
+        const claim = await claimSetupCreate(tx, claimMatch)
+        if (claim.kind === 'replay') return claim.id
+        const created = entity.key === 'usage-meters'
+          ? await createUsageMeter(orgId, actorId, {
+            key: String(body.key), name: String(body.name), unit: String(body.unit),
+            aggregation: body.aggregation as UsageAggregation,
+            itemId: body.itemId == null || body.itemId === '' ? null : String(body.itemId),
+          })
+          : await createUsageRatingPlan(orgId, actorId, {
+            name: String(body.name), currency: String(body.currency),
+          })
+        const rowId = String(created.id)
+        if (entity.key === 'usage-meters' && body.isActive !== undefined && !coerceBoolean(body.isActive)) {
+          await deactivateUsageMeter(orgId, actorId, rowId)
+        }
+        if (entity.key === 'usage-rating-plans' && body.status === 'retired') {
+          await retireUsageRatingPlan(orgId, actorId, rowId)
+        }
+        await audit({
+          orgId, table: entity.table, rowId, action: 'insert',
+          changes: { after: await loadSetupAuditRow(entity, orgId, rowId, tx), match },
+          actorId, requestId,
+        }, tx)
+        return rowId
+      }, { ...scopeOptions, idempotencyKey: requestId }))
+      return { status: 200, body: { id } }
+    } catch (error) {
+      if (error instanceof SetupWriteRefusal) return { status: error.status, body: { error: error.message } }
+      if (error instanceof SetupCreateConflict) return { status: error.status, body: { error: error.message, code: error.code } }
+      if (error instanceof UsageBillingError) {
+        return { status: error.status, body: { error: error.message, code: error.code, remedy: error.remedy, field: error.field } }
+      }
+      if (pgErrorCode(error) === '23505') return duplicateConflict(entity.key)
+      return { status: 400, body: { error: describeDbError(error) } }
+    }
+  }
 
   if (entity.key === 'pay-derived-rules') {
     // A direct create of a later active version follows the same timeline rule
@@ -2184,6 +2235,55 @@ export async function updateSetupRecord(
       const message = (e as Error).message
       const error = ['not found', 'default-required'].includes(message) ? message : describeDbError(e)
       return { status: error === 'not found' ? 404 : 400, body: { error } }
+    }
+  }
+
+  if (entity.key === 'usage-meters' || entity.key === 'usage-rating-plans') {
+    try {
+      await withOrgTransaction(orgId, () => setupWriteTransaction(entity, orgId, body, id, async (tx) => {
+        const before = await loadSetupAuditRow(entity, orgId, id, tx, true)
+        if (!before) throw new SetupWriteRefusal('not found', 404)
+        if (entity.key === 'usage-meters') {
+          const input = {
+            ...(body.key === undefined ? {} : { key: String(body.key) }),
+            ...(body.name === undefined ? {} : { name: String(body.name) }),
+            ...(body.unit === undefined ? {} : { unit: String(body.unit) }),
+            ...(body.aggregation === undefined ? {} : { aggregation: body.aggregation as UsageAggregation }),
+            ...(body.itemId === undefined ? {} : { itemId: body.itemId == null || body.itemId === '' ? null : String(body.itemId) }),
+          }
+          if (Object.keys(input).length) await updateUsageMeter(orgId, actorId, id, input)
+          if (body.isActive !== undefined) {
+            const active = coerceBoolean(body.isActive)
+            if (active !== Boolean(before.is_active)) {
+              if (active) await reactivateUsageMeter(orgId, actorId, id)
+              else await deactivateUsageMeter(orgId, actorId, id)
+            }
+          }
+          if (Object.keys(input).length === 0 && body.isActive === undefined) await updateUsageMeter(orgId, actorId, id, {})
+        } else {
+          if (body.name !== undefined && String(body.name) !== String(before.name)) {
+            throw new UsageBillingError('usage_plan_name_immutable', 'A rating plan name cannot change after creation.', 'Create a new usage rating plan with the desired name.', { field: 'name', status: 409 })
+          }
+          if (body.currency !== undefined && String(body.currency) !== String(before.currency_code)) {
+            throw new UsageBillingError('usage_plan_currency_immutable', 'A rating plan currency cannot change after creation.', 'Create a new usage rating plan with the desired currency.', { field: 'currency', status: 409 })
+          }
+          if (body.status === 'retired' && before.status === 'active') await retireUsageRatingPlan(orgId, actorId, id)
+          else if (body.status === 'active' && before.status === 'retired') {
+            throw new UsageBillingError('usage_plan_reactivation_refused', 'A retired usage rating plan cannot be reactivated.', 'Create a new usage rating plan.', { field: 'status', status: 409 })
+          }
+        }
+        await audit({
+          orgId, table: entity.table, rowId: id, action: 'update',
+          changes: { before, after: await loadSetupAuditRow(entity, orgId, id, tx) }, actorId,
+        }, tx)
+      }, scopeOptions))
+      return { status: 200, body: { id } }
+    } catch (error) {
+      if (error instanceof SetupWriteRefusal) return { status: error.status, body: { error: error.message } }
+      if (error instanceof UsageBillingError) {
+        return { status: error.status, body: { error: error.message, code: error.code, remedy: error.remedy, field: error.field } }
+      }
+      return { status: 400, body: { error: describeDbError(error) } }
     }
   }
 

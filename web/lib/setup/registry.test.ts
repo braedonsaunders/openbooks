@@ -94,6 +94,25 @@ test('number sequences use friendly record choices and explain gapless numbering
   assert.ok(sequence.fields.some((field) => field.key === 'gapless' && field.helpTextKey === 'fieldHelp.gapless'))
 })
 
+test('usage setup is feature-gated and keeps meter identity and plan headers controlled', () => {
+  const meters = SETUP_ENTITY_BY_KEY.get('usage-meters')
+  const plans = SETUP_ENTITY_BY_KEY.get('usage-rating-plans')
+  assert.ok(meters)
+  assert.ok(plans)
+  assert.equal(meters.groupKey, 'billing')
+  assert.equal(meters.featureKey, 'usageBilling')
+  assert.equal(meters.naturalKey, 'key')
+  assert.equal(meters.allowDelete, false)
+  assert.equal(meters.fields.some((field) => field.key === 'distinctKey'), false)
+  assert.ok(meters.fields.some((field) => field.key === 'key' && field.lockedOnEdit))
+  assert.ok(meters.fields.some((field) => field.key === 'aggregation' && field.lockedOnEdit))
+  assert.ok(meters.fields.some((field) => field.key === 'isActive' && field.kind === 'boolean'))
+  assert.equal(plans.featureKey, 'usageBilling')
+  assert.equal(plans.naturalKey, 'name')
+  assert.equal(plans.allowDelete, false)
+  assert.ok(plans.fields.some((field) => field.key === 'status' && field.kind === 'select'))
+})
+
 test('generic setup subsidiary controls follow the feature flag everywhere', () => {
   for (const key of ['number-sequences', 'classes', 'departments', 'locations']) {
     const entity = SETUP_ENTITY_BY_KEY.get(key)

@@ -15,6 +15,15 @@ import { savePayComponentEarningClassification, validateEntityIntegrity } from '
 import { payPeriodsPerYearProblem } from '@openbooks/engine/src/payroll/run-calendar.ts'
 import { isSetupBookEntity, saveSetupBook } from '../setup/books'
 import { auditSetupChange as audit, loadSetupAuditRow } from '../setup/audit'
+import {
+  createUsageMeter,
+  deactivateUsageMeter,
+  reactivateUsageMeter,
+  updateUsageMeter,
+  type UsageAggregation,
+} from '@openbooks/engine/src/billing/usage/records.ts'
+import { createUsageRatingPlan, retireUsageRatingPlan } from '@openbooks/engine/src/billing/usage/rating-plans.ts'
+import { UsageBillingError } from '@openbooks/engine/src/billing/usage/errors.ts'
 import { setupReadProjection, setupReadSource } from '../setup/read-shape'
 import {
   enforceExportRowLimit,
@@ -208,10 +217,13 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
       const resolver = new RefResolver(orgId)
       const cols = fields.map((f) => toSnake(f.key))
       const resourceLabel = setupDescriptor(entity).label
+      const projection = entity.key === 'usage-rating-plans'
+        ? sql.raw(cols.map((column) => column === 'currency' ? 'currency_code as currency' : column).join(', '))
+        : setupReadProjection(entity, cols)
       const result = entity.dataSource
         ? { rows: await jsonBackedRows(entity.dataSource, orgId, resourceLabel) }
         : (await db.execute(sql`
-        select ${setupReadProjection(entity, cols)}
+        select ${projection}
           from ${setupReadSource(entity)}
          ${entity.orgScoped ? sql`where org_id = ${orgId}` : sql``}
          order by ${sql.raw(idColumn(entity))}
@@ -438,6 +450,76 @@ async function writeSetup(
         continue
       }
 
+      if (entity.key === 'usage-meters' || entity.key === 'usage-rating-plans') {
+        const built = buildRow(entity, src, { forCreate: !existingId })
+        if ('error' in built) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: built.error })
+          continue
+        }
+        const values = Object.fromEntries(built.cols.map((column) => [column.column, column.value]))
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`savepoint setup_import_row`)
+          try {
+            const before = existingId
+              ? await loadSetupAuditRow(entity, ctx.orgId, existingId, tx, true)
+              : undefined
+            if (existingId && !before) throw new Error('row no longer exists')
+            let rowId = existingId ?? ''
+            if (entity.key === 'usage-meters') {
+              if (existingId) {
+                await updateUsageMeter(ctx.orgId, ctx.actorId, existingId, {
+                  key: String(values.key), name: String(values.name), unit: String(values.unit),
+                  aggregation: values.aggregation as UsageAggregation,
+                  itemId: values.item_id == null || values.item_id === '' ? null : String(values.item_id),
+                })
+              } else {
+                const created = await createUsageMeter(ctx.orgId, ctx.actorId, {
+                  key: String(values.key), name: String(values.name), unit: String(values.unit),
+                  aggregation: values.aggregation as UsageAggregation,
+                  itemId: values.item_id == null || values.item_id === '' ? null : String(values.item_id),
+                })
+                rowId = String(created.id)
+              }
+              const wantedActive = values.is_active === undefined ? true : coerceBoolean(values.is_active)
+              const hadActive = before ? Boolean(before.is_active) : true
+              if (wantedActive !== hadActive) {
+                if (wantedActive) await reactivateUsageMeter(ctx.orgId, ctx.actorId, rowId)
+                else await deactivateUsageMeter(ctx.orgId, ctx.actorId, rowId)
+              }
+            } else if (existingId) {
+              if (String(values.currency_code) !== String(before!.currency_code)) {
+                throw new UsageBillingError('usage_plan_currency_immutable', 'A rating plan currency cannot change after creation.', 'Create a new usage rating plan with the desired currency.', { field: 'currency', status: 409 })
+              }
+              if (values.status === 'retired' && before!.status === 'active') await retireUsageRatingPlan(ctx.orgId, ctx.actorId, rowId)
+            } else {
+              const created = await createUsageRatingPlan(ctx.orgId, ctx.actorId, {
+                name: String(values.name), currency: String(values.currency_code),
+              })
+              rowId = String(created.id)
+              if (values.status === 'retired') await retireUsageRatingPlan(ctx.orgId, ctx.actorId, rowId)
+            }
+            await audit({
+              orgId: ctx.orgId, table: entity.table, rowId, action: existingId ? 'update' : 'insert',
+              changes: {
+                source: 'import',
+                ...(existingId ? { before } : { before: null }),
+                after: await loadSetupAuditRow(entity, ctx.orgId, rowId, tx),
+              },
+              actorId: ctx.actorId,
+            }, tx)
+            await tx.execute(sql`release savepoint setup_import_row`)
+          } catch (error) {
+            await tx.execute(sql`rollback to savepoint setup_import_row`)
+            await tx.execute(sql`release savepoint setup_import_row`)
+            throw error
+          }
+        })
+        if (existingId) outcome.updated++
+        else outcome.created++
+        continue
+      }
+
       if (existingId) {
         const built = buildRow(entity, src, { forCreate: false })
         if ('error' in built) {
@@ -625,6 +707,10 @@ async function writeSetup(
       }
     } catch (e) {
       outcome.failed++
+      if (e instanceof UsageBillingError) {
+        outcome.errors.push({ row: rowNo, message: `${e.message} Remedy: ${e.remedy}` })
+        continue
+      }
       // Drizzle wraps the driver error, so the storage guard's message lives
       // on `cause` — surface that, never the wrapper's query echo.
       const cause = (e as { cause?: { message?: string } })?.cause

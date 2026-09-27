@@ -753,6 +753,20 @@
       },
       "learnMore": "En savoir plus."
     },
+    "saasMetrics": {
+      "title": "Indicateurs SaaS",
+      "description": "Modifier ces définitions change les données d'entrée de chaque mois ; rouvrez un mois clôturé pour le recalculer ou conservez ses faits enregistrés gelés.",
+      "evergreenBookingMonths": {
+        "label": "Durée d'engagement permanente (mois)",
+        "hint": "Sert à calculer les réservations lorsqu'un abonnement n'a pas de renouvellement explicite."
+      },
+      "billingsUsePreTaxSubtotal": {
+        "label": "Calculer les facturations à partir du sous-total hors taxes"
+      },
+      "customerCreditsReduceBillings": {
+        "label": "Déduire les avoirs clients des facturations"
+      }
+    },
     "approvals": {
       "title": "Approbations",
       "description": "Contrôlez quand les factures fournisseurs sont libérées après soumission.",
@@ -923,6 +937,8 @@
     "ar_post": "Comptabiliser les factures au grand livre",
     "ar_pay": "Enregistrer les paiements clients",
     "usage_read": "Consulter la consommation mesurée",
+    "usage_manage": "Gérer les compteurs, les plans tarifaires et les enregistrements d'usage importés",
+    "usage_bill": "Tarifer l'usage et facturer les frais d'abonnement",
     "reports_read": "Consulter les rapports",
     "reports_create": "Créer et enregistrer des rapports",
     "reports_schedule": "Planifier l’envoi de rapports",
@@ -2305,6 +2321,8 @@
       }
     },
     "entities": {
+      "usage-meters": { "title": "Compteurs d’usage", "singular": "Compteur d’usage", "description": "Définissez les unités et l’agrégation utilisées pour collecter l’usage facturable." },
+      "usage-rating-plans": { "title": "Plans tarifaires d’usage", "singular": "Plan tarifaire d’usage", "description": "Configurez la devise et le cycle de vie des plans tarifaires d’usage." },
       "warehouses": {
         "title": "Entrepôts",
         "singular": "Entrepôt",
@@ -2869,6 +2887,7 @@
       }
     },
     "fields": {
+      "aggregation": "Agrégation",
       "addressLine1": "Adresse, ligne 1",
       "addressLine2": "Adresse, ligne 2",
       "city": "Ville",
@@ -3280,6 +3299,7 @@
       "reviewMonths": "Cadence (mois)"
     },
     "fieldHelp": {
+      "usageAggregation": "unique_count compte les valeurs distinctes de la clé distincte de chaque enregistrement.",
       "putawayItem": "Laissez vide pour appliquer la règle à tous les articles.",
       "putawayCapacity": "Quantité maximale de l’article dans la cible. Obligatoire pour une zone de vrac ; laissez vide sur un emplacement fixe pour ne pas fixer de limite.",
       "carrierServices": "Les niveaux de service proposés par ce transporteur, par exemple Standard ou Express. Chaque expédition en choisit un.",
@@ -3386,6 +3406,17 @@
       "aiRailsReviewMonths": "Cadence en mois (1–36) ; les capacités en retard notifient la boîte setup."
     },
     "options": {
+      "usageAggregation": {
+        "sum": "Somme",
+        "count": "Nombre",
+        "max": "Valeur la plus élevée",
+        "last": "Dernière valeur",
+        "uniqueCount": "Valeurs distinctes"
+      },
+      "usageRatingPlanStatus": {
+        "active": "Actif",
+        "retired": "Retiré"
+      },
       "warehouseStatus": {
         "draft": "Brouillon",
         "active": "Actif",

@@ -753,6 +753,20 @@
       },
       "learnMore": "Más información."
     },
+    "saasMetrics": {
+      "title": "Métricas SaaS",
+      "description": "Cambiar estas definiciones modifica las entradas de cada mes; reabra un mes cerrado para recalcularlo o mantenga congelados sus datos registrados.",
+      "evergreenBookingMonths": {
+        "label": "Plazo de contratación indefinido (meses)",
+        "hint": "Se usa para calcular las contrataciones cuando una suscripción no tiene un plazo de renovación explícito."
+      },
+      "billingsUsePreTaxSubtotal": {
+        "label": "Calcular la facturación con el subtotal de la factura antes de impuestos"
+      },
+      "customerCreditsReduceBillings": {
+        "label": "Restar los abonos de clientes de la facturación"
+      }
+    },
     "approvals": {
       "title": "Aprobaciones",
       "description": "Controle cuándo se liberan las facturas de proveedores tras enviarlas.",
@@ -923,6 +937,8 @@
     "ar_post": "Contabilizar facturas en el libro mayor",
     "ar_pay": "Registrar pagos de clientes",
     "usage_read": "Ver el uso medido",
+    "usage_manage": "Gestionar medidores, planes de tarifas y registros de uso importados",
+    "usage_bill": "Tarifar el uso y facturar cargos de suscripción",
     "reports_read": "Ver informes",
     "reports_create": "Crear y guardar informes",
     "reports_schedule": "Programar el envío de informes",
@@ -2305,6 +2321,8 @@
       }
     },
     "entities": {
+      "usage-meters": { "title": "Medidores de uso", "singular": "Medidor de uso", "description": "Defina las unidades y la agregación para recopilar el uso facturable." },
+      "usage-rating-plans": { "title": "Planes de tarifas de uso", "singular": "Plan de tarifas de uso", "description": "Configure la moneda y el ciclo de vida de los planes de tarifas de uso." },
       "warehouses": {
         "title": "Almacenes",
         "singular": "Almacén",
@@ -2869,6 +2887,7 @@
       }
     },
     "fields": {
+      "aggregation": "Agregación",
       "addressLine1": "Dirección, línea 1",
       "addressLine2": "Dirección, línea 2",
       "city": "Ciudad",
@@ -3280,6 +3299,7 @@
       "reviewMonths": "Cadencia (meses)"
     },
     "fieldHelp": {
+      "usageAggregation": "unique_count cuenta los valores distintos de la clave distinta de cada registro.",
       "putawayItem": "Déjelo en blanco para aplicar la regla a todos los artículos.",
       "putawayCapacity": "Lo máximo que el destino puede contener del artículo. Obligatorio en una zona a granel; déjelo en blanco en un hueco fijo para no poner límite.",
       "carrierServices": "Los niveles de servicio que ofrece este transportista, como Terrestre o Urgente. Cada envío elige uno de ellos.",
@@ -3386,6 +3406,17 @@
       "aiRailsReviewMonths": "Cadencia en meses (1–36); las capacidades vencidas avisan al inbox de setup."
     },
     "options": {
+      "usageAggregation": {
+        "sum": "Suma",
+        "count": "Recuento",
+        "max": "Máximo",
+        "last": "Último valor",
+        "uniqueCount": "Valores distintos"
+      },
+      "usageRatingPlanStatus": {
+        "active": "Activo",
+        "retired": "Retirado"
+      },
       "warehouseStatus": {
         "draft": "Borrador",
         "active": "Activo",

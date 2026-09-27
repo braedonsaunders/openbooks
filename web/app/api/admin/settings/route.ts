@@ -24,6 +24,11 @@ const requestBodySchema = z.object({
   timeZone: z.string().nullable().optional(),
   reportPdfStyle: z.enum(["modern", "formal"]).optional(),
   fairValueRangePolicy: z.enum(["warn", "off"]).optional(),
+  saasMetrics: z.object({
+    evergreenBookingMonths: z.string().regex(/^[1-9]\d*$/),
+    billingsUsePreTaxSubtotal: z.boolean(),
+    customerCreditsReduceBillings: z.boolean(),
+  }).optional(),
   requireVendorBillApproval: z.boolean().optional(),
   requireStockCountReview: z.boolean().optional(),
 });

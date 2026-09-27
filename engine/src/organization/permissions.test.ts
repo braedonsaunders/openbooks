@@ -11,6 +11,29 @@ import {
   type CataloguePermission,
 } from "./permissions.ts";
 
+test("usage permissions are catalogued and granted wherever invoice creation is allowed", () => {
+  const keys: CataloguePermission[] = ["usage.read", "usage.manage", "usage.bill"];
+  for (const permission of keys) {
+    assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(permission));
+    assert.equal(permissionLabelKey(permission), `permissions.${permission.replace(/\./g, "_")}`);
+  }
+  assert.deepEqual(
+    PERMISSION_GROUPS.find((entry) => entry.key === "usage")?.permissions.map((entry) => entry.key),
+    keys,
+  );
+  const holds = (role: string, permission: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), permission);
+  for (const role of BUILT_IN_ROLE_KEYS) {
+    if (holds(role, "ar.create")) {
+      assert.equal(holds(role, "usage.manage"), true, `${role} must manage usage with invoice creation`);
+      assert.equal(holds(role, "usage.bill"), true, `${role} must bill usage with invoice creation`);
+    } else {
+      assert.equal(holds(role, "usage.manage"), false, `${role} must not manage usage`);
+      assert.equal(holds(role, "usage.bill"), false, `${role} must not bill usage`);
+    }
+  }
+});
+
 /**
  * Allocation kernel duty split (A10 platform slice): read sees rules, runs,
  * and lineage; manage authors rules and drivers; run previews, posts,
