@@ -20,10 +20,16 @@ const routeState: RouteState = {
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 
-// The engine error classes cannot cross the mock boundary by import: the
-// route's instanceof checks resolve against these same class objects, so the
-// test constructs refusals from the shared copies on globalThis.
 const mockSources = new Map<string, string>([
+  [
+    "mock:authz",
+    `
+      const state = globalThis[Symbol.for('openbooks.hrm-options-route-test')]
+      export async function getAuthz() { return { user: { id: 'user-1', orgId: 'org-1' } } }
+      export async function guardPermission() { return state.gate }
+      export function guardRootSubsidiaryScope() { return null }; export function guardUnrestrictedScope() { return null }
+    `,
+  ],
   [
     "mock:feature-gates",
     `
@@ -127,7 +133,7 @@ const mockUrls = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier);
+    const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" ? "mock:authz" : undefined);
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier);
   },
@@ -313,7 +319,7 @@ test("a non-integer limit and a non-uuid include are refused", async () => {
     assert.deepEqual(routeState.calls, []);
   });
 
-test("F3-40: people forwards the pin under its own key for the exit-interviewer picker", async () => {
+test("people forwards the pin under its own key for the exit-interviewer picker", async () => {
   reset();
   const include = "00000000-0000-4000-8000-000000000033";
   const response = await optionsRoute!.GET(getRequest(`?source=people&include=${include}`));

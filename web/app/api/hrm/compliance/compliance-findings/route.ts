@@ -1,4 +1,4 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
@@ -6,52 +6,51 @@ import {
   listFindings,
   resolveFinding,
 } from "@openbooks/engine/src/hrm/construction/findings.ts";
-import { guardPermission } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { constructionErrorResponse } from "../_lib";
 import { findingActionBody } from "../bodies";
-import { notFound } from "@/lib/api/responses";
-
-
-export const runtime = "nodejs";
-
 /** Compliance findings: list, acknowledge, resolve. */
-export async function GET(req: Request) {
-  const gate = await guardPermission("hrm.construction.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmConstructionCompliance"))) {
-    return notFound("record");
-  }
-  const url = new URL(req.url);
-  try {
-    const findings = await listFindings(db, gate.user.orgId, gate.user.id, url.searchParams.get("status"));
-    return NextResponse.json({ findings });
-  } catch (e) {
-    return constructionErrorResponse(e);
-  }
-}
-
-export async function PUT(req: Request) {
-  const gate = await guardPermission("hrm.construction.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmConstructionCompliance"))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, findingActionBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const finding =
-      parsedBody.data.action === "acknowledge"
-        ? await acknowledgeFinding(db, gate.user.orgId, gate.user.id, parsedBody.data.findingId)
-        : await resolveFinding(
-            db,
-            gate.user.orgId,
-            gate.user.id,
-            parsedBody.data.findingId,
-            parsedBody.data.reason ?? "resolved from the Compliance page",
-          );
-    return NextResponse.json({ finding });
-  } catch (e) {
-    return constructionErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.construction.read",
+  feature: "hrmConstructionCompliance",
+  handler: async ({ request: req, authz: gate }) => {
+    const url = new URL(req.url);
+    try {
+      const findings = await listFindings(
+        db,
+        gate.user.orgId,
+        gate.user.id,
+        url.searchParams.get("status"),
+      );
+      return NextResponse.json({ findings });
+    } catch (e) {
+      return constructionErrorResponse(e);
+    }
+  },
+});
+export const PUT = defineRoute({
+  permission: "hrm.construction.manage",
+  feature: "hrmConstructionCompliance",
+  body: findingActionBody,
+  handler: async ({ request: req, authz: gate, body }) => {
+    try {
+      const finding =
+        body.action === "acknowledge"
+          ? await acknowledgeFinding(
+              db,
+              gate.user.orgId,
+              gate.user.id,
+              body.findingId,
+            )
+          : await resolveFinding(
+              db,
+              gate.user.orgId,
+              gate.user.id,
+              body.findingId,
+              body.reason ?? "resolved from the Compliance page",
+            );
+      return NextResponse.json({ finding });
+    } catch (e) {
+      return constructionErrorResponse(e);
+    }
+  },
+});

@@ -4,17 +4,6 @@ import nodeTest from "node:test";
 import { NextResponse } from "next/server";
 import { BenefitsError } from "@openbooks/engine/src/hrm/benefits/errors.ts";
 
-/**
- * Enrollment-window collection boundary.
- *
- * mock:authz (session + grants) and mock:features (the hrm switch) isolate
- * the route from the network; the service double records calls and rethrows
- * REAL BenefitsErrors when told — a double that cannot produce the refusal
- * is not a test of the refusal. The JSON boundary (parseJsonBody) and the
- * error mapping (_lib) are REAL: the 400s and the 409/422s below exercise
- * the production code path, not a copy.
- */
-
 interface RouteState {
   gate: { user: { id: string; orgId: string } } | { status: number };
   featureOn: boolean;
@@ -48,6 +37,8 @@ const mockSources = new Map<string, string>([
         }
         return state.gate
       }
+      export async function getAuthz() { return state.gate && !('status' in state.gate) ? state.gate : null }
+      export function guardRootSubsidiaryScope() { return null }; export function guardUnrestrictedScope() { return null }
     `,
   ],
   [
@@ -98,7 +89,7 @@ const mockUrls = new Map<string, string>([
 
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
+      const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
       if (mocked) return { url: mocked, shortCircuit: true };
       return nextResolve(specifier);
     },
@@ -110,7 +101,6 @@ const mockUrls = new Map<string, string>([
   });
   const routeUrl = "./route.ts?hrm-benefits-windows-collection";
   const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  hooks.deregister();
 
 
 function reset(): void {

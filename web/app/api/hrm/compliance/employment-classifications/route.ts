@@ -1,33 +1,24 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { assignClassification } from "@openbooks/engine/src/hrm/construction/classifications.ts";
-import { guardPermission } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { constructionErrorResponse } from "../_lib";
 import { assignClassificationBody } from "../bodies";
-import { notFound } from "@/lib/api/responses";
-
-
-export const runtime = "nodejs";
-
 /** Employment classifications: bitemporal assignment with history. */
-export async function POST(req: Request) {
-  const gate = await guardPermission("hrm.construction.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmConstructionCompliance"))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, assignClassificationBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const assignment = await assignClassification(db, {
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      ...parsedBody.data,
-    });
-    return NextResponse.json({ assignment }, { status: 201 });
-  } catch (e) {
-    return constructionErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.construction.manage",
+  feature: "hrmConstructionCompliance",
+  body: assignClassificationBody,
+  handler: async ({ request: req, authz: gate, body }) => {
+    try {
+      const assignment = await assignClassification(db, {
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        ...body,
+      });
+      return NextResponse.json({ assignment }, { status: 201 });
+    } catch (e) {
+      return constructionErrorResponse(e);
+    }
+  },
+});

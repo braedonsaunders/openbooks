@@ -41,11 +41,13 @@ export {
   type WorkerQualification,
 } from "./qualifications.ts";
 export {
+  listRequirementSubjectOptions,
   listRequirements,
   removeRequirement,
   resolveSubject,
   setRequirement,
   type QualificationRequirement,
+  type RequirementSubjectOption,
   type RequirementSeverity,
   type RequirementSubjectKind,
 } from "./requirements.ts";

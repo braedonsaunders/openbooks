@@ -44,12 +44,20 @@ const mockSources = new Map<string, string>([
       return gate();
     }
   `],
+  ["mock:features", `
+    const state = globalThis[Symbol.for('openbooks.route-factory-test')];
+    export async function isFeatureEnabled() {
+      state.calls.push('session-feature');
+      return state.feature === 'on';
+    }
+  `],
 ]);
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "@/lib/authz") return { shortCircuit: true, url: "mock:authz" };
     if (specifier === "@/lib/feature-gates") return { shortCircuit: true, url: "mock:feature-gates" };
+    if (specifier === "@/lib/features") return { shortCircuit: true, url: "mock:features" };
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -89,10 +97,14 @@ test("public token routes skip every gate", async () => {
 
 test("public session routes require a session but no permission", async () => {
   reset({ session: false });
-  const handler = defineRoute({ public: "session", handler: async () => ok() });
+  const handler = defineRoute({ public: "session", feature: "hrm", handler: async () => ok() });
   assert.equal((await handler(get())).status, 401);
   reset();
   assert.equal((await handler(get())).status, 200);
+  assert.deepEqual(state.calls, ["session", "session-feature"]);
+  reset({ feature: "off" });
+  assert.equal((await handler(get())).status, 404);
+  assert.deepEqual(state.calls, ["session", "session-feature"]);
 });
 
 test("permission refusals pass through before the feature gate runs", async () => {

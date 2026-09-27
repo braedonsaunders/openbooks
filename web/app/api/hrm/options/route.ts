@@ -1,4 +1,5 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import {
   EmploymentReadError,
@@ -18,9 +19,6 @@ import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
-
-export const runtime = "nodejs";
-
 /**
  * Authoring pickers for employment change requests. GET lists bounded,
  * org- and subsidiary-scoped option pages behind the HRM feature switch
@@ -46,102 +44,136 @@ export const runtime = "nodejs";
  * absent rather than leaking existence. GET carries no body, so no JSON
  * boundary parser runs here.
  */
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const source = url.searchParams.get("source");
-  if (
-    source !== "employments" &&
-    source !== "locations" &&
-    source !== "positions" &&
-    source !== "people" &&
-    source !== "leave-types" &&
-    source !== "leave-filing-employments" &&
-    source !== "leave-own-employments"
-  ) {
-    return NextResponse.json(
-      {
-        error:
-          "source must be one of employments, locations, positions, people, leave-types, leave-filing-employments, leave-own-employments",
-      },
-      { status: 400 },
-    );
-  }
-  // One gate per source: the establishment behind its own read grant, leave
-  // types behind the request grant (the filer's), the on-behalf employment
-  // picker behind the manage grant (the manager's), everything else behind
-  // the employment read grant.
-  const gate =
-    source === "leave-types"
-      ? await guardLeaveOptions()
-      : source === "leave-filing-employments"
-        ? await guardFeaturePermission("hrm.leave.manage", "hrm")
-        : source === "leave-own-employments"
-          ? await guardFeaturePermission("hrm.leave.request", "hrm")
-          : await guardFeaturePermission(source === "positions" ? "hrm.position.read" : "hrm.employment.read", "hrm");
-  if (gate instanceof NextResponse) return gate;
-  const rawLimit = url.searchParams.get("limit");
-  if (rawLimit !== null && !/^\d+$/.test(rawLimit)) {
-    return NextResponse.json({ error: "limit must be a positive integer" }, { status: 400 });
-  }
-  const include = url.searchParams.get("include");
-  if (include !== null && !isUuid(include)) {
-    return NextResponse.json({ error: "include must be a uuid" }, { status: 400 });
-  }
-  const base = {
-    orgId: gate.user.orgId,
-    actorId: gate.user.id,
-    q: url.searchParams.get("q") ?? undefined,
-    ...(rawLimit === null ? {} : { limit: Number(rawLimit) }),
-  };
-  try {
-    if (source === "leave-types") {
-      const options = await listLeaveTypeOptions(db, gate.user.orgId);
-      return NextResponse.json({ options });
-    }
-    if (source === "leave-filing-employments") {
-      // The drawer parses {id, label} uniformly, so the employment options
-      // are projected onto that shape here — the engine keeps its own
-      // employmentId key for its other picker consumers.
-      const options = await listLeaveFilingEmploymentOptions(
-        include === null ? base : { ...base, includeEmploymentId: include },
+export const GET = defineRoute({
+  public: "session",
+  handler: async ({ request: req }) => {
+    const url = new URL(req.url);
+    const source = url.searchParams.get("source");
+    if (
+      source !== "employments" &&
+      source !== "locations" &&
+      source !== "positions" &&
+      source !== "people" &&
+      source !== "leave-types" &&
+      source !== "leave-filing-employments" &&
+      source !== "leave-own-employments"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "source must be one of employments, locations, positions, people, leave-types, leave-filing-employments, leave-own-employments",
+        },
+        { status: 400 },
       );
-      return NextResponse.json({ options: options.map((option) => ({ id: option.employmentId, label: option.label })) });
     }
-    if (source === "leave-own-employments") {
-      const options = await listOwnLeaveEmploymentOptions({ orgId: gate.user.orgId, actorId: gate.user.id });
-      return NextResponse.json({ options: options.map((option) => ({ id: option.employmentId, label: option.label })) });
-    }
-    const options =
-      source === "employments"
-        ? await listEmploymentOptions(
-            include === null ? base : { ...base, includeEmploymentId: include },
-          )
-        : source === "locations"
-          ? await listLocationOptions(
-              include === null ? base : { ...base, includeLocationId: include },
-            )
-          : source === "people"
-            ? // F3-40: directory people holding an employment, keyed by
-              // party for the exit-interviewer picker — the same read
-              // grant and subsidiary scope as the employment picker.
-              await listPeopleOptions(
-                include === null ? base : { ...base, includePartyId: include },
-              )
-            : await listPositionOptions(
-                include === null ? base : { ...base, includePositionId: include },
+    // One gate per source: the establishment behind its own read grant, leave
+    // types behind the request grant (the filer's), the on-behalf employment
+    // picker behind the manage grant (the manager's), everything else behind
+    // the employment read grant.
+    const gate =
+      source === "leave-types"
+        ? await guardLeaveOptions()
+        : source === "leave-filing-employments"
+          ? await guardFeaturePermission("hrm.leave.manage", "hrm")
+          : source === "leave-own-employments"
+            ? await guardFeaturePermission("hrm.leave.request", "hrm")
+            : await guardFeaturePermission(
+                source === "positions"
+                  ? "hrm.position.read"
+                  : "hrm.employment.read",
+                "hrm",
               );
-    return NextResponse.json({ options });
-  } catch (e) {
-    if (e instanceof HrmAuthorizationError) {
-      return hrmAuthorizationResponse(e);
+    if (gate instanceof NextResponse) return gate;
+    const rawLimit = url.searchParams.get("limit");
+    if (rawLimit !== null && !/^\d+$/.test(rawLimit)) {
+      return NextResponse.json(
+        { error: "limit must be a positive integer" },
+        { status: 400 },
+      );
     }
-    if (e instanceof EmploymentReadError || e instanceof HrmPositionError) {
-      return apiErrorResponse(e, { safeStatus: 422 });
+    const include = url.searchParams.get("include");
+    if (include !== null && !isUuid(include)) {
+      return NextResponse.json(
+        { error: "include must be a uuid" },
+        { status: 400 },
+      );
     }
-    throw e;
-  }
-}
-
+    const base = {
+      orgId: gate.user.orgId,
+      actorId: gate.user.id,
+      q: url.searchParams.get("q") ?? undefined,
+      ...(rawLimit === null ? {} : { limit: Number(rawLimit) }),
+    };
+    try {
+      if (source === "leave-types") {
+        const options = await listLeaveTypeOptions(db, gate.user.orgId);
+        return NextResponse.json({ options });
+      }
+      if (source === "leave-filing-employments") {
+        // The drawer parses {id, label} uniformly, so the employment options
+        // are projected onto that shape here — the engine keeps its own
+        // employmentId key for its other picker consumers.
+        const options = await listLeaveFilingEmploymentOptions(
+          include === null ? base : { ...base, includeEmploymentId: include },
+        );
+        return NextResponse.json({
+          options: options.map((option) => ({
+            id: option.employmentId,
+            label: option.label,
+          })),
+        });
+      }
+      if (source === "leave-own-employments") {
+        const options = await listOwnLeaveEmploymentOptions({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+        });
+        return NextResponse.json({
+          options: options.map((option) => ({
+            id: option.employmentId,
+            label: option.label,
+          })),
+        });
+      }
+      const options =
+        source === "employments"
+          ? await listEmploymentOptions(
+              include === null
+                ? base
+                : { ...base, includeEmploymentId: include },
+            )
+          : source === "locations"
+            ? await listLocationOptions(
+                include === null
+                  ? base
+                  : { ...base, includeLocationId: include },
+              )
+            : source === "people"
+              ? // Directory people with an employment, keyed by
+                // party for the exit-interviewer picker — the same read
+                // grant and subsidiary scope as the employment picker.
+                await listPeopleOptions(
+                  include === null
+                    ? base
+                    : { ...base, includePartyId: include },
+                )
+              : await listPositionOptions(
+                  include === null
+                    ? base
+                    : { ...base, includePositionId: include },
+                );
+      return NextResponse.json({ options });
+    } catch (e) {
+      if (e instanceof HrmAuthorizationError) {
+        return hrmAuthorizationResponse(e);
+      }
+      if (e instanceof EmploymentReadError || e instanceof HrmPositionError) {
+        return apiErrorResponse(e, { safeStatus: 422 });
+      }
+      throw e;
+    }
+  },
+});
 /**
  * Leave-type options admit either grant: managers read the taxonomy, filers
  * need it to file. The read denial reports when neither grant is held.

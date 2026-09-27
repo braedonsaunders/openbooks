@@ -3,10 +3,12 @@ import { db, withOrgTransaction } from "../../platform/db.ts";
 import {
   requireHrmCompensationManage,
   requireHrmCompensationRead,
+  requireUnrestrictedHrmScope,
 } from "../authorization.ts";
 import { CompensationError } from "./errors.ts";
 import { requireActorId, requireId, requireOrgId, requireReason } from "../recruiting/input.ts";
 import { canonicalDecimal, compareDecimal } from "../../money/exact-decimal.ts";
+import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 
 /**
  * Job architecture (HR-12, 0221): families and levels plus the
@@ -57,12 +59,18 @@ export interface CompensationSettings {
   readonly burdenRate: string | null;
 }
 
+/** The org's compensation settings document as stored for the settings API. */
+export async function compensationSettingsDocument(orgId: string): Promise<Record<string, unknown>> {
+  const companyId = requireOrgId(orgId);
+  const row = (await db.execute<{ compensation: Record<string, unknown> | null }>(
+    sql`select settings->'compensation' as compensation from orgs where id = ${companyId}`,
+  )).rows[0];
+  return row?.compensation ?? {};
+}
+
 /** The org's compensation settings document (orgs.settings->'compensation'), with declared defaults. */
 export async function compensationSettings(orgId: string): Promise<CompensationSettings> {
-  const r = (await db.execute<{ c: Record<string, unknown> | null }>(
-    sql`select settings->'compensation' as c from orgs where id = ${orgId}`,
-  ));
-  const c = r.rows[0]?.c ?? {};
+  const c = await compensationSettingsDocument(orgId);
   const gap = c.gapThresholdPct;
   const days = c.responseDays;
   const rounding = c.fteRounding;
@@ -89,6 +97,53 @@ export async function compensationSettings(orgId: string): Promise<CompensationS
       rounding === "nearest_tenth" || rounding === "nearest_hundredth" ? rounding : "up_to_whole",
     burdenRate: typeof burden === "string" && burden.trim().length > 0 ? burden.trim() : null,
   };
+}
+
+export interface UpdateCompensationSettingsQuery {
+  readonly orgId: string;
+  readonly actorId: string;
+  readonly comparisonAttributeKey?: string | null;
+  readonly gapThresholdPct?: string | null;
+  readonly responseDays?: number | null;
+  readonly fteRounding?: FteRounding | null;
+  readonly burdenRate?: string | null;
+}
+
+/** Store the org-wide compensation policy and return the exact saved document. */
+export async function updateCompensationSettings(
+  query: UpdateCompensationSettingsQuery,
+): Promise<Record<string, unknown>> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  return withOrgTransaction(orgId, async () => {
+    await requireHrmCompensationManage(db, orgId, actorId);
+    await requireUnrestrictedHrmScope(db, orgId, actorId);
+    if (!(await lockAndCheckOrgFeature(db, orgId, "hrmCompensation"))) {
+      throw new CompensationError(
+        "BAD_STATE",
+        "Compensation settings are unavailable while the feature is off — enable Compensation under Company Settings → Features; existing settings are preserved.",
+      );
+    }
+    const current = (await db.execute<{ compensation: Record<string, unknown> | null }>(sql`
+      select settings->'compensation' as compensation from orgs where id = ${orgId} for update
+    `)).rows[0];
+    if (!current) throw new CompensationError("NOT_FOUND", "the organization was not found — refresh and try again");
+    const next = { ...(current.compensation ?? {}) };
+    if (query.comparisonAttributeKey !== undefined) next.comparisonAttributeKey = query.comparisonAttributeKey;
+    if (query.gapThresholdPct !== undefined) next.gapThresholdPct = query.gapThresholdPct;
+    if (query.responseDays !== undefined) next.responseDays = query.responseDays;
+    if (query.fteRounding !== undefined) next.fteRounding = query.fteRounding;
+    if (query.burdenRate !== undefined) next.burdenRate = query.burdenRate;
+    const saved = (await db.execute<{ id: string }>(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{compensation}', ${JSON.stringify(next)}::jsonb, true),
+             updated_at = now(), updated_by = ${actorId}
+       where id = ${orgId}
+       returning id
+    `)).rows[0];
+    if (!saved) throw new CompensationError("NOT_FOUND", "the compensation settings were not saved — the organization is no longer available; refresh and try again");
+    return next;
+  });
 }
 
 /** Walk the driver-error cause chain for a Postgres SQLSTATE (Drizzle wraps the pg error). */

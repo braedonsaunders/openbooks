@@ -1,33 +1,26 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import { checkAssignment } from "@openbooks/engine/src/hrm/qualifications/gating.ts";
-import { guardPermission } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
 import { qualificationErrorResponse } from "../_lib";
 import { checkAssignmentBody } from "../bodies";
-import { notFound } from "@/lib/api/responses";
-
-
-export const runtime = "nodejs";
-
 /** The gate as a read: verdict for one employment against one subject. */
-export async function POST(req: Request) {
-  const gate = await guardPermission("hrm.certifications.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, checkAssignmentBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const verdict = await withOrgTransaction(gate.user.orgId, () => checkAssignment(db, {
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      ...parsedBody.data,
-    }));
-    return NextResponse.json({ verdict });
-  } catch (e) {
-    return qualificationErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.certifications.read",
+  feature: "hrmCertifications",
+  body: checkAssignmentBody,
+  handler: async ({ request: req, authz: gate, body }) => {
+    try {
+      const verdict = await withOrgTransaction(gate.user.orgId, () =>
+        checkAssignment(db, {
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          ...body,
+        }),
+      );
+      return NextResponse.json({ verdict });
+    } catch (e) {
+      return qualificationErrorResponse(e);
+    }
+  },
+});

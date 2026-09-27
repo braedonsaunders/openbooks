@@ -64,6 +64,8 @@ export interface SessionRouteOptions<
 > extends CommonOptions<Authz, P, B> {
   /** Authenticated session, no permission: self-service surfaces. */
   public: "session";
+  /** Optional organization feature gate for authenticated self-service routes. */
+  feature?: string;
   scope?: RouteScope;
 }
 
@@ -153,6 +155,15 @@ export function defineRoute(options: LooseOptions) {
           return NextResponse.json({ error: "unauthorized" }, { status: 401 });
         }
         authz = session;
+        if (options.feature !== undefined) {
+          if (typeof options.feature !== "string") {
+            throw new Error("defineRoute: session feature must be a key");
+          }
+          const { isFeatureEnabled } = await import("@/lib/features");
+          if (!(await isFeatureEnabled(authz.user.orgId, options.feature))) {
+            return notFound("route");
+          }
+        }
       }
 
       const scope = options.scope;
