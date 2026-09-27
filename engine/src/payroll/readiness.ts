@@ -478,7 +478,8 @@ export async function payrollSetupState(
         }
         for (const account of accounts.rows) {
           const filingAccount = {
-            id: account.id, name: account.name, remitterType: account.remitterType,
+            id: account.id, accountNumber: account.accountNumber,
+            name: account.name, remitterType: account.remitterType,
           };
           const { frequency } = scheduledRemittanceFrequency(
             schedule, blob as Record<string, unknown>, filingAccount,
