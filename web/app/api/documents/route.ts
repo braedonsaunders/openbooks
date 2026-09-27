@@ -184,6 +184,7 @@ export const POST = defineRoute({
           return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
         }
         if (e instanceof DocumentEditError) {
+          if (e.status === 404 && e.message === 'not found') return notFound("record")
           return apiErrorResponse(e, { details: e.fieldErrors ? { fieldErrors: e.fieldErrors } : undefined })
         }
         throw e
