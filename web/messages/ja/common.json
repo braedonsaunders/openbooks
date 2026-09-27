@@ -94,7 +94,9 @@
     "shipment": "出荷",
     "shipmentShort": "出荷",
     "fulfillment": "出荷実績",
-    "fulfillmentShort": "出荷実績"
+    "fulfillmentShort": "出荷実績",
+    "returnAuthorization": "返品承認",
+    "returnAuthorizationShort": "RMA"
   },
   "labels": {
     "name": "名前",

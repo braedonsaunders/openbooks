@@ -103,7 +103,8 @@
     "tax-provisions": "Impuesto sobre beneficios",
     "timesheets": "Hojas de horas",
     "vendors": "Proveedores",
-    "wip-billing": "Trabajo en curso y prefacturación"
+    "wip-billing": "Trabajo en curso y prefacturación",
+    "returns": "Devoluciones"
   },
   "modulesShort": {
     "ap": "Por pagar",

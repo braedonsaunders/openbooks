@@ -45,7 +45,8 @@
     "pay_run": "Lohnlauf",
     "field_ticket": "Außendienstbeleg",
     "pick_list": "Kommissionierliste",
-    "shipment": "Sendung"
+    "shipment": "Sendung",
+    "rma": "Rückgabegenehmigung"
   },
   "resourcing": {
     "fields": {

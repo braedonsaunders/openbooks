@@ -11,6 +11,7 @@ import {
   CreditCard,
   FileText,
   ReceiptText,
+  RotateCcw,
 } from 'lucide-react'
 
 /**
@@ -82,6 +83,7 @@ export const DOC_TYPE_META: Record<string, DocTypeMeta> = {
   field_ticket: meta('fieldTicket', 'fieldTicketShort', <ClipboardCheck className={ICON} />, P.cyan),
   pick_list: meta('pickList', 'pickListShort', <ListChecks className={ICON} />, P.teal),
   shipment: meta('shipment', 'shipmentShort', <Truck className={ICON} />, P.sky),
+  rma: meta('returnAuthorization', 'returnAuthorizationShort', <RotateCcw className={ICON} />, P.orange),
   sales_fulfillment: meta('fulfillment', 'fulfillmentShort', <Truck className={ICON} />, P.slate),
 }
 

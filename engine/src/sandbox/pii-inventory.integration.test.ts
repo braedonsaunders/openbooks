@@ -66,6 +66,8 @@ function isCoveredByConstruction(table: string, column: string, udtName: string)
  *   with faked names they identify nobody.
  */
 const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
+  "rma_documents.stage",
+  "rma_lines.disposition",
   "account_group_members.dimension",
   "account_groups.color",
   "account_groups.dimension",

@@ -94,7 +94,9 @@
     "shipment": "发运单",
     "shipmentShort": "发运",
     "fulfillment": "销售履约",
-    "fulfillmentShort": "履约"
+    "fulfillmentShort": "履约",
+    "returnAuthorization": "退货授权",
+    "returnAuthorizationShort": "RMA"
   },
   "labels": {
     "name": "名称",

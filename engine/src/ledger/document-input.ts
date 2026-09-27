@@ -54,6 +54,8 @@ export interface DocumentLineInput extends BillLineInput {
    */
   inventoryReturnSource?: {
     movementId: string
+    /** Source warehouse when returned stock is routed to a different bin. */
+    sourceStockLocationId?: string
     lotId?: string | null
     serialId?: string | null
   } | null

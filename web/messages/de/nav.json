@@ -136,7 +136,8 @@
     "automate": "Automatisieren",
     "extend": "Erweitern",
     "records": "Datensätze",
-    "compliance": "Compliance"
+    "compliance": "Compliance",
+    "returns": "Rückgaben"
   },
   "modulesShort": {
     "ap": "Kreditoren",

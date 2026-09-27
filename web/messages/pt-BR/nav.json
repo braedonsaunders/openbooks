@@ -136,7 +136,8 @@
     "automate": "Automatizar",
     "extend": "Estender",
     "records": "Registros",
-    "compliance": "Conformidade"
+    "compliance": "Conformidade",
+    "returns": "Devoluções"
   },
   "modulesShort": {
     "ap": "Contas a pagar",

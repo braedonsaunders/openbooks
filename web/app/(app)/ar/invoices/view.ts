@@ -75,6 +75,7 @@ export interface ArInvoicesDrawer {
   allocationsEntryEnabled: boolean
   appliedPayments: { payments: AppliedPayment[]; currency: string } | null
   creditApplications: { documentId: string; side: 'ap' | 'ar'; partyId: string | null; canApply: boolean } | null
+  returnAuthorizationHref: string | null
 }
 
 export interface ArInvoicesData {
@@ -268,6 +269,10 @@ export async function loadArInvoices(
                   partyId: openDoc.doc.party_id ? String(openDoc.doc.party_id) : null,
                   canApply: can(authz, 'ar.pay'),
                 }
+              : null,
+          returnAuthorizationHref:
+            drawerKind === 'customer_invoice' && featureEnabled(featureState, 'returnAuthorizations') && can(authz, 'orders.fulfill')
+              ? '/returns?doc=new&kind=rma'
               : null,
           config: DOC_KINDS[drawerKind]!,
           initialMode: (isCreate || pickString(sp.mode) === 'edit' ? 'edit' : 'view') as 'edit' | 'view',

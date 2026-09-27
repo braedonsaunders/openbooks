@@ -87,7 +87,7 @@ export interface MaskingPolicy {
   transform: MaskTransform;
 }
 
-interface MaskingPolicyRow extends Record<string, unknown> {
+type MaskingPolicyRow = Record<string, unknown> & {
   table_name: string; column_name: string; transform: MaskTransform;
 }
 
@@ -128,6 +128,7 @@ export async function loadMaskingPolicies(
  * fails unless each is masked here or explicitly allow-listed as
  * non-personal. Add a policy there before allow-listing anyone's identity. */
 export const DEFAULT_POLICIES: MaskingPolicy[] = [
+  { tableName: "rma_documents", columnName: "rejection_reason", transform: "redact" },
   { tableName: "party_bank_accounts", columnName: "account_number_encrypted", transform: "reseal_secret" },
   { tableName: "party_bank_accounts", columnName: "account_last_four", transform: "null_out" },
   { tableName: "party_bank_accounts", columnName: "routing", transform: "null_out" },

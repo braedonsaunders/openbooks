@@ -17,7 +17,7 @@
       "receipt": "Receita de mercadorias",
       "fulfillment": "Atendimento"
     },
-    "docKind": "{kind, select, quote {Orçamento} sales_order {Pedido de venda} purchase_order {Pedido de compra} customer_invoice {Fatura} vendor_bill {Conta a pagar} purchase_receipt {Receita de mercadorias} sales_fulfillment {Atendimento} pick_list {Lista de separação} shipment {Remessa} other {{kind}}}",
+    "docKind": "{kind, select, quote {Orçamento} sales_order {Pedido de venda} purchase_order {Pedido de compra} customer_invoice {Fatura} vendor_bill {Conta a pagar} purchase_receipt {Receita de mercadorias} sales_fulfillment {Atendimento} pick_list {Lista de separação} shipment {Remessa} rma {Autorização de devolução} other {{kind}}}",
     "partyLabel": "{kind, select, purchase_order {Fornecedor} other {Cliente}}",
     "selectPartyPlaceholder": "{kind, select, purchase_order {Selecionar fornecedor…} other {Selecionar cliente…}}",
     "dateLabel": "{kind, select, quote {Data do orçamento} other {Data do pedido}}",

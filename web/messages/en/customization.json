@@ -45,7 +45,8 @@
     "fixed_asset": "Fixed asset",
     "property": "Property",
     "pick_list": "Pick list",
-    "shipment": "Shipment"
+    "shipment": "Shipment",
+    "rma": "Return authorization"
   },
   "resourcing": {
     "fields": {

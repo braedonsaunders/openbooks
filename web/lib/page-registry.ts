@@ -2404,6 +2404,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/returns': {
+    route: '/returns',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/returns/view')
+      return {
+        load: (input) => m.loadReturns(input.searchParams ?? {}),
+        spec: (data) => m.returnsSpec(data as never),
+      }
+    },
+  },
   '/revenue': {
     route: '/revenue',
     segments: [],

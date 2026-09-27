@@ -6,6 +6,7 @@ export const DOC_KIND_FEATURE: Partial<Record<string, string>> = {
   purchase_order: "orders",
   pick_list: "fulfillment",
   shipment: "fulfillment",
+  rma: "returnAuthorizations",
   expense_report: "expenses",
   field_ticket: "fieldTickets",
   pay_run: "payroll",

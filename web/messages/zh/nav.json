@@ -136,7 +136,8 @@
     "automate": "自动化",
     "extend": "扩展",
     "records": "记录",
-    "compliance": "合规"
+    "compliance": "合规",
+    "returns": "退货"
   },
   "modulesShort": {
     "ap": "应付账款",

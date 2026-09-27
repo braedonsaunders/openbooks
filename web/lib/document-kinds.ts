@@ -81,6 +81,11 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
     partyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: true, hasDueDate: true,
     hasReference: true, fundingSource: null, isOpenItem: true, showsBalance: false, directPost: false,
   },
+  rma: {
+    kind: 'rma', closeModule: 'ar', family: 'ar', numberPrefix: 'RMA-', permNamespace: 'ar', i18n: 'ar',
+    partyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: false, hasDueDate: false,
+    hasReference: true, fundingSource: null, isOpenItem: false, showsBalance: false, directPost: false,
+  },
   card_charge: {
     kind: 'card_charge', closeModule: 'ap', family: 'bank', numberPrefix: 'CC-', permNamespace: 'ap', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: true, hasDueDate: false, hasReference: false,
@@ -149,6 +154,7 @@ export const BANK_KINDS = ['card_charge', 'card_refund', 'check', 'deposit', 'tr
 export const DOCUMENT_CREATE_KINDS = [
   'customer_invoice',
   'customer_credit',
+  'rma',
   'vendor_bill',
   'vendor_credit',
   'card_charge',
@@ -191,6 +197,7 @@ export function docKindConfig(kind: string): DocKindConfig | undefined {
  * posting rule lives under.
  */
 export function documentReadPermission(kind: string): string {
+  if (kind === 'rma') return 'orders.fulfill'
   if (kind === 'project_charge') return 'projects.read'
   return readPermission(kind)
 }
@@ -201,12 +208,14 @@ export function documentReadPermission(kind: string): string {
  * through projects.manage.
  */
 export function documentEditPermission(kind: string): string {
+  if (kind === 'rma') return 'orders.fulfill'
   if (kind === 'project_charge') return 'projects.manage'
   return createPermission(kind)
 }
 
 /** Permission key for the create/submit action on a kind. */
 export function createPermission(kind: string): string {
+  if (kind === 'rma') return 'orders.fulfill'
   const cfg = DOC_KINDS[kind]
   if (!cfg) throw new Error(`unknown document kind "${kind}"`)
   return cfg.permNamespace === 'gl' ? 'gl.post' : `${cfg.permNamespace}.create`

@@ -27,6 +27,7 @@ const DOMAIN_ERROR_NAMES = new Set([
   'WarehouseRefusal',
   'BackorderRefusal',
   'AvailabilityRefusal',
+  'ReturnRefusal',
 ])
 
 const MAX_DOMAIN_MESSAGE = 400

@@ -489,6 +489,8 @@ export const TENANT_TABLE_POLICIES = {
   "res_retainer_drawdowns": "clone:catalog-uuid-rebase",
   "res_retainers": "clone:catalog-uuid-rebase",
   "resource_grants": "clone:catalog-uuid-rebase",
+  "rma_documents": "clone:catalog-uuid-rebase",
+  "rma_lines": "clone:catalog-uuid-rebase",
   "revenue_contracts": "clone:catalog-uuid-rebase",
   "role_assignments": "clone:catalog-uuid-rebase",
   "role_dashboard_layouts": "clone:catalog-uuid-rebase",

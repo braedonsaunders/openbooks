@@ -94,7 +94,9 @@
     "shipment": "Expédition",
     "shipmentShort": "Expéd.",
     "fulfillment": "Exécution de commande",
-    "fulfillmentShort": "Exéc."
+    "fulfillmentShort": "Exéc.",
+    "returnAuthorization": "Autorisation de retour",
+    "returnAuthorizationShort": "RMA"
   },
   "labels": {
     "name": "Nom",

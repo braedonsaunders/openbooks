@@ -68,6 +68,7 @@ export interface SalesOrderDrawer {
   layout: OrderDrawerProps['layout']
   backorders: boolean
   pickLists: boolean
+  returnAuthorizations: boolean
 }
 
 export interface SalesOrdersData {
@@ -99,9 +100,10 @@ export interface SalesOrdersData {
  * list — both need the fulfil-orders permission with Fulfillment on. The
  * create form and the routes enforce both again.
  */
-export async function orderFulfillmentActions(authz: Authz): Promise<{ backorders: boolean; pickLists: boolean }> {
+export async function orderFulfillmentActions(authz: Authz): Promise<{ backorders: boolean; pickLists: boolean; returnAuthorizations: boolean }> {
   const enabled = can(authz, 'orders.fulfill') && (await isFeatureEnabled(authz.user.orgId, 'fulfillment'))
-  return { backorders: enabled, pickLists: enabled }
+  const returns = can(authz, 'orders.fulfill') && (await isFeatureEnabled(authz.user.orgId, 'returnAuthorizations'))
+  return { backorders: enabled, pickLists: enabled, returnAuthorizations: returns }
 }
 
 export async function loadSalesOrders(
@@ -111,7 +113,7 @@ export async function loadSalesOrders(
   await requireFeatureEnabled(authz.user.orgId, 'orders')
   const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
   const canManage = can(authz, 'ar.create')
-  const { backorders, pickLists } = await orderFulfillmentActions(authz)
+  const { backorders, pickLists, returnAuthorizations } = await orderFulfillmentActions(authz)
   const t = await getTranslations('salesOrders')
   const openId = pickString(sp[PARAM])
   // Only a real document id may reach the uuid comparison: the create view
@@ -237,6 +239,7 @@ export async function loadSalesOrders(
           layout: resolvedForm?.layout,
           backorders,
           pickLists,
+          returnAuthorizations,
         }
       : null
 

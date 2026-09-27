@@ -106,6 +106,7 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   inventory: ['app/api/inventory', 'app/api/items/[id]/costing'],
   warehousing: ['app/api/warehouses'],
   fulfillment: ['app/api/picks', 'app/api/shipments'],
+  returnAuthorizations: ['app/api/returns'],
   fieldTickets: ['app/api/field-tickets'],
   subscriptionBilling: ['app/api/subscriptions'],
   advancedSubscriptions: ['app/api/subscriptions/advanced'],

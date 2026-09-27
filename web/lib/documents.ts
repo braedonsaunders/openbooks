@@ -702,8 +702,9 @@ const RETURN_SIDE_BY_KIND: Record<string, ReturnSide> = {
 async function applyInventoryReturnSelections(
   tx: SqlExecutor,
   orgId: string,
-  documentId: string,
   kind: string,
+  partyId: string | null,
+  subsidiaryId: string | null,
   submitted: DocumentLineInput[],
   preparedLines: { itemId: string | null; stockLocationId: string | null; custom: Record<string, unknown> }[],
 ): Promise<void> {
@@ -719,10 +720,6 @@ async function applyInventoryReturnSelections(
         `a ${kind} has no shipment or receipt to return against; nothing was changed`,
     )
   }
-  const party = (await tx.execute<{ partyId: string | null; subsidiaryId: string | null }>(sql`
-    select party_id as "partyId", subsidiary_id as "subsidiaryId"
-      from documents where id = ${documentId} and org_id = ${orgId}
-  `)).rows[0]
   for (let i = 0; i < submitted.length; i++) {
     const selection = submitted[i]!.inventoryReturnSource
     if (selection === undefined) continue
@@ -734,7 +731,7 @@ async function applyInventoryReturnSelections(
       prepared.custom = rest
       continue
     }
-    if (!party?.partyId) {
+    if (!partyId) {
       throw new DocumentEditError(
         422,
         `Line ${i + 1}: select the ${side === 'purchase' ? 'vendor' : 'customer'} before choosing what this credit returns; nothing was changed`,
@@ -752,7 +749,7 @@ async function applyInventoryReturnSelections(
     // from another entity is refused here, at save, instead of at posting.
     // The party guard above already threw when the credit names no party,
     // so a missing subsidiary here names the subsidiary remedy, not the party.
-    const creditSubsidiaryId = party?.subsidiaryId ?? null
+    const creditSubsidiaryId = subsidiaryId
     if (!creditSubsidiaryId) {
       throw new DocumentEditError(
         422,
@@ -765,9 +762,9 @@ async function applyInventoryReturnSelections(
         orgId,
         {
           side,
-          partyId: party.partyId,
+          partyId,
           itemId: prepared.itemId,
-          stockLocationId: prepared.stockLocationId,
+          stockLocationId: selection.sourceStockLocationId ?? prepared.stockLocationId,
           movementId: selection.movementId,
           subsidiaryIds: [creditSubsidiaryId],
           lotId: selection.lotId ?? null,
@@ -1519,7 +1516,7 @@ export async function applyDocumentEdit(
   // header/line replacement.
   await runDocumentVersionedTransaction<
     DocumentTransaction,
-    { kind: string; status: string; updatedAt: string; subsidiaryId: string | null; extraDims: unknown },
+    { kind: string; status: string; updatedAt: string; partyId: string | null; subsidiaryId: string | null; extraDims: unknown },
     void
   >({
     expectedRevision,
@@ -1531,10 +1528,11 @@ export async function applyDocumentEdit(
       kind: string
       status: string
       updatedAt: string
+      partyId: string | null
       subsidiaryId: string | null
       extraDims: unknown
       }>(sql`
-        select kind, status, subsidiary_id as "subsidiaryId", extra_dims as "extraDims",
+        select kind, status, party_id as "partyId", subsidiary_id as "subsidiaryId", extra_dims as "extraDims",
                ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
           from documents
          where id = ${id} and org_id = ${orgId}
@@ -1768,7 +1766,15 @@ export async function applyDocumentEdit(
       // the stored one, or changing a return source would silently keep the
       // old movement while the drawer showed the new one.
       if (preparedLines && body.lines) {
-        await applyInventoryReturnSelections(tx, orgId, id, locked.kind, body.lines, preparedLines)
+        await applyInventoryReturnSelections(
+          tx,
+          orgId,
+          locked.kind,
+          body.partyId ?? locked.partyId,
+          body.subsidiaryId ?? locked.subsidiaryId,
+          body.lines,
+          preparedLines,
+        )
       }
 
       try {

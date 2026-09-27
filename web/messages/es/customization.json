@@ -45,7 +45,8 @@
     "property": "Propiedad",
     "pay_run": "Ciclo de nómina",
     "pick_list": "Lista de preparación",
-    "shipment": "Envío"
+    "shipment": "Envío",
+    "rma": "Autorización de devolución"
   },
   "resourcing": {
     "fields": {
