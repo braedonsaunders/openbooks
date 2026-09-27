@@ -1,0 +1,130 @@
+import { sql } from "drizzle-orm";
+import {
+  check,
+  date,
+  foreignKey,
+  index,
+  integer,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
+import { orgs } from "./core";
+import { parties } from "./parties";
+import { id, money, orgRef } from "./helpers";
+import { subsidiaries } from "./subsidiaries";
+import { subscriptions } from "./subscriptions";
+
+/** Additive SaaS ledger facts. Stocks are snapshots; the other measures are flows. */
+export const saasMetricsMonthly = pgTable(
+  "saas_metrics_monthly",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    customerId: uuid("customer_id").notNull(),
+    subscriptionId: uuid("subscription_id").notNull(),
+    month: date("month").notNull(),
+    cohortMonth: date("cohort_month").notNull(),
+    mrrStart: money("mrr_start").notNull(),
+    mrrEnd: money("mrr_end").notNull(),
+    newMrr: money("new_mrr").notNull(),
+    expansionMrr: money("expansion_mrr").notNull(),
+    contractionMrr: money("contraction_mrr").notNull(),
+    churnedMrr: money("churned_mrr").notNull(),
+    reactivationMrr: money("reactivation_mrr").notNull(),
+    movement: text("movement", {
+      enum: ["new", "expansion", "contraction", "churn", "reactivation", "flat"],
+    }).notNull(),
+    recognizedRevenue: money("recognized_revenue").notNull(),
+    deferredDelta: money("deferred_delta").notNull(),
+    inputsHash: text("inputs_hash").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("saas_metrics_monthly_org_month_subscription").on(t.orgId, t.month, t.subscriptionId),
+    uniqueIndex("saas_metrics_monthly_org_id_id_unique").on(t.orgId, t.id),
+    index("saas_metrics_monthly_org_sub_month").on(t.orgId, t.subsidiaryId, t.month),
+    foreignKey({ name: "saas_metrics_monthly_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }).onDelete("cascade"),
+    foreignKey({ name: "saas_metrics_monthly_subsidiary_fk", columns: [t.orgId, t.subsidiaryId], foreignColumns: [subsidiaries.orgId, subsidiaries.id] }).onDelete("restrict"),
+    foreignKey({ name: "saas_metrics_monthly_customer_fk", columns: [t.orgId, t.customerId], foreignColumns: [parties.orgId, parties.id] }).onDelete("restrict"),
+    foreignKey({ name: "saas_metrics_monthly_subscription_fk", columns: [t.orgId, t.subscriptionId], foreignColumns: [subscriptions.orgId, subscriptions.id] }).onDelete("restrict"),
+    check("saas_metrics_monthly_movement_valid", sql`${t.movement} in ('new', 'expansion', 'contraction', 'churn', 'reactivation', 'flat')`),
+    check("saas_metrics_monthly_nonnegative_mrr", sql`${t.mrrStart} >= 0 and ${t.mrrEnd} >= 0 and ${t.newMrr} >= 0 and ${t.expansionMrr} >= 0 and ${t.contractionMrr} >= 0 and ${t.churnedMrr} >= 0 and ${t.reactivationMrr} >= 0`),
+    check("saas_metrics_monthly_movement_identity", sql`${t.mrrEnd} - ${t.mrrStart} = ${t.newMrr} + ${t.expansionMrr} + ${t.reactivationMrr} - ${t.contractionMrr} - ${t.churnedMrr}`),
+    check("saas_metrics_monthly_month_start", sql`extract(day from ${t.month}) = 1 and extract(day from ${t.cohortMonth}) = 1`),
+  ],
+);
+
+export const saasMetricsFactsMonthly = pgTable(
+  "saas_metrics_facts_monthly",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    month: date("month").notNull(),
+    mrrStart: money("mrr_start").notNull(),
+    mrrEnd: money("mrr_end").notNull(),
+    newMrr: money("new_mrr").notNull(),
+    expansionMrr: money("expansion_mrr").notNull(),
+    contractionMrr: money("contraction_mrr").notNull(),
+    churnedMrr: money("churned_mrr").notNull(),
+    reactivationMrr: money("reactivation_mrr").notNull(),
+    recognizedRevenue: money("recognized_revenue").notNull(),
+    deferredDelta: money("deferred_delta").notNull(),
+    mrrAtRisk: money("mrr_at_risk").notNull(),
+    customersStart: integer("customers_start").notNull(),
+    customersEnd: integer("customers_end").notNull(),
+    customersNew: integer("customers_new").notNull(),
+    customersChurned: integer("customers_churned").notNull(),
+    customersReactivated: integer("customers_reactivated").notNull(),
+    glRevenue: money("gl_revenue").notNull(),
+    glCogs: money("gl_cogs").notNull(),
+    bookings: money("bookings").notNull(),
+    billings: money("billings").notNull(),
+    deferredBalance: money("deferred_balance").notNull(),
+    basis: text("basis", { enum: ["recognised", "billed"] }).notNull(),
+    inputsHash: text("inputs_hash").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("saas_metrics_facts_monthly_org_sub_month").on(t.orgId, t.subsidiaryId, t.month),
+    uniqueIndex("saas_metrics_facts_monthly_org_id_id_unique").on(t.orgId, t.id),
+    foreignKey({ name: "saas_metrics_facts_monthly_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }).onDelete("cascade"),
+    foreignKey({ name: "saas_metrics_facts_monthly_subsidiary_fk", columns: [t.orgId, t.subsidiaryId], foreignColumns: [subsidiaries.orgId, subsidiaries.id] }).onDelete("restrict"),
+    check("saas_metrics_facts_monthly_counts_nonnegative", sql`${t.customersStart} >= 0 and ${t.customersEnd} >= 0 and ${t.customersNew} >= 0 and ${t.customersChurned} >= 0 and ${t.customersReactivated} >= 0`),
+    check("saas_metrics_facts_monthly_basis_valid", sql`${t.basis} in ('recognised', 'billed')`),
+    check("saas_metrics_facts_monthly_month_start", sql`extract(day from ${t.month}) = 1`),
+  ],
+);
+
+export const saasMetricsCohortMonthly = pgTable(
+  "saas_metrics_cohort_monthly",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    cohortMonth: date("cohort_month").notNull(),
+    month: date("month").notNull(),
+    monthsSinceStart: integer("months_since_start").notNull(),
+    startMrr: money("start_mrr").notNull(),
+    mrr: money("mrr").notNull(),
+    startCustomers: integer("start_customers").notNull(),
+    customers: integer("customers").notNull(),
+    inputsHash: text("inputs_hash").notNull(),
+    computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("saas_metrics_cohort_monthly_org_sub_cohort_month").on(t.orgId, t.subsidiaryId, t.cohortMonth, t.month),
+    uniqueIndex("saas_metrics_cohort_monthly_org_id_id_unique").on(t.orgId, t.id),
+    index("saas_metrics_cohort_monthly_org_month").on(t.orgId, t.month),
+    foreignKey({ name: "saas_metrics_cohort_monthly_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }).onDelete("cascade"),
+    foreignKey({ name: "saas_metrics_cohort_monthly_subsidiary_fk", columns: [t.orgId, t.subsidiaryId], foreignColumns: [subsidiaries.orgId, subsidiaries.id] }).onDelete("restrict"),
+    check("saas_metrics_cohort_monthly_months_nonnegative", sql`${t.monthsSinceStart} >= 0`),
+    check("saas_metrics_cohort_monthly_counts_nonnegative", sql`${t.startCustomers} >= 0 and ${t.customers} >= 0`),
+    check("saas_metrics_cohort_monthly_mrr_nonnegative", sql`${t.startMrr} >= 0 and ${t.mrr} >= 0`),
+    check("saas_metrics_cohort_monthly_month_start", sql`extract(day from ${t.cohortMonth}) = 1 and extract(day from ${t.month}) = 1 and ${t.month} >= ${t.cohortMonth}`),
+  ],
+);
