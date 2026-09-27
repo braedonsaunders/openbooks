@@ -93,10 +93,9 @@ test("GET /api/v1/settings/company reads through readCompanySettings", async () 
 
 test("GET /api/v1/settings/company refuses readers without settings authority", async () => {
   routeState.permissions = ["gl.post"];
-  await assert.rejects(
-    () => GET(new Request("http://openbooks.test/api/v1/settings/company")),
-    /forbidden/,
-  );
+  const response = await GET(new Request("http://openbooks.test/api/v1/settings/company"));
+  assert.equal(response.status, 403);
+  assert.deepEqual(await response.json(), { error: "forbidden", code: "forbidden" });
   routeState.permissions = ["admin.setup.manage"];
 });
 
@@ -126,8 +125,7 @@ test("PATCH /api/v1/settings/company requires an Idempotency-Key", async () => {
 });
 
 test("PATCH /api/v1/settings/company refuses empty changes", async () => {
-  await assert.rejects(
-    () => PATCH(json({ changes: {} }, { "idempotency-key": "key-1" })),
-    /changes must name at least one setting/,
-  );
+  const response = await PATCH(json({ changes: {} }, { "idempotency-key": "key-1" }));
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), { error: "changes must name at least one setting", code: "invalid_input" });
 });
