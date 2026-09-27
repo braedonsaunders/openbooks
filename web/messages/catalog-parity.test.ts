@@ -1807,6 +1807,8 @@ const COGNATES = new Set<string>([
   'fr:reports.catalog.enumValues.service|Service',
   'fr:reports.custom.builder.agg.max|Max',
   'fr:reports.custom.builder.agg.min|Min',
+  // “Format” is spelled identically in French.
+  'fr:reports.custom.builder.formulaFormat|Format',
   'fr:reports.custom.builder.mode|Mode',
   'fr:reports.custom.builder.pageSetup.densityStandard|Standard',
   'fr:reports.custom.builder.pageSetup.orientation|Orientation',
