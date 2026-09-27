@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /**
  * Secret sealing (AES-256-GCM), engine-level so BOTH the web app (sealing on a
@@ -308,9 +308,107 @@ export function unsealJson<T = Record<string, unknown>>(stored: string, scope: S
  * key you already had the plaintext. `namespace` domain-separates fields, so
  * a SIN fingerprint can never collide with an SSN fingerprint of the same
  * digits.
+ *
+ * The fingerprint carries the key id that produced it (`<keyId>:<hmac>`),
+ * so a comparison made AFTER a rotation can recompute under the STORED key
+ * id instead of misreading every identifier as changed. Bare-hex
+ * fingerprints predate key ids and read as `k1` (the legacy single-key id).
  */
 export function keyedFingerprint(namespace: string, plain: string): string {
-  return createHmac("sha256", activeKey().key)
+  const { id, key } = activeKey();
+  return `${id}:${fingerprintHmac(key, namespace, plain)}`;
+}
+
+function fingerprintHmac(key: Buffer, namespace: string, plain: string): string {
+  return createHmac("sha256", key)
     .update(`${namespace}\u0000${plain}`, "utf8")
     .digest("hex");
+}
+
+/**
+ * A stored fingerprint whose key id is not configured: the comparison cannot
+ * recompute, so it refuses by name. The operator keeps the retired key in
+ * OPENBOOKS_DATA_KEYS until amendments are re-fingerprinted, or runs
+ * scripts/rotate-data-key.ts --apply, which re-fingerprints snapshots under
+ * the active key.
+ */
+export class KeyedFingerprintError extends Error {
+  readonly keyId: string;
+  constructor(keyId: string) {
+    super(
+      `confidential identifier fingerprints under data key ${keyId} cannot be compared `
+      + `because key ${keyId} is not configured — keep the retired key in OPENBOOKS_DATA_KEYS `
+      + `until amendments are re-fingerprinted, or run scripts/rotate-data-key.ts --apply to `
+      + `re-fingerprint filing snapshots under the active key`,
+    );
+    this.name = "KeyedFingerprintError";
+    this.keyId = keyId;
+  }
+}
+
+const FINGERPRINT_KEY_RE = /^[A-Za-z0-9_-]{1,32}$/;
+const FINGERPRINT_HMAC_RE = /^[0-9a-f]{64}$/i;
+
+/**
+ * Split a stored fingerprint into the key id that produced it and the
+ * digest. Legacy bare-hex fingerprints predate key ids and read as `k1`.
+ * Null when the value is not a fingerprint at all (empty, corrupt) — the
+ * caller treats that as unmatchable, never as equal.
+ */
+export function parseKeyedFingerprint(stored: string): { keyId: string; hmac: string } | null {
+  if (typeof stored !== "string" || stored === "") return null;
+  const colon = stored.indexOf(":");
+  if (colon <= 0) {
+    return FINGERPRINT_HMAC_RE.test(stored) ? { keyId: LEGACY_SINGLE_KEY_ID, hmac: stored.toLowerCase() } : null;
+  }
+  const keyId = stored.slice(0, colon);
+  const hmac = stored.slice(colon + 1);
+  if (!FINGERPRINT_KEY_RE.test(keyId) || !FINGERPRINT_HMAC_RE.test(hmac)) return null;
+  return { keyId, hmac: hmac.toLowerCase() };
+}
+
+/**
+ * Fingerprint a value under a NAMED key from the ring (not necessarily the
+ * active one). Throws KeyedFingerprintError naming the remedy when the key
+ * id is absent — a retired key the comparison still needs.
+ */
+export function fingerprintUnderKey(keyId: string, namespace: string, plain: string): string {
+  const ring = loadDataKeyRing();
+  const key = ring.keys.get(keyId);
+  if (!key) throw new KeyedFingerprintError(keyId);
+  return `${keyId}:${fingerprintHmac(key, namespace, plain)}`;
+}
+
+/**
+ * The comparison half of `keyedFingerprint`: recompute the CURRENT value
+ * under the STORED fingerprint's key id, so a rotation never reads an
+ * unchanged identifier as changed. A stored value with no usable key id
+ * (empty, corrupt) cannot prove equality and reads as different; a stored
+ * key id absent from the ring throws KeyedFingerprintError naming the
+ * remedy. Pass the previous snapshot fingerprint through so both halves
+ * stay in one place.
+ */
+export function keyedFingerprintForComparison(
+  namespace: string,
+  plain: string,
+  previous: string | undefined,
+): string {
+  if (!previous) return keyedFingerprint(namespace, plain);
+  const parsed = parseKeyedFingerprint(previous);
+  if (!parsed) return keyedFingerprint(namespace, plain);
+  return fingerprintUnderKey(parsed.keyId, namespace, plain);
+}
+
+/**
+ * True when `plain` is the value a stored fingerprint was taken from,
+ * recomputed under the stored fingerprint's key id (timing-safe). Throws
+ * KeyedFingerprintError when the stored key id is absent from the ring.
+ */
+export function matchKeyedFingerprint(namespace: string, stored: string, plain: string): boolean {
+  const parsed = parseKeyedFingerprint(stored);
+  if (!parsed) return false;
+  const recomputed = fingerprintUnderKey(parsed.keyId, namespace, plain);
+  const expected = Buffer.from(parsed.hmac, "hex");
+  const actual = Buffer.from(recomputed.slice(recomputed.indexOf(":") + 1), "hex");
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }

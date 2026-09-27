@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { add } from "../../money/money.ts";
-import { keyedFingerprint, unsealSecret } from "../../platform/secrets.ts";
+import { keyedFingerprintForComparison, unsealSecret } from "../../platform/secrets.ts";
 import { filingAccountRef, filingAccountsById } from "../filing.ts";
 import { buildRoeXml, type RoeIssueInput } from "./roexml.ts";
 import { buildT4Xml, t4SlipFromReported } from "./t4xml.ts";
@@ -328,7 +328,7 @@ function t4Amendment(): NonNullable<PayrollYearEndFiling["amendment"]> {
       },
     },
     slip: { build: async (row) => t4CorrectionSlip(row) },
-    confidential: (orgId, _taxYear, rowId) => t4ConfidentialFields(orgId, rowId),
+    confidential: (orgId, _taxYear, rowId, previous) => t4ConfidentialFields(orgId, rowId, previous),
     privateFacts: async (orgId, taxYear, rowId) => {
       const slip = (await t4Slips(orgId, taxYear)).find((candidate) =>
         `${candidate.employeePartyId}:${candidate.province}:${candidate.filingAccountId ?? ""}` === rowId);
@@ -418,6 +418,7 @@ async function t4CorrectionSlip(row: PayrollFilingCorrectionRow): Promise<Payrol
 async function t4ConfidentialFields(
   orgId: string,
   rowId: string,
+  previous?: readonly { label: string; fingerprint: string }[],
 ): Promise<{ label: string; fingerprint: string }[]> {
   const employeePartyId = rowId.split(":")[0] ?? "";
   if (!UUID_RE.test(employeePartyId)) return [];
@@ -427,9 +428,15 @@ async function t4ConfidentialFields(
   `));
   const sealed = rows.rows[0]?.sin_encrypted ?? null;
   const sin = sealed == null ? null : unsealSecret(sealed, { orgId, purpose: "payroll.employee.sin" });
+  const label = "Social insurance number";
+  // Recompute under the STORED fingerprint's key id: after a rotation the
+  // snapshot still names the old key, and only the old key proves the
+  // current SIN is the reported one. A retired key the ring no longer holds
+  // refuses by name (keep it configured, or re-fingerprint via rotation).
+  const stored = previous?.find((entry) => entry.label === label)?.fingerprint;
   return [{
-    label: "Social insurance number",
-    fingerprint: sin ? keyedFingerprint("ca.sin", sin) : "",
+    label,
+    fingerprint: sin ? keyedFingerprintForComparison("ca.sin", sin, stored) : "",
   }];
 }
 

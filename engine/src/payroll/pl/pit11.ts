@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
-import { keyedFingerprint, unsealSecret } from "../../platform/secrets.ts";
+import { keyedFingerprintForComparison, unsealSecret } from "../../platform/secrets.ts";
 import { add, neg, normalizeMoney } from "../../money/money.ts";
 import { assertPayrollCountryKnown } from "../country.ts";
 import { PayrollError } from "../error.ts";
@@ -345,13 +345,18 @@ export async function pit11ConfidentialFields(
   orgId: string,
   _taxYear: number,
   rowId: string,
+  previous?: readonly { label: string; fingerprint: string }[],
 ): Promise<{ label: string; fingerprint: string }[]> {
   const employeePartyId = rowId;
   if (!PIT11_ROW_UUID_RE.test(employeePartyId)) return [];
   const pesel = await loadValidPesel(orgId, employeePartyId);
+  const label = "PESEL";
+  // Same stored-key recompute as the T4 SIN: the snapshot names the key
+  // that proves the current PESEL is the reported one, across rotations.
+  const stored = previous?.find((entry) => entry.label === label)?.fingerprint;
   return [{
-    label: "PESEL",
-    fingerprint: keyedFingerprint("pl.pesel", pesel),
+    label,
+    fingerprint: keyedFingerprintForComparison("pl.pesel", pesel, stored),
   }];
 }
 

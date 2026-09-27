@@ -3,7 +3,13 @@ import { createCipheriv, randomBytes } from "node:crypto";
 import test from "node:test";
 import {
   describeSealedBlob,
+  fingerprintUnderKey,
+  keyedFingerprint,
+  keyedFingerprintForComparison,
+  KeyedFingerprintError,
   loadDataKeyRing,
+  matchKeyedFingerprint,
+  parseKeyedFingerprint,
   requireDataKey,
   sealJson,
   sealSecret,
@@ -136,4 +142,63 @@ test("boot validation refuses missing, placeholder, and wrong-length keys", () =
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+});
+
+function restoreSavedEnv(): void {
+  for (const [key, value] of Object.entries(savedEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
+
+function useOnlyK2(): void {
+  delete process.env.OPENBOOKS_DATA_KEY;
+  process.env.OPENBOOKS_DATA_KEYS = `k2=${K2_B64}`;
+  process.env.OPENBOOKS_DATA_KEY_ACTIVE = "k2";
+}
+
+test("keyed fingerprints carry the producing key id; legacy bare digests read as k1", () => {
+  useSingleKey();
+  const fp = keyedFingerprint("ca.sin", "046454286");
+  assert.match(fp, /^k1:[0-9a-f]{64}$/);
+  assert.deepEqual(parseKeyedFingerprint(fp), { keyId: "k1", hmac: fp.slice("k1:".length) });
+  // Snapshots written before key ids existed store the bare digest.
+  assert.deepEqual(parseKeyedFingerprint(fp.slice("k1:".length)), { keyId: "k1", hmac: fp.slice("k1:".length) });
+  assert.equal(parseKeyedFingerprint(""), null);
+  assert.equal(parseKeyedFingerprint("k1:not-hex"), null);
+  useKeyRing("k2");
+  const fp2 = keyedFingerprint("ca.sin", "046454286");
+  assert.match(fp2, /^k2:[0-9a-f]{64}$/);
+  assert.notEqual(fp2, fp, "different keys must fingerprint differently");
+  restoreSavedEnv();
+});
+
+test("fingerprint comparison recomputes under the stored key id and refuses a dropped key by name", () => {
+  useSingleKey(K1_HEX);
+  const stored = keyedFingerprint("ca.sin", "046454286");
+  useKeyRing("k2");
+  assert.equal(
+    keyedFingerprintForComparison("ca.sin", "046454286", stored),
+    stored,
+    "an unchanged identifier recomputes identically under the stored key after rotation",
+  );
+  assert.notEqual(keyedFingerprintForComparison("ca.sin", "987654321", stored), stored);
+  assert.ok(matchKeyedFingerprint("ca.sin", stored, "046454286"));
+  assert.equal(matchKeyedFingerprint("ca.sin", stored, "987654321"), false);
+  assert.ok(matchKeyedFingerprint("ca.sin", stored.slice("k1:".length), "046454286"), "legacy bare digests verify under k1");
+  assert.equal(fingerprintUnderKey("k1", "ca.sin", "046454286"), stored);
+  // The retired key leaves the ring: the comparison refuses naming the key
+  // and the remedy instead of reading every identifier as changed.
+  useOnlyK2();
+  assert.throws(
+    () => keyedFingerprintForComparison("ca.sin", "046454286", stored),
+    (error: unknown) => {
+      assert.ok(error instanceof KeyedFingerprintError);
+      assert.equal((error as KeyedFingerprintError).keyId, "k1");
+      assert.match((error as Error).message, /OPENBOOKS_DATA_KEYS|rotate-data-key/);
+      return true;
+    },
+  );
+  assert.throws(() => matchKeyedFingerprint("ca.sin", stored, "046454286"), KeyedFingerprintError);
+  restoreSavedEnv();
 });

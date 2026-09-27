@@ -20,6 +20,17 @@
  * Email credentials sealed before the data-key move (`keyCiphertext` /
  * `keyNonce` under SESSION_SECRET) migrate to `keySealed` in the same run;
  * that leg needs the source SESSION_SECRET still configured.
+ *
+ * Year-end filing snapshots (`payroll_filing_submission_slips.reported`)
+ * carry keyed fingerprints of confidential identifiers, not the identifiers
+ * themselves, so they cannot be re-sealed — they are RE-FINGERPRINTED under
+ * the active key in the same run, one transaction with compare-and-swap
+ * row-count checks like every other leg. A snapshot is only rewritten when
+ * the profile still holds exactly what it reported; an identifier that moved
+ * since issue keeps its old fingerprint (still comparable while the retired
+ * key is configured) so the pending change is never erased. A snapshot whose
+ * key id is absent from the ring refuses naming the slip — restore the
+ * retired key and re-run.
  */
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -27,11 +38,14 @@ import { sql } from "drizzle-orm";
 import { db, pool, withBypassContext } from "../engine/src/platform/db.ts";
 import {
   describeSealedBlob,
+  KeyedFingerprintError,
   loadDataKeyRing,
   sealSecret,
   unsealSecret,
   type SecretScope,
 } from "../engine/src/platform/secrets.ts";
+import { planFingerprintReseal } from "../engine/src/payroll/yearend-amendments.ts";
+import type { PayrollFilingReported } from "../engine/src/payroll/filing-registry.ts";
 import { sealSecret as sealEmailSecret, unsealLegacyEmailSecret } from "@openbooks/emails";
 
 const args = process.argv.slice(2);
@@ -44,6 +58,13 @@ export type ResealReport = {
   rows: number;
   alreadyCurrent: number;
   resealed: number;
+  /**
+   * Fingerprint rows the run verified but left on their old key: the
+   * identifier moved (or can no longer be proven) since the snapshot was
+   * issued, so rewriting it from today's profile would erase a pending
+   * change. Still comparable while the retired key is configured.
+   */
+  skipped?: number;
 };
 
 function isEntrypoint(): boolean {
@@ -382,6 +403,84 @@ export async function rotateDataKey(options: { apply: boolean; org?: string | nu
       reports.push({ table: "orgs", column: "settings", rows: checked, alreadyCurrent: checked - resealed, resealed });
     }
 
+    // Filing snapshots carry keyed fingerprints, not sealed blobs: each
+    // one is verified against today's profile and, when it still proves,
+    // rewritten under the active key — same per-table transaction and
+    // compare-and-swap row-count checks as every sealed leg. Drifted rows
+    // (an identifier that moved since issue) are counted and left alone.
+    {
+      const orgFilter = org ? ` and s.org_id = '${org.replace(/'/g, "''")}'` : "";
+      const slips = await db.execute<{
+        id: string;
+        orgId: string;
+        country: string;
+        filingKey: string;
+        taxYear: number;
+        rowId: string;
+        reported: unknown;
+      }>(sql.raw(
+        `select sl.id::text as id, s.org_id::text as "orgId", s.country as country,`
+        + ` s.filing_key as "filingKey", s.tax_year as "taxYear", sl.row_id as "rowId", sl.reported as reported`
+        + ` from payroll_filing_submission_slips sl`
+        + ` join payroll_filing_submissions s on s.id = sl.submission_id and s.org_id = sl.org_id`
+        + ` where 1 = 1${orgFilter} order by sl.id`,
+      ));
+      let alreadyCurrent = 0;
+      let skipped = 0;
+      const writes: Array<{ id: string; where: string; oldValue: string; newValue: string }> = [];
+      for (const slip of slips.rows) {
+        const where =
+          `payroll_filing_submission_slips.reported row ${slip.id} (${slip.country} ${slip.filingKey} ${slip.taxYear} row ${slip.rowId})`;
+        const raw = slip.reported as Partial<PayrollFilingReported> | null;
+        if (!raw || typeof raw !== "object" || !Array.isArray(raw.confidential)) {
+          throw new Error(`${where} holds no filing snapshot; restore it from backup and re-run`);
+        }
+        let plan: Awaited<ReturnType<typeof planFingerprintReseal>>;
+        try {
+          plan = await planFingerprintReseal(
+            slip.orgId, slip.country, slip.filingKey, Number(slip.taxYear), slip.rowId, raw as PayrollFilingReported,
+          );
+        } catch (error) {
+          if (error instanceof KeyedFingerprintError) {
+            throw new Error(`${where}: ${error.message}`);
+          }
+          throw error;
+        }
+        if (plan.status === "rewritten") {
+          writes.push({ id: slip.id, where, oldValue: JSON.stringify(slip.reported), newValue: JSON.stringify(plan.reported) });
+        } else if (plan.status === "drifted") {
+          skipped += 1;
+        } else {
+          alreadyCurrent += 1;
+        }
+      }
+      if (applyRun && writes.length > 0) {
+        await db.transaction(async (tx) => {
+          for (const w of writes) {
+            const r = (await tx.execute(sql`
+              update payroll_filing_submission_slips set reported = ${w.newValue}::jsonb
+               where id = ${w.id} and reported = ${w.oldValue}::jsonb`)) as unknown as {
+              rowCount?: number | null;
+            };
+            if ((r.rowCount ?? 0) !== 1) {
+              throw new Error(
+                `${w.where} changed during rotation (matched ${r.rowCount ?? 0} rows); ` +
+                  `refusing to re-fingerprint over a concurrent edit — re-run`,
+              );
+            }
+          }
+        });
+      }
+      reports.push({
+        table: "payroll_filing_submission_slips",
+        column: "reported",
+        rows: slips.rows.length,
+        alreadyCurrent,
+        resealed: writes.length,
+        ...(skipped > 0 ? { skipped } : {}),
+      });
+    }
+
     // The feedback token lives on the org-less platform_settings singleton;
     // an --org run skips it (nothing tenant-scoped to bind the write to).
     if (!org) {
@@ -504,7 +603,8 @@ async function main(): Promise<number> {
   const reports = await rotateDataKey({ apply, org: onlyOrg });
   for (const r of reports) {
     console.log(
-      `[rotate-data-key] ${r.table}.${r.column}: ${r.rows} row(s), ${r.alreadyCurrent} current, ${r.resealed} to re-seal`,
+      `[rotate-data-key] ${r.table}.${r.column}: ${r.rows} row(s), ${r.alreadyCurrent} current, ${r.resealed} to re-seal`
+      + (r.skipped ? `, ${r.skipped} left on their old key (identifier moved since issue — keep the retired key configured)` : ``),
     );
   }
   const total = reports.reduce((n, r) => n + r.resealed, 0);
