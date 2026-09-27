@@ -613,6 +613,7 @@
       "description": "Migration and mirroring runs from external systems; party merges; verification.",
       "dependsOn": [
         "banking",
+        "billing",
         "close",
         "composition",
         "connectors",
@@ -622,6 +623,7 @@
         "ledger",
         "money",
         "organization",
+        "payments",
         "periods",
         "platform",
         "projects",

@@ -94,6 +94,9 @@ export const EXCLUDE = new Set([
   // Time-bound controller replay grants are evidence of the source org, not
   // configuration: a sandbox must never inherit a live closed-period window.
   "connector_replay_authorizations",
+  // External Stripe identifiers and their native-row targets belong to the
+  // connected account and must be linked again inside each sandbox.
+  "stripe_billing_links",
   // The storage cleanup outbox holds object deletes queued against the
   // source org's files; a sandbox that replayed them would delete them.
   "storage_cleanup_outbox",
