@@ -10,12 +10,14 @@ import {
   rejectRequestedDocumentVoid,
 } from "../ledger/document-void.ts";
 import { ALLOCATION_RUN_SUBJECT_KIND } from "../flows/allocation-runs-adapter.ts";
+import { FUND_RELEASE_SUBJECT_KIND } from "../flows/fund-releases-adapter.ts";
 import { CLOSE_RUN_SUBJECT_KIND } from "../flows/close-runs-adapter.ts";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
 import { RESOURCING_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/resourcing.ts";
 import { releaseAllocationRunApproval } from "../allocations/flow-release.ts";
+import { releaseFundReleaseFlowApproval } from "../nonprofit/flow-release.ts";
 import { releaseCloseRunApproval } from "../close/flow-release.ts";
 import { registerBalancingLegProvider } from "../journal/balancing-hooks.ts";
 import { fundBalancingLegProvider } from "../nonprofit/fund-posting.ts";
@@ -49,6 +51,7 @@ export function installEngineSeams(): void {
   // Engine-owned approval releases: the adapters delegate through
   // releaseFlowApproval; the handlers run inside decideGate's transaction.
   registerFlowApprovalReleaseHandler(ALLOCATION_RUN_SUBJECT_KIND, releaseAllocationRunApproval);
+  registerFlowApprovalReleaseHandler(FUND_RELEASE_SUBJECT_KIND, releaseFundReleaseFlowApproval);
   registerFlowApprovalReleaseHandler(CLOSE_RUN_SUBJECT_KIND, releaseCloseRunApproval);
   registerFlowApprovalReleaseHandler(HRM_COMP_CYCLE_SUBJECT_KIND, releaseCompCycleApproval);
   registerFlowApprovalReleaseHandler(HRM_CHANGE_REQUEST_SUBJECT_KIND, releaseHrmChangeRequestApproval);

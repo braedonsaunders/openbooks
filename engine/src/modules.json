@@ -335,6 +335,7 @@
     "nonprofit": {
       "description": "Fund accounting records, classifications, and interfund posting legs.",
       "dependsOn": [
+        "flows",
         "journal",
         "money",
         "organization",
