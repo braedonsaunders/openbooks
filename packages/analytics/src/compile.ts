@@ -97,11 +97,13 @@ function queryMeasureField(measure: QueryMeasure): string | undefined {
 
 function reportMeasure(measure: QueryMeasure): ReportMeasure {
   const fn = queryMeasureFn(measure)
-  return {
+  const normalized: ReportMeasure = {
     ...measure,
     fn,
     ...(fn === 'count' || fn === 'formula' ? {} : { column: queryMeasureField(measure) }),
   } as ReportMeasure
+  if (measure.filter) normalized.filter = measure.filter
+  return normalized
 }
 
 /** Whitelist-safe output alias: caller-provided aliases are re-slugged, never
@@ -293,6 +295,12 @@ function dateRangeFilter(field: string, from: string, to: string): ReportRuleGro
   }
 }
 
+function monthStart(year: number, monthIndex: number): string {
+  const normalizedYear = year + Math.floor(monthIndex / 12)
+  const normalizedMonth = ((monthIndex % 12) + 12) % 12 + 1
+  return `${String(normalizedYear).padStart(4, '0')}-${String(normalizedMonth).padStart(2, '0')}-01`
+}
+
 function reportFilterGroup(
   filters: readonly QueryFilter[] | undefined,
   fiscalStartMonth: number,
@@ -328,8 +336,8 @@ function reportFilterGroup(
         ? date.getUTCMonth()
         : Math.floor(date.getUTCMonth() / 3) * 3
       const monthCount = filter.op === 'this_month' ? 1 : 3
-      const from = new Date(Date.UTC(date.getUTCFullYear(), firstMonth, 1)).toISOString().slice(0, 10)
-      const next = new Date(Date.UTC(date.getUTCFullYear(), firstMonth + monthCount, 1)).toISOString().slice(0, 10)
+      const from = monthStart(date.getUTCFullYear(), firstMonth)
+      const next = monthStart(date.getUTCFullYear(), firstMonth + monthCount)
       return dateRangeFilter(filter.field, from, shiftCalendarDate(next, -1))
     }
     if (filter.op === 'this_year' || filter.op === 'ytd') {
