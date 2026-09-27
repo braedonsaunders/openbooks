@@ -4,6 +4,7 @@ import {
   check,
   date,
   index,
+  integer,
   pgTable,
   text,
   timestamp,
@@ -20,6 +21,39 @@ import { auditColumns, id, money, orgRef } from "./helpers";
  * FIFO and moving-average via cost layers, standard cost with variance
  * postings.
  */
+
+/** Tenant-owned BOM components; its effectivity exclusion is defined in SQL. */
+export const bomComponents = pgTable(
+  "bom_components",
+  {
+    id: id(),
+    orgId: orgRef(),
+    assemblyItemId: uuid("assembly_item_id").notNull(),
+    componentItemId: uuid("component_item_id").notNull(),
+    quantityPer: money("quantity_per").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    ...auditColumns,
+    effectiveFrom: date("effective_from"),
+    effectiveTo: date("effective_to"),
+    operationSeq: integer("operation_seq"),
+    scrapPct: money("scrap_pct"),
+    isByproduct: boolean("is_byproduct").notNull().default(false),
+  },
+  (t) => [
+    check(
+      "bom_components_effective_range_check",
+      sql`${t.effectiveFrom} is null or ${t.effectiveTo} is null or ${t.effectiveTo} > ${t.effectiveFrom}`,
+    ),
+    check(
+      "bom_components_operation_sequence_check",
+      sql`${t.operationSeq} is null or ${t.operationSeq} > 0`,
+    ),
+    check(
+      "bom_components_scrap_pct_check",
+      sql`${t.scrapPct} is null or (${t.scrapPct} >= 0 and ${t.scrapPct} < 100)`,
+    ),
+  ],
+);
 
 /** Physical stock-keeping detail under the `locations` dimension. */
 export const stockLocations = pgTable(
