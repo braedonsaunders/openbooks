@@ -877,6 +877,10 @@
       "ai_capabilities": {
         "label": "Capacités IA",
         "description": "Une ligne par capacité : plafond d'autonomie, relecteur, mention, état et dernière revue."
+      },
+      "backorders": {
+        "label": "Reliquats de commande",
+        "description": "Lignes de stock des commandes client approuvées encore dues au client : quantité commandée, livrée, annulée et restante par ligne, avec client, article et emplacement de stock."
       }
     },
     "columns": {
@@ -1916,6 +1920,24 @@
         "enabled": "Activée",
         "last_reviewed_at": "Dernière revue",
         "reviewed_by": "Revu par"
+      },
+      "backorders": {
+        "document_number": "N° de commande",
+        "document_date": "Date de commande",
+        "party_name": "Client",
+        "line_number": "N° de ligne",
+        "item_code": "Code article",
+        "item_name": "Article",
+        "location_code": "Emplacement de stock",
+        "quantity": "Commandée",
+        "quantity_fulfilled": "Livrée",
+        "quantity_cancelled": "Annulée",
+        "open_quantity": "Restante",
+        "document_kind": "Type de transaction",
+        "line_id": "Ligne de commande (id)",
+        "document_id": "Commande (id)",
+        "item_id": "Article (id)",
+        "transaction_entry_id": "Écriture de transaction (id)"
       }
     },
     "enumValues": {
@@ -2141,6 +2163,10 @@
     "headcount-statement": {
       "name": "État des effectifs",
       "description": "Effectif et équivalents temps plein par filiale et service, avec totaux."
+    },
+    "backorders": {
+      "name": "Reliquats de commande",
+      "description": "Lignes de stock des commandes client encore dues : commandée, livrée, annulée et restante par client et article."
     }
   },
   "generalLedger": {

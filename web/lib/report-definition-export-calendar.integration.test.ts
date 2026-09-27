@@ -40,7 +40,9 @@ const { withSimClock } = await import("@openbooks/engine/src/platform/clock.ts")
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
-const { builtInReportDefinitionId } = await import("./custom-reports.ts");
+const { builtInReportDefinitionId, executeReport, loadReportDefinition } = await import("./custom-reports.ts");
+const { salesOrderLineRemainders } = await import("@openbooks/engine/src/records/order-line-remainders.ts");
+const { toQuantityUnits } = await import("./order-cycle-math.ts");
 const { withReportAuthz } = await import("./report-execution-context.ts");
 const { GET } = await import("../app/api/reports/definitions/[id]/export/route.ts");
 
@@ -168,6 +170,47 @@ test("saved-definition PDF and XLSX artifacts use the organization business day"
     const expected = new Date(`${BUSINESS_DAY}T00:00:00.000Z`);
     assert.equal(workbook.created?.toISOString(), expected.toISOString());
     assert.equal(workbook.modified?.toISOString(), expected.toISOString());
+  } finally {
+    await release(fx);
+  }
+});
+
+test("the backorders built-in states the engine open quantity line by line", async () => {
+  const fx = await fixture();
+  try {
+    const orderId = crypto.randomUUID();
+    const [partial, shipped, service] = [crypto.randomUUID(), crypto.randomUUID(), crypto.randomUUID()];
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        update orgs set settings = jsonb_set(settings, '{features}', settings->'features'
+               || '{"orders":true,"warehousing":true,"fulfillment":true}'::jsonb)
+         where id = ${fx.org.orgId}`);
+      await db.execute(sql`
+        insert into documents (id, org_id, kind, document_number, document_date, status, currency, subtotal, tax_total, total, subsidiary_id, party_id)
+        values (${orderId}, ${fx.org.orgId}, 'sales_order', 'SO-BACK', ${fx.org.date}, 'draft', 'CAD', '0', '0', '0', ${fx.org.subsidiaryId}, ${fx.org.customerId})`);
+      // Open 5 after 3 shipped and 2 cancelled; a fully shipped stock line and
+      // a service line are not backorders.
+      await db.execute(sql`
+        insert into document_lines (id, org_id, document_id, line_number, item_id, quantity, quantity_fulfilled, quantity_cancelled, unit_price, amount, stock_location_id)
+        values (${partial}, ${fx.org.orgId}, ${orderId}, 1, ${fx.org.items.fifo}, '10', '3', '2', '1', '10', ${fx.org.stockLocationId}),
+               (${shipped}, ${fx.org.orgId}, ${orderId}, 2, ${fx.org.items.fifo}, '5', '5', '0', '1', '5', ${fx.org.stockLocationId}),
+               (${service}, ${fx.org.orgId}, ${orderId}, 3, ${fx.org.items.service}, '4', '0', '0', '1', '4', null)`);
+      await db.execute(sql`update documents set status = 'approved' where id = ${orderId} and org_id = ${fx.org.orgId}`);
+    });
+    const definitionId = await withBypassContext(() => builtInReportDefinitionId(fx.org.orgId, "backorders"));
+    assert.ok(definitionId, "the backorders definition is available for this organization");
+    const report = await run(fx.org.orgId, fx.authz, async () => {
+      const definition = await loadReportDefinition(fx.org.orgId, definitionId);
+      assert.ok(definition?.query);
+      const columns = [...definition.query.columns!, "line_id"];
+      const result = await executeReport(fx.org.orgId, { ...definition.query, columns }, undefined, {});
+      const [open, line] = [columns.indexOf("open_quantity"), columns.indexOf("line_id")];
+      return result.groups.flatMap((group) => group.rows.map((row) => [String(row[line]), toQuantityUnits(String(row[open]))]));
+    });
+    const engine = await run(fx.org.orgId, fx.authz, () =>
+      salesOrderLineRemainders(db, fx.org.orgId, { documentId: orderId, openOnly: true }));
+    assert.deepEqual(report, engine.map((row) => [row.lineId, toQuantityUnits(row.open)]));
+    assert.deepEqual(report, [[partial, toQuantityUnits("5")]]);
   } finally {
     await release(fx);
   }

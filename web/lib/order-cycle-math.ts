@@ -33,15 +33,19 @@ function roundedDivide(numerator: bigint, denominator: bigint): bigint {
   return negative ? -rounded : rounded
 }
 
-/** Exact eight-decimal quantity remainder and four-decimal amount/tax for order conversion. */
+/** Exact eight-decimal quantity remainder and four-decimal amount/tax for
+ * order conversion. A cancelled quantity is no longer owed, so the line
+ * converts at most `quantity − quantityCancelled`
+ * (engine/src/records/order-line-remainders.ts). */
 export function remainingOrderLine(input: {
   quantity: string
   quantityBilled: string
+  quantityCancelled: string
   unitPrice: string
   taxAmount: string
 }): { quantity: string; amount: string; taxAmount: string } | null {
   const original = toQuantityUnits(input.quantity)
-  const remaining = original - toQuantityUnits(input.quantityBilled)
+  const remaining = original - toQuantityUnits(input.quantityCancelled) - toQuantityUnits(input.quantityBilled)
   if (remaining <= 0n) return null
   // Quantity and unit price are both numeric(28,8), while the converted line
   // amount is ledger money (numeric(19,4)). Convert the exact product to money
@@ -59,15 +63,18 @@ export function orderLineAmount(quantity: string, unitPrice: string): string {
 
 /**
  * Quantity headroom shared by order billing legs. Stock lines can only bill
- * received-and-unbilled quantity; service lines use the ordered remainder.
+ * received-and-unbilled quantity; service lines use the ordered remainder
+ * net of any cancelled quantity.
  */
 export function billableRemainderQuantityUnits(input: {
   orderedQuantity: string
   billedQuantity: string
+  cancelledQuantity: string
   fulfilledQuantity: string
   requiresReceipt: boolean
 }): bigint {
-  const remaining = toQuantityUnits(input.orderedQuantity) - toQuantityUnits(input.billedQuantity)
+  const remaining =
+    toQuantityUnits(input.orderedQuantity) - toQuantityUnits(input.cancelledQuantity) - toQuantityUnits(input.billedQuantity)
   if (remaining <= 0n) return 0n
   if (!input.requiresReceipt) return remaining
   const cover = toQuantityUnits(input.fulfilledQuantity) - toQuantityUnits(input.billedQuantity)

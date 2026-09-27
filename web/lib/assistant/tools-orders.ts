@@ -7,6 +7,8 @@ import { can } from "../authz";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { loadOrder } from "../../app/api/_order/lib";
+import { orderedNetOfCancelledSql } from "@openbooks/engine/src/records/order-line-remainders.ts";
+import { backorderPosition } from "@openbooks/engine/src/sales/backorders.ts";
 import {
   billableRemainderQuantityUnits,
   fromQuantityUnits,
@@ -108,7 +110,7 @@ const searchOrders: AssistantToolDef = {
       with grouped as (
         select d.id, d.kind, d.document_number, d.document_date, d.status, d.currency,
                d.total, d.memo, p.display_name as party,
-               coalesce(sum(l.quantity), 0) as ordered,
+               coalesce(sum(${orderedNetOfCancelledSql("l")}), 0) as ordered,
                coalesce(sum(l.quantity_fulfilled), 0) as fulfilled,
                coalesce(sum(l.quantity_billed), 0) as billed
           from documents d
@@ -169,7 +171,7 @@ const searchOrders: AssistantToolDef = {
 const getOrder: AssistantToolDef = {
   name: "get_order",
   description:
-    "One quote/order by id: header, line quantities (ordered/fulfilled/billed/remaining), links graph. Same payload as the order drawer. Read-only.",
+    "One quote/order by id: header, line quantities (ordered/fulfilled/billed/cancelled/remaining), links graph. Same payload as the order drawer. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
   feature: "orders",
@@ -185,10 +187,11 @@ const getOrder: AssistantToolDef = {
     if (!can(authz, kindPerm(a.kind))) return { ok: false, error: "forbidden" };
     const payload = await loadOrder(a.id, authz.user.orgId, a.kind, authz.allowedSubsidiaryIds);
     if (!payload) return { ok: false, error: "not_found" };
-    const fulfil = (await db.execute<{ id: string; quantity: string; quantity_fulfilled: string; quantity_billed: string }>(sql`
+    const fulfil = (await db.execute<{ id: string; quantity: string; quantity_fulfilled: string; quantity_billed: string; quantity_cancelled: string }>(sql`
       select l.id, l.quantity::text as quantity,
              coalesce(l.quantity_fulfilled, 0)::text as quantity_fulfilled,
-             coalesce(l.quantity_billed, 0)::text as quantity_billed
+             coalesce(l.quantity_billed, 0)::text as quantity_billed,
+             l.quantity_cancelled::text as quantity_cancelled
         from document_lines l
        where l.document_id = ${a.id} and l.org_id = ${authz.user.orgId}
     `)).rows;
@@ -199,9 +202,11 @@ const getOrder: AssistantToolDef = {
       const ordered = String(f?.quantity ?? l.quantity ?? "0");
       const fulfilled = String(f?.quantity_fulfilled ?? "0");
       const billed = String(f?.quantity_billed ?? l.quantity_billed ?? "0");
+      const cancelled = String(f?.quantity_cancelled ?? "0");
       const remaining = billableRemainderQuantityUnits({
         orderedQuantity: ordered,
         billedQuantity: billed,
+        cancelledQuantity: cancelled,
         fulfilledQuantity: fulfilled,
         requiresReceipt: a.kind === "purchase_order",
       });
@@ -212,8 +217,9 @@ const getOrder: AssistantToolDef = {
         tax_amount: money(l.tax_amount),
         quantityFulfilled: fromQuantityUnits(toQuantityUnits(fulfilled)),
         quantityBilled: fromQuantityUnits(toQuantityUnits(billed)),
+        quantityCancelled: fromQuantityUnits(toQuantityUnits(cancelled)),
         remainingBillable: fromQuantityUnits(remaining),
-        fulfilment: fulfilmentStatus(toQuantityUnits(ordered), toQuantityUnits(fulfilled)),
+        fulfilment: fulfilmentStatus(toQuantityUnits(ordered) - toQuantityUnits(cancelled), toQuantityUnits(fulfilled)),
       };
     });
     return {
@@ -228,4 +234,29 @@ const getOrder: AssistantToolDef = {
   },
 };
 
-export const ORDERS_TOOLS: AssistantToolDef[] = [searchOrders, getOrder];
+const getBackorderPosition: AssistantToolDef = {
+  name: "get_backorder_position",
+  description:
+    "Backordered sales-order stock lines: ordered, fulfilled, cancelled and open quantity per line, for one order or all approved orders. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["ar.read"] },
+  feature: "fulfillment",
+  inputSchema: z.object({
+    orderId: uuidInput.optional().describe("Sales order id from search_orders; omit for every order"),
+    limit: z.number().int().min(1).max(200).optional().describe("Default 50"),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "fulfillment"))) {
+      return { ok: false, error: "feature_disabled" };
+    }
+    const a = raw as { orderId?: string; limit?: number };
+    const rows = await backorderPosition(db, authz.user.orgId, {
+      documentId: a.orderId,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    });
+    const page = assistantListPage(rows, Math.min(a.limit ?? 50, 200), rows.length);
+    return { ok: true, data: { ...page, href: "/sales-orders" } };
+  },
+};
+
+export const ORDERS_TOOLS: AssistantToolDef[] = [searchOrders, getOrder, getBackorderPosition];

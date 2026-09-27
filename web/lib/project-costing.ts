@@ -4,6 +4,7 @@ import { db, orgContext, withOrgTransaction } from '@openbooks/engine/src/platfo
 import { add, fromUnits, neg, normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { directSubcontractOpenCommitment } from './subcontract-commitments'
 import { pgTextArrayLiteral } from './pg-array'
+import { orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
 
 /**
  * Job-costing rollup for a single project — the heart of project accounting.
@@ -122,7 +123,7 @@ async function projectCostSummaryInSnapshot(
         4
       )) filter (where d.kind = 'purchase_order'), 0) as committed_cost,
       coalesce(sum(round(
-        (dl.quantity - dl.quantity_billed) * dl.unit_price * d.fx_rate,
+        (${orderedNetOfCancelledSql('dl')} - dl.quantity_billed) * dl.unit_price * d.fx_rate,
         4
       )) filter (where d.kind = 'sales_order'), 0) as committed_revenue
     from document_lines dl
@@ -130,7 +131,7 @@ async function projectCostSummaryInSnapshot(
     where dl.org_id = ${orgId}
       and coalesce(dl.project_id, d.project_id) = ${projectId}
       and d.status = 'approved' and d.kind in ('purchase_order', 'sales_order')
-      and dl.quantity > dl.quantity_billed
+      and ${orderedNetOfCancelledSql('dl')} > dl.quantity_billed
       ${projectSubsidiaryFilter(sql`coalesce(dl.subsidiary_id, d.subsidiary_id)`, allowedSubsidiaryIds)}
   `)
   const directSubcontractCommitment = await directSubcontractOpenCommitment(orgId, projectId)

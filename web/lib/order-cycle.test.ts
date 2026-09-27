@@ -11,6 +11,7 @@ test('order progress preserves eight-decimal quantities', () => {
   const remainder = remainingOrderLine({
     quantity: '1.00000001',
     quantityBilled: '0.00000000',
+    quantityCancelled: '0',
     unitPrice: '10.00000000',
     taxAmount: '1.5000',
   })
@@ -26,10 +27,15 @@ test('billing headroom keeps received eight-decimal progress exact', () => {
   const units = billableRemainderQuantityUnits({
     orderedQuantity: '1.00000001',
     billedQuantity: '0.00000000',
+    cancelledQuantity: '0',
     fulfilledQuantity: '1.00000001',
     requiresReceipt: true,
   })
 
   assert.equal(fromQuantityUnits(units), '1.00000001')
   assert.equal(toQuantityUnits('1.00000001'), units)
+  // A line billed without receipt stops at the ordered quantity net of cancellations.
+  const service = { orderedQuantity: '10', billedQuantity: '3', cancelledQuantity: '4', fulfilledQuantity: '0', requiresReceipt: false }
+  assert.equal(fromQuantityUnits(billableRemainderQuantityUnits(service)), '3.0000')
+  assert.equal(billableRemainderQuantityUnits({ ...service, billedQuantity: '6' }), 0n)
 })

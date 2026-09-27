@@ -877,6 +877,10 @@
       "ai_capabilities": {
         "label": "KI-Fähigkeiten",
         "description": "Ein Datensatz je KI-Fähigkeit: Autonomiestufe, Prüfer, Gegenstandshinweis, Aktivierung und letzte Prüfung."
+      },
+      "backorders": {
+        "label": "Rückstände",
+        "description": "Lagerpositionen freigegebener Kundenaufträge, die dem Kunden noch geschuldet werden – bestellte, erfüllte, stornierte und offene Menge je Zeile, mit Kunde, Artikel und Lagerort."
       }
     },
     "columns": {
@@ -1916,6 +1920,24 @@
         "enabled": "Aktiviert",
         "last_reviewed_at": "Zuletzt geprüft",
         "reviewed_by": "Geprüft von"
+      },
+      "backorders": {
+        "document_number": "Auftragsnummer",
+        "document_date": "Auftragsdatum",
+        "party_name": "Kunde",
+        "line_number": "Zeilennummer",
+        "item_code": "Artikelcode",
+        "item_name": "Artikel",
+        "location_code": "Lagerort",
+        "quantity": "Bestellt",
+        "quantity_fulfilled": "Erfüllt",
+        "quantity_cancelled": "Storniert",
+        "open_quantity": "Offen",
+        "document_kind": "Belegart",
+        "line_id": "Auftragszeile (ID)",
+        "document_id": "Auftrag (ID)",
+        "item_id": "Artikel (ID)",
+        "transaction_entry_id": "Transaktionsbuchung (ID)"
       }
     },
     "enumValues": {
@@ -2161,6 +2183,10 @@
     "headcount-statement": {
       "name": "Personalbestandsaufstellung",
       "description": "Personalbestand und FTE je Tochtergesellschaft und Abteilung, mit Summen."
+    },
+    "backorders": {
+      "name": "Rückstände",
+      "description": "Noch geschuldete Lagerpositionen von Kundenaufträgen – bestellt, erfüllt, storniert und offen nach Kunde und Artikel."
     }
   },
   "generalLedger": {

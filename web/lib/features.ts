@@ -2,6 +2,7 @@ import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
 
 import { FEATURES, featureEnabled, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
 import { dataDependentFeatureDefault } from '@openbooks/engine/src/organization/feature-defaults.ts'
@@ -137,7 +138,7 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
          and exists (
            select 1 from document_lines dl
             where dl.document_id = d.id and dl.org_id = d.org_id
-              and dl.quantity_billed < dl.quantity
+              and dl.quantity_billed < ${orderedNetOfCancelledSql('dl')}
          )`)
     return {
       blocked: n > 0,

@@ -186,6 +186,11 @@ import { REPORT_AS_OF } from './report-as-of'
 
 export { REPORT_AS_OF, bindReportFromAsOf } from './report-as-of'
 
+/** Open quantity of an order line: ordered less fulfilled and cancelled.
+ *  The report-catalog statement of the engine rule in
+ *  engine/src/records/order-line-remainders.ts; an agreement test pins them. */
+const BACKORDER_OPEN_QUANTITY = '(dl.quantity - dl.quantity_fulfilled - dl.quantity_cancelled)'
+
 export const REPORT_ENTITIES: ReportEntity[] = [
   {
     key: 'ledger_lines',
@@ -508,6 +513,56 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       docKindColumn: 'document_kind',
     }],
     defaultSort: { column: 'moved_at', direction: 'desc' },
+  },
+  {
+    key: 'backorders',
+    label: 'Backorders',
+    category: 'orders',
+    description:
+      'Approved sales-order stock lines still owed to the customer — ordered, fulfilled, cancelled and open quantity per line, with customer, item and stock location.',
+    // Approved sales orders' stock lines (the item has an inventory costing
+    // profile) with open quantity. The open-quantity expression is the engine
+    // rule in engine/src/records/order-line-remainders.ts.
+    from: `document_lines dl
+      JOIN documents d ON d.id = dl.document_id AND d.org_id = dl.org_id
+       AND d.kind = 'sales_order' AND d.status = 'approved'
+      JOIN item_inventory_profiles ip ON ip.item_id = dl.item_id AND ip.org_id = dl.org_id
+       AND ${BACKORDER_OPEN_QUANTITY} > 0
+      JOIN items it ON it.id = dl.item_id AND it.org_id = dl.org_id
+      LEFT JOIN parties p ON p.id = d.party_id AND p.org_id = d.org_id
+      LEFT JOIN stock_locations sl ON sl.id = dl.stock_location_id AND sl.org_id = dl.org_id`,
+    orgColumn: 'dl.org_id',
+    subsidiaryScope: { column: 'd.subsidiary_id' },
+    featureKey: 'fulfillment',
+    // A position read, not a fiscal-period statement: the order date must not
+    // create an implicit period filter that hides older open orders.
+    defaultPeriodField: null,
+    columns: [
+      { key: 'document_number', label: 'Order #', kind: 'text', expr: 'd.document_number' },
+      { key: 'document_date', label: 'Order date', kind: 'date', expr: 'd.document_date' },
+      { key: 'party_name', label: 'Customer', kind: 'text', expr: 'p.display_name' },
+      { key: 'line_number', label: 'Line #', kind: 'number', expr: 'dl.line_number' },
+      { key: 'item_code', label: 'Item code', kind: 'text', expr: 'it.code' },
+      { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
+      { key: 'location_code', label: 'Stock location', kind: 'text', expr: 'sl.code' },
+      { key: 'quantity', label: 'Ordered', kind: 'number', expr: 'dl.quantity' },
+      { key: 'quantity_fulfilled', label: 'Fulfilled', kind: 'number', expr: 'dl.quantity_fulfilled' },
+      { key: 'quantity_cancelled', label: 'Cancelled', kind: 'number', expr: 'dl.quantity_cancelled' },
+      { key: 'open_quantity', label: 'Open', kind: 'number', expr: BACKORDER_OPEN_QUANTITY },
+      { key: 'document_kind', label: 'Transaction type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
+      { key: 'line_id', label: 'Order line (id)', kind: 'uuid', expr: 'dl.id' },
+      { key: 'document_id', label: 'Order (id)', kind: 'uuid', expr: 'd.id' },
+      { key: 'item_id', label: 'Item (id)', kind: 'uuid', expr: 'dl.item_id' },
+      { key: 'transaction_entry_id', label: 'Transaction entry (id)', kind: 'uuid', expr: 'coalesce(d.posted_entry_id, d.id)' },
+    ],
+    cellLinks: [{
+      column: 'document_number',
+      kind: 'transaction',
+      entryIdColumn: 'transaction_entry_id',
+      docIdColumn: 'document_id',
+      docKindColumn: 'document_kind',
+    }],
+    defaultSort: { column: 'document_date', direction: 'asc' },
   },
   {
     key: 'projects',

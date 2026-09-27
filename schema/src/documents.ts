@@ -396,6 +396,10 @@ export const documentLines = pgTable(
     // cannot silently truncate a valid order line.
     quantityFulfilled: numeric("quantity_fulfilled", { precision: 28, scale: 8 }).notNull().default("0"),
     quantityBilled: numeric("quantity_billed", { precision: 28, scale: 8 }).notNull().default("0"),
+    /** Ordered quantity cancelled and no longer owed; the sum of the line's
+     *  order_line_cancellations rows. Open quantity is quantity −
+     *  quantityFulfilled − quantityCancelled. */
+    quantityCancelled: numeric("quantity_cancelled", { precision: 28, scale: 8 }).notNull().default("0"),
 
     /** Stock location for an inventory item line — where a bill receives stock
      *  or an invoice/shipment issues it. Null lines fall back to the single
@@ -540,6 +544,10 @@ export const documentLines = pgTable(
     }),
     check("doc_lines_target", sql`${t.itemId} IS NOT NULL OR ${t.accountId} IS NOT NULL`),
     check("doc_lines_one_tax_profile", sql`num_nonnulls(${t.taxCodeId}, ${t.taxGroupId}) <= 1`),
+    check(
+      "document_lines_quantity_cancelled_check",
+      sql`${t.quantityCancelled} >= 0 AND (${t.quantityCancelled} = 0 OR ${t.quantityFulfilled} + ${t.quantityCancelled} <= ${t.quantity})`,
+    ),
   ],
 );
 

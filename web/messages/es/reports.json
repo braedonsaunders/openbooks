@@ -877,6 +877,10 @@
       "ai_capabilities": {
         "label": "Capacidades de IA",
         "description": "Una fila por capacidad: techo de autonomía, revisor, aviso, estado y última revisión."
+      },
+      "backorders": {
+        "label": "Pedidos pendientes",
+        "description": "Líneas de inventario de pedidos de venta aprobados que aún se deben al cliente: cantidad pedida, entregada, cancelada y pendiente por línea, con cliente, artículo y ubicación de inventario."
       }
     },
     "columns": {
@@ -1916,6 +1920,24 @@
         "enabled": "Activada",
         "last_reviewed_at": "Última revisión",
         "reviewed_by": "Revisado por"
+      },
+      "backorders": {
+        "document_number": "N.º de pedido",
+        "document_date": "Fecha del pedido",
+        "party_name": "Cliente",
+        "line_number": "N.º de línea",
+        "item_code": "Código del artículo",
+        "item_name": "Artículo",
+        "location_code": "Ubicación de inventario",
+        "quantity": "Pedida",
+        "quantity_fulfilled": "Entregada",
+        "quantity_cancelled": "Cancelada",
+        "open_quantity": "Pendiente",
+        "document_kind": "Tipo de transacción",
+        "line_id": "Línea del pedido (id)",
+        "document_id": "Pedido (id)",
+        "item_id": "Artículo (id)",
+        "transaction_entry_id": "Asiento de transacción (id)"
       }
     },
     "enumValues": {
@@ -2141,6 +2163,10 @@
     "headcount-statement": {
       "name": "Estado de plantilla",
       "description": "Plantilla y equivalentes a tiempo completo por filial y departamento, con totales."
+    },
+    "backorders": {
+      "name": "Pedidos pendientes",
+      "description": "Líneas de inventario de pedidos de venta aún adeudadas: pedida, entregada, cancelada y pendiente por cliente y artículo."
     }
   },
   "generalLedger": {

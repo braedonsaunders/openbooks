@@ -64,6 +64,22 @@
     },
     "linksTitle": "来源／转换为",
     "linkCreatedFrom": "创建自",
-    "linkConvertedInto": "转换为"
+    "linkConvertedInto": "转换为",
+    "backorders": {
+      "tab": "欠交订单",
+      "loading": "正在加载欠交订单…",
+      "loadFailed": "无法加载欠交订单。",
+      "empty": "此订单没有欠交数量。",
+      "line": "第 {line} 行",
+      "quantities": "订购 {ordered} · 已履行 {fulfilled} · 已取消 {cancelled}",
+      "open": "未交 {open}",
+      "cancelRemainder": "取消剩余数量",
+      "cancelTitle": "取消第 {line} 行的未交 {open}",
+      "reasonLabel": "原因",
+      "reasonPlaceholder": "为什么剩余部分不再发货？",
+      "cancelConfirm": "取消剩余数量",
+      "cancelFailed": "无法取消剩余数量。",
+      "cancelled": "已取消第 {line} 行的剩余数量"
+    }
   }
 }

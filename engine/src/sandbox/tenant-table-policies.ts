@@ -363,6 +363,7 @@ export const TENANT_TABLE_POLICIES = {
   "nl_report_drafts": "clone:catalog-uuid-rebase",
   "notifications": "clone:catalog-uuid-rebase",
   "number_sequences": "clone:catalog-uuid-rebase",
+  "order_line_cancellations": "clone:catalog-uuid-rebase",
   "org_nav_configs": "clone:catalog-uuid-rebase",
   "overhead_rates": "clone:catalog-uuid-rebase",
   "ownership_consolidation_entries": "clone:catalog-uuid-rebase",

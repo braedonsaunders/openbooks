@@ -64,6 +64,22 @@
     },
     "linksTitle": "Origem / Convertido em",
     "linkCreatedFrom": "Criado a partir de",
-    "linkConvertedInto": "Convertido em"
+    "linkConvertedInto": "Convertido em",
+    "backorders": {
+      "tab": "Pedidos em atraso",
+      "loading": "Carregando pedidos em atraso…",
+      "loadFailed": "Não foi possível carregar os pedidos em atraso.",
+      "empty": "Este pedido não tem quantidades em aberto.",
+      "line": "Linha {line}",
+      "quantities": "Pedida {ordered} · Atendida {fulfilled} · Cancelada {cancelled}",
+      "open": "{open} em aberto",
+      "cancelRemainder": "Cancelar saldo",
+      "cancelTitle": "Cancelar {open} em aberto na linha {line}",
+      "reasonLabel": "Motivo",
+      "reasonPlaceholder": "Por que o restante não será enviado?",
+      "cancelConfirm": "Cancelar saldo",
+      "cancelFailed": "Não foi possível cancelar o saldo.",
+      "cancelled": "Saldo da linha {line} cancelado"
+    }
   }
 }

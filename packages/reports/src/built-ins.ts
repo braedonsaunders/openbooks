@@ -209,6 +209,34 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     },
   },
   {
+    slug: 'backorders',
+    name: 'Backorders',
+    description: 'Sales-order stock lines still owed — ordered, fulfilled, cancelled and open by customer and item.',
+    urlFilters: [
+      { param: 'itemId', field: 'item_id', op: 'eq', valueKind: 'uuid' },
+      { param: 'orderId', field: 'document_id', op: 'eq', valueKind: 'uuid' },
+    ],
+    query: {
+      entity: 'backorders',
+      mode: 'rows',
+      columns: [
+        'document_number', 'document_date', 'party_name', 'item_code', 'item_name',
+        'location_code', 'quantity', 'quantity_fulfilled', 'quantity_cancelled', 'open_quantity',
+      ],
+      breakouts: [],
+      measures: [],
+      filters: null,
+      groupBy: null,
+      // The line id is the unique tie-breaker that keeps the order stable.
+      sorts: [
+        { column: 'document_date', direction: 'asc' },
+        { column: 'document_number', direction: 'asc' },
+        { column: 'line_id', direction: 'asc' },
+      ],
+      limit: 10000,
+    },
+  },
+  {
     slug: 'payroll-register',
     name: 'Payroll register',
     description: 'Pay stubs this fiscal year — gross, withholdings, net, employer cost.',

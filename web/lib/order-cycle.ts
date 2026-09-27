@@ -31,6 +31,7 @@ import { assertStockLocationAdmitsSubsidiary } from "@openbooks/engine/src/inven
 import { InventoryError, InventoryOwnershipError } from "@openbooks/engine/src/inventory/contracts.ts";
 import { loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
 import { issueSalesOrder } from '@openbooks/engine/src/sales/sales-orders.ts'
+import { openQuantitySql, orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
 import { activeStockLocations, resolveLineStockLocation } from './stock-locations'
 import { isUuid } from './list-params'
 
@@ -78,6 +79,7 @@ interface OrderConvertLineRow extends Record<string, unknown> {
   is_billable: boolean
   quantity_billed: string
   quantity_fulfilled: string
+  quantity_cancelled: string
   /** Pricing provenance (0336): copied verbatim so lineage survives conversion. */
   price_basis: unknown
   item_kind: string | null
@@ -98,7 +100,9 @@ interface OrderConvertLineRow extends Record<string, unknown> {
  *   approved  — issued / open (the order is live; convertible)
  *   voided    — cancelled
  * "Converted" is derived: an order is fully converted when every line's
- * quantity_billed >= quantity.
+ * quantity_billed reaches quantity − quantity_cancelled. A cancelled
+ * remainder is never shipped or billed; the open-quantity rule lives in
+ * engine/src/records/order-line-remainders.ts.
  */
 
 const NUMBER_PREFIX: Record<OrderKind, { kind: OrderKind; prefix: string }> = {
@@ -325,10 +329,12 @@ export async function conversionWouldCopyInventoryKinds(orgId: string, sourceId:
     kind: string | null
     quantity: string
     quantity_billed: string
+    quantity_cancelled: string
     unit_price: string
     tax_amount: string
   }>(sql`
-    select line.item_id, i.kind, line.quantity, line.quantity_billed, line.unit_price, line.tax_amount
+    select line.item_id, i.kind, line.quantity, line.quantity_billed, line.quantity_cancelled,
+           line.unit_price, line.tax_amount
       from document_lines line
       left join items i on i.id = line.item_id and i.org_id = line.org_id
      where line.org_id = ${orgId} and line.document_id = ${sourceId}`))
@@ -337,6 +343,7 @@ export async function conversionWouldCopyInventoryKinds(orgId: string, sourceId:
     return remainingOrderLine({
       quantity: String(line.quantity),
       quantityBilled: String(line.quantity_billed),
+      quantityCancelled: String(line.quantity_cancelled),
       unitPrice: String(line.unit_price),
       taxAmount: String(line.tax_amount),
     }) !== null
@@ -406,6 +413,8 @@ interface SalesFulfillmentSourceLineRow extends Record<string, unknown> {
   extra_dims: Record<string, unknown> | null
   stock_location_id: string | null
   quantity_fulfilled: string
+  /** Quantity still owed: ordered less shipped and cancelled. */
+  open_quantity: string
   custom: Record<string, unknown> | null
   item_kind: string | null
   has_inventory_profile: boolean
@@ -509,6 +518,7 @@ export async function fulfillSalesOrder(
       select dl.id, dl.line_number, dl.item_id, dl.account_id, dl.description,
              dl.quantity, dl.unit, dl.department_id, dl.project_id, dl.location_id,
              dl.class_id, dl.extra_dims, dl.stock_location_id, dl.quantity_fulfilled,
+             ${openQuantitySql('dl')}::text as open_quantity,
              dl.custom, i.kind as item_kind,
              profile.item_id is not null as has_inventory_profile
         from document_lines dl
@@ -523,9 +533,11 @@ export async function fulfillSalesOrder(
     const selected = requested.map((request) => {
       const line = sourceById.get(request.sourceLineId)
       if (!line) throw new ConversionError(`Sales-order line ${request.sourceLineId} was not found`)
-      const remaining = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_fulfilled))
+      const remaining = toQuantityUnits(line.open_quantity)
       const shipping = toQuantityUnits(request.quantity)
-      if (remaining <= 0n) throw new ConversionError(`Sales-order line ${line.line_number} is already fully fulfilled`)
+      if (remaining <= 0n) {
+        throw new ConversionError(`Sales-order line ${line.line_number} is already fully fulfilled or cancelled`)
+      }
       if (shipping > remaining) {
         throw new ConversionError(
           `Sales-order line ${line.line_number} has only ${fromQuantityUnits(remaining)} remaining to fulfill`,
@@ -649,7 +661,7 @@ export async function fulfillSalesOrder(
            set quantity_fulfilled = quantity_fulfilled + ${request.quantity},
                updated_by = ${userId}
          where id = ${line.id} and org_id = ${orgId}
-           and quantity_fulfilled + ${request.quantity} <= quantity
+           and ${openQuantitySql('document_lines')} >= ${request.quantity}
         returning id
       `)).rows[0]
       if (!advanced) {
@@ -703,10 +715,9 @@ async function fulfillSalesOrderRemainder(
   const fulfillmentDate = await businessToday(orgId)
   const rows = (await db.execute<{
     id: string
-    quantity: string
-    quantity_fulfilled: string
+    open_quantity: string
   }>(sql`
-    select line.id, line.quantity, line.quantity_fulfilled
+    select line.id, ${openQuantitySql('line')}::text as open_quantity
       from document_lines line
       join documents source
         on source.id = line.document_id and source.org_id = line.org_id
@@ -715,7 +726,7 @@ async function fulfillSalesOrderRemainder(
      order by line.id
   `)).rows
   const lines = rows.flatMap((line) => {
-    const remaining = toQuantityUnits(line.quantity) - toQuantityUnits(line.quantity_fulfilled)
+    const remaining = toQuantityUnits(line.open_quantity)
     return remaining > 0n
       ? [{ sourceLineId: line.id, quantity: fromQuantityUnits(remaining) }]
       : []
@@ -731,7 +742,7 @@ async function fulfillSalesOrderRemainder(
        order by target.created_at desc, target.id desc
        limit 1
     `)).rows[0]
-    if (!latest) throw new ConversionError('Every line is already fully fulfilled')
+    if (!latest) throw new ConversionError('Every line is already fully fulfilled or cancelled')
     return {
       id: latest.id,
       documentNumber: latest.document_number,
@@ -1046,7 +1057,7 @@ async function receivePurchaseOrderRemainder(
 
 /**
  * Convert an order document into `targetKind`, pulling forward each line's
- * remaining (quantity − quantity_billed). Records a document_links edge and
+ * remaining (quantity − quantity_cancelled − quantity_billed). Records a document_links edge and
  * advances quantity_billed on the source lines. Runs in one transaction.
  */
 export interface AssignOrderLineWarehouseInput {
@@ -1289,7 +1300,7 @@ export async function convertOrder(
              dl.unit_price, dl.amount, dl.tax_code_id, dl.tax_group_id, dl.tax_amount,
              dl.department_id, dl.project_id, dl.location_id, dl.class_id, dl.extra_dims,
              dl.stock_location_id, dl.is_billable, dl.quantity_billed, dl.quantity_fulfilled,
-             dl.price_basis,
+             dl.quantity_cancelled, dl.price_basis,
              i.kind as item_kind, i.income_account_id as item_income_account_id
         from document_lines dl left join items i on i.id = dl.item_id and i.org_id = dl.org_id
        where dl.document_id = ${sourceId} and dl.org_id = ${orgId}
@@ -1316,6 +1327,7 @@ export async function convertOrder(
         remainder: remainingOrderLine({
           quantity: String(line.quantity),
           quantityBilled: String(line.quantity_billed),
+          quantityCancelled: String(line.quantity_cancelled),
           unitPrice: String(line.unit_price),
           taxAmount: String(line.tax_amount),
         }),
@@ -1334,6 +1346,7 @@ export async function convertOrder(
             const units = billableRemainderQuantityUnits({
               orderedQuantity: String(row.line.quantity),
               billedQuantity: String(row.line.quantity_billed),
+              cancelledQuantity: String(row.line.quantity_cancelled),
               fulfilledQuantity: String(row.line.quantity_fulfilled),
               requiresReceipt: row.line.item_id != null && lineRequiresReceipt(row.line.item_kind ?? null),
             })
@@ -1518,7 +1531,7 @@ export async function convertOrder(
       const advanced = (await tx.execute<{ id: string }>(sql`
         update document_lines set quantity_billed = quantity_billed + ${coveredQty}, updated_by = ${userId}
          where id = ${l.id} and org_id = ${orgId}
-           and quantity_billed + ${coveredQty} <= quantity
+           and quantity_billed + ${coveredQty} <= ${orderedNetOfCancelledSql('document_lines')}
            ${receiptRequired ? sql`and quantity_billed + ${coveredQty} <= quantity_fulfilled` : sql``}
         returning id
       `)).rows[0]

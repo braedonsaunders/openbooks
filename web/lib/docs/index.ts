@@ -56,6 +56,7 @@ import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
 import { subcontractorCompliance } from './articles/subcontractor-compliance'
 import { itemRates } from './articles/item-rates'
+import { distributionBackorders } from './articles/distribution-backorders'
 import { fixedAssetsDepreciation } from './articles/fixed-assets-depreciation'
 import { revenueRecognition } from './articles/revenue-recognition'
 import { propertyManagement } from './articles/property-management'
@@ -245,6 +246,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'allocations': 'accounting-advanced',
   'sales-workflow': 'transactions-daily',
   'purchasing-workflow': 'transactions-daily',
+  'distribution-backorders': 'transactions-daily',
   'payments-and-applications': 'transactions-daily',
   'property-management': 'transactions-daily',
   'distribution-warehouses': 'transactions-daily',
@@ -311,6 +313,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   allocations,
   salesWorkflow,
   purchasingWorkflow,
+  distributionBackorders,
   paymentsAndApplications,
   propertyManagement,
   distributionWarehouses,

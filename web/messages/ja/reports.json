@@ -877,6 +877,10 @@
       "ai_capabilities": {
         "label": "AI能力",
         "description": "能力1件につき1行：自律性上限・レビュー担当・通知・有効状態・最終レビュー。"
+      },
+      "backorders": {
+        "label": "受注残",
+        "description": "承認済み受注の在庫明細のうち、まだ顧客へ未出荷のもの。明細ごとの受注・出荷済み・取消・未出荷数量と、顧客・品目・在庫拠点。"
       }
     },
     "columns": {
@@ -1916,6 +1920,24 @@
         "enabled": "有効",
         "last_reviewed_at": "最終レビュー",
         "reviewed_by": "レビュー者"
+      },
+      "backorders": {
+        "document_number": "受注番号",
+        "document_date": "受注日",
+        "party_name": "顧客",
+        "line_number": "明細番号",
+        "item_code": "品目コード",
+        "item_name": "品目",
+        "location_code": "在庫拠点",
+        "quantity": "受注数量",
+        "quantity_fulfilled": "出荷済み",
+        "quantity_cancelled": "取消済み",
+        "open_quantity": "未出荷",
+        "document_kind": "取引種別",
+        "line_id": "受注明細（ID）",
+        "document_id": "受注（ID）",
+        "item_id": "品目（ID）",
+        "transaction_entry_id": "取引仕訳（ID）"
       }
     },
     "enumValues": {
@@ -2161,6 +2183,10 @@
     "headcount-statement": {
       "name": "人員数計算書",
       "description": "子会社・部門別の人員数とFTE（合計付き）。"
+    },
+    "backorders": {
+      "name": "受注残",
+      "description": "未出荷の受注在庫明細 — 顧客・品目別の受注・出荷済み・取消・未出荷数量。"
     }
   },
   "generalLedger": {
