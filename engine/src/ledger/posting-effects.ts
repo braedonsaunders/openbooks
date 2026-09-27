@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { db, type SqlExecutor, withOrgContext } from "../platform/db.ts";
 import {
   logTerminalFailure,
   POSTING_EFFECTS_WORKER_IDENTITY,
@@ -495,14 +495,14 @@ export type FailedPostingEffect = {
   terminalFailedBy: string | null;
 };
 
-/** Privileged operator query. Tenant scope is mandatory even though the
- * implementation crosses the RLS bypass boundary. */
+/** Operator query over one organization's failed effects, read in that
+ * organization's tenant scope. */
 export async function listFailedPostingEffects(
   orgId: string,
   limit = 100,
 ): Promise<FailedPostingEffect[]> {
   if (!orgId) throw new PostingEffectsReplayError("organization id is required");
-  const result = await withBypassContext(() => db.execute<FailedPostingEffect>(sql`
+  const result = await withOrgContext(orgId, () => db.execute<FailedPostingEffect>(sql`
     select id, org_id as "orgId", document_id as "documentId", kind, status,
            attempt_count as "attemptCount", error,
            next_attempt_at as "nextAttemptAt", last_attempt_at as "lastAttemptAt",
@@ -532,7 +532,7 @@ export async function replayTerminalPostingEffect(input: {
     throw new PostingEffectsReplayError("replay reason must be between 10 and 1000 characters");
   }
   const now = input.now ?? new Date();
-  await withBypassContext(() => db.transaction(async (tx) => {
+  await withOrgContext(input.orgId, () => db.transaction(async (tx) => {
     const actor = await tx.execute<{ exists: boolean }>(sql`
       select exists (
         select 1 from users
