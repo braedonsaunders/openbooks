@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { Check, ExternalLink, FileWarning, Sparkles } from 'lucide-react'
 import { Button } from '@openbooks/ui'
-import { apiJson } from '@/lib/api-error'
+import { ApiResponseError, apiJson } from '@/lib/api-error'
 import { decimalCmp, decimalNeg } from '@/lib/statement-format'
 type ProposalData = {
   kind: string
@@ -77,7 +77,7 @@ export function ProposalCard({ proposal }: { proposal: ProposalData }) {
           setState('error')
         }
       } catch (error) {
-        setError(error instanceof Error ? error.message : t('proposal.failed'))
+        setError(error instanceof ApiResponseError ? error.message : t('proposal.failed'))
         setState('error')
       }
     })
