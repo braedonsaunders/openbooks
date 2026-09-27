@@ -118,7 +118,7 @@ const mockUrls = new Map<string, string>([
   ["../../_lib", "mock:lib"],
 ]);
 
-  const hooks = registerHooks({
+  registerHooks({
     resolve(specifier, _context, nextResolve) {
       // The real JSON boundary is pure (Request + schema → value) and runs as-is;
       const mocked = mockUrls.get(specifier) ?? (specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
@@ -137,7 +137,6 @@ const mockUrls = new Map<string, string>([
   const idRoute: typeof import("./route.ts") | undefined = (await import(idUrl)) as typeof import("./route.ts");
   const submitRoute: typeof import("./submit/route.ts") | undefined = (await import(submitUrl)) as typeof import("./submit/route.ts");
   const withdrawRoute: typeof import("./withdraw/route.ts") | undefined = (await import(withdrawUrl)) as typeof import("./withdraw/route.ts");
-  hooks.deregister();
 
 
 const REQUEST_ID = "00000000-0000-4000-8000-000000000031";
