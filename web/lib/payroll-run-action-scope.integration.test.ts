@@ -863,3 +863,363 @@ const consolidatedRows = [
 ] as const;
 
 for (const row of consolidatedRows) await row.register();
+
+
+const payrollRunRouteCases = [
+  { label: "payroll bank file scope", register: async () => {
+        const assert = (await import("node:assert/strict")).default;
+        const { randomUUID } = await import("node:crypto");
+        const { registerHooks } = await import("node:module");
+        const test = (await import("node:test")).default;
+        type Authz = import("./authz").Authz;
+        const state: { gate: Authz | null } = { gate: null };
+        (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-bank-file-scope")] = state;
+        // The route imports the JSON boundary through the web `@/` alias, which tsx
+        // resolves only under the web tsconfig. Map it to the real module so the
+        // route under test runs its production body parsing.
+        const apiJsonUrl = new URL("./api/json.ts", import.meta.url).href;
+        // Worktrees symlink node_modules (and web/node_modules) at the main
+        // checkout, so a bare `@openbooks/engine/...` import inside web code
+        // resolves to the MAIN checkout's engine — the behaviour under test would
+        // be main's, not this worktree's, and `instanceof` checks would span two
+        // module instances. Rewrite every main-checkout source URL to this
+        // worktree so the route and the engine it calls are one codebase.
+        // (Symlinked node_modules paths rewrite onto themselves and are harmless.)
+        const MAIN_ROOT_URL = "file:///Users/braedonsaunders/Documents/openbooks/";
+        const WORKTREE_ROOT_URL = new URL("../../", import.meta.url).href;
+        registerHooks({ resolve(specifier, context, next) {
+          if (specifier === "@/lib/api/json") return { shortCircuit: true, url: apiJsonUrl };
+          if (specifier === "../../../../../../lib/feature-gates" && decodeURIComponent(context.parentURL ?? "").endsWith("/api/payroll/runs/[id]/bank-file/route.ts")) {
+            return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
+              "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.payroll-bank-file-scope')].gate}") };
+          }
+          const resolved = next(specifier, context);
+          const rewrite = (url: string) =>
+            url.startsWith(MAIN_ROOT_URL) ? WORKTREE_ROOT_URL + url.slice(MAIN_ROOT_URL.length) : url;
+          if (resolved.url.startsWith(MAIN_ROOT_URL)) {
+            return { url: rewrite(resolved.url), shortCircuit: true };
+          }
+          return resolved;
+        } });
+        const { sql } = await import("drizzle-orm");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { seedAdoption, calculatedRun } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
+        const { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts");
+        const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { GET, POST } = await import("../app/api/payroll/runs/[id]/bank-file/route");
+
+        /**
+         * The bank-file panel and generator enforce the run-population scope the
+         * run detail and every other run action enforce: a run whose legal entity
+         * is visible but which carries an employee outside the caller's subsidiary
+         * scope is opaque — its panel is a 404 and generating its file is refused.
+         */
+        async function opaqueFixture() {
+          const fx = await withBypassContext(() => seedAdoption());
+          await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
+            where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
+          const { input } = await withBypassContext(() => calculatedRun(fx));
+          await withOrgContext(fx.orgId, () => commitPayRun(input));
+          const hidden = randomUUID();
+          await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+            values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden payroll employer', 'CAD', 'CA')`));
+          await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${hidden}
+            where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
+          return { fx, documentId: input.documentId };
+        }
+
+        function scopedGate(fx: { orgId: string; actorId: string; subsidiaryId: string }, permission: string): Authz {
+          return {
+            user: { orgId: fx.orgId, id: fx.actorId },
+            permissions: new Set([permission]),
+            allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
+          } as Authz;
+        }
+
+        test("bank-file panel hides a run carrying an out-of-scope employee", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+          const { fx, documentId } = await opaqueFixture();
+          try {
+            state.gate = scopedGate(fx, "payroll.read");
+            const refused = await withOrgContext(fx.orgId, () => GET(
+              new Request("https://openbooks.test/api/payroll/runs/fixture/bank-file"),
+              { params: Promise.resolve({ id: documentId }) },
+            ));
+            assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()));
+            assert.deepEqual(await refused.json(), { error: "not_found" });
+
+            state.gate = { ...scopedGate(fx, "payroll.read"), allowedSubsidiaryIds: null };
+            const visible = await withOrgContext(fx.orgId, () => GET(
+              new Request("https://openbooks.test/api/payroll/runs/fixture/bank-file"),
+              { params: Promise.resolve({ id: documentId }) },
+            ));
+            assert.equal(visible.status, 200, JSON.stringify(await visible.clone().json()).slice(0, 300));
+          } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
+        });
+
+        test("bank-file generate refuses a run carrying an out-of-scope employee", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+          const { fx, documentId } = await opaqueFixture();
+          try {
+            state.gate = scopedGate(fx, "payroll.run");
+            const refused = await withOrgContext(fx.orgId, () => POST(
+              new Request("https://openbooks.test/api/payroll/runs/fixture/bank-file", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ paymentBankProfileId: randomUUID() }),
+              }),
+              { params: Promise.resolve({ id: documentId }) },
+            ));
+            assert.equal(refused.status, 409, JSON.stringify(await refused.clone().json()));
+            assert.match(String((await refused.json() as { error: string }).error), /pay run not found/);
+            const artifacts = (await withOrgContext(fx.orgId, () => db.execute<{ count: string }>(sql`
+              select count(*) as count from pay_run_bank_files
+               where org_id = ${fx.orgId} and pay_run_document_id = ${documentId}`))).rows[0]!.count;
+            assert.equal(artifacts, "0", "a refused generate must not leave a bank-file artifact behind");
+          } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
+        });
+  } },
+  { label: "payroll create picker scope", register: async () => {
+        const assert = (await import("node:assert/strict")).default;
+        const { randomUUID } = await import("node:crypto");
+        const { registerHooks } = await import("node:module");
+        const { resolveAppModule } = await import('./test-module-hooks');
+        const { pathToFileURL } = await import('node:url');
+        const test = (await import("node:test")).default;
+        const React = await import("react");
+        type Authz = import("./authz").Authz;
+        type FinalPayCandidate = import("../app/(app)/payroll/_ui/NewRunButton").FinalPayCandidate;
+        type RunSchedule = import("../app/(app)/payroll/_ui/NewRunButton").RunSchedule;
+        const { stubModules } = await import('../testing/stub-modules.ts');
+        const root = pathToFileURL(process.cwd() + '/').href;
+        // The tsx runner compiles these RSC sources with the CLASSIC JSX transform,
+        // which emits bare `React.createElement`. Next supplies the automatic runtime
+        // in production; the global is the equivalent here. Needed because importing a
+        // page now reaches the shared widget registry, and those components are JSX.
+        Object.assign(globalThis, { React });
+        const state: { gate: Authz | null } = { gate: null };
+        (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-create-picker-scope")] = state;
+        stubModules({ intl: true, navigation: false, authz: false, features: false });
+
+        registerHooks({ resolve(specifier, context, next) {
+          const parent = decodeURIComponent(context.parentURL ?? "");
+          const virtual = (source: string) => ({ shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) });
+          // A page is its `page.tsx` AND its `view.ts`: the loader these stubs were
+          // written against now lives in the sibling module.
+          if (parent.endsWith("/payroll/runs/page.tsx") || parent.endsWith("/payroll/runs/view.ts")) {
+            if (specifier.endsWith("/lib/authz")) return virtual(
+              "export async function requirePermission(){return globalThis[Symbol.for('openbooks.payroll-create-picker-scope')].gate};export function can(){return true}");
+            if (specifier.endsWith("/module-home/group-tabs")) return virtual("export async function groupTabs(){return []}");
+            if (specifier.endsWith("/record-list-view")) return virtual("export function RecordListView(){return null}");
+            if (specifier.endsWith("/_ui/NewRunButton")) return virtual("export function NewRunButton(){return null}");
+          }
+          const app = resolveAppModule(specifier, context, next, root)
+          if (app) return app
+          return next(specifier, context);
+        } });
+        const { sql } = await import("drizzle-orm");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { seedAdoption } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
+        const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { listApplicationPayrollEmployees } = await import("./application/payroll-read.ts");
+        const { ApplicationError } = await import("./application/errors.ts");
+        type ApplicationContext = import("./application/context.ts").ApplicationContext;
+        // The page LOADER. What this test checks is which schedules and which
+        // final-pay candidates the page's queries return for a given subsidiary scope,
+        // and that is decided in the loader — the spec only names where the resolved
+        // rows are bound. Hunting the rendered tree for NewRunButton's props stopped
+        // working when `ModuleView` became the single render path, and was always a
+        // detour: `newRun` IS the props object the button receives.
+        const { loadPayRuns } = await import("../app/(app)/payroll/runs/view");
+
+        type PickerProps = { schedules: RunSchedule[]; finalPayCandidates: FinalPayCandidate[] };
+
+        for (const surface of ["employee", "schedule"] as const) {
+          test(`payroll creation ${surface} picker scopes server-rendered data`, async () => {
+            const fx = await withBypassContext(() => seedAdoption());
+            try {
+              const childId = randomUUID();
+              const childScheduleId = randomUUID();
+              await withBypassContext(async () => {
+                await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+                  values(${childId},${fx.orgId},${fx.subsidiaryId},'Hidden picker owner','CAD','CA')`);
+                await db.execute(sql`update parties set subsidiary_id=${childId} where org_id=${fx.orgId} and id=${fx.employeeId}`);
+                await db.execute(sql`update employee_roles set terminated_on='2026-07-18' where org_id=${fx.orgId} and party_id=${fx.employeeId}`);
+                await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,subsidiary_id,is_active)
+                  select ${childScheduleId},org_id,'Hidden schedule',frequency,periods_per_year,anchor_period_end,pay_date_offset_days,${childId},true
+                  from pay_schedules where org_id=${fx.orgId} and id=${fx.scheduleId}`);
+                await db.execute(sql`update employee_payroll_profiles set pay_schedule_id=${childScheduleId} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+                await db.execute(sql`update employee_payroll_profiles
+                  set sin_encrypted='SEALED-PAYROLL-SIN-TEST-SENTINEL', sin_last3='789',
+                      federal_claim_amount='123456789012345.6789', additional_tax_per_period='9876.5432'
+                  where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+                await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${fx.orgId}`);
+              });
+              const gate = { user: { orgId: fx.orgId, id: fx.actorId }, permissions: new Set(["payroll.read", "payroll.run"]) } as Authz;
+              const read = async (scope: Set<string> | null, scheduleIds: string[], employeeVisible: boolean) => {
+                state.gate = { ...gate, allowedSubsidiaryIds: scope };
+                const props = (await withOrgContext(fx.orgId, () => loadPayRuns({}))).newRun as PickerProps;
+                assert.ok(props);
+                const appContext: ApplicationContext = {
+                  authz: { ...gate, permissions: new Set(["payroll.manage"]), allowedSubsidiaryIds: scope },
+                  source: "api",
+                  requestId: randomUUID(),
+                  apiKeyId: null,
+                };
+                const payrollEmployees = await withOrgContext(fx.orgId, () =>
+                  listApplicationPayrollEmployees(appContext, {}));
+                assert.deepEqual(
+                  payrollEmployees.employees.map((employee) => employee.employeePartyId),
+                  employeeVisible ? [fx.employeeId] : [],
+                );
+                if (employeeVisible) {
+                  const employee = payrollEmployees.employees[0]!;
+                  assert.equal(employee.name, fx.employeeName);
+                  assert.equal(employee.scheduleName, "Hidden schedule");
+                  assert.equal("sinLast3" in employee, false);
+                  assert.equal("federalClaimAmount" in employee, false);
+                  assert.equal(JSON.stringify(employee).includes("SEALED-PAYROLL-SIN-TEST-SENTINEL"), false);
+                }
+                if (surface === "schedule") assert.deepEqual(new Set(props.schedules.map((row) => row.id)), new Set(scheduleIds));
+                else assert.deepEqual(props.finalPayCandidates, employeeVisible ? [{
+                  id: fx.employeeId, name: fx.employeeName, pay_schedule_id: childScheduleId, terminated_on: "2026-07-18",
+                }] : []);
+              };
+              await read(new Set([fx.subsidiaryId]), [fx.scheduleId], false);
+              await read(new Set(), [], false);
+              await read(new Set([childId]), [childScheduleId], true);
+              await read(new Set([fx.subsidiaryId, childId]), [fx.scheduleId, childScheduleId], true);
+              await read(null, [fx.scheduleId, childScheduleId], true);
+            } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
+          });
+        }
+
+        test("application payroll employee reads name the Features-page remedy when payroll is off", async () => {
+          const fx = await withBypassContext(() => seedAdoption());
+          try {
+            await withBypassContext(() => db.execute(sql`
+              update orgs set settings=jsonb_set(settings,'{features}',
+                coalesce(settings->'features','{}'::jsonb)||'{"payroll":false}'::jsonb,true)
+               where id=${fx.orgId}`));
+            const context: ApplicationContext = {
+              authz: {
+                user: { orgId: fx.orgId, id: fx.actorId } as ApplicationContext["authz"]["user"],
+                permissions: new Set(["payroll.manage"]),
+                allowedSubsidiaryIds: null,
+              },
+              source: "api",
+              requestId: randomUUID(),
+              apiKeyId: null,
+            };
+            await withOrgContext(fx.orgId, () => assert.rejects(
+              listApplicationPayrollEmployees(context, {}),
+              (error: unknown) => error instanceof ApplicationError
+                && error.code === "not_found"
+                && error.status === 404
+                && error.message === "payroll is off; enable it from GET /api/v1/settings/features",
+            ));
+          } finally {
+            state.gate = null;
+            await dropScratchOrgReporting(fx.orgId);
+          }
+        });
+  } },
+  { label: "payroll retro route", register: async () => {
+        const assert = (await import("node:assert/strict")).default;
+        const { registerHooks } = await import("node:module");
+        const test = (await import("node:test")).default;
+        type Authz = import("./authz").Authz;
+        const state: { gate: Authz | null } = { gate: null };
+        (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-retro-route")] = state;
+        // The route imports the JSON boundary through the web `@/` alias, which tsx
+        // resolves only under the web tsconfig. Map it to the real module so the
+        // route under test runs its production body parsing.
+        const apiJsonUrl = new URL("./api/json.ts", import.meta.url).href;
+        registerHooks({ resolve(specifier, context, next) {
+          if (specifier === "@/lib/api/json") return { shortCircuit: true, url: apiJsonUrl };
+          if (specifier === "../../../../lib/feature-gates" && decodeURIComponent(context.parentURL ?? "").endsWith("/api/payroll/retro/route.ts")) {
+            return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
+              "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.payroll-retro-route')].gate}") };
+          }
+          return next(specifier, context);
+        } });
+        const { seedAdoption } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
+        const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { POST } = await import("../app/api/payroll/retro/route");
+
+        /**
+         * The retro workspace always sends `excludeSourcePayRunDocumentIds: []`
+         * (its initial exclusion state), so the route must read an empty list as
+         * "nothing excluded" — the same as an absent key. Refusing [] with 422
+         * breaks every UI propose that excludes nothing, which is nearly all of
+         * them. Same for an explicitly empty employeePartyIds.
+         */
+
+        function runGate(fx: { orgId: string; actorId: string }): Authz {
+          return {
+            user: { orgId: fx.orgId, id: fx.actorId },
+            permissions: new Set(["payroll.run"]),
+            allowedSubsidiaryIds: null,
+          } as Authz;
+        }
+
+        async function propose(body: Record<string, unknown>) {
+          return POST(
+            new Request("https://openbooks.test/api/payroll/retro", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            }),
+          );
+        }
+
+        test("propose accepts an explicitly empty exclusion list", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+          const fx = await withBypassContext(() => seedAdoption());
+          try {
+            state.gate = runGate(fx);
+            // The route reads schedules/runs through RLS; the mocked gate only
+            // supplies identity, so run the call under the org scope the real
+            // middleware would set.
+            const res = await withOrgContext(fx.orgId, () => propose({
+              action: "propose",
+              payScheduleId: fx.scheduleId,
+              payDate: "2026-07-21",
+              excludeSourcePayRunDocumentIds: [],
+            }));
+            assert.equal(res.status, 200, JSON.stringify(await res.clone().json()).slice(0, 300));
+            const body = await res.json() as { payableTotal: string };
+            assert.equal(body.payableTotal, "0.0000");
+          } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
+        });
+
+        test("propose still refuses malformed lists", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+          const fx = await withBypassContext(() => seedAdoption());
+          try {
+            state.gate = runGate(fx);
+            for (const body of [
+              { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", excludeSourcePayRunDocumentIds: ["nope"] },
+              { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", excludeSourcePayRunDocumentIds: "nope" },
+              { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", employeePartyIds: ["nope"] },
+            ]) {
+              const res = await propose(body);
+              assert.equal(res.status, 422, JSON.stringify(await res.clone().json()).slice(0, 200));
+            }
+          } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
+        });
+
+        test("propose accepts an explicitly empty employee list", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+          const fx = await withBypassContext(() => seedAdoption());
+          try {
+            state.gate = runGate(fx);
+            const res = await withOrgContext(fx.orgId, () => propose({
+              action: "propose",
+              payScheduleId: fx.scheduleId,
+              payDate: "2026-07-21",
+              employeePartyIds: [],
+            }));
+            assert.equal(res.status, 200, JSON.stringify(await res.clone().json()).slice(0, 300));
+          } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
+        });
+  } },
+] as const;
+
+for (const row of payrollRunRouteCases) await row.register();
