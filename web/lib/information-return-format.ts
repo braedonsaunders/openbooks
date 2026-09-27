@@ -1,3 +1,5 @@
+import { formatDecimal } from './money-format'
+
 /**
  * Box amount formatting for information-return worksheets and facsimiles.
  *
@@ -24,10 +26,10 @@ export function formatBoxAmount(amount: string | undefined): string {
   if (amount === undefined) return ''
   const raw = amount.trim()
   if (!DECIMAL_TEXT.test(raw) || isZeroDecimalText(raw)) return ''
-  const formatted = new Intl.NumberFormat('en-US', {
+  const formatted = formatDecimal('en-US', raw, {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(raw as never)
+  })
   // Keep the old non-finite-input behavior for values such as "1e309".
   return formatted.includes('∞') ? '' : formatted
 }

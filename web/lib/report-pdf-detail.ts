@@ -3,6 +3,7 @@ import type { GeneralLedgerResult } from './reports'
 import type { ExportData, Translator } from './report-pdf'
 import type { ExactDecimal } from './statement-format'
 import { decimalIsZero } from './statement-format'
+import { createMoneyFormatter, formatDecimal } from './money-format'
 
 const LEDGER_ALIGN: PdfColumnAlign[] = ['left', 'left', 'left', 'right', 'right', 'right']
 
@@ -36,11 +37,10 @@ export function pdfMoney(v: ExactDecimal, locale = 'en', currency?: string): str
   if (!EXACT_DECIMAL_TEXT.test(v)) return v
   // Collapse "-0"/"-0.0000" so a zeroed account never prints "-0.00".
   const normalized = NEGATIVE_ZERO_TEXT.test(v) ? '0' : v
-  return new Intl.NumberFormat(locale, {
-    ...(currency ? { style: 'currency', currency } : {}),
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(normalized as never)
+  const options = { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+  return currency
+    ? createMoneyFormatter(locale, currency).money(normalized, options)
+    : formatDecimal(locale, normalized, options)
 }
 
 /**

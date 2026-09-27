@@ -1,3 +1,5 @@
+import { createMoneyFormatter } from './money-format'
+
 export function dateTime(v: string | Date | null | undefined, locale = "en-CA"): string {
   if (!v) return "";
   return new Date(v).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" });
@@ -84,11 +86,7 @@ export function decimalLabel(value: number, locale: string, minimumFractionDigit
 
 /** Viewer-facing whole-unit currency for kanban cards (F2-14b). */
 export function currencyLabel(amount: number, currency: string, locale: string): string {
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return createMoneyFormatter(locale, currency).money(String(amount), { maximumFractionDigits: 0 });
 }
 
 /**

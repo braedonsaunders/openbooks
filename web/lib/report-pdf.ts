@@ -31,6 +31,7 @@ import { resolveReportLayout } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 import { resolveLocale } from './locale'
 import { pdfMoney } from './report-pdf-detail'
+import { formatDecimal } from './money-format'
 export { generalLedgerExportData } from './report-pdf-detail'
 
 /**
@@ -101,7 +102,7 @@ export function resolveLayout(layout?: Partial<ReportLayoutConfig> | null): {
 
 /** Format a number for the PDF: counts stay clean, money gets 2 decimals. */
 function pdfNum(v: number, locale = 'en'): string {
-  return new Intl.NumberFormat(locale, { maximumFractionDigits: Number.isInteger(v) ? 0 : 2 }).format(v)
+  return formatDecimal(locale, String(v), { maximumFractionDigits: Number.isInteger(v) ? 0 : 2 })
 }
 
 function pdfCell(v: string | number | null | undefined, locale: string, isMoney = false): string {
