@@ -1015,7 +1015,6 @@ const BUDGET_SCENARIO: RecordTypeMeta = {
   category: "entity",
   featureKey: "budgets",
   supportsForms: false,
-  customFieldTable: "budget_scenarios",
   customFieldLineTable: null,
   headerFields: [],
   lineFields: [],
@@ -1108,7 +1107,6 @@ const REVENUE_CONTRACT: RecordTypeMeta = {
   category: "entity",
   featureKey: "revenueRecognition",
   supportsForms: false,
-  customFieldTable: "revenue_contracts",
   customFieldLineTable: null,
   headerFields: [],
   lineFields: [],
@@ -1140,7 +1138,6 @@ const EQUIPMENT_UNIT: RecordTypeMeta = {
   category: "entity",
   featureKey: "equipment",
   supportsForms: false,
-  customFieldTable: "equipment_units",
   customFieldLineTable: null,
   headerFields: [],
   lineFields: [],
@@ -2320,17 +2317,20 @@ export function listFilterMeta(recordType: string, key: string): ListFilterMeta 
  * Where a record type's custom-field definitions live. Documents-backed types
  * (transactions) key their defs by `target_kind = recordType`; entity types
  * (e.g. projects) use a null kind and their own table. Line defs only exist for
- * types with a line grid (customFieldLineTable non-null).
+ * types with a line grid (customFieldLineTable non-null). Only a transaction
+ * falls back to documents: an entity type that names no table, or a key
+ * outside the registry, has no custom-field storage and resolves to null.
  */
 export function customFieldTargetFor(recordType: string): {
-  table: string
+  table: string | null
   kind: string | undefined
   lineTable: string | null
   lineKind: string | undefined
 } {
   const meta = RECORD_TYPE_BY_KEY[recordType]
-  const table = meta?.customFieldTable ?? "documents"
-  const lineTable = meta && meta.customFieldLineTable !== undefined ? meta.customFieldLineTable : "document_lines"
+  const documentKind = meta?.category === "transaction"
+  const table = meta?.customFieldTable ?? (documentKind ? "documents" : null)
+  const lineTable = meta && meta.customFieldLineTable !== undefined ? meta.customFieldLineTable : documentKind ? "document_lines" : null
   return {
     table,
     kind: table === "documents" ? recordType : undefined,

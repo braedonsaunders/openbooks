@@ -273,12 +273,14 @@ export async function loadCustomization(
   // Live custom-field defs feed the designer palette (header + line). The target
   // table + kind depend on the record type: documents-backed transactions key
   // defs by kind; entity types (e.g. projects) use their own table with a null
-  // kind and have no line grid.
+  // kind and have no line grid. An entity type with no custom-field storage
+  // (null header table) gets no header palette: its rows have no custom column,
+  // so offering fields — least of all another table's — would store nothing.
   const designerRecordType = openForm?.recordType ?? openView?.recordType ?? recordType
   const cfTarget = designerRecordType ? customFieldTargetFor(designerRecordType) : null
   const [designerHeaderDefs, designerLineDefs] = (formId || viewId) && designerRecordType && cfTarget
     ? await Promise.all([
-        loadFieldDefs(cfTarget.table, cfTarget.kind),
+        cfTarget.table ? loadFieldDefs(cfTarget.table, cfTarget.kind) : Promise.resolve([]),
         cfTarget.lineTable ? loadFieldDefs(cfTarget.lineTable, cfTarget.lineKind) : Promise.resolve([]),
       ])
     : [null, null]
