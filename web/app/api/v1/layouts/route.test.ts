@@ -88,6 +88,10 @@ const jsonRequest = (url: string, method: string, body?: unknown) => new Request
   body: body === undefined ? undefined : JSON.stringify(body),
 });
 const lastCall = () => routeState.calls[routeState.calls.length - 1];
+async function assertInvalidInput(response: Response, error: string) {
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), { error, code: "invalid_input" });
+}
 
 test("GET /api/v1/layouts lists through listLayouts", async () => {
   const response = await main.GET(new Request("http://openbooks.test/api/v1/layouts"));
@@ -111,10 +115,7 @@ test("PUT /api/v1/layouts stores through setLayout", async () => {
 });
 
 test("PUT /api/v1/layouts refuses a missing route", async () => {
-  await assert.rejects(
-    () => main.PUT(jsonRequest("http://openbooks.test/api/v1/layouts", "PUT", { spec: {} })),
-    /route is required/,
-  );
+  await assertInvalidInput(await main.PUT(jsonRequest("http://openbooks.test/api/v1/layouts", "PUT", { spec: {} })), "route is required");
 });
 
 test("DELETE /api/v1/layouts clears by query route", async () => {
@@ -125,10 +126,7 @@ test("DELETE /api/v1/layouts clears by query route", async () => {
 });
 
 test("DELETE /api/v1/layouts requires the route query parameter", async () => {
-  await assert.rejects(
-    () => main.DELETE(new Request("http://openbooks.test/api/v1/layouts")),
-    /route query parameter is required/,
-  );
+  await assertInvalidInput(await main.DELETE(new Request("http://openbooks.test/api/v1/layouts")), "route query parameter is required");
 });
 
 test("GET /api/v1/layouts/vocabulary describes through describeLayoutVocabulary", async () => {
@@ -151,10 +149,7 @@ test("GET /api/v1/layouts/describe forwards route and parsed params", async () =
 });
 
 test("GET /api/v1/layouts/describe requires the route query parameter", async () => {
-  await assert.rejects(
-    () => describe.GET(new Request("http://openbooks.test/api/v1/layouts/describe")),
-    /route query parameter is required/,
-  );
+  await assertInvalidInput(await describe.GET(new Request("http://openbooks.test/api/v1/layouts/describe")), "route query parameter is required");
 });
 
 test("POST /api/v1/layouts/validate checks the draft spec", async () => {
@@ -165,10 +160,7 @@ test("POST /api/v1/layouts/validate checks the draft spec", async () => {
 });
 
 test("POST /api/v1/layouts/validate refuses a missing spec", async () => {
-  await assert.rejects(
-    () => validate.POST(jsonRequest("http://openbooks.test/api/v1/layouts/validate", "POST", {})),
-    /spec is required/,
-  );
+  await assertInvalidInput(await validate.POST(jsonRequest("http://openbooks.test/api/v1/layouts/validate", "POST", {})), "spec is required");
 });
 
 test("POST /api/v1/layouts/preview stages the draft", async () => {
@@ -199,8 +191,5 @@ test("POST /api/v1/layouts/restore republishes by version id", async () => {
 });
 
 test("POST /api/v1/layouts/restore refuses a missing versionId", async () => {
-  await assert.rejects(
-    () => restore.POST(jsonRequest("http://openbooks.test/api/v1/layouts/restore", "POST", { route: "/banking" })),
-    /versionId is required/,
-  );
+  await assertInvalidInput(await restore.POST(jsonRequest("http://openbooks.test/api/v1/layouts/restore", "POST", { route: "/banking" })), "versionId is required");
 });
