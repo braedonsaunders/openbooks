@@ -10,7 +10,7 @@ export const POST = defineRoute({
   permission: "assets.manage",
   feature: "fixedAssets",
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz: gate, params }) => {
+  handler: async ({ request: _req, authz: gate, params }) => {
     const { id } = await params;
     if (!isUuid(id))
       return NextResponse.json({ error: "invalid lease" }, { status: 422 });

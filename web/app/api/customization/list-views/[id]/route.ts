@@ -92,7 +92,7 @@ export const PATCH = defineRoute({
       isActive: z.boolean().optional(),
     })
     .refine((body) => Object.keys(body).length > 0, "provide at least one view field to update"),
-  handler: async ({ request: req, authz, params, body: routeBody }) => {
+  handler: async ({ request: _req, authz, params, body: routeBody }) => {
     if (!authz)
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;

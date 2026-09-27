@@ -83,7 +83,7 @@ export const PATCH = defineRoute({
       isActive: z.boolean().optional(),
     })
     .refine((body) => Object.keys(body).length > 0, "provide at least one form field to update"),
-  handler: async ({ request: req, authz: gate, params, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const { user } = gate;
     const { id } = await params;
     if (!isUuid(id))

@@ -272,7 +272,7 @@ export const PATCH = defineRoute({
   feature: "fixedAssets",
   params: z.object({ id: z.string() }),
   body: patchBodySchema0,
-  handler: async ({ request: req, authz: gate, params, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const user = gate.user;
     const { id } = await params;
     if (!isUuid(id))

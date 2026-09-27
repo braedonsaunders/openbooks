@@ -6,7 +6,6 @@ import {
 } from "@openbooks/engine/src/automations/services.ts";
 import { createAutomationBody } from "./bodies";
 import { automationErrorResponse } from "./_lib";
-import { notFound } from "@/lib/api/responses";
 
 
 export { runtime } from "@/lib/api/route";
@@ -29,7 +28,7 @@ export const POST = defineRoute({
   permission: "automations.manage",
   feature: "automations",
   body: createAutomationBody,
-  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     const body = routeBody;
     try {
       const automation = await createAutomation({

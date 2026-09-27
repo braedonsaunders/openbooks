@@ -4,7 +4,6 @@ import { saveApprovalSettings } from "@openbooks/engine/src/automations/services
 import { loadApprovalSettings } from "@openbooks/engine/src/automations/approvals.ts";
 import { approvalSettingsBody } from "../bodies";
 import { automationErrorResponse } from "../_lib";
-import { notFound } from "@/lib/api/responses";
 
 
 export { runtime } from "@/lib/api/route";
@@ -34,7 +33,7 @@ export const POST = defineRoute({
   permission: "automations.manage",
   feature: "automations",
   body: approvalSettingsBody,
-  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     const body = routeBody;
     try {
       const settings = await saveApprovalSettings({

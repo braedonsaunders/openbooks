@@ -68,7 +68,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: "session",
   body: postBodySchema0,
-  handler: async ({ request: req, authz, body: routeBody }) => {
+  handler: async ({ request: _req, authz, body: routeBody }) => {
     if (!authz)
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     const { user } = authz;

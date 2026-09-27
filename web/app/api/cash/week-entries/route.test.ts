@@ -114,7 +114,7 @@ if (process.env.VITEST) {
     ["../../../../lib/cash/core", "mock:cash-core"],
     ["../../../../lib/cash/cash-position", "mock:cash-position"],
   ]);
-  const hooks = registerHooks({
+  const _hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
       const mocked = mockUrls.get(specifier);
       if (mocked) return { url: mocked, shortCircuit: true };

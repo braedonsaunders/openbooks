@@ -29,7 +29,7 @@ const subsidiaryScopeUrl = new URL(
 ).href
 const jsonUrl = new URL('../../../../../../lib/api/json.ts', import.meta.url).href
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '@/lib/authz' || /(^|\/)lib\/authz$/.test(specifier)) {
       return { shortCircuit: true, url: 'mock:replace-authz' }

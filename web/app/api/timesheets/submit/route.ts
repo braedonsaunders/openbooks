@@ -45,7 +45,7 @@ export const POST = defineRoute({
   permission: "time.manage",
   feature: "timeTracking",
   body: postBodySchema0,
-  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     const { user } = gate;
     const orgId = user.orgId;
 

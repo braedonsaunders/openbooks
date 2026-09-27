@@ -116,7 +116,7 @@ export const PATCH = defineRoute({
       allowedRoles: z.array(z.string().trim().min(1, "allowedRoles cannot contain blank role keys")).nullable().optional(),
     })
     .refine((body) => Object.keys(body).some((key) => key !== "expectedUpdatedAt"), "provide at least one dashboard field to update"),
-  handler: async ({ request: req, authz: gate, params, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const user = gate.user;
     const { id } = await params;
     if (!isUuid(id))

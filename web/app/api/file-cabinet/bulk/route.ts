@@ -54,7 +54,7 @@ type BulkItemResult = {
 export const POST = defineRoute({
   public: "session",
   body: postBodySchema0,
-  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, body: routeBody }) => {
     const orgId = gate.user.orgId;
     const viewer = fileViewer(gate);
 

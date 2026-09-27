@@ -2,7 +2,6 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { automationRecipes } from "@openbooks/engine/src/automations/services.ts";
 import { automationErrorResponse } from "../_lib";
-import { notFound } from "@/lib/api/responses";
 
 
 export { runtime } from "@/lib/api/route";
@@ -11,7 +10,7 @@ export { runtime } from "@/lib/api/route";
 export const GET = defineRoute({
   permission: "automations.read",
   feature: "automations",
-  handler: async ({ authz: gate }) => {
+  handler: async ({ authz: _gate }) => {
     try {
       return NextResponse.json({ recipes: automationRecipes() });
     } catch (e) {

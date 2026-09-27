@@ -23,7 +23,6 @@ import {
   listVisibleAttachments,
   loadAttachmentTarget,
   MAX_BYTES,
-  ATTACHABLE_TARGET_TABLES,
 } from "../lib";
 import { notFound } from "@/lib/api/responses";
 const postBodySchema0 = z.strictObject({

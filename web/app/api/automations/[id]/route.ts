@@ -5,7 +5,6 @@ import { updateAutomation } from "@openbooks/engine/src/automations/services.ts"
 import { isUuid } from "../../../../lib/list-params";
 import { patchAutomationBody } from "../bodies";
 import { automationErrorResponse } from "../_lib";
-import { notFound } from "@/lib/api/responses";
 
 
 export { runtime } from "@/lib/api/route";
@@ -46,7 +45,7 @@ export const PATCH = defineRoute({
   feature: "automations",
   params: z.object({ id: z.string() }),
   body: patchAutomationBody,
-  handler: async ({ request: req, authz: gate, params, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const ctx = { params };
 
     const { id } = await ctx.params;

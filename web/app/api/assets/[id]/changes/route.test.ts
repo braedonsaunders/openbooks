@@ -15,7 +15,7 @@ const state = {
 (globalThis as typeof globalThis & Record<symbol, unknown>)[
   Symbol.for("asset-change-route")
 ] = state;
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, next) {
     // Resolve framework imports against this real file, not the virtual auth URL.
     if (specifier === "next/server" && context.parentURL?.startsWith("mock:"))

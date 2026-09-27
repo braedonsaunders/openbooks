@@ -251,7 +251,7 @@ function mockedUrl(specifier: string): string | null {
   return mockUrls.get(specifier) ?? null;
 }
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockedUrl(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };

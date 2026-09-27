@@ -5,7 +5,7 @@ import test from "node:test";
 const key = Symbol.for("openbooks.lease-lifecycle-routes");
 const state = { allowed: true, calls: [] as unknown[][], refusal: "" };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[key] = state;
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // Resolve framework imports against this real file, not the virtual auth URL.
     if (specifier === "next/server" && context.parentURL?.startsWith("mock:"))

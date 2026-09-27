@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import { getAutomationRun } from "@openbooks/engine/src/automations/services.ts";
 import { isUuid } from "../../../../../lib/list-params";
 import { automationErrorResponse } from "../../_lib";
-import { notFound } from "@/lib/api/responses";
 
 
 export { runtime } from "@/lib/api/route";

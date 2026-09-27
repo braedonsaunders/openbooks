@@ -39,7 +39,7 @@ function sqlText(query: unknown): string {
 
 const VIEW_ID = '11111111-1111-4111-8111-111111111111'
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if ((specifier === '@/lib/authz' || specifier === '../../../../lib/authz')) {
       return { shortCircuit: true, url: 'mock:authz' }

@@ -94,7 +94,7 @@ const mockUrls = new Map<string, string>([
 
 const selfUrl = new URL(import.meta.url).href
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     // File-URL serving: the double re-exports the real permission map (opaque mock: URLs cannot resolve it).

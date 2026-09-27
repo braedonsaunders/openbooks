@@ -32,7 +32,7 @@ const mockCustomization = `
   export function parseFormLayout(input) { return { success: true, data: input, issues: [] } }
 `;
 
-const hooks = registerHooks({
+const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const parent = context.parentURL ?? "";
     if (specifier === "@openbooks/engine/src/platform/db.ts" && parent.includes("customization/form-layouts/route")) {

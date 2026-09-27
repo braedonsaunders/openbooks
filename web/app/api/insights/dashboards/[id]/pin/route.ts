@@ -22,7 +22,7 @@ export const POST = defineRoute({
   },
   params: z.object({ id: z.string() }),
   body: postBodySchema0,
-  handler: async ({ request: req, authz: gate, params, body: routeBody }) => {
+  handler: async ({ request: _req, authz: gate, params, body: routeBody }) => {
     const user = gate.user;
     const { id } = await params;
     if (!isUuid(id))
