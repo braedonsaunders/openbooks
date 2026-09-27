@@ -31,7 +31,7 @@ export const PUT = defineRoute({
   permission: "hrm.construction.manage",
   feature: "hrmConstructionCompliance",
   body: findingActionBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const finding =
         body.action === "acknowledge"

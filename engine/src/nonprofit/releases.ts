@@ -11,7 +11,6 @@ import {
   orgFeatureEnabled,
 } from "../organization/org-feature-lock.ts";
 import {
-  db,
   inDbTransaction,
   withOrgTransaction,
   type SqlExecutor,
@@ -679,7 +678,7 @@ async function postRelease(
   reason: string,
 ): Promise<FundRelease> {
   await lockFundReleaseBalance(executor, release.orgId, release.fromFundId);
-  const readiness = await postingReadiness(executor, release);
+  await postingReadiness(executor, release);
   const period = await resolveCoveringPeriod(executor, release.orgId, release.releaseDate);
   if (!period) {
     throw refusal({

@@ -46,7 +46,7 @@ export const POST = defineRoute({
   permission: "hrm.compensation.manage",
   feature: "hrmHeadcountPlans",
   body: createPlanBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     if (body.fiscalPeriodTo < body.fiscalPeriodFrom) {
       return NextResponse.json(
         { error: "fiscalPeriodTo must be on or after fiscalPeriodFrom" },

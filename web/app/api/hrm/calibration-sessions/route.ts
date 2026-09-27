@@ -39,7 +39,7 @@ export const POST = defineRoute({
   permission: "hrm.performance.manage",
   feature: "hrmCalibration",
   body: createCalibrationSessionBody,
-  handler: async ({ request: req, authz, body }) => {
+  handler: async ({ request: _req, authz, body }) => {
     try {
       const session = await createCalibrationSession({
         orgId: authz.user.orgId,

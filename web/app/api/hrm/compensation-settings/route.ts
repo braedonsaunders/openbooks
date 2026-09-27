@@ -52,7 +52,7 @@ export const PUT = defineRoute({
   feature: "hrmCompensation",
   scope: "unrestricted",
   body: settingsBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const next = await updateCompensationSettings({
         orgId: gate.user.orgId,

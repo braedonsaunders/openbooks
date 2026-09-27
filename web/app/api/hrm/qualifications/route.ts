@@ -46,7 +46,7 @@ export const POST = defineRoute({
   permission: "hrm.certifications.manage",
   feature: "hrmCertifications",
   body: recordQualificationBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       // The record and its evidence event commit together — one
       // transaction per user action, partial effects roll back.

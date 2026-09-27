@@ -42,7 +42,7 @@ export const POST = defineRoute({
   permission: "hrm.compensation.manage",
   feature: "hrmCompensation",
   body: createLevelBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const level = await createJobLevel({
         orgId: gate.user.orgId,

@@ -32,7 +32,7 @@ export const POST = defineRoute({
   permission: "hrm.employment.manage",
   feature: "hrmActionReasons",
   body: actionReasonRouteBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const reason = await upsertActionReason({
         orgId: gate.user.orgId,

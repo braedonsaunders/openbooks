@@ -101,7 +101,6 @@ function compute(
   context: StateEngineContext<MsYearRates>,
 ): UsStateWithholdingResult {
   const P = input.periodsPerYear;
-  const period = context.requirePrintedPeriod(P, MS_PERIODS, 260);
   const { factors, trace } = context;
 
   if (certificateFlag(input.certificate, "exempt")) {

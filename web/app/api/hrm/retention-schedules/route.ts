@@ -25,7 +25,7 @@ export const POST = defineRoute({
   permission: "hrm.documents.manage",
   feature: "hrmDocumentRetention",
   body: saveScheduleBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const schedule = await saveSchedule({
         orgId: gate.user.orgId,

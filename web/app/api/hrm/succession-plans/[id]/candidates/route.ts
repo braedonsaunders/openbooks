@@ -21,7 +21,7 @@ export const POST = defineRoute({
   feature: "hrmSuccession",
   body: addSuccessionCandidateBody,
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz, params, body }) => {
+  handler: async ({ request: _req, authz, params, body }) => {
     const { id } = params;
     try {
       const candidate = await addSuccessionCandidate({
@@ -43,7 +43,7 @@ export const PATCH = defineRoute({
   feature: "hrmSuccession",
   body: removeCandidateBody,
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz, params, body }) => {
+  handler: async ({ request: _req, authz, params, body }) => {
     const { id } = params;
     try {
       await removeSuccessionCandidate({

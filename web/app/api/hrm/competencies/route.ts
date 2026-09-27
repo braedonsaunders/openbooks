@@ -21,7 +21,7 @@ export const POST = defineRoute({
   permission: "hrm.performance.manage",
   feature: "hrmCompetencies",
   body: z.union([addCompetencyLevelBody, createCompetencyBody]),
-  handler: async ({ request: req, authz, body }) => {
+  handler: async ({ request: _req, authz, body }) => {
     const raw: unknown = body;
     if (raw !== null && typeof raw === "object" && "competencyId" in raw) {
       const parsedLevel = addCompetencyLevelBody.safeParse(raw);

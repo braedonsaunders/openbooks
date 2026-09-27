@@ -18,7 +18,7 @@ export const POST = defineRoute({
     reason: z.string().trim().max(2000).nullable().optional(),
   }),
   params: z.object({ id: z.string(), lineId: z.string() }),
-  handler: async ({ request: req, authz: gate, params, body }) => {
+  handler: async ({ request: _req, authz: gate, params, body }) => {
     // The folder segment is [id]; naming the local planId is fine, reading
     // a params key by that name is not -- Next generates the context type
     // from the path.

@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { registerHooks } from 'node:module'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { DOC_KIND_FEATURE } from './document-kinds'
 import { MODULE_BY_KEY } from './nav/registry'
@@ -680,11 +677,6 @@ test('subsidiary-aware contacts, accounts, and projects use their canonical scop
   assert.doesNotMatch(projects.text, /subsidiary_id is null/)
 })
 
-const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
-
-function source(relativePath: string): string {
-  return readFileSync(join(webRoot, relativePath), 'utf8')
-}
 
 function projectGroup(response: Awaited<ReturnType<typeof globalSearch>>) {
   return response.groups.find((group) => group.type === 'project')

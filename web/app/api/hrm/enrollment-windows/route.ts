@@ -43,7 +43,7 @@ export const POST = defineRoute({
   permission: "hrm.benefits.manage",
   feature: "hrm",
   body: createWindowBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const window = await createEnrollmentWindow({
         orgId: gate.user.orgId,

@@ -90,7 +90,7 @@ const mockUrls = new Map<string, string>([
   ["../review-cycles/_lib", "mock:lib"],
 ]);
 
-  const hooks = registerHooks({
+  registerHooks({
     resolve(specifier, _context, nextResolve) {
       const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" ? "mock:authz" : undefined);
       if (mocked) return { url: mocked, shortCircuit: true };

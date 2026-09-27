@@ -23,7 +23,7 @@
 import { D, divIntCents, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import {
-  certificateAmount, certificateChoice, certificateFlag, type PayrollCertificate,
+  certificateAmount, certificateChoice, type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
@@ -139,7 +139,6 @@ function compute(
   context: StateEngineContext<MoYearRates>,
 ): UsStateWithholdingResult {
   const P = input.periodsPerYear;
-  const period = context.requirePrintedPeriod(P, MO_PERIODS, 260);
   const { factors, trace } = context;
 
   const exempt = context.exemptResult({ factorKey: "MO_EXEMPT", factorFormat: "decimal" });

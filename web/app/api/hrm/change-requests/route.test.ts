@@ -91,7 +91,7 @@ const mockUrls = new Map<string, string>([
   ["./_lib", "mock:lib"],
 ]);
 
-  const hooks = registerHooks({
+  registerHooks({
     resolve(specifier, _context, nextResolve) {
       // The real JSON boundary is pure (Request + schema → value) and runs as-is;
       const mocked = mockUrls.get(specifier) ?? (specifier === "@/lib/authz" || specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);

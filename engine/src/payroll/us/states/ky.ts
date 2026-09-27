@@ -34,7 +34,7 @@ import { PayrollError } from "../../error.ts";
 import { D, divIntCents, max0, mulRateCents, rate6, U } from "../../../money/payroll-decimal.ts";
 import { mulRatio } from "../../../money/money.ts";
 import {
-  certificateAmount, certificateFlag, type PayrollCertificate,
+  certificateAmount, type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";

@@ -31,7 +31,7 @@ export const POST = defineRoute({
   permission: "hrm.compensation.manage",
   feature: "hrmPayTransparency",
   body: generateSnapshotBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const snapshot = await computeGapSnapshot({
         orgId: gate.user.orgId,

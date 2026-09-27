@@ -29,7 +29,7 @@ import { calculateBrInssFromTables } from "./inss-year.ts";
 import { calculateBrIrrfFromTables } from "./irrf-year.ts";
 import { brTablesForPayDate } from "./year-tables.ts";
 import { BR_PACK_RATES } from "./rates.ts";
-import { BR_2026_FGTS, BR_2026_PATRONAL, BR_2026_SALARIO_FAMILIA } from "./tax-year-2026.ts";
+import { BR_2026_SALARIO_FAMILIA } from "./tax-year-2026.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { BR_CPP_IN_DAS, BR_REGIME_TRIBUTARIO_CHOICES } from "./employer-facts.ts";
 

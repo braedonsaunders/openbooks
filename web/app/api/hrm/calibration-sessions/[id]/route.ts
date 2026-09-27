@@ -46,7 +46,7 @@ export const PATCH = defineRoute({
   feature: "hrmCalibration",
   body: patchCalibrationSessionBody,
   params: z.object({ id: z.string() }),
-  handler: async ({ request: req, authz, params, body }) => {
+  handler: async ({ request: _req, authz, params, body }) => {
     const { id } = params;
     try {
       const session =

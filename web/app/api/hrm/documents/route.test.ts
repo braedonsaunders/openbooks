@@ -43,7 +43,7 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "@/lib/authz" || specifier === "./authz") return { url: "mock:authz", shortCircuit: true };
     if (specifier === "./features") return { url: "mock:features", shortCircuit: true };

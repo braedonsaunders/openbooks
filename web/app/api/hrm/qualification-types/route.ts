@@ -31,7 +31,7 @@ export const POST = defineRoute({
   feature: "hrmCertifications",
   scope: "unrestricted",
   body: createQualificationTypeBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const type = await createQualificationType(db, {
         orgId: gate.user.orgId,

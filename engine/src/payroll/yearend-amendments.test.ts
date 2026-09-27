@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { describeSealedBlob, sealSecret, unsealSecret } from "../platform/secrets.ts";
+import { sealSecret, unsealSecret } from "../platform/secrets.ts";
 import { rotateDataKey } from "../../../scripts/rotate-data-key.ts";
 import { PayrollError } from "./error.ts";
 import {

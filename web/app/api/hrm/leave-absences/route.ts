@@ -12,7 +12,7 @@ export const POST = defineRoute({
   permission: "hrm.leave.manage",
   feature: "hrm",
   body: recordAbsenceBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const absence = await recordAbsence({
         orgId: gate.user.orgId,

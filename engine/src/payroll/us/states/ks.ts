@@ -23,7 +23,7 @@
 import { D, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { PayrollError } from "../../error.ts";
 import {
-  certificateAmount, certificateChoice, certificateCount, certificateFlag,
+  certificateAmount, certificateChoice, certificateCount,
   type PayrollCertificate,
 } from "../../certificates.ts";
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";

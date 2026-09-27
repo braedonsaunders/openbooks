@@ -39,7 +39,7 @@ export const POST = defineRoute({
   permission: "hrm.benefits.manage",
   feature: "hrm",
   body: createDependentBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const dependent = await createDependent({
         orgId: gate.user.orgId,

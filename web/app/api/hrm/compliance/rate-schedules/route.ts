@@ -43,7 +43,7 @@ export const POST = defineRoute({
   permission: "hrm.construction.manage",
   feature: "hrmConstructionCompliance",
   body: createScheduleBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const schedule = await createSchedule(db, {
         orgId: gate.user.orgId,

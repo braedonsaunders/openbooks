@@ -117,7 +117,7 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
   }, [data.salesOrder.id, t])
 
   useEffect(() => {
-    void load()
+    queueMicrotask(() => { void load() })
   }, [load])
 
   const warehouses = useMemo(() => {

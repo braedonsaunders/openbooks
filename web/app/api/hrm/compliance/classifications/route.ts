@@ -28,7 +28,7 @@ export const POST = defineRoute({
   permission: "hrm.construction.manage",
   feature: "hrmConstructionCompliance",
   body: createClassificationBody,
-  handler: async ({ request: req, authz: gate, body }) => {
+  handler: async ({ request: _req, authz: gate, body }) => {
     try {
       const classification = await createClassification(db, {
         orgId: gate.user.orgId,

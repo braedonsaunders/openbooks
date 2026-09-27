@@ -129,7 +129,6 @@ function compute(
   context: StateEngineContext<NeYearRates>,
 ): UsStateWithholdingResult {
   const P = input.periodsPerYear;
-  const period = context.requirePrintedPeriod(P, NE_PERIODS, 260);
   const { factors, trace } = context;
 
   if (input.employerEmployeeCount == null) {
