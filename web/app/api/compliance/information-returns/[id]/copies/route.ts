@@ -19,7 +19,7 @@ import { renderInformationReturnBatchPdf, renderInformationReturnPdf } from '@/l
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
+const requestBodySchema = z.strictObject({
   recipientId: z.string().uuid({ error: 'recipientId must be a valid recipient id' }).nullable().optional(),
 })
 

@@ -47,29 +47,57 @@ export const dynamic = 'force-dynamic'
  */
 
 /** employee_payroll_profiles.stub_delivery. */
-const STUB_DELIVERIES = new Set(['email', 'print', 'both'])
+const STUB_DELIVERY_OPTIONS = ['email', 'print', 'both'] as const
+const STUB_DELIVERIES = new Set<string>(STUB_DELIVERY_OPTIONS)
 
 /**
  * employee_payroll_profiles.payment_method — the payroll-owned override of the
  * rail. Empty/absent means "inherit the party preference"; the resolver
  * (engine/src/payroll/payment-method.ts) decides from there.
  */
-const PAYMENT_METHODS = new Set(['eft', 'cheque'])
+const PAYMENT_METHOD_OPTIONS = ['eft', 'cheque'] as const
+const PAYMENT_METHODS = new Set<string>(PAYMENT_METHOD_OPTIONS)
 
 const optionalCount = z.union([z.number().int(), z.string().trim().regex(/^\d*$/)]).nullable().optional()
 const optionalPackCount = z.union([z.number(), z.string()]).nullable().optional()
-const profileBodySchema = z.looseObject({
-  employeePartyId: z.string(),
-  payScheduleId: z.string(),
+const profileUuid = (field: string) => z.preprocess(
+  (value) => value === '' ? null : value,
+  z.string({ error: `${field} must be a UUID; choose a saved payroll record` })
+    .uuid({ error: `${field} must be a UUID; choose a saved payroll record` })
+    .nullable()
+    .optional(),
+)
+const optionalProfileMoney = (field: string) => z.string({
+  error: `${field} must be an exact decimal string; JSON numbers are refused`,
+}).nullable().optional()
+const profileBodySchema = z.strictObject({
+  employeePartyId: z.string({ error: 'employeePartyId must be a UUID; select an active employee in this organization' })
+    .uuid({ error: 'employeePartyId must be a UUID; select an active employee in this organization' }),
+  payScheduleId: z.string({ error: 'payScheduleId must be a UUID; select an active payroll schedule' })
+    .uuid({ error: 'payScheduleId must be a UUID; select an active payroll schedule' }),
   country: z.string().optional(),
   province: z.string().optional(),
   labourJurisdiction: z.string().nullable().optional(),
   payBasis: z.enum(['hourly', 'salary']).optional(),
   vacationMethod: z.enum(['accrue', 'pay_each_period']).optional(),
   filingStatus: z.string().nullable().optional(),
-  filingAccountId: z.string().nullable().optional(),
-  stubDelivery: z.string().optional(),
-  paymentMethod: z.string().nullable().optional(),
+  filingAccountId: profileUuid('filingAccountId'),
+  stubDelivery: z.enum(STUB_DELIVERY_OPTIONS, { error: 'stubDelivery must be email, print, or both' }).optional(),
+  paymentMethod: z.preprocess(
+    (value) => value === '' ? null : value,
+    z.enum(PAYMENT_METHOD_OPTIONS, { error: 'paymentMethod must be eft or cheque' }).nullable().optional(),
+  ),
+  federalClaimAmount: optionalProfileMoney('federalClaimAmount'),
+  provincialClaimAmount: optionalProfileMoney('provincialClaimAmount'),
+  additionalTaxPerPeriod: optionalProfileMoney('additionalTaxPerPeriod'),
+  prescribedZoneDeduction: optionalProfileMoney('prescribedZoneDeduction'),
+  authorizedAnnualDeductions: optionalProfileMoney('authorizedAnnualDeductions'),
+  authorizedFederalCredits: optionalProfileMoney('authorizedFederalCredits'),
+  authorizedProvincialCredits: optionalProfileMoney('authorizedProvincialCredits'),
+  dependentCredits: optionalProfileMoney('dependentCredits'),
+  otherIncomeAnnual: optionalProfileMoney('otherIncomeAnnual'),
+  deductionsAnnual: optionalProfileMoney('deductionsAnnual'),
+  vacationPercent: optionalProfileMoney('vacationPercent'),
   federalClaimCode: optionalCount,
   provincialClaimCode: optionalCount,
   w4Allowances: optionalCount,
@@ -98,6 +126,7 @@ const profileBodySchema = z.looseObject({
   jpKaigoDainigou: z.string().nullable().optional(),
   brDependentes: optionalPackCount,
   brPensaoMensal: z.string({ error: "brPensaoMensal must be sent as a decimal string, not a JSON number" }).nullable().optional(),
+  brSalarioFamiliaFilhos: optionalPackCount,
   // Standing commission-pay status for statutory-holiday rules that read it.
   // Nullable three-state: true/false answers, null un-answers. Omit to keep.
   paidOnCommission: z.boolean().nullable().optional(),

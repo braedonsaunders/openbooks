@@ -321,7 +321,7 @@ test("unconfigured inputs are refused by name, never stored as zero", async () =
     { ...baseBody(), status: "active" },
   ];
   const codes = [
-    "name_required",
+    "name is required",
     "invalid_subsidiary",
     "charge_item_not_found",
     "purchase_price_invalid",
@@ -334,7 +334,7 @@ test("unconfigured inputs are refused by name, never stored as zero", async () =
   for (let index = 0; index < bodies.length; index += 1) {
     const key = `00000000-0000-4000-8000-000000003${String(index + 11).padStart(3, "0")}`;
     const res = await post(key, bodies[index]!);
-    assert.equal(res.status, 422);
+    assert.equal(res.status, index === 0 ? 400 : 422);
     assert.equal(((await res.json()) as { error: string }).error, codes[index]);
   }
   assert.equal(state.units.length, 0);

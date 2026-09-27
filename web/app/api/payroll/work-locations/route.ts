@@ -76,7 +76,7 @@ export const GET = defineRoute({
 })
 
 const saveSchema = z.object({
-  employmentId: z.string().refine(isUuid),
+  employmentId: z.string().uuid('employmentId must be a valid UUID; select an employment in your payroll scope'),
   periodStart: z.string().regex(dateShape),
   periodEnd: z.string().regex(dateShape),
   region: z.string().trim().min(1).max(32),
@@ -84,7 +84,7 @@ const saveSchema = z.object({
   serviceDays: z.number().int().nonnegative().nullable().optional(),
   workShare: z.string().regex(shareShape).nullable().optional(),
   source: z.enum(["hr_records", "certificate", "adequate_records"]),
-  evidenceDocumentId: z.string().refine(isUuid).nullable().optional(),
+  evidenceDocumentId: z.string().uuid('evidenceDocumentId must be a valid UUID; select a saved evidence document').nullable().optional(),
   changeReason: z.string().trim().min(1).max(1000),
 }).refine((value) => value.periodStart <= value.periodEnd, {
   message: "period start must not follow period end",

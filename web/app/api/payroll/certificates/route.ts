@@ -39,7 +39,7 @@ export const dynamic = 'force-dynamic'
  * columns. Only `certificate_rows` certificates are listed and accepted.
  */
 
-const certificateBodySchema = z.looseObject({
+const certificateBodySchema = z.strictObject({
   employeePartyId: z.string().uuid(),
   country: z.string().min(1),
   certificateKey: z.string().trim().min(1),
