@@ -16,16 +16,24 @@ test('expense categories exclude secondary-book journal amounts', { skip: !proce
     await withBypassContext(async () => {
       await db.execute(sql`insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
         values (${book}, ${org.orgId}, 'ALT', 'Alternate', false, true, true)`)
-      await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, subtotal, tax_total, total)
-        values (${document}, ${org.orgId}, 'expense_report', 'posted', 'EXP-BOOK', ${org.customerId}, ${org.subsidiaryId}, '2026-07-14', '2026-07-14', 'CAD', '1', '100', '0', '100')`)
+      await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, subtotal, tax_total, total, posting_period_id)
+        values (${document}, ${org.orgId}, 'expense_report', 'draft', 'EXP-BOOK', ${org.customerId}, ${org.subsidiaryId}, '2026-07-14', '2026-07-14', 'CAD', '1', '100', '0', '100', ${org.periodId})`)
+      let primaryEntryId = ''
       for (const [bookId, amount, tag] of [[org.bookId, '100', 'PRIMARY'], [book, '900', 'ALTERNATE']] as const) {
         const entry = randomUUID()
+        if (bookId === org.bookId) primaryEntryId = entry
         await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, source_document_id)
-          values (${entry}, ${org.orgId}, ${bookId}, ${org.subsidiaryId}, ${`${tag}-${entry}`}, '2026-07-14', ${org.periodId}, 'posted', 'manual', ${document})`)
+          values (${entry}, ${org.orgId}, ${bookId}, ${org.subsidiaryId}, ${`${tag}-${entry}`}, '2026-07-14', ${org.periodId}, 'draft', 'manual', ${document})`)
         await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
           values (${org.orgId}, ${entry}, 1, ${org.accounts.cogs}, ${org.subsidiaryId}, ${amount}, 'CAD', ${amount}, '1'),
                  (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, ${'-' + amount}, 'CAD', ${'-' + amount}, '1')`)
+        const posted = await db.execute(sql`update journal_entries set status = 'posted', posted_at = now()
+          where id = ${entry} and org_id = ${org.orgId} returning id`)
+        assert.equal(posted.rows.length, 1)
       }
+      const postedDocument = await db.execute(sql`update documents set status = 'posted', posted_entry_id = ${primaryEntryId}
+        where id = ${document} and org_id = ${org.orgId} returning id`)
+      assert.equal(postedDocument.rows.length, 1)
     })
     await withSimClock('2026-07-15', async () => {
       const dashboard = await expensesDashboard(org.orgId, null)
