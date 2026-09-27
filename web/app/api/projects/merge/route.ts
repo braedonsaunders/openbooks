@@ -1,6 +1,7 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
@@ -10,11 +11,10 @@ import {
 } from "@openbooks/engine/src/projects/merge.ts";
 import { guardPermission, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
-import { guardProjectsFeature } from "../../../../lib/projects-gate";
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = "nodejs";
+const mergeBody = z.object({ survivorId: z.string().uuid(), duplicateId: z.string().uuid() })
 
 type Gate = Exclude<Awaited<ReturnType<typeof guardPermission>>, NextResponse>;
 
@@ -38,11 +38,9 @@ async function guardMergeScope(
 }
 
 /** Preview the impact of merging one duplicate into its survivor. */
-export async function GET(req: Request) {
-  const gate = await guardPermission("projects.manage");
-  if (gate instanceof NextResponse) return gate;
-  const feature = await guardProjectsFeature(gate.user.orgId);
-  if (feature) return feature;
+export const GET = defineRoute({
+  permission: "projects.manage", feature: "projects",
+  handler: async ({ request: req, authz: gate }) => {
   const url = new URL(req.url);
   const survivorId = url.searchParams.get("survivorId") ?? "";
   const duplicateId = url.searchParams.get("duplicateId") ?? "";
@@ -67,17 +65,13 @@ export async function GET(req: Request) {
     }
     throw error;
   }
-}
+  },
+})
 
 /** Merge the duplicate into the survivor in one transaction. */
-export async function POST(req: Request) {
-  const gate = await guardPermission("projects.manage");
-  if (gate instanceof NextResponse) return gate;
-  const feature = await guardProjectsFeature(gate.user.orgId);
-  if (feature) return feature;
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as Record<string, unknown>;
+export const POST = defineRoute({
+  permission: "projects.manage", feature: "projects", body: mergeBody,
+  handler: async ({ body, authz: gate }) => {
   const survivorId = typeof body.survivorId === "string" ? body.survivorId : "";
   const duplicateId = typeof body.duplicateId === "string" ? body.duplicateId : "";
   if (!isUuid(survivorId) || !isUuid(duplicateId)) {
@@ -102,4 +96,5 @@ export async function POST(req: Request) {
     }
     throw error;
   }
-}
+  },
+})

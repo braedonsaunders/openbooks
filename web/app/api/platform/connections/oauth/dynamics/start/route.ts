@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { authorizeUrl, type DynamicsApp } from '@openbooks/engine/src/connectors/dynamics.ts'
 import { SecretIntegrityError, unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
-import { guardPermission, guardUnrestrictedScope } from '../../../../../../../lib/authz'
+import { defineRoute } from '@/lib/api/route'
 import { storageIdentityError } from '../../../_storage-identity'
 import {
   attachConnectionOauthCookie,
@@ -12,7 +12,6 @@ import {
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = 'nodejs'
 
 /**
  * Begin the Dynamics 365 Business Central consent flow for one connection. The
@@ -20,11 +19,11 @@ export const runtime = 'nodejs'
  * id + BC environment ride on its config. A one-time nonce rides in the sealed
  * `state` and in an HttpOnly cookie.
  */
-export async function GET(req: Request) {
-  const gate = await guardPermission('admin.setup.manage')
-  if (gate instanceof NextResponse) return gate
-  const scopeDenied = guardUnrestrictedScope(gate)
-  if (scopeDenied) return scopeDenied
+export const GET = defineRoute({
+  permission: 'admin.setup.manage',
+  feature: { none: 'External accounting connections are controlled by setup permission and have no separate organization feature gate.' },
+  scope: 'unrestricted',
+  handler: async ({ request: req, authz: gate }) => {
   const connectionId = new URL(req.url).searchParams.get('connectionId')
   if (!connectionId) return NextResponse.json({ error: 'connectionId is required' }, { status: 400 })
 
@@ -57,4 +56,5 @@ export async function GET(req: Request) {
   const response = NextResponse.redirect(authorizeUrl(app, state))
   attachConnectionOauthCookie(response, nonce)
   return response
-}
+  },
+})

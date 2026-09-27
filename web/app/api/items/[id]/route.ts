@@ -1,9 +1,9 @@
-import { exactMoney, parseJsonBody } from "@/lib/api/json";
+import { exactMoney } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { guardPermission, guardUnrestrictedScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
@@ -12,8 +12,6 @@ import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
 
 const ITEM_KINDS = [
   'service',
@@ -75,7 +73,7 @@ const nullableMoney = z.preprocess(
 
 // Validate the complete patch shape before normalization. Non-text values must
 // never become silent clears, and PostgreSQL must not coerce lifecycle flags.
-const itemPatchSchema = z.looseObject({
+const itemPatchSchema = z.object({
   kind: z.string().optional(),
   code: nullableText,
   name: z.string().optional(),
@@ -99,7 +97,7 @@ const itemPatchSchema = z.looseObject({
   standaloneSellingPrice: nullableMoney,
   reason: nullableText,
   changeReason: nullableText,
-})
+}).strict()
 type PatchBody = z.output<typeof itemPatchSchema>
 
 const CREATE_PLANS_ON = ['billing', 'fulfillment', 'arrangement'] as const
@@ -160,38 +158,36 @@ class PatchInvalid extends Error {}
 /** The item disappeared or a feature gate closed before the locked read. */
 class PatchNotFound extends Error {}
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.read')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
+const itemParams = z.object({ id: z.string() })
+
+export const GET = defineRoute({
+  permission: 'items.read',
+  feature: { none: 'The item catalog is available independently of optional inventory capabilities.' },
+  params: itemParams,
+  handler: async ({ authz: gate, params: { id } }) => {
   if (!isUuid(id)) return notFound("record")
   const payload = await loadItem(id, gate.user.orgId)
   if (!payload) return notFound("record")
   return NextResponse.json(payload)
-}
+  },
+})
 
 /**
  * Autosave for the item flyout: catalog fields, account/tax links, custom
  * values, and the explicit activate/deactivate action. Only provided fields
  * are updated; a real name is required to activate.
  */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('items.manage')
-  if (gate instanceof NextResponse) return gate
+export const PATCH = defineRoute({
+  permission: 'items.manage',
+  feature: { none: 'The item catalog is available independently of optional inventory capabilities.' },
+  scope: 'unrestricted',
+  params: itemParams,
+  body: itemPatchSchema,
+  handler: async ({ params: { id }, body, authz: gate }) => {
   // Item accounts, tax, and recognition config apply org-wide.
-  const unrestricted = guardUnrestrictedScope(gate)
-  if (unrestricted) return unrestricted
   const user = gate.user
-  const { id } = await params
   if (!isUuid(id)) return notFound("record")
 
-  // The patch body parses directly through its zod schema: the schema
-  // already validated separately, so parsing through jsonObject first only
-  // ran the same validation twice. Schema failures stay 422 with the first
-  // issue message, exactly as the removed second validation reported them.
-  const parsedBody = await parseJsonBody(req, itemPatchSchema, { status: 422 });
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data
 
   // -- kind ----------------------------------------------------------------
   if (body.kind !== undefined && !ITEM_KINDS.includes(body.kind as (typeof ITEM_KINDS)[number])) {
@@ -474,4 +470,5 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const payload = await loadItem(id, user.orgId)
   return NextResponse.json(payload)
-}
+  },
+})

@@ -6,6 +6,7 @@ import { paymentErrorResponse } from '../lib'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
+import { defineRoute } from '@/lib/api/route'
 
 
 export const runtime = 'nodejs'
@@ -17,7 +18,7 @@ export const runtime = 'nodejs'
  * so they need their own reader — without it a posted credit memo is
  * invisible to every receipt flow.
  */
-export async function GET(req: Request) {
+async function getCreditItems(req: Request) {
   const url = new URL(req.url)
   const partyId = url.searchParams.get('partyId') ?? ''
   const side = url.searchParams.get('side')
@@ -44,3 +45,15 @@ export async function GET(req: Request) {
     return paymentErrorResponse(e)
   }
 }
+
+export const GET = defineRoute({
+  authorize: async ({ request }) => {
+    const side = new URL(request.url).searchParams.get('side')
+    if (side !== 'ap' && side !== 'ar') {
+      return NextResponse.json({ error: 'side must be ap or ar' }, { status: 400 })
+    }
+    return guardPermission(side === 'ap' ? 'ap.pay' : 'ar.pay')
+  },
+  feature: { none: 'Credit application source lines are available under the side-specific payment permission.' },
+  handler: async ({ request }) => getCreditItems(request),
+})

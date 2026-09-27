@@ -1,23 +1,20 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
 import { getTranslations } from 'next-intl/server'
 import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
 import { getConnection, QBD_WEB_CONNECTOR_REGIONS } from '@openbooks/engine/src/sync/connection.ts'
 import { xmlEscape } from '@openbooks/engine/src/qbd/qbxml.ts'
-import { guardPermission, guardUnrestrictedScope } from '../../../../../../lib/authz'
 import { storageIdentityError } from '../../_storage-identity'
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = 'nodejs'
-
 const OWNER_ID = '{E71D62A6-BC4D-4F72-90E8-F797CA478DA0}'
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('admin.setup.manage')
-  if (gate instanceof NextResponse) return gate
-  const scopeDenied = guardUnrestrictedScope(gate)
-  if (scopeDenied) return scopeDenied
-  const { id } = await params
+export const GET = defineRoute({
+  permission: 'admin.setup.manage', feature: { none: 'QuickBooks Desktop connector files are controlled by setup permission and have no separate organization feature gate.' },
+  scope: 'unrestricted', params: z.object({ id: z.string().uuid() }),
+  handler: async ({ params: { id }, authz: gate }) => {
   const connection = await getConnection(gate.user.orgId, id).catch((e) => {
     if (storageIdentityError(e)) return null
     throw e
@@ -65,4 +62,5 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       'X-Content-Type-Options': 'nosniff',
     },
   })
-}
+  },
+})

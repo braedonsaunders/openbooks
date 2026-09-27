@@ -3,10 +3,11 @@ import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { suggestApplications } from "@openbooks/engine/src/payments/payment-queries.ts";
-import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
+import { getAuthz, guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { exactMoney, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse } from '../lib'
 import { notFound } from "@/lib/api/responses";
+import { defineRoute } from '@/lib/api/route'
 
 
 export const runtime = 'nodejs'
@@ -24,7 +25,7 @@ const suggestBody = z.object({
 })
 
 /** Automated cash application: suggest how an amount settles a party's open items. */
-export async function POST(req: Request) {
+async function suggestPaymentApplications(req: Request) {
   const parsed = await parseJsonBody(req, suggestBody)
   if (!parsed.ok) return parsed.response
   const body = parsed.data
@@ -51,3 +52,17 @@ export async function POST(req: Request) {
     return paymentErrorResponse(e)
   }
 }
+
+export const POST = defineRoute({
+  authorize: async ({ request }) => {
+    let side: unknown
+    try { side = (await request.clone().json() as { side?: unknown }).side } catch { /* body parser provides the malformed-body refusal */ }
+    if (side !== 'ap' && side !== 'ar') {
+      const authz = await getAuthz()
+      return authz ?? NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    }
+    return guardPermission(side === 'ap' ? 'ap.pay' : 'ar.pay')
+  },
+  feature: { none: 'Application suggestions require the payment permission matching their AP or AR side.' },
+  handler: async ({ request }) => suggestPaymentApplications(request),
+})

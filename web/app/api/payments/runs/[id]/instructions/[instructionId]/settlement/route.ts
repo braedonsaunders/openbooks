@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { defineRoute } from "@/lib/api/route";
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -23,7 +24,7 @@ const settlementBody = z
     error: 'A return reason is required',
   })
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string; instructionId: string }> }) {
+async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string; instructionId: string }> }) {
   const { id, instructionId } = await params
   if (!isUuid(id) || !isUuid(instructionId)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
@@ -52,3 +53,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return paymentErrorResponse(error)
   }
 }
+
+export const POST = defineRoute({
+  authorize: async ({ params }) => {
+    const runId = String((params as { id?: string } | undefined)?.id ?? "");
+    return guardPaymentRunPermission(runId);
+  },
+  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
+  handler: async ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params as never) }),
+});

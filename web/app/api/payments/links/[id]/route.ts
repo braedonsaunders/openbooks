@@ -1,5 +1,7 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { PaymentAcceptanceError, voidPaymentLink } from "@openbooks/engine/src/payments/acceptance.ts";
@@ -12,7 +14,7 @@ import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function deletePaymentLink(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission("ar.create");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "onlinePayments"))) {
@@ -40,3 +42,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return apiErrorResponse(e);
   }
 }
+
+export const DELETE = defineRoute({
+  authorize: () => guardPermission('ar.create'),
+  feature: { none: 'The link handler applies the onlinePayments feature and record scope after permission authorization.' },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, params }) => deletePaymentLink(request, { params: Promise.resolve(params) }),
+})

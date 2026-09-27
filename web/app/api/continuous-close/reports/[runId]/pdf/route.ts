@@ -1,22 +1,22 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { resolvePdfPageSetup } from '@openbooks/pdf'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { guardUnrestrictedScope } from '../../../../../../lib/authz'
 import { readableContinuousCloseAgents } from '../../../../../../lib/continuous-close'
 import { pdfResponse, safeName } from '../../../../../../lib/export'
 import { exportDataToPdf, orgBranding, type ExportData } from '../../../../../../lib/report-pdf'
 import { isUuid } from '../../../../../../lib/list-params'
 
-export const runtime = 'nodejs'
-
-export async function GET(_request: Request, { params }: { params: Promise<{ runId: string }> }) {
-  const gate = await guardFeaturePermission('assistant.use', 'continuousClose')
-  if (gate instanceof NextResponse) return gate
-  const { runId } = await params
+export const GET = defineRoute({
+  permission: 'assistant.use',
+  feature: 'continuousClose',
+  params: z.object({ runId: z.string() }),
+  handler: async ({ authz: gate, params: { runId } }) => {
   if (!isUuid(runId)) return NextResponse.json({ error: 'invalid_report' }, { status: 422 })
   const readable = readableContinuousCloseAgents(gate)
   if (!readable.length) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
@@ -88,7 +88,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ run
     generatedAt: new Date(`${stamp}T00:00:00Z`),
   })
   return pdfResponse(pdf, safeName(`${title}-${runId.slice(0, 8)}-${stamp}`))
-}
+  },
+})
 
 function textGroup(title: string, values: string[]): ExportData['groups'][number] {
   return { kind: 'section', title, columns: [''], rows: values.map((value) => [value]), align: ['left'] }

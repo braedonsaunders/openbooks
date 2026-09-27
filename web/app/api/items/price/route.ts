@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
-import { jsonObject, parseJsonBody } from '@/lib/api/json'
-import { guardPermission } from '@/lib/authz'
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
+import { exactMoney, nullableUuidId, uuidId } from '@/lib/api/json'
+import { isoDate } from '@/lib/api/json'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
@@ -9,14 +11,20 @@ import { cmp } from '@openbooks/engine/src/money/money.ts'
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = 'nodejs'
+const priceBody = z.object({
+  itemId: uuidId,
+  customerId: nullableUuidId.optional(),
+  currency: z.string(),
+  onDate: isoDate(),
+  lineQuantity: exactMoney(),
+  overallItemQuantity: exactMoney().optional(),
+})
 
-export async function POST(request: Request) {
-  const gate = await guardPermission('ar.read')
-  if (gate instanceof NextResponse) return gate
-  const parsed = await parseJsonBody(request, jsonObject)
-  if (!parsed.ok) return parsed.response
-  const body = parsed.data as Record<string, unknown>
+export const POST = defineRoute({
+  permission: 'ar.read',
+  feature: { none: 'Item price previews require accounts-receivable read permission and have no separate organization feature gate.' },
+  body: priceBody,
+  handler: async ({ body, authz: gate }) => {
   const itemId = String(body.itemId ?? '')
   const customerId = body.customerId == null || body.customerId === '' ? null : String(body.customerId)
   const currency = String(body.currency ?? '').trim().toUpperCase()
@@ -33,4 +41,5 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: 'The item price could not be resolved' }, { status: 500 })
   }
-}
+  },
+})

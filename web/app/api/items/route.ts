@@ -43,8 +43,8 @@ const nullableMoney = z.preprocess(
   exactMoney().nullable(),
 ).optional()
 
-const itemCreateSchema = z.looseObject({
-  kind: z.string(),
+const itemCreateSchema = z.object({
+  kind: z.enum(ITEM_KINDS),
   code: nullableText,
   name: z.string(),
   description: nullableText,
@@ -65,7 +65,7 @@ const itemCreateSchema = z.looseObject({
   createPlansOn: z.string().optional(),
   revenueAllocation: z.string().optional(),
   standaloneSellingPrice: nullableMoney,
-})
+}).strict()
 
 function bad(error: string, status = 422) {
   if (status === 400) return unprocessable(error, { status })

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import {
   buildSource,
   type ConnectionRow,
 } from "@openbooks/engine/src/sync/connection.ts";
-import { guardPermission, guardUnrestrictedScope } from "../../../../../../lib/authz";
 import { storageIdentityError } from "../../_storage-identity";
 import { connectionConfigUrlRefusal } from "../../_connector-guard";
 import { notFound } from "@/lib/api/responses";
@@ -59,18 +60,13 @@ async function writeProbeOutcome(
  * same version of the row (status / last_error). Probe target and version
  * token come from one read; a concurrent change leaves the new row untouched.
  */
-export async function POST(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export const POST = defineRoute({
+  permission: "sync.run", feature: { none: "Connection probes are controlled by sync-run permission and have no separate organization feature gate." },
+  scope: "unrestricted", params: z.object({ id: z.string().uuid() }),
+  handler: async ({ params: { id }, authz: gate }) => {
   // Probing a connection exercises its credentials the way a run does, so
   // it rides the `sync.run` grant beside the run route; reconfiguring the
   // connection itself stays `admin.setup.manage`.
-  const gate = await guardPermission("sync.run");
-  if (gate instanceof NextResponse) return gate;
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
-  const { id } = await params;
   const row = await loadProbeRow(gate.user.orgId, id).catch((e) => {
     if (storageIdentityError(e)) return null;
     throw e;
@@ -140,4 +136,5 @@ export async function POST(
     if (!matched) return stale();
     return NextResponse.json({ ok: false, error: message }, { status: 422 });
   }
-}
+  },
+});

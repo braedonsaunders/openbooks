@@ -1,11 +1,9 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { cmp, normalizeDecimal, normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { guardPermission } from "../../../../lib/authz";
-import { guardProjectsFeature } from "../../../../lib/projects-gate";
 import { isUuid } from "../../../../lib/list-params";
 import {
   findUnownedCustomReferences,
@@ -25,11 +23,19 @@ import {
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = "nodejs";
-
-const nameBodySchema = z.looseObject({
-  name: z.string().optional(),
-  code: z.string().optional(),
+const cardBodySchema = z.object({
+  name: z.string().trim().min(1),
+  code: z.string().trim().min(1),
+  currency: z.string().optional(),
+  effective_from: z.string(),
+  effective_to: z.string().nullable(),
+  status: z.enum(["draft", "active", "retired"]),
+  derivation_policy: z.enum(["explicit", "time_type_multipliers"]),
+  custom: z.record(z.string(), z.unknown()).optional(),
+  scopes: z.array(z.object({ scopeType: z.string(), scopeValueId: z.string().nullable().optional(), scopeValueText: z.string().nullable().optional(), includeChildren: z.boolean().optional() })),
+  lines: z.array(z.object({ id: z.string().optional(), itemId: z.string().optional(), regular: z.string().nullable().optional(), timeTypeRates: z.record(z.string(), z.string()).optional() })),
+  adjustments: z.array(z.object({ code: z.string().trim().min(1), name: z.string().trim().min(1), category: z.string(), calculation: z.string(), value: z.string().nullable().optional(), unit: z.string().nullable().optional(), presentation: z.string(), threshold: z.string().nullable().optional(), thresholdUnit: z.string().nullable().optional(), referenceText: z.string().nullable().optional(), targets: z.array(z.object({ targetType: z.string(), targetValueId: z.string().nullable().optional(), targetValueText: z.string().nullable().optional(), includeChildren: z.boolean().optional() })) })),
+  terms: z.array(z.object({ code: z.string().trim().min(1), label: z.string().trim().min(1), content: z.string(), placement: z.string() })),
 });
 
 const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
@@ -59,58 +65,6 @@ const UUID_TARGET_TABLES: Record<string, string> = {
   class: "classes",
   trade: "trades",
   project: "projects",
-};
-
-type TargetInput = {
-  targetType?: string;
-  targetValueId?: string | null;
-  targetValueText?: string | null;
-  includeChildren?: boolean;
-};
-type ScopeInput = {
-  scopeType?: string;
-  scopeValueId?: string | null;
-  scopeValueText?: string | null;
-  includeChildren?: boolean;
-};
-type LineInput = {
-  id?: string;
-  itemId?: string;
-  regular?: string | null;
-  timeTypeRates?: Record<string, string>;
-};
-type AdjustmentInput = {
-  code?: string;
-  name?: string;
-  category?: string;
-  calculation?: string;
-  value?: string | null;
-  unit?: string | null;
-  presentation?: string;
-  threshold?: string | null;
-  thresholdUnit?: string | null;
-  referenceText?: string | null;
-  targets?: TargetInput[];
-};
-type TermInput = {
-  code?: string;
-  label?: string;
-  content?: string;
-  placement?: string;
-};
-type CardInput = {
-  name?: string;
-  code?: string;
-  currency?: string;
-  effective_from?: string;
-  effective_to?: string | null;
-  status?: string;
-  derivation_policy?: string;
-  custom?: Record<string, unknown>;
-  scopes?: ScopeInput[];
-  lines?: LineInput[];
-  adjustments?: AdjustmentInput[];
-  terms?: TermInput[];
 };
 
 function error(errorCode: string, status = 422) {
@@ -163,19 +117,13 @@ function nonnegativeDecimal(value: unknown, scale: number, nullable = false): st
   }
 }
 
-export async function PUT(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
-  const projectsGate = await guardProjectsFeature(gate.user.orgId);
-  if (projectsGate) return projectsGate;
-  const { id } = await params;
+export const PUT = defineRoute({
+  permission: "admin.setup.manage",
+  feature: "projects",
+  params: z.object({ id: z.string() }),
+  body: cardBodySchema,
+  handler: async ({ params: { id }, body, authz: gate }) => {
   if (!isUuid(id)) return error("notFound", 404);
-  const parsedBody = await parseJsonBody(req, nameBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as CardInput;
   if (
     typeof body.name !== "string" ||
     typeof body.code !== "string" ||
@@ -645,4 +593,5 @@ export async function PUT(
       code === "notFound" ? 404 : 422,
     );
   }
-}
+  },
+});

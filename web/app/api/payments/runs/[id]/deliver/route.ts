@@ -1,4 +1,5 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
@@ -21,7 +22,7 @@ const deliverBody = z.object({
 })
 
 /** Active SFTP servers the run can be delivered to (picker for the run drawer). */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
@@ -35,7 +36,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 /** Deliver a payment run's bank file to an SFTP server's outbound folder: { sftpServerId }. */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
@@ -51,3 +52,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return unexpectedServerError('payments/deliver', e)
   }
 }
+
+export const GET = defineRoute({
+  authorize: async ({ params }) => {
+    const runId = String((params as { id?: string } | undefined)?.id ?? "");
+    return guardPaymentRunPermission(runId);
+  },
+  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
+  handler: async ({ request, params }) => legacyGET(request, { params: Promise.resolve(params as never) }),
+});
+export const POST = defineRoute({
+  authorize: async ({ params }) => {
+    const runId = String((params as { id?: string } | undefined)?.id ?? "");
+    return guardPaymentRunPermission(runId);
+  },
+  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
+  handler: async ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params as never) }),
+});

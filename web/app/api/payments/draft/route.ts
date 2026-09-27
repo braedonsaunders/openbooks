@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
+import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { createPaymentDocument } from "@openbooks/engine/src/payments/payment-documents.ts";
-import { guardPermission } from '../../../../lib/authz'
+import { can, getAuthz, guardPermission } from '../../../../lib/authz'
 import { parseJsonBody } from '../../../../lib/api/json'
 import { paymentErrorResponse, paymentPermission } from '../lib'
 
@@ -14,7 +15,7 @@ const draftBody = z.object({
 })
 
 /** Instant-into-draft: create an empty draft payment/receipt, return its id. */
-export async function POST(req: Request) {
+async function createPaymentDraft(req: Request) {
   const parsed = await parseJsonBody(req, draftBody)
   if (!parsed.ok) return parsed.response
   const kind = parsed.data.kind
@@ -36,3 +37,18 @@ export async function POST(req: Request) {
     return paymentErrorResponse(e)
   }
 }
+
+export const POST = defineRoute({
+  authorize: async ({ request }) => {
+    let kind: unknown
+    try { kind = (await request.clone().json() as { kind?: unknown }).kind } catch { /* body parser handles malformed JSON below */ }
+    const authz = await getAuthz()
+    if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+    if ((kind === 'vendor_payment' || kind === 'customer_payment') && !can(authz, paymentPermission(kind))) {
+      return NextResponse.json({ error: `missing permission: ${paymentPermission(kind)}` }, { status: 403 })
+    }
+    return authz
+  },
+  feature: { none: 'Draft payment permission is selected from the validated payment kind.' },
+  handler: async ({ request }) => createPaymentDraft(request),
+})

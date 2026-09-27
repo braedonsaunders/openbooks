@@ -1,20 +1,19 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { currentUser, rotateRecoveryCodes } from "../../../../../lib/auth";
 import { authRequestContext, hasExpectedOrigin, publicMfaSecurityFailure } from "../../../../../lib/auth-policy";
 
-export const runtime = "nodejs";
+const recoveryBody = z.object({ password: z.string(), code: z.string() });
 
-export async function POST(request: NextRequest) {
+export const POST = defineRoute({ public: "session", body: recoveryBody, handler: async ({ request, body }) => {
+  const nextRequest = request as NextRequest;
   if (!hasExpectedOrigin(request)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   // Matches the login route's timing floor: a wrong password and a wrong MFA
   // code must be indistinguishable by response time as well as by message.
   const startedAt = Date.now();
   const user = await currentUser();
   if (!user?.sessionId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const parsedBody = await parseJsonBody(request, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as { password?: unknown; code?: unknown } | null;
   if (typeof body?.password !== "string" || typeof body.code !== "string") {
     return NextResponse.json({ error: "password and code required" }, { status: 400 });
   }
@@ -23,7 +22,7 @@ export async function POST(request: NextRequest) {
     user.sessionId,
     body.password,
     body.code,
-    authRequestContext(request),
+    authRequestContext(nextRequest),
   );
   const wait = Math.max(0, 500 - (Date.now() - startedAt));
   if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
@@ -41,4 +40,4 @@ export async function POST(request: NextRequest) {
     });
   }
   return NextResponse.json({ ok: true, recoveryCodes: result.recoveryCodes }, { headers: { "Cache-Control": "no-store" } });
-}
+} });

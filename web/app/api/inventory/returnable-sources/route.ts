@@ -11,6 +11,7 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { createPermission } from '../../../../lib/document-kinds'
 import { isDocKindEnabled } from '../../../../lib/documents.ts'
 import { notFound } from "@/lib/api/responses";
+import { defineRoute } from '@/lib/api/route'
 
 
 export const runtime = 'nodejs'
@@ -34,7 +35,7 @@ const SIDE_KINDS: Record<string, { side: ReturnSide; creditKind: string }> = {
  * movement against the very same reader, so the editor cannot offer a source
  * the save would refuse.
  */
-export async function GET(req: Request) {
+async function getReturnableSources(req: Request) {
   const url = new URL(req.url)
   const sideParam = url.searchParams.get('side') ?? ''
   const rules = SIDE_KINDS[sideParam]
@@ -105,3 +106,14 @@ export async function GET(req: Request) {
   })
   return NextResponse.json({ sources: page.sources, hasMore: page.hasMore })
 }
+
+export const GET = defineRoute({
+  authorize: async ({ request }) => {
+    const side = new URL(request.url).searchParams.get('side') ?? ''
+    const rules = SIDE_KINDS[side]
+    if (!rules) return NextResponse.json({ error: 'side must be purchase or sales' }, { status: 400 })
+    return guardPermission(createPermission(rules.creditKind))
+  },
+  feature: { none: 'The handler additionally applies the inventory and credit-kind feature gates for the selected return side.' },
+  handler: async ({ request }) => getReturnableSources(request),
+})

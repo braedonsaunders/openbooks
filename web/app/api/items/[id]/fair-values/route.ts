@@ -1,9 +1,9 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+import { exactMoney, uuidId } from "@/lib/api/json";
+import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardUnrestrictedScope } from '../../../../../lib/authz'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, isPositiveDecimal } from '../../../../../lib/exact-decimal'
@@ -13,7 +13,13 @@ import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = 'nodejs'
+const itemParams = z.object({ id: uuidId })
+const fairValueCreateBody = z.object({
+  currency: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/), unitPrice: exactMoney(),
+  lowValue: z.union([exactMoney(), z.null()]).optional(), highValue: z.union([exactMoney(), z.null()]).optional(),
+  effectiveFrom: z.string().nullable().optional(), effectiveTo: z.string().nullable().optional(), isActive: z.boolean().optional(),
+})
+const fairValueUpdateBody = fairValueCreateBody.extend({ id: uuidId })
 
 /**
  * Fair-value / standalone selling prices (fair_value_prices) for one item —
@@ -56,10 +62,7 @@ function dateOrNull(value: unknown): string | null | 'invalid' {
   return isIsoCalendarDate(s) ? s : 'invalid'
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('items.read', 'revenueRecognition')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
+export const GET = defineRoute({ permission: 'items.read', feature: 'revenueRecognition', params: itemParams, handler: async ({ params: { id }, authz: gate }) => {
   if (!isUuid(id) || !(await itemExists(id, gate.user.orgId))) {
     return notFound("record")
   }
@@ -69,7 +72,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
      where org_id = ${gate.user.orgId} and item_id = ${id}
      order by currency, effective_from desc nulls last`)))
   return NextResponse.json({ prices: rows.rows })
-}
+} })
 
 /** Shared field extraction/validation for POST and PATCH. */
 function parseBody(body: Record<string, unknown>): { error: string } | {
@@ -105,20 +108,14 @@ function parseBody(body: Record<string, unknown>): { error: string } | {
   }
 }
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('items.manage', 'revenueRecognition')
-  if (gate instanceof NextResponse) return gate
-  // Fair-value pricing is org-wide valuation policy.
-  const unrestricted = guardUnrestrictedScope(gate)
-  if (unrestricted) return unrestricted
+export const POST = defineRoute({
+  permission: 'items.manage', feature: 'revenueRecognition', scope: 'unrestricted', params: itemParams, body: fairValueCreateBody,
+  handler: async ({ params: { id }, body, authz: gate }) => {
   const { orgId, id: actorId } = gate.user
-  const { id } = await params
   if (!isUuid(id) || !(await itemExists(id, orgId))) {
     return notFound("record")
   }
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const parsed = parseBody((parsedBody.data) as Record<string, unknown>)
+  const parsed = parseBody(body)
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
   const created = await db.transaction(async (tx) => {
     const row = (await tx.execute<Record<string, unknown>>(sql`
@@ -141,19 +138,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return createdRow
   })
   return NextResponse.json({ id: String(created.id) })
-}
+  },
+})
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('items.manage', 'revenueRecognition')
-  if (gate instanceof NextResponse) return gate
-  const unrestricted = guardUnrestrictedScope(gate)
-  if (unrestricted) return unrestricted
+export const PATCH = defineRoute({
+  permission: 'items.manage', feature: 'revenueRecognition', scope: 'unrestricted', params: itemParams, body: fairValueUpdateBody,
+  handler: async ({ params: { id }, body, authz: gate }) => {
   const { orgId, id: actorId } = gate.user
-  const { id } = await params
   if (!isUuid(id)) return notFound("record")
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
-  if (!parsedBody2.ok) return parsedBody2.response;
-  const body = (parsedBody2.data) as Record<string, unknown>
   const rowId = String(body.id ?? '')
   if (!isUuid(rowId)) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const parsed = parseBody(body)
@@ -188,15 +180,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   })
   if (recordMissing) return notFound("record")
   return NextResponse.json({ id: rowId })
-}
+  },
+})
 
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('items.manage', 'revenueRecognition')
-  if (gate instanceof NextResponse) return gate
-  const unrestricted = guardUnrestrictedScope(gate)
-  if (unrestricted) return unrestricted
+export const DELETE = defineRoute({
+  permission: 'items.manage', feature: 'revenueRecognition', scope: 'unrestricted', params: itemParams,
+  handler: async ({ request: req, params: { id }, authz: gate }) => {
   const { orgId, id: actorId } = gate.user
-  const { id } = await params
   if (!isUuid(id)) return notFound("record")
   const rowId = new URL(req.url).searchParams.get('id') ?? ''
   if (!isUuid(rowId)) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -224,4 +214,5 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   })
   if (recordMissing) return notFound("record")
   return NextResponse.json({ ok: true })
-}
+  },
+})

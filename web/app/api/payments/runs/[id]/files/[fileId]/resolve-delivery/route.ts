@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { defineRoute } from "@/lib/api/route";
 import { z } from 'zod'
 import { resolveUncertainDelivery } from '@openbooks/engine/src/payments/operations.ts'
 import { isUuid } from '@/lib/list-params'
@@ -21,7 +22,7 @@ const resolveDeliveryBody = z.object({
  * nothing arrived). Approval-grade permission; the decision and its reason
  * are audited on the file's event trail by the engine.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string; fileId: string }> }) {
+async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string; fileId: string }> }) {
   const { id, fileId } = await params
   if (!isUuid(id) || !isUuid(fileId)) return notFound("record")
   const gate = await guardPaymentRunPermission(id, 'approve')
@@ -42,3 +43,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return paymentErrorResponse(e)
   }
 }
+
+export const POST = defineRoute({
+  authorize: async ({ params }) => {
+    const runId = String((params as { id?: string } | undefined)?.id ?? "");
+    return guardPaymentRunPermission(runId, "approve");
+  },
+  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
+  handler: async ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params as never) }),
+});

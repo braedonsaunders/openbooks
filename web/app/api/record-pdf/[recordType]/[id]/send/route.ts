@@ -1,5 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
 import { NextResponse } from 'next/server'
 import { isValidEmailAddress } from '@openbooks/emails'
 import { can, guardPermission, guardSubsidiaryScope } from '../../../../../../lib/authz'
@@ -10,9 +11,16 @@ import { PDF_RECORD_TYPE_BY_KEY } from '../../../../../../lib/pdf-templates/cata
 import { resolveRecordRecipient, sendRecordPdfEmail } from '../../../../../../lib/pdf-templates/send'
 import { loadRecordSubsidiaryScope } from '../../../lib'
 import { notFound } from "@/lib/api/responses";
+import { defineRoute } from '@/lib/api/route'
 
 
 export const runtime = 'nodejs'
+
+const sendRecordBody = z.object({
+  to: z.string().optional(),
+  message: z.string().optional(),
+  template: z.string().optional(),
+}).strict();
 
 /**
  * Outbound-send authority per PDF record type — the write-side twin of the
@@ -50,7 +58,7 @@ const RECORD_TYPE_SEND_PERMISSION: Record<string, string> = {
 }
 
 /** GET — default recipient + labels to prefill the send dialog. */
-export async function GET(req: Request, { params }: { params: Promise<{ recordType: string; id: string }> }) {
+async function getSendOptions(req: Request, { params }: { params: Promise<{ recordType: string; id: string }> }) {
   const { recordType, id } = await params
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 })
@@ -71,7 +79,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ recordTy
 }
 
 /** POST — render the record PDF and email it to the party. */
-export async function POST(req: Request, { params }: { params: Promise<{ recordType: string; id: string }> }) {
+async function sendRecord(req: Request, { params }: { params: Promise<{ recordType: string; id: string }> }) {
   const { recordType, id } = await params
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 })
@@ -98,9 +106,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ recordT
     )
   }
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, sendRecordBody);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { to?: string; message?: string; template?: string }
+  const body = parsedBody.data
   // Recipient policy at this boundary: an explicitly addressed send must name
   // one syntactically valid address; blank falls through to the party email
   // on file inside the sender. Refused before any render/log/send work.
@@ -133,3 +141,36 @@ export async function POST(req: Request, { params }: { params: Promise<{ recordT
     return apiErrorResponse(e)
   }
 }
+
+const sendParams = z.object({ recordType: z.string(), id: z.string() })
+const authorizeRecordRead = async ({ params }: { request: Request; params: unknown }) => {
+  const recordType = (params as { recordType?: string } | undefined)?.recordType ?? ''
+  const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
+  if (!meta) return NextResponse.json({ error: 'unknown record type' }, { status: 400 })
+  return guardPermission(meta.readPermission)
+}
+const authorizeRecordSend = async ({ params }: { request: Request; params: unknown }) => {
+  const recordType = (params as { recordType?: string } | undefined)?.recordType ?? ''
+  const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
+  if (!meta) return NextResponse.json({ error: 'unknown record type' }, { status: 400 })
+  const gate = await guardPermission(meta.readPermission)
+  if (gate instanceof NextResponse) return gate
+  const sendPermission = RECORD_TYPE_SEND_PERMISSION[recordType]
+  if (!sendPermission || !can(gate, sendPermission)) {
+    return NextResponse.json({ error: `missing permission: ${sendPermission ?? 'outbound send'}` }, { status: 403 })
+  }
+  return gate
+}
+
+export const GET = defineRoute({
+  authorize: authorizeRecordRead,
+  feature: { none: 'Record-type availability is enforced by the document-kind gate in the send dialog handler.' },
+  params: sendParams,
+  handler: async ({ request, params }) => getSendOptions(request, { params: Promise.resolve(params) }),
+})
+export const POST = defineRoute({
+  authorize: authorizeRecordSend,
+  feature: { none: 'Record-type availability is enforced by the document-kind gate; outbound delivery also checks its write permission.' },
+  params: sendParams,
+  handler: async ({ request, params }) => sendRecord(request, { params: Promise.resolve(params) }),
+})

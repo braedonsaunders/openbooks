@@ -1,9 +1,8 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../../../lib/authz'
+import { z } from 'zod'
 import { isUuid } from '../../../../../../lib/list-params'
-import { guardProjectsFeature } from '../../../../../../lib/projects-gate'
 import {
   updateWorkBreakdownTask,
 } from '../../../../../../lib/project-work-breakdown'
@@ -16,29 +15,21 @@ import {
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = 'nodejs'
+const taskParams = z.object({ id: z.string(), taskId: z.string() })
+const taskBody = z.object({
+  code: z.string().nullable().optional(), name: z.string().trim().min(1), status: z.enum(["open", "complete", "cancelled"]).optional(),
+  estimatedHours: z.string().nullable().optional(), estimatedCost: z.string().nullable().optional(),
+  expectedUpdatedAt: z.string(), reason: z.string().nullable().optional(),
+})
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string; taskId: string }> },
-) {
-  const gate = await guardPermission('projects.manage')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
-  if (feature) return feature
-  const { id, taskId } = await params
+export const PATCH = defineRoute({
+  permission: 'projects.manage', feature: 'projects', params: taskParams, body: taskBody,
+  handler: async ({ authz: gate, params: { id, taskId }, body }) => {
   if (!isUuid(id) || !isUuid(taskId)) {
     return notFound("record")
   }
 
   try {
-    const parsedBody = await parseJsonBody(request, jsonObject);
-    if (!parsedBody.ok) return parsedBody.response;
-    const rawBody = parsedBody.data
-    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
-      throw new ProjectWorkBreakdownError('Task details are required')
-    }
-    const body = rawBody as Record<string, unknown>
     // reason rides alongside the editor payload, not inside it: the input
     // parser rejects unknown task fields, and the reason evidences closed
     // transitions (reopens, closed-task budget changes) in the audit row.
@@ -62,4 +53,5 @@ export async function PATCH(
     }
     throw error
   }
-}
+  },
+})

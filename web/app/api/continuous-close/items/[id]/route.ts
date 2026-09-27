@@ -1,7 +1,7 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../lib/list-params";
 import { can, guardRootSubsidiaryScope, subsidiaryScopeAllows } from "../../../../../lib/authz";
 import {
@@ -35,11 +35,18 @@ const ALLOWED_ACTIONS = {
   dismissed: ["reopen"],
 } as const;
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission("assistant.use", "continuousClose");
-  if (gate instanceof NextResponse) return gate;
-  const authz = gate;
-  const { id } = await params;
+const itemParams = z.object({ id: z.string() });
+const itemActionBody = z.discriminatedUnion("action", [
+  z.object({ action: z.enum(["review", "resolve", "dismiss", "reopen"]), reason: z.string().optional() }),
+  z.object({ action: z.literal("assign"), assigneeUserId: z.string().nullable().optional(), assigneeRole: z.string().nullable().optional(), dueAt: z.string().nullable().optional() }),
+  z.object({ action: z.literal("note"), body: z.string() }),
+]);
+
+export const GET = defineRoute({
+  permission: "assistant.use",
+  feature: "continuousClose",
+  params: itemParams,
+  handler: async ({ authz, params: { id } }) => {
   if (!isUuid(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
   const item = await loadWorkItemDetail(
     authz.user.orgId,
@@ -62,13 +69,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     assignment,
     notes,
   });
-}
+  },
+});
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission("assistant.write", "continuousClose");
-  if (gate instanceof NextResponse) return gate;
-  const authz = gate;
-  const { id } = await params;
+export const PATCH = defineRoute({
+  permission: "assistant.write",
+  feature: "continuousClose",
+  params: itemParams,
+  body: itemActionBody,
+  handler: async ({ authz, params: { id }, body }) => {
   if (!isUuid(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
   const access = await loadWorkItemAccess(authz.user.orgId, id);
   if (!access) return notFound("record");
@@ -79,14 +88,6 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   // subject is out of scope: restricted callers share the uniform not-found.
   if (!subsidiaryScopeAllows(authz.allowedSubsidiaryIds, access.subjectSubsidiaryId)) {
     return notFound("record");
-  }
-  let body: Record<string, unknown>;
-  try {
-    const parsedBody = await parseJsonBody(request, jsonObject);
-    if (!parsedBody.ok) return parsedBody.response;
-    body = parsedBody.data;
-  } catch {
-    return NextResponse.json({ error: "bad_request" }, { status: 400 });
   }
   const action = typeof body.action === "string" ? body.action : "";
   if (action === "assign" || action === "note") {
@@ -157,4 +158,5 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: result.error }, { status: statusCode });
   }
   return NextResponse.json({ ok: true, status: result.status });
-}
+  },
+});

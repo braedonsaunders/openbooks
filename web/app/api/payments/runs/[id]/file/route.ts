@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { defineRoute } from "@/lib/api/route";
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { generatePaymentFileArtifact, recordPaymentFileDownload } from '@openbooks/engine/src/payments/operations.ts'
@@ -15,7 +16,7 @@ export const runtime = 'nodejs'
  * Download the latest approved immutable file artifact. Generation is a
  * separate POST so profiles that require file approval cannot leak bytes.
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
@@ -56,7 +57,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 /** Generate and persist a new file artifact for an approved run. */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
@@ -71,3 +72,20 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return paymentErrorResponse(e)
   }
 }
+
+export const GET = defineRoute({
+  authorize: async ({ params }) => {
+    const runId = String((params as { id?: string } | undefined)?.id ?? "");
+    return guardPaymentRunPermission(runId);
+  },
+  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
+  handler: async ({ request, params }) => legacyGET(request, { params: Promise.resolve(params as never) }),
+});
+export const POST = defineRoute({
+  authorize: async ({ params }) => {
+    const runId = String((params as { id?: string } | undefined)?.id ?? "");
+    return guardPaymentRunPermission(runId);
+  },
+  feature: { none: "Payment-run authorization checks the run direction, capability, and subsidiary scope." },
+  handler: async ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params as never) }),
+});

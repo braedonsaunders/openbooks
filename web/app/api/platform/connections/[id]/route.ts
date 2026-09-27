@@ -1,5 +1,8 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
+import { z } from "zod";
 import { NextResponse } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "@openbooks/engine/src/platform/db.ts";
@@ -25,6 +28,17 @@ import { notFound } from "@/lib/api/responses";
 
 
 export const runtime = "nodejs";
+
+// Connector config fields are versioned by the source manifest at runtime.
+const connectionPatchBody = z.object({
+  displayName: z.string().optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+  secrets: z.record(z.string(), z.string()).optional(),
+  mirrorEnabled: z.boolean().optional(),
+  mirrorSchedule: z.string().optional(),
+  postedChangePolicy: z.enum(["review_required", "append_only_automatic"]).optional(),
+  status: z.enum(["active", "paused"]).optional(),
+}).strict();
 
 /**
  * An unparseable mirror schedule refuses at 400 with the reason intact.
@@ -58,7 +72,7 @@ class ConnectionSecretsRefusal extends Error {
  * pause/resume. Secrets are merged (only provided fields change) then re-sealed;
  * they are never returned.
  */
-export async function PATCH(
+async function patchConnection(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -69,17 +83,9 @@ export async function PATCH(
   const orgId = gate.user.orgId;
   const { id } = await params;
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, connectionPatchBody);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    displayName?: string;
-    config?: Record<string, unknown>;
-    secrets?: Record<string, string>;
-    mirrorEnabled?: boolean;
-    mirrorSchedule?: string;
-    postedChangePolicy?: "review_required" | "append_only_automatic";
-    status?: "active" | "paused";
-  };
+  const body = parsedBody.data;
   if (body.config && typeof body.config === "object") {
     const ownedError = callerOwnedConfigRefusal(body.config);
     if (ownedError) {
@@ -276,7 +282,7 @@ export async function PATCH(
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(
+async function deleteConnection(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -333,3 +339,17 @@ export async function DELETE(
   }
   return NextResponse.json({ ok: true });
 }
+
+const connectionParams = z.object({ id: z.string() })
+export const PATCH = defineRoute({
+  authorize: () => guardPermission('admin.setup.manage'),
+  feature: { none: 'Connection configuration is governed by the org-wide setup permission and subsidiary-scope guard.' },
+  params: connectionParams,
+  handler: async ({ request, params }) => patchConnection(request, { params: Promise.resolve(params) }),
+})
+export const DELETE = defineRoute({
+  authorize: () => guardPermission('admin.setup.manage'),
+  feature: { none: 'Connection deletion is governed by the org-wide setup permission and subsidiary-scope guard.' },
+  params: connectionParams,
+  handler: async ({ request, params }) => deleteConnection(request, { params: Promise.resolve(params) }),
+})

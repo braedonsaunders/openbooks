@@ -1,11 +1,11 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { enqueueMigration, getMigrationQueue } from "@openbooks/jobs";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { syncConnectionRunLockKey } from "@openbooks/engine/src/sync/sync.ts";
 import type { ConnectionRow } from "@openbooks/engine/src/sync/connection.ts";
-import { guardPermission, guardUnrestrictedScope } from "../../../../../../lib/authz";
 import { storageIdentityError } from "../../_storage-identity";
 import { connectionConfigUrlRefusal } from "../../_connector-guard";
 
@@ -35,19 +35,16 @@ const MUTATING_MIGRATION_MODES = [
  * the platform page renders. One job per (connection, mode) is de-duped so a
  * double click can't launch two backfills.
  */
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+const runBody = z.object({ mode: z.enum(["full_migration", "preflight", "mirror", "project_financials", "attachments"]) });
+
+export const POST = defineRoute({
+  permission: "sync.run", feature: { none: "Connection synchronization is controlled by sync-run permission and has no separate organization feature gate." },
+  scope: "unrestricted", params: z.object({ id: z.string().uuid() }), body: runBody,
+  handler: async ({ params: { id }, body, authz: gate }) => {
   // Running a sync is the `sync.run` grant, not connection configuration:
   // a caller who may run but not reconfigure still passes here, while the
   // config routes keep requiring `admin.setup.manage`.
-  const gate = await guardPermission("sync.run");
-  if (gate instanceof NextResponse) return gate;
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
   const orgId = gate.user.orgId;
-  const { id } = await params;
   const conn = await db
     .execute<ProbeRow>(sql`
       select id, org_id as "orgId", source, display_name as "displayName",
@@ -87,28 +84,6 @@ export async function POST(
     );
   }
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    mode?:
-      | "full_migration"
-      | "preflight"
-      | "mirror"
-      | "project_financials"
-      | "attachments";
-  };
-  if (
-    !body.mode ||
-    ![
-      "full_migration",
-      "preflight",
-      "mirror",
-      "project_financials",
-      "attachments",
-    ].includes(body.mode)
-  ) {
-    return NextResponse.json({ errorCode: "INVALID_MODE" }, { status: 400 });
-  }
   if (body.mode === "attachments" && conn.source !== "netsuite") {
     return NextResponse.json(
       { errorCode: "ATTACHMENTS_UNSUPPORTED" },
@@ -196,4 +171,5 @@ export async function POST(
     );
   }
   return NextResponse.json({ jobId: outcome.job.id, mode });
-}
+  },
+});

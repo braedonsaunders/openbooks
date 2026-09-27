@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { defineRoute } from '@/lib/api/route'
+import { exactMoney, uuidId } from '@/lib/api/json'
 import { unprocessable } from '@/lib/api/responses'
 import { resolveIdempotentReplay } from '@/lib/api/idempotency'
 import { guardSubsidiaryScope, subsidiariesInScope } from '../../../lib/authz'
@@ -21,27 +22,31 @@ import { notFound } from "@/lib/api/responses";
 
 const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
 
-const projectCreateBody = z.looseObject({
-  name: z.unknown().optional(),
-  tasks: z.unknown().optional(),
-  isActive: z.unknown().optional(),
-  subsidiaryIncludeChildren: z.unknown().optional(),
-  status: z.unknown().optional(),
-  customerId: z.unknown().optional(),
-  foremanId: z.unknown().optional(),
-  managerId: z.unknown().optional(),
-  subsidiaryId: z.unknown().optional(),
-  startsOn: z.unknown().optional(),
-  endsOn: z.unknown().optional(),
-  invoicingPreference: z.unknown().optional(),
+const projectCreateBody = z.object({
+  name: z.string(),
+  tasks: z.array(z.object({ name: z.string(), code: z.string().nullable().optional() })).optional(),
+  isActive: z.boolean().optional(),
+  subsidiaryIncludeChildren: z.boolean().optional(),
+  status: z.enum(STATUSES).optional(),
+  customerId: uuidId.nullable().optional(),
+  foremanId: uuidId.nullable().optional(),
+  managerId: uuidId.nullable().optional(),
+  subsidiaryId: uuidId.nullable().optional(),
+  startsOn: z.string().nullable().optional(),
+  endsOn: z.string().nullable().optional(),
+  invoicingPreference: z.object({
+    defaultBasis: z.enum(["date_range", "draw_amount", "time_selection", "milestone"]).nullable().optional(),
+    backupRequired: z.boolean().nullable().optional(),
+    backupType: z.enum(["costed_timesheets", "timesheets_purchases", "purchases", "purchases_shop_time", "quote_only", "none"]).nullable().optional(),
+  }).nullable().optional(),
   custom: z.record(z.string(), z.unknown()).optional(),
-  contractValue: z.unknown().optional(),
-  siteJurisdiction: z.unknown().optional(),
-  projectTypeId: z.unknown().optional(),
-  code: z.unknown().optional(),
-  customerPoNumber: z.unknown().optional(),
-  notes: z.unknown().optional(),
-})
+  contractValue: z.union([exactMoney(), z.null()]).optional(),
+  siteJurisdiction: z.string().nullable().optional(),
+  projectTypeId: uuidId.nullable().optional(),
+  code: z.string().nullable().optional(),
+  customerPoNumber: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+}).strict()
 
 function bad(error: string, field?: string, status = 422) {
   if (status !== 400 && status !== 422) return NextResponse.json({ error, ...(field ? { field } : {}) }, { status })

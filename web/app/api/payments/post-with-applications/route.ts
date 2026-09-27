@@ -1,5 +1,6 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
+import { defineRoute } from '@/lib/api/route'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -49,7 +50,7 @@ const postWithApplicationsBody = z.object({
  * applies it to the selected open items atomically (auto-reversal on
  * application failure — see engine/src/payments/payments.ts).
  */
-export async function POST(req: Request) {
+async function postWithApplications(req: Request) {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
@@ -181,3 +182,12 @@ export async function POST(req: Request) {
     return paymentErrorResponse(e)
   }
 }
+
+export const POST = defineRoute({
+  authorize: async () => {
+    const authz = await getAuthz()
+    return authz ?? NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  },
+  feature: { none: 'The payment record determines AP or AR posting authority and subsidiary scope inside the handler.' },
+  handler: async ({ request }) => postWithApplications(request),
+})

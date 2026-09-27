@@ -6,12 +6,13 @@ import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse } from '../lib'
 import { notFound } from "@/lib/api/responses";
+import { defineRoute } from '@/lib/api/route'
 
 
 export const runtime = 'nodejs'
 
 /** Open AP or AR items for a party, with applied-to-date and open balances. */
-export async function GET(req: Request) {
+async function listOpenItems(req: Request) {
   const url = new URL(req.url)
   const partyId = url.searchParams.get('partyId') ?? ''
   const side = url.searchParams.get('side')
@@ -38,3 +39,13 @@ export async function GET(req: Request) {
     return paymentErrorResponse(e)
   }
 }
+
+export const GET = defineRoute({
+  authorize: async ({ request }) => {
+    const side = new URL(request.url).searchParams.get('side')
+    if (side !== 'ap' && side !== 'ar') return NextResponse.json({ error: 'side must be ap or ar' }, { status: 400 })
+    return guardPermission(side === 'ap' ? 'ap.pay' : 'ar.pay')
+  },
+  feature: { none: 'Open items require the payment permission matching their AP or AR side.' },
+  handler: async ({ request }) => listOpenItems(request),
+})

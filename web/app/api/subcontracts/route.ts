@@ -1,5 +1,5 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -37,6 +37,8 @@ import { isUuid } from "../../../lib/list-params";
 import { guardSubcontractsFeature } from "../../../lib/subcontracts-gate";
 import { subsidiaryVisibleFilter } from "../../../lib/subsidiaries";
 import { notFound } from "@/lib/api/responses";
+import { defineRoute } from '@/lib/api/route'
+import { z } from "zod";
 
 
 export const runtime = "nodejs";
@@ -62,7 +64,7 @@ function invalidDecimal(label: string, raw: unknown, noun = "an amount") {
   return NextResponse.json({ error: moneyRefusal(label, raw, noun) }, { status: 422 });
 }
 
-export async function GET(request: Request) {
+async function listSubcontracts(request: Request) {
   const authz = await guardPermission("ap.read");
   if (authz instanceof NextResponse) return authz;
   const feature = await guardSubcontractsFeature(authz.user.orgId);
@@ -206,6 +208,28 @@ const approvalActions = new Set(["approveSubcontract", "approveChangeOrder", "ap
 const postingActions = new Set(["createVendorBill", "releaseRetainage"]);
 const paymentActions = new Set(["addPaymentControl", "releasePaymentControl"]);
 
+const subcontractRequestBody = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("createSubcontract"), projectId: uuidId, vendorId: uuidId, number: z.string().trim().min(1), title: z.string().trim().min(1), description: z.string().nullable().optional(), currency: z.string().optional(), originalCommitment: z.string(), defaultRetainagePercent: z.string().nullable().optional(), purchaseOrderId: uuidId.nullable().optional(), startsOn: z.string().nullable().optional(), endsOn: z.string().nullable().optional() }).strict(),
+  z.object({ action: z.literal("updateSubcontract"), id: uuidId, title: z.string().trim().min(1), description: z.string().nullable().optional(), originalCommitment: z.string(), defaultRetainagePercent: z.string(), startsOn: z.string().nullable().optional(), endsOn: z.string().nullable().optional(), expectedUpdatedAt: z.string() }).strict(),
+  z.object({ action: z.literal("addSovLine"), subcontractId: uuidId, itemNo: z.string().nullable().optional(), description: z.string().trim().min(1), scheduledValue: z.string(), retainagePercent: z.string().nullable().optional(), expenseAccountId: uuidId.nullable().optional(), sortOrder: z.number().int().optional() }).strict(),
+  z.object({ action: z.literal("removeSovLine"), id: uuidId }).strict(),
+  z.object({ action: z.literal("submitSubcontract"), id: uuidId }).strict(),
+  z.object({ action: z.literal("approveSubcontract"), id: uuidId }).strict(),
+  z.object({ action: z.literal("transitionSubcontract"), id: uuidId, transition: z.enum(["substantially_complete", "close", "void"]) }).strict(),
+  z.object({ action: z.literal("addChangeOrder"), subcontractId: uuidId, number: z.string().trim().min(1), description: z.string().nullable().optional(), amount: z.string(), targetSovLineId: uuidId.nullable().optional() }).strict(),
+  z.object({ action: z.literal("approveChangeOrder"), id: uuidId, approvedOn: z.string() }).strict(),
+  z.object({ action: z.literal("voidChangeOrder"), id: uuidId }).strict(),
+  z.object({ action: z.literal("createPayApplication"), subcontractId: uuidId, periodEnd: z.string(), vendorInvoiceNumber: z.string().nullable().optional() }).strict(),
+  z.object({ action: z.literal("updatePayApplication"), payApplicationId: uuidId, expectedRevision: z.number().int().positive(), lines: z.array(z.object({ sovLineId: z.string(), workCompletedThisPeriod: z.string().optional(), materialsStoredCurrent: z.string().optional() }).strict()) }).strict(),
+  z.object({ action: z.literal("submitPayApplication"), id: uuidId }).strict(),
+  z.object({ action: z.literal("approvePayApplication"), id: uuidId }).strict(),
+  z.object({ action: z.literal("voidPayApplication"), id: uuidId }).strict(),
+  z.object({ action: z.literal("createVendorBill"), id: uuidId }).strict(),
+  z.object({ action: z.literal("releaseRetainage"), subcontractId: uuidId, periodEnd: z.string(), amount: z.string(), memo: z.string().nullable().optional() }).strict(),
+  z.object({ action: z.literal("addPaymentControl"), subcontractId: uuidId, payApplicationId: uuidId.nullable().optional(), vendorBillDocumentId: uuidId.nullable().optional(), controlType: z.enum(["joint_check", "payment_hold"]), jointPayeePartyId: uuidId.nullable().optional(), amountLimit: z.string().nullable().optional(), reason: z.string().trim().min(1), effectiveOn: z.string(), expiresOn: z.string().nullable().optional() }).strict(),
+  z.object({ action: z.literal("releasePaymentControl"), id: uuidId, releaseReason: z.string().trim().min(1) }).strict(),
+]);
+
 /**
  * Which request field names the record each action touches, and the table that
  * record lives in. Every action reaches a project through this chain, so the
@@ -266,11 +290,11 @@ async function actionProjectSubsidiary(
   return row ? { found: true, subsidiaryId: row.subsidiary_id, projectId: row.project_id } : { found: false, subsidiaryId: null, projectId: null };
 }
 
-export async function POST(request: Request) {
-  const parsedBody = await parseJsonBody(request, jsonObject);
+async function dispatchSubcontractAction(request: Request) {
+  const parsedBody = await parseJsonBody(request, subcontractRequestBody);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = ((parsedBody.data));
-  const action = String(body.action ?? "");
+  const body = parsedBody.data as unknown as Record<string, unknown>;
+  const action = String(body.action);
   const permission = approvalActions.has(action) ? "ap.approve"
     : postingActions.has(action) ? "ap.post"
       : paymentActions.has(action) ? "ap.pay"
@@ -489,3 +513,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Subcontract action failed" }, { status: 500 });
   }
 }
+
+export const GET = defineRoute({
+  authorize: () => guardPermission('ap.read'),
+  feature: { none: 'The handler enforces the Projects parent and subcontract capability gates.' },
+  handler: async ({ request }) => listSubcontracts(request),
+})
+export const POST = defineRoute({
+  authorize: async ({ request }) => {
+    let action: string | undefined
+    try {
+      const payload: unknown = await request.clone().json()
+      if (typeof payload === 'object' && payload !== null && 'action' in payload && typeof payload.action === 'string') action = payload.action
+    } catch {
+      // The discriminated body schema returns the malformed-body response in the handler.
+    }
+    const permission = action === undefined ? 'ap.create'
+      : approvalActions.has(action) ? 'ap.approve'
+        : postingActions.has(action) ? 'ap.post'
+          : paymentActions.has(action) ? 'ap.pay'
+            : 'ap.create'
+    return guardPermission(permission)
+  },
+  feature: { none: 'The handler enforces the Projects parent and subcontract capability gates after action authorization.' },
+  handler: async ({ request }) => dispatchSubcontractAction(request),
+})

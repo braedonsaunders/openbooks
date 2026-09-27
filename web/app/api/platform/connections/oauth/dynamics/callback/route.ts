@@ -1,4 +1,3 @@
-import { NextResponse } from 'next/server'
 import { isDeepStrictEqual } from 'node:util'
 import { and, eq } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
@@ -6,7 +5,7 @@ import { sealJson, SecretIntegrityError, unsealJson } from '@openbooks/engine/sr
 import { exchangeCode, listCompanies, type DynamicsApp } from '@openbooks/engine/src/connectors/dynamics.ts'
 import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
 import { connectionAuditChanges } from '@openbooks/schema/src/connections.ts'
-import { guardPermission, guardUnrestrictedScope } from '../../../../../../../lib/authz'
+import { defineRoute } from '@/lib/api/route'
 import { lockActorPermission } from '../../../../../../../lib/super-admin'
 import { storageIdentityError } from '../../../_storage-identity'
 import {
@@ -18,7 +17,6 @@ import {
   pinProviderChoice,
 } from '../../_flow'
 
-export const runtime = 'nodejs'
 export const maxDuration = 60
 
 /**
@@ -28,11 +26,11 @@ export const maxDuration = 60
  * never the first row of a longer list), and merge tokens + companyId back
  * onto the row.
  */
-export async function GET(req: Request) {
-  const gate = await guardPermission('admin.setup.manage')
-  if (gate instanceof NextResponse) return gate
-  const scopeDenied = guardUnrestrictedScope(gate)
-  if (scopeDenied) return scopeDenied
+export const GET = defineRoute({
+  permission: 'admin.setup.manage',
+  feature: { none: 'External accounting connections are controlled by setup permission and have no separate organization feature gate.' },
+  scope: 'unrestricted',
+  handler: async ({ request: req, authz: gate }) => {
   const url = new URL(req.url)
 
   if (url.searchParams.get('error')) return connectionOauthBounce('denied')
@@ -128,4 +126,5 @@ export async function GET(req: Request) {
   } catch {
     return connectionOauthBounce('error')
   }
-}
+  },
+})
