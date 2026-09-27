@@ -53,7 +53,7 @@ test('a failed second write deletes the first key and stores nothing', async () 
   state.failAfterPuts = 1
   try {
     await assert.rejects(
-      storeEmailAttachments([payload('a.pdf', 'first'), payload('b.pdf', 'second')]),
+      storeEmailAttachments([payload('a.pdf', 'first'), payload('b.pdf', 'second')], { orgId: 'org-1' }),
       /S3 unavailable/,
     )
     assert.equal(state.objects.size, 0, 'no partial blob may survive the failed staging')
@@ -64,7 +64,7 @@ test('a failed second write deletes the first key and stores nothing', async () 
 
 test('a successful staging keeps every blob', async () => {
   state.objects.clear()
-  const stored = await storeEmailAttachments([payload('a.pdf', 'first'), payload('b.pdf', 'second')])
+  const stored = await storeEmailAttachments([payload('a.pdf', 'first'), payload('b.pdf', 'second')], { orgId: 'org-1' })
   assert.equal(stored.length, 2)
   assert.equal(state.objects.size, 2)
   for (const ref of stored) {
