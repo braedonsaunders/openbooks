@@ -125,6 +125,9 @@ export type Role =
   | "deferredRevenue"
   | "recognizedRevenue"
   | "contractAsset"
+  | "grantReceivable"
+  | "refundableAdvance"
+  | "grantRevenue"
   // Inventory
   | "inventory"
   | "cogs"

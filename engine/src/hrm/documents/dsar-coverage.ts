@@ -184,6 +184,10 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
       "record. Asset remit.",
   },
   {
+    table: "grants",
+    reason: "grant awards; sponsor counterparty. Finance remit.",
+  },
+  {
     table: "property_leases",
     reason: "lease register; tenant link. Property remit.",
   },
