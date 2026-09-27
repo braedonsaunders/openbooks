@@ -6,8 +6,8 @@
  * status set containing `posted` must also contain `reversed`. Documents use
  * `voided_at` for the reversal date; an aggregate that reads document or line
  * amounts must include `voided` (or use the as-of void-date predicate). A
- * current-state aggregate may explicitly exclude voided documents on the
- * predicate line with this exact intent comment:
+ * current-state read may explicitly exclude reversals on the predicate
+ * line with this exact intent comment:
  * `-- Live entries only: <why voided documents are excluded>`
  *
  * The scan uses TypeScript's AST to isolate SQL template literals, then ties
@@ -110,8 +110,10 @@ function statusConditions(text, alias) {
 
 function hasOrStatus(text, alias, first, second) {
   const escapedAlias = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const left = new RegExp(`\\b${escapedAlias}\\s*\\.\\s*status\\s*=\\s*'${first}'\\s+or\\s+${escapedAlias}\\s*\\.\\s*status\\s*=\\s*'${second}'`, "i");
-  const right = new RegExp(`\\b${escapedAlias}\\s*\\.\\s*status\\s*=\\s*'${second}'\\s+or\\s+${escapedAlias}\\s*\\.\\s*status\\s*=\\s*'${first}'`, "i");
+  const status = `(?<![\\w$.])(?:\\b${escapedAlias}\\s*\\.\\s*)?status`;
+  const term = (value) => `${status}\\s*(?:=\\s*'${value}'|in\\s*\\([^)]*'${value}'[^)]*\\))`;
+  const left = new RegExp(`${term(first)}\\s+or\\s+${term(second)}`, "i");
+  const right = new RegExp(`${term(second)}\\s+or\\s+${term(first)}`, "i");
   return left.test(text) || right.test(text);
 }
 
@@ -137,6 +139,17 @@ function hasDocumentAmountAggregate(text, aliases) {
     (new RegExp(`\\bcount\\s*\\(\\s*(?:distinct\\s+)?${alias}\\s*\\.\\s*id\\s*\\)`, "i").test(text) || /\bcount\s*\(\s*\*\s*\)/i.test(text)));
 }
 
+function hasLiveEntriesOnlyIntent(raw, condition) {
+  const lineStart = raw.lastIndexOf("\n", condition.offset) + 1;
+  const lineEnd = raw.indexOf("\n", condition.end);
+  const predicateLine = raw.slice(lineStart, lineEnd < 0 ? raw.length : lineEnd);
+  if (/--\s*Live entries only: [^\r\n]+\s*$/.test(predicateLine)) return true;
+  const previousEnd = lineStart - 1;
+  if (previousEnd < 0) return false;
+  const previousStart = raw.lastIndexOf("\n", previousEnd - 1) + 1;
+  return /--\s*Live entries only: [^\r\n]+\s*$/.test(raw.slice(previousStart, previousEnd));
+}
+
 export function scanSource(path, content) {
   const sourceFile = ts.createSourceFile(path, content, ts.ScriptTarget.Latest, true);
   const findings = [];
@@ -150,19 +163,16 @@ export function scanSource(path, content) {
         const conditions = statusConditions(sqlText, alias);
         for (const condition of conditions) {
           const values = new Set(condition.values);
+          const liveEntriesOnly = hasLiveEntriesOnlyIntent(raw, condition);
           let reason = null;
           if (relation === "journal_entries" && values.has("posted") && !values.has("reversed") &&
-              !hasOrStatus(sqlText, alias, "posted", "reversed")) {
+              !hasOrStatus(sqlText, alias, "posted", "reversed") && !liveEntriesOnly) {
             reason = "journal-entry filters that include posted must also include reversed";
           }
           if (relation === "documents" && values.has("posted") && !values.has("voided") &&
-              hasDocumentAmountAggregate(sqlText, aliases) && !hasDocumentAsOfVoidPredicate(sqlText, alias)) {
-            const lineStart = raw.lastIndexOf("\n", condition.offset) + 1;
-            const lineEnd = raw.indexOf("\n", condition.end);
-            const predicateLine = raw.slice(lineStart, lineEnd < 0 ? raw.length : lineEnd);
-            if (!/--\s*Live entries only: .+\S/.test(predicateLine)) {
-              reason = "document amount aggregates must include voided history or an as-of void-date predicate; current-state exclusions need the documented intent comment";
-            }
+              !hasOrStatus(sqlText, alias, "posted", "voided") &&
+              hasDocumentAmountAggregate(sqlText, aliases) && !hasDocumentAsOfVoidPredicate(sqlText, alias) && !liveEntriesOnly) {
+            reason = "document amount aggregates must include voided history or an as-of void-date predicate; current-state exclusions need the documented intent comment";
           }
           if (reason) {
             const templateLine = sourceFile.getLineAndCharacterOfPosition(template.getStart(sourceFile) + 1).line;

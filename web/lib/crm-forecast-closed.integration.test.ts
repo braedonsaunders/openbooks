@@ -56,21 +56,27 @@ async function fixture() {
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"crm":true}'::jsonb) where id=${org.orgId}`);
     await db.execute(sql`insert into crm_account_profiles (org_id, party_id, owner_user_id) values (${org.orgId}, ${org.customerId}, ${actor})`);
   });
-  await postDocument(org, { kind: 'customer_invoice', number: 'INV-C6', date: '2026-07-15', partyId: org.customerId, subtotal: '100.0000', taxTotal: '13.0000', total: '113.0000' });
-  return { org, actor };
+  const invoiceId = await postDocument(org, { kind: 'customer_invoice', number: 'INV-C6', date: '2026-07-15', partyId: org.customerId, subtotal: '100.0000', taxTotal: '13.0000', total: '113.0000' });
+  return { org, actor, invoiceId };
 }
 async function postCredit(org: { orgId: string; bookId: string; subsidiaryId: string; periodId: string; accounts: { revenue: string; ar: string } }, partyId: string, number: string, subtotal: string) {
   await postDocument(org, { kind: 'customer_credit', number, date: '2026-07-20', partyId, subtotal, taxTotal: '0.0000', total: subtotal });
 }
-async function closed(orgId: string, ownerUserId?: string) {
-  const rows = await calculateForecast({ orgId, ...PERIOD, ownerUserId }) as { currency: string; closed_amount: string }[];
+async function closed(orgId: string, ownerUserId?: string, period = PERIOD) {
+  const rows = await calculateForecast({ orgId, ...period, ownerUserId }) as { currency: string; closed_amount: string }[];
   return rows.find((row) => row.currency === 'CAD')?.closed_amount;
 }
 
-test('a taxed invoice closes at its net subtotal, not its total', { skip: !DB }, async () => {
-  const { org } = await fixture();
+test('a voided invoice remains in its posting period and offsets its void period', { skip: !DB }, async () => {
+  const { org, invoiceId } = await fixture();
   try {
+    assert.equal(await closed(org.orgId), '100.0000', 'closed revenue uses the invoice subtotal, not tax')
+    const updated = await withBypassContext(() => db.execute(sql`update documents
+      set status = 'voided', voided_at = '2026-08-05 12:00:00+00'::timestamptz
+      where id = ${invoiceId} and org_id = ${org.orgId} returning id`))
+    assert.equal(updated.rows.length, 1, 'the posted invoice must be voided for the history case')
     assert.equal(await closed(org.orgId), '100.0000');
+    assert.equal(await closed(org.orgId, undefined, { periodStart: '2026-08-01', periodEnd: '2026-08-31' }), '-100.0000')
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -86,6 +86,23 @@ test('analytics drill reads the posted statement-book population only', async ()
       assert.equal(partyBody.count, 1, 'draft invoice is not revenue');
       assert.deepEqual(partyBody.entries.map(({ docNumber, entryId }) => [docNumber, entryId]), [['POSTED-INV', invoiceEntry]], 'append-only source corrections drill through the authoritative current posting once');
     });
+
+    const voided = await withBypassContext(() => db.execute(sql`update documents
+      set status = 'voided', voided_at = '2026-08-05 12:00:00+00'::timestamptz
+      where id = ${postedInvoice} and org_id = ${org.orgId} returning id`))
+    assert.equal(voided.rows.length, 1, 'the July invoice must be voided after the drill cutoff')
+    await withOrgContext(org.orgId, async () => {
+      const historicalRes = await GET(
+        new Request(`http://drillposted.local/api/analytics/drill?party=${vendor}&from=${FROM}&to=${TO}`),
+      )
+      assert.equal(historicalRes.status, 200)
+      const historical = await historicalRes.json() as {
+        total: string; count: number; entries: unknown[]; monthly: Array<{ month: string; amount: string }>
+      }
+      assert.deepEqual([historical.total, historical.count], ['300', 1], 'July retains the invoice even after its August void')
+      assert.deepEqual(historical.monthly, [{ month: '2026-07', amount: '300' }])
+      assert.deepEqual(historical.entries, [], 'the current detail list omits the voided invoice')
+    });
   } finally {
     state.user = null;
     await dropScratchOrg(org.orgId);

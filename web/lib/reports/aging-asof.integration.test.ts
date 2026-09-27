@@ -63,6 +63,15 @@ async function seedArScenario(): Promise<{ org: ScratchOrg }> {
     await db.execute(sql`insert into documents (id, org_id, kind, document_number, document_date, posting_date, due_date, currency, fx_rate, subtotal, tax_total, total, party_id, status, posted_entry_id, posting_period_id, open_balance)
       values (${randomUUID()}, ${org.orgId}, 'customer_invoice', 'AGE-INV-1', '2026-07-05', '2026-07-05', '2026-07-15', 'CAD', '1', '1000.0000', '0.0000', '1000.0000', ${org.customerId}, 'posted', ${eInv}, ${july}, '1000.0000')`)
 
+    const eVoided = await postEntry(org, july, '2026-07-10', 'VOID-AFTER-CUTOFF', [[org.accounts.ar, '200.0000', org.customerId], [org.accounts.revenue, '-200.0000', null]])
+    const voidedDoc = randomUUID()
+    await db.execute(sql`insert into documents (id, org_id, kind, document_number, document_date, posting_date, due_date, currency, fx_rate, subtotal, tax_total, total, party_id, status, posted_entry_id, posting_period_id, open_balance)
+      values (${voidedDoc}, ${org.orgId}, 'customer_invoice', 'AGE-VOID-AFTER-CUTOFF', '2026-07-10', '2026-07-10', '2026-07-20', 'CAD', '1', '200.0000', '0.0000', '200.0000', ${org.customerId}, 'posted', ${eVoided}, ${july}, '200.0000')`)
+    const reversed = await db.execute(sql`update journal_entries set status = 'reversed' where id = ${eVoided} and org_id = ${org.orgId} returning id`)
+    assert.equal(reversed.rows.length, 1, 'the original entry must retain its reversed history')
+    const voided = await db.execute(sql`update documents set status = 'voided', voided_at = '2026-08-20 12:00:00+00'::timestamptz where id = ${voidedDoc} and org_id = ${org.orgId} returning id`)
+    assert.equal(voided.rows.length, 1, 'the invoice must be voided after the July cutoff')
+
     // July part-payment 400, applied 07-20.
     const ePayJul = await postEntry(org, july, '2026-07-20', 'PAYJ', [[org.accounts.bank, '400.0000', null], [org.accounts.ar, '-400.0000', org.customerId]])
     await applyLines(org, await lineId(ePayJul, org.accounts.ar), await lineId(eInv, org.accounts.ar), '400.0000', '2026-07-20')
@@ -84,36 +93,36 @@ test('AR aging as of July still shows the balance settled in August', { skip: !p
   const { org } = await seedArScenario()
   try {
     await withOrgContext(org.orgId, async () => {
-      // July GL truth: 1000 − 400 − 100 = 500 on the receivable control.
+      // July GL truth: 1000 − 400 − 100 plus the invoice voided in August = 700.
       const gl = (await db.execute<{ bal: string }>(sql`select coalesce(sum(l.amount), 0)::text as bal from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed') and e.posting_date <= '2026-07-31' and e.book_id = ${org.bookId}
         where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.ar}`)).rows[0]!.bal
-      assert.equal(gl, '500.0000')
+      assert.equal(gl, '700.0000')
 
       const aging = await agingByParty('ar', '2026-07-31', undefined, org.orgId)
-      assert.equal(aging.totals.total, '500.0000', 'July AR aging must tie the July control balance after an August settlement')
+      assert.equal(aging.totals.total, '700.0000', 'July AR aging must retain the invoice voided after the cutoff')
       // Empty buckets read the canonical ledger zero ('0.0000', as the totals
       // always have): the old grouped query returned SQL's integer-coalesced
       // '0' here, a formatting artifact of the query shape, not arithmetic.
       assert.deepEqual(
         aging.rows.map((r) => [r.partyName, r.current, r.b1, r.b2, r.b3, r.b4, r.total]),
-        [['Acme Customer', '0.0000', '500.0000', '0.0000', '0.0000', '0.0000', '500.0000']],
+        [['Acme Customer', '0.0000', '700.0000', '0.0000', '0.0000', '0.0000', '700.0000']],
       )
 
       const detail = await agingDetail('ar', '2026-07-31', undefined, org.orgId)
-      assert.equal(detail.totals.total, '500.0000', 'aging detail must tie the summary')
-      assert.equal(detail.rows.length, 1, 'only the invoice carries a July open balance; the settled credit memo drops out')
+      assert.equal(detail.totals.total, '700.0000', 'aging detail must tie the summary')
+      assert.equal(detail.rows.length, 2, 'the settled credit memo drops out but an invoice voided in August stays in July')
 
       // Sibling surfaces that already scope to the as-of date.
       const partners = await partnerBalances('receivable', org.orgId, '2026-07-31')
       assert.equal(partners.length, 1)
-      assert.equal(partners[0]!.balance, '500.0000')
+      assert.equal(partners[0]!.balance, '700.0000')
       const reg = await partyRegister('ar', { from: '2026-01-01', to: '2026-07-31', orgId: org.orgId })
       assert.equal(reg.parties.length, 1)
-      assert.equal(reg.parties[0]!.closing, '500.0000')
+      assert.equal(reg.parties[0]!.closing, '700.0000')
       const stmt = await partnerStatement(org.customerId, org.orgId, { from: '2026-01-01', to: '2026-07-31', side: 'ar' })
-      assert.equal(stmt.closing, '500.0000')
-      assert.equal(stmt.aging.total, '500.0000', 'partner-statement footer must agree with its own closing')
+      assert.equal(stmt.closing, '700.0000')
+      assert.equal(stmt.aging.total, '700.0000', 'partner-statement footer must agree with its own closing')
     })
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId))

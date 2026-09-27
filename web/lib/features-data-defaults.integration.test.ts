@@ -130,6 +130,15 @@ test("feature disable probes ignore secondary-book journal amounts", { skip: !DB
     assert.equal(status.multiSubsidiary?.blocked, false);
     assert.equal(status.multiCurrency?.blocked, false);
     assert.ok(!status.projects?.impacts.some((impact) => impact.labelKey === 'outstandingRetainage'));
+
+    const voidedRun = await withBypassContext(() => db.execute(sql`insert into documents
+      (org_id, kind, document_number, status, voided_at, void_reason)
+      values (${org.orgId}, 'pay_run', 'VOIDED-PAYRUN', 'voided', '2026-08-05 12:00:00+00'::timestamptz, 'history probe')
+      returning id`));
+    assert.equal(voidedRun.rows.length, 1);
+    const payroll = await withBypassContext(() => featureDisableStatuses(org.orgId, ['payroll']));
+    assert.equal(payroll.payroll?.blocked, true, 'a voided payroll run still records irreversible posting history');
+    assert.deepEqual(payroll.payroll?.impacts, [{ labelKey: 'postedPayRuns', count: 1 }]);
   } finally {
     await dropScratchOrg(org.orgId);
   }
