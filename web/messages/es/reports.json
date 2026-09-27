@@ -2164,6 +2164,42 @@
       "name": "Estado de plantilla",
       "description": "Plantilla y equivalentes a tiempo completo por filial y departamento, con totales."
     },
+    "mrr-movements": {
+      "name": "Movimientos de MRR",
+      "description": "MRR nueva, de expansión, contracción, cancelada y reactivada por mes, con MRR inicial y final y el índice de cobertura rápida. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación; los ingresos siguen la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada."
+    },
+    "arr-summary": {
+      "name": "Resumen de ARR",
+      "description": "Los ingresos recurrentes anuales de cada mes equivalen a doce veces la MRR final. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación; los ingresos siguen la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada."
+    },
+    "revenue-churn": {
+      "name": "Churn de ingresos y clientes",
+      "description": "La cancelación de ingresos y de cuentas compara por mes la MRR perdida y las cuentas de facturación perdidas con los saldos iniciales. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación; los ingresos siguen la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada."
+    },
+    "nrr-grr": {
+      "name": "Retención neta y bruta",
+      "description": "La retención neta y bruta de ingresos compara por mes la expansión, la contracción y las cancelaciones con la MRR inicial. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación; los ingresos siguen la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada."
+    },
+    "cohort-retention": {
+      "name": "Retención por cohortes",
+      "description": "La retención por mes de cohorte y meses transcurridos muestra la MRR retenida y las cuentas de facturación. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación; los ingresos siguen la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada."
+    },
+    "arpa-ltv": {
+      "name": "ARPA y valor de vida",
+      "description": "Promedio de ingresos por cuenta de facturación de los últimos doce meses, cancelación mensual de ingresos, margen bruto y valor de vida del cliente. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación; los ingresos siguen la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada."
+    },
+    "gross-margin": {
+      "name": "Margen bruto",
+      "description": "El margen bruto mensual compara los ingresos reconocidos o, si se desactiva el reconocimiento de ingresos, los facturados, con el costo de ingresos del libro mayor."
+    },
+    "deferred-waterfall": {
+      "name": "Calendario de ingresos diferidos",
+      "description": "Reconocimiento futuro previsto de obligaciones activas de ingresos diferidos, por mes, cuenta de diferimiento y moneda, sobre la base reconocida."
+    },
+    "bookings-billings-revenue": {
+      "name": "Reservas, facturación e ingresos",
+      "description": "Reservas, facturación e ingresos mensuales sobre la base reconocida o, si se desactiva el reconocimiento de ingresos, la facturada. Una suscripción pausada cuenta como cancelación y reanudarla como reactivación."
+    },
     "backorders": {
       "name": "Pedidos pendientes",
       "description": "Líneas de inventario de pedidos de venta aún adeudadas: pedida, entregada, cancelada y pendiente por cliente y artículo."

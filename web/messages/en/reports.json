@@ -2184,6 +2184,42 @@
       "name": "Headcount statement",
       "description": "Headcount and FTE by subsidiary and department, with totals."
     },
+    "mrr-movements": {
+      "name": "MRR movements",
+      "description": "Monthly new, expansion, contraction, churned and reactivated MRR with opening and closing MRR and the quick ratio. A paused subscription counts as churn and resuming as reactivation; revenue is on the recognised basis, or billed when revenue recognition is off."
+    },
+    "arr-summary": {
+      "name": "ARR summary",
+      "description": "Monthly annual recurring revenue is twelve times closing MRR. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off."
+    },
+    "revenue-churn": {
+      "name": "Revenue and logo churn",
+      "description": "Monthly revenue and logo churn compare churned MRR and billing-account losses with opening balances. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off."
+    },
+    "nrr-grr": {
+      "name": "Net and gross revenue retention",
+      "description": "Monthly net and gross revenue retention compare expansion, contraction and churn with opening MRR. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off."
+    },
+    "cohort-retention": {
+      "name": "Cohort retention",
+      "description": "Retention by signup cohort month and elapsed month shows retained MRR and billing accounts. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off."
+    },
+    "arpa-ltv": {
+      "name": "ARPA and lifetime value",
+      "description": "Trailing twelve-month average revenue per billing account, monthly revenue churn, gross margin and lifetime value. A paused subscription counts as churn and resuming as reactivation; revenue uses the recognised basis, or billed when revenue recognition is off."
+    },
+    "gross-margin": {
+      "name": "Gross margin",
+      "description": "Monthly gross margin compares revenue on the recognised basis, or billed when revenue recognition is off, with cost of revenue from the general ledger."
+    },
+    "deferred-waterfall": {
+      "name": "Deferred revenue waterfall",
+      "description": "Future recognition scheduled for live deferred revenue obligations by month, deferred account and currency, on the recognised basis."
+    },
+    "bookings-billings-revenue": {
+      "name": "Bookings, billings and revenue",
+      "description": "Monthly bookings, billings and revenue on the recognised basis, or billed when revenue recognition is off. A paused subscription counts as churn and resuming as reactivation."
+    },
     "backorders": {
       "name": "Backorders",
       "description": "Sales-order stock lines still owed — ordered, fulfilled, cancelled and open by customer and item."
