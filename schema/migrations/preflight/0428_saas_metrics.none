@@ -1,0 +1,1 @@
+The metrics tables are derived-only storage. They add no data-dependent precondition or rewrite to existing records.
