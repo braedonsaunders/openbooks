@@ -100,6 +100,12 @@ test("a preflight is deferred only when an earlier pending migration creates the
     false,
   );
   assert.equal(earlierPendingCreatesObject(new Error("permission denied"), [creator]), false);
+
+  const aliased = Object.assign(new Error("column c.token_sealed does not exist"), { code: "42703" });
+  const guardedAdder = "ALTER TABLE public.payment_links ADD COLUMN IF NOT EXISTS token_sealed text;";
+  const preflight = "SELECT c.id FROM public.payment_links c WHERE c.token_sealed IS NOT NULL";
+  assert.equal(earlierPendingCreatesObject(aliased, [guardedAdder], preflight), true);
+  assert.equal(earlierPendingCreatesObject(aliased, ["select 1;"], preflight), false);
 });
 
 test("well-formed finding rows pass through with their migration attached", () => {
