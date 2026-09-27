@@ -198,7 +198,7 @@ export const MO_FACTOR_LABELS: Readonly<Record<string, string>> = {
 };
 
 const MO_STATE_ENGINE = defineStateEngine({
-  state: { state: "MO", label: "Missouri income tax", printedPeriods: null },
+  state: { state: "MO", label: "Missouri income tax", printedPeriods: MO_PERIODS, fixedPeriodsOnly: true },
   editions: pairStateRateEditions(Object.values(MO_EDITIONS_BY_YEAR), MO_TAX_YEAR_EDITIONS),
   compute: compute,
 });

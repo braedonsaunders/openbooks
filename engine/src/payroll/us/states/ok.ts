@@ -170,7 +170,7 @@ function compute(
   rates: OkYearRates,
   context: StateEngineContext<OkYearRates>,
 ): UsStateWithholdingResult {
-  const period = context.requirePrintedPeriod(input.periodsPerYear, OK_PERIODS, 260);
+  const period = context.fixedPeriod as OkPeriod;
   const { factors, trace } = context;
 
   if (certificateFlag(input.certificate, "military_spouse_exempt")) {
@@ -322,7 +322,7 @@ export const OK_FACTOR_LABELS: Readonly<Record<string, string>> = {
 };
 
 const OK_STATE_ENGINE = defineStateEngine({
-  state: { state: "OK", label: "Oklahoma income tax", printedPeriods: null },
+  state: { state: "OK", label: "Oklahoma income tax", printedPeriods: OK_PERIODS, fixedPeriodsOnly: true },
   editions: pairStateRateEditions(Object.values(OK_EDITIONS_BY_YEAR), OK_TAX_YEAR_EDITIONS),
   compute: compute,
 });

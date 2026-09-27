@@ -249,7 +249,7 @@ export const NE_FACTOR_LABELS: Readonly<Record<string, string>> = {
 };
 
 const NE_STATE_ENGINE = defineStateEngine({
-  state: { state: "NE", label: "Nebraska income tax", printedPeriods: null },
+  state: { state: "NE", label: "Nebraska income tax", printedPeriods: NE_PERIODS, fixedPeriodsOnly: true },
   editions: pairStateRateEditions(Object.values(NE_EDITIONS_BY_YEAR), NE_TAX_YEAR_EDITIONS),
   compute: compute,
 });

@@ -48,6 +48,8 @@ export interface StateExemptOptions {
 export interface StateEngineContext<Rates> {
   readonly rates: Rates;
   readonly factors: Record<string, string>;
+  /** Validated pay period for jurisdictions that do not annualize unprinted frequencies. */
+  readonly fixedPeriod: UsStatePayPeriod | null;
   trace(key: string, value: bigint): void;
   requirePeriodsPerYear(periodsPerYear?: number): number;
   requirePrintedPeriod(
@@ -71,7 +73,12 @@ export interface StateEngineContext<Rates> {
 
 /** Build the shared lifecycle around a jurisdiction's published formula. */
 export function defineStateEngine<Rates extends { year: number; status: "published" | "draft" }>(input: {
-  state: { state: string; label: string; printedPeriods: readonly UsStatePayPeriod[] | null };
+  state: {
+    state: string;
+    label: string;
+    printedPeriods: readonly UsStatePayPeriod[] | null;
+    fixedPeriodsOnly?: boolean;
+  };
   editions: readonly StateRateEdition<Rates>[];
   compute(
     input: UsStateWithholdingInput,
@@ -95,6 +102,9 @@ export function defineStateEngine<Rates extends { year: number; status: "publish
   ): UsStatePayPeriod | null;
   compute(input: UsStateWithholdingInput): UsStateWithholdingResult;
 } {
+  if (input.state.fixedPeriodsOnly && input.state.printedPeriods === null) {
+    throw new PayrollError(`${input.state.label} requires a printed-period declaration for fixed-frequency withholding`);
+  }
   const byYear = new Map<number, StateRateEdition<Rates>>();
   for (const edition of input.editions) {
     if (edition.year !== edition.rates.year || edition.edition.year !== edition.year) {
@@ -157,6 +167,9 @@ export function defineStateEngine<Rates extends { year: number; status: "publish
     printedPeriod,
     compute(payrollInput) {
       const rates = ratesForPayDate(payrollInput.payDate);
+      const fixedPeriod = input.state.fixedPeriodsOnly
+        ? requirePrintedPeriod(payrollInput.periodsPerYear, input.state.printedPeriods!)
+        : null;
       const factors: Record<string, string> = {};
       const trace = (key: string, value: bigint) => { factors[key] = D(value); };
       const requirePeriodsPerYearForInput = (periodsPerYear = payrollInput.periodsPerYear): number =>
@@ -197,6 +210,7 @@ export function defineStateEngine<Rates extends { year: number; status: "publish
       };
       return input.compute(payrollInput, rates, {
         rates,
+        fixedPeriod,
         factors,
         trace,
         requirePeriodsPerYear: requirePeriodsPerYearForInput,
