@@ -12,9 +12,10 @@ import { isUuid } from "../list-params";
  *   if (!parsed.ok) return parsed.response;
  *   // parsed.data is fully typed + validated from here on.
  *
- * Malformed JSON, non-object payloads, and schema failures all fail closed as
- * 400 with the first issue message (plus an `issues` array for field-level
- * UI rendering) — a route never sees unvalidated input shape again.
+ * Malformed JSON and non-object payloads fail closed as 400. A well-formed
+ * object that fails its route schema returns 422 with the first issue message
+ * (plus an `issues` array for field-level UI rendering) — a route never sees
+ * unvalidated input shape again.
  */
 
 export interface BodyIssue {
@@ -105,6 +106,15 @@ export async function parseJsonBody<S extends z.ZodType>(
       response: NextResponse.json({ error: INVALID_BODY }, { status: opts?.status ?? 400 }),
     };
   }
+  return validateJsonBody(raw, schema, opts);
+}
+
+/** Validate an already-decoded JSON object using the same response contract. */
+export function validateJsonBody<S extends z.ZodType>(
+  raw: unknown,
+  schema: S,
+  opts?: { status?: number },
+): ParsedBody<z.output<S>> {
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
     const issues: BodyIssue[] = parsed.error.issues.map((issue) => ({
@@ -115,7 +125,7 @@ export async function parseJsonBody<S extends z.ZodType>(
       ok: false,
       response: NextResponse.json(
         { error: issues[0]?.message ?? INVALID_BODY, issues },
-        { status: opts?.status ?? 400 },
+        { status: opts?.status ?? 422 },
       ),
     };
   }

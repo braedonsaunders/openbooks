@@ -2,7 +2,7 @@ import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { crmOpportunityScope, crmSharedScope } from '../../../../../lib/crm-scope'
-import { parseJsonBody } from "@/lib/api/json"
+import { jsonObject, parseJsonBody, validateJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -81,7 +81,7 @@ const requestBodySchema = z.strictObject({
   team: z.array(contributionSchema).optional(),
   title: z.string().trim().min(1),
   winLossReason: z.string().nullable(),
-}).superRefine((body, context) => {
+}).partial().superRefine((body, context) => {
   for (const [field, value] of [['rangeLow', body.rangeLow], ['rangeHigh', body.rangeHigh]] as const) {
     if (value != null && value !== '' && canonicalDecimal(value, 4) !== null && compareDecimal(value, '0') < 0) {
       context.addIssue({ code: 'custom', path: [field], message: `${field} must be a non-negative amount` })
@@ -255,17 +255,20 @@ export const PATCH = defineRoute({
       where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}`))
     let current = existing.rows[0]
     if (!current) return notFound("record")
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
-    if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data
+    const rawBody = await parseJsonBody(req, jsonObject);
+    if (!rawBody.ok) return rawBody.response;
     // Mandatory optimistic-concurrency evidence (same contract as document,
     // payment, prebill-line, capture, and custom-record edits): the drawer
     // always saves a full-replace payload (header scalars + lines + team), so
     // two tabs must 409 instead of silently replacing each other. Checked after
     // the existence gate so a missing token never leaks opportunity existence.
-    if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+    const expectedUpdatedAt = rawBody.data.expectedUpdatedAt;
+    if (!isDocumentRevisionToken(expectedUpdatedAt)) {
       return NextResponse.json({ error: 'A current opportunity revision is required; reload the opportunity and try again' }, { status: 409 })
     }
+    const parsedBody = validateJsonBody(rawBody.data, requestBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data
     let partyId = body.partyId === undefined ? current.party_id : textOrNull(body.partyId)
     let contactId = body.primaryContactId === undefined ? current.primary_contact_id : textOrNull(body.primaryContactId)
     let ownerUserId = body.ownerUserId === undefined ? current.owner_user_id : textOrNull(body.ownerUserId)
@@ -451,7 +454,7 @@ export const PATCH = defineRoute({
       if (!current) throw new OpportunityDisappeared()
       // Compared against the row locked by this write transaction, never the
       // preflight snapshot (which may have gone stale during validation).
-      if (current.revision !== body.expectedUpdatedAt) {
+      if (current.revision !== expectedUpdatedAt) {
         throw new OpportunityRevisionError('This opportunity changed after you opened it; reload the opportunity and reapply your changes')
       }
 

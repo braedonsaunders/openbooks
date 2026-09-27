@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { registerHooks } from 'node:module'
+import { stubModules, withAuthzTestSurface } from '@/testing/stub-modules'
 import test from 'node:test'
 
 // F3-71: activity PATCH carried no revision token, so the last writer won
@@ -9,23 +9,23 @@ import test from 'node:test'
 // stale), the same contract as the opportunity route.
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __activityRevisionState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
-    if (specifier === '../../../../../lib/authz') return virtual(`
-      export async function guardPermission() {
-        const s = globalThis.__activityRevisionState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
-      }
-    `)
-    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
-      export async function guardFeaturePermission() {
-        const s = globalThis.__activityRevisionState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
-      }
-    `)
-    return next(specifier, context)
+stubModules({
+  navigation: true,
+  authz: {
+    source: withAuthzTestSurface(`
+      const state = globalThis.__activityRevisionState;
+      const session = () => ({ user: { orgId: state.orgId, id: state.actorId }, permissions: [], allowedSubsidiaryIds: null });
+      export async function getAuthz() { return session(); }
+      export async function guardPermission() { return session(); }
+    `),
+  },
+  features: {
+    source: `
+      const state = globalThis.__activityRevisionState;
+      const session = () => ({ user: { orgId: state.orgId, id: state.actorId }, permissions: [], allowedSubsidiaryIds: null });
+      export async function isFeatureEnabled() { return true; }
+      export async function guardFeaturePermission() { return session(); }
+    `,
   },
 })
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')

@@ -26,7 +26,7 @@ const activityParticipant = z.strictObject({
   message: 'each participant must have exactly one target',
 })
 const requestBodySchema = z.strictObject({
-  expectedUpdatedAt: z.string().refine(isDocumentRevisionToken, 'A current activity revision is required; reload the activity and try again'),
+  expectedUpdatedAt: z.string().optional(),
   assignedUserId: z.string().uuid().nullable().optional(),
   body: z.string().nullable().optional(),
   custom: z.record(z.string(), z.json()).optional(),

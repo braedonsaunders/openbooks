@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules, withAuthzTestSurface } from '@/testing/stub-modules'
 import test from 'node:test'
 
 // Two tabs editing the same opportunity: the second save carries the revision
@@ -9,23 +9,23 @@ import test from 'node:test'
 // and custom-record edits.
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __opportunityRevisionState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') return virtual('export function redirect() {}')
-    if (specifier === '../../../../../lib/authz') return virtual(`
-      export async function guardPermission() {
-        const s = globalThis.__opportunityRevisionState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
-      }
-    `)
-    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
-      export async function guardFeaturePermission() {
-        const s = globalThis.__opportunityRevisionState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
-      }
-    `)
-    return next(specifier, context)
+stubModules({
+  navigation: true,
+  authz: {
+    source: withAuthzTestSurface(`
+      const state = globalThis.__opportunityRevisionState;
+      const session = () => ({ user: { orgId: state.orgId, id: state.actorId }, permissions: [], allowedSubsidiaryIds: null });
+      export async function getAuthz() { return session(); }
+      export async function guardPermission() { return session(); }
+    `),
+  },
+  features: {
+    source: `
+      const state = globalThis.__opportunityRevisionState;
+      const session = () => ({ user: { orgId: state.orgId, id: state.actorId }, permissions: [], allowedSubsidiaryIds: null });
+      export async function isFeatureEnabled() { return true; }
+      export async function guardFeaturePermission() { return session(); }
+    `,
   },
 })
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
@@ -101,7 +101,7 @@ test('a stale opportunity revision refuses instead of replacing a newer save', a
     const tabA = await patch(oppId, {
       statusId,
       title: 'Tab A title',
-      lines: [{ itemId: itemA, quantity: '2', unitPrice: '50' }],
+      lines: [{ itemId: itemA, description: 'Tab A line', quantity: '2', unit: 'each', unitPrice: '50' }],
       expectedUpdatedAt: stale,
     })
     assert.equal(tabA.status, 200, `tab A: ${JSON.stringify(tabA.json)}`)
@@ -115,7 +115,7 @@ test('a stale opportunity revision refuses instead of replacing a newer save', a
     const tabB = await patch(oppId, {
       statusId,
       title: 'Tab B title',
-      lines: [{ itemId: itemB, quantity: '1', unitPrice: '10' }],
+      lines: [{ itemId: itemB, description: 'Tab B line', quantity: '1', unit: 'each', unitPrice: '10' }],
       expectedUpdatedAt: stale,
     })
     assert.equal(tabB.status, 409, `tab B: ${JSON.stringify(tabB.json)}`)

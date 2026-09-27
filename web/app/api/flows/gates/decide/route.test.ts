@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
+import { stubModules } from '@/testing/stub-modules'
 
 interface RouteState {
   authz: {
@@ -105,6 +106,8 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/flows/index.ts", "mock:engine"],
   ["../../_lib", "mock:lib"],
 ]);
+
+stubModules({ navigation: true, authz: false, features: { enabled: ['flows'] } })
 
 let postRoute: typeof import("./route.ts").POST | undefined;
 if (!isVitest) {

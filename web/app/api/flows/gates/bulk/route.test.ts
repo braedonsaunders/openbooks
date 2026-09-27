@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '@/testing/stub-modules'
 
 interface RouteState {
   authz: { user: { id: string; orgId: string }; allowedSubsidiaryIds: Set<string> | null } | Response
@@ -79,6 +80,7 @@ registerHooks({
     return nextLoad(url, context)
   },
 })
+stubModules({ navigation: true, authz: false, features: { enabled: ['flows'] } })
 
 const routeUrl = './route.ts?bulk-gates-boundary-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
@@ -109,7 +111,7 @@ test('rejects a bulk request above the cap before any per-item database work', a
 
   const response = await post({ items, decision: 'approved' })
 
-  assert.equal(response.status, 400)
+  assert.equal(response.status, 422)
   const refusal = await response.json() as { error: string; issues: { path: string }[] }
   assert.equal(refusal.error, `too many items (max ${MAX_BULK_ITEMS})`)
   assert.ok(refusal.issues.some((issue) => issue.path === 'items'))
@@ -207,7 +209,7 @@ test('invalid gate IDs are refused by the request boundary before database work'
     decision: 'approved',
   })
 
-  assert.equal(response.status, 400)
+  assert.equal(response.status, 422)
   const refusal = await response.json() as { error: string; issues: { path: string }[] }
   assert.equal(refusal.error, 'Invalid UUID')
   assert.ok(refusal.issues.some((issue) => issue.path.startsWith('items.')))

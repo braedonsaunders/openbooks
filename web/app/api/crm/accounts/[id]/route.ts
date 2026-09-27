@@ -26,7 +26,7 @@ const requestBodySchema = z.strictObject({
   category: z.string().nullable().optional(),
   custom: z.record(z.string(), z.json()).optional(),
   employeeCount: optionalCount,
-  expectedUpdatedAt: z.string().min(1),
+  expectedUpdatedAt: z.string().optional(),
   industry: z.string().nullable().optional(),
   isActive: z.boolean().optional(),
   leadSourceId: nullableUuid.optional(),

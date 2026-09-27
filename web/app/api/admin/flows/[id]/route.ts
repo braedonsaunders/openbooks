@@ -16,7 +16,7 @@ import { notFound } from "@/lib/api/responses";
 const requestBodySchema = z.object({
   "description": z.string().optional(),
   "enabled": z.boolean().optional(),
-  "expectedUpdatedAt": z.string().refine(isDocumentRevisionToken, "Reload the flow and send its exact revision before saving"),
+  "expectedUpdatedAt": z.string().optional(),
   "graph": automationGraphSchema.optional(),
   "name": z.string().optional(),
 });
