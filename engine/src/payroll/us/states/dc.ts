@@ -30,7 +30,7 @@
  *     — the schedule for tax years beginning after 12/31/2021, still the
  *     published schedule: 4% / 6% / 6.5% / 8.5% / 9.25% / 9.75% / 10.75%
  *     with the cumulative amounts transcribed below (each reproduces from
- *     the prior brackets — asserted in conformance-dc.test.ts).
+ *     the prior brackets — asserted in conformance.test.ts).
  *   IRS Publication 15-T (2026), Worksheet 1A line 1k (fetched from
  *     irs.gov/publications/p15t, September 2026) — "Multiply line 1j by
  *     $4,300": the federal allowance amount for 2026. It agrees with the
@@ -161,7 +161,7 @@ export interface DcYearRates {
  * fetched, September 2026), with the allowance from IRS Pub 15-T (2026)
  * line 1k via OTR Tax Notice 2022-08.
  *
- * Cumulative-amount check (asserted in conformance-dc.test.ts):
+ * Cumulative-amount check (asserted in conformance.test.ts):
  *   4% × 10,000 = 400;
  *   400 + 6% × 30,000 = 2,200;
  *   2,200 + 6.5% × 20,000 = 3,500;

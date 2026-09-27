@@ -1,268 +1,160 @@
 /**
- * JP 2026 pure-engine tests: NTA 月額表 gold parity, pension grade parity,
- * and the four gold-parity mechanisms.
- *
- * Mechanism 1 (published-table rows, no excuse for skipping): rows straight
- * off the NTA 月額表 and the JPS 料額表, asserting the engine reproduces
- * them exactly — plus the 求め方's own worked example (80,750円 → 2,473円).
- * Mechanism 2 (hand-worked cases with arithmetic shown): full payslips with
- * every subtraction on display. Mechanism 3 (year resolver throws both
- * sides): in pack.test.ts, through the adapter that owns the year gate.
- * Mechanism 4 (sweeps): at, below and above every bracket and every grade
- * boundary, plus monotonicity both ways — and the grade STEP trap: both
- * sides of each step, and pay rising within one grade never moving the
- * premium.
+ * JP 2026 pure-engine goldens: NTA 月額表 cells and the 求め方's worked example,
+ * JPS grades, the 協会けんぽ 50銭 rule and hand-worked payslips in one table;
+ * refusals in another; then sweeps across every bracket and grade step. The
+ * year gate is proven in pack.test.ts, through the adapter that owns it.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PayrollPackError } from "../payroll-error.ts";
 import { JP_PENSION_GRADES_2026 } from "./pension-2026.ts";
 import { JP_GENSEN_MONTHLY_2026 } from "./tables-2026.ts";
 import {
-  calculateJp2026,
-  healthHalfShare,
-  lookupGensenKo,
-  lookupGensenOtsu,
-  pensionGradeForPay,
-  pensionGradeForStandard,
+  calculateJp2026, healthHalfShare, lookupGensenKo, lookupGensenOtsu, pensionGradeForPay, pensionGradeForStandard,
 } from "./withholding-2026.ts";
 
-// ---------------------------------------------------------------------------
-// Mechanism 1a: NTA 月額表 rows, straight off the published table.
-// ---------------------------------------------------------------------------
+type Input =
+  | { kind: "gensen"; pay: bigint; dependents: number | null }
+  | { kind: "grade-for-standard" | "grade-for-pay"; amount: bigint }
+  | { kind: "health"; standard: bigint; rate: string }
+  | { kind: "payslip"; gross: bigint; standard: bigint; dependents: number | null };
 
-test("NTA row 1: 105,000–107,000円 prices 170 at 0人, 0 above, 乙 3,800", () => {
-  assert.equal(lookupGensenKo(105000n, 0), 170n);
-  assert.equal(lookupGensenKo(106999n, 0), 170n);
-  assert.equal(lookupGensenKo(105000n, 1), 0n);
-  assert.equal(lookupGensenKo(105000n, 7), 0n);
-  assert.equal(lookupGensenOtsu(105000n), 3800n);
+interface Golden { year: number; label: string; input: Input; expected: Record<string, bigint | number>; citation: string }
+
+const yen = (amount: bigint) => `${amount.toLocaleString("en-US")}円`;
+const NTA = (row: number) => `NTA 月額表 row ${row}`;
+const JPS = "JPS 厚生年金保険料額表 (折半額)";
+
+/** One 月額表 cell: `dependents` null reads the 乙欄. */
+const gensen = (citation: string, pay: bigint, dependents: number | null, tax: bigint): Golden => ({
+  year: 2026, label: `${yen(pay)} ${dependents === null ? "乙欄" : `甲欄 ${dependents}人`}`,
+  input: { kind: "gensen", pay, dependents }, expected: { gensen: tax }, citation,
+});
+const grade = (kind: "grade-for-standard" | "grade-for-pay", amount: bigint, expected: Golden["expected"], citation: string): Golden => ({
+  year: 2026, label: `${kind === "grade-for-standard" ? "標準報酬月額" : "報酬月額"} ${yen(amount)}`, input: { kind, amount }, expected, citation,
+});
+const slip = (label: string, gross: bigint, standard: bigint, dependents: number | null, expected: Golden["expected"], citation: string): Golden =>
+  ({ year: 2026, label, input: { kind: "payslip", gross, standard, dependents }, expected, citation });
+const health = (standard: bigint, rate: string, half: bigint, citation: string): Golden => ({
+  year: 2026, label: `health half-share ${yen(standard)} at ${rate}%`, input: { kind: "health", standard, rate }, expected: { half }, citation,
 });
 
-test("NTA row 59: 221,000–224,000円 prices 5,150/3,520/1,910/300", () => {
-  assert.equal(lookupGensenKo(221000n, 0), 5150n);
-  assert.equal(lookupGensenKo(223999n, 1), 3520n);
-  assert.equal(lookupGensenKo(222500n, 2), 1910n);
-  assert.equal(lookupGensenKo(221000n, 3), 300n);
-  assert.equal(lookupGensenKo(221000n, 4), 0n);
-  assert.equal(lookupGensenOtsu(223999n), 26400n);
+const GOLDENS: readonly Golden[] = [
+  gensen(NTA(1), 105000n, 0, 170n), gensen(NTA(1), 106999n, 0, 170n), gensen(NTA(1), 105000n, 1, 0n),
+  gensen(NTA(1), 105000n, 7, 0n), gensen(NTA(1), 105000n, null, 3800n),
+  gensen(NTA(59), 221000n, 0, 5150n), gensen(NTA(59), 223999n, 1, 3520n), gensen(NTA(59), 222500n, 2, 1910n),
+  gensen(NTA(59), 221000n, 3, 300n), gensen(NTA(59), 221000n, 4, 0n), gensen(NTA(59), 223999n, null, 26400n),
+  ...[7930n, 6320n, 4700n, 3080n, 1470n, 0n].map((tax, dependents) => gensen(NTA(85), 300000n, dependents, tax)),
+  gensen(NTA(85), 299000n, null, 53600n),
+  gensen(`${NTA(114)}: first nonzero 7人 cell`, 387000n, 7, 170n), gensen(NTA(114), 387000n, 6, 1790n),
+  gensen(`${NTA(114)}: just below it, 7人 is still 0`, 385999n, 7, 0n),
+  gensen(`${NTA(231)} (last)`, 737000n, 0, 71380n), gensen(`${NTA(231)} (last)`, 739999n, 7, 26110n),
+  gensen(`${NTA(231)} (last)`, 739999n, null, 257700n),
+  gensen("月額表の求め方: 「2,473円（80,750円×3.063%、1円未満の端数は切り捨てます。)」", 80750n, null, 2473n),
+  gensen("月額表: 乙欄 below 105,000円 is 3.063%", 0n, null, 0n),
+  gensen("月額表: 乙欄 below 105,000円 is 3.063%, truncated", 104999n, null, 3216n),
+  grade("grade-for-standard", 88000n, { grade: 1, half: 8052n }, `${JPS}: bottom grade`),
+  grade("grade-for-standard", 300000n, { grade: 19, half: 27450n }, `${JPS}: middle grade`),
+  grade("grade-for-standard", 650000n, { grade: 32, half: 59475n }, `${JPS}: top grade`),
+  grade("grade-for-pay", 0n, { grade: 1 }, `${JPS}: grade 1 takes everything below 93,000円`),
+  grade("grade-for-pay", 92999n, { grade: 1 }, `${JPS}: grade 1 takes everything below 93,000円`),
+  grade("grade-for-pay", 635000n, { grade: 32 }, `${JPS}: grade 32 from 635,000円`),
+  grade("grade-for-pay", 2000000n, { grade: 32, half: 59475n }, `${JPS}: grade 32 has no ceiling`),
+  health(88000n, "9.85", 4334n, "協会けんぽ 9.85%"),
+  health(300000n, "9.85", 14775n, "協会けんぽ 9.85%: 29,550 halved exactly"),
+  health(100000n, "9.801", 4900n, "50銭以下切り捨て: half 4,900.5 is exactly 50銭"),
+  health(100000n, "9.80102", 4901n, "50銭超切り上げ: half 4,900.51"),
+  health(100000n, "9.80098", 4900n, "50銭未満: half 4,900.49"),
+  slip("甲 payslip: 300,000円, grade 300,000, 0人, 9.85%", 300000n, 300000n, 0,
+    { pension: 27450n, pensionEmployer: 27450n, health: 14775n, healthEmployer: 14775n, gensenBase: 257775n, gensen: 6430n },
+    `hand-worked: grade 19 → 27,450; 300,000 × 9.85% / 2 = 14,775; base 257,775 → ${NTA(71)} 0人`),
+  slip("甲 payslip: same pay, 2人", 300000n, 300000n, 2, { gensenBase: 257775n, gensen: 3200n }, `hand-worked: ${NTA(71)} 2人`),
+  slip("乙 payslip: no declaration, same base", 300000n, 300000n, null, { gensenBase: 257775n, gensen: 38600n }, `hand-worked: ${NTA(71)} 乙欄`),
+  slip("甲 payslip: 150,000円, grade 150,000, 0人, 9.85%", 150000n, 150000n, 0, { pension: 13725n, health: 7387n, gensenBase: 128888n, gensen: 1300n },
+    `hand-worked: grade 9 → 13,725; half 7,387.5 → 50銭以下切り捨て 7,387; base 128,888 → ${NTA(12)} 0人`),
+];
+
+/** A resident payslip at the 9.85% health rate, before the 2026-04 child contributions. */
+const payslip = (gross: bigint, standard: bigint, dependents: number | null) => calculateJp2026({
+  grossMonthly: gross, standard, dependents, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident",
 });
 
-test("NTA row 85: 299,000–302,000円 prices the full 0–4人 ladder", () => {
-  assert.deepEqual(
-    [0, 1, 2, 3, 4, 5].map((dependents) => lookupGensenKo(300000n, dependents)),
-    [7930n, 6320n, 4700n, 3080n, 1470n, 0n],
-  );
-  assert.equal(lookupGensenOtsu(299000n), 53600n);
-});
-
-test("NTA row 114: first nonzero at 7人 (386,000–389,000円 → 170)", () => {
-  assert.equal(lookupGensenKo(387000n, 7), 170n);
-  assert.equal(lookupGensenKo(387000n, 6), 1790n);
-  assert.equal(lookupGensenKo(385999n, 7), 0n);
-});
-
-test("NTA row 231 (last): 737,000–740,000円 prices 71,380 at 0人", () => {
-  assert.equal(lookupGensenKo(737000n, 0), 71380n);
-  assert.equal(lookupGensenKo(739999n, 7), 26110n);
-  assert.equal(lookupGensenOtsu(739999n), 257700n);
-});
-
-test("below the floor: under 105,000円 every 甲 column is 0", () => {
-  for (let dependents = 0; dependents <= 7; dependents++) {
-    assert.equal(lookupGensenKo(0n, dependents), 0n, `0円/${dependents}人`);
-    assert.equal(lookupGensenKo(104999n, dependents), 0n, `104,999円/${dependents}人`);
+function compute(input: Input): Record<string, bigint | number> {
+  if (input.kind === "gensen") {
+    return { gensen: input.dependents === null ? lookupGensenOtsu(input.pay) : lookupGensenKo(input.pay, input.dependents) };
   }
-});
+  if (input.kind === "health") return { half: healthHalfShare(input.standard, input.rate) };
+  if (input.kind === "payslip") return { ...payslip(input.gross, input.standard, input.dependents) };
+  const priced = (input.kind === "grade-for-pay" ? pensionGradeForPay : pensionGradeForStandard)(input.amount);
+  return { grade: priced.grade, half: priced.half };
+}
 
-test("求め方 worked example: 乙 80,750円 → 2,473円 (3.063%, sub-yen truncated)", () => {
-  // 月額表の求め方: 「2,473円（80,750円×3.063%、1円未満の端数は切り捨て
-  // ます。)」 — 80,750 × 0.03063 = 2,473.3725 → 2,473.
-  assert.equal(lookupGensenOtsu(80750n), 2473n);
-  assert.equal(lookupGensenOtsu(0n), 0n);
-  assert.equal(lookupGensenOtsu(104999n), 3216n);
-});
+for (const row of GOLDENS) {
+  test(`${row.year} ${row.label}`, () => {
+    const actual = compute(row.input);
+    for (const [field, figure] of Object.entries(row.expected)) {
+      assert.equal(actual[field], figure, `${row.year} ${row.label}: ${field} — ${row.citation}`);
+    }
+  });
+}
 
-// ---------------------------------------------------------------------------
-// Mechanism 1b: JPS 料額表 grades — bottom, middle, top.
-// ---------------------------------------------------------------------------
+const REFUSALS: readonly { label: string; input: () => unknown; refusal: RegExp }[] = [
+  ...[740000n, 790000n, 1000000n].flatMap((amount) => [
+    { label: `甲欄 at ${yen(amount)}: formula rows untranscribed`, input: () => lookupGensenKo(amount, 0), refusal: /740,000/ },
+    { label: `乙欄 at ${yen(amount)}: formula rows untranscribed`, input: () => lookupGensenOtsu(amount), refusal: /740,000/ },
+  ]),
+  { label: "an amount past Number precision is named exactly", input: () => lookupGensenKo(9007199254740993n, 0), refusal: /9007199254740993/ },
+  { label: "a health rate that is not a number", input: () => healthHalfShare(300000n, "nine"), refusal: /health rate "nine" is not a percent number/ },
+  { label: "an empty health rate", input: () => healthHalfShare(300000n, ""), refusal: /health rate "" is not a percent number/ },
+  { label: "an unpublished 標準報酬月額", input: () => pensionGradeForStandard(99000n),
+    refusal: /99000円 matches no 厚生年金 grade.*copy the grade off the JPS notice/ },
+  { label: "a payslip on an unpublished 標準報酬月額", input: () => payslip(300000n, 99000n, 0), refusal: /99000円 matches no 厚生年金 grade/ },
+  { label: "premiums exceeding pay", input: () => payslip(10000n, 88000n, 0), refusal: /gensen base is negative/ },
+];
 
-test("JPS grades: bottom, middle and top half-shares reproduce the table", () => {
-  assert.equal(pensionGradeForStandard(88000n).half, 8052n);
-  assert.equal(pensionGradeForStandard(88000n).grade, 1);
-  assert.equal(pensionGradeForStandard(300000n).half, 27450n);
-  assert.equal(pensionGradeForStandard(300000n).grade, 19);
-  assert.equal(pensionGradeForStandard(650000n).half, 59475n);
-  assert.equal(pensionGradeForStandard(650000n).grade, 32);
-});
+for (const { label, input, refusal } of REFUSALS) {
+  test(`refused: ${label}`, () => assert.throws(input, refusal, label));
+}
 
-test("every transcribed grade: full is twice the half, half is 9.15% of standard", () => {
-  assert.equal(JP_PENSION_GRADES_2026.length, 32);
-  for (const grade of JP_PENSION_GRADES_2026) {
-    assert.equal(grade.full, grade.half * 2n, `grade ${grade.grade} full`);
-    assert.equal(grade.half * 10000n, grade.standard * 915n, `grade ${grade.grade} 9.15%`);
-  }
-});
+const COLUMNS = [0, 1, 2, 3, 4, 5, 6, 7];
 
-// ---------------------------------------------------------------------------
-// Mechanism 2: hand-worked payslips, arithmetic shown.
-// ---------------------------------------------------------------------------
-
-test("hand-worked 甲 payslip: 300,000円 gross, grade 300,000, 0人, Tokyo 9.85%", () => {
-  // Pension: grade 19 → 27,450 (折半額). Health: 300,000 × 9.85% = 29,550,
-  // half 14,775. Gensen base: 300,000 − 27,450 − 14,775 = 257,775 →
-  const result = calculateJp2026({ grossMonthly: 300000n, standard: 300000n, dependents: 0, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident" });
-  assert.equal(result.pension, 27450n);
-  assert.equal(result.pensionEmployer, 27450n);
-  assert.equal(result.health, 14775n);
-  assert.equal(result.healthEmployer, 14775n);
-  assert.equal(result.gensenBase, 257775n);
-  assert.equal(result.gensen, 6430n);
-});
-
-test("hand-worked 甲 payslip with dependents: same pay, 2人 → 3,200", () => {
-  // Same base 257,775 → row 71, 2人 column → 3,200.
-  const result = calculateJp2026({ grossMonthly: 300000n, standard: 300000n, dependents: 2, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident" });
-  assert.equal(result.gensenBase, 257775n);
-  assert.equal(result.gensen, 3200n);
-});
-
-test("hand-worked 乙 payslip: no declaration → 乙欄 38,600 on the same base", () => {
-  const result = calculateJp2026({ grossMonthly: 300000n, standard: 300000n, dependents: null, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident" });
-  assert.equal(result.gensenBase, 257775n);
-  assert.equal(result.gensen, 38600n);
-});
-
-test("hand-worked low payslip: 150,000円 gross, grade 150,000, 0人, 9.85%", () => {
-  // Pension grade 9 → 13,725. Health: 150,000 × 9.85% = 14,775, half
-  // exactly 7,387.5 → 50銭以下切り捨て → 7,387. Base:
-  // 150,000 − 13,725 − 7,387 = 128,888 → row 12 (127,000–129,000) 0人 → 1,300.
-  const result = calculateJp2026({ grossMonthly: 150000n, standard: 150000n, dependents: 0, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident" });
-  assert.equal(result.pension, 13725n);
-  assert.equal(result.health, 7387n);
-  assert.equal(result.gensenBase, 128888n);
-  assert.equal(result.gensen, 1300n);
-});
-
-// ---------------------------------------------------------------------------
-// Health 50銭 rule, both arms plus the exact boundary.
-// ---------------------------------------------------------------------------
-
-test("health half-share: exact halves, the 50銭 boundary, and above it", () => {
-  assert.equal(healthHalfShare(88000n, "9.85"), 4334n);
-  assert.equal(healthHalfShare(300000n, "9.85"), 14775n);
-  // Full 9,801 → half 4,900.5: exactly 50銭 → 切り捨て → 4,900.
-  assert.equal(healthHalfShare(100000n, "9.801"), 4900n);
-  // Full 9,801.02 → half 4,900.51: 50銭超 → 切り上げ → 4,901.
-  assert.equal(healthHalfShare(100000n, "9.80102"), 4901n);
-  // Full 9,800.98 → half 4,900.49 → 4,900.
-  assert.equal(healthHalfShare(100000n, "9.80098"), 4900n);
-  assert.throws(() => healthHalfShare(300000n, "nine"), PayrollPackError);
-  assert.throws(() => healthHalfShare(300000n, ""), PayrollPackError);
-});
-
-// ---------------------------------------------------------------------------
-// Mechanism 4a: sweeps at, below and above every 月額表 bracket.
-// ---------------------------------------------------------------------------
-
-test("sweep: every row boundary resolves to the correct row on both sides", () => {
+test("sweep: every 月額表 row boundary on both sides, monotone in pay and in dependents", () => {
   assert.equal(JP_GENSEN_MONTHLY_2026.length, 231);
-  for (let i = 0; i < JP_GENSEN_MONTHLY_2026.length; i++) {
-    const row = JP_GENSEN_MONTHLY_2026[i]!;
-    // At lo and just below hi: this row, every column.
-    for (let dependents = 0; dependents <= 7; dependents++) {
-      assert.equal(lookupGensenKo(row.lo, dependents), row.ko[dependents], `row ${row.n} lo`);
-      assert.equal(lookupGensenKo(row.hi - 1n, dependents), row.ko[dependents], `row ${row.n} hi-1`);
+  JP_GENSEN_MONTHLY_2026.forEach((row, index) => {
+    const prev = JP_GENSEN_MONTHLY_2026[index - 1];
+    if (prev) assert.equal(prev.hi, row.lo, `rows ${prev.n}/${row.n} contiguous`);
+    for (const dependents of COLUMNS) {
+      const cell = row.ko[dependents]!;
+      assert.equal(lookupGensenKo(row.lo, dependents), cell, `row ${row.n} lo`);
+      assert.equal(lookupGensenKo(row.hi - 1n, dependents), cell, `row ${row.n} hi-1`);
+      // Below row 1 every 甲 column is 0, down to 0円.
+      assert.equal(lookupGensenKo(row.lo - 1n, dependents), prev ? prev.ko[dependents] : 0n, `below row ${row.n}`);
+      if (!prev) assert.equal(lookupGensenKo(0n, dependents), 0n, `0円/${dependents}人`);
+      if (prev) assert.ok(cell >= prev.ko[dependents]!, `ko/${dependents} dips at row ${row.n}`);
+      if (dependents > 0) assert.ok(cell <= row.ko[dependents - 1]!, `row ${row.n}: ${dependents}人 exceeds ${dependents - 1}人`);
     }
     assert.equal(lookupGensenOtsu(row.lo), row.otsu, `row ${row.n} otsu lo`);
     assert.equal(lookupGensenOtsu(row.hi - 1n), row.otsu, `row ${row.n} otsu hi-1`);
-    // Just below lo: the previous row (or the sub-floor rules for row 1).
-    if (i === 0) {
-      for (let dependents = 0; dependents <= 7; dependents++) {
-        assert.equal(lookupGensenKo(row.lo - 1n, dependents), 0n, "below row 1 is 0");
-      }
-      assert.equal(lookupGensenOtsu(row.lo - 1n), ((row.lo - 1n) * 3063n) / 100000n, "below row 1 is 3.063%");
-    } else {
-      const prev = JP_GENSEN_MONTHLY_2026[i - 1]!;
-      assert.equal(prev.hi, row.lo, `rows ${prev.n}/${row.n} contiguous`);
-      for (let dependents = 0; dependents <= 7; dependents++) {
-        assert.equal(lookupGensenKo(row.lo - 1n, dependents), prev.ko[dependents], `below row ${row.n}`);
-      }
-      assert.equal(lookupGensenOtsu(row.lo - 1n), prev.otsu, `below row ${row.n} otsu`);
-    }
-  }
+    assert.equal(lookupGensenOtsu(row.lo - 1n), prev ? prev.otsu : ((row.lo - 1n) * 3063n) / 100000n, `below row ${row.n} otsu`);
+    if (prev) assert.ok(row.otsu >= prev.otsu, `otsu dips at row ${row.n}`);
+  });
 });
 
-test("gensen refuses at and above 740,000円 (formula rows untranscribed)", () => {
-  for (const amount of [740000n, 790000n, 1000000n]) {
-    assert.throws(() => lookupGensenKo(amount, 0), /740,000/);
-    assert.throws(() => lookupGensenOtsu(amount), /740,000/);
-  }
-});
-
-test("monotonicity: tax never falls as pay rises, never rises as dependents rise", () => {
-  for (let dependents = 0; dependents <= 7; dependents++) {
-    let prev = -1n;
-    for (const row of JP_GENSEN_MONTHLY_2026) {
-      assert.ok(row.ko[dependents]! >= prev, `ko/${dependents} dips at row ${row.n}`);
-      prev = row.ko[dependents]!;
-    }
-  }
-  let prevOtsu = -1n;
-  for (const row of JP_GENSEN_MONTHLY_2026) {
-    assert.ok(row.otsu >= prevOtsu, `otsu dips at row ${row.n}`);
-    prevOtsu = row.otsu;
-  }
-  for (const row of JP_GENSEN_MONTHLY_2026) {
-    for (let dependents = 0; dependents < 7; dependents++) {
-      assert.ok(
-        row.ko[dependents + 1]! <= row.ko[dependents]!,
-        `row ${row.n}: ${dependents + 1}人 exceeds ${dependents}人`,
-      );
-    }
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Mechanism 4b: grade STEP sweeps — both sides of every step, invariance within.
-// ---------------------------------------------------------------------------
-
-test("sweep: both sides of every grade step, and invariance within each grade", () => {
+test("sweep: every grade is 9.15% (折半), invariant within, and steps on both sides", () => {
   assert.equal(JP_PENSION_GRADES_2026.length, 32);
-  for (let i = 0; i < JP_PENSION_GRADES_2026.length; i++) {
-    const grade = JP_PENSION_GRADES_2026[i]!;
-    // Within the grade the premium does not move.
-    const loPay = grade.lo ?? 0n;
-    const hiPay = grade.hi ?? grade.lo! + 100000n;
+  JP_PENSION_GRADES_2026.forEach((current, index) => {
+    assert.equal(current.full, current.half * 2n, `grade ${current.grade} full`);
+    assert.equal(current.half * 10000n, current.standard * 915n, `grade ${current.grade} 9.15%`);
+    const loPay = current.lo ?? 0n;
+    const hiPay = current.hi ?? current.lo! + 100000n;
     for (const pay of [loPay, (loPay + hiPay) / 2n, hiPay - 1n]) {
-      assert.equal(pensionGradeForPay(pay).grade, grade.grade, `pay ${pay} stays in grade ${grade.grade}`);
-      assert.equal(pensionGradeForPay(pay).half, grade.half, `pay ${pay} premium invariant`);
+      assert.equal(pensionGradeForPay(pay).grade, current.grade, `pay ${pay} stays in grade ${current.grade}`);
+      assert.equal(pensionGradeForPay(pay).half, current.half, `pay ${pay} premium invariant`);
     }
-    // The step: just below the next grade's floor is still this grade.
-    if (i + 1 < JP_PENSION_GRADES_2026.length) {
-      const next = JP_PENSION_GRADES_2026[i + 1]!;
-      assert.equal(next.lo! - 1n >= 0n ? pensionGradeForPay(next.lo! - 1n).grade : grade.grade, grade.grade);
-      assert.equal(pensionGradeForPay(next.lo!).grade, next.grade);
-      assert.notEqual(next.half, grade.half, `grades ${grade.grade}/${next.grade} step`);
+    const next = JP_PENSION_GRADES_2026[index + 1];
+    if (next) {
+      assert.equal(pensionGradeForPay(next.lo! - 1n).grade, current.grade, `just below grade ${next.grade}`);
+      assert.equal(pensionGradeForPay(next.lo!).grade, next.grade, `at grade ${next.grade}`);
+      assert.notEqual(next.half, current.half, `grades ${current.grade}/${next.grade} step`);
     }
-  }
-  // Grade 1 takes everything below 93,000; grade 32 has no ceiling.
-  assert.equal(pensionGradeForPay(0n).grade, 1);
-  assert.equal(pensionGradeForPay(92999n).grade, 1);
-  assert.equal(pensionGradeForPay(635000n).grade, 32);
-  assert.equal(pensionGradeForPay(2000000n).grade, 32);
-  assert.equal(pensionGradeForPay(2000000n).half, 59475n);
-});
-
-test("unknown 標準報酬月額 refuses (copy it off the JPS notice)", () => {
-  assert.throws(() => pensionGradeForStandard(99000n), PayrollPackError);
-  assert.throws(() => lookupGensenKo(9007199254740993n, 0), /9007199254740993/);
-  assert.throws(() => calculateJp2026({ grossMonthly: 300000n, standard: 99000n, dependents: 0, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident" }), PayrollPackError);
-});
-
-test("negative gensen base refuses rather than looking up a negative amount", () => {
-  assert.throws(
-    () => calculateJp2026({ grossMonthly: 10000n, standard: 88000n, dependents: 0, healthRate: "9.85", childContributionsEffective: false, taxResidence: "resident" }),
-    /negative/,
-  );
+  });
 });

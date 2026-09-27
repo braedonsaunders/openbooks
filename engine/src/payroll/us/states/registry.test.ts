@@ -74,7 +74,7 @@ test("supported states are the implemented ones PLUS the genuinely no-tax ones",
 test("coverage is complete: no wage-tax jurisdiction lacks an engine", () => {
   // The District of Columbia was the last one: it levies a wage income tax
   // and had no engine, so it carried the refusal below. Now it computes
-  // (see conformance-dc.test.ts), and every other wage-tax jurisdiction in
+  // (see conformance.test.ts), and every other wage-tax jurisdiction in
   // US_STATES already did. The refusal branch in requireUsStateWithholding
   // stays for the next untranscribed levy — this test fails the moment one
   // appears without an engine, which is how the list stays honest.
@@ -834,7 +834,7 @@ test("a Maryland residence county moves SIT_MD and produces no separate levy", (
   // The Comptroller's combined state+local tables: the same $1,000 weekly
   // wage with one exemption is $69.41 through Montgomery county's 3.20%
   // table and $68.10 through Carroll county's 3.05% table (Guide p. 39
-  // cells, pinned in conformance-md) — the county SELECTS the SIT_MD
+  // cells, pinned in conformance.test.ts) — the county SELECTS the SIT_MD
   // computation. And the resolver produces no county levy for either code,
   // because the local tax is inside SIT_MD, not beside it: a separate
   // posting would withhold the same tax twice.

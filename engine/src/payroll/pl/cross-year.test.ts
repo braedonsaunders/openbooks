@@ -6,12 +6,8 @@
  * - 22 000 zł December: the emerytalne/rentowe room binds differently every
  *   year (234 720 / 260 190 / 282 600), so the same pay prices three distinct
  *   advances: 6 488 (2024), 5 832 (2025), 5 695 (2026).
- * - 8 000 zł June: genuinely frozen — the scale, rates and funds are
- *   identical, so the same 498 zł advance in all three years is asserted per
- *   year, pinning the freeze against future edits.
- * - Senior FGŚP: 0,00 in all three transcribed years (art. 9b ust. 2,
- *   modelled per year — 2026 under Dz.U. 2026 poz. 186). The dispatch is
- *   still proved distinct by the December advances above.
+ * - The frozen 8 000 zł June payslip and the senior FGŚP bar are pinned per
+ *   year by the rows of ./goldens.test.ts.
  * - The adapter cases price December through `computePlStatutory` per
  *   taxYear: a dispatch that fell through to 2026 would print 5 695 for a
  *   2025 run instead of 5 832.
@@ -94,73 +90,6 @@ test("December 22 000 zł prices a different advance every year", () => {
   assert.equal(pit2024.zaliczka, "6488.0000");
   assert.equal(pit2025.zaliczka, "5832.0000");
   assert.equal(pit2026.zaliczka, "5695.0000");
-});
-
-test("June 8 000 zł is frozen: the same figures in all three years", () => {
-  for (const year of [2024, 2025, 2026] as const) {
-    const zusInput = {
-      brut: "8000.00",
-      payDate: `${year}-06-15`,
-      periodsPerYear: 12,
-      rokUrodzenia: 1990,
-    } as const;
-    const zus =
-      year === 2024
-        ? calculatePlZus2024(zusInput)
-        : year === 2025
-          ? calculatePlZus2025(zusInput)
-          : calculatePlZus2026(zusInput);
-    // No cap binds (6 × 8 000 = 48 000); rates and funds identical.
-    assert.equal(zus.zusEe, "1096.8000", `${year} zusEe`);
-    assert.equal(zus.zdrowotna, "621.2900", `${year} zdrowotna`);
-    assert.equal(zus.fp, "80.0000", `${year} fp`);
-    assert.equal(zus.fs, "116.0000", `${year} fs`);
-    assert.equal(zus.fgsp, "8.0000", `${year} fgsp`);
-    const pitInput = {
-      brut: "8000.00",
-      zusEe: zus.zusEe,
-      kup: "miejscowy",
-      pomniejszenie: "1/12",
-      payDate: `${year}-06-15`,
-      periodsPerYear: 12,
-    } as const;
-    const pit =
-      year === 2024
-        ? calculatePlPit2024(pitInput)
-        : year === 2025
-          ? calculatePlPit2025(pitInput)
-          : calculatePlPit2026(pitInput);
-    assert.equal(pit.zaliczka, "498.0000", `${year} zaliczka`);
-  }
-});
-
-test("senior FGŚP: zero in every transcribed year", () => {
-  // Born 1960: past 60-by-year in every transcribed year. Each year models
-  // the claims-protection art. 9b ust. 2 exemption under its own
-  // consolidated text (2026: Dz.U. 2026 poz. 186 — was 8,00 under the
-  // landed unconditional pricing, now 0). Asserting all three proves the
-  // dispatch reaches each year's own tables.
-  for (const [year, expected] of [
-    [2024, "0.0000"],
-    [2025, "0.0000"],
-    [2026, "0.0000"],
-  ] as const) {
-    const input = {
-      brut: "8000.00",
-      payDate: `${year}-06-15`,
-      periodsPerYear: 12,
-      rokUrodzenia: 1960,
-    } as const;
-    const zus =
-      year === 2024
-        ? calculatePlZus2024(input)
-        : year === 2025
-          ? calculatePlZus2025(input)
-          : calculatePlZus2026(input);
-    assert.equal(zus.fp, "0.0000", `${year} fp`);
-    assert.equal(zus.fs, "0.0000", `${year} fs`);
-    assert.equal(zus.fgsp, expected, `${year} fgsp`);
-  }
 });
 
 function adapterCtx(taxYear: number, payDate: string, income: string) {

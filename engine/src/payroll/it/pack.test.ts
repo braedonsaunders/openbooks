@@ -1,8 +1,8 @@
 /**
  * IT payroll pack tests — the declaration and the statutory pass.
  *
- * The pack is installable:true for 2025 (proven by tax-year-2025.test.ts)
- * and 2026 (proven by tax-year-2026.test.ts); later years are refused by
+ * The pack is installable:true for 2025 and 2026 (both years proven by
+ * goldens.test.ts); later years are refused by
  * name. All 20 regions are supported (no region publishes its own tables),
  * but monthly surtax withholding refuses without prior-year settlement facts.
  * Wrapper glue is tested with injected rates (no Postgres).
