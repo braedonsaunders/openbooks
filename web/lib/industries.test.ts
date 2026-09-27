@@ -11,9 +11,9 @@ test('nonprofit preset has unique net-asset account numbers', () => {
   assert.deepEqual(
     nonprofit.coa.filter((account) => account.type === 'equity').map(({ number, name }) => ({ number, name })),
     [
-      { number: '3000', name: 'Unrestricted Net Assets' },
-      { number: '3100', name: 'Temporarily Restricted Net Assets' },
-      { number: '3200', name: 'Permanently Restricted Net Assets' },
+      { number: '3000', name: 'Unrestricted net assets' },
+      { number: '3100', name: 'Restricted net assets' },
+      { number: '3200', name: 'Endowment net assets' },
     ],
   )
 })
