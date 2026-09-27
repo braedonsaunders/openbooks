@@ -26,7 +26,7 @@ const presentContent = new Map(presentFiles.map((name) => [name, readFileSync(jo
 // included in a tagged release. Derive publication from tagged release trees,
 // so an unreleased migration under active development does not need a ledger
 // transition for each interim edit.
-const releaseTags = execFileSync('git', ['tag', '--list'], { cwd: ROOT, encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+const releaseTags = execFileSync('git', ['tag', '--list', 'v*'], { cwd: ROOT, encoding: 'utf8' }).trim().split('\n').filter(Boolean)
 const publishedFiles = new Set()
 for (const tag of releaseTags) {
   const files = execFileSync(
@@ -107,6 +107,13 @@ function publishedDigests() {
 }
 
 const published = publishedDigests()
+
+test('tagged release refs are available for migration publication checks', () => {
+  assert.ok(
+    releaseTags.length > 0,
+    'Migration digest publication checks require at least one v* release tag; fetch with fetch-depth 0 so tagged releases are available.',
+  )
+})
 
 // The historical digests still awaiting an individually-audited transition.
 // Each was published by an in-place corrective edit to an already-applied
