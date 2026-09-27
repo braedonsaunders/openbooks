@@ -3,6 +3,61 @@ import type { SetupEntity } from '../types'
 import { COSTING_METHODS, INVENTORY_TRACKING, STOCK_LOCATION_KINDS } from '../options'
 
 export const INVENTORY_ENTITIES: SetupEntity[] = [
+  {
+    key: 'item-identifiers',
+    table: 'item_identifiers',
+    singularTitleKey: 'entities.item-identifiers.singular',
+    actorCols: true,
+    groupKey: 'inventory',
+    featureKey: 'barcodeScanning',
+    writePermission: 'items.manage',
+    iconKey: 'package',
+    orgScoped: true,
+    naturalKey: 'value',
+    hasActive: false,
+    columns: [
+      { key: 'itemId', kind: 'ref', ref: 'items' },
+      { key: 'kind', kind: 'text' },
+      { key: 'value', kind: 'code' },
+      { key: 'unit', kind: 'text' },
+    ],
+    fields: [
+      { key: 'itemId', kind: 'ref', ref: 'items', required: true },
+      { key: 'kind', kind: 'select', options: [
+        { value: 'gtin', labelKey: 'options.identifierKind.gtin' },
+        { value: 'upc', labelKey: 'options.identifierKind.upc' },
+        { value: 'ean', labelKey: 'options.identifierKind.ean' },
+        { value: 'internal', labelKey: 'options.identifierKind.internal' },
+      ], required: true },
+      { key: 'value', kind: 'text', required: true },
+      { key: 'unit', kind: 'text' },
+    ],
+  },
+  {
+    key: 'customer-item-refs',
+    table: 'customer_item_refs',
+    singularTitleKey: 'entities.customer-item-refs.singular',
+    actorCols: true,
+    groupKey: 'inventory',
+    featureKey: 'customerPartNumbers',
+    writePermission: 'items.manage',
+    iconKey: 'package',
+    orgScoped: true,
+    orderBy: 'customer_id, customer_sku',
+    hasActive: false,
+    columns: [
+      { key: 'customerId', kind: 'ref', ref: 'parties' },
+      { key: 'itemId', kind: 'ref', ref: 'items' },
+      { key: 'customerSku', kind: 'code' },
+      { key: 'description', kind: 'text' },
+    ],
+    fields: [
+      { key: 'customerId', kind: 'ref', ref: 'parties', required: true },
+      { key: 'itemId', kind: 'ref', ref: 'items', required: true },
+      { key: 'customerSku', kind: 'text', required: true },
+      { key: 'description', kind: 'textarea' },
+    ],
+  },
   // --- Inventory -----------------------------------------------------------
   {
     // Stock locations — physical bins/zones under the `locations` dimension.

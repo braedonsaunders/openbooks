@@ -2942,6 +2942,17 @@
         "singularTitle": "保留规则",
         "title": "保留规则"
       }
+    ,
+      "item-identifiers": {
+        "title": "商品标识符",
+        "singular": "商品标识符",
+        "description": "登记扫描时用于识别商品的精确 GTIN、UPC、EAN 和内部值。"
+      },
+      "customer-item-refs": {
+        "title": "客户商品编号",
+        "singular": "客户商品编号",
+        "description": "将客户专用商品代码映射到其订购商品。"
+      }
     },
     "fields": {
       "aggregation": "聚合方式",
@@ -3354,6 +3365,8 @@
       "cohortKey": "分组",
       "biasTerms": "敏感措辞",
       "reviewMonths": "评审周期（月）"
+    ,
+      "customerSku": "客户商品编号"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count 按每条记录的 distinct key 统计不同值。",
@@ -3962,6 +3975,13 @@
         "department": "部门",
         "paySchedule": "发薪周期",
         "jobLevel": "职级"
+      }
+    ,
+      "identifierKind": {
+        "gtin": "GTIN",
+        "upc": "UPC",
+        "ean": "EAN",
+        "internal": "内部"
       }
     },
     "payroll": {

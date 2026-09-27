@@ -12,6 +12,7 @@ import { buildRow, coerceBoolean, idColumn, type Coerced } from '../setup/coerce
 import { filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
 import { savePayComponentEarningClassification, validateEntityIntegrity } from '../setup/write'
+import { permissionSetCovers } from '../permissions'
 import { payPeriodsPerYearProblem } from '@openbooks/engine/src/payroll/run-calendar.ts'
 import { isSetupBookEntity, saveSetupBook } from '../setup/books'
 import { auditSetupChange as audit, loadSetupAuditRow } from '../setup/audit'
@@ -185,7 +186,7 @@ export function setupDescriptor(entity: SetupEntity): ResourceDescriptor {
     group: 'Setup',
     iconKey: entity.iconKey || 'sliders',
     readPermission: 'admin.setup.manage',
-    writePermission: 'admin.setup.manage',
+    writePermission: entity.writePermission ?? 'admin.setup.manage',
     supportsImport: !entity.readOnly && !entity.dataSource,
     naturalKey: entity.naturalKey,
   }
@@ -345,6 +346,14 @@ async function writeSetup(
     const rowNo = i + 1
     const src = { ...rows[i] }
     try {
+      if (entity.writePermission && !permissionSetCovers(ctx.permissions ?? new Set(), entity.writePermission)) {
+        outcome.failed++
+        outcome.errors.push({
+          row: rowNo,
+          message: `The ${entity.writePermission} permission is required to import ${entity.key}; grant it to the importing role and retry.`,
+        })
+        continue
+      }
       const unavailable = unavailableFields.find((key) => src[key] !== undefined && src[key] !== null && src[key] !== '')
       if (unavailable) {
         outcome.failed++

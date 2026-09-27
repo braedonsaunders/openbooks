@@ -9,10 +9,10 @@
 // This is the single dropdown implementation behind both the people picker and
 // the generic <Select> — there are no native <select> dropdowns in the app.
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Check, ChevronDown, Search, X } from 'lucide-react'
+import { Camera, Check, ChevronDown, ScanLine, Search, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { cn } from './utils'
 import { anchoredMenuPosition } from './anchored-menu-position'
@@ -27,6 +27,16 @@ export type SelectOption = {
   disabled?: boolean
   /** Group header label (from <optgroup>); options sharing a group are batched. */
   group?: string
+}
+
+export type SearchSelectScanResult =
+  | { ok: true; value: string; label?: string; unit?: string | null }
+  | { ok: false; message: string; candidates?: string[] }
+
+type BarcodeDetectorWindow = Window & {
+  BarcodeDetector?: new (options?: { formats?: string[] }) => {
+    detect(source: HTMLVideoElement): Promise<Array<{ rawValue: string }>>
+  }
 }
 
 export function SearchSelect({
@@ -51,9 +61,10 @@ export function SearchSelect({
   onSearchChange,
   invalid = false,
   id,
+  scanResolver,
 }: {
   value: string
-  onChange: (value: string) => void
+  onChange: (value: string, scan?: Extract<SearchSelectScanResult, { ok: true }>) => void
   options: SelectOption[]
   placeholder?: string
   searchPlaceholder?: string
@@ -85,6 +96,8 @@ export function SearchSelect({
   /** Renders the trigger in an error state. */
   invalid?: boolean
   id?: string
+  /** Exact keyboard-wedge or camera scan resolver. Omitted when scanning is gated off. */
+  scanResolver?: (value: string) => Promise<SearchSelectScanResult>
 }) {
   const t = useTranslations('ui.select')
   const tCommon = useTranslations('common')
@@ -107,6 +120,12 @@ export function SearchSelect({
   // it floats above any `overflow` container (e.g. the line-grid table) instead
   // of being clipped or expanding the row.
   const [pos, setPos] = useState<ReturnType<typeof anchoredMenuPosition> | null>(null)
+  const [scanMessage, setScanMessage] = useState<string | null>(null)
+  const [scanFailed, setScanFailed] = useState(false)
+  const [cameraActive, setCameraActive] = useState(false)
+  const scanBuffer = useRef({ value: '', at: 0 })
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const cameraAvailable = mounted && typeof window !== 'undefined' && Boolean((window as BarcodeDetectorWindow).BarcodeDetector)
 
   const noneLabel = tCommon('labels.none')
   const allOptions = useMemo(
@@ -118,7 +137,100 @@ export function SearchSelect({
   const display = selected?.label ?? (showEmpty ? emptyLabel : resolvedPlaceholder)
   const isPlaceholder = !selected && !showEmpty
 
-  const showSearch = searchable ?? (allOptions.length > 7 || allOptions.some((o) => o.group))
+  const resolveTypedScan = useCallback(async (raw: string) => {
+    if (!scanResolver || disabled) return
+    const result = await scanResolver(raw)
+    if (result.ok) {
+      if (!allOptions.some((option) => option.value === result.value)) {
+        setScanMessage(`${t('scanUnavailable')}${result.label ? `: ${result.label}` : ''}`)
+        setScanFailed(true)
+        return
+      }
+      setScanMessage(null)
+      setScanFailed(false)
+      setQuery('')
+      onSearchChange?.('')
+      onChange(result.value, result)
+      setOpen(false)
+      return
+    }
+    const message = result.message === 'scan_network_error'
+      ? t('scanNetworkError')
+      : result.message === 'scan_not_found'
+        ? t('scanNotFound')
+        : result.message === 'scan_ambiguous'
+          ? t('scanAmbiguous')
+          : result.message
+    const missingChoices = result.candidates?.filter((candidate) => !message.includes(candidate)) ?? []
+    const choices = missingChoices.length ? ` ${missingChoices.join('; ')}` : ''
+    setScanMessage(`${message}${choices}`)
+    setScanFailed(true)
+  }, [allOptions, disabled, onChange, onSearchChange, scanResolver, t])
+
+  const scannerKeyDown = useCallback((event: ReactKeyboardEvent<HTMLElement>) => {
+    if (!scanResolver || disabled || event.altKey || event.ctrlKey || event.metaKey) return
+    const now = Date.now()
+    if (event.key === 'Enter') {
+      const { value, at } = scanBuffer.current
+      scanBuffer.current = { value: '', at: 0 }
+      if (value.length >= 2 && now - at <= 150) {
+        event.preventDefault()
+        event.stopPropagation()
+        void resolveTypedScan(value)
+      }
+      return
+    }
+    if (event.key.length === 1) {
+      const prior = scanBuffer.current
+      scanBuffer.current = {
+        value: now - prior.at <= 150 ? `${prior.value}${event.key}`.slice(-200) : event.key,
+        at: now,
+      }
+    } else if (event.key !== 'Shift') {
+      scanBuffer.current = { value: '', at: 0 }
+    }
+  }, [disabled, resolveTypedScan, scanResolver])
+
+  const scanWithCamera = useCallback(async () => {
+    const Detector = typeof window === 'undefined' ? undefined : (window as BarcodeDetectorWindow).BarcodeDetector
+    const video = videoRef.current
+    if (!Detector || !navigator.mediaDevices?.getUserMedia || !video) {
+      setScanMessage(t('cameraUnavailable'))
+      setScanFailed(true)
+      return
+    }
+    let stream: MediaStream | null = null
+    try {
+      setCameraActive(true)
+      setScanFailed(false)
+      setScanMessage(t('scanResolving'))
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
+      video.srcObject = stream
+      await video.play()
+      const detector = new Detector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39'] })
+      const deadline = Date.now() + 15000
+      while (Date.now() < deadline) {
+        const detections = await detector.detect(video)
+        const value = detections.find((detection) => detection.rawValue)?.rawValue
+        if (value) {
+          await resolveTypedScan(value)
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, 120))
+      }
+      setScanMessage(t('cameraUnavailable'))
+      setScanFailed(true)
+    } catch {
+      setScanMessage(t('cameraUnavailable'))
+      setScanFailed(true)
+    } finally {
+      stream?.getTracks().forEach((track) => track.stop())
+      video.srcObject = null
+      setCameraActive(false)
+    }
+  }, [resolveTypedScan, t])
+
+  const showSearch = searchable ?? (Boolean(scanResolver) || allOptions.length > 7 || allOptions.some((o) => o.group))
   const place = useCallback(() => {
     const anchor = triggerRef.current?.getBoundingClientRect()
     if (!anchor) return
@@ -152,6 +264,8 @@ export function SearchSelect({
   function openMenu() {
     if (disabled) return
     setQuery('')
+    setScanMessage(null)
+    setScanFailed(false)
     onSearchChange?.('')
     setHighlight(
       firstEnabled(
@@ -295,46 +409,75 @@ export function SearchSelect({
           {t('noMatches')}
         </div>
       ) : null}
-      {loading || statusMessage ? (
+      {loading || statusMessage || scanMessage ? (
         <div
-          role={statusTone === 'error' ? 'alert' : 'status'}
+          role={scanFailed || statusTone === 'error' ? 'alert' : 'status'}
           className={cn(
             'border-t border-slate-100 px-3 py-2 text-xs dark:border-slate-800',
-            statusTone === 'error'
+            scanFailed || statusTone === 'error'
               ? 'text-red-600 dark:text-red-400'
               : 'text-slate-500 dark:text-slate-400',
           )}
         >
-          {loading ? t('searching') : statusMessage}
+          {loading ? t('searching') : scanMessage ?? statusMessage}
         </div>
       ) : null}
     </>
   )
 
   const searchBox = (largeText: boolean) => (
-    <div className="relative px-3 pt-3">
-      <Search
-        size={16}
-        className="absolute top-1/2 left-6 -translate-y-1/2 text-slate-400 dark:text-slate-500"
-      />
-      <input
-        ref={searchRef}
-        value={query}
-        onChange={(e) => {
-          const next = e.target.value
-          setQuery(next)
-          onSearchChange?.(next)
-          setHighlight(0)
-        }}
-        placeholder={resolvedSearchPlaceholder}
-        aria-label={resolvedSearchPlaceholder}
-        aria-busy={loading || undefined}
-        className={cn(
-          'w-full rounded-lg border border-slate-200 bg-slate-50 pr-3 pl-9 transition outline-none focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20 dark:border-slate-800 dark:bg-slate-900 dark:focus:bg-slate-900',
-          // 16px below sm — anything smaller makes iOS Safari zoom on focus.
-          largeText ? 'h-11 text-base' : 'h-9 text-base sm:text-sm',
-        )}
-      />
+    <div className="relative flex items-center gap-2 px-3 pt-3">
+      <div className="relative min-w-0 flex-1">
+        <Search
+          size={16}
+          className="absolute top-1/2 left-3 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+        />
+        <input
+          ref={searchRef}
+          value={query}
+          onKeyDown={scannerKeyDown}
+          onChange={(e) => {
+            const next = e.target.value
+            setQuery(next)
+            onSearchChange?.(next)
+            setHighlight(0)
+          }}
+          placeholder={resolvedSearchPlaceholder}
+          aria-label={resolvedSearchPlaceholder}
+          aria-busy={loading || undefined}
+          className={cn(
+            'w-full rounded-lg border border-slate-200 bg-slate-50 pr-3 pl-9 transition outline-none focus:border-teal-500 focus:bg-white focus:ring-2 focus:ring-teal-500/20 dark:border-slate-800 dark:bg-slate-900 dark:focus:bg-slate-900',
+            // 16px below sm — anything smaller makes iOS Safari zoom on focus.
+            largeText ? 'h-11 text-base' : 'h-9 text-base sm:text-sm',
+          )}
+        />
+      </div>
+      {scanResolver ? (
+        <button
+          type="button"
+          aria-label={t('scan')}
+          title={t('scan')}
+          onClick={() => { searchRef.current?.focus(); setScanMessage(null); setScanFailed(false) }}
+          className="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2 text-xs text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          <ScanLine size={15} />{t('scan')}
+        </button>
+      ) : null}
+      {scanResolver && cameraAvailable ? (
+        <button
+          type="button"
+          aria-label={t('scanCamera')}
+          title={t('scanCamera')}
+          disabled={cameraActive}
+          onClick={() => void scanWithCamera()}
+          className="inline-flex h-9 shrink-0 items-center rounded-lg border border-slate-200 px-2 text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+        >
+          <Camera size={16} />
+        </button>
+      ) : null}
+      {scanResolver && cameraAvailable ? (
+        <video ref={videoRef} autoPlay playsInline className={cameraActive ? 'absolute right-3 top-14 z-10 max-h-32 w-40 rounded-lg border border-slate-300 bg-black object-cover dark:border-slate-700' : 'hidden'} />
+      ) : null}
     </div>
   )
 
@@ -344,6 +487,7 @@ export function SearchSelect({
         ref={triggerRef}
         type="button"
         id={id}
+        onKeyDown={scannerKeyDown}
         onClick={() => (open ? setOpen(false) : openMenu())}
         disabled={disabled}
         aria-label={ariaLabel}

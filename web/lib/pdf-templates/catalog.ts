@@ -73,6 +73,7 @@ const REFERENCE_FIELD: PdfMergeField = {
 const LINE_FIELDS: PdfMergeField[] = [
   { key: 'line_number', label: 'Line #', sample: '1' },
   { key: 'item_name', label: 'Item', sample: 'Structural steel' },
+  { key: 'customer_sku', label: 'Customer part number', sample: 'ACME-STEEL-42' },
   { key: 'account_name', label: 'Account', sample: '5010 Materials' },
   { key: 'description', label: 'Description', sample: 'W12x26 beams — level 2 mezzanine' },
   { key: 'quantity', label: 'Quantity', sample: '12' },
@@ -260,6 +261,7 @@ const SHIPMENT: PdfRecordTypeMeta = {
       fields: [
         { key: 'line_number', label: 'Line #', sample: '1' },
         { key: 'item_name', label: 'Item', sample: 'W12x26 beam' },
+        { key: 'customer_sku', label: 'Customer part number', sample: 'ACME-STEEL-42' },
         { key: 'description', label: 'Description', sample: 'Structural steel — level 2 mezzanine' },
         { key: 'quantity', label: 'Quantity', sample: '12' },
         { key: 'unit', label: 'Unit', sample: 'ea' },

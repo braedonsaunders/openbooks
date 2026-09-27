@@ -32,7 +32,15 @@
     "placeholder": "Sélectionner…",
     "searchPlaceholder": "Rechercher…",
     "noMatches": "Aucune correspondance",
-    "searching": "Recherche…"
+    "searching": "Recherche…",
+    "scan": "Scanner le code-barres",
+    "scanCamera": "Scanner avec la caméra",
+    "scanResolving": "Résolution du scan…",
+    "cameraUnavailable": "Le scan par caméra n’est pas disponible dans ce navigateur.",
+    "scanUnavailable": "L’enregistrement scanné n’est pas un choix disponible pour cette ligne.",
+    "scanNetworkError": "Le scan n’a pas pu être résolu. Vérifiez la connexion et réessayez.",
+    "scanNotFound": "Aucun enregistrement ne correspond exactement à ce scan. Vérifiez la valeur ou choisissez un enregistrement dans la liste.",
+    "scanAmbiguous": "Ce scan correspond à plusieurs enregistrements. Choisissez l’enregistrement voulu parmi les candidats."
   },
   "sparkline": {
     "noTrend": "Aucune donnée de tendance",

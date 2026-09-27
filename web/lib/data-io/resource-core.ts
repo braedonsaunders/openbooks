@@ -49,6 +49,8 @@ export interface ReadCtx {
 export interface WriteCtx {
   orgId: string
   actorId: string
+  /** The caller's effective grants, used by resources with entity-specific write permissions. */
+  permissions?: ReadonlySet<string>
   /** Dry-run: validate + classify insert/update, but write nothing. */
   dryRun: boolean
   /** Transactions only: post to the ledger after creating the draft. */

@@ -11,6 +11,7 @@ import { ListPageLayout } from '../../../components/page-layout'
 import { ModuleHomeTabs } from '../../../components/module-home/ui'
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../lib/features'
 import { pickString } from '../../../lib/list-params'
 import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
 import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
@@ -45,6 +46,7 @@ export default async function Inventory({
   ])
   const authz = await requirePermission('items.read')
   await requireFeatureEnabled(authz.user.orgId, 'inventory')
+  const barcodeScanningEnabled = await isFeatureEnabled(authz.user.orgId, 'barcodeScanning')
 
   const orgId = authz.user.orgId
   const requestedView = selectedView(sp)
@@ -220,6 +222,7 @@ export default async function Inventory({
           reviewRequired={reviewRequired}
           canManageStockLocations={canSetup}
           canManageItems={canManage}
+          barcodeScanningEnabled={barcodeScanningEnabled}
           itemsExcludedCount={countData[6].rows[0]?.excluded ?? 0}
           createRequested={pickString(sp.count) === 'new'}
           selectedCountId={pickString(sp.countId)}

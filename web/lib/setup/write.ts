@@ -26,6 +26,7 @@ import { parseClauses } from '@openbooks/engine/src/hrm/recruiting/offers-signin
 import { validateAvailabilityWindows } from '@openbooks/engine/src/hrm/recruiting/scheduling.ts'
 // HR-18 end
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, setupEntitySubsidiaryField, setupEntitySubsidiaryReferenceFields, toSnake, type SetupEntity } from './registry'
+import { permissionSetCovers } from '../permissions'
 import { UNRESTRICTED_SCOPE_REQUIRED } from '../subsidiaries'
 import {
   buildRow,
@@ -61,6 +62,7 @@ import {
 } from '@openbooks/engine/src/billing/usage/records.ts'
 import { createUsageRatingPlan, retireUsageRatingPlan } from '@openbooks/engine/src/billing/usage/rating-plans.ts'
 import { UsageBillingError } from '@openbooks/engine/src/billing/usage/errors.ts'
+import { setupEntityWithValidationHook } from './entities/customer-item-refs'
 
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
 import { featureEnabled, featureGateLockKey, isFeatureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../features'
@@ -116,7 +118,29 @@ export { resolveEntity as resolveSetupEntity }
 
 
 class SetupWriteRefusal extends Error {
-  constructor(message: string, readonly status: number) { super(message) }
+  constructor(message: string, readonly status: number, readonly code?: string, readonly remedy?: string) { super(message) }
+}
+function setupRefusalResult(error: SetupWriteRefusal): SetupWriteResult {
+  return { status: error.status, body: {
+    error: error.message,
+    ...(error.code ? { code: error.code } : {}),
+    ...(error.remedy ? { remedy: error.remedy } : {}),
+  } }
+}
+function typedSetupRefusal(error: unknown): SetupWriteRefusal | null {
+  if (!(error instanceof Error)) return null
+  const source = error as Error & { status?: unknown; code?: unknown; remedy?: unknown }
+  if (typeof source.status !== 'number' || !Number.isInteger(source.status) || source.status < 400 || source.status > 499) return null
+  return new SetupWriteRefusal(
+    error.message,
+    source.status,
+    typeof source.code === 'string' ? source.code : undefined,
+    typeof source.remedy === 'string' ? source.remedy : undefined,
+  )
+}
+function setupDomainRefusal(error: unknown): SetupWriteResult | null {
+  const refusal = typedSetupRefusal(error)
+  return refusal ? setupRefusalResult(refusal) : null
 }
 type SetupTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -213,7 +237,14 @@ async function setupWriteTransaction<T>(
       }
     }
     if (body) {
-      const problem = await validateEntityIntegrity(entity, body, orgId, rowId, tx)
+      let problem: string | null
+      try {
+        problem = await validateEntityIntegrity(entity, body, orgId, rowId, tx)
+      } catch (error) {
+        const refusal = typedSetupRefusal(error)
+        if (refusal) throw refusal
+        throw error
+      }
       if (problem) throw new SetupWriteRefusal(problem, problem === 'not found' ? 404 : 400)
       if (entity.key === 'item-rate-books' && body.currency !== undefined
         && !(await isFeatureEnabled(orgId, 'multiCurrency', tx))) {
@@ -319,6 +350,11 @@ async function syncMembers(
  */
 function resolveEntity(entityKey: string): SetupEntity | null {
   return SETUP_ENTITY_BY_KEY.get(entityKey) ?? null
+}
+
+function entityPermissionRefusal(actor: SetupActor, entity: SetupEntity): SetupWriteResult | null {
+  if (!entity.writePermission || permissionSetCovers(new Set(actor.permissions), entity.writePermission)) return null
+  return { status: 403, body: { error: 'forbidden' } }
 }
 
 /**
@@ -1629,7 +1665,8 @@ export async function validateEntityIntegrity(
       }
     }
   }
-  return null
+  const validatedEntity = setupEntityWithValidationHook(entity)
+  return await validatedEntity.validateWrite?.({ entity: validatedEntity, body, orgId, rowId, executor }) ?? null
 }
 
 
@@ -1673,6 +1710,8 @@ export async function preflightSetupWrite(
   const entity = resolveEntity(entityKey)
   if (!entity) return { status: 404, body: { error: 'unknown setup entity' } }
   if (!(await setupEntityEnabled(entity, actor.orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
+  const permissionRefusal = entityPermissionRefusal(actor, entity)
+  if (permissionRefusal) return permissionRefusal
   const scopeRefusal = setupScopeRefusal(actor, entity)
   if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
@@ -1737,6 +1776,8 @@ export async function createSetupRecord(
   const entity = resolveEntity(entityKey)
   if (!entity) return { status: 404, body: { error: 'unknown setup entity' } }
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
+  const permissionRefusal = entityPermissionRefusal(actor, entity)
+  if (permissionRefusal) return permissionRefusal
   const scopeRefusal = setupScopeRefusal(actor, entity)
   if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
@@ -1790,7 +1831,14 @@ export async function createSetupRecord(
   // point, so a present fold covers its slots' requiredness and columns.
   const built = buildRow(await entityForValidation(createEntity), body, { forCreate: true, coverFoldedSlots: true })
   if ('error' in built) return { status: 400, body: { error: built.error, code: 'invalid' } }
-  const integrityError = await validateEntityIntegrity(entity, body, orgId)
+  let integrityError: string | null
+  try {
+    integrityError = await validateEntityIntegrity(entity, body, orgId)
+  } catch (error) {
+    const refusal = setupDomainRefusal(error)
+    if (refusal) return refusal
+    throw error
+  }
   if (integrityError) {
     if (integrityError === 'not found') return { status: 404, body: { error: integrityError } }
     // Typed user-correctable failure: the code lets surfaces map
@@ -1823,7 +1871,7 @@ export async function createSetupRecord(
         { ...scopeOptions, idempotencyKey: requestId })
       return { status: 200, body: { id } }
     } catch (e) {
-      if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+      if (e instanceof SetupWriteRefusal) return setupRefusalResult(e)
       if (e instanceof SetupCreateConflict) return { status: e.status, body: { error: e.message, code: e.code } }
       return { status: 400, body: { error: describeDbError(e) } }
     }
@@ -1842,7 +1890,7 @@ export async function createSetupRecord(
         { ...scopeOptions, idempotencyKey: requestId })
       return { status: 200, body: { id } }
     } catch (e) {
-      if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+      if (e instanceof SetupWriteRefusal) return setupRefusalResult(e)
       if (e instanceof SetupCreateConflict) return { status: e.status, body: { error: e.message, code: e.code } }
       return { status: 400, body: { error: describeDbError(e) } }
     }
@@ -2035,7 +2083,7 @@ export async function createSetupRecord(
       }, { ...scopeOptions, idempotencyKey: requestId })
       return { status: 200, body: { id: newId } }
     } catch (e) {
-      if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+      if (e instanceof SetupWriteRefusal) return setupRefusalResult(e)
       if (e instanceof SetupCreateConflict) return { status: e.status, body: { error: e.message, code: e.code } }
       if (pgErrorCode(e) === '23505' || pgErrorCode(e) === '23P01') {
         return duplicateConflict(entity.key)
@@ -2101,7 +2149,7 @@ export async function createSetupRecord(
     }, { ...scopeOptions, idempotencyKey: requestId })
     return { status: 200, body: { id: newId } }
   } catch (e) {
-    if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+    if (e instanceof SetupWriteRefusal) return setupRefusalResult(e)
     if (e instanceof SetupCreateConflict) return { status: e.status, body: { error: e.message, code: e.code } }
     const databaseError = e as { constraint?: string; cause?: { constraint?: string; message?: string }; message?: string }
     if ((databaseError.cause?.constraint ?? databaseError.constraint) === 'depreciation_book_posted_policy') {
@@ -2142,6 +2190,8 @@ export async function updateSetupRecord(
   const entity = resolveEntity(entityKey)
   if (!entity) return { status: 404, body: { error: 'unknown setup entity' } }
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
+  const permissionRefusal = entityPermissionRefusal(actor, entity)
+  if (permissionRefusal) return permissionRefusal
   const scopeRefusal = setupScopeRefusal(actor, entity)
   if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
@@ -2196,7 +2246,14 @@ export async function updateSetupRecord(
   // Same folded-slot cover as the create path: the normalizer ran above.
   const built = buildRow(await entityForValidation(patchEntity), body, { forCreate: false, coverFoldedSlots: true })
   if ('error' in built) return { status: 400, body: { error: built.error, code: 'invalid' } }
-  const integrityError = await validateEntityIntegrity(entity, body, orgId, id)
+  let integrityError: string | null
+  try {
+    integrityError = await validateEntityIntegrity(entity, body, orgId, id)
+  } catch (error) {
+    const refusal = setupDomainRefusal(error)
+    if (refusal) return refusal
+    throw error
+  }
   if (integrityError) {
     if (integrityError === 'not found') return { status: 404, body: { error: integrityError } }
     // Typed user-correctable failure: the code lets surfaces map
@@ -2210,7 +2267,7 @@ export async function updateSetupRecord(
         saveSetupBook(entity, orgId, actorId, body, tx, { id }), scopeOptions)
       return { status: 200, body: { id } }
     } catch (e) {
-      if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+      if (e instanceof SetupWriteRefusal) return setupRefusalResult(e)
       const message = (e as Error).message
       const error = message === 'primary-required' || message === 'primary-active-required' || message === 'not found'
         ? message
@@ -2231,7 +2288,7 @@ export async function updateSetupRecord(
         saveSetupBook(entity, orgId, actorId, body, tx, { id }), scopeOptions)
       return { status: 200, body: { id } }
     } catch (e) {
-      if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+      if (e instanceof SetupWriteRefusal) return setupRefusalResult(e)
       const message = (e as Error).message
       const error = ['not found', 'default-required'].includes(message) ? message : describeDbError(e)
       return { status: error === 'not found' ? 404 : 400, body: { error } }
@@ -2412,7 +2469,7 @@ export async function updateSetupRecord(
       }, scopeOptions)
       return { status: 200, body: { id: versionId } }
     } catch (e) {
-      if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+      if (e instanceof SetupWriteRefusal) return setupRefusalResult(e)
       const code = pgErrorCode(e)
       if (code === '23505' || code === '23P01') {
         return duplicateConflict(entity.key)
@@ -2582,7 +2639,7 @@ export async function updateSetupRecord(
       }, scopeOptions)
       return { status: 200, body: { id: versionId } }
     } catch (e) {
-      if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+      if (e instanceof SetupWriteRefusal) return setupRefusalResult(e)
       const code = pgErrorCode(e)
       if (code === '23505' || code === '23P01') {
         return duplicateConflict(entity.key)
@@ -2715,7 +2772,7 @@ export async function updateSetupRecord(
     if (!found) return { status: 404, body: { error: 'not_found' } }
     return { status: 200, body: { id, ...(scheduleRescope ? { rescope: scheduleRescope } : {}) } }
   } catch (e) {
-    if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+    if (e instanceof SetupWriteRefusal) return setupRefusalResult(e)
     const databaseError = e as { constraint?: string; cause?: { constraint?: string; message?: string }; message?: string }
     if (['asset_category_posted_policy', 'pay_component_historical_policy', 'depreciation_book_posted_policy'].includes(databaseError.cause?.constraint ?? databaseError.constraint ?? '')) {
       return { status: 409, body: { error: databaseError.cause?.message ?? databaseError.message } }
@@ -2750,6 +2807,8 @@ export async function deleteSetupRecord(
   const entity = resolveEntity(entityKey)
   if (!entity) return { status: 404, body: { error: 'unknown setup entity' } }
   if (!(await setupEntityEnabled(entity, orgId))) return { status: 404, body: { error: 'unknown setup entity' } }
+  const permissionRefusal = entityPermissionRefusal(actor, entity)
+  if (permissionRefusal) return permissionRefusal
   const scopeRefusal = setupScopeRefusal(actor, entity)
   if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
@@ -2818,7 +2877,7 @@ export async function deleteSetupRecord(
     if (e instanceof WarehouseRefusal) {
       return { status: e.status, body: { error: e.message, code: e.code, remedy: e.remedy } }
     }
-    if (e instanceof SetupWriteRefusal) return { status: e.status, body: { error: e.message } }
+    if (e instanceof SetupWriteRefusal) return setupRefusalResult(e)
     if (e instanceof Error && e.message === 'default-required') {
       return { status: 409, body: { error: 'default-required' } }
     }

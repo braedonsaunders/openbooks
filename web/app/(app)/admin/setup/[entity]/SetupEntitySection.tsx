@@ -18,6 +18,7 @@ import { SearchInput } from '../../../../../components/search-input'
 import { Pagination } from '../../../../../components/pagination'
 import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
 import { setupEntityForFeatureState, setupOptionLabel, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
+import { setupEntityClientDescriptor } from '../../../../../lib/setup/types'
 import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
 import { setupReadProjection, setupReadSource } from '../../../../../lib/setup/read-shape'
@@ -27,6 +28,7 @@ import { NewSetupButton, SetupDrawer } from './SetupDrawer'
 import { RateBookDrawer, type RateBookLine, type RateBookItemOption } from './RateBookDrawer'
 import { ConstructionRateScheduleEditor } from './ConstructionRateScheduleEditor'
 import { listScheduleLines } from '@openbooks/engine/src/hrm/construction/rates.ts'
+import { can, getAuthz } from '../../../../../lib/authz'
 
 /**
  * Registry-driven list + drawer for one configuration entity, mountable under
@@ -133,6 +135,9 @@ export async function SetupEntitySection({
       ? { ...gated, fields: gated.fields.filter((field) => field.key !== 'currency') }
       : gated,
   )
+  const drawerEntity = setupEntityClientDescriptor(entity)
+  const currentAuthz = entity.writePermission ? await getAuthz() : null
+  const canWriteEntity = canManage && (!entity.writePermission || Boolean(currentAuthz && can(currentAuthz, entity.writePermission)))
   const t = await getTranslations('admin.setup')
   const locale = await getLocale()
   const rawRow = sp[rowParam]
@@ -311,7 +316,7 @@ export async function SetupEntitySection({
             ) : null}
           </p>
         </div>
-        {canManage ? <NewSetupButton entityKey={entity.key} label={t('new')} basePath={basePath} rowParam={rowParam} /> : null}
+        {canWriteEntity ? <NewSetupButton entityKey={entity.key} label={t('new')} basePath={basePath} rowParam={rowParam} /> : null}
       </div> : null}
 
       <div className="flex flex-wrap items-center gap-2">
@@ -351,7 +356,7 @@ export async function SetupEntitySection({
               <TableRow key={String(row[idColumn])}>
                 {entity.columns.map((c, i) => (
                   <TableCell key={c.key}>
-                    {canManage && (i === 0 || entity.key === 'item-rate-books') ? (
+                    {canWriteEntity && (i === 0 || entity.key === 'item-rate-books') ? (
                       <Link
                         href={mergeHref(basePath, sp, { [rowParam]: String(row[idColumn]) })}
                         className="font-medium text-teal-700 hover:underline dark:text-teal-300"
@@ -373,7 +378,7 @@ export async function SetupEntitySection({
         <Pagination basePath={basePath} currentParams={sp} total={total} page={list.page} perPage={list.perPage} />
       ) : null}
 
-      {open && canManage && entity.key === 'item-rate-books' && rateBookDrawerData ? (
+      {open && canWriteEntity && entity.key === 'item-rate-books' && rateBookDrawerData ? (
         <RateBookDrawer
           row={open.row as Record<string, unknown> | null}
           latestEffectiveFrom={rateBookDrawerData.latestEffectiveFrom}
@@ -384,9 +389,9 @@ export async function SetupEntitySection({
           multiCurrency={multiCurrency}
           closeHref={closeHref}
         />
-      ) : open && canManage && entity.key === 'construction-rate-schedules' && open.row && rateScheduleScopeOptions && rateScheduleEditorData ? (
+      ) : open && canWriteEntity && entity.key === 'construction-rate-schedules' && open.row && rateScheduleScopeOptions && rateScheduleEditorData ? (
         <SetupDrawer
-          entity={entity}
+          entity={drawerEntity}
           row={open.row}
           members={[]}
           refOptions={refOptions}
@@ -397,9 +402,9 @@ export async function SetupEntitySection({
             content: <ConstructionRateScheduleEditor row={open.row} scopeOptions={rateScheduleScopeOptions} initialData={rateScheduleEditorData} />,
           }}
         />
-      ) : open && canManage ? (
+      ) : open && canWriteEntity ? (
         <SetupDrawer
-          entity={entity}
+          entity={drawerEntity}
           row={open.row}
           members={[]}
           refOptions={refOptions}

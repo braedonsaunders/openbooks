@@ -198,6 +198,7 @@ export const POST = defineRoute({
   const ctx = {
     orgId,
     actorId: authz.user.id,
+    permissions: authz.permissions,
     dryRun: mode === 'preview',
     post,
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds,

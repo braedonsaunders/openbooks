@@ -3014,6 +3014,17 @@
         "singularTitle": "保持ルール",
         "title": "保持ルール"
       }
+    ,
+      "item-identifiers": {
+        "title": "商品識別子",
+        "singular": "商品識別子",
+        "description": "スキャン時に商品を識別するためのGTIN、UPC、EAN、内部値を登録します。"
+      },
+      "customer-item-refs": {
+        "title": "顧客品番",
+        "singular": "顧客品番",
+        "description": "顧客が注文する商品に対応する顧客固有の商品コードです。"
+      }
     },
     "fields": {
       "aggregation": "集計方法",
@@ -3426,6 +3437,8 @@
       "cohortKey": "コホート",
       "biasTerms": "配慮語句",
       "reviewMonths": "レビュー周期（月）"
+    ,
+      "customerSku": "顧客品番"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count は各レコードの distinct key の異なる値を数えます。",
@@ -4034,6 +4047,13 @@
         "department": "部門",
         "paySchedule": "給与サイクル",
         "jobLevel": "職位"
+      }
+    ,
+      "identifierKind": {
+        "gtin": "GTIN",
+        "upc": "UPC",
+        "ean": "EAN",
+        "internal": "内部"
       }
     },
     "invoicing": {

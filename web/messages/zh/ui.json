@@ -32,7 +32,15 @@
     "placeholder": "选择…",
     "searchPlaceholder": "搜索…",
     "noMatches": "无匹配项",
-    "searching": "搜索中…"
+    "searching": "搜索中…",
+    "scan": "扫描条形码",
+    "scanCamera": "使用相机扫描",
+    "scanResolving": "正在解析扫描…",
+    "cameraUnavailable": "此浏览器不支持相机扫描。",
+    "scanUnavailable": "扫描的记录不是此行的可用选项。",
+    "scanNetworkError": "无法解析扫描内容。请检查连接后重试。",
+    "scanNotFound": "没有记录与此扫描值完全匹配。请检查该值或从列表中选择记录。",
+    "scanAmbiguous": "此扫描值匹配多个记录。请从候选项中选择要使用的记录。"
   },
   "sparkline": {
     "noTrend": "无趋势数据",

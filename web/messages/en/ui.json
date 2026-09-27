@@ -32,7 +32,15 @@
     "placeholder": "Select…",
     "searchPlaceholder": "Search…",
     "noMatches": "No matches",
-    "searching": "Searching…"
+    "searching": "Searching…",
+    "scan": "Scan barcode",
+    "scanCamera": "Use camera to scan",
+    "scanResolving": "Resolving scan…",
+    "cameraUnavailable": "Camera scanning is unavailable in this browser.",
+    "scanUnavailable": "The scanned record is not an available choice for this line.",
+    "scanNetworkError": "The scan could not be resolved. Check the connection and try again.",
+    "scanNotFound": "No exact record matches this scan. Check the value or choose a record from the list.",
+    "scanAmbiguous": "This scan matches multiple records. Choose the intended record from the candidates."
   },
   "sparkline": {
     "noTrend": "No trend data",

@@ -1,4 +1,6 @@
 /** Setup-registry descriptor types and pure helpers (split from registry.ts; pure moves only). */
+import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+
 export type SetupFieldKind =
   | 'text'
   | 'country'
@@ -244,10 +246,31 @@ export interface SetupEntity {
   /** Optional-feature gate (web/lib/features.ts key). When the feature is off,
    *  this entity is hidden from the setup rail and 404s as a standalone page. */
   featureKey?: string
+  /** Additional permission required to create, edit, or delete this entity. */
+  writePermission?: string
+  /** Server-side validation for invariants that belong to one entity. */
+  validateWrite?: SetupEntityValidationHook
   columns: SetupColumn[]
   fields: SetupField[]
   /** Enum dropdown filters rendered beside search. */
   filters?: SetupFilter[]
+}
+
+export interface SetupEntityValidationContext {
+  entity: SetupEntity
+  body: Record<string, unknown>
+  orgId: string
+  rowId?: string
+  executor: SqlExecutor
+}
+
+export type SetupEntityValidationHook = (context: SetupEntityValidationContext) => Promise<string | null | void>
+
+/** Remove server-only hooks before a descriptor crosses into a client component. */
+export function setupEntityClientDescriptor(entity: SetupEntity): Omit<SetupEntity, 'validateWrite'> {
+  const descriptor = { ...entity }
+  delete descriptor.validateWrite
+  return descriptor
 }
 
 /** Direct subsidiary anchor for generic row visibility and write authorization. */
@@ -320,4 +343,3 @@ export const SETUP_GROUPS: SetupGroup[] = [
   { key: 'currency', iconKey: 'coins' },
   { key: 'agents', iconKey: 'sparkles' },
 ]
-

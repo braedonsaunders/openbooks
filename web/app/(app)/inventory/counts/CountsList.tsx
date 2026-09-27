@@ -10,6 +10,7 @@ import { Badge, Button, Input, Label, SearchSelect, UrlDrawer } from '@openbooks
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
+import { optionalScanResolver } from '../../../../lib/scan'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { StockCountDetail, StockCountSummary } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
 
@@ -77,6 +78,7 @@ export function CountsList({
   reviewRequired,
   canManageStockLocations,
   canManageItems,
+  barcodeScanningEnabled = false,
   itemsExcludedCount,
   createRequested = false,
   selectedCountId,
@@ -95,6 +97,7 @@ export function CountsList({
   canManageStockLocations: boolean
   /** May manage items: gates the Item Costing setup link in the picker note. */
   canManageItems: boolean
+  barcodeScanningEnabled?: boolean
   /** Active items excluded from the picker for lacking a costing profile. */
   itemsExcludedCount: number
   createRequested?: boolean
@@ -254,6 +257,7 @@ export function CountsList({
           locationOptions={locationOptions}
           subsidiaryOptions={subsidiaryOptions}
           itemOptions={itemOptions}
+          barcodeScanningEnabled={barcodeScanningEnabled}
           stockLocations={stockLocations}
           canManageStockLocations={canManageStockLocations}
           canManageItems={canManageItems}
@@ -303,6 +307,7 @@ function CreateCountDrawer({
   locationOptions,
   subsidiaryOptions,
   itemOptions,
+  barcodeScanningEnabled,
   stockLocations,
   canManageStockLocations,
   canManageItems,
@@ -313,6 +318,7 @@ function CreateCountDrawer({
   locationOptions: { value: string; label: string }[]
   subsidiaryOptions: { value: string; label: string }[]
   itemOptions: { value: string; label: string }[]
+  barcodeScanningEnabled: boolean
   stockLocations: { id: string; code: string | null; locationId: string }[]
   canManageStockLocations: boolean
   canManageItems: boolean
@@ -524,6 +530,7 @@ function CreateCountDrawer({
                   placeholder={t('counts.create.selectItem')}
                   sheetTitle={t('counts.columns.item')}
                   ariaLabel={t('counts.columns.item')}
+                  scanResolver={optionalScanResolver(barcodeScanningEnabled, (value) => ({ field: 'item', value }))}
                 />
                 </div>
                 <div className="space-y-1">
@@ -541,6 +548,7 @@ function CreateCountDrawer({
                   placeholder={t('counts.create.selectStockLocation')}
                   sheetTitle={t('counts.columns.stockLocation')}
                   ariaLabel={t('counts.columns.stockLocation')}
+                  scanResolver={optionalScanResolver(barcodeScanningEnabled, (value) => ({ field: 'bin', value }))}
                 />
                 {rowError ? (
                   <p role="alert" className="text-sm text-red-600 dark:text-red-400">
@@ -569,6 +577,7 @@ function CreateCountDrawer({
                   placeholder={t('counts.create.selectLot')}
                   sheetTitle={t('counts.columns.lot')}
                   ariaLabel={t('counts.columns.lot')}
+                  scanResolver={optionalScanResolver(barcodeScanningEnabled, (value) => ({ field: 'lot', value, itemId: line.itemId }))}
                 />
                 <Button
                   variant="ghost"

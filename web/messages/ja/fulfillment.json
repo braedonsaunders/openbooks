@@ -36,7 +36,9 @@
     "lot": "ロット {lot}",
     "serial": "シリアル {serial}",
     "actionsFor": "明細 {line} の操作",
-    "empty": "この伝票には明細がありません。"
+    "empty": "この伝票には明細がありません。",
+    "scanItem": "明細 {line} の商品をスキャン",
+    "scanWrongItem": "スキャンした商品はこの出荷明細と一致しません。"
   },
   "related": {
     "tab": "関連",

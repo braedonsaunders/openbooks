@@ -2942,6 +2942,17 @@
         "singularTitle": "Retention rule",
         "title": "Retention rules"
       }
+    ,
+      "item-identifiers": {
+        "title": "Item identifiers",
+        "singular": "Item identifier",
+        "description": "Exact GTIN, UPC, EAN and internal values used to identify items during scanning."
+      },
+      "customer-item-refs": {
+        "title": "Customer part numbers",
+        "singular": "Customer part number",
+        "description": "Customer-specific product codes mapped to the items they order."
+      }
     },
     "fields": {
       "aggregation": "Aggregation",
@@ -3354,6 +3365,8 @@
       "cohortKey": "Cohort",
       "biasTerms": "Bias terms",
       "reviewMonths": "Review cadence (months)"
+    ,
+      "customerSku": "Customer part number"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count counts distinct values of each record's distinct key.",
@@ -3962,6 +3975,13 @@
         "department": "Department",
         "paySchedule": "Pay schedule",
         "jobLevel": "Job level"
+      }
+    ,
+      "identifierKind": {
+        "gtin": "GTIN",
+        "upc": "UPC",
+        "ean": "EAN",
+        "internal": "Internal"
       }
     },
     "payroll": {

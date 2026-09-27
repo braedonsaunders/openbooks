@@ -36,7 +36,9 @@
     "lot": "Lote {lot}",
     "serial": "Serie {serial}",
     "actionsFor": "Acciones de la línea {line}",
-    "empty": "Este documento no tiene líneas."
+    "empty": "Este documento no tiene líneas.",
+    "scanItem": "Escanear artículo de la línea {line}",
+    "scanWrongItem": "El artículo escaneado no coincide con esta línea del envío."
   },
   "related": {
     "tab": "Relacionados",

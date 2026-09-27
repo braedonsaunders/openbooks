@@ -10,6 +10,7 @@ import { incomeTaxWithholdingSystemKeys } from '@openbooks/engine/src/payroll/pa
 import { createMoneyFormatter, type MoneyFormatter } from '../money-format'
 import { resolveLocale } from '../locale'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
+import { isFeatureEnabled } from '../features'
 import { PDF_RECORD_TYPE_BY_KEY, type PdfMergeField, type PdfRecordTypeMeta } from './catalog'
 import { loadFieldTicket } from '../field-tickets'
 import { canonicalDecimal } from '../exact-decimal'
@@ -166,14 +167,17 @@ async function loadDocumentValues(
   // same expression the `currency` merge value below uses. No literal here.
   const format = createMoneyFormatter(locale, String(doc.currency ?? org.base_currency))
   const { money } = format
+  const customerPartNumbersEnabled = await isFeatureEnabled(orgId, 'customerPartNumbers')
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.line_number, l.description, l.quantity, l.unit, l.unit_price, l.amount, l.tax_amount,
            coalesce(nullif(trim(concat(acc.number, ' ', acc.name)), ''), acc.name) as account_name,
-           i.name as item_name
+           i.name as item_name, cir.customer_sku
       from document_lines l
       left join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
       left join items i on i.id = l.item_id and i.org_id = l.org_id
+      left join customer_item_refs cir on cir.org_id = l.org_id and cir.customer_id = ${doc.party_id}
+           and cir.item_id = l.item_id and ${customerPartNumbersEnabled}
      where l.document_id = ${id} and l.org_id = ${orgId}
      order by l.line_number
   `))
@@ -233,6 +237,7 @@ async function loadDocumentValues(
     lines: lines.rows.map((l) => ({
       line_number: String(l.line_number ?? ''),
       item_name: l.item_name ?? '',
+      customer_sku: l.customer_sku ?? '',
       account_name: l.account_name ?? '',
       description: l.description ?? '',
       quantity: fmtQty(l.quantity, locale),
@@ -544,6 +549,7 @@ async function loadShipmentValues(
     throw error
   }
   if (!shipment || shipment.kind !== 'shipment') return null
+  const customerPartNumbersEnabled = await isFeatureEnabled(orgId, 'customerPartNumbers')
   const [org, locale, party, customRow] = await Promise.all([
     orgRow(orgId),
     resolveLocale(),
@@ -557,6 +563,15 @@ async function loadShipmentValues(
   const format = createMoneyFormatter(locale, org.base_currency)
   const address = shipment.shipToAddress
   const cartons = new Set(shipment.lines.map((line) => line.carton).filter((carton): carton is string => Boolean(carton)))
+  const itemIds = [...new Set(shipment.lines.map((line) => line.itemId))]
+  const customerSkus = customerPartNumbersEnabled && shipment.customer && itemIds.length > 0
+    ? (await db.execute<{ item_id: string; customer_sku: string }>(sql`
+        select item_id, customer_sku from customer_item_refs
+         where org_id = ${orgId} and customer_id = ${shipment.customer.id}
+           and item_id = any(${sql.param(itemIds)}::uuid[])
+      `)).rows
+    : []
+  const customerSkuByItem = new Map(customerSkus.map((row) => [row.item_id, row.customer_sku]))
   const values: Record<string, unknown> = {
     document_number: shipment.documentNumber,
     document_date: fmtDate(shipment.documentDate, locale),
@@ -584,6 +599,7 @@ async function loadShipmentValues(
     lines: shipment.lines.map((line) => ({
       line_number: String(line.lineNumber),
       item_name: line.itemLabel,
+      customer_sku: customerSkuByItem.get(line.itemId) ?? '',
       description: line.description ?? '',
       quantity: canonicalDecimal(line.quantity, 8) ?? line.quantity,
       unit: line.unit ?? '',

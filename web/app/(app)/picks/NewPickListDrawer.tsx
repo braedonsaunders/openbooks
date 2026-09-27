@@ -18,6 +18,7 @@ import { HeaderFields } from '../../../components/transaction-form/header-fields
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { confirmDialog } from '../../../lib/confirm'
+import { optionalScanResolver } from '../../../lib/scan'
 import { fulfillmentRequest } from '../_fulfillment/fulfillment-client'
 import { fulfillmentHref } from '../_fulfillment/FulfillmentSections'
 import type { NewPickListData } from '../_fulfillment/types'
@@ -160,15 +161,16 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
       },
     },
     {
-      key: 'binId', label: t('fields.bin'), width: '170px', type: 'select',
+      key: 'binId', label: t('fields.bin'), width: '170px', type: 'search-select',
       optionsFor: (row) => row.bins.map((bin) => ({ value: bin.binId, label: t('create.binOption', { bin: bin.binCode, onHand: shown(bin.onHand) }) })),
+      scanResolver: optionalScanResolver(data.barcodeScanningEnabled, (value) => ({ field: 'bin', value })),
       isCellEditable: (row) => pickable(row),
     },
     {
       key: 'quantity', label: tCommon('labels.quantity'), width: '120px', type: 'decimal', decimalScale: 8, align: 'right',
       isCellEditable: (row) => pickable(row),
     },
-  ], [t, tCommon, whyLocked, pickable])
+  ], [t, tCommon, whyLocked, pickable, data.barcodeScanningEnabled])
 
   async function confirmDiscard() {
     if (!dirty) return true

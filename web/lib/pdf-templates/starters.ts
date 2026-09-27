@@ -104,8 +104,8 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
         `<tr data-each="lines">${td('account_name')}${td('description')}${td('amount', 'right')}</tr>` +
         `</tbody></table>`
       : `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
-        `<tr>${th('Description')}${th('Qty', 'right', '52px')}${th('Rate', 'right', '76px')}${th('Amount', 'right', '92px')}</tr>` +
-        `<tr data-each="lines">${td('description')}${td('quantity', 'right')}${td('unit_price', 'right')}${td('amount', 'right')}</tr>` +
+        `<tr>${th('Item / customer part #')}${th('Description')}${th('Qty', 'right', '52px')}${th('Rate', 'right', '76px')}${th('Amount', 'right', '92px')}</tr>` +
+        `<tr data-each="lines"><td style="padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{item_name}}<div data-if="customer_sku" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Customer part #: {{customer_sku}}</div></td>${td('description')}${td('quantity', 'right')}${td('unit_price', 'right')}${td('amount', 'right')}</tr>` +
         `</tbody></table>`) +
     // ---- Totals ----
     `<table style="width:100%;border-collapse:collapse;margin:0 0 26px;"><tbody><tr>` +
@@ -419,8 +419,8 @@ function packingSlipStarter(meta: PdfRecordTypeMeta, accent: string): StarterTem
     `</td></tr></tbody></table>` +
     // ---- Packed lines ----
     `<table style="width:100%;border-collapse:collapse;margin:0 0 20px;"><tbody>` +
-    `<tr>${th('Item')}${th('Description')}${th('Carton', 'left', '80px')}${th('Qty', 'right', '64px')}${th('Unit', 'left', '52px')}</tr>` +
-    `<tr data-each="lines">${td('item_name')}${td('description')}${td('carton')}${td('quantity', 'right')}${td('unit')}</tr>` +
+    `<tr>${th('Item / customer part #')}${th('Description')}${th('Carton', 'left', '80px')}${th('Qty', 'right', '64px')}${th('Unit', 'left', '52px')}</tr>` +
+    `<tr data-each="lines"><td style="padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{item_name}}<div data-if="customer_sku" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Customer part #: {{customer_sku}}</div></td>${td('description')}${td('carton')}${td('quantity', 'right')}${td('unit')}</tr>` +
     `</tbody></table>` +
     `<div data-if="memo" style="font-size:11px;color:${MUTED};line-height:1.6;margin:0 0 20px;">` +
     `<span style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};display:block;padding-bottom:3px;">Notes</span>{{memo}}</div>` +

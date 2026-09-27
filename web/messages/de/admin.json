@@ -3014,6 +3014,17 @@
         "singularTitle": "Aufbewahrungsregel",
         "title": "Aufbewahrungsregeln"
       }
+    ,
+      "item-identifiers": {
+        "title": "Artikelkennungen",
+        "singular": "Artikelkennung",
+        "description": "Exakte GTIN-, UPC-, EAN- und interne Werte zur Identifizierung von Artikeln beim Scannen."
+      },
+      "customer-item-refs": {
+        "title": "Kundenteilenummern",
+        "singular": "Kundenteilenummer",
+        "description": "Kundenspezifische Produktcodes, die den bestellten Artikeln zugeordnet sind."
+      }
     },
     "fields": {
       "aggregation": "Aggregation",
@@ -3426,6 +3437,8 @@
       "cohortKey": "Kohorte",
       "biasTerms": "Sprachliste",
       "reviewMonths": "Prüfrhythmus (Monate)"
+    ,
+      "customerSku": "Kundenteilenummer"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count zählt die unterschiedlichen Werte des Distinct Keys jedes Datensatzes.",
@@ -4034,6 +4047,13 @@
         "department": "Abteilung",
         "paySchedule": "Lohnturnus",
         "jobLevel": "Karrierestufe"
+      }
+    ,
+      "identifierKind": {
+        "gtin": "GTIN",
+        "upc": "UPC",
+        "ean": "EAN",
+        "internal": "Intern"
       }
     },
     "bankFeeds": {

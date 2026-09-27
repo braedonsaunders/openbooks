@@ -359,6 +359,8 @@ export function ShipmentDrawer({ data, initialMode = 'view' }: { data: Fulfillme
             <FulfillmentLines
               lines={shipment.lines}
               layout={data.layout}
+              barcodeScanningEnabled={data.barcodeScanningEnabled}
+              customerId={shipment.customer?.id}
               cartonActions={canEdit ? {
                 onSet: setCarton,
                 onClear: (line) => saveCartons([{ lineId: line.lineId, carton: null }]),

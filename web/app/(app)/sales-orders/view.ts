@@ -75,6 +75,8 @@ export interface SalesOrderDrawer {
   dropShipVendors: OrderDrawerProps['dropShipVendors']
   canRouteDropShip: boolean
   canCreateDropShipPurchaseOrder: boolean
+  barcodeScanningEnabled: boolean
+  customerItemRefs: { customerId: string; itemId: string; customerSku: string }[]
 }
 
 export interface SalesOrdersData {
@@ -119,6 +121,8 @@ export async function loadSalesOrders(
   await requireFeatureEnabled(authz.user.orgId, 'orders')
   const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
   const dropShipping = await isFeatureEnabled(authz.user.orgId, 'dropShipping')
+  const barcodeScanningEnabled = await isFeatureEnabled(authz.user.orgId, 'barcodeScanning')
+  const customerPartNumbersEnabled = await isFeatureEnabled(authz.user.orgId, 'customerPartNumbers')
   const canManage = can(authz, 'ar.create')
   const canRouteDropShip = dropShipping && can(authz, 'orders.fulfill')
   const canCreateDropShipPurchaseOrder = dropShipping && can(authz, 'ap.create')
@@ -179,6 +183,13 @@ export async function loadSalesOrders(
     : []
   const dropShipLines = openOrder && dropShipping
     ? await dropShipOrderStatus(db, authz.user.orgId, openDocumentId!, authz.allowedSubsidiaryIds)
+    : []
+  const scopedCustomerIds = pickers?.[0].rows.map((party) => party.id) ?? []
+  const customerItemRefs = customerPartNumbersEnabled && scopedCustomerIds.length > 0
+    ? (await db.execute<{ customer_id: string; item_id: string; customer_sku: string }>(sql`
+        select customer_id, item_id, customer_sku from customer_item_refs
+         where org_id = ${authz.user.orgId} and customer_id = any(${sql.param(scopedCustomerIds)}::uuid[])
+      `)).rows.map((row) => ({ customerId: row.customer_id, itemId: row.item_id, customerSku: row.customer_sku }))
     : []
   const resolvedForm = openOrder && pickers ? await resolveFormLayout({
     orgId: authz.user.orgId, userId: authz.user.id, recordType: KIND,
@@ -260,6 +271,8 @@ export async function loadSalesOrders(
           dropShipVendors,
           canRouteDropShip,
           canCreateDropShipPurchaseOrder,
+          barcodeScanningEnabled,
+          customerItemRefs,
         }
       : null
 

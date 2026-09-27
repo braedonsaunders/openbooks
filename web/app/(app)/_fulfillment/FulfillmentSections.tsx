@@ -6,12 +6,13 @@ import { useTranslations } from 'next-intl'
 import { MoreHorizontal } from 'lucide-react'
 import { customFieldDefKey, isCustomFieldKey, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
 import type { FulfillmentDocumentView, FulfillmentLineView } from '@openbooks/engine/src/sales/fulfillment.ts'
-import { Badge, Button, ContextMenu, FieldLabel, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
+import { Badge, Button, ContextMenu, FieldLabel, SearchSelect, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import type { CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { FULFILLMENT_STATUS_VARIANT } from './fulfillment-client'
+import { resolveScanValue } from '../../../lib/scan'
 
 const LINK = 'text-teal-700 hover:underline dark:text-teal-300'
 const VALUE = 'text-sm text-slate-900 dark:text-slate-100'
@@ -174,10 +175,14 @@ export function FulfillmentLines({
   lines,
   layout,
   cartonActions,
+  barcodeScanningEnabled = false,
+  customerId,
 }: {
   lines: FulfillmentLineView[]
   layout: FormLayoutConfig
   cartonActions?: { onSet: (line: FulfillmentLineView) => void; onClear: (line: FulfillmentLineView) => void; disabled: boolean }
+  barcodeScanningEnabled?: boolean
+  customerId?: string
 }) {
   const t = useTranslations('fulfillment')
   const tCommon = useTranslations('common')
@@ -191,7 +196,32 @@ export function FulfillmentLines({
         key: 'salesOrderLineNumber', label: t('fields.salesOrderLine'), width: '90px', type: 'readonly',
         render: (row) => t('lines.orderLine', { line: row.salesOrderLineNumber }),
       },
-      item_id: { key: 'itemLabel', label: tCommon('labels.item'), width: 'minmax(170px,1.6fr)', type: 'readonly' },
+      item_id: {
+        key: 'itemLabel', label: tCommon('labels.item'), width: 'minmax(170px,1.6fr)', type: 'readonly',
+        render: (row) => (
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="min-w-0 flex-1 truncate">{row.itemLabel}</span>
+            {barcodeScanningEnabled ? (
+              <SearchSelect
+                ariaLabel={t('lines.scanItem', { line: row.lineNumber })}
+                value={row.itemId}
+                options={[{ value: row.itemId, label: row.itemLabel }]}
+                onChange={() => undefined}
+                scanResolver={async (value) => {
+                  const result = await resolveScanValue({ field: 'item', value, customerId })
+                  if (result.ok && result.value !== row.itemId) {
+                    return { ok: false, message: t('lines.scanWrongItem'), candidates: [row.itemLabel] }
+                  }
+                  return result
+                }}
+                searchable
+                className="w-9 shrink-0"
+                triggerClassName="h-8 w-9 justify-center px-1"
+              />
+            ) : null}
+          </div>
+        ),
+      },
       description: {
         key: 'description', label: tCommon('labels.description'), width: 'minmax(150px,1.4fr)', type: 'readonly',
         render: (row) => row.description ?? '',
@@ -236,7 +266,7 @@ export function FulfillmentLines({
         ),
       },
     ]
-  }, [layout, cartonActions, t, tCommon, menu])
+  }, [layout, cartonActions, t, tCommon, menu, barcodeScanningEnabled, customerId])
 
   const items: ContextMenuEntry[] = target && cartonActions
     ? [

@@ -63,6 +63,7 @@ export interface EstimateDrawer {
   canManage: boolean
   canOverrideCredit: boolean
   layout: unknown
+  barcodeScanningEnabled: boolean
 }
 
 export interface EstimatesData {
@@ -90,6 +91,7 @@ export async function loadEstimates(
   const authz = await requirePermission('ar.read')
   await requireFeatureEnabled(authz.user.orgId, 'orders')
   const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
+  const barcodeScanningEnabled = await isFeatureEnabled(authz.user.orgId, 'barcodeScanning')
   const canManage = can(authz, 'ar.create')
   const t = await getTranslations('estimates')
   const openId = pickString(sp[PARAM])
@@ -229,6 +231,7 @@ export async function loadEstimates(
           canManage,
           canOverrideCredit: can(authz, 'ar.approve'),
           layout: resolvedForm?.layout,
+          barcodeScanningEnabled,
         }
       : null
 
