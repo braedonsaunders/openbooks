@@ -100,16 +100,22 @@ const mockSources = new Map<string, string>([
     'mock:authz',
     `
       const state = globalThis[Symbol.for('openbooks.percent-complete-route-test')]
-      export async function guardPermission(permission) {
-        if (permission !== 'projects.manage') return new Response(null, { status: 403 })
-        return {
-          user: { orgId: 'org-1', id: 'user-1' },
-          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
-        }
+      export async function getAuthz() { return null }
+      export async function guardPermission() { return null }
+      export async function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
+    `,
+  ],
+  [
+    'mock:feature-gates',
+    `
+      const state = globalThis[Symbol.for('openbooks.percent-complete-route-test')]
+      export async function guardFeaturePermission(permission, feature) {
+        if (permission !== 'projects.manage' || feature !== 'projects') throw new Error('unexpected route gate')
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
       }
     `,
   ],
-  ['mock:projects-gate', `export async function guardProjectsFeature() { return null }`],
   [
     'mock:subsidiaries',
     `
@@ -149,8 +155,8 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/projects/revenue.ts', 'mock:project-revenue'],
   ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
-  ['../../../../../lib/authz', 'mock:authz'],
-  ['../../../../../lib/projects-gate', 'mock:projects-gate'],
+  ['@/lib/authz', 'mock:authz'],
+  ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/subsidiaries', 'mock:subsidiaries'],
 ])
 
@@ -169,7 +175,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?percent-complete-subsidiary-scope-test'
 const { PUT } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+test.after(() => hooks.deregister())
 
 const PROJECT_ID = '00000000-0000-4000-8000-000000000001'
 const VISIBLE_SUBSIDIARY_ID = '00000000-0000-4000-8000-000000000002'

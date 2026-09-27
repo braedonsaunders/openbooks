@@ -1,18 +1,15 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { syncProjectRevenueContractsInTransaction } from '@openbooks/engine/src/projects/revenue.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
-import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
 
 /**
  * PUT — set or clear the project's percent-complete OVERRIDE (0–100; null =
@@ -20,17 +17,19 @@ export const runtime = 'nodejs'
  * override equivalent: it refreshes the project's revenue contract schedule,
  * and the central recognition run posts the catch-up. Nothing posts here.
  */
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('projects.manage')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
-  if (feature) return feature
-  const { id } = await params
+const percentCompleteBody = z.looseObject({
+  percentComplete: z.unknown().optional(),
+  expectedPercentComplete: z.unknown().optional(),
+})
+
+export const PUT = defineRoute({
+  permission: 'projects.manage',
+  feature: 'projects',
+  params: z.object({ id: z.string() }),
+  body: percentCompleteBody,
+  handler: async ({ authz: gate, params: { id }, body }) => {
   if (!isUuid(id)) return notFound("record")
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { percentComplete?: number | null; expectedPercentComplete?: number | null }
   const pct = body.percentComplete
   if (pct !== null && pct !== undefined && (typeof pct !== 'number' || !Number.isFinite(pct) || pct < 0 || pct > 100)) {
     return NextResponse.json({ error: 'percentComplete must be 0–100 or null' }, { status: 422 })
@@ -63,7 +62,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   // The override write and the contract/obligation/multi-book schedule sync are
   // ONE transaction: a failure after the override (or anywhere in the sync)
   // rolls back the whole thing, so the displayed override never disagrees with
-  // the obligation or with any book's schedule (audit fnd_mt982zsr_wd4f6o).
+  // the obligation or with any book's schedule.
   const sync = await db.transaction(async (tx) => {
     if (!(await lockAndCheckOrgFeature(tx, orgId, 'projects'))) {
       return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
@@ -118,4 +117,5 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     status: sync.synced[0] ?? null,
     problems: sync.skipped ? [...sync.problems, sync.skipped] : sync.problems,
   })
-}
+  },
+})
