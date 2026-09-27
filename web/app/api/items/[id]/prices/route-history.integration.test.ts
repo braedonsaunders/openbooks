@@ -23,6 +23,15 @@ const hooks = registerHooks({
             const state = globalThis[Symbol.for('openbooks.item-price-history-test')]
             return state.authz ?? new Response(null, { status: 403 })
           }
+          export async function getAuthz() {
+            return globalThis[Symbol.for('openbooks.item-price-history-test')].authz ?? null
+          }
+          export function guardUnrestrictedScope() {
+            return null
+          }
+          export async function guardRootSubsidiaryScope() {
+            return null
+          }
         `,
       }
     }
