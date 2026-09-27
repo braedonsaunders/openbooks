@@ -143,7 +143,7 @@ export const POST = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   scope: "unrestricted",
   body: createBodySchema,
-  handler: async ({ authz: routeAuthz }) => {
+  handler: async ({ authz: routeAuthz, body: b }) => {
 
     const gate = routeAuthz
 
@@ -219,7 +219,7 @@ export const PATCH = defineRoute({
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   scope: "unrestricted",
   body: updateBodySchema,
-  handler: async ({ authz: routeAuthz }) => {
+  handler: async ({ authz: routeAuthz, body: b }) => {
 
     const gate = routeAuthz
 

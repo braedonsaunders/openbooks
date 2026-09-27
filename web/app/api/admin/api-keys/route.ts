@@ -543,7 +543,7 @@ export const DELETE = defineRoute({
   permission: "api.keys.manage",
   feature: "apiAccess",
   body: revokeApiKeyBodySchema,
-  handler: async ({ authz: routeAuthz }) => {
+  handler: async ({ authz: routeAuthz, body }) => {
 
     const gate = routeAuthz;
 
@@ -552,6 +552,7 @@ export const DELETE = defineRoute({
 
 
 
+    const id = body.id;
     if (!id || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     return withOrgTransaction(actor.orgId, async () => {
