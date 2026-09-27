@@ -449,6 +449,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'record-count-cell',
   'record-drawer',
   'record-list-view',
+  'resourcing-demand-drawer',
   'related-txn-drawer',
   'relationships-section',
   'remittance-ap-note',
