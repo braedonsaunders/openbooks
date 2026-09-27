@@ -16,6 +16,7 @@ import {
   type ReportRunResult,
 } from '@openbooks/reports'
 import { confirmDialog } from '../../../../lib/confirm'
+import { readApiErrorMessage } from '../../../../lib/api-error'
 import { RowsConfig, SortConfig, SummarizeConfig } from '../../reports/query-config'
 import { FilterTree } from '../../reports/custom/FilterTree'
 import { ResultView } from '../../reports/custom/ResultView'
@@ -74,21 +75,28 @@ export function ViewStudio({
   )
   const [preview, setPreview] = useState<ReportRunResult | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
 
   const entity = REPORT_ENTITY_MAP[query.entity] ?? REPORT_ENTITY_MAP.ledger_lines!
   const mode = query.mode ?? 'rows'
-  const patch = useCallback((next: Partial<ReportCustomQuery>) => setQuery((q) => ({ ...q, ...next })), [])
+  const patch = useCallback((next: Partial<ReportCustomQuery>) => {
+    setPreviewError(null)
+    setSaveError(null)
+    setQuery((q) => ({ ...q, ...next }))
+  }, [])
 
   function changeEntity(key: string) {
     const e = REPORT_ENTITY_MAP[key]
     if (!e) return
+    setPreviewError(null)
+    setSaveError(null)
     setQuery({
       entity: key,
       mode,
       columns: defaultColumnsFor(e),
       breakouts: [],
-      measures: [{ fn: 'count' }],
+      measures: [{ fn: 'count', key: 'm1' }],
       filters: null,
       groupBy: null,
       sorts: e.defaultSort ? [e.defaultSort] : null,
@@ -105,13 +113,19 @@ export function ViewStudio({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: plan }),
       })
+      if (!res.ok) {
+        const message = await readApiErrorMessage(res, tb('previewFailed'))
+        setPreview(null)
+        setPreviewError(message)
+        return
+      }
       const data = await res.json().catch(() => null) as { result?: ReportRunResult; error?: unknown } | null
-      if (res.ok && data) {
+      if (data) {
         setPreview(data.result ?? null)
         setPreviewError(null)
       } else {
         setPreview(null)
-        setPreviewError(typeof data?.error === 'string' && data.error ? data.error : tb('previewFailed'))
+        setPreviewError(tb('previewFailed'))
       }
     } catch {
       setPreview(null)
@@ -172,18 +186,22 @@ export function ViewStudio({
             body: JSON.stringify({ name, description, query, scope }),
           })
           if (res.ok) {
-            if (mountedRef.current && revision === saveRevisionRef.current) setSaveState('saved')
+            if (mountedRef.current && revision === saveRevisionRef.current) {
+              setSaveState('saved')
+              setSaveError(null)
+            }
             return
           }
-
-          const data = await res.json().catch(() => ({}))
+          const message = await readApiErrorMessage(res, tc('feedback.saveFailed'))
           if (mountedRef.current && revision === saveRevisionRef.current) {
             setSaveState('error')
-            toast.error(data.error ?? tc('feedback.saveFailed'))
+            setSaveError(message)
+            toast.error(message)
           }
         } catch {
           if (mountedRef.current && revision === saveRevisionRef.current) {
             setSaveState('error')
+            setSaveError(tc('feedback.saveFailed'))
             toast.error(tc('feedback.saveFailed'))
           }
         }
@@ -237,12 +255,9 @@ export function ViewStudio({
         body: JSON.stringify({ name: name.trim(), description: description.trim(), query, scope }),
       })
       if (!res.ok) {
-        const failure = (await res.json().catch(() => ({}))) as { error?: unknown }
-        toast.error(
-          typeof failure.error === 'string' && failure.error
-            ? failure.error
-            : tc('feedback.createFailed'),
-        )
+        const message = await readApiErrorMessage(res, tc('feedback.createFailed'))
+        setSaveError(message)
+        toast.error(message)
         return
       }
       const data = (await res.json()) as { id?: unknown }
@@ -363,7 +378,7 @@ export function ViewStudio({
                   variant={mode === 'summarize' ? 'default' : 'outline'}
                   size="sm"
                   disabled={!canCreate}
-                  onClick={() => patch({ mode: 'summarize', measures: query.measures?.length ? query.measures : [{ fn: 'count' }] })}
+                  onClick={() => patch({ mode: 'summarize', measures: query.measures?.length ? query.measures : [{ fn: 'count', key: 'm1' }] })}
                 >
                   {tb('summarize')}
                 </Button>
@@ -373,7 +388,7 @@ export function ViewStudio({
             {mode === 'rows' ? (
               <RowsConfig entity={entity} query={query} patch={patch} columns={selectableColumns} disabled={!canCreate} />
             ) : (
-              <SummarizeConfig entity={entity} query={query} patch={patch} />
+              <SummarizeConfig entity={entity} query={query} patch={patch} inventoryEnabled={inventoryEnabled} error={previewError ?? saveError} />
             )}
 
             <div className={field}>

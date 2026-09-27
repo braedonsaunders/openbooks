@@ -69,6 +69,7 @@ export function ReportBuilder({
     resolveReportLayout(definition.layout as Partial<ReportLayoutConfig> | null | undefined),
   )
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>(createMode ? 'dirty' : 'saved')
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [preview, setPreview] = useState<ReportRunResult | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
@@ -145,20 +146,24 @@ export function ReportBuilder({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ ...payload, expectedUpdatedAt }),
           })
+          if (!res.ok) {
+            const message = await readApiErrorMessage(res, tc('feedback.saveFailed'))
+            if (generation === saveGenerationRef.current) {
+              setSaveState('error')
+              setSaveError(message)
+              toast.error(message)
+            }
+            return
+          }
           const data = (await res.json().catch(() => ({}))) as {
-            error?: string
             definition?: { updated_at?: unknown }
           }
-          if (res.ok) {
-            const savedRevision = data.definition?.updated_at
-            if (typeof savedRevision === 'string') revisionRef.current = savedRevision
-            if (generation === saveGenerationRef.current) {
-              setSaveState('saved')
-              router.refresh()
-            }
-          } else if (generation === saveGenerationRef.current) {
-            setSaveState('error')
-            toast.error(data.error ?? tc('feedback.saveFailed'))
+          const savedRevision = data.definition?.updated_at
+          if (typeof savedRevision === 'string') revisionRef.current = savedRevision
+          if (generation === saveGenerationRef.current) {
+            setSaveState('saved')
+            setSaveError(null)
+            router.refresh()
           }
         } catch {
           if (generation !== saveGenerationRef.current) return
@@ -172,6 +177,8 @@ export function ReportBuilder({
   const mode = query.mode ?? 'rows'
 
   const patch = useCallback((next: Partial<ReportCustomQuery>) => {
+    setPreviewError(null)
+    setSaveError(null)
     setQuery((q) => ({ ...q, ...next }))
   }, [])
 
@@ -184,7 +191,7 @@ export function ReportBuilder({
       mode,
       columns: defaultColumnsFor(e),
       breakouts: [],
-      measures: [{ fn: 'count' }],
+      measures: [{ fn: 'count', key: 'm1' }],
       filters: null,
       groupBy: null,
       sorts: e.defaultSort ? [e.defaultSort] : null,
@@ -303,12 +310,9 @@ export function ReportBuilder({
         body: JSON.stringify({ name: name.trim(), description: description.trim(), query, layout }),
       })
       if (!res.ok) {
-        const failure = (await res.json().catch(() => ({}))) as { error?: unknown }
-        toast.error(
-          typeof failure.error === 'string' && failure.error
-            ? failure.error
-            : tk('newButton.createFailed'),
-        )
+        const message = await readApiErrorMessage(res, tk('newButton.createFailed'))
+        setSaveError(message)
+        toast.error(message)
         return
       }
       const data = (await res.json()) as { definition?: { id?: unknown } }
@@ -536,7 +540,7 @@ export function ReportBuilder({
                     type="button"
                     variant={mode === 'summarize' ? 'default' : 'outline'}
                     size="sm"
-                    onClick={() => patch({ mode: 'summarize', measures: query.measures?.length ? query.measures : [{ fn: 'count' }] })}
+                    onClick={() => patch({ mode: 'summarize', measures: query.measures?.length ? query.measures : [{ fn: 'count', key: 'm1' }] })}
                   >
                     {t('summarize')}
                   </Button>
@@ -566,13 +570,13 @@ export function ReportBuilder({
             mode === 'rows' ? (
               <RowsConfig entity={entity} query={query} patch={patch} columns={entity.columns} section="columns" />
             ) : (
-              <SummarizeConfig entity={entity} query={query} patch={patch} section="measures" />
+                  <SummarizeConfig entity={entity} query={query} patch={patch} section="measures" inventoryEnabled={inventoryEnabled} error={previewError ?? saveError} />
             )
           ) : tab === 'grouping' ? (
             mode === 'rows' ? (
               <RowsConfig entity={entity} query={query} patch={patch} columns={entity.columns} section="grouping" />
             ) : (
-              <SummarizeConfig entity={entity} query={query} patch={patch} section="grouping" />
+                  <SummarizeConfig entity={entity} query={query} patch={patch} section="grouping" inventoryEnabled={inventoryEnabled} />
             )
           ) : tab === 'sorting' ? (
             <SortConfig entity={entity} query={query} patch={patch} />
