@@ -169,10 +169,10 @@ test("one time entry cannot support two retainer drawdowns", { skip }, async () 
     const itemId = itemRows[0]!.id;
     const retainerRows = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`
       insert into res_retainers
-        (org_id, project_id, customer_party_id, kind, total_amount, total_hours,
+        (org_id, project_id, customer_party_id, kind, total_amount, currency, total_hours,
          unit_rate, starts_on, ends_on, retainer_item_id)
       values
-        (${org.orgId}, ${projectId}, ${customerId}, 'hours', 1500.0000, 10.0000,
+        (${org.orgId}, ${projectId}, ${customerId}, 'hours', 1500.0000, 'CAD', 10.0000,
          150.0000, '2026-09-01', '2026-12-31', ${itemId})
       returning id
     `)).rows);

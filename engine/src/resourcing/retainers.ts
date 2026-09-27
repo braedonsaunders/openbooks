@@ -38,6 +38,10 @@ type RetainerAuditRow = { id: string } & Record<string, unknown>;
 type RetainerAuditLogWriteRow = { row_id: string } & Record<string, unknown>;
 type DrawdownRow = typeof resRetainerDrawdowns.$inferSelect;
 type RetainerState = RetainerRow["state"];
+type RetainerCurrencyContext = { baseCurrency: string | null; customerCurrency: string | null };
+type CurrencyRegistryRow = { code: string };
+
+export type RetainerBalance = { amount: string; currency: string };
 
 export interface RetainerPriceEntry {
   id: string;
@@ -63,6 +67,7 @@ export interface CreateRetainerInput {
   projectId: string;
   customerPartyId: string;
   kind: "hours" | "fees";
+  currency?: string;
   totalAmount?: unknown;
   totalHours?: unknown;
   unitRate?: unknown;
@@ -100,6 +105,7 @@ export interface DraftDrawdownResult {
   weekStart: string;
   hours: string;
   amount: string;
+  currency: string;
   byEntry: PricedRetainerEntry[];
   byMonth: Record<string, string>;
 }
@@ -157,10 +163,13 @@ export function priceHoursDrawdown(
 
 /** The remaining contract liability, derived only from posted drawdowns. */
 export function balanceOf(
-  retainer: Pick<RetainerRow, "totalAmount">,
+  retainer: Pick<RetainerRow, "totalAmount" | "currency">,
   postedDrawdowns: readonly Pick<DrawdownRow, "amount">[],
-): string {
-  return add(retainer.totalAmount, neg(sum(postedDrawdowns.map((drawdown) => drawdown.amount))));
+): RetainerBalance {
+  return {
+    amount: add(retainer.totalAmount, neg(sum(postedDrawdowns.map((drawdown) => drawdown.amount)))),
+    currency: retainer.currency,
+  };
 }
 
 /** Resolve the next persisted lifecycle state from current posted evidence and the org's business day. */
@@ -291,20 +300,22 @@ export async function createRetainer(
         "customerPartyId",
       );
     }
+    const currency = await resolveRetainerCurrency(tx, input);
 
     let retainer: RetainerRow;
     if (idempotency) {
       const result = await tx.execute<RetainerWriteRow>(sql`
         insert into res_retainers (
-          id, org_id, project_id, customer_party_id, kind, total_amount, total_hours,
+          id, org_id, project_id, customer_party_id, kind, total_amount, currency, total_hours,
           unit_rate, starts_on, ends_on, retainer_item_id, custom, created_by, updated_by
         ) values (
           coalesce(${idempotency?.id ?? null}::uuid, public.uuid_generate_v7()), ${input.orgId},
-          ${input.projectId}, ${input.customerPartyId}, ${input.kind}, ${totalAmount},
+          ${input.projectId}, ${input.customerPartyId}, ${input.kind}, ${totalAmount}, ${currency},
           ${totalHours}, ${unitRate}, ${startsOn}, ${endsOn}, ${input.retainerItemId},
           ${JSON.stringify(input.custom ?? {})}::jsonb, ${input.actorId}, ${input.actorId}
         ) returning id, org_id as "orgId", project_id as "projectId",
           customer_party_id as "customerPartyId", kind, total_amount::text as "totalAmount",
+          currency,
           total_hours::text as "totalHours", unit_rate::text as "unitRate",
           starts_on::text as "startsOn", ends_on::text as "endsOn",
           retainer_item_id as "retainerItemId", invoice_document_id as "invoiceDocumentId",
@@ -328,6 +339,7 @@ export async function createRetainer(
         customerPartyId: input.customerPartyId,
         kind: input.kind,
         totalAmount,
+        currency,
         totalHours,
         unitRate,
         startsOn,
@@ -345,6 +357,7 @@ export async function createRetainer(
           customerPartyId: input.customerPartyId,
           kind: input.kind,
           totalAmount,
+          currency,
           totalHours,
           unitRate,
           startsOn,
@@ -411,7 +424,7 @@ export async function draftHoursDrawdown(input: DraftHoursDrawdownInput): Promis
     }
     const priced = priceHoursDrawdown(entries, retainer.unitRate);
     const balance = await retainerBalance(input.orgId, retainer);
-    assertDrawdownWithinBalance(priced.total, balance, "hours");
+    assertDrawdownWithinBalance(priced.total, balance.amount, "hours");
 
     const inserted = await db.insert(resRetainerDrawdowns).values({
       orgId: input.orgId,
@@ -449,6 +462,7 @@ export async function draftHoursDrawdown(input: DraftHoursDrawdownInput): Promis
       weekStart: input.sunday,
       hours: priced.hours,
       amount: priced.total,
+      currency: retainer.currency,
       byEntry: priced.byEntry,
       byMonth: priced.byMonth,
     };
@@ -477,7 +491,7 @@ export async function draftFeeDrawdown(input: DraftFeeDrawdownInput): Promise<Dr
     }
     await refuseExistingDrawdown(input.orgId, input.retainerId, input.sunday);
     const balance = await retainerBalance(input.orgId, retainer);
-    assertDrawdownWithinBalance(amount, balance, "fees");
+    assertDrawdownWithinBalance(amount, balance.amount, "fees");
     const inserted = await db.insert(resRetainerDrawdowns).values({
       orgId: input.orgId,
       retainerId: input.retainerId,
@@ -505,6 +519,7 @@ export async function draftFeeDrawdown(input: DraftFeeDrawdownInput): Promise<Dr
       weekStart: input.sunday,
       hours: "0.0000",
       amount,
+      currency: retainer.currency,
       byEntry: [],
       byMonth: {},
     };
@@ -561,7 +576,7 @@ export async function closeRetainer(
   return withRetainerWrite(input.orgId, async () => {
     const retainer = await loadRetainerForUpdate(input);
     const balance = await retainerBalance(input.orgId, retainer);
-    assertRetainerCanClose(balance);
+    assertRetainerCanClose(balance.amount);
     if (retainer.state === "closed") {
       throw new ResourcingRefusal(409, "retainer_already_closed", "retainer is already closed", "choose a retainer that is not closed", "retainerId");
     }
@@ -586,8 +601,9 @@ export async function closeRetainer(
 async function withRetainerWrite<T>(orgId: string, work: (tx: typeof db) => Promise<T>): Promise<T> {
   try {
     return await withOrgTransaction(orgId, async () => {
-      await acquireOrgFeatureGateLock(db, orgId);
-      if (!(await lockAndCheckOrgFeature(db, orgId, "retainerBilling"))) {
+      const tx = db;
+      await acquireOrgFeatureGateLock(tx, orgId);
+      if (!(await lockAndCheckOrgFeature(tx, orgId, "retainerBilling"))) {
         throw new ResourcingRefusal(
           409,
           "retainer_billing_disabled",
@@ -595,7 +611,7 @@ async function withRetainerWrite<T>(orgId: string, work: (tx: typeof db) => Prom
           "enable Retainer Billing in Company Settings → Features",
         );
       }
-      return work(db);
+      return work(tx);
     });
   } catch (error) {
     const constraint = postgresUniqueConstraint(error);
@@ -652,7 +668,55 @@ async function loadRetainerForUpdate(input: RetainerWriteInput): Promise<Retaine
   return retainer;
 }
 
-async function retainerBalance(orgId: string, retainer: RetainerRow): Promise<string> {
+async function resolveRetainerCurrency(
+  tx: typeof db,
+  input: CreateRetainerInput,
+): Promise<string> {
+  const context = (await tx.execute<RetainerCurrencyContext>(sql`
+    select o.base_currency as "baseCurrency", cr.currency as "customerCurrency"
+      from orgs o
+      left join customer_roles cr
+        on cr.org_id = o.id and cr.party_id = ${input.customerPartyId}
+     where o.id = ${input.orgId}
+  `)).rows[0];
+  const baseCurrency = context?.baseCurrency?.trim().toUpperCase();
+  if (!baseCurrency) throw new Error(`organization ${input.orgId} has no base currency`);
+  const customerCurrency = context?.customerCurrency?.trim();
+  const currency = (input.currency ?? (customerCurrency || baseCurrency)).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new ResourcingRefusal(
+      422,
+      "invalid_currency",
+      "retainer currency must be a three-letter currency code",
+      "choose a currency listed under Company Settings → Setup → Currencies",
+      "currency",
+    );
+  }
+  const registered = await tx.execute<CurrencyRegistryRow>(sql`
+    select code from currencies where code = ${currency}
+  `);
+  if (!registered.rows[0]) {
+    throw new ResourcingRefusal(
+      422,
+      "currency_not_enabled",
+      `currency ${currency} is not available in the currency registry`,
+      "choose a currency listed under Company Settings → Setup → Currencies",
+      "currency",
+    );
+  }
+  if (!(await lockAndCheckOrgFeature(tx, input.orgId, "multiCurrency")) && currency !== baseCurrency) {
+    throw new ResourcingRefusal(
+      422,
+      "multi_currency_disabled",
+      `retainer currency ${currency} differs from the organization's base currency ${baseCurrency}`,
+      "turn on Multi-Currency in Company Settings → Features or choose the organization's base currency",
+      "currency",
+    );
+  }
+  return currency;
+}
+
+async function retainerBalance(orgId: string, retainer: RetainerRow): Promise<RetainerBalance> {
   const posted = await db.select({ amount: resRetainerDrawdowns.amount })
     .from(resRetainerDrawdowns)
     .where(and(
