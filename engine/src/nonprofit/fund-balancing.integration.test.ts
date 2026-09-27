@@ -242,7 +242,10 @@ test("fund balancing stays data-driven and fund postings use configured interfun
           { accountId: org.accounts.cogs, amount: "-25.0000", currency: "CAD" },
         ],
       }),
-      /requires segment fund/,
+      (error) => {
+        const wrapped = error as Error & { cause?: { message?: string } };
+        return /requires segment fund/.test(`${wrapped.message} ${wrapped.cause?.message ?? ""}`);
+      },
     );
 
     await assert.rejects(
