@@ -87,31 +87,4 @@ VALUES
   ('mfg_wo_operations', '0432')
 ON CONFLICT (relation) DO NOTHING; -- expected on replay
 
--- The view builder runs with its function owner's privileges. Grant that owner
--- read access to newly registered relations before it freezes their views.
-DO $catalog_view_grants$
-DECLARE
-  query_catalog_owner name;
-  relation_name text;
-BEGIN
-  SELECT pg_catalog.pg_get_userbyid(p.proowner)
-    INTO query_catalog_owner
-    FROM pg_catalog.pg_proc p
-   WHERE p.oid = 'public.openbooks_refresh_query_catalog()'::regprocedure;
-
-  IF query_catalog_owner IS NULL THEN
-    RAISE EXCEPTION 'openbooks_refresh_query_catalog() owner is unavailable';
-  END IF;
-
-  FOR relation_name IN
-    SELECT relation
-      FROM public.openbooks_query_catalog_relations
-     WHERE added_in = '0432'
-     ORDER BY relation
-  LOOP
-    EXECUTE format('GRANT SELECT ON TABLE public.%I TO %I', relation_name, query_catalog_owner);
-  END LOOP;
-END
-$catalog_view_grants$;
-
 SELECT public.openbooks_refresh_query_catalog();
