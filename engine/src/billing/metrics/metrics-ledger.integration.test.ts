@@ -182,7 +182,11 @@ test("SaaS metrics movements reconcile by subsidiary and a bad movement identity
         values (${org.orgId}, ${org.subsidiaryId}, ${org.customerId}, ${ids.new},
                 '2026-08-01', '2026-07-01', '0', '100', '99', '0', '0', '0', '0', 'new', '0', '0', 'bad-identity')
       `)),
-      (error: unknown) => (error as { constraint?: string }).constraint === "saas_metrics_monthly_movement_identity",
+      (error: unknown) => {
+        const wrapped = error as { constraint?: string; cause?: { constraint?: string } } | null;
+        return wrapped?.constraint === "saas_metrics_monthly_movement_identity"
+          || wrapped?.cause?.constraint === "saas_metrics_monthly_movement_identity";
+      },
       "storage refuses a movement amount that does not reconcile to MRR",
     );
   } finally {
