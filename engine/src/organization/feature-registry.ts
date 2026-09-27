@@ -153,6 +153,11 @@ export const FEATURES: FeatureDef[] = [
   // Warehousing and fulfillment: warehouse locations, then pick and ship.
   { key: 'warehousing', defaultEnabled: false, category: 'operations', navModules: ['warehouses'], requiresAll: ['inventory'] },
   { key: 'fulfillment', defaultEnabled: false, category: 'operations', navModules: ['picks', 'shipments'], requiresAll: ['orders', 'warehousing'] },
+  // Distribution extensions: drop shipping, returns, customer part numbers, and barcode scanning.
+  { key: 'dropShipping', defaultEnabled: false, category: 'operations', requiresAll: ['orders', 'inventory'] },
+  { key: 'returnAuthorizations', defaultEnabled: false, category: 'operations', navModules: ['returns'], requiresAll: ['fulfillment'] },
+  { key: 'customerPartNumbers', defaultEnabled: false, category: 'sales', requiresAll: ['orders'] },
+  { key: 'barcodeScanning', defaultEnabled: false, category: 'operations', requiresAll: ['inventory'] },
   // Manufacturing: building finished goods from inventory components.
   { key: 'manufacturing', defaultEnabled: false, category: 'operations', navModules: ['manufacturing'], requiresAll: ['inventory'] },
   { key: 'equipment', defaultEnabled: true, category: 'operations', navModules: ['equipment'] },

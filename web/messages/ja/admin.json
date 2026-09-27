@@ -4929,6 +4929,23 @@
       "title": "出荷処理",
       "description": "倉庫在庫から受注をピッキング・梱包・出荷します。"
     },
+
+    "dropShipping": {
+      "title": "ドロップシッピング",
+      "description": "商品を自社倉庫に受け入れず、仕入先から顧客へ直接出荷して販売注文を履行します。"
+    },
+    "returnAuthorizations": {
+      "title": "返品承認",
+      "description": "顧客返品を承認し、受領した商品を追跡して、返金または交換を管理します。"
+    },
+    "customerPartNumbers": {
+      "title": "顧客品番",
+      "description": "見積書、注文書、請求書で、顧客ごとの品番を自社商品に対応付けます。"
+    },
+    "barcodeScanning": {
+      "title": "バーコードスキャン",
+      "description": "商品と保管場所のバーコードを読み取り、商品を特定して倉庫作業を記録します。"
+    },
     "manufacturing": {
       "title": "製造",
       "description": "部品表・工程表・製造指図により、部品から完成品を製造します。"

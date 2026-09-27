@@ -2,6 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { FEATURE_BY_KEY, featureEnabled } from "./feature-registry.ts";
 
+test("distribution features are opt-in and declare their dependencies", () => {
+  const expected = [
+    ["dropShipping", "operations", undefined, ["orders", "inventory"]],
+    ["returnAuthorizations", "operations", ["returns"], ["fulfillment"]],
+    ["customerPartNumbers", "sales", undefined, ["orders"]],
+    ["barcodeScanning", "operations", undefined, ["inventory"]],
+  ] as const;
+  for (const [key, category, navModules, requiresAll] of expected) {
+    const def = FEATURE_BY_KEY.get(key);
+    assert.ok(def, `${key} must be registered before distribution routes gate on it`);
+    assert.equal(def.defaultEnabled, false);
+    assert.equal(def.category, category);
+    assert.deepEqual(def.navModules ?? [], navModules ?? []);
+    assert.deepEqual(def.requiresAll, requiresAll);
+    assert.equal(featureEnabled({}, key), false);
+  }
+});
+
 test("allocations is an opt-in accounting feature with no nav modules", () => {
   const def = FEATURE_BY_KEY.get("allocations");
   assert.ok(def, "allocations must be registered before sibling shards gate on it");

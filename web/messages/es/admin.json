@@ -4789,6 +4789,23 @@
       "title": "Preparación de pedidos",
       "description": "Prepare, empaquete y envíe pedidos de venta desde las existencias del almacén."
     },
+
+    "dropShipping": {
+      "title": "Envío directo",
+      "description": "Completa pedidos de venta directamente desde un proveedor sin recibir la mercancía en tu almacén."
+    },
+    "returnAuthorizations": {
+      "title": "Autorizaciones de devolución",
+      "description": "Autoriza devoluciones de clientes, registra los artículos recibidos y controla los abonos o reemplazos."
+    },
+    "customerPartNumbers": {
+      "title": "Referencias de cliente",
+      "description": "Asocia las referencias de cada cliente con tus productos en presupuestos, pedidos y facturas."
+    },
+    "barcodeScanning": {
+      "title": "Escaneo de códigos de barras",
+      "description": "Escanea códigos de productos y ubicaciones para identificar artículos y registrar movimientos de almacén."
+    },
     "manufacturing": {
       "title": "Fabricación",
       "description": "Listas de materiales, rutas y órdenes de trabajo que fabrican productos terminados a partir de componentes."
