@@ -9,7 +9,7 @@ import { AvailabilityRefusal } from "../inventory/availability.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { postManufacturingEntry } from "./journal.ts";
 import { ManufacturingError } from "./errors.ts";
-import { createWorkOrder, getWorkOrder, updateDraftWorkOrder, releaseWorkOrder, holdWorkOrder, startWorkOrder, cancelWorkOrder, startWorkOrderOperation, pauseWorkOrderOperation, resumeWorkOrderOperation } from "./work-orders.ts";
+import { createWorkOrder, getWorkOrder, updateDraftWorkOrder, releaseWorkOrder, holdWorkOrder, resumeWorkOrder, startWorkOrder, cancelWorkOrder, startWorkOrderOperation, pauseWorkOrderOperation, resumeWorkOrderOperation } from "./work-orders.ts";
 import { createWorkCenter } from "./work-centers.ts";
 import { activateRouting, createNextRoutingVersion, createRouting, createRoutingOperation, updateRouting } from "./routings.ts";
 import { updateManufacturingPolicies } from "./policies.ts";
