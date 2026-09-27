@@ -29,7 +29,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const requireFromRoot = createRequire(new URL("../package.json", import.meta.url));
-const ts = requireFromRoot("typescript-eslint-typescript");
+const ts = requireFromRoot("typescript");
 
 const SELF = "scripts/check-route-permission-coverage.mjs";
 const BASELINE_PATH = "scripts/route-factory.baseline.json";
