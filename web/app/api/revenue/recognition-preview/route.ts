@@ -9,8 +9,7 @@ import {
 } from '@openbooks/engine/src/revenue/recognition.ts'
 import { subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { guardPermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { defineRoute } from '../../../../lib/api/route'
 import { isUuid } from '../../../../lib/list-params'
 import { revenueRecognitionErrorResponse } from '../../../../lib/revenue-recognition-error'
 import { parseJsonBody } from '../../../../lib/api/json'
@@ -72,13 +71,11 @@ async function ownedId(
  * pair it would post, the refusals that would hold a line back, and the
  * fingerprint Confirm carries so the run can refuse a stale review.
  */
-export async function POST(request: Request) {
-  const gate = await guardPermission('ar.post')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  permission: 'ar.post',
+  feature: 'revenueRecognition',
+  handler: async ({ request, authz: gate }) => {
   const user = gate.user
-  if (!(await isFeatureEnabled(user.orgId, 'revenueRecognition'))) {
-    return NextResponse.json({ error: 'feature disabled' }, { status: 404 })
-  }
 
   const parsed = await parseJsonBody(request, previewBody, { status: 422 })
   if (!parsed.ok) return parsed.response
@@ -133,4 +130,5 @@ export async function POST(request: Request) {
   } catch (e: unknown) {
     return revenueRecognitionErrorResponse(e, 'Unable to preview revenue recognition.')
   }
-}
+  },
+})

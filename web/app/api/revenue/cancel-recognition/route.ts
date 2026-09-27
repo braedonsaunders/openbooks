@@ -10,8 +10,8 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { DocumentVoidError } from '@openbooks/engine/src/ledger/document-void.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { sql } from 'drizzle-orm'
-import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { guardSubsidiaryScope } from '../../../../lib/authz'
+import { defineRoute } from '../../../../lib/api/route'
 import { isoDate, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { notFound } from "@/lib/api/responses";
@@ -36,13 +36,11 @@ export type CancelRecognitionRequest = z.input<typeof cancelRecognitionBody>
  * is the dedicated cancellation workflow the invoice-void refusal points at —
  * voiding a revenue-recognition invoice directly stays refused.
  */
-export async function POST(req: Request) {
-  const gate = await guardPermission('ar.post')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  permission: 'ar.post',
+  feature: 'revenueRecognition',
+  handler: async ({ request: req, authz: gate }) => {
   const user = gate.user
-  if (!(await isFeatureEnabled(user.orgId, 'revenueRecognition'))) {
-    return NextResponse.json({ error: 'feature disabled' }, { status: 404 })
-  }
 
   const parsed = await parseJsonBody(req, cancelRecognitionBody, { status: 422 })
   if (!parsed.ok) return parsed.response
@@ -54,7 +52,7 @@ export async function POST(req: Request) {
      where id = ${body.documentId} and org_id = ${user.orgId}
   `))
   const doc = found.rows[0]
-  if (!doc) return NextResponse.json({ error: 'invoice not found' }, { status: 404 })
+  if (!doc) return notFound("record")
   const denied = guardSubsidiaryScope(gate, doc.subsidiaryId)
   if (denied) return denied
   if (!(await isDocKindEnabled(user.orgId, doc.kind))) {
@@ -78,7 +76,7 @@ export async function POST(req: Request) {
     )
   } catch (error) {
     if (error instanceof ScopeNotFoundError) {
-      return NextResponse.json({ error: 'invoice not found' }, { status: 404 })
+      return notFound("record")
     }
     if (error instanceof RevenueRecognitionCancellationError) {
       return apiErrorResponse(error, { safeStatus: 422 })
@@ -88,4 +86,5 @@ export async function POST(req: Request) {
     }
     throw error
   }
-}
+  },
+})

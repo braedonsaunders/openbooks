@@ -3,8 +3,7 @@ import { z } from 'zod'
 import { runRevenueRecognition } from '@openbooks/engine/src/revenue/recognition.ts'
 import { syncProjectRevenueContracts } from '@openbooks/engine/src/projects/revenue.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { guardPermission } from '../../../../lib/authz'
-import { isFeatureEnabled } from '../../../../lib/features'
+import { defineRoute } from '../../../../lib/api/route'
 import { revenueRecognitionErrorResponse } from '../../../../lib/revenue-recognition-error'
 import { isoDate, parseJsonBody, uuidId } from '../../../../lib/api/json'
 
@@ -33,13 +32,11 @@ const runRecognitionBody = z.object({
  * Optional `obligationId` scopes the run to one obligation; `asOfDate` defaults
  * to today.
  */
-export async function POST(req: Request) {
-  const gate = await guardPermission('ar.post')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  permission: 'ar.post',
+  feature: 'revenueRecognition',
+  handler: async ({ request: req, authz: gate }) => {
   const user = gate.user
-  if (!(await isFeatureEnabled(user.orgId, 'revenueRecognition'))) {
-    return NextResponse.json({ error: 'feature disabled' }, { status: 404 })
-  }
 
   const parsed = await parseJsonBody(req, runRecognitionBody, { status: 422 })
   if (!parsed.ok) return parsed.response
@@ -105,4 +102,5 @@ export async function POST(req: Request) {
   } catch (e: unknown) {
     return revenueRecognitionErrorResponse(e, 'Unable to run revenue recognition.')
   }
-}
+  },
+})

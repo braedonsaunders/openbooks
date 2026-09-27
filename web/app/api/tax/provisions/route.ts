@@ -1,5 +1,8 @@
+import type { Authz } from "@/lib/authz";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -13,16 +16,55 @@ import {
   type PermanentDifference,
 } from "@openbooks/engine/src/tax-returns/income-tax-provision.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
+import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 
 export const runtime = "nodejs";
 
-const DIFF_CATEGORIES = new Set(["fixed_assets", "revenue_recognition", "provisions", "loss_carryforward", "other"]);
+const DIFFERENCE_CATEGORIES = ['fixed_assets', 'revenue_recognition', 'provisions', 'loss_carryforward', 'other'] as const;
+const provisionAmount = (field: string) => z.string({ error: `${field} must be a decimal string` }).transform((raw, ctx) => {
+  if (raw.trim() === '') return '';
+  const exact = canonicalDecimal(raw, 4);
+  if (exact === null || exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: moneyRefusal(field, raw, 'an amount', 4, 15) });
+    return z.NEVER;
+  }
+  return normalizeMoney(exact);
+});
+const differenceCategory = z.enum([...DIFFERENCE_CATEGORIES, ''], { error: 'invalid temporary-difference category' });
 
-export async function GET() {
-  const gate = await guardPermission("reports.read");
-  if (gate instanceof NextResponse) return gate;
+const bodyObjectSchema = z.object({
+  fiscalYear: z.union([z.number().int(), z.string().regex(/^\d{4}$/)]),
+  permanentDifferences: z.array(z.object({
+    description: z.string().optional(),
+    amount: provisionAmount('amount').optional(),
+  }).strict()).optional(),
+  additionalDifferences: z.array(z.object({
+    category: differenceCategory.optional(),
+    description: z.string().optional(),
+    difference: provisionAmount('difference').optional(),
+  }).strict()).optional(),
+  lossCarryforwardUsed: provisionAmount('lossCarryforwardUsed').optional(),
+  valuationAllowance: provisionAmount('valuationAllowance').optional(),
+  entities: z.record(z.string().uuid(), z.object({
+    permanentDifferences: z.array(z.object({ description: z.string().optional(), amount: provisionAmount('amount').optional() }).strict()).optional(),
+    additionalDifferences: z.array(z.object({
+      category: differenceCategory.optional(),
+      description: z.string().optional(),
+      difference: provisionAmount('difference').optional(),
+    }).strict()).optional(),
+    lossCarryforwardUsed: provisionAmount('lossCarryforwardUsed').optional(),
+    valuationAllowance: provisionAmount('valuationAllowance').optional(),
+  }).strict()).optional(),
+  presentationCurrency: z.string({ error: 'invalid presentation currency' }).regex(/^[A-Z]{3}$/, { error: 'invalid presentation currency' }).optional(),
+}).strict();
+
+const DIFF_CATEGORIES = new Set<string>(DIFFERENCE_CATEGORIES);
+
+async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const orgId = gate.user.orgId;
   const [runs, years, rates, framework] = await Promise.all([
     listProvisionRuns(orgId, gate.allowedSubsidiaryIds),
@@ -46,31 +88,24 @@ export async function GET() {
   });
 }
 
-export async function POST(req: Request) {
-  const gate = await guardPermission("reports.create");
-  if (gate instanceof NextResponse) return gate;
+async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   // Org-wide write (canonical shape 2 in
   // engine/src/organization/subsidiary-scope.ts): computing a provision
   // measures every entity, so a subsidiary-restricted caller gets the named
   // 403 instead of the silent 404.
   const scopeDenied = guardUnrestrictedScope(gate);
   if (scopeDenied) return scopeDenied;
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, bodyObjectSchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;
   const fiscalYear = Number(body.fiscalYear);
   if (!Number.isInteger(fiscalYear) || fiscalYear < 1900 || fiscalYear > 2200) {
     return NextResponse.json({ error: "fiscalYear is required" }, { status: 400 });
   }
-  const money = (raw: unknown): string | null => {
-    const exact = canonicalDecimal(raw, 4);
-    if (exact === null) return null;
-    // Provision results persist to numeric(19,4) columns and the engine
-    // measures in unbounded bigint units, so a wider figure would die in
-    // Postgres as a raw storage failure (HTTP 500). Refuse it here.
-    if (exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) return null;
-    return normalizeMoney(exact);
-  };
+  const money = (raw: unknown): string | null =>
+    typeof raw === 'string' && raw.trim() !== '' ? raw : null;
   // A grid row with no description is an empty line ONLY when it carries no
   // data — no amount and (for temporary differences) no chosen category. A
   // populated row without a description refuses by row, naming the required
@@ -290,3 +325,15 @@ export async function POST(req: Request) {
     return apiErrorResponse(e, e instanceof IncomeTaxProvisionError ? { safeStatus: 422 } : {})
   }
 }
+
+export const GET = defineRoute({
+  permission: "reports.read", feature: { none: "This route is governed by its permission and service authorization." },
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const POST = defineRoute({
+  permission: "reports.create", feature: { none: "This route is governed by its permission and service authorization." },
+
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

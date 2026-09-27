@@ -1,9 +1,12 @@
+import type { Authz } from "@/lib/authz";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { rendererUnavailableResponse } from "@/lib/api/pdf-renderer";
 import { assertPrintablePage, compileTemplateHtml, sanitizeTokenizedFragment } from "@openbooks/pdf";
-import { can, guardPermission } from "../../../../lib/authz";
+import { can } from "../../../../lib/authz";
 import { unexpectedServerError } from "../../../../lib/api/unexpected";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { pdfResponse } from "../../../../lib/export";
@@ -14,6 +17,16 @@ import { notFound } from "@/lib/api/responses";
 
 
 export const runtime = "nodejs";
+
+const bodyObjectSchema = z.object({
+  recordType: z.string().min(1),
+  sourceHtml: z.string().optional(),
+  headerHtml: z.string().nullable().optional(),
+  footerHtml: z.string().nullable().optional(),
+  paperSize: z.enum(['letter', 'a4', 'legal']).optional(),
+  orientation: z.enum(["landscape", "portrait"]).optional(),
+  marginMm: z.number().optional(),
+}).strict();
 
 /**
  * POST /api/pdf-templates/preview — render draft (unsaved) template HTML as an
@@ -28,21 +41,13 @@ export const runtime = "nodejs";
  * them. A designer who cannot read any real record still previews against
  * the catalog's synthetic sample values.
  */
-export async function POST(req: Request) {
-  const gate = await guardPermission("admin.customization.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const { user } = gate;
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, bodyObjectSchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    recordType?: string;
-    sourceHtml?: string;
-    headerHtml?: string | null;
-    footerHtml?: string | null;
-    paperSize?: string;
-    orientation?: string;
-    marginMm?: number;
-  };
+  const body = parsedBody.data;
   const meta = body.recordType ? PDF_RECORD_TYPE_BY_KEY[body.recordType] : undefined;
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
   if (!can(gate, meta.readPermission)) {
@@ -107,3 +112,9 @@ export async function POST(req: Request) {
     return unexpectedServerError('pdf-templates/preview', e);
   }
 }
+
+export const POST = defineRoute({
+  permission: "admin.customization.manage", feature: { none: "This route is governed by its permission and service authorization." },
+
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

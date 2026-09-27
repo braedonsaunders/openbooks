@@ -1,11 +1,13 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
-import { guardPermission, subsidiariesInScope } from '../../../lib/authz'
+import { subsidiariesInScope } from '../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { isFeatureEnabled } from '../../../lib/features'
+import { resolveIdempotentReplay } from '../../../lib/api/idempotency'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { isUuid } from '../../../lib/list-params'
 import { normalizeCountryCode } from '../../../lib/countries'
@@ -13,6 +15,7 @@ import { isIsoCalendarDate } from '../../../lib/crm-dates'
 import { loadParty } from './_lib'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../lib/exact-decimal'
 import { notFound } from "@/lib/api/responses";
+import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 
 
 export const runtime = 'nodejs'
@@ -23,14 +26,76 @@ export const runtime = 'nodejs'
 const PARTY_KINDS = ['company', 'person', 'customer', 'vendor', 'employee'] as const
 const PAYMENT_METHODS = ['eft', 'cheque', 'card', 'cash', 'other'] as const
 const CURRENCY_RE = /^[A-Za-z]{3}$/
-// Draft-completion sentinels are never valid create input: the draft flow
-// stored them, this flow refuses them, so a create can never mint a nameless
-// record that reads as "correctly inactive".
-const PLACEHOLDER_NAMES = new Set(['New party', 'New lead'])
+// This label belongs to the unsaved new-party drawer and is never valid
+// create input, so a request cannot mint a nameless inactive record.
+const PLACEHOLDER_NAMES = new Set(['New lead'])
 
 function bad(error: string, field?: string, status = 422) {
   return NextResponse.json({ error, ...(field ? { field } : {}) }, { status })
 }
+
+class PartyIdempotencyConflict extends Error {
+  readonly status = 409
+  readonly code = 'idempotency_key_conflict'
+  readonly remedy = 'Close and reopen the drawer to try again with a fresh request.'
+
+  constructor() {
+    super('This idempotency key was already used for a different party create request. Close and reopen the drawer to try again with a fresh request.')
+  }
+}
+
+const partyCreateBody = z.object({
+  kind: z.enum(PARTY_KINDS).optional(),
+  displayName: z.string(),
+  legalName: z.string().nullable().optional(),
+  shortCode: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  website: z.string().nullable().optional(),
+  isActive: z.boolean().optional(),
+  subsidiaryId: z.string().uuid().nullable().optional(),
+  additionalSubsidiaryIds: z.array(z.string().uuid()).optional(),
+  roles: z.object({
+    customer: z.object({
+      enabled: z.boolean().optional(), paymentTermsId: z.string().uuid().nullable().optional(),
+      creditLimit: z.string().nullable().optional(), currency: z.string().nullable().optional(),
+      arAccountId: z.string().uuid().nullable().optional(), salesRepId: z.string().uuid().nullable().optional(),
+      taxCodeId: z.string().uuid().nullable().optional(), isOnHold: z.boolean().optional(),
+      holdReason: z.string().nullable().optional(),
+    }).strict().optional(),
+    vendor: z.object({
+      enabled: z.boolean().optional(), paymentMethod: z.enum(PAYMENT_METHODS).nullable().optional(),
+      eftNotificationEmail: z.string().nullable().optional(), paymentTermsId: z.string().uuid().nullable().optional(),
+      currency: z.string().nullable().optional(), is1099OrT4a: z.boolean().optional(),
+      apAccountId: z.string().uuid().nullable().optional(), defaultExpenseAccountId: z.string().uuid().nullable().optional(),
+      taxCodeId: z.string().uuid().nullable().optional(), isOnHold: z.boolean().optional(),
+      holdReason: z.string().nullable().optional(),
+    }).strict().optional(),
+    employee: z.object({
+      enabled: z.boolean().optional(), employeeNumber: z.string().nullable().optional(), jobTitle: z.string().nullable().optional(),
+      departmentId: z.string().uuid().nullable().optional(), tradeId: z.string().uuid().nullable().optional(),
+      workerCompGroupId: z.string().uuid().nullable().optional(), hiredOn: z.string().nullable().optional(),
+    }).strict().optional(),
+  }).strict().optional(),
+  // Custom fields are org-configured JSON values; their field registry validates each value below.
+  custom: z.record(z.string(), z.json()).optional(),
+  invoicingPreference: z.object({
+    defaultBasis: z.enum(['date_range', 'draw_amount', 'time_selection', 'milestone']).nullable().optional(),
+    backupRequired: z.boolean().nullable().optional(),
+    backupType: z.enum(['costed_timesheets', 'timesheets_purchases', 'purchases', 'purchases_shop_time', 'quote_only', 'none']).nullable().optional(),
+  }).strict().nullable().optional(),
+  addresses: z.array(z.object({
+    label: z.string().nullable().optional(), line1: z.string().nullable().optional(), line2: z.string().nullable().optional(),
+    city: z.string().nullable().optional(), region: z.string().nullable().optional(), postalCode: z.string().nullable().optional(),
+    country: z.string().nullable().optional(), isDefaultBilling: z.boolean().optional(), isDefaultShipping: z.boolean().optional(),
+  }).strict()).optional(),
+  contacts: z.array(z.object({
+    firstName: z.string().nullable().optional(), lastName: z.string().nullable().optional(), name: z.string().nullable().optional(),
+    title: z.string().nullable().optional(), role: z.string().nullable().optional(), email: z.string().nullable().optional(),
+    phone: z.string().nullable().optional(), mobilePhone: z.string().nullable().optional(), isPrimary: z.boolean().optional(),
+    isActive: z.boolean().optional(),
+  }).strict()).optional(),
+}).strict()
 
 /** Trimmed string or null ('' and non-strings collapse to null). */
 function strOrNull(v: unknown): string | null {
@@ -86,22 +151,22 @@ function asRecord(v: unknown): Record<string, unknown> {
  * Create one tenant-owned party with its roles, addresses, and contacts.
  *
  * The caller supplies a UUID idempotency key, which becomes the party ID.
- * Retrying the same request therefore returns the same party without a
- * duplicate insert or duplicate audit event. A reused key with a changed
- * payload is a 409, never the older party returned as though it matched.
+ * Retrying the same request returns the same party without a duplicate
+ * insert or audit event; a different payload under that key conflicts.
  *
  * This is the only write path for new parties: the directory opens an
  * unsaved drawer (zero writes) and this endpoint persists it exactly once.
  */
-export async function POST(request: Request) {
-  const gate = await guardPermission('parties.manage')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  permission: 'parties.manage',
+  feature: { none: 'Parties are shared master records; CRM capabilities do not gate their creation.' },
+  handler: async ({ request, authz: gate }) => {
   const user = gate.user
 
   const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
   if (!isUuid(requestId)) return bad('invalid_idempotency_key', undefined, 400)
 
-  const parsedBody = await parseJsonBody(request, jsonObject)
+  const parsedBody = await parseJsonBody(request, partyCreateBody)
   if (!parsedBody.ok) return parsedBody.response
   const body = parsedBody.data
 
@@ -210,11 +275,14 @@ export async function POST(request: Request) {
     if (!(await orgRefExists('tax', taxCodeId, user.orgId))) return bad('Invalid customer tax code', 'roles')
     const creditLimitRaw = strOrNull(customerInput.creditLimit)
     const creditLimitExact = creditLimitRaw === null ? null : canonicalDecimal(creditLimitRaw, 4)
-    if (creditLimitRaw !== null && (creditLimitExact === null || compareDecimal(creditLimitExact, '0') < 0)) {
-      return bad('Credit limit must be a non-negative number', 'roles')
+    if (creditLimitRaw !== null && creditLimitExact === null) {
+      return bad(moneyRefusal('Credit limit', creditLimitRaw, 'an amount', 4, 15), 'roles')
+    }
+    if (creditLimitExact !== null && compareDecimal(creditLimitExact, '0') < 0) {
+      return bad('Credit limit must be a non-negative amount', 'roles')
     }
     if (creditLimitExact !== null && wholeDigits(creditLimitExact) > 15) {
-      return bad('Credit limit is out of range — at most 15 whole digits fit the ledger', 'roles')
+      return bad(moneyRefusal('Credit limit', creditLimitRaw, 'an amount', 4, 15), 'roles')
     }
     const creditLimit = creditLimitExact === null ? null : fixedDecimal(creditLimitExact, 4)
     const currency = customerInput.currency !== undefined ? (strOrNull(customerInput.currency)?.toUpperCase() ?? null) : null
@@ -376,6 +444,8 @@ export async function POST(request: Request) {
   let created = false
   try {
     created = await db.transaction(async (tx) => {
+      // An id collision is the expected duplicate-retry shape; the immutable
+      // insert audit snapshot below decides whether that retry may replay.
       const inserted = (await tx.execute<{ id: string }>(sql`
         insert into parties
           (id, org_id, kind, display_name, legal_name, short_code, email, phone,
@@ -392,28 +462,13 @@ export async function POST(request: Request) {
         returning id
       `))
       if (!inserted.rows[0]) {
-        const prior = (await tx.execute<{ id: string }>(sql`
-          select id from parties
-           where id = ${requestId} and org_id = ${user.orgId}
-        `))
-        if (!prior.rows[0]) throw new Error('idempotency_key_conflict')
-        // Compare replays with the immutable create snapshot in the insert
-        // audit event, rather than today's party row, so an unchanged retry
-        // still succeeds even when a later PATCH has legitimately edited it.
-        const original = (await tx.execute<{ after: unknown }>(sql`
-          select changes->'after' as after
-            from audit_log
-           where org_id = ${user.orgId}
-             and table_name = 'parties'
-             and row_id = ${requestId}
-             and action = 'insert'
-             and request_id = ${requestId}
-           order by at asc
-           limit 1
-        `)).rows[0]?.after
-        if (!original || canonicalJson(original) !== canonicalJson(snapshot)) {
-          throw new Error('idempotency_key_conflict')
-        }
+        const replay = await resolveIdempotentReplay(tx, {
+          orgId: user.orgId,
+          table: 'parties',
+          key: requestId,
+          match: snapshot,
+        })
+        if (replay !== 'replay') throw new PartyIdempotencyConflict()
         return false
       }
       if (customer?.arAccountId) {
@@ -526,8 +581,8 @@ export async function POST(request: Request) {
     const message = error instanceof Error
       ? `${error.message} ${String((error as { cause?: unknown }).cause ?? '')}`
       : String(error)
+    if (error instanceof PartyIdempotencyConflict) throw error
     if (message.includes('parties_org_shortcode')) return bad('That short code is already used by another party', 'shortCode')
-    if (message.includes('idempotency_key_conflict')) return bad('invalid_idempotency_key', undefined, 409)
     if (message.includes('invalid_receivable_account_for_party_subsidiary')) return bad('Invalid receivable account for this party subsidiary', 'roles')
     if (message.includes('invalid_payable_account_for_party_subsidiary')) return bad('Invalid payable account for this party subsidiary', 'roles')
     if (message.includes('invalid_default_expense_account_for_party_subsidiary')) return bad('Invalid default expense account for this party subsidiary', 'roles')
@@ -537,4 +592,5 @@ export async function POST(request: Request) {
   const payload = await loadParty(requestId, user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return bad('save_failed', undefined, 500)
   return NextResponse.json(payload, { status: created ? 201 : 200 })
-}
+  },
+})

@@ -1,10 +1,13 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import type { TaxReturnResult } from '@openbooks/engine/src/tax-returns/return.ts'
-import { guardPermission, guardSubsidiaryScope } from '../../../../../../lib/authz'
+import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
 import { taxReturnExportData } from '../../../../../../lib/tax-filing'
@@ -15,9 +18,8 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = 'nodejs'
 
 /** Export the frozen snapshot, never a recomputation of today's ledger. */
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('reports.read')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(req: Request, { params }: { params: Promise<{ id: string }> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
   const format = new URL(req.url).searchParams.get('format')?.toLowerCase() ?? 'pdf'
@@ -107,3 +109,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     generatedAt: new Date(`${stamp}T00:00:00Z`),
   }), filename)
 }
+
+export const GET = defineRoute({
+  permission: 'reports.read', feature: { none: "This route is governed by its permission and service authorization." },
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});

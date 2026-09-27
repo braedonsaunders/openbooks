@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createDirectDebitRun } from '@openbooks/engine/src/payments/direct-debit.ts'
-import { guardPermission } from '@/lib/authz'
+import { defineRoute } from '@/lib/api/route'
 import { isoDate, parseJsonBody, uuidId } from '@/lib/api/json'
 import { paymentErrorResponse } from '@/app/api/payments/lib'
 
@@ -17,9 +17,10 @@ const directDebitRunBody = z.object({
   scheduledFor: isoDate().nullable().optional(),
 })
 
-export async function POST(req: Request) {
-  const gate = await guardPermission('ar.pay')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  permission: 'ar.pay',
+  feature: { none: 'Direct debit runs are governed by payment permissions and have no organization feature switch.' },
+  handler: async ({ request: req, authz: gate }) => {
   const parsed = await parseJsonBody(req, directDebitRunBody)
   if (!parsed.ok) return parsed.response
   const body = parsed.data
@@ -35,4 +36,5 @@ export async function POST(req: Request) {
   } catch (error) {
     return paymentErrorResponse(error)
   }
-}
+  },
+})

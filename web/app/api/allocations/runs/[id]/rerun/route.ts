@@ -1,7 +1,9 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../../lib/api/json";
-import { gateCan, guardAllocations, missingPermission } from "../../../../../../lib/allocations-gate";
+import { gateCan, missingPermission } from "../../../../../../lib/allocations-gate";
 import { requireVisibleAllocationRun } from "../../../../../../lib/allocations-scope";
 import { isUuid } from "../../../../../../lib/list-params";
 import { rerunAllocationRun } from "../../../../../../../engine/src/allocations/period-run.ts";
@@ -23,9 +25,9 @@ type Ctx = { params: Promise<{ id: string }> };
  * `allocations.run` + `gl.post`. An explicit reason is recorded in the
  * audit log; callers without one get the request's provenance.
  */
-export async function POST(req: Request, { params }: Ctx) {
-  const gate = await guardAllocations("allocations.run");
-  if (gate instanceof NextResponse) return gate;
+async function legacyPOST(req: Request, { params }: Ctx, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   if (!gateCan(gate, "gl.post")) return missingPermission("gl.post");
   const { id } = await params;
   if (!isUuid(id)) return notFound("record");
@@ -44,3 +46,9 @@ export async function POST(req: Request, { params }: Ctx) {
     return allocationRunErrorResponse(error, "Unable to re-run the allocation run.");
   }
 }
+
+export const POST = defineRoute({
+  permission: "allocations.run", feature: "allocations",
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

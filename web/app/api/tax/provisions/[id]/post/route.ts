@@ -1,9 +1,12 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { IncomeTaxProvisionError, postProvisionRun } from "@openbooks/engine/src/tax-returns/income-tax-provision.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { guardPermission, guardUnrestrictedScope } from "../../../../../../lib/authz";
+import { guardUnrestrictedScope } from "../../../../../../lib/authz";
 import { isUuid } from "../../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
@@ -12,9 +15,9 @@ export const runtime = "nodejs";
 
 /** A provision posts and reverses the complete organization-wide entity set.
  * Root-entity access alone cannot authorize journals in its siblings/children. */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("gl.post");
-  if (gate instanceof NextResponse) return gate;
+async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: string }> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
   // Org-wide write (canonical shape 2 in
@@ -37,3 +40,9 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return apiErrorResponse(e, e instanceof IncomeTaxProvisionError ? { safeStatus: 422 } : {})
   }
 }
+
+export const POST = defineRoute({
+  permission: "gl.post", feature: { none: "This route is governed by its permission and service authorization." },
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

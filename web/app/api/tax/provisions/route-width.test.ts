@@ -27,6 +27,8 @@ const mockSources = new Map<string, string>([
         }
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
+      export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null } }
+      export function guardRootSubsidiaryScope() { return null }
       export function guardSubsidiaryScope() { return null }
       export function guardUnrestrictedScope() { return null }
     `,
@@ -48,6 +50,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
   [
     "@openbooks/engine/src/tax-returns/income-tax-provision.ts",
     "mock:income-tax-provision",

@@ -12,7 +12,7 @@ import {
   type FeedbackTurnResult,
   type IssuePublisher,
 } from '@braedonsaunders/appkit-feedback'
-import { can, getAuthz } from '../../../../lib/authz'
+import { defineRoute } from '../../../../lib/api/route'
 import { getOrgAiConfig } from '../../../../lib/assistant/ai-config'
 import { AIDisabledError, getModel } from '../../../../lib/assistant/client'
 import { orgInfo } from '../../../../lib/data'
@@ -53,10 +53,10 @@ export const maxDuration = 60
  * an unreported defect is worse than an unpolished issue.
  */
 
-export async function POST(req: Request): Promise<Response> {
-  const authz = await getAuthz()
-  if (!authz) return new Response('Unauthorized', { status: 401 })
-  if (!can(authz, 'feedback.use')) return new Response('Forbidden', { status: 403 })
+export const POST = defineRoute({
+  permission: 'feedback.use',
+  feature: { none: 'Feedback access is controlled by feedback.use and has no organization feature switch.' },
+  handler: async ({ request: req, authz }) => {
   const { id: userId, orgId } = authz.user
 
   const t = await getTranslations('shell.feedback')
@@ -221,4 +221,5 @@ export async function POST(req: Request): Promise<Response> {
     if (!(error instanceof AIDisabledError)) console.error('[feedback/turn] failed', error)
     return finish(await runScripted(true))
   }
-}
+  },
+})

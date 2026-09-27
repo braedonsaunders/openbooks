@@ -23,11 +23,28 @@ const mockSources = new Map<string, string>([
           allowedSubsidiaryIds: state.allowedSubsidiaryIds,
         }
       }
+      export async function getAuthz() {
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+        }
+      }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
     `,
   ],
   [
     'features',
-    `export async function isFeatureEnabled() { return true }`,
+    `
+      const state = globalThis[Symbol.for('openbooks.recognition-preview-route-test')]
+      export async function isFeatureEnabled() { return true }
+      export async function guardFeaturePermission() {
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+        }
+      }
+    `,
   ],
   [
     'business-date',
@@ -74,7 +91,9 @@ const selfUrl = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${selfUrl}?preview-mock=${name}`
 const mockUrls = new Map<string, string>([
   ['../../../../lib/authz', mockUrl('authz')],
+  ['@/lib/authz', mockUrl('authz')],
   ['../../../../lib/features', mockUrl('features')],
+  ['@/lib/feature-gates', mockUrl('features')],
   ['@openbooks/engine/src/platform/business-date.ts', mockUrl('business-date')],
   ['@openbooks/engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
   // The shared error mapper reaches the same engine module through a
@@ -82,7 +101,7 @@ const mockUrls = new Map<string, string>([
   ['../../engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, _context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { shortCircuit: true, url: mocked }
@@ -98,7 +117,6 @@ const hooks = registerHooks({
 
 const routeUrl = new URL('./route.ts?recognition-preview-test', import.meta.url).href
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   state.allowedSubsidiaryIds = null

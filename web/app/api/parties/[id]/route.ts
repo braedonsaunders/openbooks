@@ -1,10 +1,12 @@
-import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import { parseJsonBody } from '@/lib/api/json'
+import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
-import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
+import { guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
@@ -14,6 +16,7 @@ import { loadParty } from '../_lib'
 import { denyLockedOutsidePartyScope } from './bank-accounts/party-scope'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/exact-decimal'
 import { notFound } from "@/lib/api/responses";
+import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 
 
 export const runtime = 'nodejs'
@@ -28,6 +31,53 @@ class PartyLifecycleError extends Error {}
 const PARTY_KINDS = ['company', 'person', 'customer', 'vendor', 'employee'] as const
 const PAYMENT_METHODS = ['eft', 'cheque', 'card', 'cash', 'other'] as const
 const CURRENCY_RE = /^[A-Za-z]{3}$/
+const partyPatchBody = z.object({
+  displayName: z.string().optional(), legalName: z.string().nullable().optional(), shortCode: z.string().nullable().optional(),
+  email: z.string().nullable().optional(), phone: z.string().nullable().optional(), website: z.string().nullable().optional(),
+  isActive: z.boolean().optional(), kind: z.enum(PARTY_KINDS).optional(),
+  // Custom field values are org-configured JSON; their field registry validates the submitted bag below.
+  custom: z.record(z.string(), z.json()).optional(),
+  invoicingPreference: z.object({
+    defaultBasis: z.enum(['date_range', 'draw_amount', 'time_selection', 'milestone']).nullable().optional(),
+    backupRequired: z.boolean().nullable().optional(),
+    backupType: z.enum(['costed_timesheets', 'timesheets_purchases', 'purchases', 'purchases_shop_time', 'quote_only', 'none']).nullable().optional(),
+  }).strict().nullable().optional(),
+  subsidiaryId: z.string().uuid().nullable().optional(),
+  additionalSubsidiaryIds: z.array(z.string().uuid()).optional(),
+  roles: z.object({
+    customer: z.object({
+      enabled: z.boolean().optional(), paymentTermsId: z.string().uuid().nullable().optional(),
+      creditLimit: z.string().nullable().optional(), currency: z.string().nullable().optional(),
+      arAccountId: z.string().uuid().nullable().optional(), salesRepId: z.string().uuid().nullable().optional(),
+      taxCodeId: z.string().uuid().nullable().optional(), isOnHold: z.boolean().optional(), holdReason: z.string().nullable().optional(),
+    }).strict().optional(),
+    vendor: z.object({
+      enabled: z.boolean().optional(), paymentMethod: z.enum(PAYMENT_METHODS).nullable().optional(),
+      eftNotificationEmail: z.string().nullable().optional(), paymentTermsId: z.string().uuid().nullable().optional(),
+      currency: z.string().nullable().optional(), is1099OrT4a: z.boolean().optional(),
+      apAccountId: z.string().uuid().nullable().optional(), defaultExpenseAccountId: z.string().uuid().nullable().optional(),
+      taxCodeId: z.string().uuid().nullable().optional(), isOnHold: z.boolean().optional(), holdReason: z.string().nullable().optional(),
+    }).strict().optional(),
+    employee: z.object({
+      enabled: z.boolean().optional(), employeeNumber: z.string().nullable().optional(), jobTitle: z.string().nullable().optional(),
+      departmentId: z.string().uuid().nullable().optional(), tradeId: z.string().uuid().nullable().optional(),
+      workerCompGroupId: z.string().uuid().nullable().optional(), hiredOn: z.string().nullable().optional(),
+    }).strict().optional(),
+  }).strict().optional(),
+  addresses: z.array(z.object({
+    label: z.string().nullable().optional(), line1: z.string().nullable().optional(), line2: z.string().nullable().optional(),
+    city: z.string().nullable().optional(), region: z.string().nullable().optional(), postalCode: z.string().nullable().optional(),
+    country: z.string().nullable().optional(), isDefaultBilling: z.boolean().optional(), isDefaultShipping: z.boolean().optional(),
+  }).strict()).optional(),
+  contacts: z.array(z.object({
+    firstName: z.string().nullable().optional(), lastName: z.string().nullable().optional(), name: z.string().nullable().optional(),
+    title: z.string().nullable().optional(), role: z.string().nullable().optional(), email: z.string().nullable().optional(),
+    phone: z.string().nullable().optional(), mobilePhone: z.string().nullable().optional(), isPrimary: z.boolean().optional(),
+    isActive: z.boolean().optional(),
+  }).strict()).optional(),
+  expectedUpdatedAt: z.string().min(1),
+  changeReason: z.string().optional(),
+}).strict()
 
 function bad(error: string, fieldErrors?: Record<string, string>) {
   return NextResponse.json({ error, ...(fieldErrors ? { fieldErrors } : {}) }, { status: 422 })
@@ -179,10 +229,12 @@ interface PatchBody {
   changeReason?: string
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('parties.read')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
+export const GET = defineRoute({
+  permission: 'parties.read',
+  feature: { none: 'Parties are shared master records; role-specific capabilities are resolved on each read.' },
+  params: z.object({ id: z.string() }),
+  handler: async ({ authz: gate, params }) => {
+  const { id } = params
   if (!isUuid(id)) return notFound("record")
   // Parties are org-wide when their primary subsidiary is null (mirrors the
   // party lists' `is null or = any(...)` predicate).
@@ -195,7 +247,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const payload = await loadParty(id, gate.user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return notFound("record")
   return NextResponse.json(payload)
-}
+  },
+})
 
 /**
  * Autosave for the party flyout: identity fields, custom values, role
@@ -203,11 +256,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
  * explicit activate/deactivate action. Bank accounts are intentionally NOT
  * writable here — add/approve flows belong to the Payments module.
  */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('parties.manage')
-  if (gate instanceof NextResponse) return gate
+export const PATCH = defineRoute({
+  permission: 'parties.manage',
+  feature: { none: 'Parties are shared master records; role-specific capabilities are resolved on each write.' },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
   const user = gate.user
-  const { id } = await params
+  const { id } = params
   if (!isUuid(id)) return notFound("record")
 
   const existing = await db.execute<{
@@ -251,7 +306,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const scopeDenied = guardSubsidiaryScope(gate, existingParty.subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 
-  const parsedBody = await parseJsonBody(req, jsonObject)
+  const parsedBody = await parseJsonBody(req, partyPatchBody)
   if (!parsedBody.ok) return parsedBody.response
   const body = parsedBody.data as PatchBody
   // Worker-comp group is Payroll configuration living on the employee role.
@@ -270,18 +325,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return notFound("record")
   }
   const displayName = body.displayName !== undefined ? body.displayName.trim() : undefined
-  // Draft-completion sentinels: the parties draft flow stores 'New party',
-  // the CRM lead/prospect draft flow stores 'New lead'. Naming either
+  // Draft-completion sentinel: the CRM lead/prospect draft flow stores 'New lead'. Naming it
   // inactive placeholder without an explicit status change completes (and
   // activates) it reason-free; an explicit isActive flip still needs the
   // change reason below.
-  const isPlaceholderName =
-    existingParty.display_name === 'New party' || existingParty.display_name === 'New lead'
+  const isPlaceholderName = existingParty.display_name === 'New lead'
   const completesPlaceholder =
     body.isActive === undefined &&
     existingParty.is_active === false &&
     isPlaceholderName &&
-    Boolean(displayName && displayName !== 'New party' && displayName !== 'New lead')
+    Boolean(displayName && displayName !== 'New lead')
   if (!isDocumentRevisionToken(body.expectedUpdatedAt) || body.expectedUpdatedAt !== existingParty.updated_at) {
     return NextResponse.json(
       {
@@ -358,7 +411,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
   const willBeActive = body.isActive ?? (completesPlaceholder ? true : existingParty.is_active)
   const effectiveName = displayName ?? existingParty.display_name.trim()
-  if (willBeActive && (!effectiveName || effectiveName === 'New party' || effectiveName === 'New lead')) {
+  if (willBeActive && (!effectiveName || effectiveName === 'New lead')) {
     return bad(body.isActive === true ? 'Give the party a real name before activating it' : 'An active party needs a display name')
   }
 
@@ -557,11 +610,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           if (!(await orgRefExists('tax', taxCodeId, user.orgId))) throwBad('Invalid customer tax code')
           const creditLimitRaw = strOrNull(c.creditLimit)
           const creditLimitExact = creditLimitRaw === null ? null : canonicalDecimal(creditLimitRaw, 4)
-          if (creditLimitRaw !== null && (creditLimitExact === null || compareDecimal(creditLimitExact, '0') < 0)) {
-            throwBad('Credit limit must be a non-negative number')
+          if (creditLimitRaw !== null && creditLimitExact === null) {
+            throwBad(moneyRefusal('Credit limit', creditLimitRaw, 'an amount', 4, 15))
+          }
+          if (creditLimitExact !== null && compareDecimal(creditLimitExact, '0') < 0) {
+            throwBad('Credit limit must be a non-negative amount')
           }
           if (creditLimitExact !== null && wholeDigits(creditLimitExact) > 15) {
-            throwBad('Credit limit is out of range — at most 15 whole digits fit the ledger')
+            throwBad(moneyRefusal('Credit limit', creditLimitRaw, 'an amount', 4, 15))
           }
           const creditLimit = creditLimitExact === null ? null : fixedDecimal(creditLimitExact, 4)
           const currency = c.currency !== undefined ? (strOrNull(c.currency)?.toUpperCase() ?? null) : undefined
@@ -865,4 +921,5 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const payload = await loadParty(id, user.orgId, gate.allowedSubsidiaryIds)
   return NextResponse.json(payload)
-}
+  },
+})

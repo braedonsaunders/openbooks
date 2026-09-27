@@ -60,7 +60,7 @@ export async function GET(req: Request) {
          where id=${runId} and org_id=${orgId} and definition_id=${definitionId}
            and trigger in ('scheduled', 'close-package')
       `))
-      if (!run.rows[0]) return NextResponse.json({ error: 'report run not found' }, { status: 404 })
+      if (!run.rows[0]) return notFound("record")
       authorization_snapshot = run.rows[0].authorization_snapshot
       const stored = run.rows[0].filters
       if (run.rows[0].trigger === 'close-package') {

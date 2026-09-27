@@ -2,8 +2,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../lib/api/json";
-import { guardAllocations } from "../../../../lib/allocations-gate";
-import { guardUnrestrictedScope } from "../../../../lib/authz";
+import { defineRoute } from "../../../../lib/api/route";
 import {
   DriverAdminError,
   createDriverValue,
@@ -32,11 +31,11 @@ async function toResponse(error: unknown): Promise<NextResponse> {
  * Manual driver values (A8): the effective-dated grid behind the manual
  * drawer. Reads need `allocations.read`; writes need `allocations.manage`.
  */
-export async function GET(req: Request) {
-  const gate = await guardAllocations("allocations.read");
-  if (gate instanceof NextResponse) return gate;
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
+export const GET = defineRoute({
+  permission: "allocations.read",
+  feature: "allocations",
+  scope: "unrestricted",
+  handler: async ({ request: req, authz: gate }) => {
   const params = new URL(req.url).searchParams;
   const driverId = params.get("driverId") ?? "";
   const onDate = params.get("onDate") ?? undefined;
@@ -46,13 +45,14 @@ export async function GET(req: Request) {
   } catch (error) {
     return toResponse(error);
   }
-}
+  },
+});
 
-export async function POST(req: Request) {
-  const gate = await guardAllocations("allocations.manage");
-  if (gate instanceof NextResponse) return gate;
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
+export const POST = defineRoute({
+  permission: "allocations.manage",
+  feature: "allocations",
+  scope: "unrestricted",
+  handler: async ({ request: req, authz: gate }) => {
   const parsedBody = await parseJsonBody(req, valueBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const data = parsedBody.data;
@@ -68,4 +68,5 @@ export async function POST(req: Request) {
   } catch (error) {
     return toResponse(error);
   }
-}
+  },
+});

@@ -35,6 +35,9 @@ const mockSources = new Map<string, string>([
       export async function guardPermission() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
+      export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null } }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
       // Authorization-check double: allows everything except gl.post while
       // the denial case runs, so the route's posting decision is exercised.
       export function can(authz, perm) {
@@ -45,7 +48,12 @@ const mockSources = new Map<string, string>([
   ],
   [
     'mock:features',
-    `export async function isFeatureEnabled() { return true }`,
+    `
+      export async function isFeatureEnabled() { return true }
+      export async function guardFeaturePermission() {
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+      }
+    `,
   ],
   [
     'mock:projects-gate',
@@ -87,13 +95,15 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../../lib/authz', 'mock:authz'],
+  ['@/lib/feature-gates', 'mock:features'],
   ['../../../lib/features', 'mock:features'],
   ['../../../lib/projects-gate', 'mock:projects-gate'],
   ['../../../lib/project-charges', 'mock:project-charges'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
@@ -108,7 +118,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?project-charge-route-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const body = {
   projectId: '00000000-0000-4000-8000-00000000a001',

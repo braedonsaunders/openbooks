@@ -1,8 +1,9 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { myClockDay, resolveOwnParty } from '@openbooks/engine/src/hrm/field-time/reads.ts'
 import { recordClockEvent, replayClockEvents, type RecordClockInput } from '@openbooks/engine/src/hrm/field-time/clock.ts'
@@ -54,9 +55,8 @@ const clockBody = z.union([
 ])
 
 /** GET → own clock status, today's pairs, and the offline replay hint. */
-export async function GET() {
-  const gate = await guardFeaturePermission('time.clock', 'fieldTime')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   try {
     const day = await myClockDay(gate.user.orgId, gate.user.id)
     return NextResponse.json(day)
@@ -70,9 +70,8 @@ export async function GET() {
  * queue. Replay returns per-event results — one bad event never sinks
  * the rest, and a replayed id returns the original recording.
  */
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('time.clock', 'fieldTime')
-  if (gate instanceof NextResponse) return gate
+async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const { user } = gate
   const orgId = user.orgId
 
@@ -132,3 +131,15 @@ function toInput(
     clientEventId: event.clientEventId,
   }
 }
+
+export const GET = defineRoute({
+  permission: 'time.clock', feature: 'fieldTime',
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const POST = defineRoute({
+  permission: 'time.clock', feature: 'fieldTime',
+
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

@@ -1,10 +1,12 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardPermission, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
+import { guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
@@ -26,6 +28,39 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = 'nodejs'
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+const ticketHeaderBody = z.object({
+  expectedRevision: z.string().min(1),
+  documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  projectId: z.string().uuid().nullable().optional(),
+  foremanPartyId: z.string().uuid().nullable().optional(),
+  period: z.enum(['shift', 'daily', 'weekly']).optional(),
+  referenceNumber: z.string().nullable().optional(),
+  memo: z.string().nullable().optional(),
+}).strict()
+const crewRowBody = z.object({
+  employeePartyId: z.string().uuid(),
+  itemId: z.string().uuid().nullable(),
+  projectTaskId: z.string().uuid().nullable().optional(),
+  timeTypeId: z.string().uuid().nullable(),
+  hours: z.record(z.string().regex(/^\d{4}-\d{2}-\d{2}$/), z.union([z.string(), z.number()])),
+}).strict()
+const ticketActionBody = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('save-grid'), expectedRevision: z.string().min(1), rows: z.array(crewRowBody) }).strict(),
+  z.object({
+    action: z.literal('patch'), expectedRevision: z.string().min(1),
+    foremanPartyId: z.string().uuid().nullable().optional(),
+    workDescription: z.string().nullable().optional(), poNumber: z.string().nullable().optional(),
+  }).strict(),
+  z.object({
+    action: z.literal('add-line'), expectedRevision: z.string().min(1), itemId: z.string().uuid(), quantity: z.string().min(1),
+    equipmentUnitId: z.string().uuid().nullable().optional(), rateUnitCode: z.string().nullable().optional(),
+    employeeId: z.string().uuid().nullable().optional(), description: z.string().nullable().optional(),
+  }).strict(),
+  z.object({ action: z.literal('remove-line'), expectedRevision: z.string().min(1), lineId: z.string().uuid() }).strict(),
+  z.object({ action: z.literal('submit') }).strict(),
+  z.object({ action: z.literal('send-signature'), to: z.string().min(1), message: z.string().nullable().optional() }).strict(),
+])
+const ticketDiscardBody = z.object({ expectedRevision: z.string().min(1) }).strict()
 
 function fail(e: unknown): Promise<NextResponse> {
   // The send-for-signature action renders the ticket PDF: a renderer outage
@@ -88,12 +123,13 @@ async function requireRevision(value: unknown): Promise<string | NextResponse> {
   }
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('time.read')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
+export const GET = defineRoute({
+  permission: 'time.read',
+  feature: 'fieldTickets',
+  params: z.object({ id: z.string() }),
+  handler: async ({ authz: gate, params }) => {
+  const { id } = params
   if (!isUuid(id)) return notFound("record")
-  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return notFound("record")
   const denied = await guardTicketScope(gate, id)
   if (denied) return denied
   try {
@@ -103,18 +139,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   } catch (e) {
     return fail(e)
   }
-}
+  },
+})
 
 /** Standard-form header save (project/date/PO/memo/period/foreman). */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('time.manage')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
+export const PATCH = defineRoute({
+  permission: 'time.manage',
+  feature: 'fieldTickets',
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
+  const { id } = params
   if (!isUuid(id)) return notFound("record")
-  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return notFound("record")
   const denied = await guardTicketScope(gate, id)
   if (denied) return denied
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, ticketHeaderBody);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
   const expectedRevision = await requireRevision(body.expectedRevision)
@@ -123,30 +161,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // them (or coercing a bad id to null) would answer 200 while the ticket
   // keeps its old date or loses its foreman — the caller can never tell the
   // save did not land. Explicit nulls still clear/keep their nullable fields.
-  if ('documentDate' in body && (typeof body.documentDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(body.documentDate))) {
-    return NextResponse.json({ error: 'invalid documentDate — expected YYYY-MM-DD' }, { status: 422 })
-  }
-  if ('projectId' in body && body.projectId !== null && (typeof body.projectId !== 'string' || !isUuid(body.projectId))) {
-    return NextResponse.json({ error: 'invalid projectId' }, { status: 422 })
-  }
-  if ('foremanPartyId' in body && body.foremanPartyId !== null && (typeof body.foremanPartyId !== 'string' || !isUuid(body.foremanPartyId))) {
-    return NextResponse.json({ error: 'invalid foremanPartyId' }, { status: 422 })
-  }
-  if ('period' in body && (typeof body.period !== 'string' || !['shift', 'daily', 'weekly'].includes(body.period))) {
-    return NextResponse.json({ error: 'invalid period' }, { status: 422 })
-  }
-  if ('projectId' in body && typeof body.projectId === 'string' && isUuid(body.projectId)) {
+  if (body.projectId) {
     const projectDenied = await guardProjectScope(gate, body.projectId)
     if (projectDenied) return projectDenied
   }
   try {
     await updateTicketHeader(gate.user.orgId, gate.user.id, id, {
-      ...(('projectId' in body) ? { projectId: body.projectId as string | null } : {}),
-      ...(('documentDate' in body) ? { documentDate: body.documentDate as string } : {}),
-      ...(('referenceNumber' in body) ? { referenceNumber: body.referenceNumber ? String(body.referenceNumber).slice(0, 100) : null } : {}),
-      ...(('memo' in body) ? { memo: body.memo ? String(body.memo).slice(0, 2000) : null } : {}),
-      ...(('period' in body) ? { period: body.period as 'shift' | 'daily' | 'weekly' } : {}),
-      ...(('foremanPartyId' in body) ? { foremanPartyId: body.foremanPartyId as string | null } : {}),
+      ...(body.projectId !== undefined ? { projectId: body.projectId } : {}),
+      ...(body.documentDate !== undefined ? { documentDate: body.documentDate } : {}),
+      ...(body.referenceNumber !== undefined ? { referenceNumber: body.referenceNumber?.slice(0, 100) || null } : {}),
+      ...(body.memo !== undefined ? { memo: body.memo?.slice(0, 2000) || null } : {}),
+      ...(body.period !== undefined ? { period: body.period } : {}),
+      ...(body.foremanPartyId !== undefined ? { foremanPartyId: body.foremanPartyId } : {}),
     }, expectedRevision, gate.allowedSubsidiaryIds ?? null)
     return NextResponse.json(await loadFieldTicket(gate.user.orgId, id, {
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds ?? null,
@@ -154,72 +180,65 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   } catch (e) {
     return fail(e)
   }
-}
+  },
+})
 
 /** Ticket drafting/submission actions. Approval decisions live only in Flows. */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const POST = defineRoute({
+  permission: 'time.manage',
+  feature: 'fieldTickets',
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
+  const { id } = params
   if (!isUuid(id)) return notFound("record")
 
-  const gate = await guardPermission('time.manage')
-  if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
   const userId = gate.user.id
-  if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) return notFound("record")
 
   const denied = await guardTicketScope(gate, id)
   if (denied) return denied
 
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  const parsedBody2 = await parseJsonBody(req, ticketActionBody);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = parsedBody2.data
-  const action = String(body.action ?? '')
 
   // Revision is a protocol requirement for every state-changing ticket edit,
   // including add/remove-line (not only the header/grid forms). Resolve the
   // record scope first so forbidden tickets always remain indistinguishable
   // 404s, even when the request body is malformed or stale.
-  const preflightRevision = ['save-grid', 'patch', 'add-line', 'remove-line'].includes(action)
+  const preflightRevision = body.action === 'save-grid' || body.action === 'patch' || body.action === 'add-line' || body.action === 'remove-line'
     ? await requireRevision(body.expectedRevision)
     : null
   if (preflightRevision instanceof NextResponse) return preflightRevision
 
   try {
-    if (action === 'save-grid') {
+    if (body.action === 'save-grid') {
       const expectedRevision = preflightRevision as string
-      await saveCrewGrid(orgId, userId, id, Array.isArray(body.rows) ? body.rows : [], expectedRevision, gate.allowedSubsidiaryIds ?? null)
-    } else if (action === 'patch') {
+      // Null is the stored representation for an unclassified crew time type.
+      await saveCrewGrid(orgId, userId, id, body.rows as Parameters<typeof saveCrewGrid>[3], expectedRevision, gate.allowedSubsidiaryIds ?? null)
+    } else if (body.action === 'patch') {
       const expectedRevision = preflightRevision as string
       // Same fail-closed contract as PATCH above: a malformed foreman id
       // must not coerce to null and silently clear the stored foreman.
-      if ('foremanPartyId' in body && body.foremanPartyId !== null && (typeof body.foremanPartyId !== 'string' || !isUuid(body.foremanPartyId))) {
-        return NextResponse.json({ error: 'invalid foremanPartyId' }, { status: 422 })
-      }
       await updateTicketHeader(orgId, userId, id, {
-        ...(('workDescription' in body)
-          ? { memo: body.workDescription ? String(body.workDescription).slice(0, 2000) : null }
-          : {}),
-        ...(('poNumber' in body)
-          ? { referenceNumber: body.poNumber ? String(body.poNumber).slice(0, 100) : null }
-          : {}),
-        ...(('foremanPartyId' in body)
-          ? { foremanPartyId: body.foremanPartyId as string | null }
-          : {}),
+        ...(body.workDescription !== undefined ? { memo: body.workDescription?.slice(0, 2000) || null } : {}),
+        ...(body.poNumber !== undefined ? { referenceNumber: body.poNumber?.slice(0, 100) || null } : {}),
+        ...(body.foremanPartyId !== undefined ? { foremanPartyId: body.foremanPartyId } : {}),
       }, expectedRevision, gate.allowedSubsidiaryIds ?? null)
-    } else if (action === 'add-line') {
+    } else if (body.action === 'add-line') {
       const expectedRevision = preflightRevision as string
-      const equipmentUnitId = typeof body.equipmentUnitId === 'string' && isUuid(body.equipmentUnitId) ? body.equipmentUnitId : null
+      const equipmentUnitId = body.equipmentUnitId ?? null
       if (equipmentUnitId && !(await isFeatureEnabled(orgId, 'equipment'))) {
         return notFound("record")
       }
-      if (typeof body.itemId === 'string' && isUuid(body.itemId) && !(await isFeatureEnabled(orgId, 'equipment'))) {
+      if (!(await isFeatureEnabled(orgId, 'equipment'))) {
         const item = (await db.execute<{ kind: string }>(sql`
           select kind from items where id = ${body.itemId} and org_id = ${orgId}`))
         if (item.rows[0]?.kind === 'equipment_charge') {
           return notFound("record")
         }
       }
-      if (typeof body.itemId === 'string' && isUuid(body.itemId) && !(await isFeatureEnabled(orgId, 'inventory'))) {
+      if (!(await isFeatureEnabled(orgId, 'inventory'))) {
         const item = (await db.execute<{ kind: string }>(sql`
           select kind from items where id = ${body.itemId} and org_id = ${orgId}`))
         if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
@@ -230,34 +249,31 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         // Forwarded as received: the engine looks the item up (garbage fails
         // closed there, exactly as when this read `any`), and parses the
         // quantity — only the static shape is pinned down here.
-        itemId: body.itemId as string,
-        quantity: body.quantity as string | number,
+        itemId: body.itemId,
+        quantity: body.quantity,
         rateUnitCode: typeof body.rateUnitCode === 'string' && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(body.rateUnitCode)
           ? body.rateUnitCode
           : null,
         equipmentUnitId,
-        employeeId: typeof body.employeeId === 'string' && isUuid(body.employeeId) ? body.employeeId : null,
-        description: (body.description ?? null) as string | null,
+        employeeId: body.employeeId ?? null,
+        description: body.description ?? null,
       }, expectedRevision, gate.allowedSubsidiaryIds ?? null)
-    } else if (action === 'remove-line') {
+    } else if (body.action === 'remove-line') {
       const expectedRevision = preflightRevision as string
-      if (typeof body.lineId !== 'string' || !isUuid(body.lineId)) return NextResponse.json({ error: 'invalid lineId' }, { status: 422 })
       await removeTicketLine(orgId, id, body.lineId, expectedRevision, gate.allowedSubsidiaryIds ?? null)
-    } else if (action === 'submit') {
+    } else if (body.action === 'submit') {
       await submitFieldTicket(orgId, userId, id)
-    } else if (action === 'send-signature') {
+    } else if (body.action === 'send-signature') {
       const base = process.env.OPENBOOKS_APP_URL || new URL(req.url).origin
       await sendTicketForSignature({
         orgId,
         userId,
         ticketId: id,
-        to: String(body.to ?? ''),
-        message: body.message ? String(body.message).slice(0, 1000) : null,
+        to: body.to,
+        message: body.message ? body.message.slice(0, 1000) : null,
         appBaseUrl: base,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds ?? null,
       })
-    } else {
-      return NextResponse.json({ error: 'unknown action' }, { status: 400 })
     }
     return NextResponse.json(await loadFieldTicket(orgId, id, {
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds ?? null,
@@ -265,22 +281,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } catch (e) {
     return fail(e)
   }
-}
+  },
+})
 
 /**
  * Discard an untouched draft. New ticket persists an empty
  * server-side draft on click; this is its way back out. Anything with
  * content, signatures, links, or status refuses with the blocker named.
  */
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('time.manage')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
+export const DELETE = defineRoute({
+  permission: 'time.manage',
+  feature: 'fieldTickets',
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
+  const { id } = params
   if (!isUuid(id)) return notFound("record")
-  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) return notFound("record")
   const denied = await guardTicketScope(gate, id)
   if (denied) return denied
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, ticketDiscardBody);
   if (!parsedBody.ok) return parsedBody.response;
   const expectedRevision = await requireRevision(parsedBody.data.expectedRevision)
   if (expectedRevision instanceof NextResponse) return expectedRevision
@@ -290,4 +308,5 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   } catch (e) {
     return fail(e)
   }
-}
+  },
+})

@@ -1,5 +1,8 @@
+import type { Authz } from "@/lib/authz";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -7,11 +10,29 @@ import { computeTaxReturn } from '@openbooks/engine/src/tax-returns/return.ts'
 import { buildTaxFilingSnapshot, TAX_FILING_SNAPSHOT_VERSION } from '@openbooks/engine/src/tax-returns/filing.ts'
 import { loadOrgFilingCalendar } from '@openbooks/engine/src/tax/nexus-ledger.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { guardPermission, guardSubsidiaryScope, guardUnrestrictedScope } from '../../../../lib/authz'
+import { guardSubsidiaryScope, guardUnrestrictedScope } from '../../../../lib/authz'
 import { parseReturnScopeBody, returnScopeOpts } from '@/lib/tax-return-scope'
 import { TAX_FILING_WRITE_PERMISSION } from '../../../../lib/tax-filing-permission'
 
 export const runtime = 'nodejs'
+
+const bodyObjectSchema = z.object({
+  code: z.string().min(1),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  adjustments: z.record(z.string(), z.string().max(100)).refine((adjustments) =>
+    Object.keys(adjustments).length <= 100 && Object.keys(adjustments).every((key) => key.length > 0),
+  ).optional(),
+  filingEntity: z.object({
+    subsidiaryIds: z.array(z.string()).optional(),
+    registrationId: z.string().optional(),
+  }).strict().optional(),
+  translation: z.object({
+    presentationCurrency: z.string().optional(),
+    rateType: z.string().optional(),
+    rateDate: z.string().optional(),
+  }).strict().optional(),
+}).strict();
 
 /**
  * Saving a snapshot (POST here) and marking it filed (PATCH [id]) both
@@ -30,9 +51,8 @@ function isIsoDate(value: string): boolean {
 }
 
 /** Filing obligations for the org's registrations in a date range. */
-export async function GET(req: Request) {
-  const gate = await guardPermission('reports.read')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const scopeDenied = guardSubsidiaryScope(gate, null)
   if (scopeDenied) return scopeDenied
   const p = new URL(req.url).searchParams
@@ -55,10 +75,9 @@ export async function GET(req: Request) {
 }
 
 /** Recompute server-side and freeze a versioned return snapshot in history. */
-export async function POST(req: Request) {
-  const gate = await guardPermission(TAX_FILING_WRITE_PERMISSION)
-  if (gate instanceof NextResponse) return gate
-  const parsedBody = await parseJsonBody(req, jsonObject);
+async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+  const parsedBody = await parseJsonBody(req, bodyObjectSchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     code?: string
@@ -165,3 +184,15 @@ export async function POST(req: Request) {
     return apiErrorResponse(error, { safeStatus: 422 })
   }
 }
+
+export const GET = defineRoute({
+  permission: 'reports.read', feature: { none: "This route is governed by its permission and service authorization." },
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const POST = defineRoute({
+  permission: TAX_FILING_WRITE_PERMISSION, feature: { none: "This route is governed by its permission and service authorization." },
+
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

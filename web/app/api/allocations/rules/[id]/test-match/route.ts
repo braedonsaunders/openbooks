@@ -1,4 +1,7 @@
-import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
+import { parseJsonBody } from '@/lib/api/json';
 import { NextResponse } from 'next/server'
 import { fromUnits, toUnits } from '../../../../../../../engine/src/money/money.ts'
 import {
@@ -8,10 +11,26 @@ import {
   type AccountGroupResolver,
 } from '../../../../../../../engine/src/allocations/index.ts'
 import { resolveAccountGroups } from '../../../../../../../engine/src/records/account-groups.ts'
-import { guardAllocations } from '../../../../../../lib/allocations-gate'
 import { allocationErrorResponse, requireRuleId } from '../../../_lib.ts'
 
 export const runtime = 'nodejs'
+
+const bodyObjectSchema = z.object({
+  versionId: z.string().optional(),
+  line: z.object({
+    accountId: z.string().uuid(),
+    documentKind: z.string().nullable().optional(),
+    departmentId: z.string().uuid().nullable().optional(),
+    locationId: z.string().uuid().nullable().optional(),
+    classId: z.string().uuid().nullable().optional(),
+    projectId: z.string().uuid().nullable().optional(),
+    subsidiaryId: z.string().uuid().nullable().optional(),
+    partyId: z.string().uuid().nullable().optional(),
+    itemId: z.string().uuid().nullable().optional(),
+    extraDims: z.record(z.string(), z.string()).optional(),
+  }).strict().optional(),
+  periodId: z.string().optional(),
+}).strict();
 
 /**
  * Test tab endpoint. Entry/post rules: a pasted sample line coordinate comes
@@ -19,12 +38,11 @@ export const runtime = 'nodejs'
  * Period rules do not match lines — the response carries the Runs deep link
  * A8's tab renders the preview behind.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardAllocations('allocations.read')
-  if (gate instanceof NextResponse) return gate
+async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string }> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const id = requireRuleId((await params).id)
   if (id instanceof NextResponse) return id
-  const parsed = await parseJsonBody(req, jsonObject)
+  const parsed = await parseJsonBody(req, bodyObjectSchema)
   if (!parsed.ok) return parsed.response
   const body = parsed.data as { versionId?: unknown; line?: unknown; periodId?: unknown }
   try {
@@ -158,3 +176,9 @@ function asStringMap(value: unknown): Record<string, string> {
   }
   return out
 }
+
+export const POST = defineRoute({
+  permission: 'allocations.read', feature: "allocations",
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

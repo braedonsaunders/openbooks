@@ -27,6 +27,7 @@ interface RouteState {
 const routeState: RouteState = { calls: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] =
   routeState;
+const SUBSIDIARY_ID = "00000000-0000-4000-8000-00000000b001";
 
 const root = pathToFileURL(process.cwd() + "/").href;
 
@@ -40,6 +41,8 @@ const mockSources = new Map<string, string>([
         }
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
+      export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null } }
+      export function guardRootSubsidiaryScope() { return null }
       export function guardSubsidiaryScope() { return null }
       export function guardUnrestrictedScope() { return null }
     `,
@@ -61,6 +64,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
   [
     "@openbooks/engine/src/tax-returns/income-tax-provision.ts",
     "mock:income-tax-provision",
@@ -111,9 +115,9 @@ test("POST refuses a described difference with an unknown category", async () =>
   });
 
   assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), {
-    error: "invalid temporary-difference category",
-  });
+  const body = (await response.json()) as { error: string; issues: { path: string }[] };
+  assert.equal(body.error, "invalid temporary-difference category");
+  assert.equal(body.issues[0]?.path, "additionalDifferences.0.category");
   assert.equal(
     routeState.calls.length,
     0,
@@ -233,12 +237,12 @@ test("a described row with an empty amount refuses by row instead of an unnamed 
   const entity = await post({
     fiscalYear: 2026,
     entities: {
-      "sub-1": { permanentDifferences: [{ description: "Meals", amount: "" }] },
+      [SUBSIDIARY_ID]: { permanentDifferences: [{ description: "Meals", amount: "" }] },
     },
   });
   assert.equal(entity.status, 400);
   assert.deepEqual(await entity.json(), {
-    error: 'entities["sub-1"].permanentDifferences[0]: amount is required when a description is provided',
+    error: 'entities["' + SUBSIDIARY_ID + '"].permanentDifferences[0]: amount is required when a description is provided',
   });
   assert.equal(routeState.calls.length, 0);
 });
@@ -260,14 +264,14 @@ test("POST refuses a populated per-entity row without a description, naming the 
   const response = await post({
     fiscalYear: 2026,
     entities: {
-      "sub-1": {
+      [SUBSIDIARY_ID]: {
         permanentDifferences: [{ description: "", amount: "50.00" }],
       },
     },
   });
   assert.equal(response.status, 400);
   assert.deepEqual(await response.json(), {
-    error: 'entities["sub-1"].permanentDifferences[0]: description is required when an amount is provided',
+    error: `entities["${SUBSIDIARY_ID}"].permanentDifferences[0]: description is required when an amount is provided`,
   });
   assert.equal(routeState.calls.length, 0);
 });
@@ -309,7 +313,7 @@ test("POST still skips truly empty grid rows at root and per-entity level", asyn
     permanentDifferences: [{ description: "" }, { description: "Meals", amount: "10.00" }],
     additionalDifferences: [{ description: "", category: "", difference: "" }],
     entities: {
-      "sub-1": {
+      [SUBSIDIARY_ID]: {
         permanentDifferences: [{ description: "" }],
         additionalDifferences: [{ description: "", category: "", difference: "" }],
       },
@@ -321,7 +325,7 @@ test("POST still skips truly empty grid rows at root and per-entity level", asyn
     { description: "Meals", amount: "10.0000" },
   ]);
   assert.deepEqual(routeState.calls[0]!.input.additionalDifferences, []);
-  assert.deepEqual(routeState.calls[0]!.input.entities, { "sub-1": {} });
+  assert.deepEqual(routeState.calls[0]!.input.entities, { [SUBSIDIARY_ID]: {} });
 });
 
 test("POST passes per-entity inputs and presentation currency to the run", async () => {
@@ -331,7 +335,7 @@ test("POST passes per-entity inputs and presentation currency to the run", async
     fiscalYear: 2026,
     permanentDifferences: [{ description: "Root meals", amount: "10.00" }],
     entities: {
-      "sub-1": {
+      [SUBSIDIARY_ID]: {
         permanentDifferences: [{ description: "Meals", amount: "50.00" }],
         additionalDifferences: [
           { description: "Lease", category: "provisions", difference: "10.00" },
@@ -347,7 +351,7 @@ test("POST passes per-entity inputs and presentation currency to the run", async
   assert.equal(routeState.calls.length, 1);
   const input = routeState.calls[0]!.input as Record<string, unknown>;
   assert.deepEqual(input.entities, {
-    "sub-1": {
+    [SUBSIDIARY_ID]: {
       permanentDifferences: [{ description: "Meals", amount: "50.0000" }],
       additionalDifferences: [
         {
@@ -390,28 +394,28 @@ test("POST omits entity keys when no per-entity inputs are given", async () => {
 test("POST refuses malformed per-entity inputs without reaching the run", async () => {
   for (const entities of [
     [],
-    { "sub-1": null },
+    { [SUBSIDIARY_ID]: null },
     {
-      "sub-1": {
+      [SUBSIDIARY_ID]: {
         permanentDifferences: [{ description: "Meals", amount: "bogus" }],
       },
     },
     {
-      "sub-1": {
+      [SUBSIDIARY_ID]: {
         additionalDifferences: [
           { description: "Lease", category: "typo", difference: "10.00" },
         ],
       },
     },
-    { "sub-1": { lossCarryforwardUsed: "bogus" } },
-    { "sub-1": { permanentDifferences: "bogus" } },
+    { [SUBSIDIARY_ID]: { lossCarryforwardUsed: "bogus" } },
+    { [SUBSIDIARY_ID]: { permanentDifferences: "bogus" } },
   ]) {
     routeState.calls.length = 0;
     const response = await post({ fiscalYear: 2026, entities });
     assert.equal(response.status, 400, JSON.stringify(entities));
-    assert.deepEqual(await response.json(), {
-      error: "invalid provision entities",
-    });
+    const body = (await response.json()) as { error: string; issues: { path: string }[] };
+    assert.ok(body.error.length > 0);
+    assert.ok(body.issues.some((issue) => issue.path === 'entities' || issue.path.startsWith('entities.')));
     assert.equal(routeState.calls.length, 0);
   }
 });
@@ -434,22 +438,22 @@ test("POST refuses non-object grid rows by indexed path instead of skipping them
       routeState.calls.length = 0;
       const response = await post(body);
       assert.equal(response.status, 400, `${name}: ${JSON.stringify(body)}`);
-      const payload = (await response.json()) as { error: string };
-      assert.match(payload.error, /^\S+\[0\]: each row must be an object with/);
+      const payload = (await response.json()) as { error: string; issues: { path: string }[] };
+      const collection = 'permanentDifferences' in body ? 'permanentDifferences' : 'additionalDifferences';
+      assert.ok(payload.error.length > 0);
+      assert.ok(payload.issues.some((issue) => issue.path === `${collection}.0`));
       assert.equal(routeState.calls.length, 0, `${name} must never reach the provision run`);
     }
     for (const key of ["permanentDifferences", "additionalDifferences"] as const) {
       routeState.calls.length = 0;
       const response = await post({
         fiscalYear: 2026,
-        entities: { "sub-1": { [key]: [value] } },
+        entities: { [SUBSIDIARY_ID]: { [key]: [value] } },
       });
       assert.equal(response.status, 400, `per-entity ${name}: ${key}`);
-      const payload = (await response.json()) as { error: string };
-      assert.match(
-        payload.error,
-        new RegExp(`^entities\\["sub-1"\\]\\.${key}\\[0\\]: each row must be an object with`),
-      );
+      const payload = (await response.json()) as { error: string; issues: { path: string }[] };
+      assert.ok(payload.error.length > 0);
+      assert.ok(payload.issues.some((issue) => issue.path === `entities.${SUBSIDIARY_ID}.${key}.0`));
       assert.equal(routeState.calls.length, 0, `per-entity ${name} must never reach the provision run`);
     }
   }
@@ -461,9 +465,8 @@ test("POST refuses non-object grid rows by indexed path instead of skipping them
     permanentDifferences: [{ description: "Meals", amount: "10.00" }, null],
   });
   assert.equal(indexed.status, 400);
-  assert.deepEqual(await indexed.json(), {
-    error: "permanentDifferences[1]: each row must be an object with description and amount",
-  });
+  const indexedBody = (await indexed.json()) as { error: string; issues: { path: string }[] };
+  assert.equal(indexedBody.issues[0]?.path, 'permanentDifferences.1');
   assert.equal(routeState.calls.length, 0);
 
   routeState.calls.length = 0;
@@ -472,9 +475,8 @@ test("POST refuses non-object grid rows by indexed path instead of skipping them
     additionalDifferences: ["25000"],
   });
   assert.equal(temporary.status, 400);
-  assert.deepEqual(await temporary.json(), {
-    error: "additionalDifferences[0]: each row must be an object with description, category and difference",
-  });
+  const temporaryBody = (await temporary.json()) as { error: string; issues: { path: string }[] };
+  assert.equal(temporaryBody.issues[0]?.path, 'additionalDifferences.0');
   assert.equal(routeState.calls.length, 0);
 });
 
@@ -483,9 +485,9 @@ test("POST refuses a malformed presentation currency without reaching the run", 
     routeState.calls.length = 0;
     const response = await post({ fiscalYear: 2026, presentationCurrency });
     assert.equal(response.status, 400, JSON.stringify(presentationCurrency));
-    assert.deepEqual(await response.json(), {
-      error: "invalid presentation currency",
-    });
+    const body = (await response.json()) as { error: string; issues: { path: string }[] };
+    assert.equal(body.error, "invalid presentation currency");
+    assert.equal(body.issues[0]?.path, 'presentationCurrency');
     assert.equal(routeState.calls.length, 0);
   }
 });

@@ -1,11 +1,13 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
+import { z } from 'zod'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { ControlAccountsIncompleteError } from '@openbooks/engine/src/records/control-accounts.ts'
-import { can, guardPermission } from '../../../lib/authz'
+import { can } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import {
   createProjectCharge,
@@ -26,6 +28,41 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = 'nodejs'
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
+const rateComponentSchema = z.object({
+  rateLineId: z.string().uuid().nullable(),
+  unitCode: z.string(),
+  unitName: z.string(),
+  quantity: z.string(),
+  rate: z.string(),
+  amount: z.string(),
+  quantityRatio: z.object({ numerator: z.string(), denominator: z.string() }).optional(),
+}).strict()
+const ratePriceSchema = z.object({ amount: z.string(), components: z.array(rateComponentSchema) }).strict()
+const chargeLineSchema = z.object({
+  itemId: z.string().uuid(),
+  quantity: z.string().min(1),
+  equipmentUnitId: z.string().uuid().nullable().optional(),
+  employeeId: z.string().uuid().nullable().optional(),
+  costRate: z.string().nullable().optional(),
+  billRate: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  accountId: z.string().uuid().nullable().optional(),
+  isBillable: z.boolean().optional(),
+  rateSnapshot: z.object({
+    rateVersionId: z.string().uuid().nullable(),
+    baseUnit: z.string(),
+    baseQuantity: z.string().optional(),
+    transactionUnitCode: z.string().nullable().optional(),
+    invoicePresentation: z.enum(['summary', 'rate_components']),
+    cost: ratePriceSchema,
+    bill: ratePriceSchema,
+  }).strict().nullable().optional(),
+}).strict()
+const projectChargeBody = z.object({
+  projectId: z.string().uuid(),
+  referenceNumber: z.string().nullable().optional(),
+  lines: z.array(chargeLineSchema).min(1),
+}).strict()
 
 /** Whole-digit width of a canonical decimal. */
 function wholeDigits(canonical: string): number {
@@ -56,11 +93,10 @@ function quantityOrInvalid(v: unknown): string | 'invalid' {
 }
 
 /** GET ?projectId= — list project_charge documents (+ their billed status). */
-export async function GET(req: Request) {
-  const gate = await guardPermission('projects.read')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
-  if (feature) return feature
+export const GET = defineRoute({
+  permission: 'projects.read',
+  feature: 'projects',
+  handler: async ({ request: req, authz: gate }) => {
   const projectId = new URL(req.url).searchParams.get('projectId')
   if (!projectId || !isUuid(projectId)) return NextResponse.json({ error: 'projectId required' }, { status: 400 })
   const project = ((await db.execute(sql`select subsidiary_id from projects where id = ${projectId} and org_id = ${gate.user.orgId}`)))
@@ -80,23 +116,17 @@ export async function GET(req: Request) {
      order by d.document_date desc, d.document_number desc
   `))
   return NextResponse.json({ charges: r.rows })
-}
+  },
+})
 
 /** POST — create + post a project charge. */
-export async function POST(req: Request) {
-  const gate = await guardPermission('projects.manage')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
-  if (feature) return feature
-  const parsedBody = await parseJsonBody(req, jsonObject);
+export const POST = defineRoute({
+  permission: 'projects.manage',
+  feature: 'projects',
+  handler: async ({ request: req, authz: gate }) => {
+  const parsedBody = await parseJsonBody(req, projectChargeBody);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { projectId?: string; referenceNumber?: string; lines?: ChargeLineInput[] }
-  if (!body?.projectId || !isUuid(String(body.projectId))) {
-    return NextResponse.json({ error: 'projectId required' }, { status: 400 })
-  }
-  if (!Array.isArray(body.lines) || body.lines.length === 0) {
-    return NextResponse.json({ error: 'At least one charge line is required' }, { status: 400 })
-  }
+  const body = parsedBody.data as { projectId: string; referenceNumber?: string | null; lines: ChargeLineInput[] }
   const project = ((await db.execute(sql`select subsidiary_id from projects where id = ${body.projectId} and org_id = ${gate.user.orgId}`)))
   if (!project.rows[0] || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(project.rows[0].subsidiary_id)))) {
     return notFound("record")
@@ -180,4 +210,5 @@ export async function POST(req: Request) {
     }
     return apiErrorResponse(e)
   }
-}
+  },
+})

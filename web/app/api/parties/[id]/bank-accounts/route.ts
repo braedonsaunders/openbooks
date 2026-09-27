@@ -1,11 +1,12 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { encryptAccountNumber } from "@openbooks/engine/src/payments-core/rail-settings.ts";
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { defineRoute } from '../../../../../lib/api/route'
 import { denyLockedOutsidePartyScope, denyOutsidePartyScope } from './party-scope'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
@@ -43,6 +44,28 @@ type Body = {
   retirementReason?: string
 }
 
+const bankAccountCreateBody = z.object({
+  bankName: z.string().trim().min(1),
+  accountNumber: z.string().trim().min(4, { error: 'accountNumber required' }),
+  country: z.string().nullable().optional(),
+  currency: z.string().nullable().optional(),
+  // Routing keys vary by bank and region; persisted values are a string-valued JSONB map.
+  routing: z.record(z.string(), z.string()).optional(),
+}).strict()
+const bankAccountPatchBody = z.object({
+  bankName: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+  currency: z.string().nullable().optional(),
+  routing: z.record(z.string(), z.string()).optional(),
+  accountNumber: z.string().trim().min(4, { error: 'accountNumber required' }).optional(),
+  expectedUpdatedAt: z.string().min(1),
+  changeReason: z.string().optional(),
+}).strict()
+const bankAccountRetirementBody = z.object({
+  expectedUpdatedAt: z.string().min(1),
+  retirementReason: z.string().trim().min(5).max(500),
+}).strict()
+
 function validateBody(body: Body, creating: boolean): string | null {
   if (body.bankName !== undefined && !body.bankName?.trim()) return 'bankName required'
   if (creating && !body.bankName?.trim()) return 'bankName required'
@@ -67,19 +90,21 @@ function canonicalRevision(value: unknown): string | null {
   return isDocumentRevisionToken(value) ? value : null
 }
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('parties.manage')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  permission: 'parties.manage',
+  feature: { none: 'Party bank details are governed by party permissions and approval flows.' },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
   const { user } = gate
-  const { id: partyId } = await params
+  const { id: partyId } = params
   if (!isUuid(partyId)) return NextResponse.json({ error: 'bad party id' }, { status: 400 })
 
   const scopeDenied = await denyOutsidePartyScope(gate, partyId)
   if (scopeDenied) return scopeDenied
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, bankAccountCreateBody);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Body
+  const body = parsedBody.data as Body
   // Party bank-account currency is Multi-currency configuration. Turning that
   // switch off must refuse a new write; omitting currency keeps the create
   // path and stored accounts with a null currency.
@@ -122,13 +147,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     { orgId: user.orgId, userId: user.id },
   )
   return NextResponse.json({ id: accountId, approvalStatus: 'pending' }, { status: 201 })
-}
+  },
+})
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('parties.manage')
-  if (gate instanceof NextResponse) return gate
+export const PATCH = defineRoute({
+  permission: 'parties.manage',
+  feature: { none: 'Party bank details are governed by party permissions and approval flows.' },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
   const { user } = gate
-  const { id: partyId } = await params
+  const { id: partyId } = params
 
   const url = new URL(req.url)
   const accountId = url.searchParams.get('accountId') ?? ''
@@ -139,7 +167,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (partyDenied) return partyDenied
   // Keep the OCC token in PostgreSQL's six-digit wire form. Mapping
   // timestamptz to Date first would discard microseconds before the CAS.
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  const parsedBody2 = await parseJsonBody(req, bankAccountPatchBody);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as Body
   // Party bank-account currency is Multi-currency configuration. Turning that
@@ -283,27 +311,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     return NextResponse.json({ id: accountId, approvalStatus: 'pending', changedFields })
   })
-}
+  },
+})
 
 /** Retire approved or rejected bank details without destroying fraud evidence. */
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('parties.manage')
-  if (gate instanceof NextResponse) return gate
+export const DELETE = defineRoute({
+  permission: 'parties.manage',
+  feature: { none: 'Party bank details are governed by party permissions and approval flows.' },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
   const { user } = gate
-  const { id: partyId } = await params
+  const { id: partyId } = params
   const accountId = new URL(req.url).searchParams.get('accountId') ?? ''
   if (!isUuid(partyId) || !isUuid(accountId)) {
     return NextResponse.json({ error: 'bad ids' }, { status: 400 })
   }
   const partyDenied = await denyOutsidePartyScope(gate, partyId)
   if (partyDenied) return partyDenied
-  const parsedBody3 = await parseJsonBody(req, jsonObject);
+  const parsedBody3 = await parseJsonBody(req, bankAccountRetirementBody);
   if (!parsedBody3.ok) return parsedBody3.response;
-  const body = (parsedBody3.data) as Body
-  const reason = body.retirementReason?.trim() ?? ''
-  if (reason.length < 5 || reason.length > 500) {
-    return NextResponse.json({ error: 'a retirement reason between 5 and 500 characters is required' }, { status: 422 })
-  }
+  const body = parsedBody3.data
+  const reason = body.retirementReason.trim()
   if (!body.expectedUpdatedAt) {
     return NextResponse.json({ error: 'the bank-detail revision is required; reload and try again' }, { status: 409 })
   }
@@ -374,4 +402,5 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     `)
     return NextResponse.json({ ok: true })
   })
-}
+  },
+})

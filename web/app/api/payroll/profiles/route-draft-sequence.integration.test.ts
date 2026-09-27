@@ -24,20 +24,14 @@ registerHooks({
 const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { POST: postDraft } = await import('../../parties/draft/route')
+const { POST: postParty } = await import('../../parties/route')
 const { GET: getParty, PATCH: patchParty } = await import('../../parties/[id]/route')
 const { GET: getProfiles, POST: postProfile } = await import('./route')
 
 /**
- * The reported defect: an intermittent 422 saving a valid US payroll profile
- * right after creating the employee. The create path (POST /api/parties/draft)
- * mints an INACTIVE placeholder party with an active role row in one
- * transaction, and the profile save requires parties.is_active — so saving
- * the profile before naming/saving the employee is deterministically refused.
- * The refusal is correct; the defect was that one message covered four
- * distinct causes (no such party, draft party, no active role, no schedule),
- * which made the draft case read as broken data. Each branch below names the
- * predicate that actually failed.
+ * Payroll profiles require a saved employee role. Create a named employee
+ * through the canonical party endpoint, then verify missing-party, missing-
+ * schedule, and inactive-role refusals remain distinguishable.
  */
 async function fixture() {
   return withBypassContext(async () => {
@@ -56,11 +50,15 @@ async function fixture() {
   })
 }
 
-async function createEmployeeDraft() {
-  const response = await withOrgContext(state.orgId, () => postDraft(
-    new NextRequest('http://payroll.test/api/parties/draft', { method: 'POST', body: JSON.stringify({ role: 'employee' }) }),
+async function createEmployee() {
+  const response = await withOrgContext(state.orgId, () => postParty(
+    new NextRequest('http://payroll.test/api/parties', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': randomUUID() },
+      body: JSON.stringify({ kind: 'employee', displayName: 'New Payroll Employee', roles: { employee: { enabled: true } } }),
+    }),
   ))
-  assert.equal(response.status, 200, await response.clone().text())
+  assert.equal(response.status, 201, await response.clone().text())
   return (await response.json()) as { id: string }
 }
 
@@ -86,38 +84,15 @@ async function activateParty(id: string, displayName: string) {
   assert.equal(response.status, 200, JSON.stringify(await response.clone().json()))
 }
 
-test('profile POST on a just-created draft employee names the draft, then saves after activation', async () => {
-  const { org, scheduleId } = await fixture()
-  try {
-    const draft = await createEmployeeDraft()
-    const refused = await post(await profileBody(draft.id, scheduleId))
-    assert.equal(refused.status, 422, await refused.clone().text())
-    assert.match(
-      ((await refused.json()) as { error: string }).error,
-      /still a draft — save the employee record first/,
-    )
-    await activateParty(draft.id, 'Draft Sequence Hire')
-    const saved = await post(await profileBody(draft.id, scheduleId))
-    assert.equal(saved.status, 200, await saved.clone().text())
-    const rows = await withOrgContext(org.orgId, () => db.execute<{ count: string }>(sql`
-      select count(*) as count from employee_payroll_profiles
-       where org_id = ${org.orgId} and employee_party_id = ${draft.id}`))
-    assert.equal(rows.rows[0]!.count, '1')
-  } finally {
-    state.user = null
-    await withBypassContext(() => dropScratchOrg(org.orgId))
-  }
-})
-
 test('profile POST distinguishes a missing party from a missing schedule', async () => {
   const { org, scheduleId } = await fixture()
   try {
     const missingParty = await post(await profileBody(randomUUID(), scheduleId))
     assert.equal(missingParty.status, 422, await missingParty.clone().text())
     assert.match(((await missingParty.json()) as { error: string }).error, /employee is not available/)
-    const draft = await createEmployeeDraft()
-    await activateParty(draft.id, 'Schedule Check Hire')
-    const missingSchedule = await post(await profileBody(draft.id, randomUUID()))
+    const employee = await createEmployee()
+    await activateParty(employee.id, 'Schedule Check Hire')
+    const missingSchedule = await post(await profileBody(employee.id, randomUUID()))
     assert.equal(missingSchedule.status, 422, await missingSchedule.clone().text())
     assert.match(((await missingSchedule.json()) as { error: string }).error, /pay schedule is not available/)
   } finally {
@@ -129,11 +104,11 @@ test('profile POST distinguishes a missing party from a missing schedule', async
 test('profile POST names the role when the party is active but its employee role is not', async () => {
   const { org, scheduleId } = await fixture()
   try {
-    const draft = await createEmployeeDraft()
-    await activateParty(draft.id, 'Role Check Hire')
+    const employee = await createEmployee()
+    await activateParty(employee.id, 'Role Check Hire')
     await withBypassContext(() => db.execute(sql`
-      update employee_roles set is_active = false where org_id = ${org.orgId} and party_id = ${draft.id}`))
-    const refused = await post(await profileBody(draft.id, scheduleId))
+      update employee_roles set is_active = false where org_id = ${org.orgId} and party_id = ${employee.id}`))
+    const refused = await post(await profileBody(employee.id, scheduleId))
     assert.equal(refused.status, 422, await refused.clone().text())
     assert.match(((await refused.json()) as { error: string }).error, /employee role is not active/)
   } finally {

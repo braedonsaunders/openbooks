@@ -109,6 +109,9 @@ const mockSources = new Map<string, string>([
         }
         return new Response(null, { status: 403 })
       }
+      export async function getAuthz() { return null }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
       export function guardSubsidiaryScope(authz, subsidiaryId) {
         if (authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds === undefined) return null
         if (subsidiaryId && authz.allowedSubsidiaryIds.has(subsidiaryId)) return null
@@ -116,7 +119,17 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  ['mock:features', `export async function isFeatureEnabled() { return true }\n     export async function acquireFeatureGateLock() {}\n     export async function checkProjectsWriteEnabled() { return true }`],
+  ['mock:features', `
+     const state = globalThis[Symbol.for('openbooks.fieldticket-route-test')]
+     export async function isFeatureEnabled() { return true }
+     export async function guardFeaturePermission(permission) {
+       if (permission === 'time.read' || permission === 'time.manage') {
+         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
+       }
+       return new Response(null, { status: 403 })
+     }
+     export async function acquireFeatureGateLock() {}
+     export async function checkProjectsWriteEnabled() { return true }`],
   ['mock:org-feature-lock', `export async function lockAndCheckOrgFeature() { return true }\nexport async function acquireOrgFeatureGateLock() {}\nexport function featureGateLockKey(orgId) { return \`openbooks:feature-gate:\${orgId}\` }`],
   [
     'mock:signing',
@@ -128,6 +141,8 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@/lib/authz', 'mock:authz'],
+  ['@/lib/feature-gates', 'mock:features'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../lib/features', 'mock:features'],
   ['../../../../lib/field-ticket-signing', 'mock:signing'],
@@ -136,6 +151,7 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === '@/lib/feature-gates') return { url: 'mock:features', shortCircuit: true }
     // load under the plain runner (same seam as documents.test.ts).
     // Forward Next.js-style aliases to the real modules they point at.
     // The ticket service gates itself on the same feature module via a
@@ -158,7 +174,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?fieldticket-occ-test'
 const { GET, PATCH, POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const NEXT_REVISION = '2026-08-24T12:00:00.300002Z'
 
@@ -224,16 +239,14 @@ function postRaw(body: string): Promise<Response> {
   )
 }
 
-test('PATCH rejects a missing revision token before any write', async () => {
+test('PATCH rejects a missing revision token as an invalid body before any write', async () => {
   reset()
   serveReads(() => STORED_REVISION)
 
   const response = await patch({ memo: 'no token' })
 
-  assert.equal(response.status, 409)
-  assert.deepEqual(await response.json(), {
-    error: 'the document revision is required; reload and review the latest revision',
-  })
+  assert.equal(response.status, 400)
+  assert.equal(typeof (await response.json()).error, 'string')
   assert.ok(!routeState.calls.some((call) => call.kind === 'tx-execute'), 'no transactional write ran')
 })
 
@@ -288,12 +301,12 @@ test('POST save-grid fences the grid replacement behind the same revision token'
     return { rows: [] }
   }
 
-  // Missing token → refused before anything is written.
+  // Missing token → malformed action body, refused before any write.
   const refused = await post({
     action: 'save-grid',
     rows: [{ employeePartyId: EMPLOYEE_ID, itemId: null, timeTypeId: TIME_TYPE_ID, hours: { '2026-08-24': '8' } }],
   })
-  assert.equal(refused.status, 409)
+  assert.equal(refused.status, 400)
 
   // Stale token → conflict, no grid write.
   routeState.calls.length = 0

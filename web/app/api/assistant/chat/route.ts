@@ -1,9 +1,10 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
-import { NextResponse } from "next/server";
+import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 import { convertToModelMessages, generateText, type UIMessage } from "ai";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { can, guardPermission } from "../../../../lib/authz";
+import { can } from "../../../../lib/authz";
 import { AIDisabledError, getModel } from "../../../../lib/assistant/client";
 import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
 import { NO_ANSWER_MESSAGE, runAgentTurn, type AgentTurnResult } from "../../../../lib/assistant/agent";
@@ -70,6 +71,11 @@ export const maxDuration = 300;
 const SCOPE = "assistant";
 const MAX_PROMPT_CHARS = 32_000;
 const TURN_FAILURE_MESSAGE = "The assistant could not complete this response. Please try again.";
+const chatRequestBody = z.object({
+  conversationId: z.string().uuid().nullable().optional(),
+  prompt: z.string().max(MAX_PROMPT_CHARS),
+  findingId: z.string().uuid().nullable().optional(),
+}).strict();
 
 function conversationResponse(
   body: BodyInit | null,
@@ -81,23 +87,20 @@ function conversationResponse(
   return new Response(body, { status, headers });
 }
 
-export async function POST(req: Request): Promise<Response> {
-  const gate = await guardPermission("assistant.use");
-  if (gate instanceof NextResponse) return gate;
+export const POST = defineRoute({
+  permission: "assistant.use",
+  feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
+  handler: async ({ request: req, authz: gate }) => {
   const authz = gate;
 
-  let body: unknown;
+  let input: z.output<typeof chatRequestBody>;
   try {
-    const parsedBody = await parseJsonBody(req, jsonObject);
+    const parsedBody = await parseJsonBody(req, chatRequestBody);
     if (!parsedBody.ok) return parsedBody.response;
-    body = parsedBody.data;
+    input = parsedBody.data;
   } catch {
     return new Response("Bad request", { status: 400 });
   }
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return new Response("Bad request", { status: 400 });
-  }
-  const input = body as { conversationId?: unknown; prompt?: unknown; findingId?: unknown };
   // "Ask about this" handoff (b06): an optional workbench finding whose
   // evidence rides the memorySections seam as untrusted data. Absent or
   // unreadable findings change nothing about the turn.
@@ -108,22 +111,11 @@ export async function POST(req: Request): Promise<Response> {
     }
     findingId = input.findingId;
   }
-  if (
-    input.conversationId !== undefined &&
-    input.conversationId !== null &&
-    typeof input.conversationId !== "string"
-  ) {
-    return new Response("Bad request", { status: 400 });
-  }
-  if (typeof input.prompt !== "string") return new Response("Invalid prompt", { status: 400 });
-  if (input.prompt.length > MAX_PROMPT_CHARS) {
-    return new Response("Prompt too large", { status: 413 });
-  }
   const prompt = input.prompt.trim();
   if (!prompt) return new Response("Empty prompt", { status: 400 });
 
   // Resolve / create the conversation. Only the OWNER may send a turn.
-  let conversationId = (input.conversationId as string | undefined) ?? null;
+  let conversationId = input.conversationId ?? null;
   if (conversationId) {
     if (!isUuid(conversationId)) return new Response("Bad request", { status: 400 });
     if (!(await ownsConversation(authz, conversationId, SCOPE))) {
@@ -396,4 +388,5 @@ export async function POST(req: Request): Promise<Response> {
     console.error("[assistant/chat] failed", err);
     return conversationResponse("Assistant request failed.", 500, conversationId);
   }
-}
+  },
+});

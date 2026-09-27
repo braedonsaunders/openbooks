@@ -80,7 +80,6 @@ export interface EntityRoleData {
    * than a "New lead" button that makes a customer.
    */
   showNewParty: boolean
-  showNewRedirect: boolean
   drawer: (Record<string, unknown> & { remountKey: string }) | null
   txnDrawer: { id: string; kind: string; partyId: string; formLayoutId?: string } | null
 }
@@ -134,7 +133,7 @@ export async function loadEntityRole(
   const partyId = typeof sp.party === 'string' ? sp.party : undefined
   // Unsaved-create: ?partyNew=1 opens an editable drawer on no persisted
   // row — zero writes on open, zero on Cancel, one idempotent POST on Save.
-  const creating = pickString(sp.partyNew) === '1' && canManage
+  const creating = (pickString(sp.partyNew) === '1' || partyId === 'new') && canManage
   const partyTransactionId = pickString(sp.partyTxn)
   const partyTransactionKind = pickString(sp.partyTxnKind)
   const requestedPartyTab = pickString(sp.partyTab)
@@ -147,7 +146,7 @@ export async function loadEntityRole(
     : 'overview'
   const [openParty, pickers] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId, authz.allowedSubsidiaryIds) : null,
-    partyId || creating
+    (partyId && partyId !== 'new') || creating
       ? Promise.all([
           db.execute<ElementOf<PartyDrawerProps['paymentTerms']>>(sql`select id, name from payment_terms where org_id = ${orgId} and is_active order by name`),
           db.execute<ElementOf<PartyDrawerProps['departments']>>(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`),
@@ -210,7 +209,6 @@ export async function loadEntityRole(
       ? { label: tCrm(`accounts.${segment}.new`), failed: tCrm('feedback.createFailed'), lifecycleStage: segment }
       : null,
     showNewParty: segment !== 'lead' && segment !== 'prospect',
-    showNewRedirect: partyId === 'new' && canManage,
     drawer: (openParty || creating) && pickers
       ? {
           remountKey: creating ? 'new-party' : String(openParty!.party.id),
@@ -378,10 +376,8 @@ export function entityRoleSpec(data: EntityRoleData): PageSpec {
         recordType: data.recordType,
         sp: data.currentParams,
         emptyAction: canCreate ? newParty : null,
-        // Rendered in the native page's order: the create-redirect first, then
-        // the record flyout, then the transaction flyout stacked over it.
+        // The record flyout and transaction flyout stack in this order.
         drawer: [
-          data.showNewRedirect ? { widget: 'new-role-party-redirect', props: { ...data.newParty } } : null,
           data.drawer ? { widget: 'party-drawer', props: { drawer: data.drawer } } : null,
           data.txnDrawer
             ? { widget: 'related-txn-drawer', props: { drawer: data.txnDrawer } }

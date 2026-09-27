@@ -1,21 +1,23 @@
-import { type NextRequest, NextResponse } from 'next/server'
+import { notFound } from "@/lib/api/responses";
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
+import { guardSubsidiaryScope } from '../../../../../lib/authz'
+import { defineRoute } from '../../../../../lib/api/route'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadRelatedTransactionDrawerData } from '../../../../../components/related-transaction-drawer'
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const authz = await guardPermission('parties.read')
-  if (authz instanceof NextResponse) return authz
-
-  const { id: partyId } = await params
-  const transactionId = request.nextUrl.searchParams.get('transaction')
-  const kind = request.nextUrl.searchParams.get('kind')
-  const formLayoutId = request.nextUrl.searchParams.get('form') ?? undefined
+export const GET = defineRoute({
+  permission: 'parties.read',
+  feature: { none: 'Party transaction drawers are scoped by the transaction kind and subsidiary.' },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, authz, params }) => {
+  const { id: partyId } = params
+  const searchParams = new URL(request.url).searchParams
+  const transactionId = searchParams.get('transaction')
+  const kind = searchParams.get('kind')
+  const formLayoutId = searchParams.get('form') ?? undefined
   if (!isUuid(partyId) || !transactionId || !isUuid(transactionId) || !kind) {
     return NextResponse.json({ error: 'invalid transaction selection' }, { status: 400 })
   }
@@ -25,7 +27,7 @@ export async function GET(
   const scope = (await db.execute<{ subsidiaryId: string | null }>(
     sql`select subsidiary_id as "subsidiaryId" from parties where id = ${partyId} and org_id = ${authz.user.orgId}`,
   ))
-  if (!scope.rows[0]) return NextResponse.json({ error: 'transaction not found' }, { status: 404 })
+  if (!scope.rows[0]) return notFound("record")
   const denied = guardSubsidiaryScope(authz, scope.rows[0].subsidiaryId, { orgWideNull: true })
   if (denied) return denied
 
@@ -36,6 +38,7 @@ export async function GET(
     authz,
     formLayoutId,
   })
-  if (!data) return NextResponse.json({ error: 'transaction not found' }, { status: 404 })
+  if (!data) return notFound("record")
   return NextResponse.json(data)
-}
+  },
+})

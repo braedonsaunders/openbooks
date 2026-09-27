@@ -1,3 +1,4 @@
+import { notFound } from "@/lib/api/responses";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -7,7 +8,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { applicationContextFromSession } from '../../../../lib/application/context'
 import { executeIdempotent } from '../../../../lib/application/idempotency'
 import { ApplicationError } from '../../../../lib/application/errors'
-import { can, guardPermission } from '../../../../lib/authz'
+import { can } from '../../../../lib/authz'
+import { defineRoute } from '../../../../lib/api/route'
 import { parseJsonBody } from '../../../../lib/api/json'
 import { getResource } from '../../../../lib/data-io/resources'
 import { guessMapping, ImportParseError, MAX_IMPORT_ROWS, parseImportFile } from '../../../../lib/data-io/parse'
@@ -38,7 +40,9 @@ const importBodySchema = z.object({
   format: z.enum(IMPORT_FORMATS, { error: 'format must be csv, xlsx or json' }).optional(),
   text: z.string().optional(),
   base64: z.string().optional(),
-  rows: z.array(z.record(z.string(), z.unknown())).optional(),
+  // Import row keys are selected at runtime by the registered resource; the
+  // adapter validates their meaning against that resource's column schema.
+  rows: z.array(z.record(z.string(), z.json())).optional(),
   mapping: z.record(z.string(), z.string()).optional(),
   importMode: z.enum(['insert', 'upsert'], { error: 'importMode must be insert or upsert' }).optional(),
   fileName: z.string().optional(),
@@ -61,10 +65,10 @@ const importBodySchema = z.object({
  * data.import gates the route; the resource's own write permission is enforced
  * on top (e.g. importing accounts also needs admin.setup.manage).
  */
-export async function POST(req: Request) {
-  const gate = await guardPermission('data.import')
-  if (gate instanceof NextResponse) return gate
-  const authz = gate
+export const POST = defineRoute({
+  permission: 'data.import',
+  feature: { none: 'Data import and export are permission-gated and have no organization feature switch.' },
+  handler: async ({ request: req, authz }) => {
   const orgId = authz.user.orgId
 
   // Bulk rows and base64 workbooks ride this body (up to MAX_IMPORT_ROWS
@@ -79,7 +83,7 @@ export async function POST(req: Request) {
   const format: ImportFormat = body.format ?? 'csv'
 
   const resource = await getResource(orgId, body.resource ?? '', authz.allowedSubsidiaryIds)
-  if (!resource) return NextResponse.json({ error: 'unknown resource' }, { status: 404 })
+  if (!resource) return notFound("record")
   if (!resource.descriptor.supportsImport) {
     return NextResponse.json({ error: 'resource is read-only' }, { status: 400 })
   }
@@ -251,7 +255,8 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ ...committed.value, total: mappedRows.length, replayed: committed.replayed })
-}
+  },
+})
 
 /**
  * Reserved key carrying the source columns the operator left unmapped.

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../lib/api/json";
-import { guardAllocations } from "../../../../../lib/allocations-gate";
+import { defineRoute } from "../../../../../lib/api/route";
 import { previewAllocationRun } from "../../../../../../engine/src/allocations/period-run.ts";
 import { allocationServiceDeps } from "../../../../../../engine/src/allocations/service.ts";
 import { previewPinError } from "../../../../../../engine/src/organization/allocation-scope.ts";
@@ -24,9 +24,10 @@ const previewBodySchema = z.object({
  * A subsidiary-restricted caller must pin a visible subsidiary: an omitted
  * pin would sweep every legal entity.
  */
-export async function POST(req: Request) {
-  const gate = await guardAllocations("allocations.run");
-  if (gate instanceof NextResponse) return gate;
+export const POST = defineRoute({
+  permission: "allocations.run",
+  feature: "allocations",
+  handler: async ({ request: req, authz: gate }) => {
   const parsedBody = await parseJsonBody(req, previewBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const data = parsedBody.data;
@@ -66,4 +67,5 @@ export async function POST(req: Request) {
   } catch (error) {
     return allocationRunErrorResponse(error, "Unable to preview the allocation run.");
   }
-}
+  },
+});

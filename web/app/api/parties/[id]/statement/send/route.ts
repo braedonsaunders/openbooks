@@ -1,6 +1,9 @@
+import { notFound } from "@/lib/api/responses";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -13,7 +16,7 @@ import {
   resolveOrgEmailTransport,
 } from '@openbooks/engine/src/delivery/email-config.ts'
 import { deriveEmailDeliveryKey, documentEmail, isValidEmailAddress, sendVia } from '@openbooks/emails'
-import { can, guardPermission, subsidiaryScopeAllows } from '../../../../../../lib/authz'
+import { can, subsidiaryScopeAllows } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { resolvePeriod } from '../../../../../../lib/periods'
@@ -37,6 +40,13 @@ export const runtime = 'nodejs'
  */
 
 type Side = 'ar' | 'ap'
+const statementBody = z.object({
+  side: z.enum(['ar', 'ap']).optional(),
+  to: z.string().optional(),
+  message: z.string().optional(),
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+}).strict()
 
 function sideOf(req: Request, body?: { side?: unknown }): Side {
   const raw = typeof body?.side === 'string' ? body.side : new URL(req.url).searchParams.get('side')
@@ -61,29 +71,35 @@ function partyInScope(allowedSubsidiaryIds: Set<string> | null, party: { subsidi
 }
 
 /** GET — default recipient to prefill the send dialog. */
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
+export const GET = defineRoute({
+  public: 'session',
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
+  const { id } = params
   const side = sideOf(req)
-  const gate = await guardPermission(side === 'ap' ? 'ap.read' : 'ar.read')
-  if (gate instanceof NextResponse) return gate
-  if (!isUuid(id)) return NextResponse.json({ error: 'record not found' }, { status: 404 })
+  const permission = side === 'ap' ? 'ap.read' : 'ar.read'
+  if (!can(gate, permission)) return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })
+  if (!isUuid(id)) return notFound("record")
   const party = await loadParty(gate.user.orgId, id)
   if (!party || !partyInScope(gate.allowedSubsidiaryIds, party)) {
-    return NextResponse.json({ error: 'record not found' }, { status: 404 })
+    return notFound("record")
   }
   return NextResponse.json({ to: party.email?.trim() || null, partyName: party.display_name })
-}
+  },
+})
 
 /** POST — render the party-statement PDF and email it to the party. */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-  const parsedBody = await parseJsonBody(req, jsonObject)
+export const POST = defineRoute({
+  public: 'session',
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
+  const { id } = params
+  const parsedBody = await parseJsonBody(req, statementBody)
   if (!parsedBody.ok) return parsedBody.response
   const body = parsedBody.data as { to?: string; message?: string; side?: string; from?: string; toDate?: string }
   const side = sideOf(req, body)
   const sendPermission = side === 'ap' ? 'ap.create' : 'ar.create'
-  const gate = await guardPermission(sendPermission)
-  if (gate instanceof NextResponse) return gate
+  if (!can(gate, sendPermission)) return NextResponse.json({ error: `missing permission: ${sendPermission}` }, { status: 403 })
   // Rendering the statement runs the report engine, which requires
   // reports.read (requireReportAuthz): a create-only sender would otherwise
   // reach it and answer a generic 422 'Report access denied'. Require the
@@ -91,10 +107,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!can(gate, 'reports.read')) {
     return NextResponse.json({ error: 'missing permission: reports.read' }, { status: 403 })
   }
-  if (!isUuid(id)) return NextResponse.json({ error: 'record not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const party = await loadParty(gate.user.orgId, id)
   if (!party || !partyInScope(gate.allowedSubsidiaryIds, party)) {
-    return NextResponse.json({ error: 'record not found' }, { status: 404 })
+    return notFound("record")
   }
 
   const requestedTo = typeof body.to === 'string' ? body.to.trim() : ''
@@ -178,4 +194,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return apiErrorResponse(e)
   }
   return NextResponse.json({ ok: true, to })
-}
+  },
+})

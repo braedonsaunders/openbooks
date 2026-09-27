@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { guardPermission } from "../../../../lib/authz";
+import { defineRoute } from "../../../../lib/api/route";
 import { listConversations } from "../../../../lib/ai-conversations";
 
 export const runtime = "nodejs";
@@ -7,9 +7,11 @@ export const runtime = "nodejs";
 const SCOPE = "assistant";
 
 /** The current user's recent assistant conversations, newest first. */
-export async function GET() {
-  const gate = await guardPermission("assistant.use");
-  if (gate instanceof NextResponse) return gate;
-  const items = await listConversations(gate, SCOPE);
+export const GET = defineRoute({
+  permission: "assistant.use",
+  feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
+  handler: async ({ authz }) => {
+  const items = await listConversations(authz, SCOPE);
   return NextResponse.json({ items });
-}
+  },
+});

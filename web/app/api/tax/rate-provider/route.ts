@@ -1,5 +1,7 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
   TaxRateProviderError,
@@ -10,7 +12,7 @@ import {
   type ProviderDocumentKind,
   type TaxRateProviderKey,
 } from "@openbooks/engine/src/tax/rate-providers.ts";
-import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
+import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
@@ -18,12 +20,45 @@ import { z } from "zod";
 
 export const runtime = "nodejs";
 
+const addressSchema = z.object({
+  line1: z.string().nullable().optional(),
+  city: z.string().nullable().optional(),
+  region: z.string().nullable().optional(),
+  postalCode: z.string().nullable().optional(),
+  country: z.string().nullable().optional(),
+}).strict();
+const quoteFields = {
+  taxableAmount: z.string(),
+  ratePercent: z.string().optional(),
+  jurisdiction: z.string().optional(),
+  currency: z.string().nullable().optional(),
+  itemCode: z.string().nullable().optional(),
+  quotedOn: z.string().nullable().optional(),
+  documentKind: z.enum(["customer_invoice", "vendor_bill", "customer_credit", "vendor_credit"]).nullable().optional(),
+  counterpartyCode: z.string().nullable().optional(),
+  shipFrom: addressSchema.optional(),
+  shipTo: addressSchema.optional(),
+};
+const bodyObjectSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("manualQuote"),
+    ...quoteFields,
+    ratePercent: z.string(),
+    jurisdiction: z.string().min(1),
+  }).strict(),
+  z.object({
+    action: z.literal("providerQuote"),
+    ...quoteFields,
+  }).strict(),
+]);
+
 const taxRateProviderConfigSchema = z.object({
   provider: z.enum(["avalara", "taxjar", "custom_http", "manual"]),
   displayName: z.string().optional(),
   isEnabled: z.boolean({ error: "isEnabled must be a boolean" }),
   preferProvider: z.boolean().optional(),
-  settings: z.record(z.string(), z.unknown()).optional(),
+  // Provider-specific settings are a JSONB column interpreted by the selected provider.
+  settings: z.record(z.string(), z.json()).optional(),
   apiKey: z.union([z.string().min(1), z.null()], { error: "apiKey must be null or a non-empty string" }).optional(),
   accountId: z.union([z.string().min(1), z.null()], { error: "accountId must be null or a non-empty string" }).optional(),
   licenseKey: z.union([z.string().min(1), z.null()], { error: "licenseKey must be null or a non-empty string" }).optional(),
@@ -32,16 +67,16 @@ const taxRateProviderConfigSchema = z.object({
   }),
 });
 
-export async function GET() {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const view = await readTaxRateProviderConfigView(gate.user.orgId);
   return NextResponse.json({ config: view });
 }
 
-export async function PUT(req: Request) {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
+async function legacyPUT(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   // The rate provider prices tax for every entity in the org.
   const unrestricted = guardUnrestrictedScope(gate);
   if (unrestricted) return unrestricted;
@@ -71,10 +106,10 @@ export async function PUT(req: Request) {
 }
 
 /** Test quote against the configured provider (or manual rate). */
-export async function POST(req: Request) {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
+async function legacyPOST(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
+  const parsedBody2 = await parseJsonBody(req, bodyObjectSchema);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = ((parsedBody2.data));
   try {
@@ -126,3 +161,21 @@ export async function POST(req: Request) {
     return apiErrorResponse(e, e instanceof TaxRateProviderError ? { safeStatus: 422 } : {})
   }
 }
+
+export const GET = defineRoute({
+  permission: "admin.setup.manage", feature: { none: "This route is governed by its permission and service authorization." },
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const PUT = defineRoute({
+  permission: "admin.setup.manage", feature: { none: "This route is governed by its permission and service authorization." },
+
+  handler: ({ request, params, authz }) => legacyPUT(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const POST = defineRoute({
+  permission: "admin.setup.manage", feature: { none: "This route is governed by its permission and service authorization." },
+
+  handler: ({ request, params, authz }) => legacyPOST(request, { params: Promise.resolve(params) }, authz),
+});

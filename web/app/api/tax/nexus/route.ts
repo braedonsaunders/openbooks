@@ -1,7 +1,9 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { computeUsNexusStatus } from '@openbooks/engine/src/tax-returns/us-nexus-ledger.ts'
-import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
+import { guardSubsidiaryScope } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
 
@@ -15,9 +17,8 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
  *  ledger in its working currency; `currency` (+ `rateType`/`rateDate`)
  *  declares the working currency and threshold-translation policy for a
  *  mixed entity. */
-export async function GET(req: Request) {
-  const gate = await guardPermission('reports.read')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const p = new URL(req.url).searchParams
   const from = p.get('from')
   const to = p.get('to')
@@ -46,3 +47,9 @@ export async function GET(req: Request) {
     return apiErrorResponse(e, { safeStatus: 422 })
   }
 }
+
+export const GET = defineRoute({
+  permission: 'reports.read', feature: { none: "This route is governed by its permission and service authorization." },
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});

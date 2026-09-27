@@ -66,6 +66,9 @@ stubModules({
         }
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: allowed }
       }
+      export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: allowed } }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
       export function guardSubsidiaryScope(authz, subsidiaryId) {
         if (subsidiaryId === null) return { status: 404, json: async () => ({ error: 'not_found' }) }
         if (!authz.allowedSubsidiaryIds.has(subsidiaryId)) {
@@ -73,6 +76,13 @@ stubModules({
         }
         return null
       }
+    `,
+    "@/lib/authz": `
+      const allowed = new Set(['sub-allowed'])
+      export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: allowed } }
+      export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: allowed } }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
     `,
     "@openbooks/engine/src/tax-returns/return.ts": `
       const state = globalThis[Symbol.for('openbooks.tax-return-export-route-test')]
@@ -113,6 +123,7 @@ stubModules({
       export async function inDbTransaction(work) { return work({ execute() { throw new Error('unexpected database query') } }) }
       export function registerRequestOrgResolver() {}
       export function currentRequestOrgResolver() { return null }
+      export function ambientTenantOrgId() { return null }
     `,
     "@openbooks/engine/src/platform/business-date.ts": `
       export async function businessToday() { return '2026-07-31' }

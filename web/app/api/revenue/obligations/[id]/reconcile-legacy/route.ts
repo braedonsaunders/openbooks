@@ -7,7 +7,7 @@ import {
   RevenueRecognitionError,
 } from '@openbooks/engine/src/revenue/recognition.ts'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { guardFeaturePermission } from '@/lib/feature-gates'
+import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from '@/lib/api/json'
 import { isUuid } from '@/lib/list-params'
 import { auditSetupChange } from '@/lib/setup/audit'
@@ -27,10 +27,12 @@ const reconcileBody = z.object({
  * only. Refuses when there is nothing to reconcile (rule not legacy, no
  * schedule evidence, or already reconciled).
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('ar.post', 'revenueRecognition')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
+export const POST = defineRoute({
+  permission: 'ar.post',
+  feature: 'revenueRecognition',
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: req, authz: gate, params }) => {
+  const { id } = params
   if (!isUuid(id)) return NextResponse.json({ error: 'invalid obligation' }, { status: 422 })
   const parsed = await parseJsonBody(req, reconcileBody, { status: 422 })
   if (!parsed.ok) return parsed.response
@@ -69,4 +71,5 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     console.error('[revenue/reconcile-legacy] reconciliation failed', e)
     return NextResponse.json({ error: 'reconciliation failed' }, { status: 500 })
   }
-}
+  },
+})

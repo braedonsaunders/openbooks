@@ -83,6 +83,7 @@ const request = (body: unknown) =>
     method: 'POST',
     body: JSON.stringify(body),
   })
+const readRequest = () => new Request('http://audit.local')
 
 async function fixture() {
   const org = await withBypassContext(() => createScratchOrg())
@@ -560,17 +561,17 @@ for (const boundary of [
               )
               assert.ok(own)
               assert.equal(own.totalExpense, '20.0000')
-              const result = await (await provisions()).json()
+              const result = await (await provisions(readRequest())).json()
               assert.equal(
                 result.runs[0].totalExpense,
                 own.totalExpense,
                 'list must show the same scoped total as detail',
               )
               await restrict(org.orgId, [])
-              assert.deepEqual((await (await provisions()).json()).runs, [])
+              assert.deepEqual((await (await provisions(readRequest())).json()).runs, [])
               await restrict(org.orgId, null)
               assert.equal(
-                (await (await provisions()).json()).runs[0].totalExpense,
+                (await (await provisions(readRequest())).json()).runs[0].totalExpense,
                 '60.0000',
               )
             } else if (boundary === 'provision compute') {

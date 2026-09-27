@@ -1,6 +1,7 @@
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { z } from 'zod'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { can } from '../../../../../lib/authz'
 import { postPermission } from '../../../../../lib/document-kinds'
@@ -33,7 +34,7 @@ async function batchGate(perm: 'time.crew.enter' | 'time.read' | 'time.approve' 
 }
 
 /** GET → batch detail with lines and append-only history. */
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function legacyGET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
   const read = await batchGate('time.read')
   const gate = read instanceof NextResponse ? await batchGate('time.crew.enter') : read
@@ -82,7 +83,7 @@ const batchActionBody = z.discriminatedUnion('action', [
  * approve (current stage), reject (reason required), post (entries +
  * equipment charges, then the charge documents to the ledger).
  */
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+async function legacyPOST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params
   const parsedBody = await parseJsonBody(req, batchActionBody, { status: 422 });
   if (!parsedBody.ok) return parsedBody.response;
@@ -186,3 +187,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return fieldTime(error)
   }
 }
+
+export const GET = defineRoute({
+  public: "session",
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params }) => legacyGET(request, { params: Promise.resolve(params) }),
+});
+
+export const POST = defineRoute({
+  public: "session",
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params }) => legacyPOST(request, { params: Promise.resolve(params) }),
+});

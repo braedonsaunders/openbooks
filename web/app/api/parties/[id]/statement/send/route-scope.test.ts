@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict'
 import { stubModules } from '../../../../../../testing/stub-modules'
 import test from 'node:test'
+import { NextResponse } from 'next/server'
 
-// H-STATEMENT: GET /api/parties/[id]/statement/send disclosed an
-// out-of-scope party's name and email, POST would send it a statement, and
-// POST gated only ar.create/ap.create while rendering requires reports.read
-// (a create-only sender got a generic 422 'Report access denied'). The party
-// is now the record boundary (uniform 'record not found'), and POST requires
-// the full permission set at the boundary, by name.
+// Party statements are scoped to the caller's subsidiary access, and rendering
+// requires report access in addition to the permission to send a statement.
 interface StatementState {
   permissions: string[]
   allowedSubsidiaryIds: Set<string> | null
@@ -27,6 +24,7 @@ const statementState: StatementState = {
   sendCalls: 0,
 }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = statementState
+;(globalThis as typeof globalThis & Record<string, unknown>).openbooksStatementNextResponse = NextResponse
 
 const PARTY_ID = '00000000-0000-4000-8000-00000000e001'
 const SUB_A = '00000000-0000-4000-8000-00000000e00a'
@@ -95,7 +93,7 @@ stubModules({
       const state = globalThis[Symbol.for('openbooks.statement-send-test')]
       export async function guardPermission(perm) {
         if (!state.permissions.includes(perm)) {
-          return Response.json({ error: 'missing permission: ' + perm }, { status: 403 })
+          return NextResponse.json({ error: 'missing permission: ' + perm }, { status: 403 })
         }
         return {
           user: { orgId: 'org-1', id: 'user-1' },
@@ -115,6 +113,24 @@ stubModules({
         }
         return scope.has(subsidiaryId)
       }
+    `,
+    "@/lib/authz": `
+      const state = globalThis[Symbol.for('openbooks.statement-send-test')]
+      const NextResponse = globalThis.openbooksStatementNextResponse
+      function currentAuthz() {
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          permissions: new Set(state.permissions),
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+        }
+      }
+      export async function getAuthz() { return currentAuthz() }
+      export async function guardPermission(perm) {
+        if (!state.permissions.includes(perm)) return NextResponse.json({ error: 'missing permission: ' + perm }, { status: 403 })
+        return currentAuthz()
+      }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
     `,
     "../../../../../../lib/report-filters": `export function parseReportQuery() { return { period: 'custom' } }`,
     "../../../../../../lib/periods": `export async function resolvePeriod() { return { from: '2026-07-01', to: '2026-07-31' } }`,

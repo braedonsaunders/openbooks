@@ -50,6 +50,9 @@ const mockSources = new Map<string, string>([
         const state = globalThis[Symbol.for('openbooks.bank-accounts-route-test')]
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
       }
+      export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' } } }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
       export function guardSubsidiaryScope(gate, subsidiaryId, options = {}) {
         if (gate.allowedSubsidiaryIds === null) return null
         if (subsidiaryId === null && options.orgWideNull) return null
@@ -78,6 +81,7 @@ const mockSources = new Map<string, string>([
   [
     'payments',
     `
+      export class PaymentError extends Error {}
       export function encryptAccountNumber(value) { return 'encrypted:' + value }
     `,
   ],
@@ -174,6 +178,7 @@ const mockSources = new Map<string, string>([
 const selfUrl = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${selfUrl}?bank-accounts-mock=${name}`
 const mockUrls = new Map<string, string>([
+  ['@/lib/authz', mockUrl('authz')],
   ['../../../../../lib/authz', mockUrl('authz')],
   ['../../../../../lib/features', mockUrl('features')],
   ['../../../../../lib/countries', mockUrl('countries')],
@@ -255,7 +260,10 @@ test('PATCH rejects account numbers shorter than four characters', async () => {
   })
 
   assert.equal(response.status, 400)
-  assert.deepEqual(await response.json(), { error: 'accountNumber required' })
+  assert.deepEqual(await response.json(), {
+    error: 'accountNumber required',
+    issues: [{ path: 'accountNumber', message: 'accountNumber required' }],
+  })
   assert.equal(state.updateParams.length, 0)
 })
 

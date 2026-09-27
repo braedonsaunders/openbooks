@@ -1,18 +1,21 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { allocateDocumentNumber } from "@openbooks/engine/src/records/numbering.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { normalizeMoney, sum, toUnits } from "@openbooks/engine/src/money/money.ts";
-import { can, guardPermission, subsidiaryScopeAllows } from "../../../../lib/authz";
+import { can, subsidiaryScopeAllows } from "../../../../lib/authz";
+import { defineRoute } from "../../../../lib/api/route";
 import { applicationContextFromSession } from "../../../../lib/application/context";
 import { executeIdempotent } from "../../../../lib/application/idempotency";
 import { verifyProposal, type JournalPreview } from "../../../../lib/assistant/proposals";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { notFound } from "@/lib/api/responses";
+import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 
 /** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
 
@@ -46,45 +49,54 @@ function exactMoney(v: unknown): string | "invalid" {
 export const runtime = "nodejs";
 
 class AccountScopeChangedError extends Error {}
+const assistantCommitBody = z.object({
+  kind: z.literal("create_journal_entry"),
+  preview: z.object({
+    documentDate: z.string(),
+    memo: z.string().nullable(),
+    lines: z.array(z.object({
+      accountId: z.string().uuid(),
+      accountLabel: z.string(),
+      description: z.string().nullable(),
+      amount: z.string().min(1),
+    }).strict()).min(2),
+  }).strict(),
+  confirmToken: z.string().min(1),
+}).strict();
 
-export async function POST(req: Request) {
-  const gate = await guardPermission("assistant.write");
-  if (gate instanceof NextResponse) return gate;
+export const POST = defineRoute({
+  permission: "assistant.write",
+  feature: { none: "Assistant commands are controlled by assistant permissions and provider configuration." },
+  handler: async ({ request: req, authz: gate }) => {
   const authz = gate;
   if (!can(authz, "gl.post")) {
     return NextResponse.json({ error: "missing permission: gl.post" }, { status: 403 });
   }
 
-  let body: {
-    kind?: string;
-    preview?: JournalPreview;
-    confirmToken?: string;
-  };
+  let body: z.output<typeof assistantCommitBody>;
   try {
-    const parsedBody = await parseJsonBody(req, jsonObject);
+    const parsedBody = await parseJsonBody(req, assistantCommitBody);
     if (!parsedBody.ok) return parsedBody.response;
     body = parsedBody.data;
   } catch {
     return NextResponse.json({ error: "bad request" }, { status: 400 });
   }
-  if (body.kind !== "create_journal_entry" || !body.preview || !body.confirmToken) {
-    return NextResponse.json({ error: "unsupported draft type" }, { status: 400 });
-  }
-  if (!verifyProposal("create_journal_entry", body.preview, body.confirmToken, authz)) {
+  const preview: JournalPreview = body.preview;
+  if (!verifyProposal("create_journal_entry", preview, body.confirmToken, authz)) {
     return NextResponse.json(
       { error: "This draft expired or was modified. Ask the assistant to draft it again." },
       { status: 422 },
     );
   }
 
-  const p = body.preview;
+  const p = preview;
   // Defense in depth: the HMAC already covers a balanced preview, but a
   // balanced check here keeps a signing bug from ever writing a lopsided draft.
   const lines: { accountId: string; description: string | null; amount: string }[] = [];
   for (const line of p.lines) {
     const amount = exactMoney(line.amount);
     if (amount === "invalid") {
-      return NextResponse.json({ error: "draft lines contain an invalid monetary amount" }, { status: 422 });
+      return NextResponse.json({ error: moneyRefusal("Draft line amount", line.amount, "an amount", 4, 15) }, { status: 422 });
     }
     lines.push({ accountId: line.accountId, description: line.description, amount });
   }
@@ -224,4 +236,5 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json(result.value);
-}
+  },
+});

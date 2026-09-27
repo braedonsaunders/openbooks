@@ -1,6 +1,7 @@
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
-import { guardAllocations } from "../../../../lib/allocations-gate";
 import { isUuid } from "../../../../lib/list-params";
 import { RunQueryError, listRuns } from "../../../../../engine/src/allocations/run-queries.ts";
 
@@ -12,9 +13,9 @@ const STATUSES = ["previewed", "pending_approval", "posted", "reversed", "failed
  * Run list (A8). `allocations.read` + the caller's subsidiary scope
  * (org-wide runs stay invisible to restricted callers).
  */
-export async function GET(req: Request) {
-  const gate = await guardAllocations("allocations.read");
-  if (gate instanceof NextResponse) return gate;
+async function legacyGET(req: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
+
   const params = new URL(req.url).searchParams;
   const pick = (name: string): string | undefined => {
     const raw = params.get(name);
@@ -47,3 +48,9 @@ export async function GET(req: Request) {
     throw error;
   }
 }
+
+export const GET = defineRoute({
+  permission: "allocations.read", feature: "allocations",
+
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});

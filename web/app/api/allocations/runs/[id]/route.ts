@@ -1,6 +1,7 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
-import { guardAllocations } from "../../../../../lib/allocations-gate";
+import { defineRoute } from "../../../../../lib/api/route";
+import { z } from "zod";
 import { isUuid } from "../../../../../lib/list-params";
 import { RunQueryError, getRun } from "../../../../../../engine/src/allocations/run-queries.ts";
 import { allocationScopeVisible } from "../../../../../../engine/src/organization/allocation-scope.ts";
@@ -9,13 +10,13 @@ import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";
 
-type Ctx = { params: Promise<{ id: string }> };
-
 /** Run detail drawer payload: the stored RunComputation plus its journal links. */
-export async function GET(_req: Request, { params }: Ctx) {
-  const gate = await guardAllocations("allocations.read");
-  if (gate instanceof NextResponse) return gate;
-  const { id } = await params;
+export const GET = defineRoute({
+  permission: "allocations.read",
+  feature: "allocations",
+  params: z.object({ id: z.string() }),
+  handler: async ({ authz: gate, params }) => {
+  const { id } = params;
   if (!isUuid(id)) return notFound("record");
   try {
     const run = await getRun(gate.user.orgId, id);
@@ -31,4 +32,5 @@ export async function GET(_req: Request, { params }: Ctx) {
     }
     throw error;
   }
-}
+  },
+});

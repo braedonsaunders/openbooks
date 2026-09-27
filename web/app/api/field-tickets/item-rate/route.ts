@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { divRate, mul } from '@openbooks/engine/src/money/money.ts'
-import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
+import { guardSubsidiaryScope } from '../../../../lib/authz'
+import { defineRoute } from '../../../../lib/api/route'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { resolveItemRate } from '../../../../lib/item-rates'
@@ -16,12 +17,10 @@ export const runtime = 'nodejs'
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 /** Live item-price preview using the same assignment and tier engine as charges. */
-export async function GET(req: Request) {
-  const gate = await guardPermission('time.read')
-  if (gate instanceof NextResponse) return gate
-  if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) {
-    return notFound("record")
-  }
+export const GET = defineRoute({
+  permission: 'time.read',
+  feature: 'fieldTickets',
+  handler: async ({ request: req, authz: gate }) => {
   const q = new URL(req.url).searchParams
   const projectId = q.get('projectId')
   const itemId = q.get('itemId')
@@ -51,7 +50,7 @@ export async function GET(req: Request) {
     select name, default_rate, default_cost, unit, kind from items
      where id = ${itemId} and org_id = ${gate.user.orgId} and is_active
   `))
-  if (!item.rows[0]) return NextResponse.json({ error: 'item not found' }, { status: 404 })
+  if (!item.rows[0]) return notFound("record")
   // The picker and add-line already refuse these kinds. Turning Inventory off
   // must also 404 a crafted preview so a live price cannot be quoted for an
   // inventory / assembly / kit item. Stored ticket lines stay as they are.
@@ -106,4 +105,5 @@ export async function GET(req: Request) {
     policyProvenance: resolved?.policyProvenance ?? null,
     components: resolved?.bill.components ?? [],
   })
-}
+  },
+})

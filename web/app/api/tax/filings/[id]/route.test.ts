@@ -3,7 +3,7 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { NextResponse } from 'next/server'
 
-// Route boundary regression for fnd_mtcbmf0b_atofm2: a tax filing snapshot is
+// Route boundary regression: a tax filing snapshot is
 // organization-wide, so subsidiary-restricted compliance.file holders must
 // never reach the irreversible mark-filed engine call.
 interface RouteState {
@@ -40,6 +40,8 @@ const mockSources = new Map<string, string>([
         if (authz.allowedSubsidiaryIds === null) return null
         return NextResponse.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
       }
+      export async function getAuthz() { return null }
+      export function guardRootSubsidiaryScope() { return null }
     `,
   ],
   [
@@ -64,6 +66,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
+  ['@/lib/authz', 'mock:authz'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['@openbooks/engine/src/tax-returns/filing.ts', 'mock:tax-filing'],
 ])

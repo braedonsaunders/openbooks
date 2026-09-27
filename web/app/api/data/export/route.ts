@@ -1,17 +1,26 @@
+import { notFound } from "@/lib/api/responses";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { can, guardPermission } from '../../../../lib/authz'
+import { can } from '../../../../lib/authz'
 import { getResource } from '../../../../lib/data-io/resources'
 import { ExportRowLimitError } from '../../../../lib/data-io/resource-core'
 import type { CellValue } from '../../../../lib/data-io/types'
 import { toCsv, toJson, toXlsx } from '../../../../lib/data-io/serialize'
 import { csvResponse, safeName, xlsxResponse } from '../../../../lib/export'
-import { requestedExportFormat, type ExportFormat } from '../../../../lib/data-io/types'
+import { EXPORT_FORMATS, requestedExportFormat, type ExportFormat } from '../../../../lib/data-io/types'
 import { selectExportColumns } from '../../../../lib/data-io/export-selection'
 
 export const runtime = 'nodejs'
+
+const exportBody = z.object({
+  resource: z.string().min(1),
+  columns: z.array(z.string()).optional(),
+  format: z.enum(EXPORT_FORMATS).optional(),
+}).strict()
 
 /**
  * Generic export: any registered resource → CSV / XLSX / JSON. The resource
@@ -19,12 +28,12 @@ export const runtime = 'nodejs'
  * record type); its own read permission is enforced on top of data.export.
  * Reference columns are emitted as human natural keys, not UUIDs.
  */
-export async function POST(req: Request) {
-  const gate = await guardPermission('data.export')
-  if (gate instanceof NextResponse) return gate
-  const authz = gate
+export const POST = defineRoute({
+  permission: 'data.export',
+  feature: { none: 'Data import and export are permission-gated and have no organization feature switch.' },
+  handler: async ({ request: req, authz }) => {
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, exportBody);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     resource?: string
@@ -41,7 +50,7 @@ export async function POST(req: Request) {
   // generic registry otherwise defaults to an org-only adapter, which would
   // let a restricted AP/AR/GL reader export another subsidiary's documents.
   const resource = await getResource(authz.user.orgId, resourceKey, authz.allowedSubsidiaryIds)
-  if (!resource) return NextResponse.json({ error: 'unknown resource' }, { status: 404 })
+  if (!resource) return notFound("record")
   if (!can(authz, resource.descriptor.readPermission)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
@@ -86,4 +95,5 @@ export async function POST(req: Request) {
       'Cache-Control': 'no-store',
     },
   })
-}
+  },
+})

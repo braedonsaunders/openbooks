@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import { defineRoute } from '../../../../../lib/api/route'
+import { notFound } from '@/lib/api/responses'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { crmActivityScope } from '../../../../../lib/crm-scope'
 import { isUuid } from '../../../../../lib/list-params'
@@ -13,16 +15,18 @@ const KINDS = new Set(['task', 'call', 'event', 'email', 'note'])
 const STATUSES = new Set(['planned', 'in_progress', 'completed', 'cancelled'])
 
 /** Searchable, filtered CRM activity sublist for a customer flyout. */
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('crm.activities.read', 'crm')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({}, { status: 404 })
+export const GET = defineRoute({
+  permission: 'crm.activities.read',
+  feature: 'crm',
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, authz: gate, params }) => {
+  const { id } = params
+  if (!isUuid(id)) return notFound("record")
 
   // Party record boundary (null-subsidiary parties are org-wide).
   const party = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from parties where id=${id} and org_id=${gate.user.orgId} limit 1`))
-  if (!party.rows[0]) return NextResponse.json({}, { status: 404 })
+  if (!party.rows[0]) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 
@@ -71,4 +75,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     kinds: filters.rows[0]?.kinds ?? [],
     statuses: filters.rows[0]?.statuses ?? [],
   })
-}
+  },
+})

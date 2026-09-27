@@ -1,15 +1,24 @@
-import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import type { Authz } from "@/lib/authz";
+import { defineRoute } from "@/lib/api/route";
+import { z } from "zod";
+import { parseJsonBody } from '@/lib/api/json';
 import { NextResponse } from 'next/server'
 import { getRuleDetail, updateRule } from '../../../../../../engine/src/allocations/index.ts'
-import { guardAllocations } from '../../../../../lib/allocations-gate'
 import { allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../_lib.ts'
 
 export const runtime = 'nodejs'
 
+const bodyObjectSchema = z.object({
+  name: z.string().optional(),
+  description: z.string().nullable().optional(),
+  sortOrder: z.number().optional(),
+  isActive: z.boolean().optional(),
+  expectedRevision: z.string().min(1),
+}).strict();
+
 /** One rule head (identity/ordering) with its version timeline. */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardAllocations('allocations.read')
-  if (gate instanceof NextResponse) return gate
+async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const id = requireRuleId((await params).id)
   if (id instanceof NextResponse) return id
   try {
@@ -20,12 +29,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 /** Update the head (name/description/order/active). `expectedRevision` is required. */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardAllocations('allocations.manage')
-  if (gate instanceof NextResponse) return gate
+async function legacyPATCH(req: Request, { params }: { params: Promise<{ id: string }> }, injectedGate?: Authz | null) {
+  const gate = injectedGate as Authz;
   const id = requireRuleId((await params).id)
   if (id instanceof NextResponse) return id
-  const parsed = await parseJsonBody(req, jsonObject)
+  const parsed = await parseJsonBody(req, bodyObjectSchema)
   if (!parsed.ok) return parsed.response
   const body = parsed.data as {
     name?: unknown
@@ -63,3 +71,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return allocationWriteErrorResponse(error)
   }
 }
+
+export const GET = defineRoute({
+  permission: 'allocations.read', feature: "allocations",
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyGET(request, { params: Promise.resolve(params) }, authz),
+});
+
+export const PATCH = defineRoute({
+  permission: 'allocations.manage', feature: "allocations",
+  params: z.object({ "id": z.string() }),
+  handler: ({ request, params, authz }) => legacyPATCH(request, { params: Promise.resolve(params) }, authz),
+});

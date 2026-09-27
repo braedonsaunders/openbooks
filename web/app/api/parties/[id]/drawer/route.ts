@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { can, guardPermission, guardSubsidiaryScope } from '../../../../../lib/authz'
+import { can, guardSubsidiaryScope } from '../../../../../lib/authz'
+import { defineRoute } from '../../../../../lib/api/route'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { loadFieldDefs } from '../../../../../lib/custom-fields'
 import { resolveFormLayout } from '../../../../../lib/customization/resolve'
@@ -15,10 +17,12 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = 'nodejs'
 
 /** Complete, org-scoped payload needed by the shell-level related-party drawer. */
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('parties.read')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
+export const GET = defineRoute({
+  permission: 'parties.read',
+  feature: { none: 'Party records are shared master data; optional role capabilities are resolved in the drawer payload.' },
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, authz: gate, params }) => {
+  const { id } = params
   if (!isUuid(id)) return notFound("record")
   // Party record boundary (null-subsidiary parties are org-wide).
   const scope = (await db.execute<{ subsidiaryId: string | null }>(
@@ -95,4 +99,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     recordType: role,
     canCustomize: can(gate, 'admin.customization.manage'),
   })
-}
+  },
+})

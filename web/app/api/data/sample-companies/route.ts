@@ -1,6 +1,8 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import {
   SampleCompanyError,
   SampleCompanyProvisioningError,
@@ -8,20 +10,17 @@ import {
   sampleCompanyProvisioningBody,
   sampleCompanyStatuses,
 } from '@openbooks/engine/src/sample-companies/service.ts'
-import { getAuthz, can } from '../../../../lib/authz'
+import { can } from '../../../../lib/authz'
 import { FEATURES, featureRequirements } from '../../../../lib/features'
 import { INDUSTRY_BY_KEY } from '../../../../lib/industries'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-async function authorized() {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (!can(authz, 'data.import') && !can(authz, 'admin.setup.manage')) {
-    return NextResponse.json({ error: 'missing permission: data.import' }, { status: 403 })
-  }
-  return authz
+const sampleCompanyBody = z.object({ industry: z.string().min(1) }).strict()
+
+function canManageSampleCompanies(authz: Parameters<typeof can>[0]): boolean {
+  return can(authz, 'data.import') || can(authz, 'admin.setup.manage')
 }
 
 function industryFeatureSet(industryKey: string): Record<string, boolean> {
@@ -48,19 +47,22 @@ function industryFeatureSet(industryKey: string): Record<string, boolean> {
   return features
 }
 
-export async function GET() {
-  const gate = await authorized()
-  if (gate instanceof NextResponse) return gate
-  return NextResponse.json({ profiles: await sampleCompanyStatuses(gate.user.homeUserId) })
-}
+export const GET = defineRoute({
+  public: 'session',
+  handler: async ({ authz }) => {
+    if (!canManageSampleCompanies(authz)) return NextResponse.json({ error: 'missing permission: data.import' }, { status: 403 })
+    return NextResponse.json({ profiles: await sampleCompanyStatuses(authz.user.homeUserId) })
+  },
+})
 
-export async function POST(req: Request) {
-  const gate = await authorized()
-  if (gate instanceof NextResponse) return gate
-  const parsedBody = await parseJsonBody(req, jsonObject);
+export const POST = defineRoute({
+  public: 'session',
+  handler: async ({ request: req, authz: gate }) => {
+  if (!canManageSampleCompanies(gate)) return NextResponse.json({ error: 'missing permission: data.import' }, { status: 403 })
+  const parsedBody = await parseJsonBody(req, sampleCompanyBody);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as { industry?: unknown }
-  if (typeof body.industry !== 'string' || !INDUSTRY_BY_KEY.has(body.industry)) {
+  const body = parsedBody.data
+  if (!INDUSTRY_BY_KEY.has(body.industry)) {
     return NextResponse.json({ error: 'unknown-industry' }, { status: 422 })
   }
   try {
@@ -88,4 +90,5 @@ export async function POST(req: Request) {
     console.error('[sample-company] provisioning failed', error)
     return apiErrorResponse(error)
   }
-}
+  },
+})

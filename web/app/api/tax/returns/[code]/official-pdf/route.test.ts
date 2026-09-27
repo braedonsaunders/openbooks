@@ -58,6 +58,19 @@ stubModules({
         return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
       }
     `,
+    "@/lib/authz": `
+      const state = globalThis[Symbol.for('openbooks.tax-official-pdf-route-test')]
+      const authz = () => ({
+        user: { orgId: 'org-1', id: 'user-1' },
+        allowedSubsidiaryIds: state.restricted ? new Set(['sub-a']) : null,
+      })
+      export async function getAuthz() { return authz() }
+      export async function guardPermission() { return authz() }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() {
+        return state.restricted ? { status: 403, json: async () => ({ error: 'requires unrestricted subsidiary access' }) } : null
+      }
+    `,
     "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.tax-official-pdf-route-test')]
       const sqlText = (query) => {

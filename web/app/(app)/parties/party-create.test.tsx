@@ -64,7 +64,6 @@ const messages = (await import("../../../messages/en")).default;
 const { MoneyProvider } = await import("../../../components/money-provider");
 const { PartyDrawer } = await import("./PartyDrawer");
 const { NewPartyButton } = await import("./NewPartyButton");
-const { NewPartyRedirect } = await import("./NewPartyRedirect");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
@@ -300,31 +299,6 @@ test("the New button opens the unsaved drawer with zero writes", async (t) => {
     "/entities/customers?partyNew=1&role=customer",
   ]);
   assert.equal(globalThis.__partyCreateFetches!.length, 0, "the button writes nothing — no draft POST");
-});
-
-test("the ?party=new deep link swaps to the unsaved drawer with zero writes", async (t) => {
-  const restoreFetch = resetHarness();
-  t.after(restoreFetch);
-  const host = document.createElement("div");
-  document.body.appendChild(host);
-  const root = createRoot(host);
-  t.after(async () => {
-    await act(async () => {
-      root.unmount();
-    });
-    host.remove();
-  });
-  await act(async () => {
-    root.render(
-      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
-        <NewPartyRedirect basePath="/entities/vendors" role="vendor" />
-      </NextIntlClientProvider>,
-    );
-    await tick();
-  });
-  await tick();
-  assert.deepEqual(globalThis.__partyCreateRouter!.replaces, ["/entities/vendors?partyNew=1&role=vendor"]);
-  assert.equal(globalThis.__partyCreateFetches!.length, 0, "the redirect writes nothing — no draft POST");
 });
 
 // /parties → New party → Kind Vendor → name → Save was refused with

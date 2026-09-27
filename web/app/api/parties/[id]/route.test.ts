@@ -98,6 +98,7 @@ stubModules({
       export const pool = {}
       export const env = {}
       export function registerRequestOrgResolver() {}
+      export function currentRequestOrgResolver() { return null }
       export async function withBypassContext(fn) { return fn() }
       export function ambientTenantOrgId() { return null }
     `,
@@ -105,8 +106,23 @@ stubModules({
       export async function guardPermission() {
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
+      export async function getAuthz() {
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+      }
       export function guardSubsidiaryScope() { return null }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
       export function subsidiariesInScope() { return true }
+    `,
+    "@/lib/authz": `
+      export async function guardPermission() {
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+      }
+      export async function getAuthz() {
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+      }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
     `,
     "../../../../lib/features": `export async function isFeatureEnabled() { return true }`,
     "../../../../lib/custom-fields": `
@@ -319,6 +335,6 @@ test('an unknown party kind is still refused before any write', async () => {
 
   const response = await patch({ kind: 'syndicate' })
 
-  assert.equal(response.status, 422)
+  assert.equal(response.status, 400)
   assert.equal(writeCalls().length, 0)
 })

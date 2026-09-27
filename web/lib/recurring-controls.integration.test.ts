@@ -63,7 +63,7 @@ for (const operation of ["list", "create by id", "create by number", "edit", "de
           await db.execute(sql`insert into document_lines (org_id,document_id,line_number,account_id,quantity,unit_price,amount,subsidiary_id)
             values (${org.orgId},${templates[0]!},2,${org.accounts.cogs},'1','-100','-100',${org.subsidiaryId})`);
           if (operation === "intercompany list") {
-            const response = await collection.GET();
+            const response = await collection.GET(new Request('http://recurring.test'));
             assert.equal(response.status, 200);
             assert.deepEqual((await response.json()).schedules, []);
           } else {
@@ -118,7 +118,7 @@ for (const operation of ["list", "create by id", "create by number", "edit", "de
             : operation === "subtree scope" ? { mode: "subtree", subsidiaryId: org.subsidiaryId } : null;
           await db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
             where org_id=${org.orgId} and key='recurring_manager'`);
-          const response = await collection.GET();
+          const response = await collection.GET(new Request('http://recurring.test'));
           assert.equal(response.status, 200);
           assert.deepEqual(new Set((await response.json()).schedules.map((row: { id: string }) => row.id)),
             new Set(operation === "empty scope" ? [] : schedules));
@@ -160,7 +160,7 @@ for (const operation of ["list", "create by id", "create by number", "edit", "de
           return;
         }
         if (operation === "list") {
-          const response = await collection.GET();
+          const response = await collection.GET(new Request('http://recurring.test'));
           assert.equal(response.status, 200);
           assert.deepEqual((await response.json()).schedules.map((row: { id: string }) => row.id), [schedules[0]]);
           return;

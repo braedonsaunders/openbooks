@@ -61,6 +61,20 @@ stubModules({
         return NextResponse.json({ error: 'not_found' }, { status: 404 })
       }
     `,
+    "@/lib/authz": `
+      const state = globalThis[Symbol.for('openbooks.filing-export-route-test')]
+      function currentAuthz() {
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds === null ? null : new Set(state.allowedSubsidiaryIds),
+        }
+      }
+      export async function getAuthz() { return currentAuthz() }
+      export async function guardPermission() { return currentAuthz() }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
+    `,
+    "../../../../../../lib/list-params": `export function isUuid() { return true }`,
     "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.filing-export-route-test')]
       const sqlText = globalThis.openbooksSqlTextFilingExport

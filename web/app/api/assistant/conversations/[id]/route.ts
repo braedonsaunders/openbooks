@@ -1,6 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "../../../../../lib/api/route";
 import { NextResponse } from "next/server";
-import { guardPermission } from "../../../../../lib/authz";
+import { z } from "zod";
 import {
   deleteConversation,
   olderMessages,
@@ -17,17 +17,19 @@ import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 export const runtime = "nodejs";
 
 const SCOPE = "assistant";
+const renameBody = z.object({ title: z.string().trim().min(1) }).strict();
 
 /**
  * Recent messages of one owned conversation, oldest first. With
  * `?before=<messageId>&limit=<n>` returns the older page above the cursor
  * plus whether more history exists above that page.
  */
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("assistant.use");
-  if (gate instanceof NextResponse) return gate;
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
+export const GET = defineRoute({
+  permission: "assistant.use",
+  feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
+  params: z.object({ id: z.string().uuid() }),
+  handler: async ({ request: req, authz: gate, params }) => {
+  const { id } = params;
   if (!(await ownsConversation(gate, id, SCOPE))) {
     return notFound("record");
   }
@@ -41,42 +43,37 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   }
   const messages = await recentMessages(gate, id);
   return NextResponse.json({ messages });
-}
+  },
+});
 
 /** Rename an owned conversation: { title }. */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("assistant.use");
-  if (gate instanceof NextResponse) return gate;
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
-  let body: { title?: unknown };
-  try {
-    const parsedBody = await parseJsonBody(req, jsonObject);
-    if (!parsedBody.ok) return parsedBody.response;
-    body = parsedBody.data;
-  } catch {
-    return NextResponse.json({ error: "bad request" }, { status: 400 });
-  }
-  if (typeof body.title !== "string" || !body.title.trim()) {
-    return NextResponse.json({ error: "title required" }, { status: 400 });
-  }
+export const PATCH = defineRoute({
+  permission: "assistant.use",
+  feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
+  params: z.object({ id: z.string().uuid() }),
+  body: renameBody,
+  handler: async ({ authz: gate, params, body }) => {
+  const { id } = params;
   const renamed = await renameConversation(gate, id, SCOPE, body.title);
   if (!renamed) return notFound("record");
   // A user rename wins forever: record the source so a later turn never
   // overwrites it with a generated title. Best-effort, never throws.
   await markTitleRenamed(gate, id);
   return NextResponse.json({ ok: true });
-}
+  },
+});
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("assistant.use");
-  if (gate instanceof NextResponse) return gate;
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
+export const DELETE = defineRoute({
+  permission: "assistant.use",
+  feature: { none: "Assistant access is controlled by assistant permissions and provider configuration." },
+  params: z.object({ id: z.string().uuid() }),
+  handler: async ({ authz: gate, params }) => {
+  const { id } = params;
   // Stop its live run first so it cannot write past the cascade; other
   // conversations' runs are untouched (different rows, different runs).
   await abortActiveRun(createDbOwnedRunStore(gate), id);
   const deleted = await deleteConversation(gate, id, SCOPE);
   if (!deleted) return notFound("record");
   return NextResponse.json({ ok: true });
-}
+  },
+});

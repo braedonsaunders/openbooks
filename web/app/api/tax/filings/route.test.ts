@@ -5,8 +5,8 @@ import test from 'node:test'
 import { NextResponse } from 'next/server'
 
 // Route boundary suite for the tax filing surface (no test file existed for
-// this module). Regression for fnd_mtbnow2k_d89o5i: the Prepare (POST) and
-// Mark Filed (PATCH) routes regressed to the report-creation permission,
+// this module). The Prepare (POST) and Mark Filed (PATCH) routes require
+// the filing permission rather than report-creation permission,
 // so any report creator could certify a statutory return as filed. The
 // certification authority is compliance.file; these tests pin the exact
 // permission string both entry points demand and prove a reports.create
@@ -84,6 +84,8 @@ const mockSources = new Map<string, string>([
         }
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
       }
+      export async function getAuthz() { return null }
+      export async function guardRootSubsidiaryScope() { return null }
     `,
   ],
   [
@@ -172,6 +174,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
+  ['@/lib/authz', 'mock:authz'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
@@ -306,13 +309,13 @@ test('POST prepare passes the filing scope and translation to the engine', async
 test('POST prepare refuses a malformed filing scope without reaching the engine', async () => {
   reset(['compliance.file'])
 
-  for (const body of [
-    { code: 'GST-Q', from: '2026-01-01', to: '2026-03-31', filingEntity: { subsidiaryIds: 'sub-a' } },
-    { code: 'GST-Q', from: '2026-01-01', to: '2026-03-31', filingEntity: { subsidiaryIds: [], } },
-    { code: 'GST-Q', from: '2026-01-01', to: '2026-03-31', translation: { presentationCurrency: 7 } },
+  for (const [body, expectedStatus] of [
+    [{ code: 'GST-Q', from: '2026-01-01', to: '2026-03-31', filingEntity: { subsidiaryIds: 'sub-a' } }, 400],
+    [{ code: 'GST-Q', from: '2026-01-01', to: '2026-03-31', filingEntity: { subsidiaryIds: [] } }, 422],
+    [{ code: 'GST-Q', from: '2026-01-01', to: '2026-03-31', translation: { presentationCurrency: 7 } }, 400],
   ]) {
-    const response = await post(body)
-    assert.equal(response.status, 422)
+    const response = await post(body as Record<string, unknown>)
+    assert.equal(response.status, expectedStatus)
   }
   assert.deepEqual(routeState.engineCalls, [], 'refused scopes never reach the engine')
 })
