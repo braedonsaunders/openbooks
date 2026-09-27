@@ -5,8 +5,13 @@
  * browser. Mirrors the web/lib/order-kinds.ts split.
  */
 
+import {
+  DOCUMENT_PERMISSION_NAMESPACE,
+  type DocumentPermissionNamespace,
+} from '@openbooks/engine/src/records/document-kind-permissions.ts'
+
 export type DocFamily = 'ap' | 'ar' | 'bank' | 'transfer' | 'gl'
-export type PermNamespace = 'ap' | 'ar' | 'gl'
+export type PermNamespace = DocumentPermissionNamespace
 
 /**
  * Period-close module whose lock governs posting this kind — mirrors
@@ -22,7 +27,10 @@ export interface DocKindConfig {
   kind: string
   family: DocFamily
   numberPrefix: string
-  /** Permission namespace driving create/read/post gates. */
+  /**
+   * Permission namespace driving create/read/post gates, from the engine's
+   * document permission catalog (records/document-kind-permissions.ts).
+   */
   permNamespace: PermNamespace
   /** Period-close module whose lock blocks posting this kind. */
   closeModule: DocCloseModule
@@ -60,39 +68,39 @@ export interface DocKindConfig {
   directPost: boolean
 }
 
-export const DOC_KINDS: Record<string, DocKindConfig> = {
+const DOC_KIND_ENTRIES: Record<string, Omit<DocKindConfig, 'permNamespace'>> = {
   vendor_bill: {
-    kind: 'vendor_bill', closeModule: 'ap', family: 'ap', numberPrefix: 'BILL-', permNamespace: 'ap', i18n: 'ap',
+    kind: 'vendor_bill', closeModule: 'ap', family: 'ap', numberPrefix: 'BILL-', i18n: 'ap',
     partyRole: 'vendor', accountTypes: null, hasTax: true, hasDueDate: true, hasReference: true,
     fundingSource: null, isOpenItem: true, showsBalance: false, directPost: false,
   },
   vendor_credit: {
-    kind: 'vendor_credit', closeModule: 'ap', family: 'ap', numberPrefix: 'VCRED-', permNamespace: 'ap', i18n: 'ap',
+    kind: 'vendor_credit', closeModule: 'ap', family: 'ap', numberPrefix: 'VCRED-', i18n: 'ap',
     partyRole: 'vendor', accountTypes: null, hasTax: true, hasDueDate: true, hasReference: true,
     fundingSource: null, isOpenItem: true, showsBalance: false, directPost: false,
   },
   customer_invoice: {
-    kind: 'customer_invoice', closeModule: 'ar', family: 'ar', numberPrefix: 'INV-', permNamespace: 'ar', i18n: 'ar',
+    kind: 'customer_invoice', closeModule: 'ar', family: 'ar', numberPrefix: 'INV-', i18n: 'ar',
     partyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: true, hasDueDate: true,
     hasReference: true, fundingSource: null, isOpenItem: true, showsBalance: true, directPost: false,
   },
   customer_credit: {
-    kind: 'customer_credit', closeModule: 'ar', family: 'ar', numberPrefix: 'CM-', permNamespace: 'ar', i18n: 'ar',
+    kind: 'customer_credit', closeModule: 'ar', family: 'ar', numberPrefix: 'CM-', i18n: 'ar',
     partyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: true, hasDueDate: true,
     hasReference: true, fundingSource: null, isOpenItem: true, showsBalance: false, directPost: false,
   },
   rma: {
-    kind: 'rma', closeModule: 'ar', family: 'ar', numberPrefix: 'RMA-', permNamespace: 'ar', i18n: 'ar',
+    kind: 'rma', closeModule: 'ar', family: 'ar', numberPrefix: 'RMA-', i18n: 'ar',
     partyRole: 'customer', accountTypes: ['income', 'income_other'], hasTax: false, hasDueDate: false,
     hasReference: true, fundingSource: null, isOpenItem: false, showsBalance: false, directPost: false,
   },
   card_charge: {
-    kind: 'card_charge', closeModule: 'ap', family: 'bank', numberPrefix: 'CC-', permNamespace: 'ap', i18n: 'banking',
+    kind: 'card_charge', closeModule: 'ap', family: 'bank', numberPrefix: 'CC-', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: true, hasDueDate: false, hasReference: false,
     fundingSource: 'card', isOpenItem: false, showsBalance: false, directPost: true,
   },
   card_refund: {
-    kind: 'card_refund', closeModule: 'ap', family: 'bank', numberPrefix: 'CRF-', permNamespace: 'ap', i18n: 'banking',
+    kind: 'card_refund', closeModule: 'ap', family: 'bank', numberPrefix: 'CRF-', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: true, hasDueDate: false, hasReference: false,
     fundingSource: 'card', isOpenItem: false, showsBalance: false, directPost: true,
   },
@@ -101,7 +109,7 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
   // present) and a 'bank' funding source. The drawer renders the payee picker
   // from optionalPartyRole and the funding bank from fundingSource.
   check: {
-    kind: 'check', closeModule: 'ap', family: 'bank', numberPrefix: 'CHK-', permNamespace: 'ap', i18n: 'banking',
+    kind: 'check', closeModule: 'ap', family: 'bank', numberPrefix: 'CHK-', i18n: 'banking',
     partyRole: null, optionalPartyRole: 'vendor', accountTypes: null, hasTax: true, hasDueDate: false, hasReference: true,
     fundingSource: 'bank', isOpenItem: false, showsBalance: false, directPost: true,
   },
@@ -111,12 +119,12 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
   // the posting rule's controlOverride; falls back to the org default bank.
   // Checks share the same fundingSource/bag contract for the funding bank.
   deposit: {
-    kind: 'deposit', closeModule: 'banking', family: 'bank', numberPrefix: 'DEP-', permNamespace: 'gl', i18n: 'banking',
+    kind: 'deposit', closeModule: 'banking', family: 'bank', numberPrefix: 'DEP-', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: true,
     fundingSource: 'bank', isOpenItem: false, showsBalance: false, directPost: true,
   },
   transfer: {
-    kind: 'transfer', closeModule: 'banking', family: 'transfer', numberPrefix: 'TRF-', permNamespace: 'gl', i18n: 'banking',
+    kind: 'transfer', closeModule: 'banking', family: 'transfer', numberPrefix: 'TRF-', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: false,
     fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
   },
@@ -126,7 +134,7 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
   // CR cost pool (see the project_charge rule in engine/src/ledger/posting.ts). Internal
   // (no party); direct-post.
   project_charge: {
-    kind: 'project_charge', closeModule: 'gl', family: 'gl', numberPrefix: 'CHG-', permNamespace: 'gl', i18n: 'banking',
+    kind: 'project_charge', closeModule: 'gl', family: 'gl', numberPrefix: 'CHG-', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: true,
     fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
   },
@@ -134,11 +142,19 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
   // Lines are machine-built by engine/src/payroll/run.ts commitPayRun — the
   // drawer never edits them; the payroll workspace is the editing surface.
   pay_run: {
-    kind: 'pay_run', closeModule: 'gl', family: 'gl', numberPrefix: 'PAY-', permNamespace: 'gl', i18n: 'banking',
+    kind: 'pay_run', closeModule: 'gl', family: 'gl', numberPrefix: 'PAY-', i18n: 'banking',
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: false,
     fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
   },
 }
+
+export const DOC_KINDS: Record<string, DocKindConfig> = Object.fromEntries(
+  Object.entries(DOC_KIND_ENTRIES).map(([kind, config]) => {
+    const permNamespace = DOCUMENT_PERMISSION_NAMESPACE[kind]
+    if (!permNamespace) throw new Error(`document kind "${kind}" has no permission namespace`)
+    return [kind, { ...config, permNamespace }]
+  }),
+)
 
 export const AP_KINDS = ['vendor_bill', 'vendor_credit'] as const
 export const AR_KINDS = ['customer_invoice', 'customer_credit'] as const
@@ -189,48 +205,10 @@ export function docKindConfig(kind: string): DocKindConfig | undefined {
   return DOC_KINDS[kind]
 }
 
-/**
- * Permission key for reading a document of a kind through the generic
- * document endpoints. Project charges are a Projects-domain record (their
- * drawer, list and kind-specific routes gate on projects.read), so they
- * read through the Projects grant rather than the GL namespace their
- * posting rule lives under.
- */
-export function documentReadPermission(kind: string): string {
-  if (kind === 'rma') return 'orders.fulfill'
-  if (kind === 'project_charge') return 'projects.read'
-  return readPermission(kind)
-}
-
-/**
- * Permission key for editing a document of a kind through the generic
- * document endpoints. Mirrors documentReadPermission: project charges edit
- * through projects.manage.
- */
-export function documentEditPermission(kind: string): string {
-  if (kind === 'rma') return 'orders.fulfill'
-  if (kind === 'project_charge') return 'projects.manage'
-  return createPermission(kind)
-}
-
-/** Permission key for the create/submit action on a kind. */
-export function createPermission(kind: string): string {
-  if (kind === 'rma') return 'orders.fulfill'
-  const cfg = DOC_KINDS[kind]
-  if (!cfg) throw new Error(`unknown document kind "${kind}"`)
-  return cfg.permNamespace === 'gl' ? 'gl.post' : `${cfg.permNamespace}.create`
-}
-
-/** Permission key for the post action on a kind. */
-export function postPermission(kind: string): string {
-  const cfg = DOC_KINDS[kind]
-  if (!cfg) throw new Error(`unknown document kind "${kind}"`)
-  return cfg.permNamespace === 'gl' ? 'gl.post' : `${cfg.permNamespace}.post`
-}
-
-/** Permission key for reading a kind (ap.read / ar.read / gl.read). */
-export function readPermission(kind: string): string {
-  const cfg = DOC_KINDS[kind]
-  if (!cfg) throw new Error(`unknown document kind "${kind}"`)
-  return `${cfg.permNamespace}.read`
-}
+export {
+  createPermission,
+  documentEditPermission,
+  documentReadPermission,
+  postPermission,
+  readPermission,
+} from '@openbooks/engine/src/records/document-kind-permissions.ts'

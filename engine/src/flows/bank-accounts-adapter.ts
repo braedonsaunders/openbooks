@@ -6,6 +6,7 @@ import { lockScopeRow } from "../organization/subsidiary-scope.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
+import { tableScope } from "./subject-scope.ts";
 
 /**
  * party_bank_accounts FlowSubjectAdapter — the first non-document subject.
@@ -92,6 +93,10 @@ async function loadRow(subjectId: string, orgId?: string): Promise<BankRow | nul
 
 export const bankAccountsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: BANK_ACCOUNT_SUBJECT_KIND,
+  // Bank details manage through the parties surface and inherit the party's
+  // legal entity.
+  permissions: { read: "parties.read", edit: "parties.manage", approve: "parties.manage" },
+  scope: tableScope("party", "party_bank_accounts", "party_id"),
   profile: bankAccountSubjectProfile,
   // Flows never write bank fields directly — the material columns are exactly
   // what approval guards, so all mutation goes through the API + re-approval.

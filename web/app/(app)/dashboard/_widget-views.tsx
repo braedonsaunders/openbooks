@@ -31,7 +31,6 @@ import {
 } from 'lucide-react'
 import { Badge } from '@openbooks/ui'
 import { metricTilePack, packsEqual } from './_metric-tile-density'
-import { approvalRecordHref } from '../../../lib/approvals-links'
 import type { DashboardMetrics } from './_metrics'
 
 export function WidgetCard({
@@ -601,10 +600,10 @@ function PendingApprovalsList({
         {approvals.map((a) => (
           <li key={a.id}>
             <Link
-              // Deep-link each row to its record through the shared approvals
-              // resolver (F4T2-6) — the same href the inbox row uses. Kinds
-              // with no module surface keep the generic list href.
-              href={approvalRecordHref(a.targetKind, a.targetId) ?? href}
+              // Each row deep-links to its record through the shared approvals
+              // resolver, computed on the server (the same href the inbox row
+              // uses). Kinds with no module surface keep the generic list href.
+              href={a.href ?? href}
               className="flex items-center justify-between gap-2 px-4 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-800/40"
             >
               <div className="min-w-0">

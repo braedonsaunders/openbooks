@@ -11,6 +11,7 @@ import {
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { tableScope } from "./subject-scope.ts";
 
 export const TIMESHEET_WEEK_SUBJECT_KIND = "timesheet_week";
 
@@ -139,6 +140,10 @@ async function loadWeekSummary(subjectId: string): Promise<WeekRow | null> {
 
 export const timesheetWeeksFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: TIMESHEET_WEEK_SUBJECT_KIND,
+  // /timesheets reads through time.read and writes through time.manage; a
+  // week belongs to its employee's legal entity.
+  permissions: { read: "time.read", edit: "time.manage", approve: "time.manage" },
+  scope: tableScope("party", "timesheet_weeks", "employee_party_id"),
   profile: timesheetWeekSubjectProfile,
   // releaseApproval below delegates to the registered handler: this kind
   // needs a handler registered at web boot (see handlerReleasedSubjectKinds).

@@ -85,6 +85,9 @@ async function loadApproval(subjectId: string): Promise<ApprovalRow | null> {
 
 export const employmentMigrationFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND,
+  // Mapping sets govern employment records; the set itself is org-wide.
+  permissions: { read: "hrm.employment.read", edit: "hrm.employment.manage", approve: "hrm.employment.manage" },
+  scope: { via: "none" },
   profile: employmentMigrationSubjectProfile,
   // A flow must not rewrite the digest it is approving: the mapping set
   // freezes when the approval is requested, so no field is flow-writable.

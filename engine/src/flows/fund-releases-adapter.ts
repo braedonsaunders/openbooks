@@ -80,6 +80,9 @@ async function loadRelease(subjectId: string): Promise<FundReleaseFlowRow | null
 
 export const fundReleasesFlowAdapter: FlowSubjectAdapter = {
   subjectKind: FUND_RELEASE_SUBJECT_KIND,
+  // Releases post at the primary book's root and carry no subsidiary.
+  permissions: { read: "funds.read", edit: "funds.manage", approve: "funds.manage" },
+  scope: { via: "none" },
   profile: fundReleaseSubjectProfile,
   writableFields: new Set<string>(),
   selfApprovalPolicy: "forbidden",
@@ -115,8 +118,10 @@ export const fundReleasesFlowAdapter: FlowSubjectAdapter = {
     return `Fund release ${String(number ?? "")}: ${String(from ?? "")} → ${String(to ?? "")}`;
   },
 
-  deepLink(subjectId: string): string {
-    return `/nonprofit?release=${encodeURIComponent(subjectId)}`;
+  deepLink(): string {
+    // Fund releases have no record page yet; the hub is the landing surface
+    // until one ships (party_bank_account precedent).
+    return "/inbox";
   },
 
   async getStatus(subjectId: string): Promise<string | null> {

@@ -63,6 +63,9 @@ const documentsAdapter = createDocumentsFlowAdapter(PAY_RUN_SUBJECT_KIND);
 export const payRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   ...documentsAdapter,
   profile: payRunSubjectProfile,
+  // Pay runs are documents, but their kind-specific surface is payroll, not
+  // the GL namespace their posting rule lives under.
+  permissions: { read: "payroll.read", edit: "payroll.manage", approve: "payroll.manage" },
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {
     const base = await documentsAdapter.loadContext(subjectId);

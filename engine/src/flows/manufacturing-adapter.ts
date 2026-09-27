@@ -5,6 +5,7 @@ import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
+import { tableScope } from "./subject-scope.ts";
 
 export const WORK_ORDER_SUBJECT_KIND = "work_order";
 
@@ -76,6 +77,8 @@ async function enabled(row: WorkOrderSubjectRow): Promise<boolean> {
 
 export const manufacturingFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: WORK_ORDER_SUBJECT_KIND,
+  permissions: { read: "manufacturing.read", edit: "manufacturing.manage", approve: "manufacturing.manage" },
+  scope: tableScope("column", "mfg_work_orders", "subsidiary_id"),
   profile: workOrderSubjectProfile,
   releaseViaHandler: true,
 
@@ -106,8 +109,10 @@ export const manufacturingFlowAdapter: FlowSubjectAdapter = defineTableSubjectAd
     return `Work order ${String(values.number ?? "")}`;
   },
 
-  deepLink(subjectId: string): string {
-    return `/manufacturing/work-orders?workOrder=${encodeURIComponent(subjectId)}`;
+  deepLink(): string {
+    // Work orders have no record page yet; the hub is the landing surface
+    // until one ships (party_bank_account precedent).
+    return "/inbox";
   },
 
   async getStatus(subjectId: string): Promise<string | null> {

@@ -17,6 +17,7 @@ import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { tableScope } from "./subject-scope.ts";
 
 export const CREW_TIME_BATCH_SUBJECT_KIND = "crew_time_batch" as const;
 
@@ -97,6 +98,11 @@ async function loadBatchSummary(subjectId: string): Promise<BatchRow | null> {
 
 export const crewBatchFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: CREW_TIME_BATCH_SUBJECT_KIND,
+  // Batches read through time.read and enter through time.crew.enter; they
+  // belong to their project's legal entity, the same rule the crew list
+  // applies.
+  permissions: { read: "time.read", edit: "time.crew.enter", approve: "time.manage" },
+  scope: tableScope("project", "crew_time_batches", "project_id"),
   profile: crewBatchSubjectProfile,
   // releaseApproval below delegates to the registered handler: this kind
   // needs a handler registered at web boot (see handlerReleasedSubjectKinds).

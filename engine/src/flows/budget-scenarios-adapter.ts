@@ -82,6 +82,9 @@ async function loadBudget(subjectId: string): Promise<BudgetRow | null> {
 
 export const budgetScenariosFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: BUDGET_SCENARIO_SUBJECT_KIND,
+  // Checker decisions require budgets.approve. Scenarios are org-wide.
+  permissions: { read: "budgets.read", edit: "budgets.manage", approve: "budgets.approve" },
+  scope: { via: "none" },
   profile: budgetScenarioSubjectProfile,
 
   async loadContext(subjectId: string): Promise<FlowSubjectContext | null> {

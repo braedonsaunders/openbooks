@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { DecisionFailedError, GateError } from '@openbooks/engine/src/flows/index.ts'
+import { DecisionFailedError, GateError, getFlowAdapter } from '@openbooks/engine/src/flows/index.ts'
 import {
-  lockScopeRow,
-  ScopeNotFoundError,
-} from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+  FlowSubjectScopeUnresolvedError,
+  lockSubjectScope,
+  resolveSubjectSubsidiaries,
+} from '@openbooks/engine/src/flows/subject-scope.ts'
 import { getAuthz, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { canReadFlowSubject } from '../../../lib/flow-subject-authz'
-import { allocationScopeVisible } from '@openbooks/engine/src/organization/allocation-scope.ts'
 import { notFound } from "@/lib/api/responses";
 
 /** Session + Flows feature gate for /api/flows/* (pages already 404 when off). */
@@ -44,53 +44,37 @@ export async function loadGateHeader(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<GateHeader | null> {
-  const r = (await db.execute<GateHeader>(sql`
+  const r = (await db.execute<Omit<GateHeader, 'subsidiary_id'>>(sql`
     select g.id, g.org_id, g.status, g.assignee_user_id, g.assignee_role,
-           g.subject_kind, g.subject_id,
-           case
-             when g.subject_kind = 'party_bank_account' then (
-               select p.subsidiary_id
-                 from party_bank_accounts ba
-                 join parties p on p.id = ba.party_id and p.org_id = ba.org_id
-                where ba.id = g.subject_id and ba.org_id = g.org_id
-             )
-             when g.subject_kind = 'timesheet_week' then (
-               select p.subsidiary_id
-                 from timesheet_weeks tw
-                 join parties p on p.id = tw.employee_party_id and p.org_id = tw.org_id
-                where tw.id = g.subject_id and tw.org_id = g.org_id
-             )
-             when g.subject_kind = 'allocation_run' then (
-               select ar.subsidiary_id from allocation_runs ar
-                where ar.id = g.subject_id and ar.org_id = g.org_id
-             )
-             else d.subsidiary_id
-           end as subsidiary_id
+           g.subject_kind, g.subject_id
       from flow_gates g
-      left join documents d
-        on d.id = g.subject_id and d.org_id = g.org_id and d.kind = g.subject_kind
      where g.id = ${gateId} and g.org_id = ${orgId}
   `))
   const gate = r.rows[0]
   if (!gate) return null
-  if (gate.subject_kind === 'allocation_run' && allowedSubsidiaryIds !== null) {
-    const run = (await db.execute<{ subsidiary_id: string | null; computation: unknown }>(sql`
-      select subsidiary_id, computation from allocation_runs
-       where id = ${gate.subject_id} and org_id = ${orgId}
-    `)).rows[0]
-    if (!run || !allocationScopeVisible(allowedSubsidiaryIds, run.subsidiary_id, run.computation)) return null
-  }
-  return gate
+  const scope = getFlowAdapter(gate.subject_kind)?.scope
+  if (!scope) throw new FlowSubjectScopeUnresolvedError(gate.subject_kind, gate.subject_id)
+  const owners = await resolveSubjectSubsidiaries(
+    orgId,
+    gate.subject_kind,
+    scope,
+    [gate.subject_id],
+    allowedSubsidiaryIds,
+  )
+  const subsidiaryId = owners.get(gate.subject_id) ?? null
+  // A custom scope's visibility is richer than one owner row (an allocation
+  // run's whole computation): a restricted caller it hides meets the same
+  // answer as a missing gate.
+  if (scope.via === 'custom' && allowedSubsidiaryIds !== null && subsidiaryId === null) return null
+  return { ...gate, subsidiary_id: subsidiaryId }
 }
 
 /**
- * Resolve the legal entity behind a flow subject before a direct read. Flow
- * subjects are polymorphic: documents (including field tickets and pay runs)
- * carry their own subsidiary, while bank-account and timesheet subjects
- * inherit it from their party. A missing/non-entity subsidiary is deliberately
- * returned as null so restricted callers fail closed through
- * guardSubsidiaryScope, while unrestricted callers can still let the adapter
- * decide whether the subject exists.
+ * Resolve the legal entity behind a flow subject before a direct read,
+ * through the subject kind's declared scope. A missing/non-entity
+ * subsidiary is deliberately returned as null so restricted callers fail
+ * closed through guardSubsidiaryScope, while unrestricted callers can still
+ * let the adapter decide whether the subject exists.
  */
 export async function loadFlowSubjectSubsidiary(
   subjectKind: string,
@@ -98,39 +82,10 @@ export async function loadFlowSubjectSubsidiary(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<string | null> {
-  if (subjectKind === 'allocation_run') {
-    const run = (await db.execute<{ subsidiary_id: string | null; computation: unknown }>(sql`
-      select subsidiary_id, computation from allocation_runs
-       where id = ${subjectId} and org_id = ${orgId}
-    `)).rows[0]
-    if (!run || !allocationScopeVisible(allowedSubsidiaryIds, run.subsidiary_id, run.computation)) return null
-    return run.subsidiary_id
-  }
-  const r = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select case
-             when ${subjectKind} = 'party_bank_account' then (
-               select p.subsidiary_id
-                 from party_bank_accounts ba
-                 join parties p on p.id = ba.party_id and p.org_id = ba.org_id
-                where ba.id = ${subjectId} and ba.org_id = ${orgId}
-             )
-             when ${subjectKind} = 'timesheet_week' then (
-               select p.subsidiary_id
-                 from timesheet_weeks tw
-                 join parties p on p.id = tw.employee_party_id and p.org_id = tw.org_id
-                where tw.id = ${subjectId} and tw.org_id = ${orgId}
-             )
-             when ${subjectKind} in ('budget_scenario', 'close_run') then null
-             else (
-               select d.subsidiary_id
-                 from documents d
-                where d.id = ${subjectId}
-                  and d.org_id = ${orgId}
-                  and d.kind = ${subjectKind}
-             )
-           end as "subsidiaryId"
-  `))
-  return r.rows[0]?.subsidiaryId ?? null;
+  const scope = getFlowAdapter(subjectKind)?.scope
+  if (!scope) throw new FlowSubjectScopeUnresolvedError(subjectKind, subjectId)
+  const owners = await resolveSubjectSubsidiaries(orgId, subjectKind, scope, [subjectId], allowedSubsidiaryIds)
+  return owners.get(subjectId) ?? null
 }
 
 /** Lock the canonical scope owner for the complete record-level flow read.
@@ -142,101 +97,18 @@ export async function lockFlowSubjectScope(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<void> {
-  if (subjectKind === "party_bank_account") {
-    const row = (
-      await db.execute<{ partyId: string }>(sql`
-      select party_id as "partyId" from party_bank_accounts
-       where id = ${subjectId} and org_id = ${orgId}
-    `)
-    ).rows[0];
-    if (!row) throw new ScopeNotFoundError();
-    await lockScopeRow(
-      db,
-      orgId,
-      "party",
-      row.partyId,
-      allowedSubsidiaryIds,
-      "share",
-    );
-    return;
-  }
-  if (subjectKind === "timesheet_week") {
-    const row = (
-      await db.execute<{ partyId: string }>(sql`
-      select employee_party_id as "partyId" from timesheet_weeks
-       where id = ${subjectId} and org_id = ${orgId}
-    `)
-    ).rows[0];
-    if (!row) throw new ScopeNotFoundError();
-    await lockScopeRow(
-      db,
-      orgId,
-      "party",
-      row.partyId,
-      allowedSubsidiaryIds,
-      "share",
-    );
-    return;
-  }
-  if (subjectKind === "allocation_run") {
-    // The visibility predicate, evaluated under the run row lock
-    // so a concurrent computation rewrite cannot slip between check and read.
-    const run = (
-      await db.execute<{ subsidiary_id: string | null; computation: unknown }>(sql`
-      select subsidiary_id, computation from allocation_runs
-       where id = ${subjectId} and org_id = ${orgId}
-       for share
-    `)
-    ).rows[0];
-    if (
-      !run ||
-      !allocationScopeVisible(allowedSubsidiaryIds, run.subsidiary_id, run.computation)
-    )
-      throw new ScopeNotFoundError();
-    return;
-  }
-  if (subjectKind === "work_order") {
-    const order = (
-      await db.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id from mfg_work_orders
-       where id = ${subjectId} and org_id = ${orgId}
-       for share
-    `)
-    ).rows[0];
-    if (
-      !order ||
-      (allowedSubsidiaryIds !== null &&
-        (order.subsidiary_id === null || !allowedSubsidiaryIds.has(order.subsidiary_id)))
-    ) {
-      throw new ScopeNotFoundError();
-    }
-    return;
-  }
-  if (subjectKind === "budget_scenario" || subjectKind === "close_run") {
-    // These org-wide subjects have no subsidiary owner. Restricted readers
-    // retain the same fail-closed result as the unlocked resolver.
-    if (allowedSubsidiaryIds !== null) throw new ScopeNotFoundError();
-    return;
-  }
-  await lockScopeRow(
-    db,
-    orgId,
-    "document",
-    subjectId,
-    allowedSubsidiaryIds,
-    "share",
-  );
+  const scope = getFlowAdapter(subjectKind)?.scope
+  if (!scope) throw new FlowSubjectScopeUnresolvedError(subjectKind, subjectId)
+  await lockSubjectScope(orgId, subjectKind, scope, subjectId, allowedSubsidiaryIds)
 }
 
 /**
  * Filter flow_runs subjects to the caller's subsidiary scope — the retry
  * route's subject-scope rule, reused for run listings (a run UUID is not a
- * grant to every legal entity). Document subjects resolve batched one
- * query per kind; bank-account and timesheet subjects resolve through
- * loadFlowSubjectSubsidiary; every other kind resolves through the same
- * loader, which fails closed (null) for restricted callers. Unrestricted
- * callers (null scope) keep every subject. Duplicate subjects resolve
- * once. Returns the in-scope subset, preserving order.
+ * grant to every legal entity). Subjects resolve batched, one query per
+ * kind, through each kind's declared scope; an unregistered kind keeps no
+ * entity and fails closed. Unrestricted callers (null scope) keep every
+ * subject. Returns the in-scope subset, preserving order.
  */
 export async function filterFlowRunSubjectsToScope<
   T extends { kind: string; id: string },
@@ -251,58 +123,22 @@ export async function filterFlowRunSubjectsToScope<
     : [...subjects];
   if (allowedSubsidiaryIds === null) return readableSubjects;
   if (readableSubjects.length === 0) return [];
-  const subsidiaryBySubject = new Map<string, string | null>();
-  const keyOf = (kind: string, id: string) => `${kind}\0${id}`;
-  // Document subjects (every kind the loader resolves through the
-  // documents table) batch one query per kind.
-  const documentKinds = new Map<string, { ids: string[] }>();
-  const individual: { key: string; kind: string; id: string }[] = [];
+  const idsByKind = new Map<string, string[]>();
   for (const subject of readableSubjects) {
-    const key = keyOf(subject.kind, subject.id);
-    if (subsidiaryBySubject.has(key)) continue;
-    subsidiaryBySubject.set(key, null);
-    if (
-      subject.kind === 'party_bank_account' ||
-      subject.kind === 'timesheet_week' ||
-      subject.kind === 'allocation_run' ||
-      subject.kind === 'budget_scenario' ||
-      subject.kind === 'close_run'
-    ) {
-      individual.push({ key, kind: subject.kind, id: subject.id });
-    } else {
-      const group = documentKinds.get(subject.kind) ?? { ids: [] };
-      group.ids.push(subject.id);
-      documentKinds.set(subject.kind, group);
-    }
+    idsByKind.set(subject.kind, [...(idsByKind.get(subject.kind) ?? []), subject.id]);
   }
-  await Promise.all([
-    ...[...documentKinds].map(async ([kind, group]) => {
-      const uniqueIds = [...new Set(group.ids)];
-      const r = await db.execute<{
-        id: string;
-        subsidiaryId: string | null;
-      }>(sql`
-        select id, subsidiary_id as "subsidiaryId" from documents
-         where org_id = ${orgId} and kind = ${kind} and id = any(${`{${uniqueIds.join(",")}}`}::uuid[])
-      `);
-      for (const row of r.rows)
-        subsidiaryBySubject.set(keyOf(kind, row.id), row.subsidiaryId);
-    }),
-    ...individual.map(async (item) => {
-      subsidiaryBySubject.set(
-        item.key,
-        await loadFlowSubjectSubsidiary(item.kind, item.id, orgId, allowedSubsidiaryIds),
-      )
-    }),
-  ]);
-  // Fail-closed scope predicate, mirroring subsidiaryScopeAllows (kept
-  // inline so this module's import surface — and the neighbouring unit
-  // mock — stays exactly as it was): an unresolved or missing subsidiary
-  // is never in scope for a restricted caller.
+  const ownersByKind = new Map(await Promise.all([...idsByKind].map(async ([kind, ids]) => {
+    const scope = getFlowAdapter(kind)?.scope
+    const owners = scope
+      ? await resolveSubjectSubsidiaries(orgId, kind, scope, ids, allowedSubsidiaryIds)
+      : new Map<string, string | null>()
+    return [kind, owners] as const
+  })));
+  // Fail-closed scope predicate, mirroring subsidiaryScopeAllows: an
+  // unresolved or missing subsidiary is never in scope for a restricted
+  // caller.
   return readableSubjects.filter((subject) => {
-    const subsidiaryId = subsidiaryBySubject.get(
-      keyOf(subject.kind, subject.id),
-    );
+    const subsidiaryId = ownersByKind.get(subject.kind)?.get(subject.id);
     return (
       subsidiaryId !== null &&
       subsidiaryId !== undefined &&

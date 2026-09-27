@@ -13,6 +13,7 @@ import {
 } from "./subject-profiles.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { tableScope } from "./subject-scope.ts";
 
 /**
  * Leave requests as a native flow subject.
@@ -96,6 +97,9 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
 
 export const hrmLeaveRequestFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: HRM_LEAVE_REQUEST_SUBJECT_KIND,
+  // A leave request belongs to the employer entity of its employment.
+  permissions: { read: "hrm.leave.read", edit: "hrm.leave.manage", approve: "hrm.leave.manage" },
+  scope: tableScope("employment", "hrm_leave_requests", "employment_id"),
   profile: hrmLeaveRequestSubjectProfile,
   // releaseApproval below delegates to the registered engine handler.
   releaseViaHandler: true,

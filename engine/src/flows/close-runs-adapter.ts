@@ -86,6 +86,10 @@ function periodType(row: CloseRunRow): "month" | "quarter" | "year" | "adjustmen
 
 export const closeRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: CLOSE_RUN_SUBJECT_KIND,
+  // /close/runs requires close.run; reads ride close.read. A period close
+  // is org-wide.
+  permissions: { read: "close.read", edit: "close.run", approve: "close.approve" },
+  scope: { via: "none" },
   profile: closeRunSubjectProfile,
   // releaseApproval below delegates to the registered engine handler.
   releaseViaHandler: true,

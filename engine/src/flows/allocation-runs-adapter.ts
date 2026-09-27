@@ -5,6 +5,7 @@ import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
+import { allocationScopeVisible } from "../organization/allocation-scope.ts";
 
 export const ALLOCATION_RUN_SUBJECT_KIND = "allocation_run";
 
@@ -115,6 +116,24 @@ async function loadRun(subjectId: string): Promise<AllocationRunRow | null> {
 
 export const allocationRunsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: ALLOCATION_RUN_SUBJECT_KIND,
+  permissions: { read: "allocations.read", edit: "allocations.manage", approve: "allocations.approve" },
+  scope: {
+    via: "custom",
+    // Allocation visibility depends on the full stored computation (pin
+    // plus every source, target, and line), not just the run pin.
+    async subsidiaryOf(orgId, ids, allowed, lock) {
+      const runs = (await db.execute<{ id: string; subsidiaryId: string | null; computation: unknown }>(sql`
+        select id, subsidiary_id as "subsidiaryId", computation from allocation_runs
+         where org_id = ${orgId}
+           and id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
+         ${lock ? sql`for share` : sql``}
+      `)).rows;
+      return new Map(runs.map((run) => [
+        run.id,
+        allocationScopeVisible(allowed, run.subsidiaryId, run.computation) ? run.subsidiaryId : null,
+      ]));
+    },
+  },
   profile: allocationRunSubjectProfile,
   // Nothing on a run is a flow-writable header field: the stored computation
   // is the thing being approved, and a flow must not rewrite it.
