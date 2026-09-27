@@ -413,3 +413,153 @@ const consolidatedRows = [
 ] as const;
 
 for (const row of consolidatedRows) await row.register();
+
+
+const cashLedgerRows = [
+  { label: "cash ledger", register: async () => {
+        const { randomUUID }=await import("node:crypto");
+        const { sql } = await import("drizzle-orm");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+        const { bankBalances, openItems } = await import("./cash/core");
+        for (const path of ["partial month", "completed month", "receivables", "payables"] as const) {
+          for (const mode of ["all", "restricted", "empty"] as const) {
+            test(`Cash ledger ${path}: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+              const org = await withBypassContext(() => createScratchOrg());
+              let foreignOrgId: string | undefined;
+              try {
+                const hidden = randomUUID(); const secondBook = randomUUID();
+                await withBypassContext(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`));
+                await withBypassContext(() => db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values (${secondBook},${org.orgId},'TAX','Tax book',false,true,true)`));
+                const subIds = mode === 'all' ? undefined : mode === 'empty' ? [] : [org.subsidiaryId];
+                if (path === 'partial month' || path === 'completed month') {
+                  foreignOrgId = (await withBypassContext(() => createScratchOrg())).orgId;
+                  for (const [sub, book, amount] of [[org.subsidiaryId,org.bookId,'100'], [hidden,org.bookId,'999'], [org.subsidiaryId,secondBook,'700']]) {
+                    const entry = randomUUID();
+                    await withBypassContext(() => db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
+                      values (${entry},${org.orgId},${book},${sub},${entry},${org.date},${org.periodId},'draft','manual')`));
+                    await withBypassContext(() => db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+                      values (${org.orgId},${entry},1,${org.accounts.bank},${sub},${amount},'CAD',${amount},1),
+                        (${org.orgId},${entry},2,${org.accounts.revenue},${sub},${'-'+amount},'CAD',${'-'+amount},1)`));
+                    await withBypassContext(() => db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`));
+                  }
+                  await withOrgContext(org.orgId, async () => {
+                    const banks = await bankBalances(path === 'completed month' ? '2026-08-15' : org.date, subIds);
+                    if (mode === 'empty') assert.deepEqual(banks, []);
+                    else {
+                      assert.equal(banks.find(bank => bank.id === org.accounts.bank)?.balance, mode === 'all' ? '1099.0000' : '100.0000');
+                      assert.equal(banks.length, 1);
+                      assert.equal(banks[0]?.id, org.accounts.bank);
+                    }
+                  });
+                } else {
+                  await withBypassContext(() => db.execute(sql`insert into party_subsidiaries(org_id,party_id,subsidiary_id)
+                    values (${org.orgId},${org.customerId},${hidden}),(${org.orgId},${org.vendorId},${hidden})`));
+                  for (const [sub, amount, label] of [[org.subsidiaryId,'100','Visible'],[hidden,'999','Hidden']]) {
+                    const id = randomUUID();
+                    const receivable = path === 'receivables';
+                    await withBypassContext(() => db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,fx_rate)
+                      values (${id},${org.orgId},${receivable ? 'customer_invoice' : 'vendor_bill'},'draft',${label},${sub},${receivable ? org.customerId : org.vendorId},${org.date},'CAD',1)`));
+                    await withBypassContext(() => db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount)
+                      values (${org.orgId},${id},1,${receivable ? org.accounts.revenue : org.accounts.adjustment},1,${amount},${amount},0,0)`));
+                    await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${id}`));
+                    // The engine reads the document through ambient org scope.
+                    await withOrgContext(org.orgId, () => postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }));
+                  }
+                  await withOrgContext(org.orgId, async () => {
+                    const items = await openItems(org.orgId, path === 'receivables' ? 'ar' : 'ap', org.date, subIds);
+                    assert.equal(items.length, mode === 'all' ? 2 : mode === 'empty' ? 0 : 1);
+                    if (mode === 'restricted') {
+                      assert.equal(items[0]?.docNumber, 'Visible');
+                      assert.equal(items[0]?.remaining, '100.0000');
+                    }
+                  });
+                }
+              } finally { await dropScratchOrg(org.orgId); if (foreignOrgId) await dropScratchOrg(foreignOrgId); }
+            });
+          }
+        }
+        
+        for (const method of ['gl_history_average', 'credit_card_cycle', 'bank_register_history'] as const) {
+          for (const mode of ['all', 'restricted', 'empty'] as const) {
+            test(`Cash history ${method}: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+              const org = await withBypassContext(() => createScratchOrg());
+              try {
+                const hidden = randomUUID(); const secondBook = randomUUID(); const card = randomUUID();
+                await withBypassContext(() => db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`));
+                await withBypassContext(() => db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values (${secondBook},${org.orgId},'TAX','Tax book',false,true,true)`));
+                await withBypassContext(() => db.execute(sql`insert into accounts(id,org_id,number,name,type) values (${card},${org.orgId},'2090','Card','liability_card')`));
+                const target = method === 'credit_card_cycle' ? card : method === 'bank_register_history' ? org.accounts.bank : org.accounts.adjustment;
+                const counter = method === 'gl_history_average' ? org.accounts.bank : org.accounts.adjustment;
+                for (const [sub, book, amount, status] of [[org.subsidiaryId,org.bookId,'100','posted'], [hidden,org.bookId,'999','posted'], [org.subsidiaryId,secondBook,'700','posted'], [org.subsidiaryId,org.bookId,'900','draft']]) {
+                  const entry = randomUUID(); const signed = method === 'gl_history_average' ? amount : '-'+amount;
+                  const opposite = method === 'gl_history_average' ? '-'+amount : amount;
+                  await withBypassContext(() => db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
+                    values (${entry},${org.orgId},${book},${sub},${entry},${org.date},${org.periodId},'draft','manual')`));
+                  await withBypassContext(() => db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+                    values (${org.orgId},${entry},1,${target},${sub},${signed},'CAD',${signed},1),
+                      (${org.orgId},${entry},2,${counter},${sub},${opposite},'CAD',${opposite},1)`));
+                  if (status === 'posted') await withBypassContext(() => db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`));
+                }
+                await withOrgContext(org.orgId, async () => {
+                  const { categoryWeekly } = await import('./cash/core');
+                  const category = await categoryWeekly(org.orgId, { id: randomUUID(), name: 'Review', direction: 'outflow', method,
+                    accountIds: [target], cardAccountIds: [target], bankAccountIds: [target], includeJournals: true, historyWeeks: 4 },
+                    '2026-07-20', ['2026-07-19','2026-07-26','2026-08-02','2026-08-09'],
+                    { arWeekly: {}, apWeekly: {}, cashStart: '0.0000', subIds: mode === 'all' ? undefined : mode === 'empty' ? [] : [org.subsidiaryId] });
+                  const amount = mode === 'all' ? '1099.0000' : mode === 'empty' ? '0.0000' : '100.0000';
+                  const field = method === 'gl_history_average' ? 'sourceTotal' : method === 'credit_card_cycle' ? 'currentBalance' : 'rawAverage';
+                  assert.equal(category.meta[field], amount);
+                  if (mode === 'empty') assert.equal(category.total, '0.0000');
+                });
+              } finally { await dropScratchOrg(org.orgId); }
+            });
+          }
+        }
+  } },
+  { label: "cash payment scope", register: async () => {
+        const { randomUUID }=await import("node:crypto");
+        const {sql} = await import('drizzle-orm');
+        const {db,withBypassContext,withOrgContext} = await import('@openbooks/engine/src/platform/db.ts');
+        const {createScratchOrg,createScratchUser,dropScratchOrg} = await import('@openbooks/engine/src/testing/fixtures.ts');
+        const {paymentStats} = await import('./cash/core');
+        for (const side of ['ar','ap'] as const) {
+          for (const mode of ['all','restricted','empty'] as const) {
+            test(`Payment-history subsidiary scope ${side}: ${mode}`, {skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+              const org=await withBypassContext(()=>createScratchOrg());
+              try {
+                const actor=await withBypassContext(()=>createScratchUser(org.orgId,'History writer','admin'));
+                const hidden=randomUUID();const party=side === 'ar' ? org.customerId : org.vendorId;
+                const account=side === 'ar' ? org.accounts.ar : org.accounts.ap;
+                await withBypassContext(async()=>{
+                await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden','CAD','CA')`);
+                for(const [sub,paidOn] of [[org.subsidiaryId,'2026-07-06'],[hidden,'2026-07-21']]) {
+                  const invoiceLine=randomUUID();const paymentLine=randomUUID();
+                  for(const [payment,line,date] of [[false,invoiceLine,'2026-07-01'],[true,paymentLine,paidOn]] as const) {
+                    const entry=randomUUID();const debit=side === 'ar' ? !payment : payment;
+                    const amount=debit ? '1' : '-1';const opposite=debit ? '-1' : '1';
+                    await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin) values (${entry},${org.orgId},${org.bookId},${sub},${entry},${date},${org.periodId},'draft','manual')`);
+                    await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,party_id,is_open_item,amount,currency,txn_amount,fx_rate)
+                      values (${line},${org.orgId},${entry},1,${account},${sub},${party},true,${amount},'CAD',${amount},1),
+                        (${randomUUID()},${org.orgId},${entry},2,${org.accounts.bank},${sub},${party},false,${opposite},'CAD',${opposite},1)`);
+                    await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
+                  }
+                  await db.execute(sql`insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by,updated_by)
+                    values (${org.orgId},${paymentLine},${invoiceLine},1,1,1,'CAD',1,'CAD',1,'same_currency','History scope regression',${paidOn},${actor},${actor})`);
+                }
+                });
+                await withOrgContext(org.orgId,async()=>{
+                  const stats=await paymentStats(side,'2026-07-31',mode === 'all' ? undefined : mode === 'empty' ? [] : [org.subsidiaryId]);
+                  assert.equal(stats.globalAvg,mode === 'all' ? 13 : mode === 'empty' ? 45 : 5);
+                  assert.equal(stats.map.size,mode === 'empty' ? 0 : 1);
+                  if(mode !== 'empty')assert.equal(stats.map.get(party)?.avg,mode === 'all' ? 12.5 : 5);
+                });
+              } finally {await dropScratchOrg(org.orgId);}
+            });
+          }
+        }
+  } },
+] as const;
+
+for(const row of cashLedgerRows) await row.register();
