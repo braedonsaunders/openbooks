@@ -97,6 +97,7 @@ test('party_concentration scopes posted documents to the caller subsidiary', { s
   try {
     const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
     const parties: Record<string, string> = {};
+    let visibleInvoiceId = '';
     await withBypassContext(async () => {
       for (const [label, sub] of [['VISIBLE', org.subsidiaryId], ['HIDDEN', hidden]] as const) {
         const partyId = randomUUID();
@@ -104,6 +105,7 @@ test('party_concentration scopes posted documents to the caller subsidiary', { s
         await db.execute(sql`insert into party_subsidiaries(org_id,party_id,subsidiary_id) values (${org.orgId},${partyId},${sub})`);
         parties[label] = partyId;
         const id = randomUUID();
+        if (label === 'VISIBLE') visibleInvoiceId = id;
         const total = label === 'VISIBLE' ? '1000' : '9000';
         await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,posting_date,currency,fx_rate,subtotal,tax_total,total,created_by)
           values (${id},${org.orgId},'customer_invoice','draft',${`${label}-CONC`},${sub},${partyId},'2026-07-15','2026-07-15','CAD','1',${total},'0',${total},${actor})`);
@@ -112,6 +114,10 @@ test('party_concentration scopes posted documents to the caller subsidiary', { s
         await db.execute(sql`update documents set status='approved' where id=${id} and org_id=${org.orgId}`);
         await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
       }
+      const voided = await db.execute(sql`update documents
+        set status = 'voided', voided_at = '2026-08-05 12:00:00+00'::timestamptz
+        where id = ${visibleInvoiceId} and org_id = ${org.orgId} returning id`)
+      assert.equal(voided.rows.length, 1, 'the July invoice must be voided after the report period')
     });
     await withOrgContext(org.orgId, async () => {
       const authz = await getAuthz();

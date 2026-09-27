@@ -31,6 +31,8 @@ test('expense categories exclude secondary-book journal amounts', { skip: !proce
       const dashboard = await expensesDashboard(org.orgId, null)
       const category = dashboard.categories.find((row) => row.categoryId === org.accounts.cogs)
       assert.equal(category?.currentAmount, '100.0000')
+      assert.equal(dashboard.monthlyTrends.find((row) => row.month === '2026-07')?.expenseAmount, '100.0000')
+      assert.equal(dashboard.summary.expenseReportTotal, '100.0000')
     })
   } finally {
     await dropScratchOrg(org.orgId)

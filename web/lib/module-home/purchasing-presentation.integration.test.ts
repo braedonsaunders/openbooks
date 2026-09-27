@@ -34,8 +34,10 @@ async function seedTwoCurrencyPayables() {
       ['BILL-CAD', org.subsidiaryId, org.vendorId, 'CAD', '100', '1'],
       ['BILL-USD', usSub, usVend, 'USD', '100', '1'],
     ] as const
+    let usBillDocumentId = ''
     for (const [num, sub, party, cur, total, fx] of bills) {
       const docId = randomUUID()
+      if (num === 'BILL-USD') usBillDocumentId = docId
       const entryId = randomUUID()
       await db.execute(sql`insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, posting_date, currency, fx_rate, status, subtotal, tax_total, total, open_balance)
         values (${docId}, ${org.orgId}, 'vendor_bill', ${num}, ${party}, ${sub}, ${D}, ${D}, ${cur}, ${fx}, 'draft', ${total}, 0, ${total}, ${total})`)
@@ -63,7 +65,7 @@ async function seedTwoCurrencyPayables() {
       await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${org.periodId} where id=${docId}`)
     }
   })
-  return { org, usVend }
+  return { org, usVend, usBillDocumentId }
 }
 
 /**
@@ -73,8 +75,14 @@ async function seedTwoCurrencyPayables() {
  * in a USD subsidiary is 135 CAD of spend and payables, not 100.
  */
 test('purchasing cockpit translates every payable functional to presentation', { skip: !env.OPENBOOKS_DB_URL }, async () => {
-  const { org, usVend } = await seedTwoCurrencyPayables()
+  const { org, usVend, usBillDocumentId } = await seedTwoCurrencyPayables()
   try {
+    await withBypass(async () => {
+      const updated = await db.execute(sql`update documents
+        set status = 'voided', voided_at = '2026-08-05 12:00:00+00'::timestamptz
+        where id = ${usBillDocumentId} and org_id = ${org.orgId} returning id`)
+      assert.equal(updated.rows.length, 1, 'the July bill must be voided after the report cutoff')
+    })
     await pinClock('2026-07-15', async () => {
       await withOrgContext(org.orgId, async () => {
         const home = await purchasingHome(org.orgId, undefined, undefined, { ap: true, orders: true, expenses: true, parties: true })
