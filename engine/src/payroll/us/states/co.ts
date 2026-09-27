@@ -31,7 +31,7 @@
  *
  * All arithmetic is exact bigint. No floats.
  */
-import { D, divIntCents, max0, mulInt, mulRateCents, rate6, U } from "../../canada/decimal.ts";
+import { D, divIntCents, max0, mulInt, mulRateCents, rate6, U } from "../../../money/payroll-decimal.ts";
 import {
   certificateAmount, certificateFlag, type PayrollCertificate,
 } from "../../certificates.ts";

@@ -53,7 +53,7 @@ import {
 import { subRegionLevy } from "../withholding-jurisdictions.ts";
 import { PayrollError } from "../error.ts";
 import type { PayrollTaxBases } from "../pack-types.ts";
-import { D, max0, mulRateCents, rate6, U } from "../canada/decimal.ts";
+import { D, max0, mulRateCents, rate6, U } from "../../money/payroll-decimal.ts";
 import type { UsSupplementalWageAmount, UsSupplementalWageCategory } from "../supplemental-wages.ts";
 import type { UsStatutoryExemptionAmount } from "../statutory-exemptions.ts";
 import { NO_WITHHOLDING_STATES, US_STATES, ratesForPayDate } from "./rates.ts";

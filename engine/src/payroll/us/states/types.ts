@@ -22,10 +22,9 @@
  * A common shape wide enough to hold all four would have optional fields for
  * every state's peculiarity, and the first state whose peculiarity did not fit
  * would be approximated into the nearest one that did. That is precisely the
- * failure this repository refuses elsewhere: `engine/src/payroll/canada/` does
- * not force Revenu Québec's TP-1015 into the CRA's T4127 shape, it gives Québec
- * its own engine beside the federal one and shares only the exact-decimal
- * primitives.
+ * failure this repository refuses elsewhere: Revenu Québec's TP-1015 is not
+ * forced into the CRA's T4127 shape; Québec has its own engine beside the
+ * federal one, and both use the same country-neutral exact-decimal primitives.
  *
  * So: each state owns its algorithm, expressed the way its own publication
  * expresses it, and exports a `UsStateWithholdingEngine`. What is shared is the
@@ -33,7 +32,7 @@
  * generic layer above knows only the interface.
  */
 import { PayrollError } from "../../error.ts";
-import { D, rate6, U } from "../../canada/decimal.ts";
+import { D, rate6, U } from "../../../money/payroll-decimal.ts";
 import { fromUnits, roundDiv, toUnits } from "../../../money/money.ts";
 import type { ResolvedCertificate } from "../../certificates.ts";
 import type { UsStatutoryExemptionAmount } from "../../statutory-exemptions.ts";

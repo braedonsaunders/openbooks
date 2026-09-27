@@ -36,7 +36,7 @@ import {
 import { CA_RATES_2026, CA_WITHHOLDING, caAnnualizedMethod } from "./ca.ts";
 import { IL_RATES_2026 } from "./il.ts";
 import { DETROIT_WITHHOLDING, MI_RATES_2026, MI_TAXING_CITIES, miCityWithholding } from "./mi.ts";
-import { D, divIntCents, mulRateCents, U } from "../../canada/decimal.ts";
+import { D, divIntCents, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { GA_EDITIONS, gaEditionForPayDate } from "./ga.ts";
 import { MA_RATES_2026, maSupplementalWithholding } from "./ma.ts";
 import { NC_RATES_2026, ncAnnualizedMethod, ncSupplementalFlat } from "./nc.ts";

@@ -48,7 +48,7 @@
  * All arithmetic is exact bigint through the shared decimal helpers. No floats.
  */
 import { PayrollError } from "../../error.ts";
-import { D, divIntCents, max0, mulInt, mulRateCents, U } from "../../canada/decimal.ts";
+import { D, divIntCents, max0, mulInt, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import {
   certificateAmount, certificateChoice, certificateCode, certificateCount, certificateFlag,
   type PayrollCertificate,

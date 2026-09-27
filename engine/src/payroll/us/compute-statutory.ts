@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import type { db } from "../../platform/db.ts";
 import { PayrollError } from "../error.ts";
 import { PayrollPackError } from "../payroll-error.ts";
-import { U } from "../canada/decimal.ts";
+import { U } from "../../money/payroll-decimal.ts";
 import { add, sum } from "../../money/money.ts";
 import { empFact } from "../employee-facts.ts";
 import { resolveEmployerFact } from "../employer-facts.ts";

@@ -66,10 +66,11 @@
  *   treatment.
  *
  * Money discipline: decimal strings at 1e4 scale in and out ("254.8300"),
- * never floats. Rounding helpers mirror engine/src/payroll/canada/
- * decimal.ts and are built on engine/src/money/money.ts only.
+ * never floats. Rounding helpers use the shared payroll decimal module and
+ * engine/src/money/money.ts only.
  */
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
+import { rate6 } from "../../money/payroll-decimal.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import {
   prsiPeriodBands,
@@ -94,16 +95,6 @@ function ceil2(u: bigint): bigint {
 }
 
 const RATE6 = 1_000_000n;
-
-/** Parse a rate (≤6 dp) to an exact 1e6-scaled bigint. */
-function rate6(value: string): bigint {
-  const raw = value.trim();
-  if (!/^(\d+(\.\d*)?|\.\d+)$/.test(raw)) {
-    throw new PayrollPackError(`IE payroll: not a decimal rate: "${value}"`);
-  }
-  const [whole = "0", fraction = ""] = raw.split(".");
-  return BigInt(whole || "0") * RATE6 + BigInt((fraction + "000000").slice(0, 6));
-}
 
 /** amount × rate, rounded half-up straight to the cent. */
 function mulRateCents(u: bigint, rate: string): bigint {
