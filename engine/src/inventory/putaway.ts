@@ -69,12 +69,9 @@ export interface ResolvePutawayInput {
   subsidiaryId: string;
 }
 
-async function emptyBinUnder(
-  runner: Runner,
-  orgId: string,
-  zoneId: string,
-): Promise<{ id: string; code: string } | null> {
-  const bins = (await runner.execute<{ id: string; code: string }>(sql`
+/** Active bins beneath a zone, by bin code: the candidates of an empty-bin rule. */
+async function activeBinsUnder(runner: Runner, orgId: string, zoneId: string): Promise<{ id: string; code: string }[]> {
+  return (await runner.execute<{ id: string; code: string }>(sql`
     with recursive tree as (
       select id, kind, code, is_active, 0 as depth from stock_locations where org_id = ${orgId} and id = ${zoneId}
       union all
@@ -83,7 +80,14 @@ async function emptyBinUnder(
        where c.org_id = ${orgId} and c.kind <> 'warehouse' and t.depth < 64
     )
     select id, code from tree where kind = 'bin' and is_active and depth > 0 order by code, id`)).rows;
-  for (const bin of bins) {
+}
+
+async function emptyBinUnder(
+  runner: Runner,
+  orgId: string,
+  zoneId: string,
+): Promise<{ id: string; code: string } | null> {
+  for (const bin of await activeBinsUnder(runner, orgId, zoneId)) {
     const items = (await runner.execute<{ item_id: string }>(sql`
       select item_id from cost_layers
        where org_id = ${orgId} and stock_location_id = ${bin.id} and remaining_quantity <> 0
@@ -249,10 +253,35 @@ export interface PutAwayInput {
 }
 
 /**
+ * Fence every location the item's rules could choose, one transaction-scoped
+ * lock per location in sorted id order, so concurrent putaways into the same
+ * warehouse resolve one after another. The key is the location, not an item
+ * position: an empty-bin rule depends on every item in the bin. Candidates
+ * are discovered lock-free; resolution then re-reads on-hand under the fence,
+ * so a capacity-limited bin can never be filled past its capacity by two
+ * putaways at once.
+ */
+async function fencePutawayTargets(tx: Runner, orgId: string, warehouseId: string, itemId: string): Promise<void> {
+  const targets = new Set<string>();
+  for (const rule of await listPutawayRules(tx, orgId, warehouseId)) {
+    if (rule.itemId !== null && rule.itemId !== itemId) continue;
+    if (rule.strategy === "empty-bin") {
+      for (const bin of await activeBinsUnder(tx, orgId, rule.targetLocationId)) targets.add(bin.id);
+    } else {
+      targets.add(rule.targetLocationId);
+    }
+  }
+  for (const locationId of [...targets].sort()) {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`putaway-target:${locationId}`}, 0))`);
+  }
+}
+
+/**
  * Directed putaway: move staged stock to the location the rules resolve,
  * through the ordinary transfer path (same costing, admission and journal
  * behaviour as any transfer; no new movement type). The staging location
- * must be a staging location inside the named warehouse.
+ * must be a staging location inside the named warehouse. Resolution and the
+ * transfer both run under the putaway-target fence.
  */
 export async function putAwayStagedStock(
   tx: Runner,
@@ -272,6 +301,7 @@ export async function putAwayStagedStock(
       422,
     );
   }
+  await fencePutawayTargets(tx, orgId, input.warehouseId, input.itemId);
   const target = await resolvePutawayLocation(tx, orgId, {
     itemId: input.itemId,
     quantity: input.quantity,
