@@ -695,6 +695,10 @@
           "label": "En-cours de fabrication",
           "hint": "Les coûts matières des ordres de fabrication actifs sont débités ici."
         },
+        "mfgMaterialUsageVariance": {
+          "label": "Compte d’écart de consommation des matières",
+          "hint": "Les écarts de consommation des matières de production sont comptabilisés ici."
+        },
         "laborClearing": {
           "label": "Compensation de main-d'œuvre",
           "hint": "Crédité lorsque la main-d'œuvre est imputée à un projet; soldé par la paie"
@@ -3971,6 +3975,7 @@
         "modePost": "Comptabiliser le coût standard aux projets",
         "laborWip": "Compte travaux en cours / coût projet",
         "mfgWip": "Compte d'en-cours de fabrication",
+        "mfgMaterialUsageVariance": "Compte d’écart de consommation des matières",
         "laborClearing": "Compte d'attente main-d'œuvre",
         "overheadNote": "Les frais généraux ne font pas partie de ce taux — ils sont appliqués par le Modèle de frais généraux comme couche distincte.",
         "payrollVariance": "Compte d'écart de paie",

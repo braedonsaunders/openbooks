@@ -695,6 +695,10 @@
           "label": "Producción en curso",
           "hint": "Los materiales emitidos a órdenes de fabricación activas se cargan aquí."
         },
+        "mfgMaterialUsageVariance": {
+          "label": "Cuenta de variación por consumo de materiales",
+          "hint": "Aquí se contabilizan las variaciones del consumo de materiales de producción."
+        },
         "laborClearing": {
           "label": "Compensación de mano de obra",
           "hint": "Se acredita cuando la mano de obra se carga a un proyecto; se liquida por nómina"
@@ -3971,6 +3975,7 @@
         "modePost": "Contabilizar costo estándar a proyectos",
         "laborWip": "Cuenta de obra en curso / costo de proyecto",
         "mfgWip": "Cuenta de producción en curso",
+        "mfgMaterialUsageVariance": "Cuenta de variación por consumo de materiales",
         "laborClearing": "Cuenta puente de mano de obra",
         "overheadNote": "Los gastos generales no forman parte de esta tarifa — los aplica el Modelo de gastos generales como su propia capa.",
         "payrollVariance": "Cuenta de variación de nómina",

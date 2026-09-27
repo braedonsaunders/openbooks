@@ -37,6 +37,7 @@ export type ReversibleMovement = {
   stock_location_id: string;
   lot_id: string | null;
   serial_id: string | null;
+  serial_number?: string | null;
   quantity: string;
   unit_cost: string | null;
   total_value: string | null;
@@ -108,12 +109,16 @@ export async function restoreIssueLayers(
         "restoring the issue would exceed its source layer's original quantity",
       );
     }
-    await tx.execute(sql`
+    const restored = await tx.execute<{ id: string }>(sql`
       update cost_layers
          set remaining_quantity = remaining_quantity + ${row.quantity},
              remaining_original_cost = remaining_original_cost + ${row.original_cost}::numeric, updated_at = now(), updated_by = ${actorId}
        where id = ${row.cost_layer_id} and org_id = ${orgId}
+       returning id
     `);
+    if (restored.rows.length !== 1) {
+      throw new InventoryError("the source cost layer changed before issue reversal");
+    }
   }
 }
 
@@ -200,6 +205,7 @@ export async function reverseInventoryJournal(
   sourceEntryId: string,
   reversalDate: string,
   reason: string,
+  options: { allowManufacturingOrigin?: boolean } = {},
 ): Promise<string> {
   const head = (await tx.execute<{
       id: string;
@@ -209,14 +215,17 @@ export async function reverseInventoryJournal(
       origin: string;
       status: string;
       posting_date: string;
+      custom: Record<string, unknown>;
     }>(sql`
-    select id, book_id, subsidiary_id, entry_number, origin, status, posting_date::text
+    select id, book_id, subsidiary_id, entry_number, origin, status, posting_date::text, custom
       from journal_entries
      where id = ${sourceEntryId} and org_id = ${orgId}
      for update
   `));
   const source = head.rows[0];
-  if (!source || source.origin !== "inventory" || source.status !== "posted") {
+  const permittedOrigin = source?.origin === "inventory"
+    || (options.allowManufacturingOrigin === true && source?.origin === "manufacturing");
+  if (!source || !permittedOrigin || source.status !== "posted") {
     throw new InventoryError(
       "the movement is not backed by a reversible posted inventory journal",
     );
@@ -302,8 +311,9 @@ export async function reverseInventoryJournal(
     postingDate: reversalDate,
     periodId: period.id,
     memo: `Inventory reversal: ${reason}`,
-    origin: "inventory",
+    origin: source.origin as "inventory" | "manufacturing",
     reversesEntryId: sourceEntryId,
+    ...(source.origin === "manufacturing" ? { custom: source.custom } : {}),
     actorId,
     closeModules: [],
     lines: lines.rows.map((line) => ({

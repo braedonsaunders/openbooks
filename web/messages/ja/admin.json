@@ -695,6 +695,10 @@
           "label": "製造仕掛品",
           "hint": "稼働中の製造オーダーに払い出した材料費をここに借記します。"
         },
+        "mfgMaterialUsageVariance": {
+          "label": "材料使用差異勘定",
+          "hint": "製造における材料使用差異はここに計上されます。"
+        },
         "laborClearing": {
           "label": "労務清算",
           "hint": "労務がプロジェクトに賦課されると貸方計上され、給与計算で清算されます"
@@ -1914,6 +1918,7 @@
         "laborClearing": "労務仮勘定",
         "laborWip": "労務仕掛品・案件原価口座",
         "mfgWip": "製造仕掛品勘定",
+        "mfgMaterialUsageVariance": "材料使用差異勘定",
         "modeOff": "オフ — レートのスナップショットのみ",
         "modePost": "標準原価を案件に記帳",
         "overheadNote": "間接費はこのレートに含まれません。間接費モデルが独自の層として適用します。",
