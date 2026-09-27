@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
-import { REPORT_ENTITIES } from '@openbooks/reports'
+import { allReportEntities } from '@openbooks/reports'
 
 /**
  * Every report entity and every one of its columns must have a heading.
@@ -35,10 +35,10 @@ const catalogs = Object.fromEntries(LOCALES.map((locale) => [
 ])) as Record<(typeof LOCALES)[number], ReportsCatalog>
 
 test('every report entity has a catalog label', () => {
-  assert.ok(REPORT_ENTITIES.length > 0, 'no report entities were loaded — the import broke')
+  assert.ok(allReportEntities().length > 0, 'no report entities were loaded — the import broke')
   const missing: string[] = []
   for (const locale of LOCALES) {
-    for (const entity of REPORT_ENTITIES) {
+    for (const { entity } of allReportEntities()) {
       const entry = catalogs[locale].catalog.entities[entity.key] as { label?: unknown; description?: unknown } | undefined
       for (const field of ['label', 'description'] as const) {
         if (typeof entry?.[field] !== 'string' || !(entry[field] as string).trim()) {
@@ -53,7 +53,7 @@ test('every report entity has a catalog label', () => {
 test('every report column has a heading, or the report renders its key path', () => {
   const missing: string[] = []
   for (const locale of LOCALES) {
-    for (const entity of REPORT_ENTITIES) {
+    for (const { entity } of allReportEntities()) {
       const headings = catalogs[locale].catalog.columns[entity.key] ?? {}
       for (const column of entity.columns ?? []) {
         if (typeof headings[column.key] !== 'string' || !headings[column.key]!.trim()) {
