@@ -1,4 +1,4 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { REPORT_ENTITY_MAP } from "@openbooks/reports";
@@ -27,90 +27,96 @@ const nlBody = z.object({
  * under the caller's report gates, and on save stores the draft for
  * save-as-view. The output is a report-engine definition, never SQL.
  */
-export async function POST(req: Request) {
-  const authz = await requireAnyPerm(["reports.read"]);
-  if (authz instanceof NextResponse) return authz;
-  if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, nlBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const hidden = new Set(await hiddenReportEntityKeys(authz));
-    const catalog = Object.values(REPORT_ENTITY_MAP)
-      .filter((e) => !hidden.has(e.key))
-      .map((e) => ({
-        key: e.key,
-        columns: e.columns.map((c) => c.key),
-        requiredPermission: e.requiredPermission ?? null,
-      }));
-    const callerPermissions = [...authz.permissions];
-    // Validate before preview so an unexecutable definition refuses
-    // before it ever runs.
-    const definition = validateNlDefinition(body.definition, catalog, callerPermissions);
-    if (!(await canRunReportEntity(authz, { entity: definition.entity }))) {
-      return NextResponse.json({ error: "you do not have access to this data" }, { status: 403 });
-    }
-    const preview = await executeReport(authz.user.orgId, {
-      entity: definition.entity,
-      mode: definition.mode,
-      columns: definition.columns,
-      breakouts: definition.breakouts,
-      measures: definition.measures,
-      filters: definition.filters as { combinator: "and" | "or"; rules: never[] } | null,
-      sorts: definition.sorts,
-      limit: definition.limit,
-    }, 5);
-    const previewRows = preview.groups.flatMap((g) => g.rows.slice(0, 5)).slice(0, 5);
-    if (body.action === "preview") {
-      await logDecision(db, {
-        orgId: authz.user.orgId,
-        actorId: authz.user.id,
-        capabilityKey: "hrmNlReports",
-        subjectKind: "nl_report_preview",
-        subjectId: null,
-        input: body.question,
-        output: `entity=${definition.entity} mode=${definition.mode}`,
-        outputSummary: `report preview from question (${definition.entity}, ${definition.mode})`,
-        sources: [{ kind: "report_entity", id: definition.entity }],
-        outcome: "shown",
-        model: "nl-report-route",
-      });
-      return NextResponse.json({ definition, previewRows });
-    }
-    const saved = await draftNlReport({
-      orgId: authz.user.orgId,
-      actorId: authz.user.id,
-      question: body.question,
-      candidate: body.definition,
-      catalog,
-      callerPermissions,
-    });
-    return NextResponse.json({ draftId: saved.draftId, definition: saved.definition, previewRows });
-  } catch (e) {
-    return aiRailsErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  public: 'session',
+  body: nlBody,
+  handler: async ({ request: req , body: routeBody }) => {
+    const authz = await requireAnyPerm(["reports.read"]);
+    if (authz instanceof NextResponse) return authz;
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
+        return notFound("record");
+      }
+
+    const body = routeBody;
+    try {
+        const hidden = new Set(await hiddenReportEntityKeys(authz));
+        const catalog = Object.values(REPORT_ENTITY_MAP)
+          .filter((e) => !hidden.has(e.key))
+          .map((e) => ({
+            key: e.key,
+            columns: e.columns.map((c) => c.key),
+            requiredPermission: e.requiredPermission ?? null,
+          }));
+        const callerPermissions = [...authz.permissions];
+        // Validate before preview so an unexecutable definition refuses
+        // before it ever runs.
+        const definition = validateNlDefinition(body.definition, catalog, callerPermissions);
+        if (!(await canRunReportEntity(authz, { entity: definition.entity }))) {
+          return NextResponse.json({ error: "you do not have access to this data" }, { status: 403 });
+        }
+        const preview = await executeReport(authz.user.orgId, {
+          entity: definition.entity,
+          mode: definition.mode,
+          columns: definition.columns,
+          breakouts: definition.breakouts,
+          measures: definition.measures,
+          filters: definition.filters as { combinator: "and" | "or"; rules: never[] } | null,
+          sorts: definition.sorts,
+          limit: definition.limit,
+        }, 5);
+        const previewRows = preview.groups.flatMap((g) => g.rows.slice(0, 5)).slice(0, 5);
+        if (body.action === "preview") {
+          await logDecision(db, {
+            orgId: authz.user.orgId,
+            actorId: authz.user.id,
+            capabilityKey: "hrmNlReports",
+            subjectKind: "nl_report_preview",
+            subjectId: null,
+            input: body.question,
+            output: `entity=${definition.entity} mode=${definition.mode}`,
+            outputSummary: `report preview from question (${definition.entity}, ${definition.mode})`,
+            sources: [{ kind: "report_entity", id: definition.entity }],
+            outcome: "shown",
+            model: "nl-report-route",
+          });
+          return NextResponse.json({ definition, previewRows });
+        }
+        const saved = await draftNlReport({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          question: body.question,
+          candidate: body.definition,
+          catalog,
+          callerPermissions,
+        });
+        return NextResponse.json({ draftId: saved.draftId, definition: saved.definition, previewRows });
+      } catch (e) {
+        return aiRailsErrorResponse(e);
+      }
+  },
+});
 
 /**
  * The caller's own NL drafts for the Ask panel's save-as-view list.
  * Feature-gated like POST: absent capability answers 404, never an
  * empty list pretending there is nothing to ask.
  */
-export async function GET() {
-  const authz = await requireAnyPerm(["reports.read"]);
-  if (authz instanceof NextResponse) return authz;
-  if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
-    return notFound("record");
-  }
-  try {
-    const drafts = await listNlDrafts(db, { orgId: authz.user.orgId, actorId: authz.user.id });
-    return NextResponse.json({ drafts });
-  } catch (e) {
-    return aiRailsErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  public: 'session',
+  handler: async (_) => {
+    const authz = await requireAnyPerm(["reports.read"]);
+    if (authz instanceof NextResponse) return authz;
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
+        return notFound("record");
+      }
+    try {
+        const drafts = await listNlDrafts(db, { orgId: authz.user.orgId, actorId: authz.user.id });
+        return NextResponse.json({ drafts });
+      } catch (e) {
+        return aiRailsErrorResponse(e);
+      }
+  },
+});
 
 const nlTransitionBody = z.object({
   draftId: z.string().uuid(),
@@ -122,23 +128,26 @@ const nlTransitionBody = z.object({
  * or discarded. The service matches the open row or refuses by name —
  * a foreign or already-transitioned id never reports success.
  */
-export async function PATCH(req: Request) {
-  const authz = await requireAnyPerm(["reports.read"]);
-  if (authz instanceof NextResponse) return authz;
-  if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, nlTransitionBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    const draft = await transitionNlDraft(db, {
-      orgId: authz.user.orgId,
-      actorId: authz.user.id,
-      draftId: parsedBody.data.draftId,
-      status: parsedBody.data.status,
-    });
-    return NextResponse.json({ draft });
-  } catch (e) {
-    return aiRailsErrorResponse(e);
-  }
-}
+export const PATCH = defineRoute({
+  public: 'session',
+  body: nlTransitionBody,
+  handler: async ({ request: req , body: routeBody }) => {
+    const authz = await requireAnyPerm(["reports.read"]);
+    if (authz instanceof NextResponse) return authz;
+    if (!(await isFeatureEnabled(authz.user.orgId, "hrmNlReports"))) {
+        return notFound("record");
+      }
+
+    try {
+        const draft = await transitionNlDraft(db, {
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          draftId: routeBody.draftId,
+          status: routeBody.status,
+        });
+        return NextResponse.json({ draft });
+      } catch (e) {
+        return aiRailsErrorResponse(e);
+      }
+  },
+});

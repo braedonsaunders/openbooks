@@ -1,10 +1,11 @@
+import { z } from 'zod';
+import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { fromUnits, toUnits } from '@openbooks/engine/src/money/money.ts'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { subsidiariesInScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
@@ -90,335 +91,314 @@ function first(row: Record<string, unknown>, ...headers: string[]) {
   return ''
 }
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('budgets.manage', 'budgets')
-  if (gate instanceof NextResponse) return gate
-  const user = gate.user
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  // Spreadsheet bytes ride this body, so the house 1 MiB default would
-  // refuse legitimate budget workbooks — 10 MiB matches the bank-import
-  // ceiling for the same class of payload.
-  const parsedBody = await parseJsonBody(req, jsonObject, { maxBodyBytes: 10 * 1024 * 1024 });
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>
-  const format = FORMATS.includes(body.format as unknown as "csv" | "xlsx") ? body.format as ImportFormat : null
-  if (!format) return NextResponse.json({ error: 'invalid_format' }, { status: 422 })
-  const expectedRevision = Number(body.expectedRevision)
-  if (!Number.isInteger(expectedRevision)) return NextResponse.json({ error: 'invalid_revision' }, { status: 422 })
-
-  let parsed
-  try {
-    parsed = await parseImportFile(format, {
-      text: typeof body.text === 'string' ? body.text : undefined,
-      base64: typeof body.base64 === 'string' ? body.base64 : undefined,
-    })
-  } catch (error) {
-    if (error instanceof ImportParseError) {
-      const refusal = new DuplicateColumnsRefusal(error)
-      return apiErrorResponse(refusal, { details: { detail: refusal.detail } })
-    }
-    throw error
-  }
-  if (parsed.rows.length === 0) return NextResponse.json({ error: 'file_has_no_rows' }, { status: 422 })
-  // The parser caps rows at its own MAX_IMPORT_ROWS; the truncation flag (not
-  // the capped length) is what proves the file fit.
-  if (parsed.truncated) return NextResponse.json({ error: 'too_many_rows' }, { status: 422 })
-
-  const scenarioResult = (await db.execute<{ fiscal_year: number; status: string; revision: number }>(sql`
-    select fiscal_year, status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId}
-  `))
-  const scenario = scenarioResult.rows[0]
-  if (!scenario) return notFound("record")
-  if (scenario.status !== 'draft') return NextResponse.json({ error: 'budget_is_locked' }, { status: 409 })
-  // Scenario owner-scope gate BEFORE the lookup loads below (which resolve
-  // every subsidiary and project name): an import rewrites the scenario's
-  // lines, so a caller whose scope misses any of them is refused by name.
-  const outOfScope = await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)
-  if (outOfScope.length > 0) {
-    const refusal = outOfScopeScenarioError(outOfScope)
-    return apiErrorResponse(refusal)
-  }
-
-  const [accountsResult, periodsResult, subsidiariesResult, departmentsResult, projectsResult, locationsResult, classesResult] = (await Promise.all([
-    db.execute<Lookup>(sql`
-      select a.id, coalesce(a.number, '') as key, a.name, a.type
-        from accounts a
-       where a.org_id = ${user.orgId} and a.is_active and not a.is_summary
-         ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
-    // Periods resolve within the budget's pinned calendar only: the line
-    // guard admits default-calendar periods, so resolving a same-named
-    // period from another calendar would write a line the worksheet hides.
-    db.execute<Lookup>(sql`
-      select p.id, p.name as key, p.name
-        from accounting_periods p
-        join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
-       where p.org_id = ${user.orgId} and p.fiscal_year = ${scenario.fiscal_year}
-         and not p.is_adjustment and fc.is_default`),
-    db.execute<Lookup & { parentId: string | null }>(sql`
-      select id, name as key, name, parent_id as "parentId"
-        from subsidiaries
-       where org_id = ${user.orgId} and is_active and not is_elimination
-         ${subsidiaryVisibleFilter(sql`id`, gate.allowedSubsidiaryIds)}`),
-    db.execute<Lookup>(sql`
-      select d.id, coalesce(d.code, '') as key, d.name
-        from departments d
-       where d.org_id = ${user.orgId} and d.is_active
-         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
-    db.execute<Lookup>(sql`
-      select p.id, coalesce(p.code, '') as key, p.name
-        from projects p
-       where p.org_id = ${user.orgId} and p.is_active
-         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
-    db.execute<Lookup>(sql`
-      select l.id, coalesce(l.code, '') as key, l.name
-        from locations l
-       where l.org_id = ${user.orgId} and l.is_active
-         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
-    db.execute<Lookup>(sql`
-      select c.id, coalesce(c.code, '') as key, c.name
-        from classes c
-       where c.org_id = ${user.orgId} and c.is_active
-         ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
-  ]))
-  const resolveAccount = buildResolver(accountsResult.rows)
-  // An Account Number cell resolves as a number only (account numbers are
-  // unique per tenant): it never guesses an account by name.
-  const resolveAccountNumber = buildResolver(accountsResult.rows.map((row) => ({ ...row, name: '' })))
-  const accountTypes = new Map(accountsResult.rows.map((row) => [row.id, row.type ?? '']))
-  const accountDisplays = new Map(
-    accountsResult.rows.map((row) => [row.id, row.key ? `${row.name} (${row.key})` : row.name]),
-  )
-  const creditAccounts = new Set(accountsResult.rows.filter((row) => row.type === 'income' || row.type === 'income_other').map((row) => row.id))
-  const resolvePeriod = buildResolver(periodsResult.rows)
-  // Subsidiaries carry no code; rows resolve by id, exact name, then
-  // case-insensitive name. Storage guarantees (org_id, name) uniqueness, but
-  // the folded lookup can still collide on case variants — like the
-  // writer-tools account resolver, an ambiguous name is refused rather than
-  // guessed. A blank cell is the documented unambiguous default: the tenant
-  // root subsidiary, matching the worksheet and its storage trigger for
-  // legacy single-entity files.
-  const subsidiaryIds = new Map(subsidiariesResult.rows.map((row) => [row.id.toLowerCase(), row.id]))
-  const subsidiaryExactNames = new Map<string, string>()
-  const subsidiaryFoldedIds = new Map<string, Set<string>>()
-  for (const row of subsidiariesResult.rows) {
-    const name = row.name.trim()
-    if (!subsidiaryExactNames.has(name)) subsidiaryExactNames.set(name, row.id)
-    const folded = norm(name)
-    const ids = subsidiaryFoldedIds.get(folded) ?? new Set<string>()
-    ids.add(row.id)
-    subsidiaryFoldedIds.set(folded, ids)
-  }
-  const rootSubsidiary = subsidiariesResult.rows.find((row) => row.parentId === null)?.id ?? null
-  // Dimensions resolve by code or name (the export writes code with a name
-  // fallback, so either form round-trips); a blank cell is genuinely "no
-  // dimension" because the export never emits a blank for a set dimension.
-  const dimensions = {
-    departmentId: buildResolver(departmentsResult.rows),
-    projectId: buildResolver(projectsResult.rows),
-    locationId: buildResolver(locationsResult.rows),
-    classId: buildResolver(classesResult.rows),
-  }
-
-  const errors: { row: number; field: string; message: string }[] = []
-  const cells: BudgetCellInput[] = []
-  const seen = new Set<string>()
-  parsed.rows.forEach((row, index) => {
-    const rowNumber = index + 2
-    // The export writes Account Number (blank when the account has none)
-    // alongside Account Name: a blank number falls back to the name instead
-    // of resolving nobody. A number cell resolves as a number only — it never
-    // guesses an account by name.
-    const accountNumberCell = first(row, 'Account Number', 'accountNumber')
-    const accountNameCell = first(row, 'Account Name', 'Account', 'account', 'accountName')
-    let accountId: string | null = null
-    const accountCellText = String(accountNumberCell ?? '').trim() || String(accountNameCell ?? '').trim()
-    if (String(accountNumberCell ?? '').trim()) {
-      const outcome = resolveAccountNumber(String(accountNumberCell))
-      if ('id' in outcome) accountId = outcome.id
-      else if ('ambiguous' in outcome) {
-        errors.push({ row: rowNumber, field: 'Account Number', message: `ambiguous_account: ${outcome.ambiguous.join(', ')}` })
-      } else {
-        errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
-      }
-    } else if (String(accountNameCell ?? '').trim()) {
-      const outcome = resolveAccount(String(accountNameCell))
-      if ('id' in outcome) accountId = outcome.id
-      else if ('ambiguous' in outcome) {
-        errors.push({ row: rowNumber, field: 'Account Number', message: `ambiguous_account: ${outcome.ambiguous.join(', ')}` })
-      } else {
-        errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
-      }
-    } else {
-      errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
-    }
-    // Budgets cover the P&L only (the worksheet, variances and the line
-    // guard agree): a balance-sheet account refuses by name, it never lands
-    // in a hidden-but-counted line.
-    if (accountId && !PNL_TYPES.includes(accountTypes.get(accountId) ?? '')) {
-      errors.push({ row: rowNumber, field: 'Account Number', message: `non_pnl_account: ${accountDisplays.get(accountId) ?? accountCellText}` })
-      accountId = null
-    }
-    const periodKey = first(row, 'Period', 'period')
-    let periodId: string | null = null
-    if (String(periodKey ?? '').trim()) {
-      const outcome = resolvePeriod(String(periodKey))
-      if ('id' in outcome) periodId = outcome.id
-      else if ('ambiguous' in outcome) {
-        errors.push({ row: rowNumber, field: 'Period', message: `ambiguous_period: ${outcome.ambiguous.join(', ')}` })
-      } else {
-        errors.push({ row: rowNumber, field: 'Period', message: 'unknown_period' })
-      }
-    } else {
-      errors.push({ row: rowNumber, field: 'Period', message: 'unknown_period' })
-    }
-
-    const subsidiaryRaw = first(row, 'Subsidiary', 'subsidiary', 'subsidiaryId')
-    const subsidiaryText = String(subsidiaryRaw ?? '').trim()
-    let subsidiaryId: string | null = null
-    if (!subsidiaryText) {
-      subsidiaryId = rootSubsidiary
-      if (!subsidiaryId) errors.push({ row: rowNumber, field: 'Subsidiary', message: 'invalid_subsidiary' })
-    } else {
-      subsidiaryId = subsidiaryIds.get(subsidiaryText.toLowerCase())
-        ?? subsidiaryExactNames.get(subsidiaryText)
-        ?? null
-      if (!subsidiaryId) {
-        const candidates = subsidiaryFoldedIds.get(norm(subsidiaryText))
-        if (!candidates) {
-          errors.push({ row: rowNumber, field: 'Subsidiary', message: 'unknown_subsidiary' })
-        } else if (candidates.size > 1) {
-          errors.push({ row: rowNumber, field: 'Subsidiary', message: 'ambiguous_subsidiary' })
-        } else {
-          subsidiaryId = [...candidates][0] ?? null
-        }
-      }
-    }
-    if (subsidiaryId && !subsidiariesInScope(gate, [subsidiaryId])) {
-      errors.push({ row: rowNumber, field: 'Subsidiary', message: 'invalid_subsidiary' })
-      subsidiaryId = null
-    }
-
-    const resolvedDims: Record<keyof typeof dimensions, string | null> = {
-      departmentId: null,
-      projectId: null,
-      locationId: null,
-      classId: null,
-    }
-    const dimHeaders: [keyof typeof dimensions, string][] = [
-      ['departmentId', 'Department'],
-      ['projectId', 'Project'],
-      ['locationId', 'Location'],
-      ['classId', 'Class'],
-    ]
-    for (const [key, header] of dimHeaders) {
-      const raw = first(row, header, header.toLowerCase(), key)
-      if (String(raw ?? '').trim()) {
-        const outcome = dimensions[key](String(raw))
-        if ('id' in outcome) resolvedDims[key] = outcome.id
-        else if ('ambiguous' in outcome) {
-          errors.push({ row: rowNumber, field: header, message: `ambiguous_dimension: ${outcome.ambiguous.join(', ')}` })
-        } else {
-          errors.push({ row: rowNumber, field: header, message: 'unknown_dimension' })
-        }
-      }
-    }
-    let amount = '0.0000'
+export const POST = defineRoute({
+  permission: 'budgets.manage',
+  feature: 'budgets',
+  handler: async ({ request: req, authz: routeAuthz, params: routeParams }) => {
+    const params = Promise.resolve(routeParams as { id: string });
+    const gate = routeAuthz;
+    const user = gate.user
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    const routeBodySchema1 = z.object({ "base64": z.string().optional(), "commit": z.unknown().optional(), "expectedRevision": z.unknown().optional(), "format": z.unknown().optional(), "text": z.string().optional() }).passthrough();
+    const parsedBody = await parseJsonBody(req, routeBodySchema1, { maxBodyBytes: 10 * 1024 * 1024 });
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = (parsedBody.data) as Record<string, unknown>
+    const format = FORMATS.includes(body.format as unknown as "csv" | "xlsx") ? body.format as ImportFormat : null
+    if (!format) return NextResponse.json({ error: 'invalid_format' }, { status: 422 })
+    const expectedRevision = Number(body.expectedRevision)
+    if (!Number.isInteger(expectedRevision)) return NextResponse.json({ error: 'invalid_revision' }, { status: 422 })
+    let parsed
     try {
-      amount = normalizeBudgetAmount(first(row, 'Amount', 'amount'))
-      if (accountId && creditAccounts.has(accountId)) amount = fromUnits(-toUnits(amount))
-    } catch {
-      errors.push({ row: rowNumber, field: 'Amount', message: 'invalid_amount' })
-    }
-    if (accountId && periodId && subsidiaryId) {
-      const key = [accountId, periodId, subsidiaryId, ...Object.values(resolvedDims).map((value) => value ?? '')].join('|')
-      if (seen.has(key)) errors.push({ row: rowNumber, field: 'Account Number', message: 'duplicate_cell' })
-      seen.add(key)
-      cells.push({
-        accountId,
-        periodId,
-        subsidiaryId,
-        ...resolvedDims,
-        amount,
-        note: String(first(row, 'Note', 'note') ?? '').trim().slice(0, 2_000) || null,
-      })
-    }
-  })
-
-  if (body.commit !== true || errors.length > 0) {
-    return NextResponse.json({ valid: errors.length === 0, rows: parsed.rows.length, errors: errors.slice(0, 200), sample: cells.slice(0, 10) })
-  }
-
-  try {
-    const result = await db.transaction(async (tx) => {
-      const locked = (await tx.execute<{ status: string; revision: number }>(sql`
-        select status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
+        parsed = await parseImportFile(format, {
+          text: typeof body.text === 'string' ? body.text : undefined,
+          base64: typeof body.base64 === 'string' ? body.base64 : undefined,
+        })
+      } catch (error) {
+        if (error instanceof ImportParseError) {
+          const refusal = new DuplicateColumnsRefusal(error)
+          return apiErrorResponse(refusal, { details: { detail: refusal.detail } })
+        }
+        throw error
+      }
+    if (parsed.rows.length === 0) return NextResponse.json({ error: 'file_has_no_rows' }, { status: 422 })
+    if (parsed.truncated) return NextResponse.json({ error: 'too_many_rows' }, { status: 422 })
+    const scenarioResult = (await db.execute<{ fiscal_year: number; status: string; revision: number }>(sql`
+        select fiscal_year, status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId}
       `))
-      const current = locked.rows[0]
-      if (!current) throw new BudgetMutationError('not_found', 404)
-      if (current.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
-      if (Number(current.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
+    const scenario = scenarioResult.rows[0]
+    if (!scenario) return notFound("record")
+    if (scenario.status !== 'draft') return NextResponse.json({ error: 'budget_is_locked' }, { status: 409 })
+    const outOfScope = await scenarioOutOfScopeSubsidiaryNames(id, user.orgId, gate.allowedSubsidiaryIds)
+    if (outOfScope.length > 0) {
+        const refusal = outOfScopeScenarioError(outOfScope)
+        return apiErrorResponse(refusal)
+      }
+    const [accountsResult, periodsResult, subsidiariesResult, departmentsResult, projectsResult, locationsResult, classesResult] = (await Promise.all([
+        db.execute<Lookup>(sql`
+          select a.id, coalesce(a.number, '') as key, a.name, a.type
+            from accounts a
+           where a.org_id = ${user.orgId} and a.is_active and not a.is_summary
+             ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+        // Periods resolve within the budget's pinned calendar only: the line
+        // guard admits default-calendar periods, so resolving a same-named
+        // period from another calendar would write a line the worksheet hides.
+        db.execute<Lookup>(sql`
+          select p.id, p.name as key, p.name
+            from accounting_periods p
+            join fiscal_calendars fc on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+           where p.org_id = ${user.orgId} and p.fiscal_year = ${scenario.fiscal_year}
+             and not p.is_adjustment and fc.is_default`),
+        db.execute<Lookup & { parentId: string | null }>(sql`
+          select id, name as key, name, parent_id as "parentId"
+            from subsidiaries
+           where org_id = ${user.orgId} and is_active and not is_elimination
+             ${subsidiaryVisibleFilter(sql`id`, gate.allowedSubsidiaryIds)}`),
+        db.execute<Lookup>(sql`
+          select d.id, coalesce(d.code, '') as key, d.name
+            from departments d
+           where d.org_id = ${user.orgId} and d.is_active
+             ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+        db.execute<Lookup>(sql`
+          select p.id, coalesce(p.code, '') as key, p.name
+            from projects p
+           where p.org_id = ${user.orgId} and p.is_active
+             ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+        db.execute<Lookup>(sql`
+          select l.id, coalesce(l.code, '') as key, l.name
+            from locations l
+           where l.org_id = ${user.orgId} and l.is_active
+             ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+        db.execute<Lookup>(sql`
+          select c.id, coalesce(c.code, '') as key, c.name
+            from classes c
+           where c.org_id = ${user.orgId} and c.is_active
+             ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, gate.allowedSubsidiaryIds)}`),
+      ]))
+    const resolveAccount = buildResolver(accountsResult.rows)
+    const resolveAccountNumber = buildResolver(accountsResult.rows.map((row) => ({ ...row, name: '' })))
+    const accountTypes = new Map(accountsResult.rows.map((row) => [row.id, row.type ?? '']))
+    const accountDisplays = new Map(
+        accountsResult.rows.map((row) => [row.id, row.key ? `${row.name} (${row.key})` : row.name]),
+      )
+    const creditAccounts = new Set(accountsResult.rows.filter((row) => row.type === 'income' || row.type === 'income_other').map((row) => row.id))
+    const resolvePeriod = buildResolver(periodsResult.rows)
+    const subsidiaryIds = new Map(subsidiariesResult.rows.map((row) => [row.id.toLowerCase(), row.id]))
+    const subsidiaryExactNames = new Map<string, string>()
+    const subsidiaryFoldedIds = new Map<string, Set<string>>()
+    for (const row of subsidiariesResult.rows) {
+        const name = row.name.trim()
+        if (!subsidiaryExactNames.has(name)) subsidiaryExactNames.set(name, row.id)
+        const folded = norm(name)
+        const ids = subsidiaryFoldedIds.get(folded) ?? new Set<string>()
+        ids.add(row.id)
+        subsidiaryFoldedIds.set(folded, ids)
+      }
+    const rootSubsidiary = subsidiariesResult.rows.find((row) => row.parentId === null)?.id ?? null
+    const dimensions = {
+        departmentId: buildResolver(departmentsResult.rows),
+        projectId: buildResolver(projectsResult.rows),
+        locationId: buildResolver(locationsResult.rows),
+        classId: buildResolver(classesResult.rows),
+      }
+    const errors: { row: number; field: string; message: string }[] = []
+    const cells: BudgetCellInput[] = []
+    const seen = new Set<string>()
+    parsed.rows.forEach((row, index) => {
+        const rowNumber = index + 2
+        // The export writes Account Number (blank when the account has none)
+        // alongside Account Name: a blank number falls back to the name instead
+        // of resolving nobody. A number cell resolves as a number only — it never
+        // guesses an account by name.
+        const accountNumberCell = first(row, 'Account Number', 'accountNumber')
+        const accountNameCell = first(row, 'Account Name', 'Account', 'account', 'accountName')
+        let accountId: string | null = null
+        const accountCellText = String(accountNumberCell ?? '').trim() || String(accountNameCell ?? '').trim()
+        if (String(accountNumberCell ?? '').trim()) {
+          const outcome = resolveAccountNumber(String(accountNumberCell))
+          if ('id' in outcome) accountId = outcome.id
+          else if ('ambiguous' in outcome) {
+            errors.push({ row: rowNumber, field: 'Account Number', message: `ambiguous_account: ${outcome.ambiguous.join(', ')}` })
+          } else {
+            errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
+          }
+        } else if (String(accountNameCell ?? '').trim()) {
+          const outcome = resolveAccount(String(accountNameCell))
+          if ('id' in outcome) accountId = outcome.id
+          else if ('ambiguous' in outcome) {
+            errors.push({ row: rowNumber, field: 'Account Number', message: `ambiguous_account: ${outcome.ambiguous.join(', ')}` })
+          } else {
+            errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
+          }
+        } else {
+          errors.push({ row: rowNumber, field: 'Account Number', message: 'unknown_account' })
+        }
+        // Budgets cover the P&L only (the worksheet, variances and the line
+        // guard agree): a balance-sheet account refuses by name, it never lands
+        // in a hidden-but-counted line.
+        if (accountId && !PNL_TYPES.includes(accountTypes.get(accountId) ?? '')) {
+          errors.push({ row: rowNumber, field: 'Account Number', message: `non_pnl_account: ${accountDisplays.get(accountId) ?? accountCellText}` })
+          accountId = null
+        }
+        const periodKey = first(row, 'Period', 'period')
+        let periodId: string | null = null
+        if (String(periodKey ?? '').trim()) {
+          const outcome = resolvePeriod(String(periodKey))
+          if ('id' in outcome) periodId = outcome.id
+          else if ('ambiguous' in outcome) {
+            errors.push({ row: rowNumber, field: 'Period', message: `ambiguous_period: ${outcome.ambiguous.join(', ')}` })
+          } else {
+            errors.push({ row: rowNumber, field: 'Period', message: 'unknown_period' })
+          }
+        } else {
+          errors.push({ row: rowNumber, field: 'Period', message: 'unknown_period' })
+        }
 
-      const rows = cells.map((cell) => ({
-        account_id: cell.accountId,
-        period_id: cell.periodId,
-        subsidiary_id: cell.subsidiaryId,
-        department_id: cell.departmentId,
-        project_id: cell.projectId,
-        location_id: cell.locationId,
-        class_id: cell.classId,
-        amount: cell.amount,
-        note: cell.note ?? null,
-      }))
-      await tx.execute(sql`
-        insert into budget_lines
-          (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
-           amount, note, created_by, updated_by)
-        select ${user.orgId}, ${id}, x.account_id, x.period_id, x.subsidiary_id, x.department_id, x.project_id, x.location_id,
-               x.class_id, x.amount, x.note, ${user.id}, ${user.id}
-          from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as x(
-            account_id uuid, period_id uuid, subsidiary_id uuid, department_id uuid, project_id uuid,
-            location_id uuid, class_id uuid, amount numeric(19,4), note text
-          )
-         where x.amount <> 0 or x.note is not null
-        on conflict on constraint budget_lines_cell do update set
-          amount = excluded.amount, note = excluded.note, updated_at = now(), updated_by = excluded.updated_by
-        where budget_lines.org_id = ${user.orgId}
-      `)
-      // A zero-amount row clears exactly its own cell: the entity is part of
-      // the key, and rows outside the caller's visible subsidiaries are never
-      // touched — an import cannot clear what it was never allowed to see.
-      await tx.execute(sql`
-        delete from budget_lines bl using jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as x(
-          account_id uuid, period_id uuid, subsidiary_id uuid, department_id uuid, project_id uuid,
-          location_id uuid, class_id uuid, amount numeric(19,4), note text
-        )
-        where bl.org_id = ${user.orgId} and bl.scenario_id = ${id}
-          and x.amount = 0 and x.note is null
-          and bl.account_id = x.account_id and bl.period_id = x.period_id
-          and bl.subsidiary_id is not distinct from x.subsidiary_id
-          and bl.department_id is not distinct from x.department_id
-          and bl.project_id is not distinct from x.project_id
-          and bl.location_id is not distinct from x.location_id
-          and bl.class_id is not distinct from x.class_id
-          ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
-      `)
-      const revision = expectedRevision + 1
-      await tx.execute(sql`
-        update budget_scenarios set revision = ${revision}, updated_at = now(), updated_by = ${user.id}
-         where id = ${id} and org_id = ${user.orgId}
-      `)
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
-          ${JSON.stringify({ source: `import:${format}`, revisionBefore: expectedRevision, revisionAfter: revision, cells: rows })}::jsonb,
-          ${user.id})
-      `)
-      return { revision, imported: rows.length }
-    })
-    return NextResponse.json(result)
-  } catch (error) {
-    if (error instanceof BudgetMutationError) return apiErrorResponse(error)
-    throw error
-  }
-}
+        const subsidiaryRaw = first(row, 'Subsidiary', 'subsidiary', 'subsidiaryId')
+        const subsidiaryText = String(subsidiaryRaw ?? '').trim()
+        let subsidiaryId: string | null = null
+        if (!subsidiaryText) {
+          subsidiaryId = rootSubsidiary
+          if (!subsidiaryId) errors.push({ row: rowNumber, field: 'Subsidiary', message: 'invalid_subsidiary' })
+        } else {
+          subsidiaryId = subsidiaryIds.get(subsidiaryText.toLowerCase())
+            ?? subsidiaryExactNames.get(subsidiaryText)
+            ?? null
+          if (!subsidiaryId) {
+            const candidates = subsidiaryFoldedIds.get(norm(subsidiaryText))
+            if (!candidates) {
+              errors.push({ row: rowNumber, field: 'Subsidiary', message: 'unknown_subsidiary' })
+            } else if (candidates.size > 1) {
+              errors.push({ row: rowNumber, field: 'Subsidiary', message: 'ambiguous_subsidiary' })
+            } else {
+              subsidiaryId = [...candidates][0] ?? null
+            }
+          }
+        }
+        if (subsidiaryId && !subsidiariesInScope(gate, [subsidiaryId])) {
+          errors.push({ row: rowNumber, field: 'Subsidiary', message: 'invalid_subsidiary' })
+          subsidiaryId = null
+        }
+
+        const resolvedDims: Record<keyof typeof dimensions, string | null> = {
+          departmentId: null,
+          projectId: null,
+          locationId: null,
+          classId: null,
+        }
+        const dimHeaders: [keyof typeof dimensions, string][] = [
+          ['departmentId', 'Department'],
+          ['projectId', 'Project'],
+          ['locationId', 'Location'],
+          ['classId', 'Class'],
+        ]
+        for (const [key, header] of dimHeaders) {
+          const raw = first(row, header, header.toLowerCase(), key)
+          if (String(raw ?? '').trim()) {
+            const outcome = dimensions[key](String(raw))
+            if ('id' in outcome) resolvedDims[key] = outcome.id
+            else if ('ambiguous' in outcome) {
+              errors.push({ row: rowNumber, field: header, message: `ambiguous_dimension: ${outcome.ambiguous.join(', ')}` })
+            } else {
+              errors.push({ row: rowNumber, field: header, message: 'unknown_dimension' })
+            }
+          }
+        }
+        let amount = '0.0000'
+        try {
+          amount = normalizeBudgetAmount(first(row, 'Amount', 'amount'))
+          if (accountId && creditAccounts.has(accountId)) amount = fromUnits(-toUnits(amount))
+        } catch {
+          errors.push({ row: rowNumber, field: 'Amount', message: 'invalid_amount' })
+        }
+        if (accountId && periodId && subsidiaryId) {
+          const key = [accountId, periodId, subsidiaryId, ...Object.values(resolvedDims).map((value) => value ?? '')].join('|')
+          if (seen.has(key)) errors.push({ row: rowNumber, field: 'Account Number', message: 'duplicate_cell' })
+          seen.add(key)
+          cells.push({
+            accountId,
+            periodId,
+            subsidiaryId,
+            ...resolvedDims,
+            amount,
+            note: String(first(row, 'Note', 'note') ?? '').trim().slice(0, 2_000) || null,
+          })
+        }
+      })
+    if (body.commit !== true || errors.length > 0) {
+        return NextResponse.json({ valid: errors.length === 0, rows: parsed.rows.length, errors: errors.slice(0, 200), sample: cells.slice(0, 10) })
+      }
+    try {
+        const result = await db.transaction(async (tx) => {
+          const locked = (await tx.execute<{ status: string; revision: number }>(sql`
+            select status, revision from budget_scenarios where id = ${id} and org_id = ${user.orgId} for update
+          `))
+          const current = locked.rows[0]
+          if (!current) throw new BudgetMutationError('not_found', 404)
+          if (current.status !== 'draft') throw new BudgetMutationError('budget_is_locked', 409)
+          if (Number(current.revision) !== expectedRevision) throw new BudgetMutationError('revision_conflict', 409)
+
+          const rows = cells.map((cell) => ({
+            account_id: cell.accountId,
+            period_id: cell.periodId,
+            subsidiary_id: cell.subsidiaryId,
+            department_id: cell.departmentId,
+            project_id: cell.projectId,
+            location_id: cell.locationId,
+            class_id: cell.classId,
+            amount: cell.amount,
+            note: cell.note ?? null,
+          }))
+          await tx.execute(sql`
+            insert into budget_lines
+              (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, project_id, location_id, class_id,
+               amount, note, created_by, updated_by)
+            select ${user.orgId}, ${id}, x.account_id, x.period_id, x.subsidiary_id, x.department_id, x.project_id, x.location_id,
+                   x.class_id, x.amount, x.note, ${user.id}, ${user.id}
+              from jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as x(
+                account_id uuid, period_id uuid, subsidiary_id uuid, department_id uuid, project_id uuid,
+                location_id uuid, class_id uuid, amount numeric(19,4), note text
+              )
+             where x.amount <> 0 or x.note is not null
+            on conflict on constraint budget_lines_cell do update set
+              amount = excluded.amount, note = excluded.note, updated_at = now(), updated_by = excluded.updated_by
+            where budget_lines.org_id = ${user.orgId}
+          `)
+          // A zero-amount row clears exactly its own cell: the entity is part of
+          // the key, and rows outside the caller's visible subsidiaries are never
+          // touched — an import cannot clear what it was never allowed to see.
+          await tx.execute(sql`
+            delete from budget_lines bl using jsonb_to_recordset(${JSON.stringify(rows)}::jsonb) as x(
+              account_id uuid, period_id uuid, subsidiary_id uuid, department_id uuid, project_id uuid,
+              location_id uuid, class_id uuid, amount numeric(19,4), note text
+            )
+            where bl.org_id = ${user.orgId} and bl.scenario_id = ${id}
+              and x.amount = 0 and x.note is null
+              and bl.account_id = x.account_id and bl.period_id = x.period_id
+              and bl.subsidiary_id is not distinct from x.subsidiary_id
+              and bl.department_id is not distinct from x.department_id
+              and bl.project_id is not distinct from x.project_id
+              and bl.location_id is not distinct from x.location_id
+              and bl.class_id is not distinct from x.class_id
+              ${subsidiaryVisibleFilter(sql`bl.subsidiary_id`, gate.allowedSubsidiaryIds)}
+          `)
+          const revision = expectedRevision + 1
+          await tx.execute(sql`
+            update budget_scenarios set revision = ${revision}, updated_at = now(), updated_by = ${user.id}
+             where id = ${id} and org_id = ${user.orgId}
+          `)
+          await tx.execute(sql`
+            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${user.orgId}, 'budget_scenarios', ${id}, 'update',
+              ${JSON.stringify({ source: `import:${format}`, revisionBefore: expectedRevision, revisionAfter: revision, cells: rows })}::jsonb,
+              ${user.id})
+          `)
+          return { revision, imported: rows.length }
+        })
+        return NextResponse.json(result)
+      } catch (error) {
+        if (error instanceof BudgetMutationError) return apiErrorResponse(error)
+        throw error
+      }
+  },
+});

@@ -1,12 +1,14 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from 'zod';
+import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { resolveFeedSyncOverlapDays, sealCredentials } from "@openbooks/engine/src/banking/bank-feed-providers.ts";
-import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
 import { guardSubsidiaryScope } from "../../../../lib/authz";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
+const POSTBodySchema1 = z.object({ "name": z.string().optional(), "provider": z.string().optional(), "accountId": z.string().optional(), "externalAccountId": z.unknown().optional(), "syncCadence": z.string().optional(), "syncOverlapDays": z.unknown().optional(), "credentials": z.unknown().optional() }).passthrough();
+
 
 export const runtime = "nodejs";
 
@@ -25,110 +27,102 @@ function withoutCredentials(row: Record<string, unknown>): Record<string, unknow
  * Credentials are sealed with the org data key on write and NEVER returned; the
  * list only ever exposes whether a connection has credentials configured.
  */
-export async function GET() {
-  const authz = await guardFeaturePermission("admin.setup.manage", "bankFeeds");
-  if (authz instanceof NextResponse) return authz;
-  const rows = (await db.execute<Record<string, unknown>>(sql`
-    select c.id, c.name, c.provider, c.account_id as "accountId", c.status,
-           c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
-           c.sync_overlap_days as "syncOverlapDays",
-           c.next_sync_at as "nextSyncAt", c.last_sync_at as "lastSyncAt", c.last_attempt_at as "lastAttemptAt",
-           c.last_result as "lastResult",
-           c.last_error as "lastError", c.is_active as "isActive",
-           (c.credentials is not null) as "hasCredentials",
-           a.number as "accountNumber", a.name as "accountName"
-      from bank_feed_connections c
-      join accounts a on a.id = c.account_id and a.org_id = c.org_id
-     where c.org_id = ${authz.user.orgId}
-       ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
-     order by c.created_at desc
-  `));
-  return NextResponse.json({ connections: rows.rows });
-}
+export const GET = defineRoute({
+  permission: 'admin.setup.manage',
+  feature: 'bankFeeds',
+  handler: async ({ authz: routeAuthz }) => {
+    const authz = routeAuthz;
+    const rows = (await db.execute<Record<string, unknown>>(sql`
+        select c.id, c.name, c.provider, c.account_id as "accountId", c.status,
+               c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
+               c.sync_overlap_days as "syncOverlapDays",
+               c.next_sync_at as "nextSyncAt", c.last_sync_at as "lastSyncAt", c.last_attempt_at as "lastAttemptAt",
+               c.last_result as "lastResult",
+               c.last_error as "lastError", c.is_active as "isActive",
+               (c.credentials is not null) as "hasCredentials",
+               a.number as "accountNumber", a.name as "accountName"
+          from bank_feed_connections c
+          join accounts a on a.id = c.account_id and a.org_id = c.org_id
+         where c.org_id = ${authz.user.orgId}
+           ${subsidiaryVisibleFilter(sql`a.subsidiary_id`, authz.allowedSubsidiaryIds)}
+         order by c.created_at desc
+      `));
+    return NextResponse.json({ connections: rows.rows });
+  },
+});
 
-export async function POST(req: Request) {
-  const authz = await guardFeaturePermission("admin.setup.manage", "bankFeeds");
-  if (authz instanceof NextResponse) return authz;
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    name?: string;
-    provider?: string;
-    accountId?: string;
-    externalAccountId?: string | null;
-    syncCadence?: string;
-    syncOverlapDays?: number | null;
-    credentials?: Record<string, string> | null;
-  };
+export const POST = defineRoute({
+  permission: 'admin.setup.manage',
+  feature: 'bankFeeds',
+  body: POSTBodySchema1,
+  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+    const authz = routeAuthz;
 
-  if (typeof body.name !== "string" || !body.name.trim()) {
-    return NextResponse.json({ error: "name is required" }, { status: 400 });
-  }
-  if (!body.provider || !PROVIDERS.includes(body.provider as (typeof PROVIDERS)[number])) {
-    return NextResponse.json({ error: "invalid provider" }, { status: 400 });
-  }
-  if (body.syncCadence !== undefined && !CADENCES.includes(body.syncCadence as (typeof CADENCES)[number])) {
-    return NextResponse.json({ error: "invalid syncCadence" }, { status: 400 });
-  }
-  // The re-pull overlap recovers late-posting transactions; an unusable
-  // value is a 400, never a silently narrowed window or a CHECK-violation
-  // 500. Omission stores null, which syncs read as the default.
-  if (body.syncOverlapDays !== undefined && body.syncOverlapDays !== null) {
-    try {
-      resolveFeedSyncOverlapDays(body.syncOverlapDays);
-    } catch {
-      return NextResponse.json({ error: "syncOverlapDays must be a whole number of days from 0 to 90" }, { status: 400 });
-    }
-  }
-  if (typeof body.accountId !== "string" || !isUuid(body.accountId)) {
-    return NextResponse.json({ error: "a bank account is required" }, { status: 400 });
-  }
-  const externalAccountId = typeof body.externalAccountId === "string"
-    ? body.externalAccountId.trim()
-    : "";
-  if (body.provider === "plaid" && !externalAccountId) {
-    return NextResponse.json({ error: "Plaid account id is required" }, { status: 400 });
-  }
-
-  // A feed may only attach where its statements can be reconciled: the same
-  // reconcilable-bank membership every banking picker reads. An
-  // inactive or non-bank account would strand imports where no banking
-  // surface can match them.
-  const acct = (await db.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from accounts where id = ${body.accountId} and org_id = ${authz.user.orgId}
-      and reconcilable and is_active and not is_summary and type in ('asset_bank', 'liability_card')
-  `));
-  if (!acct.rows.length) return NextResponse.json({ error: "not a reconcilable account" }, { status: 400 });
-  // A feed imports that account's statements, so binding it to another
-  // entity's account (or a shared one, for a restricted caller) is uniform
-  // not-found — never a 400 naming the account as usable.
-  const scoped = guardSubsidiaryScope(authz, acct.rows[0]!.subsidiary_id);
-  if (scoped) return scoped;
-
-  const isApi = API_PROVIDERS.has(body.provider);
-  const sealed = isApi && body.credentials ? sealCredentials(authz.user.orgId, body.credentials) : null;
-  const status = isApi ? "pending" : "connected";
-  const cadence = isApi ? (body.syncCadence ?? "daily") : "manual";
-
-  const id = await db.transaction(async (tx) => {
-    const created = (await tx.execute<Record<string, unknown>>(sql`
-      insert into bank_feed_connections (org_id, name, provider, account_id, external_account_id,
-                                         sync_cadence, sync_overlap_days, credentials, status, created_by, updated_by)
-      values (${authz.user.orgId}, ${body.name}, ${body.provider}, ${body.accountId},
-              ${isApi ? externalAccountId || null : null}, ${cadence}, ${body.syncOverlapDays ?? null},
-              ${sealed}, ${status},
-              ${authz.user.id}, ${authz.user.id})
-      returning *
-    `));
-    await tx.execute(sql`
-      insert into audit_log
-        (org_id, table_name, row_id, action, changes, actor_id, request_id)
-      values
-        (${authz.user.orgId}, 'bank_feed_connections', ${created.rows[0]!.id}, 'insert',
-         ${JSON.stringify({ after: withoutCredentials(created.rows[0]!) })}::jsonb,
-         ${authz.user.id}, ${req.headers.get("X-Request-Id")})
-    `);
-    return created.rows[0]!.id;
-  });
-  return NextResponse.json({ id }, { status: 201 });
-}
+    const body = (routeBody) as {
+        name?: string;
+        provider?: string;
+        accountId?: string;
+        externalAccountId?: string | null;
+        syncCadence?: string;
+        syncOverlapDays?: number | null;
+        credentials?: Record<string, string> | null;
+      };
+    if (typeof body.name !== "string" || !body.name.trim()) {
+        return NextResponse.json({ error: "name is required" }, { status: 400 });
+      }
+    if (!body.provider || !PROVIDERS.includes(body.provider as (typeof PROVIDERS)[number])) {
+        return NextResponse.json({ error: "invalid provider" }, { status: 400 });
+      }
+    if (body.syncCadence !== undefined && !CADENCES.includes(body.syncCadence as (typeof CADENCES)[number])) {
+        return NextResponse.json({ error: "invalid syncCadence" }, { status: 400 });
+      }
+    if (body.syncOverlapDays !== undefined && body.syncOverlapDays !== null) {
+        try {
+          resolveFeedSyncOverlapDays(body.syncOverlapDays);
+        } catch {
+          return NextResponse.json({ error: "syncOverlapDays must be a whole number of days from 0 to 90" }, { status: 400 });
+        }
+      }
+    if (typeof body.accountId !== "string" || !isUuid(body.accountId)) {
+        return NextResponse.json({ error: "a bank account is required" }, { status: 400 });
+      }
+    const externalAccountId = typeof body.externalAccountId === "string"
+        ? body.externalAccountId.trim()
+        : "";
+    if (body.provider === "plaid" && !externalAccountId) {
+        return NextResponse.json({ error: "Plaid account id is required" }, { status: 400 });
+      }
+    const acct = (await db.execute<{ subsidiary_id: string | null }>(sql`
+        select subsidiary_id from accounts where id = ${body.accountId} and org_id = ${authz.user.orgId}
+          and reconcilable and is_active and not is_summary and type in ('asset_bank', 'liability_card')
+      `));
+    if (!acct.rows.length) return NextResponse.json({ error: "not a reconcilable account" }, { status: 400 });
+    const scoped = guardSubsidiaryScope(authz, acct.rows[0]!.subsidiary_id);
+    if (scoped) return scoped;
+    const isApi = API_PROVIDERS.has(body.provider);
+    const sealed = isApi && body.credentials ? sealCredentials(authz.user.orgId, body.credentials) : null;
+    const status = isApi ? "pending" : "connected";
+    const cadence = isApi ? (body.syncCadence ?? "daily") : "manual";
+    const id = await db.transaction(async (tx) => {
+        const created = (await tx.execute<Record<string, unknown>>(sql`
+          insert into bank_feed_connections (org_id, name, provider, account_id, external_account_id,
+                                             sync_cadence, sync_overlap_days, credentials, status, created_by, updated_by)
+          values (${authz.user.orgId}, ${body.name}, ${body.provider}, ${body.accountId},
+                  ${isApi ? externalAccountId || null : null}, ${cadence}, ${body.syncOverlapDays ?? null},
+                  ${sealed}, ${status},
+                  ${authz.user.id}, ${authz.user.id})
+          returning *
+        `));
+        await tx.execute(sql`
+          insert into audit_log
+            (org_id, table_name, row_id, action, changes, actor_id, request_id)
+          values
+            (${authz.user.orgId}, 'bank_feed_connections', ${created.rows[0]!.id}, 'insert',
+             ${JSON.stringify({ after: withoutCredentials(created.rows[0]!) })}::jsonb,
+             ${authz.user.id}, ${req.headers.get("X-Request-Id")})
+        `);
+        return created.rows[0]!.id;
+      });
+    return NextResponse.json({ id }, { status: 201 });
+  },
+});

@@ -1,4 +1,5 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from '@/lib/api/route';
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
 import { sql } from 'drizzle-orm'
@@ -8,11 +9,12 @@ import { encryptSecret, revokeSftpSessions, sftpServerAuditSnapshot, type SftpSe
 import { findRootOverlap, rootOverlapRefusal } from '@openbooks/engine/src/sftp/roots.ts'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { pgErrorCode } from '../../../../../lib/setup/coerce'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { sftpImportScheduleRunLockKey } from '@openbooks/engine/src/sftp/import-job.ts'
 import { notFound } from "@/lib/api/responses";
+const PATCHBodySchema1 = z.object({ "action": z.string().optional(), "isActive": z.boolean().optional() }).passthrough();
+
 
 
 export const runtime = 'nodejs'
@@ -43,206 +45,207 @@ async function currentRow(tx: SqlExecutor, id: string, orgId: string) {
   return r.rows[0] ?? null
 }
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
-  if (gate instanceof NextResponse) return gate
-  // Rotating credentials or toggling a shared login is org-wide
-  // configuration (canonical org-wide-policy 403).
-  const unrestricted = guardUnrestrictedScope(gate)
-  if (unrestricted) return unrestricted
-  const { user } = gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { action?: string; isActive?: boolean }
-  if (body.action !== 'rotate' && body.action !== 'toggle') {
-    return NextResponse.json({ error: "action must be 'toggle' or 'rotate'" }, { status: 400 })
-  }
-  let recordMissing = false
-  if (body.action === 'rotate') {
-    const password = randomBytes(18).toString('base64url')
-    const username = await db.transaction(async (tx) => {
-      const before = await currentRow(tx, id, user.orgId)
-      if (!before) { recordMissing = true; return null }
-      const after = (await tx.execute<SftpServerAuditRow & { id: string; username: string }>(sql`
-        update sftp_servers set password_encrypted = ${encryptSecret(password, user.orgId)}, updated_at = now(), updated_by = ${user.id}
-         where id = ${id} and org_id = ${user.orgId}
-        returning id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, is_active, created_by, updated_by
-      `)).rows[0]!
-      await auditSetupChange({
-        orgId: user.orgId,
-        table: 'sftp_servers',
-        rowId: id,
-        action: 'update',
-        changes: { before: sftpServerAuditSnapshot(before), after: sftpServerAuditSnapshot(after), credentialRotated: true },
-        actorId: user.id,
-      }, tx)
-      return after.username
-    })
-    if (recordMissing) return notFound("record")
-    // The password just changed: end this process's live sessions for the
-    // login now. Sessions on any other listener die on their next operation
-    // through the daemon's liveness fence; revokeSftpSessions never throws.
-    revokeSftpSessions(id)
-    return NextResponse.json({ username, password })
-  }
-  const nextActive = body.isActive !== false
-  let refused: NextResponse | null = null
-  await db.transaction(async (tx) => {
-    const before = await currentRow(tx, id, user.orgId)
-    if (!before) { recordMissing = true; return }
-    // Reactivation is the update path that can reintroduce shared folders:
-    // refuse waking a server whose root is equal to, inside, or containing
-    // an ACTIVE sibling's root. The target row is already locked by
-    // currentRow; the per-org advisory lock (same key as the create gate)
-    // serializes against concurrent creates, and locking the siblings holds
-    // it against concurrent toggles.
-    if (nextActive && !before.is_active) {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'sftp-roots:' + user.orgId}, 0))`)
-      const siblings = (await tx.execute<{ id: string; name: string; root_prefix: string; is_active: boolean }>(sql`
-        select id, name, root_prefix, is_active from sftp_servers where org_id = ${user.orgId} and id <> ${id} for update
-      `))
-      const hit = findRootOverlap(
-        before.root_prefix,
-        siblings.rows.filter((r) => r.is_active).map((r) => ({ id: r.id, name: r.name, rootPrefix: r.root_prefix })),
-      )
-      if (hit) {
-        refused = NextResponse.json({ error: rootOverlapRefusal(before.root_prefix, hit), code: 'sftp_root_overlap' }, { status: 409 })
-        return
+export const PATCH = defineRoute({
+  permission: 'admin.setup.manage',
+  feature: 'bankFeeds',
+  body: PATCHBodySchema1,
+  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+    const params = Promise.resolve(routeParams as { id: string });
+    const gate = routeAuthz;
+    const unrestricted = guardUnrestrictedScope(gate)
+    if (unrestricted) return unrestricted
+    const { user } = gate
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+
+    const body = (routeBody) as { action?: string; isActive?: boolean }
+    if (body.action !== 'rotate' && body.action !== 'toggle') {
+        return NextResponse.json({ error: "action must be 'toggle' or 'rotate'" }, { status: 400 })
       }
-    }
-    if (!nextActive && before.is_active) {
-      // A server disable must fence every live schedule scan before it
-      // revokes the shared login. Each scan owns the matching session lock
-      // through its last import and archive operation; try-locking returns a
-      // truthful 409 instead of disabling the server mid-run. A claim token
-      // with no live lock belongs to a dead worker and is invalidated here.
-      const schedules = (await tx.execute<{ id: string }>(sql`
-        select id from sftp_import_schedules
-         where org_id = ${user.orgId} and sftp_server_id = ${id}
-         order by id
-      `)).rows
-      for (const schedule of schedules) {
-        const acquired = (await tx.execute<{ acquired: boolean }>(sql`
-          select pg_try_advisory_xact_lock(hashtextextended(${sftpImportScheduleRunLockKey(user.orgId, schedule.id)}, 0)) as acquired
-        `)).rows[0]?.acquired
-        if (!acquired) {
-          refused = NextResponse.json(
-            { error: 'A statement import is still running on this server — wait for the scan to finish before disabling it.', code: 'SFTP_IMPORT_RUNNING' },
+    let recordMissing = false
+    if (body.action === 'rotate') {
+        const password = randomBytes(18).toString('base64url')
+        const username = await db.transaction(async (tx) => {
+          const before = await currentRow(tx, id, user.orgId)
+          if (!before) { recordMissing = true; return null }
+          const after = (await tx.execute<SftpServerAuditRow & { id: string; username: string }>(sql`
+            update sftp_servers set password_encrypted = ${encryptSecret(password, user.orgId)}, updated_at = now(), updated_by = ${user.id}
+             where id = ${id} and org_id = ${user.orgId}
+            returning id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, is_active, created_by, updated_by
+          `)).rows[0]!
+          await auditSetupChange({
+            orgId: user.orgId,
+            table: 'sftp_servers',
+            rowId: id,
+            action: 'update',
+            changes: { before: sftpServerAuditSnapshot(before), after: sftpServerAuditSnapshot(after), credentialRotated: true },
+            actorId: user.id,
+          }, tx)
+          return after.username
+        })
+        if (recordMissing) return notFound("record")
+        // The password just changed: end this process's live sessions for the
+        // login now. Sessions on any other listener die on their next operation
+        // through the daemon's liveness fence; revokeSftpSessions never throws.
+        revokeSftpSessions(id)
+        return NextResponse.json({ username, password })
+      }
+    const nextActive = body.isActive !== false
+    let refused: NextResponse | null = null
+    await db.transaction(async (tx) => {
+        const before = await currentRow(tx, id, user.orgId)
+        if (!before) { recordMissing = true; return }
+        // Reactivation is the update path that can reintroduce shared folders:
+        // refuse waking a server whose root is equal to, inside, or containing
+        // an ACTIVE sibling's root. The target row is already locked by
+        // currentRow; the per-org advisory lock (same key as the create gate)
+        // serializes against concurrent creates, and locking the siblings holds
+        // it against concurrent toggles.
+        if (nextActive && !before.is_active) {
+          await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${'sftp-roots:' + user.orgId}, 0))`)
+          const siblings = (await tx.execute<{ id: string; name: string; root_prefix: string; is_active: boolean }>(sql`
+            select id, name, root_prefix, is_active from sftp_servers where org_id = ${user.orgId} and id <> ${id} for update
+          `))
+          const hit = findRootOverlap(
+            before.root_prefix,
+            siblings.rows.filter((r) => r.is_active).map((r) => ({ id: r.id, name: r.name, rootPrefix: r.root_prefix })),
+          )
+          if (hit) {
+            refused = NextResponse.json({ error: rootOverlapRefusal(before.root_prefix, hit), code: 'sftp_root_overlap' }, { status: 409 })
+            return
+          }
+        }
+        if (!nextActive && before.is_active) {
+          // A server disable must fence every live schedule scan before it
+          // revokes the shared login. Each scan owns the matching session lock
+          // through its last import and archive operation; try-locking returns a
+          // truthful 409 instead of disabling the server mid-run. A claim token
+          // with no live lock belongs to a dead worker and is invalidated here.
+          const schedules = (await tx.execute<{ id: string }>(sql`
+            select id from sftp_import_schedules
+             where org_id = ${user.orgId} and sftp_server_id = ${id}
+             order by id
+          `)).rows
+          for (const schedule of schedules) {
+            const acquired = (await tx.execute<{ acquired: boolean }>(sql`
+              select pg_try_advisory_xact_lock(hashtextextended(${sftpImportScheduleRunLockKey(user.orgId, schedule.id)}, 0)) as acquired
+            `)).rows[0]?.acquired
+            if (!acquired) {
+              refused = NextResponse.json(
+                { error: 'A statement import is still running on this server — wait for the scan to finish before disabling it.', code: 'SFTP_IMPORT_RUNNING' },
+                { status: 409 },
+              )
+              return
+            }
+          }
+          await tx.execute(sql`
+            select id from sftp_import_schedules
+             where org_id = ${user.orgId} and sftp_server_id = ${id}
+             order by id for update
+          `)
+          await tx.execute(sql`
+            update sftp_import_schedules
+               set run_claim_token = null, run_claimed_at = null
+             where org_id = ${user.orgId} and sftp_server_id = ${id}
+          `)
+        }
+        const after = (await tx.execute<SftpServerAuditRow & { id: string }>(sql`
+          update sftp_servers set is_active = ${nextActive}, updated_at = now(), updated_by = ${user.id}
+           where id = ${id} and org_id = ${user.orgId}
+          returning id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, is_active, created_by, updated_by
+        `)).rows[0]!
+        await auditSetupChange({
+          orgId: user.orgId,
+          table: 'sftp_servers',
+          rowId: id,
+          action: 'update',
+          changes: { before: sftpServerAuditSnapshot(before), after: sftpServerAuditSnapshot(after) },
+          actorId: user.id,
+        }, tx)
+      })
+    if (refused) return refused
+    if (recordMissing) return notFound("record")
+    if (!nextActive) {
+        // The login was just disabled: end this process's live sessions now.
+        // Any other listener's sessions die on their next operation through
+        // the daemon's liveness fence; revokeSftpSessions never throws.
+        revokeSftpSessions(id)
+      }
+    return NextResponse.json({ ok: true })
+  },
+});
+
+export const DELETE = defineRoute({
+  permission: 'admin.setup.manage',
+  feature: 'bankFeeds',
+  handler: async ({ request: req, authz: routeAuthz, params: routeParams }) => {
+    const params = Promise.resolve(routeParams as { id: string });
+    const gate = routeAuthz;
+    const unrestricted = guardUnrestrictedScope(gate)
+    if (unrestricted) return unrestricted
+    const { user } = gate
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    const { response: invalidBody, reason } = await deletionReason(req)
+    if (invalidBody) return invalidBody
+    let recordMissing = false
+    let refused: NextResponse | null = null
+    try {
+        await db.transaction(async (tx) => {
+          const before = await currentRow(tx, id, user.orgId)
+          if (!before) { recordMissing = true; return }
+          // A server that still delivers payment files or feeds statement
+          // imports cannot vanish: bank profiles hold a RESTRICT foreign key
+          // and import schedules hold the 0242 composite tenant FK
+          // (org_id, sftp_server_id), with NO ACTION. The storage layer would
+          // refuse with a raw 23503, so count dependents first and refuse with
+          // the blocking kind named — like the flow and recurring-schedule
+          // deletes — keeping the FK as the race backstop below.
+          const dependents = (await tx.execute<{ profiles: string; schedules: string }>(sql`
+            select
+              (select count(*)::text from payment_bank_profiles where org_id = ${user.orgId} and sftp_server_id = ${id}) as profiles,
+              (select count(*)::text from sftp_import_schedules where org_id = ${user.orgId} and sftp_server_id = ${id}) as schedules
+          `)).rows[0]!
+          if (Number(dependents.profiles) > 0) {
+            refused = NextResponse.json(
+              { error: 'This SFTP server still delivers payment files for a bank profile — point the profile at another server first', code: 'bank_profile_in_use' },
+              { status: 409 },
+            )
+            return
+          }
+          if (Number(dependents.schedules) > 0) {
+            refused = NextResponse.json(
+              { error: 'This SFTP server still feeds statement import schedules — delete the schedules first', code: 'import_schedules_in_use' },
+              { status: 409 },
+            )
+            return
+          }
+          await tx.execute(sql`delete from sftp_servers where id = ${id} and org_id = ${user.orgId}`)
+          await auditSetupChange({
+            orgId: user.orgId,
+            table: 'sftp_servers',
+            rowId: id,
+            action: 'delete',
+            changes: reason ? { before: sftpServerAuditSnapshot(before), reason } : { before: sftpServerAuditSnapshot(before) },
+            actorId: user.id,
+          }, tx)
+        })
+      } catch (e) {
+        // A reference the checks above cannot see (for example a row outside
+        // this organization pointing at the server through the unscoped
+        // profile key) still refuses the delete at the storage layer — surface
+        // it as the same typed 409 instead of a raw 500.
+        if (pgErrorCode(e) === '23503') {
+          return NextResponse.json(
+            { error: 'This SFTP server is still referenced and cannot be deleted', code: 'in-use' },
             { status: 409 },
           )
-          return
         }
+        throw e
       }
-      await tx.execute(sql`
-        select id from sftp_import_schedules
-         where org_id = ${user.orgId} and sftp_server_id = ${id}
-         order by id for update
-      `)
-      await tx.execute(sql`
-        update sftp_import_schedules
-           set run_claim_token = null, run_claimed_at = null
-         where org_id = ${user.orgId} and sftp_server_id = ${id}
-      `)
-    }
-    const after = (await tx.execute<SftpServerAuditRow & { id: string }>(sql`
-      update sftp_servers set is_active = ${nextActive}, updated_at = now(), updated_by = ${user.id}
-       where id = ${id} and org_id = ${user.orgId}
-      returning id, name, username, password_encrypted, authorized_keys, backend, bucket, root_prefix, is_active, created_by, updated_by
-    `)).rows[0]!
-    await auditSetupChange({
-      orgId: user.orgId,
-      table: 'sftp_servers',
-      rowId: id,
-      action: 'update',
-      changes: { before: sftpServerAuditSnapshot(before), after: sftpServerAuditSnapshot(after) },
-      actorId: user.id,
-    }, tx)
-  })
-  if (refused) return refused
-  if (recordMissing) return notFound("record")
-  if (!nextActive) {
-    // The login was just disabled: end this process's live sessions now.
-    // Any other listener's sessions die on their next operation through
-    // the daemon's liveness fence; revokeSftpSessions never throws.
+    if (refused) return refused
+    if (recordMissing) return notFound("record")
     revokeSftpSessions(id)
-  }
-  return NextResponse.json({ ok: true })
-}
-
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
-  if (gate instanceof NextResponse) return gate
-  // Deleting a shared login is org-wide configuration (canonical
-  // org-wide-policy 403).
-  const unrestricted = guardUnrestrictedScope(gate)
-  if (unrestricted) return unrestricted
-  const { user } = gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const { response: invalidBody, reason } = await deletionReason(req)
-  if (invalidBody) return invalidBody
-  let recordMissing = false
-  let refused: NextResponse | null = null
-  try {
-    await db.transaction(async (tx) => {
-      const before = await currentRow(tx, id, user.orgId)
-      if (!before) { recordMissing = true; return }
-      // A server that still delivers payment files or feeds statement
-      // imports cannot vanish: bank profiles hold a RESTRICT foreign key
-      // and import schedules hold the 0242 composite tenant FK
-      // (org_id, sftp_server_id), with NO ACTION. The storage layer would
-      // refuse with a raw 23503, so count dependents first and refuse with
-      // the blocking kind named — like the flow and recurring-schedule
-      // deletes — keeping the FK as the race backstop below.
-      const dependents = (await tx.execute<{ profiles: string; schedules: string }>(sql`
-        select
-          (select count(*)::text from payment_bank_profiles where org_id = ${user.orgId} and sftp_server_id = ${id}) as profiles,
-          (select count(*)::text from sftp_import_schedules where org_id = ${user.orgId} and sftp_server_id = ${id}) as schedules
-      `)).rows[0]!
-      if (Number(dependents.profiles) > 0) {
-        refused = NextResponse.json(
-          { error: 'This SFTP server still delivers payment files for a bank profile — point the profile at another server first', code: 'bank_profile_in_use' },
-          { status: 409 },
-        )
-        return
-      }
-      if (Number(dependents.schedules) > 0) {
-        refused = NextResponse.json(
-          { error: 'This SFTP server still feeds statement import schedules — delete the schedules first', code: 'import_schedules_in_use' },
-          { status: 409 },
-        )
-        return
-      }
-      await tx.execute(sql`delete from sftp_servers where id = ${id} and org_id = ${user.orgId}`)
-      await auditSetupChange({
-        orgId: user.orgId,
-        table: 'sftp_servers',
-        rowId: id,
-        action: 'delete',
-        changes: reason ? { before: sftpServerAuditSnapshot(before), reason } : { before: sftpServerAuditSnapshot(before) },
-        actorId: user.id,
-      }, tx)
-    })
-  } catch (e) {
-    // A reference the checks above cannot see (for example a row outside
-    // this organization pointing at the server through the unscoped
-    // profile key) still refuses the delete at the storage layer — surface
-    // it as the same typed 409 instead of a raw 500.
-    if (pgErrorCode(e) === '23503') {
-      return NextResponse.json(
-        { error: 'This SFTP server is still referenced and cannot be deleted', code: 'in-use' },
-        { status: 409 },
-      )
-    }
-    throw e
-  }
-  if (refused) return refused
-  if (recordMissing) return notFound("record")
-  // The login row is gone: end this process's live sessions now. Any other
-  // listener's sessions die on their next operation through the daemon's
-  // liveness fence; revokeSftpSessions never throws.
-  revokeSftpSessions(id)
-  return NextResponse.json({ ok: true })
-}
+    return NextResponse.json({ ok: true })
+  },
+});

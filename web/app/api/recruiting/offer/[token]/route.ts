@@ -1,4 +1,4 @@
-import { parseJsonBody } from "../../../../../lib/api/json";
+import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
 import { authRequestContext, networkAddressEvidenceHash } from "../../../../../lib/auth-policy";
 import {
@@ -21,38 +21,44 @@ export const runtime = "nodejs";
  *   GET  /api/recruiting/offer/[token]  the offer view (records viewed)
  *   POST /api/recruiting/offer/[token]  { action: sign | decline, ... }
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
-  try {
-    const offer = await readOfferForSigning(decodeURIComponent(token));
-    return NextResponse.json({ offer });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  public: 'token',
+  handler: async ({ request: _req, params: routeParams }) => {
+    const params = Promise.resolve(routeParams as { token: string });
+    const { token } = await params;
+    try {
+        const offer = await readOfferForSigning(decodeURIComponent(token));
+        return NextResponse.json({ offer });
+      } catch (e) {
+        return recruitingErrorResponse(e);
+      }
+  },
+});
 
-export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
-  const parsedBody = await parseJsonBody(req, signOfferBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  // The IP is hashed, never stored: the evidence carries proof of presence
-  // without retaining an identifier the product does not need.
-  const ipHash = networkAddressEvidenceHash(authRequestContext(req));
-  try {
-    if (body.action === "decline") {
-      const declined = await declineOfferSigning({ signingToken: decodeURIComponent(token), reason: body.reason });
-      return NextResponse.json({ declined });
-    }
-    const signed = await signOffer({
-      signingToken: decodeURIComponent(token),
-      signerName: body.signerName,
-      ipHash,
-      documentHash: body.documentHash,
-      renderedFileId: body.renderedFileId,
-    });
-    return NextResponse.json({ signed });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  public: 'token',
+  body: signOfferBody,
+  handler: async ({ request: req, params: routeParams, body: routeBody }) => {
+    const params = Promise.resolve(routeParams as { token: string });
+    const { token } = await params;
+
+    const body = routeBody;
+    const ipHash = networkAddressEvidenceHash(authRequestContext(req));
+    try {
+        if (body.action === "decline") {
+          const declined = await declineOfferSigning({ signingToken: decodeURIComponent(token), reason: body.reason });
+          return NextResponse.json({ declined });
+        }
+        const signed = await signOffer({
+          signingToken: decodeURIComponent(token),
+          signerName: body.signerName,
+          ipHash,
+          documentHash: body.documentHash,
+          renderedFileId: body.renderedFileId,
+        });
+        return NextResponse.json({ signed });
+      } catch (e) {
+        return recruitingErrorResponse(e);
+      }
+  },
+});

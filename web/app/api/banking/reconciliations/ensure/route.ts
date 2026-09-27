@@ -1,32 +1,37 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { apiErrorResponse } from '@/lib/api/error-response'
+import { z } from 'zod';
+import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { ensureOpenReconciliation } from '../../../../../lib/banking-rules'
-import { bankingErrorResponse } from '../../util'
+const POSTBodySchema1 = z.object({ "accountId": z.string().optional() }).passthrough();
+
 
 export const runtime = 'nodejs'
 
 /** Find-or-create the open reconciliation for an account (Match Bank Data entry). */
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
-  if (gate instanceof NextResponse) return gate
-  const { user } = gate
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { accountId?: string }
-  if (!body.accountId || !isUuid(body.accountId)) {
-    return NextResponse.json({ error: 'accountId is required' }, { status: 400 })
-  }
-  try {
-    const id = await ensureOpenReconciliation(
-      user.orgId,
-      user.id,
-      body.accountId,
-      gate.allowedSubsidiaryIds,
-    )
-    return NextResponse.json({ id })
-  } catch (e) {
-    return bankingErrorResponse(e)
-  }
-}
+export const POST = defineRoute({
+  permission: 'banking.reconcile',
+  feature: 'banking',
+  body: POSTBodySchema1,
+  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+    const gate = routeAuthz;
+    const { user } = gate
+
+    const body = (routeBody) as { accountId?: string }
+    if (!body.accountId || !isUuid(body.accountId)) {
+        return NextResponse.json({ error: 'accountId is required' }, { status: 400 })
+      }
+    try {
+        const id = await ensureOpenReconciliation(
+          user.orgId,
+          user.id,
+          body.accountId,
+          gate.allowedSubsidiaryIds,
+        )
+        return NextResponse.json({ id })
+      } catch (e) {
+        return apiErrorResponse(e)
+      }
+  },
+});

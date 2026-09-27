@@ -1,6 +1,7 @@
+import { z } from 'zod';
+import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -15,6 +16,8 @@ import { lockedDocumentScopeDenied } from "../../../../../lib/document-scope.ts"
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
+const POSTBodySchema1 = z.object({ "reason": z.string().optional(), "reversalDate": z.unknown().optional(), "reversalPeriodId": z.unknown().optional(), "expectedUpdatedAt": z.string().optional() }).passthrough();
+
 
 
 export const runtime = 'nodejs'
@@ -82,81 +85,83 @@ async function guardVoidDocument(id: string): Promise<VoidGuard | NextResponse> 
  * when the org uses none — the void UI then offers no period choice and the
  * reversal resolves by date in the regular covering period.
  */
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params
-  const gate = await guardVoidDocument(id)
-  if (gate instanceof NextResponse) return gate
-  const periods = (await db.execute<{ id: string; name: string; startsOn: string; endsOn: string }>(sql`
-    select p.id, p.name, p.starts_on::text as "startsOn", p.ends_on::text as "endsOn"
-      from accounting_periods p
-      join fiscal_calendars fc
-        on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
-       and fc.is_default and fc.is_active
-     where p.org_id = ${gate.authz.user.orgId} and p.is_adjustment
-     order by p.starts_on, p.ends_on, p.id
-  `))
-  return NextResponse.json({ adjustmentPeriods: periods.rows })
-}
+export const GET = defineRoute({
+  public: 'session',
+  handler: async ({ request: _req, params: routeParams }) => {
+    const params = Promise.resolve(routeParams as { id: string });
+    const { id } = await params
+    const gate = await guardVoidDocument(id)
+    if (gate instanceof NextResponse) return gate
+    const periods = (await db.execute<{ id: string; name: string; startsOn: string; endsOn: string }>(sql`
+        select p.id, p.name, p.starts_on::text as "startsOn", p.ends_on::text as "endsOn"
+          from accounting_periods p
+          join fiscal_calendars fc
+            on fc.id = p.fiscal_calendar_id and fc.org_id = p.org_id
+           and fc.is_default and fc.is_active
+         where p.org_id = ${gate.authz.user.orgId} and p.is_adjustment
+         order by p.starts_on, p.ends_on, p.id
+      `))
+    return NextResponse.json({ adjustmentPeriods: periods.rows })
+  },
+});
 
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params
-  const gate = await guardVoidDocument(id)
-  if (gate instanceof NextResponse) return gate
-  const { authz } = gate
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    reason?: string
-    reversalDate?: string | null
-    reversalPeriodId?: string | null
-    expectedUpdatedAt?: string
-  }
-  if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
-    return NextResponse.json(
-      { error: 'Reload the document and supply its exact revision before voiding', code: 'stale-revision' },
-      { status: 409 },
-    )
-  }
-  try {
-    // The void and the locked scope recheck commit as one unit: a rehome
-    // that landed after the guard above meets the uniform 404 and voids
-    // nothing, instead of voiding another subsidiary's document.
-    // requestDocumentVoid joins the ambient transaction, so the lock and
-    // the void share one snapshot.
-    type VoidOutcome =
-      | { denied: NextResponse; result?: undefined }
-      | { denied: null; result: Awaited<ReturnType<typeof requestDocumentVoid>> }
-    const outcome: VoidOutcome = await withOrgTransaction(authz.user.orgId, async (): Promise<VoidOutcome> => {
-      const relocked = await lockedDocumentScopeDenied(authz, id)
-      if (relocked) return { denied: relocked }
-      const result = await requestDocumentVoid({
-        documentId: id,
-        orgId: authz.user.orgId,
-        actorId: authz.user.id,
-        reason: body.reason ?? '',
-        reversalDate: body.reversalDate,
-        reversalPeriodId: body.reversalPeriodId,
-        source: 'ui',
-        expectedUpdatedAt: body.expectedUpdatedAt,
-      })
-      return { denied: null, result }
-    })
-    if (outcome.denied) return outcome.denied
-    const result = outcome.result
-    return NextResponse.json(
-      { ok: true, ...result },
-      { status: result.status === 'pending_approval' ? 202 : 200 },
-    )
-  } catch (error) {
-    if (error instanceof DocumentVoidError) {
-      return apiErrorResponse(error, { details: { code: error.code } })
-    }
-    throw error
-  }
-}
+export const POST = defineRoute({
+  public: 'session',
+  body: POSTBodySchema1,
+  handler: async ({ request: req, params: routeParams, body: routeBody }) => {
+    const params = Promise.resolve(routeParams as { id: string });
+    const { id } = await params
+    const gate = await guardVoidDocument(id)
+    if (gate instanceof NextResponse) return gate
+    const { authz } = gate
+
+    const body = (routeBody) as {
+        reason?: string
+        reversalDate?: string | null
+        reversalPeriodId?: string | null
+        expectedUpdatedAt?: string
+      }
+    if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+        return NextResponse.json(
+          { error: 'Reload the document and supply its exact revision before voiding', code: 'stale-revision' },
+          { status: 409 },
+        )
+      }
+    try {
+        // The void and the locked scope recheck commit as one unit: a rehome
+        // that landed after the guard above meets the uniform 404 and voids
+        // nothing, instead of voiding another subsidiary's document.
+        // requestDocumentVoid joins the ambient transaction, so the lock and
+        // the void share one snapshot.
+        type VoidOutcome =
+          | { denied: NextResponse; result?: undefined }
+          | { denied: null; result: Awaited<ReturnType<typeof requestDocumentVoid>> }
+        const outcome: VoidOutcome = await withOrgTransaction(authz.user.orgId, async (): Promise<VoidOutcome> => {
+          const relocked = await lockedDocumentScopeDenied(authz, id)
+          if (relocked) return { denied: relocked }
+          const result = await requestDocumentVoid({
+            documentId: id,
+            orgId: authz.user.orgId,
+            actorId: authz.user.id,
+            reason: body.reason ?? '',
+            reversalDate: body.reversalDate,
+            reversalPeriodId: body.reversalPeriodId,
+            source: 'ui',
+            expectedUpdatedAt: body.expectedUpdatedAt,
+          })
+          return { denied: null, result }
+        })
+        if (outcome.denied) return outcome.denied
+        const result = outcome.result
+        return NextResponse.json(
+          { ok: true, ...result },
+          { status: result.status === 'pending_approval' ? 202 : 200 },
+        )
+      } catch (error) {
+        if (error instanceof DocumentVoidError) {
+          return apiErrorResponse(error, { details: { code: error.code } })
+        }
+        throw error
+      }
+  },
+});

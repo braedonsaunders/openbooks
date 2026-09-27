@@ -1,4 +1,4 @@
-import { parseJsonBody } from "../../../../lib/api/json";
+import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
 import { authRequestContext } from "../../../../lib/auth-policy";
 import { recruitingErrorResponse } from "../../hrm/recruiting/_lib";
@@ -61,38 +61,40 @@ export function __resetApplyRateLimitForTests(): void {
   attempts.clear();
 }
 
-export async function POST(req: Request) {
-  const parsedBody = await parseJsonBody(req, applyBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  // Honeypot filled: shape success, write nothing.
-  if (body.website != null && body.website.length > 0) {
-    return NextResponse.json({ received: true }, { status: 201 });
-  }
-  if (rateLimited(clientIp(req), body.postingId)) {
-    return NextResponse.json(
-      { error: "too many applications from this address — wait a minute and try again" },
-      { status: 429 },
-    );
-  }
-  try {
-    // The posting carries its org: resolve it inside the service call
-    // through the posting row (no session, no org predicate from outside).
-    const { applyViaPostingForOrg } = await import("./_org");
-    await applyViaPostingForOrg({
-      postingId: body.postingId,
-      displayName: body.displayName,
-      email: body.email,
-      phone: body.phone,
-      consentFutureRoles: body.consentFutureRoles,
-    });
-    // The applicant gets an acknowledgement, never identifiers. The
-    // application and candidate ids are internal handles; handing them to
-    // an anonymous caller invites them to be tried against other routes,
-    // and they tell the applicant nothing they can use. A duplicate apply
-    // returns this same body -- see the oracle note in applyViaPosting.
-    return NextResponse.json({ received: true }, { status: 201 });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  public: 'token',
+  body: applyBody,
+  handler: async ({ request: req , body: routeBody }) => {
+
+    const body = routeBody;
+    if (body.website != null && body.website.length > 0) {
+        return NextResponse.json({ received: true }, { status: 201 });
+      }
+    if (rateLimited(clientIp(req), body.postingId)) {
+        return NextResponse.json(
+          { error: "too many applications from this address — wait a minute and try again" },
+          { status: 429 },
+        );
+      }
+    try {
+        // The posting carries its org: resolve it inside the service call
+        // through the posting row (no session, no org predicate from outside).
+        const { applyViaPostingForOrg } = await import("./_org");
+        await applyViaPostingForOrg({
+          postingId: body.postingId,
+          displayName: body.displayName,
+          email: body.email,
+          phone: body.phone,
+          consentFutureRoles: body.consentFutureRoles,
+        });
+        // The applicant gets an acknowledgement, never identifiers. The
+        // application and candidate ids are internal handles; handing them to
+        // an anonymous caller invites them to be tried against other routes,
+        // and they tell the applicant nothing they can use. A duplicate apply
+        // returns this same body -- see the oracle note in applyViaPosting.
+        return NextResponse.json({ received: true }, { status: 201 });
+      } catch (e) {
+        return recruitingErrorResponse(e);
+      }
+  },
+});

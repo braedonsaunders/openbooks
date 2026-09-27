@@ -1,10 +1,9 @@
+import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { notFound } from '@/lib/api/responses'
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { withReportBookColumn } from '../../../../../../lib/report-book-label'
 import { reportBookSelection } from '../../../../../../lib/report-books'
-import { guardPermission } from '../../../../../../lib/authz'
 import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
 import {
   exportDataToCsv,
@@ -28,124 +27,121 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { guardProjectsFeature } from '../../../../../../lib/projects-gate'
 import { renderGeneralLedgerPaperPdf } from '../../../../../../lib/general-ledger-pdf'
+import { notFound } from "@/lib/api/responses";
 
 
 export const runtime = 'nodejs'
 
-export async function GET(req: Request, { params }: { params: Promise<{ kind: string }> }) {
-  const gate = await guardPermission('reports.read')
-  if (gate instanceof NextResponse) return gate
-  const { kind } = await params
-  if (!isReportKind(kind)) {
-    return NextResponse.json({ error: 'unknown statement' }, { status: 422 })
-  }
-  if (kind === 'project-profitability') {
-    const feature = await guardProjectsFeature(gate.user.orgId)
-    if (feature) return feature
-  }
+export const GET = defineRoute({
+  permission: 'reports.read',
+  feature: { none: "The selected statement kind checks its Projects or budgets feature before export." },
+  handler: async ({ request: req, authz: routeAuthz, params: routeParams }) => {
+    const params = Promise.resolve(routeParams as { kind: string });
+    const gate = routeAuthz;
+    const { kind } = await params
+    if (!isReportKind(kind)) {
+        return NextResponse.json({ error: 'unknown statement' }, { status: 422 })
+      }
+    if (kind === 'project-profitability') {
+        const feature = await guardProjectsFeature(gate.user.orgId)
+        if (feature) return feature
+      }
   if (kind === 'budget' && !(await isFeatureEnabled(gate.user.orgId, 'budgets'))) {
     return notFound("record")
   }
   if ((kind === 'availability' || kind === 'replenishment') && !(await isFeatureEnabled(gate.user.orgId, 'warehousing'))) {
     return notFound('record')
   }
-
-  const url = new URL(req.url)
-  const p = url.searchParams
-  const format = (p.get('format') ?? 'pdf').toLowerCase()
-  if (!['pdf', 'xlsx', 'csv'].includes(format)) {
-    return NextResponse.json({ error: 'invalid format' }, { status: 422 })
-  }
-
-  const t = (await getTranslations('reports')) as unknown as Translator
-  const stamp = await businessToday(gate.user.orgId)
-  // The data below is resolved live inside this request, so capture the
-  // actual generation instant once: it is both the export stamp and the data
-  // as-of, and every format stamps the same moment. The business-day stamp
-  // names the file only — it must never stand in for when the data was read.
-  const generatedAt = new Date()
-  const filename = `${safeName(kind)}-${stamp}`
-  const branding = await orgBranding()
-
-  let csvBook: { label: string; value: string } | undefined
-  const emitData = async (data: ExportData) => {
-    if (format === 'csv') {
-      const { sectionHeader } = await reportCsvOptions()
-      const csvData = csvBook ? withReportBookColumn(data, csvBook) : data
-      return csvResponse(exportDataToCsv(csvData, { sectionHeader }), filename)
-    }
-    if (format === 'xlsx') {
-      return xlsxResponse(await exportDataToXlsx(data, {
-        reportName: data.title,
-        dateRangeLabel: data.dateRangeLabel,
-        generatedAt,
-      }), filename)
-    }
-    const { page, showSummary } = resolveLayout(null)
-    return pdfResponse(await exportDataToPdf(data, branding, page, {
-      showSummary,
-      generatedAt,
-    }), filename)
-  }
-
-  try {
-    const q = parseReportQuery(p)
-    const period = await resolvePeriod(q.period, { customFrom: p.get('from'), customTo: p.get('to') })
-    const resolved = await resolveReport(kind as ReportKind, p, { orgId: gate.user.orgId, t, period, query: q })
-    const bookKinds = new Set(['pnl', 'balance-sheet', 'general-ledger', 'journal', 'registers', 'partner-statement', 'project-profitability', 'trial-balance', 'partners', 'cash-flow', 'cash-flow-indirect'])
-    const selection = bookKinds.has(kind) ? await reportBookSelection(gate.user.orgId, p.get('book')) : null
-    if (selection && selection.books.length > 1) {
-      const { selectedBook } = selection
-      csvBook = { label: (await getTranslations('budgets'))('list.bookFilter'), value: `${selectedBook.code} · ${selectedBook.name}` }
-      if (resolved.render === 'data') resolved.data.dateRangeLabel = `${selectedBook.name} · ${resolved.data.dateRangeLabel}`
-    }
-
-    if (resolved.render === 'view') {
-      const { view, title, periodPhrase } = resolved
-      if (format === 'pdf') {
-        const page = resolvePdfPageSetup({
-          paperSize: 'letter',
-          orientation: view.columns.length > 4 ? 'landscape' : 'portrait',
-          marginMm: 16,
-          density: 'standard',
-        })
-        return pdfResponse(await renderStatementViewPdf(view, branding, page, {
-          title,
-          periodPhrase,
-          scale: q.scale,
+    const url = new URL(req.url)
+    const p = url.searchParams
+    const format = (p.get('format') ?? 'pdf').toLowerCase()
+    if (!['pdf', 'xlsx', 'csv'].includes(format)) {
+        return NextResponse.json({ error: 'invalid format' }, { status: 422 })
+      }
+    const t = (await getTranslations('reports')) as unknown as Translator
+    const stamp = await businessToday(gate.user.orgId)
+    const generatedAt = new Date()
+    const filename = `${safeName(kind)}-${stamp}`
+    const branding = await orgBranding()
+    let csvBook: { label: string; value: string } | undefined
+    const emitData = async (data: ExportData) => {
+        if (format === 'csv') {
+          const { sectionHeader } = await reportCsvOptions()
+          const csvData = csvBook ? withReportBookColumn(data, csvBook) : data
+          return csvResponse(exportDataToCsv(csvData, { sectionHeader }), filename)
+        }
+        if (format === 'xlsx') {
+          return xlsxResponse(await exportDataToXlsx(data, {
+            reportName: data.title,
+            dateRangeLabel: data.dateRangeLabel,
+            generatedAt,
+          }), filename)
+        }
+        const { page, showSummary } = resolveLayout(null)
+        return pdfResponse(await exportDataToPdf(data, branding, page, {
+          showSummary,
           generatedAt,
         }), filename)
       }
-      if (format === 'xlsx') {
-        return xlsxResponse(
-          await statementViewToXlsx(view, {
-            company: branding.orgName,
-            title,
-            periodPhrase,
-            accountLabel: t('export.columns.accountName'),
-            generatedAt,
-          }),
-          filename,
-        )
+    try {
+        const q = parseReportQuery(p)
+        const period = await resolvePeriod(q.period, { customFrom: p.get('from'), customTo: p.get('to') })
+        const resolved = await resolveReport(kind as ReportKind, p, { orgId: gate.user.orgId, t, period, query: q })
+        const bookKinds = new Set(['pnl', 'balance-sheet', 'general-ledger', 'journal', 'registers', 'partner-statement', 'project-profitability', 'trial-balance', 'partners', 'cash-flow', 'cash-flow-indirect'])
+        const selection = bookKinds.has(kind) ? await reportBookSelection(gate.user.orgId, p.get('book')) : null
+        if (selection && selection.books.length > 1) {
+          const { selectedBook } = selection
+          csvBook = { label: (await getTranslations('budgets'))('list.bookFilter'), value: `${selectedBook.code} · ${selectedBook.name}` }
+          if (resolved.render === 'data') resolved.data.dateRangeLabel = `${selectedBook.name} · ${resolved.data.dateRangeLabel}`
+        }
+
+        if (resolved.render === 'view') {
+          const { view, title, periodPhrase } = resolved
+          if (format === 'pdf') {
+            const page = resolvePdfPageSetup({
+              paperSize: 'letter',
+              orientation: view.columns.length > 4 ? 'landscape' : 'portrait',
+              marginMm: 16,
+              density: 'standard',
+            })
+            return pdfResponse(await renderStatementViewPdf(view, branding, page, {
+              title,
+              periodPhrase,
+              scale: q.scale,
+              generatedAt,
+            }), filename)
+          }
+          if (format === 'xlsx') {
+            return xlsxResponse(
+              await statementViewToXlsx(view, {
+                company: branding.orgName,
+                title,
+                periodPhrase,
+                accountLabel: t('export.columns.accountName'),
+                generatedAt,
+              }),
+              filename,
+            )
+          }
+          return emitData(statementViewToExportData(view, { title, dateRangeLabel: periodPhrase, accountLabel: t('export.columns.accountName') }))
+        }
+
+        if (format === 'pdf' && kind === 'general-ledger') {
+          const { page } = resolveLayout(null)
+          return pdfResponse(
+            await renderGeneralLedgerPaperPdf(resolved.data, branding, page),
+            filename,
+          )
+        }
+
+        return emitData(resolved.data)
+      } catch (err) {
+        const rendererRefusal = rendererUnavailableResponse(err)
+        if (rendererRefusal) return rendererRefusal
+        // Typed refusals (currency basis, a drifted saved query failing
+        // ReportQueryValidationError) answer 422 intact, like the run route;
+        // untyped faults still sanitize to a generic 500.
+        return apiErrorResponse(err, { safeStatus: 422 })
       }
-      return emitData(statementViewToExportData(view, { title, dateRangeLabel: periodPhrase, accountLabel: t('export.columns.accountName') }))
-    }
-
-    if (format === 'pdf' && kind === 'general-ledger') {
-      const { page } = resolveLayout(null)
-      return pdfResponse(
-        await renderGeneralLedgerPaperPdf(resolved.data, branding, page),
-        filename,
-      )
-    }
-
-    return emitData(resolved.data)
-  } catch (err) {
-    const rendererRefusal = rendererUnavailableResponse(err)
-    if (rendererRefusal) return rendererRefusal
-    // Typed refusals (currency basis, a drifted saved query failing
-    // ReportQueryValidationError) answer 422 intact, like the run route;
-    // untyped faults still sanitize to a generic 500.
-    return apiErrorResponse(err, { safeStatus: 422 })
-  }
-}
+  },
+});

@@ -1,10 +1,13 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from 'zod';
+import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
+import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
+const PATCHBodySchema1 = z.object({ "name": z.string().optional(), "color": z.unknown().optional(), "match": z.unknown().optional() }).passthrough();
+
 
 
 export const runtime = "nodejs";
@@ -106,74 +109,70 @@ function unsafeNamePattern(pattern: string): boolean {
  * pins live under ./pins. Guarded by the Setup permission — the same gate as
  * the Setup → Account Groups workspace.
  */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
-  // Classification rules match every account org-wide with no subsidiary
-  // lineage of their own: a restricted caller must not rewrite them.
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
-  const { id } = await params;
-  // A malformed id names nothing: same answer as a group in another org,
-  // never a PostgreSQL uuid cast error escaping as a 500.
-  if (!isUuid(id)) return notFound("record");
+export const PATCH = defineRoute({
+  permission: 'admin.setup.manage',
+  feature: { none: "This always-on route is governed by admin.setup.manage; the existing route has no separate feature gate." },
+  body: PATCHBodySchema1,
+  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+    const params = Promise.resolve(routeParams as { id: string });
+    const gate = routeAuthz;
+    const scopeDenied = guardUnrestrictedScope(gate);
+    if (scopeDenied) return scopeDenied;
+    const { id } = await params;
+    if (!isUuid(id)) return notFound("record");
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    name?: string;
-    color?: string | null;
-    match?: { accountTypes?: string[]; numberPrefixes?: string[]; namePattern?: string } | null;
-  };
+    const body = (routeBody) as {
+        name?: string;
+        color?: string | null;
+        match?: { accountTypes?: string[]; numberPrefixes?: string[]; namePattern?: string } | null;
+      };
+    if (body.match?.namePattern) {
+        try {
+          new RegExp(body.match.namePattern, "i");
+        } catch {
+          return NextResponse.json({ error: "invalid namePattern regex" }, { status: 400 });
+        }
+        if (unsafeNamePattern(body.match.namePattern)) {
+          return NextResponse.json({ error: "unsafe namePattern regex" }, { status: 400 });
+        }
+      }
+    const sets: ReturnType<typeof sql>[] = [];
+    if (body.name !== undefined) sets.push(sql`name = ${body.name}`);
+    if (body.color !== undefined) sets.push(sql`color = ${body.color}`);
+    if (body.match !== undefined) sets.push(sql`match = ${JSON.stringify(body.match ?? {})}::jsonb`);
+    if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
+    const updated = await db.transaction(async (tx) => {
+        // Lock and snapshot the row in the same transaction as the update so the
+        // audit evidence always describes the committed state transition, even
+        // when two classification edits arrive concurrently.
+        const current = await tx.execute<Record<string, unknown>>(sql`
+          select * from account_groups
+           where id = ${id} and org_id = ${gate.user.orgId}
+           for update
+        `);
+        const before = current.rows[0];
+        if (!before) return null;
 
-  if (body.match?.namePattern) {
-    try {
-      new RegExp(body.match.namePattern, "i");
-    } catch {
-      return NextResponse.json({ error: "invalid namePattern regex" }, { status: 400 });
-    }
-    if (unsafeNamePattern(body.match.namePattern)) {
-      return NextResponse.json({ error: "unsafe namePattern regex" }, { status: 400 });
-    }
-  }
+        const result = await tx.execute<Record<string, unknown>>(sql`
+          update account_groups
+             set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${gate.user.id}
+           where id = ${id} and org_id = ${gate.user.orgId}
+           returning *
+        `);
+        const after = result.rows[0];
+        if (!after) return null;
 
-  const sets: ReturnType<typeof sql>[] = [];
-  if (body.name !== undefined) sets.push(sql`name = ${body.name}`);
-  if (body.color !== undefined) sets.push(sql`color = ${body.color}`);
-  if (body.match !== undefined) sets.push(sql`match = ${JSON.stringify(body.match ?? {})}::jsonb`);
-  if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
-
-  const updated = await db.transaction(async (tx) => {
-    // Lock and snapshot the row in the same transaction as the update so the
-    // audit evidence always describes the committed state transition, even
-    // when two classification edits arrive concurrently.
-    const current = await tx.execute<Record<string, unknown>>(sql`
-      select * from account_groups
-       where id = ${id} and org_id = ${gate.user.orgId}
-       for update
-    `);
-    const before = current.rows[0];
-    if (!before) return null;
-
-    const result = await tx.execute<Record<string, unknown>>(sql`
-      update account_groups
-         set ${sql.join(sets, sql`, `)}, updated_at = now(), updated_by = ${gate.user.id}
-       where id = ${id} and org_id = ${gate.user.orgId}
-       returning *
-    `);
-    const after = result.rows[0];
-    if (!after) return null;
-
-    await tx.execute(sql`
-      insert into audit_log
-        (org_id, table_name, row_id, action, changes, actor_id, request_id)
-      values
-        (${gate.user.orgId}, 'account_groups', ${id}, 'update',
-         ${JSON.stringify({ before, after })}::jsonb,
-         ${gate.user.id}, ${req.headers.get("x-request-id")})
-    `);
-    return after;
-  });
-  if (!updated) return notFound("record");
-  return NextResponse.json({ ok: true });
-}
+        await tx.execute(sql`
+          insert into audit_log
+            (org_id, table_name, row_id, action, changes, actor_id, request_id)
+          values
+            (${gate.user.orgId}, 'account_groups', ${id}, 'update',
+             ${JSON.stringify({ before, after })}::jsonb,
+             ${gate.user.id}, ${req.headers.get("x-request-id")})
+        `);
+        return after;
+      });
+    if (!updated) return notFound("record");
+    return NextResponse.json({ ok: true });
+  },
+});

@@ -1,47 +1,53 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { apiErrorResponse } from '@/lib/api/error-response'
+import { z } from 'zod';
+import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { clearPossibleDuplicateFlag, excludeStatementLine, restoreStatementLine } from '@openbooks/engine/src/banking/banking.ts'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
-import { bankingErrorResponse } from '../../util'
 import { notFound } from "@/lib/api/responses";
+const PATCHBodySchema1 = z.object({ "action": z.string().optional(), "reason": z.string().optional() }).passthrough();
+
 
 
 export const runtime = 'nodejs'
 
 /** Toggle a statement line's exclusion or clear its possible-duplicate flag. */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('banking.reconcile', 'banking')
-  if (gate instanceof NextResponse) return gate
-  const { user } = gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { action?: string; reason?: string }
-  try {
-    if (body.action === 'exclude') {
-      await excludeStatementLine(id, String(body.reason ?? ''), {
-        orgId: user.orgId,
-        userId: user.id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      })
-    }
-    else if (body.action === 'restore')
-      await restoreStatementLine(id, {
-        orgId: user.orgId,
-        userId: user.id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      })
-    else if (body.action === 'clear-duplicate')
-      await clearPossibleDuplicateFlag(id, {
-        orgId: user.orgId,
-        userId: user.id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      })
-    else return NextResponse.json({ error: 'action must be "exclude", "restore" or "clear-duplicate"' }, { status: 400 })
-    return NextResponse.json({ ok: true })
-  } catch (e) {
-    return bankingErrorResponse(e)
-  }
-}
+export const PATCH = defineRoute({
+  permission: 'banking.reconcile',
+  feature: 'banking',
+  body: PATCHBodySchema1,
+  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+    const params = Promise.resolve(routeParams as { id: string });
+    const gate = routeAuthz;
+    const { user } = gate
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+
+    const body = (routeBody) as { action?: string; reason?: string }
+    try {
+        if (body.action === 'exclude') {
+          await excludeStatementLine(id, String(body.reason ?? ''), {
+            orgId: user.orgId,
+            userId: user.id,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+          })
+        }
+        else if (body.action === 'restore')
+          await restoreStatementLine(id, {
+            orgId: user.orgId,
+            userId: user.id,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+          })
+        else if (body.action === 'clear-duplicate')
+          await clearPossibleDuplicateFlag(id, {
+            orgId: user.orgId,
+            userId: user.id,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+          })
+        else return NextResponse.json({ error: 'action must be "exclude", "restore" or "clear-duplicate"' }, { status: 400 })
+        return NextResponse.json({ ok: true })
+      } catch (e) {
+        return apiErrorResponse(e)
+      }
+  },
+});
