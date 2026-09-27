@@ -6,7 +6,7 @@ import { resolveAccountGroups } from '../records/account-groups.ts'
 import { flowTranslation, translateFlowAmount } from '../fx/translation.ts'
 import { add, cmp, fromUnits, isZero, mul, mulDecimal, mulPercent, neg, normalizeMoney, roundDiv, signedDocumentAmount, sum, toUnits } from '../money/money.ts'
 import { directSubcontractOpenCommitment } from './subcontract-commitments.ts'
-import { overheadRateAppliesToTimeEntry } from './overhead-apply.ts'
+import { overheadRateAppliesToTimeEntry } from '../allocations/overhead-post.ts'
 import { businessToday } from '../platform/business-date.ts'
 
 /**

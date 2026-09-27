@@ -6,21 +6,34 @@ import { businessToday } from "../platform/business-date.ts";
 import {
   postProjectGlEntryWithinTransaction,
   reverseProjectGlEntryWithinTransaction,
-} from "./recognition.ts";
-import { buildNetZeroPairLines } from "../allocations/post.ts";
-import { loadOverheadRuleInEffect, syncOverheadSystemRule } from "../allocations/overhead-sync.ts";
-import type { RuleInEffect } from "../allocations/types.ts";
+} from "../journal/origin-entry.ts";
+import { buildNetZeroPairLines } from "./post.ts";
+import {
+  loadOverheadRuleInEffect,
+  overheadApplicationSettings,
+  overheadApplicationSettingsFrom,
+  syncOverheadSystemRule,
+  type OverheadExecutor,
+} from "./overhead-sync.ts";
+import type { RuleInEffect } from "./types.ts";
 import { add, isZero, normalizeMoney } from "../money/money.ts";
 
 /**
- * Overhead application — a net-zero journal pair,
- * applied WITH the hours: when approved time lands on a job, its overhead
- * share (hours × the effective-dated PUBLISHED per-department rate) posts as
+ * Overhead posting — the time-approval event of the system-owned
+ * 'overhead-net-zero-pair' post rule, and the only writer of overhead
+ * journals. When approved time lands on a job, its overhead share
+ * (hours × the effective-dated PUBLISHED per-department rate) posts as
  *   DR overhead account [project]   — project-scoped ledger views carry burden
  *   CR overhead account [no tag]    — the account and company P&L net to ZERO
  * in the same moment the standard labor cost does. There is no month-end
  * "apply overhead" chore; the only batch operation is a BACKFILL for hours
  * approved before the mode was enabled (or imported already-approved).
+ *
+ * The rule itself is derived from the overhead policy and rate card by
+ * overhead-sync.ts; this module measures the driver (approved hours priced
+ * by the card) and hands the shares to the kernel (buildNetZeroPairLines),
+ * which builds the pair and its lineage. Lines carry contributor_kind 'rule'
+ * and every carried time entry gets an allocation_lineage row.
  *
  * Each carried entry is stamped with overhead_journal_entry_id, so
  * application is idempotent per entry and reversible per entry — posted
@@ -29,45 +42,7 @@ import { add, isZero, normalizeMoney } from "../money/money.ts";
  * Deliberately reads the STANDARD published `overhead_rates` (not the live
  * engine): every posting is reproducible from the rate card in force on the
  * worked day.
- *
- * Allocation-kernel fold: the pair is built by the kernel
- * (buildNetZeroPairLines) under the system-owned post rule
- * 'overhead-net-zero-pair' derived from this same policy + card
- * (allocations/overhead-sync.ts). Lines carry contributor_kind 'rule' and
- * every carried entry gets an allocation_lineage row; the idempotency stamp,
- * origin and posted amounts are unchanged.
  */
-
-export interface OverheadApplicationSettings {
-  mode: "report_only" | "net_zero_pair" | "off";
-  /** The single "Overhead applied" account both legs post to. */
-  accountId: string | null;
-}
-
-type OverheadTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-type OverheadExecutor = Pick<OverheadTransaction, "execute">;
-
-async function overheadApplicationSettingsFrom(
-  executor: OverheadExecutor,
-  orgId: string,
-  lock = false,
-): Promise<OverheadApplicationSettings> {
-  const r = (await executor.execute<{ c: Partial<OverheadApplicationSettings> | null }>(sql`
-    select settings->'overheadApplication' as c
-      from orgs
-     where id = ${orgId}
-     ${lock ? sql`for share` : sql``}
-  `));
-  const c = r.rows[0]?.c ?? {};
-  return {
-    mode: c.mode === "net_zero_pair" ? "net_zero_pair" : c.mode === "off" ? "off" : "report_only",
-    accountId: typeof c.accountId === "string" ? c.accountId : null,
-  };
-}
-
-export async function overheadApplicationSettings(orgId: string): Promise<OverheadApplicationSettings> {
-  return overheadApplicationSettingsFrom(db, orgId);
-}
 
 /**
  * THE rule for which published `overhead_rates` rows apply to a time entry —

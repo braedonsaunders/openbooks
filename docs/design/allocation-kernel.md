@@ -29,7 +29,7 @@ table, and three **modes** that decide when a rule fires:
 
 Everything else in the app that allocates today stays where it is (rev-rec, depreciation,
 leases, CAM, landed cost, payroll labor distribution). The overhead net-zero-pair writer
-(`engine/src/projects/overhead-apply.ts`) is the one existing mechanism that becomes a system-owned
+(now `engine/src/allocations/overhead-post.ts`) is the one existing mechanism that becomes a system-owned
 `post` rule (slice 4), because it *is* a post-mode net-zero-pair allocation with one driver.
 
 Design constraints (AGENTS.md): financial-institution grade; balanced, deterministic,

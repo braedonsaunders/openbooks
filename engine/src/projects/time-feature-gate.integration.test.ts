@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
 import { postProjectLaborCost, reverseProjectLaborCost } from "./recognition.ts";
-import { applyOverheadForTime, reverseOverheadForTime } from "./overhead-apply.ts";
+import { applyOverheadForTime, reverseOverheadForTime } from "../allocations/overhead-post.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 async function seed() {

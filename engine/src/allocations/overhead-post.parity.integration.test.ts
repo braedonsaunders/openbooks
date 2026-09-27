@@ -6,20 +6,19 @@ import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 import { db, inDbTransaction } from "../platform/db.ts";
 import { add, isZero, neg, normalizeMoney } from "../money/money.ts";
 import {
-  overheadApplicationSettings,
   overheadRateAppliesToTimeEntry,
   applyOverheadForTime,
   reverseOverheadForTime,
-} from "./overhead-apply.ts";
-import { OVERHEAD_SYSTEM_RULE_KEY } from "../allocations/overhead-sync.ts";
-import { postProjectGlEntryWithinTransaction } from "./recognition.ts";
+} from "./overhead-post.ts";
+import { OVERHEAD_SYSTEM_RULE_KEY, overheadApplicationSettings } from "./overhead-sync.ts";
+import { postProjectGlEntryWithinTransaction } from "../journal/origin-entry.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
 const DB = process.env.OPENBOOKS_DB_URL ? true : false;
 
 /**
  * Parity oracle: the pre-fold builder, transcribed verbatim from
- * overhead-apply.ts at commit cc110ab5f (eligibility, math, plain lines,
+ * the overhead writer at commit cc110ab5f (eligibility, math, plain lines,
  * stamp). The folded path must post byte-identical journal lines
  * (account, dims, signed amounts, count, memos, order) for a mirror entry
  * set while adding the kernel stamp + lineage the oracle lacks.

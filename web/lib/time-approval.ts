@@ -10,7 +10,7 @@ import { laborCostingSettings, setPrevailingWageEntryWage, snapshotLaborCostRate
 import { prevailingWageForTimeEntry } from '@openbooks/engine/src/hrm/construction/labor-hook.ts'
 
 setPrevailingWageEntryWage(prevailingWageForTimeEntry)
-import { applyOverheadForTime } from '@openbooks/engine/src/projects/overhead-apply.ts'
+import { applyOverheadForTime } from '@openbooks/engine/src/allocations/overhead-post.ts'
 import { postProjectLaborCost } from '@openbooks/engine/src/projects/recognition.ts'
 import { setTimesheetWeekStatus, weekWindow } from '../app/api/timesheets/_lib'
 import { snapshotTimeBillRates } from './item-rates'

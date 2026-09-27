@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import pg from "pg";
 import { BUILTIN_PROJECT_TYPES, type FinancialProfile } from "@openbooks/schema";
 import { resolveProjectFinancials } from "./financials.ts";
-import { applyOverheadForTime } from "./overhead-apply.ts";
+import { applyOverheadForTime } from "../allocations/overhead-post.ts";
 import { db, pool, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { sum } from "../money/money.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "../testing/fixtures.ts";
