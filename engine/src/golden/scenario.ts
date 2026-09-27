@@ -60,6 +60,244 @@ async function all<T extends Record<string, unknown> = Record<string, unknown>>(
   return r.rows;
 }
 
+type SaaSMetricsTieRow = {
+  subsidiary_id: string;
+  month: string;
+  fact_mrr_start: string | null;
+  fact_mrr_end: string | null;
+  fact_new_mrr: string | null;
+  fact_expansion_mrr: string | null;
+  fact_contraction_mrr: string | null;
+  fact_churned_mrr: string | null;
+  fact_reactivation_mrr: string | null;
+  fact_recognized_revenue: string | null;
+  fact_deferred_delta: string | null;
+  fact_mrr_at_risk: string | null;
+  fact_customers_start: number | null;
+  fact_customers_end: number | null;
+  fact_customers_new: number | null;
+  fact_customers_churned: number | null;
+  fact_customers_reactivated: number | null;
+  sub_mrr_start: string;
+  sub_mrr_end: string;
+  sub_new_mrr: string;
+  sub_expansion_mrr: string;
+  sub_contraction_mrr: string;
+  sub_churned_mrr: string;
+  sub_reactivation_mrr: string;
+  sub_recognized_revenue: string;
+  sub_deferred_delta: string;
+  sub_customers_start: number;
+  sub_customers_end: number;
+  sub_customers_new: number;
+  sub_customers_churned: number;
+  sub_customers_reactivated: number;
+  movement_residual: string;
+};
+
+async function saasMetricsTieOut(orgId: string): Promise<Check> {
+  const counts = await one<{ fact_rows: number; subscription_rows: number; cohort_rows: number }>(sql`
+    select
+      (select count(*)::int from saas_metrics_facts_monthly where org_id = ${orgId}) as fact_rows,
+      (select count(*)::int from saas_metrics_monthly where org_id = ${orgId}) as subscription_rows,
+      (select count(*)::int from saas_metrics_cohort_monthly where org_id = ${orgId}) as cohort_rows
+  `);
+  if (counts.fact_rows === 0 && counts.subscription_rows === 0 && counts.cohort_rows === 0) {
+    return { name: "saas-metrics-tieout", ok: true, detail: "no SaaS metrics rows (inert)" };
+  }
+  const rows = await all<SaaSMetricsTieRow>(sql`
+    with subscription_totals as (
+      select subsidiary_id, month,
+             sum(mrr_start) as mrr_start, sum(mrr_end) as mrr_end,
+             sum(new_mrr) as new_mrr, sum(expansion_mrr) as expansion_mrr,
+             sum(contraction_mrr) as contraction_mrr, sum(churned_mrr) as churned_mrr,
+             sum(reactivation_mrr) as reactivation_mrr,
+             sum(recognized_revenue) as recognized_revenue, sum(deferred_delta) as deferred_delta,
+             sum((mrr_end - mrr_start) - (new_mrr + expansion_mrr + reactivation_mrr - contraction_mrr - churned_mrr)) as movement_residual
+        from saas_metrics_monthly where org_id = ${orgId}
+       group by subsidiary_id, month
+    ), customers as (
+      select m.subsidiary_id, m.month, m.customer_id,
+             bool_or(m.mrr_start > 0) as was_active,
+             bool_or(m.mrr_end > 0) as is_active,
+             exists (
+               select 1 from saas_metrics_monthly prior
+                where prior.org_id = m.org_id and prior.subsidiary_id = m.subsidiary_id
+                  and prior.customer_id = m.customer_id and prior.month < m.month and prior.mrr_end > 0
+             ) as active_before
+        from saas_metrics_monthly m where m.org_id = ${orgId}
+       group by m.org_id, m.subsidiary_id, m.month, m.customer_id
+    ), customer_totals as (
+      select subsidiary_id, month,
+             count(*) filter (where was_active)::int as customers_start,
+             count(*) filter (where is_active)::int as customers_end,
+             count(*) filter (where is_active and not was_active and not active_before)::int as customers_new,
+             count(*) filter (where was_active and not is_active)::int as customers_churned,
+             count(*) filter (where is_active and not was_active and active_before)::int as customers_reactivated
+        from customers group by subsidiary_id, month
+    ), keys as (
+      select subsidiary_id, month from saas_metrics_facts_monthly where org_id = ${orgId}
+      union
+      select subsidiary_id, month from subscription_totals
+    )
+    select k.subsidiary_id, k.month::text as month,
+           f.mrr_start::text as fact_mrr_start, f.mrr_end::text as fact_mrr_end,
+           f.new_mrr::text as fact_new_mrr, f.expansion_mrr::text as fact_expansion_mrr,
+           f.contraction_mrr::text as fact_contraction_mrr, f.churned_mrr::text as fact_churned_mrr,
+           f.reactivation_mrr::text as fact_reactivation_mrr,
+           f.recognized_revenue::text as fact_recognized_revenue,
+           f.deferred_delta::text as fact_deferred_delta, f.mrr_at_risk::text as fact_mrr_at_risk,
+           f.customers_start as fact_customers_start, f.customers_end as fact_customers_end,
+           f.customers_new as fact_customers_new, f.customers_churned as fact_customers_churned,
+           f.customers_reactivated as fact_customers_reactivated,
+           coalesce(s.mrr_start, 0)::text as sub_mrr_start,
+           coalesce(s.mrr_end, 0)::text as sub_mrr_end,
+           coalesce(s.new_mrr, 0)::text as sub_new_mrr,
+           coalesce(s.expansion_mrr, 0)::text as sub_expansion_mrr,
+           coalesce(s.contraction_mrr, 0)::text as sub_contraction_mrr,
+           coalesce(s.churned_mrr, 0)::text as sub_churned_mrr,
+           coalesce(s.reactivation_mrr, 0)::text as sub_reactivation_mrr,
+           coalesce(s.recognized_revenue, 0)::text as sub_recognized_revenue,
+           coalesce(s.deferred_delta, 0)::text as sub_deferred_delta,
+           coalesce(c.customers_start, 0)::int as sub_customers_start,
+           coalesce(c.customers_end, 0)::int as sub_customers_end,
+           coalesce(c.customers_new, 0)::int as sub_customers_new,
+           coalesce(c.customers_churned, 0)::int as sub_customers_churned,
+           coalesce(c.customers_reactivated, 0)::int as sub_customers_reactivated,
+           coalesce(s.movement_residual, 0)::text as movement_residual
+      from keys k
+      left join saas_metrics_facts_monthly f on f.org_id = ${orgId} and f.subsidiary_id = k.subsidiary_id and f.month = k.month
+      left join subscription_totals s on s.subsidiary_id = k.subsidiary_id and s.month = k.month
+      left join customer_totals c on c.subsidiary_id = k.subsidiary_id and c.month = k.month
+     order by k.month, k.subsidiary_id
+  `);
+  const recognized = await all<{ subsidiary_id: string; month: string; amount: string }>(sql`
+    with subscription_documents as (
+      select d.id, d.posted_entry_id, d.reversal_entry_id
+        from documents d
+       where d.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
+         and d.status in ('posted', 'reversed')
+         and (d.subscription_id is not null or d.custom->>'subscriptionId' is not null)
+    ), obligations as (
+      select distinct sd.id as document_id, po.id as obligation_id
+        from subscription_documents sd
+        join document_lines dl on dl.org_id = ${orgId} and dl.document_id = sd.id
+        join performance_obligations po on po.org_id = dl.org_id and po.document_line_id = dl.id
+    ), entries as (
+      select posted_entry_id as entry_id from subscription_documents where posted_entry_id is not null
+      union select reversal_entry_id from subscription_documents where reversal_entry_id is not null
+      union
+      select posted.entry_id
+        from obligations o
+        join recognition_schedules rs on rs.org_id = ${orgId} and rs.obligation_id = o.obligation_id
+        join recognition_schedule_lines rsl on rsl.org_id = rs.org_id and rsl.schedule_id = rs.id
+        cross join lateral (values (rsl.journal_entry_id), (rsl.reversal_journal_entry_id)) posted(entry_id)
+       where posted.entry_id is not null
+    )
+    select l.subsidiary_id, date_trunc('month', e.posting_date)::date::text as month,
+           coalesce(sum(-l.amount) filter (where a.type in ('income', 'income_other')), 0)::text as amount
+      from entries src
+      join journal_entries e on e.org_id = ${orgId} and e.id = src.entry_id and e.status in ('posted', 'reversed')
+      join accounting_books b on b.org_id = e.org_id and b.id = e.book_id and b.is_primary and b.is_active and b.posts_gl
+      join journal_lines l on l.org_id = e.org_id and l.entry_id = e.id
+      join accounts a on a.org_id = l.org_id and a.id = l.account_id
+     group by l.subsidiary_id, date_trunc('month', e.posting_date)::date
+  `);
+  const deferred = await all<{ subsidiary_id: string; month: string; amount: string }>(sql`
+    with subscription_documents as (
+      select d.id, d.posted_entry_id, d.reversal_entry_id
+        from documents d
+       where d.org_id = ${orgId} and d.kind in ('customer_invoice', 'customer_credit')
+         and d.status in ('posted', 'reversed')
+         and (d.subscription_id is not null or d.custom->>'subscriptionId' is not null)
+    ), obligation_accounts as (
+      select distinct sd.id as document_id, po.id as obligation_id,
+             coalesce(po.deferred_account_id, rr.deferred_account_id) as deferred_account_id
+        from subscription_documents sd
+        join document_lines dl on dl.org_id = ${orgId} and dl.document_id = sd.id
+        join performance_obligations po on po.org_id = dl.org_id and po.document_line_id = dl.id
+        join recognition_rules rr on rr.org_id = po.org_id and rr.id = po.recognition_rule_id
+       where coalesce(po.deferred_account_id, rr.deferred_account_id) is not null
+    ), entries as (
+      select oa.deferred_account_id, d.posted_entry_id as entry_id
+        from obligation_accounts oa join documents d on d.org_id = ${orgId} and d.id = oa.document_id
+       where d.posted_entry_id is not null
+      union
+      select oa.deferred_account_id, d.reversal_entry_id
+        from obligation_accounts oa join documents d on d.org_id = ${orgId} and d.id = oa.document_id
+       where d.reversal_entry_id is not null
+      union
+      select oa.deferred_account_id, posted.entry_id
+        from obligation_accounts oa
+        join recognition_schedules rs on rs.org_id = ${orgId} and rs.obligation_id = oa.obligation_id
+        join recognition_schedule_lines rsl on rsl.org_id = rs.org_id and rsl.schedule_id = rs.id
+        cross join lateral (values (rsl.journal_entry_id), (rsl.reversal_journal_entry_id)) posted(entry_id)
+       where posted.entry_id is not null
+    )
+    select l.subsidiary_id, date_trunc('month', e.posting_date)::date::text as month,
+           coalesce(sum(-l.amount), 0)::text as amount
+      from entries src
+      join journal_entries e on e.org_id = ${orgId} and e.id = src.entry_id and e.status in ('posted', 'reversed')
+      join accounting_books b on b.org_id = e.org_id and b.id = e.book_id and b.is_primary and b.is_active and b.posts_gl
+      join journal_lines l on l.org_id = e.org_id and l.entry_id = e.id and l.account_id = src.deferred_account_id
+     group by l.subsidiary_id, date_trunc('month', e.posting_date)::date
+  `);
+  const recognizedByKey = new Map(recognized.map((row) => [`${row.month.slice(0, 10)}:${row.subsidiary_id}`, row.amount]));
+  const deferredByKey = new Map(deferred.map((row) => [`${row.month.slice(0, 10)}:${row.subsidiary_id}`, row.amount]));
+  const moneyPairs: Array<[keyof SaaSMetricsTieRow, keyof SaaSMetricsTieRow, string]> = [
+    ["fact_mrr_start", "sub_mrr_start", "mrr_start"],
+    ["fact_mrr_end", "sub_mrr_end", "mrr_end"],
+    ["fact_new_mrr", "sub_new_mrr", "new_mrr"],
+    ["fact_expansion_mrr", "sub_expansion_mrr", "expansion_mrr"],
+    ["fact_contraction_mrr", "sub_contraction_mrr", "contraction_mrr"],
+    ["fact_churned_mrr", "sub_churned_mrr", "churned_mrr"],
+    ["fact_reactivation_mrr", "sub_reactivation_mrr", "reactivation_mrr"],
+    ["fact_recognized_revenue", "sub_recognized_revenue", "recognized_revenue"],
+    ["fact_deferred_delta", "sub_deferred_delta", "deferred_delta"],
+    ["fact_mrr_at_risk", "sub_mrr_start", "mrr_at_risk"],
+  ];
+  const countPairs: Array<[keyof SaaSMetricsTieRow, keyof SaaSMetricsTieRow, string]> = [
+    ["fact_customers_start", "sub_customers_start", "customers_start"],
+    ["fact_customers_end", "sub_customers_end", "customers_end"],
+    ["fact_customers_new", "sub_customers_new", "customers_new"],
+    ["fact_customers_churned", "sub_customers_churned", "customers_churned"],
+    ["fact_customers_reactivated", "sub_customers_reactivated", "customers_reactivated"],
+  ];
+  const failures: string[] = [];
+  for (const row of rows) {
+    const key = `${row.month.slice(0, 10)}:${row.subsidiary_id}`;
+    for (const [factKey, sumKey, label] of moneyPairs) {
+      const fact = row[factKey];
+      const sum = row[sumKey];
+      const actual = typeof fact === "string" ? fact : "0.0000";
+      const expected = typeof sum === "string" ? sum : "0.0000";
+      const residual = fromUnits(toUnits(actual) - toUnits(expected));
+      if (cmp(residual, "0") !== 0) failures.push(`${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: ${label} residual ${residual}`);
+    }
+    for (const [factKey, sumKey, label] of countPairs) {
+      const fact = typeof row[factKey] === "number" ? row[factKey] as number : 0;
+      const sum = row[sumKey] as number;
+      if (fact !== sum) failures.push(`${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: ${label} residual ${fact - sum}`);
+    }
+    const movementResidual = row.movement_residual;
+    if (cmp(movementResidual, "0") !== 0) failures.push(`${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: movement residual ${movementResidual}`);
+    const recognizedResidual = fromUnits(toUnits(row.fact_recognized_revenue ?? "0") - toUnits(recognizedByKey.get(key) ?? "0"));
+    if (cmp(recognizedResidual, "0") !== 0) failures.push(`${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: recognized GL residual ${recognizedResidual}`);
+    const deferredResidual = fromUnits(toUnits(row.fact_deferred_delta ?? "0") - toUnits(deferredByKey.get(key) ?? "0"));
+    if (cmp(deferredResidual, "0") !== 0) failures.push(`${row.month.slice(0, 7)} subsidiary ${row.subsidiary_id}: deferred GL residual ${deferredResidual}`);
+  }
+  if (rows.length === 0) {
+    return { name: "saas-metrics-tieout", ok: false, detail: "cohort metrics exist without monthly subscription or subsidiary facts" };
+  }
+  return {
+    name: "saas-metrics-tieout",
+    ok: failures.length === 0,
+    detail: failures.length === 0
+      ? `${rows.length} subsidiary-month row(s); movements, additive facts, subscription revenue, and deferred revenue reconcile exactly`
+      : `${failures.length} residual(s); ${failures[0]}`,
+  };
+}
+
 /** Run the non-destructive fixture verification for one org. */
 /**
  * The runtime role the probe assumes when the harness login bypasses RLS.
@@ -692,6 +930,8 @@ export async function runScenario(
     detail: `${controlTieOut.length} control accounts; worst |GL − subledger − directJE| = ${worstTie}` +
       (voidTie.length > 0 ? `; void mirrors net ${worstVoid} across ${voidTie.length} account(s) (want 0)` : ""),
   });
+
+  checks.push(await saasMetricsTieOut(orgId));
 
   // -- Inventory subledger ↔ GL tie-out per legal entity and control account.
   // The inventory control accounts are the asset accounts on item costing
