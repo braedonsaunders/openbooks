@@ -61,6 +61,8 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "entitlement_ledger", domain: "leave", linkage: "direct" },
   { table: "entitlement_plan_limits", domain: "leave", linkage: "direct" },
   { table: "time_entries", domain: "time", linkage: "direct" },
+  { table: "res_assignments", domain: "time", linkage: "direct" },
+  { table: "res_requests", domain: "time", linkage: "direct" },
   { table: "crew_time_batch_lines", domain: "time", linkage: "direct" },
   { table: "timesheet_weeks", domain: "time", linkage: "direct" },
   { table: "field_ticket_labor_lines", domain: "time", linkage: "direct" },
@@ -205,6 +207,10 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   {
     table: "item_rate_book_assignments",
     reason: "pricing config; customer counterparty.",
+  },
+  {
+    table: "res_retainers",
+    reason: "customer commercial record; its customer-party link is a counterparty reference.",
   },
   {
     table: "crm_account_profiles",

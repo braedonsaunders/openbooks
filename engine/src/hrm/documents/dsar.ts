@@ -988,6 +988,54 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
          where org_id = ${orgId} and employee_party_id = ${partyId}
          order by week_start
       `)).rows;
+      type AssignmentRow = { id: string; week_start: string };
+      const resourcingAssignments: Record<string, unknown>[] = [];
+      let lastAssignmentWeek: string | null = null;
+      let lastAssignmentId: string | null = null;
+      for (;;) {
+        const page: (Record<string, unknown> & AssignmentRow)[] = (await db.execute<Record<string, unknown> & AssignmentRow>(sql`
+          select id, project_id, employee_party_id, job_title, week_start::text as week_start,
+                 planned_hours, is_billable, bill_item_id, project_task_id, booking, state,
+                 source, request_id, custom, created_at::text as created_at,
+                 created_by, updated_at::text as updated_at, updated_by
+            from res_assignments
+           where org_id = ${orgId} and employee_party_id = ${partyId}
+             and (${lastAssignmentWeek}::date is null
+                  or (week_start, id) > (${lastAssignmentWeek}::date, ${lastAssignmentId}::uuid))
+           order by week_start, id
+           limit 1000
+        `)).rows;
+        resourcingAssignments.push(...page);
+        if (page.length < 1000) break;
+        lastAssignmentWeek = page[page.length - 1]!.week_start;
+        lastAssignmentId = page[page.length - 1]!.id;
+      }
+      payload.resourcingAssignments = resourcingAssignments;
+
+      type RequestRow = { id: string; first_week: string };
+      const resourcingRequests: Record<string, unknown>[] = [];
+      let lastRequestWeek: string | null = null;
+      let lastRequestId: string | null = null;
+      for (;;) {
+        const page: (Record<string, unknown> & RequestRow)[] = (await db.execute<Record<string, unknown> & RequestRow>(sql`
+          select id, project_id, employee_party_id, job_title, first_week::text as first_week,
+                 last_week::text as last_week, hours_per_week, is_billable, bill_item_id,
+                 reason, status, decided_by, decided_at::text as decided_at,
+                 decision_comment, flow_instance_id, custom, created_at::text as created_at,
+                 created_by, updated_at::text as updated_at, updated_by
+            from res_requests
+           where org_id = ${orgId} and employee_party_id = ${partyId}
+             and (${lastRequestWeek}::date is null
+                  or (first_week, id) > (${lastRequestWeek}::date, ${lastRequestId}::uuid))
+           order by first_week, id
+           limit 1000
+        `)).rows;
+        resourcingRequests.push(...page);
+        if (page.length < 1000) break;
+        lastRequestWeek = page[page.length - 1]!.first_week;
+        lastRequestId = page[page.length - 1]!.id;
+      }
+      payload.resourcingRequests = resourcingRequests;
       payload.fieldTicketLaborLines = (await db.execute<Record<string, unknown>>(sql`
         select ${await heldDataProjection("field_ticket_labor_lines", FIELD_TICKET_LINES_DENIED_COLUMNS)}
           from field_ticket_labor_lines

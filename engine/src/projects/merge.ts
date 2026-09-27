@@ -90,6 +90,9 @@ export const PROJECT_REFS: readonly (readonly [table: string, column: string])[]
   ["lease_agreements", "project_id"],
   ["pay_applications", "project_id"],
   ["revenue_contracts", "project_id"],
+  ["res_assignments", "project_id"],
+  ["res_requests", "project_id"],
+  ["res_retainers", "project_id"],
   ["schedule_baselines", "project_id"],
   ["schedule_calendars", "project_id"],
   ["schedule_dependencies", "project_id"],
@@ -515,6 +518,26 @@ async function planMerge(
                       and s.status in ('draft', 'submitted', 'approved'))`)).rows[0]?.n;
   if (openPayAppCollision !== "0") {
     throw new ProjectMergeError("both projects hold an open pay application; reconcile pay applications first");
+  }
+  // A project booking is unique per week and person-or-role key. Moving both
+  // copies onto one project would violate that identity; edit one booking's
+  // resource or week before retrying the merge.
+  const assignmentCollision = (await runner.execute<{ detail: string }>(sql`
+    select coalesce(p.display_name, d.job_title, d.employee_party_id::text)
+           || ' on ' || d.week_start::text as detail
+      from res_assignments d
+      left join parties p on p.id = d.employee_party_id and p.org_id = d.org_id
+     where d.org_id = ${orgId} and d.project_id = ${duplicateId}
+       and exists (select 1 from res_assignments s
+                    where s.org_id = ${orgId} and s.project_id = ${survivorId}
+                      and s.week_start = d.week_start
+                      and coalesce(s.employee_party_id::text, lower(s.job_title))
+                          = coalesce(d.employee_party_id::text, lower(d.job_title)))
+     limit 5`)).rows;
+  if (assignmentCollision.length > 0) {
+    throw new ProjectMergeError(
+      `resource assignment for ${assignmentCollision.map((row) => row.detail).join("; ")} exists on both projects; edit one booking's resource or week first`,
+    );
   }
   // Field-time identity is per foreman-day in storage: the same foreman's
   // batch for the same day on both sides would violate the unique index on
