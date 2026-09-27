@@ -90,7 +90,7 @@ export async function createRouting(tx: SqlExecutor, orgId: string, actorId: str
   return after;
 }
 
-export async function createNextRoutingVersion(tx: SqlExecutor, orgId: string, actorId: string, routingId: string, idempotency?: { id: string; requestId: string; match: Record<string, unknown> }) {
+export async function createNextRoutingVersion(tx: SqlExecutor, orgId: string, actorId: string, routingId: string, idempotency?: { id: string; requestId: string; match: Record<string, unknown> }): Promise<Record<string, unknown> & { operations: Record<string, unknown>[] }> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   const base = await routing(tx, orgId, routingId);
   if (!base) throw new ManufacturingNotFoundError();

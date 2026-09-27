@@ -7,14 +7,14 @@ import { ManufacturingError } from "./errors.ts";
 
 const MAX_DEPTH = 32;
 
-interface BomRow {
+type BomRow = {
   componentItemId: string;
   componentCode: string;
   quantityPer: string;
   operationSeq: number | null;
   scrapPct: string | null;
   isByproduct: boolean;
-}
+};
 
 export interface BomExplosionLine {
   parentItemId: string;
