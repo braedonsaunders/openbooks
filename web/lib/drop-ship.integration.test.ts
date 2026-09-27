@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import { requestDocumentVoid } from "@openbooks/engine/src/ledger/document-void.ts";
 import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
 import { DropShipRefusal } from "@openbooks/engine/src/sales/drop-ship.ts";
@@ -14,9 +14,10 @@ import { convertOrder, createOrderDraft } from "./order-cycle.ts";
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, replays and voids as a pair", { skip: !DB }, async () => {
+  // bypass: cross-org-by-design — createScratchOrg initializes an organization before its tenant context exists.
   const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Drop Ship Clerk", "admin"));
+    const actorId = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Drop Ship Clerk", "admin"));
     const context = {
       authz: {
         user: { id: actorId, orgId: org.orgId, roles: [] },
@@ -27,7 +28,7 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
       requestId: randomUUID(),
       apiKeyId: null,
     } as unknown as ApplicationContext;
-    await withBypassContext(async () => {
+    await withOrgContext(org.orgId, async () => {
       await db.execute(sql`
         update orgs set settings = jsonb_set(settings, '{features}',
           coalesce(settings->'features', '{}'::jsonb) || '{"orders":true,"inventory":true,"dropShipping":true}'::jsonb)
@@ -38,9 +39,9 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
         insert into addresses (id, org_id, party_id, label, line1, city, region, postal_code, country, is_default_shipping)
         values (${randomUUID()}, ${org.orgId}, ${org.customerId}, 'Receiving', '10 Main St', 'Toronto', 'ON', 'M5V 1A1', 'CA', true)`);
     });
-    const order = await withBypassContext(() => createOrderDraft(org.orgId, actorId, "sales_order", randomUUID(), org.subsidiaryId));
+    const order = await withOrgContext(org.orgId, () => createOrderDraft(org.orgId, actorId, "sales_order", randomUUID(), org.subsidiaryId));
     const salesLineId = randomUUID();
-    await withBypassContext(async () => {
+    await withOrgContext(org.orgId, async () => {
       await db.execute(sql`
         insert into document_lines
           (id, org_id, document_id, line_number, item_id, account_id, description, quantity,
@@ -53,36 +54,36 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
          where id = ${order.id} and org_id = ${org.orgId} and status = 'draft' returning id`);
       assert.equal(approved.rows.length, 1);
     });
-    await withBypassContext(() => routeSalesOrderLine(context, { salesOrderId: order.id, salesOrderLineId: salesLineId, routed: true }));
-    const po = await withBypassContext(() => createDropShipPurchaseOrder(context, {
+    await withOrgContext(org.orgId, () => routeSalesOrderLine(context, { salesOrderId: order.id, salesOrderLineId: salesLineId, routed: true }));
+    const po = await withOrgContext(org.orgId, () => createDropShipPurchaseOrder(context, {
       salesOrderId: order.id, vendorId: org.vendorId, idempotencyKey: randomUUID(),
     }));
-    await withBypassContext(() => db.execute(sql`
+    await withOrgContext(org.orgId, () => db.execute(sql`
       update documents set status = 'approved'
        where org_id = ${org.orgId} and id = ${po.id} and kind = 'purchase_order' and status = 'draft'`));
-    const poLines = await withBypassContext(() => db.execute<{ id: string; amount: string }>(sql`
+    const poLines = await withOrgContext(org.orgId, () => db.execute<{ id: string; amount: string }>(sql`
       select id, amount::text as amount from document_lines where org_id = ${org.orgId} and document_id = ${po.id}`));
     assert.equal(poLines.rows.length, 1);
     assert.equal(poLines.rows[0]!.amount, "60.0000");
     const confirmation = { purchaseOrderId: po.id, confirmationDate: org.date, idempotencyKey: randomUUID(),
       lines: [{ purchaseOrderLineId: poLines.rows[0]!.id, quantity: "3" }] };
 
-    await withBypassContext(() => db.execute(sql`
+    await withOrgContext(org.orgId, () => db.execute(sql`
       update item_inventory_profiles set received_not_billed_account_id = null
        where org_id = ${org.orgId} and item_id = ${org.items.fifo}`));
-    await assert.rejects(withBypassContext(() => confirmDropShip(context, confirmation)), (error: unknown) =>
+    await assert.rejects(withOrgContext(org.orgId, () => confirmDropShip(context, confirmation)), (error: unknown) =>
       error instanceof DropShipRefusal && error.code === "received_not_billed_account_required"
         && /FIFO Widget/.test(error.message) && /received-not-billed/.test(error.message) && /Costing profile/.test(error.remedy ?? ""));
-    await withBypassContext(() => db.execute(sql`
+    await withOrgContext(org.orgId, () => db.execute(sql`
       update item_inventory_profiles set received_not_billed_account_id = ${org.accounts.clearing}
        where org_id = ${org.orgId} and item_id = ${org.items.fifo}`));
 
-    const first = await withBypassContext(() => confirmDropShip(context, confirmation));
-    const replay = await withBypassContext(() => confirmDropShip(context, confirmation));
+    const first = await withOrgContext(org.orgId, () => confirmDropShip(context, confirmation));
+    const replay = await withOrgContext(org.orgId, () => confirmDropShip(context, confirmation));
     assert.equal(replay.replayed, true);
     assert.deepEqual(replay.purchaseReceipt, first.purchaseReceipt);
     assert.deepEqual(replay.salesFulfillment, first.salesFulfillment);
-    const facts = await withBypassContext(() => db.execute<{
+    const facts = await withOrgContext(org.orgId, () => db.execute<{
       po_received: string; so_fulfilled: string; receipt_status: string; fulfillment_status: string;
       movement_count: number; cost: string; clearing: string; entry_count: number;
     }>(sql`
@@ -119,13 +120,13 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
     assert.equal(facts.rows[0]!.clearing, "-60.0000");
     assert.equal(facts.rows[0]!.entry_count, 1);
 
-    const bill = await withBypassContext(() => convertOrder(org.orgId, actorId, po.id, "vendor_bill"));
-    await withBypassContext(async () => {
+    const bill = await withOrgContext(org.orgId, () => convertOrder(org.orgId, actorId, po.id, "vendor_bill"));
+    await withOrgContext(org.orgId, async () => {
       await db.execute(sql`update document_lines set unit_price = '25', amount = '75' where org_id = ${org.orgId} and document_id = ${bill.id}`);
       await db.execute(sql`update documents set subtotal = '75', total = '75', document_date = ${org.date}, status = 'approved' where org_id = ${org.orgId} and id = ${bill.id}`);
       await postDocument(bill.id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
     });
-    const clearingAfterBill = await withBypassContext(() => db.execute<{ balance: string; ppv: string }>(sql`
+    const clearingAfterBill = await withOrgContext(org.orgId, () => db.execute<{ balance: string; ppv: string }>(sql`
       select
         (select coalesce(sum(l.amount), 0)::text from journal_lines l join journal_entries e on e.id = l.entry_id
           where l.org_id = ${org.orgId} and e.org_id = l.org_id and e.book_id = ${org.bookId}
@@ -136,18 +137,18 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
     assert.equal(clearingAfterBill.rows[0]!.balance, "0.0000");
     assert.equal(clearingAfterBill.rows[0]!.ppv, "15.0000");
 
-    const invoice = await withBypassContext(() => convertOrder(org.orgId, actorId, order.id, "customer_invoice"));
-    const invoiceLine = await withBypassContext(() => db.execute<{ quantity: string }>(sql`
+    const invoice = await withOrgContext(org.orgId, () => convertOrder(org.orgId, actorId, order.id, "customer_invoice"));
+    const invoiceLine = await withOrgContext(org.orgId, () => db.execute<{ quantity: string }>(sql`
       select quantity::text as quantity from document_lines where org_id = ${org.orgId} and document_id = ${invoice.id}`));
     assert.equal(invoiceLine.rows[0]!.quantity, "3.00000000");
-    await withBypassContext(async () => {
+    await withOrgContext(org.orgId, async () => {
       await db.execute(sql`update documents set document_date = ${org.date}, status = 'approved' where org_id = ${org.orgId} and id = ${invoice.id}`);
       await postDocument(invoice.id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
     });
-    await requestDocumentVoid({ documentId: invoice.id, orgId: org.orgId, actorId, reason: "Correct the customer invoice", reversalDate: org.date, source: "api" });
-    await requestDocumentVoid({ documentId: bill.id, orgId: org.orgId, actorId, reason: "Correct the vendor bill", reversalDate: org.date, source: "api" });
-    await requestDocumentVoid({ documentId: first.salesFulfillment.id, orgId: org.orgId, actorId, reason: "Reverse the vendor confirmation", reversalDate: org.date, source: "api" });
-    const voidFacts = await withBypassContext(() => db.execute<{ receipt_status: string; fulfillment_status: string; confirmation_entries: number; reversed: number; cogs_net: string; clearing_net: string; so_fulfilled: string; po_received: string }>(sql`
+    await withOrgContext(org.orgId, () => requestDocumentVoid({ documentId: invoice.id, orgId: org.orgId, actorId, reason: "Correct the customer invoice", reversalDate: org.date, source: "api" }));
+    await withOrgContext(org.orgId, () => requestDocumentVoid({ documentId: bill.id, orgId: org.orgId, actorId, reason: "Correct the vendor bill", reversalDate: org.date, source: "api" }));
+    await withOrgContext(org.orgId, () => requestDocumentVoid({ documentId: first.salesFulfillment.id, orgId: org.orgId, actorId, reason: "Reverse the vendor confirmation", reversalDate: org.date, source: "api" }));
+    const voidFacts = await withOrgContext(org.orgId, () => db.execute<{ receipt_status: string; fulfillment_status: string; confirmation_entries: number; reversed: number; cogs_net: string; clearing_net: string; so_fulfilled: string; po_received: string }>(sql`
       select receipt.status as receipt_status, fulfillment.status as fulfillment_status,
         (select count(*)::int from journal_entries original where original.org_id = ${org.orgId}
           and original.book_id = ${org.bookId}
@@ -196,6 +197,6 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
     assert.equal(voidFacts.rows[0]!.so_fulfilled, "0.00000000");
     assert.equal(voidFacts.rows[0]!.po_received, "0.00000000");
   } finally {
-    await withBypassContext(() => dropScratchOrg(org.orgId));
+    await withOrgContext(org.orgId, () => dropScratchOrg(org.orgId));
   }
 });
