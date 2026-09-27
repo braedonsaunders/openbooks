@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useTranslations } from 'next-intl'
 import { AlertTriangle, Check, FileWarning, ShieldCheck } from 'lucide-react'
 import { Button } from '@openbooks/ui'
-import { apiJson } from '@/lib/api-error'
+import { ApiResponseError, apiJson } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 
 export interface ProposedApplicationCommand {
@@ -62,7 +62,7 @@ export function ApplicationCommandCard({ proposal }: { proposal: ProposedApplica
         setResult(body)
         setState('applied')
       } catch (error) {
-        setError(error instanceof Error ? error.message : t('failed'))
+        setError(error instanceof ApiResponseError ? error.message : t('failed'))
         setState('error')
       }
     })
