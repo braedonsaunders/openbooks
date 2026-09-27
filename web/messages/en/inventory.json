@@ -15,6 +15,18 @@
     "bom": "Bill of materials",
     "counts": "Counts"
   },
+  "bom": {
+    "columns": { "effectiveFrom": "Effective from", "effectiveTo": "Effective to", "operationSeq": "Operation sequence", "scrapPct": "Scrap %", "isByproduct": "Line type" },
+    "values": { "component": "Component", "byproduct": "By-product" },
+    "refusals": {
+      "effectivityOverlap": "Component {component} has overlapping effectivity windows {windows}. Adjust the dates, or use a distinct operation or by-product designation when intended.",
+      "invalidDate": "Enter a real calendar date in YYYY-MM-DD format.",
+      "invalidRange": "The effective end date must be after the effective start date.",
+      "invalidScrap": "Scrap percentage must be an exact decimal from 0 up to, but not including, 100.",
+      "invalidOperation": "Operation sequence must be a positive whole number.",
+      "manufacturingDisabled": "Turn on Manufacturing in Company Settings → Features to edit operation and by-product settings."
+    }
+  },
   "labels": {
     "item": "Item",
     "location": "Location",

@@ -15,6 +15,18 @@
     "bom": "Lista de materiales",
     "counts": "Conteos"
   },
+  "bom": {
+    "columns": { "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente hasta", "operationSeq": "Secuencia de operación", "scrapPct": "% de merma", "isByproduct": "Tipo de línea" },
+    "values": { "component": "Componente", "byproduct": "Subproducto" },
+    "refusals": {
+      "effectivityOverlap": "El componente {component} tiene períodos de vigencia superpuestos {windows}. Ajusta las fechas o usa una operación o designación de subproducto distinta cuando corresponda.",
+      "invalidDate": "Introduce una fecha real con el formato AAAA-MM-DD.",
+      "invalidRange": "La fecha de fin debe ser posterior a la fecha de inicio.",
+      "invalidScrap": "El porcentaje de merma debe ser un decimal exacto desde 0 y menor que 100.",
+      "invalidOperation": "La secuencia de operación debe ser un número entero positivo.",
+      "manufacturingDisabled": "Activa Fabricación en Configuración de la empresa → Funciones para editar operaciones y subproductos."
+    }
+  },
   "labels": {
     "item": "Artículo",
     "location": "Ubicación",

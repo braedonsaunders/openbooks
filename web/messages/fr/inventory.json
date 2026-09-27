@@ -15,6 +15,18 @@
     "bom": "Nomenclature",
     "counts": "Comptages"
   },
+  "bom": {
+    "columns": { "effectiveFrom": "En vigueur à partir du", "effectiveTo": "En vigueur jusqu'au", "operationSeq": "Séquence d'opération", "scrapPct": "Rebut %", "isByproduct": "Type de ligne" },
+    "values": { "component": "Composant", "byproduct": "Coproduit" },
+    "refusals": {
+      "effectivityOverlap": "Le composant {component} présente des périodes de validité qui se chevauchent {windows}. Modifiez les dates ou choisissez une autre opération ou désignation de coproduit si nécessaire.",
+      "invalidDate": "Saisissez une date réelle au format AAAA-MM-JJ.",
+      "invalidRange": "La date de fin doit être postérieure à la date de début.",
+      "invalidScrap": "Le pourcentage de rebut doit être un décimal exact compris entre 0 inclus et 100 exclu.",
+      "invalidOperation": "La séquence d'opération doit être un entier positif.",
+      "manufacturingDisabled": "Activez Fabrication dans Paramètres de l'entreprise → Fonctionnalités pour modifier les opérations et les coproduits."
+    }
+  },
   "labels": {
     "item": "Article",
     "location": "Emplacement",

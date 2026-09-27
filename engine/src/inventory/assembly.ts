@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { add, cmp, isZero, neg, normalizeMoney, toUnits } from "../money/money.ts";
+import { add, cmp, isZero, neg, normalizeMoney } from "../money/money.ts";
+import { bomRequiredQuantity } from "./bom-scrap.ts";
 import { extendCost, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import type { AssemblyBomRevisionEvidence } from "@openbooks/schema";
@@ -18,22 +19,6 @@ import { type ReverseInventoryInput, type ReverseInventoryResult, type Reversibl
 // ---------------------------------------------------------------------------
 // Assembly build (light manufacturing / kits)
 // ---------------------------------------------------------------------------
-
-/**
- * Exact decimal product of two numeric(19,4) inputs: up to 8 decimal places
- * with trailing zeros trimmed (0.0001 × 0.0001 → "0.00000001"). extendCost
- * rounds that to 4dp ("0.0000"); when it does, the refusal must still state
- * the true requirement rather than "needs 0.0000".
- */
-function exactExtension(quantity: string, quantityPer: string): string {
-  const product = toUnits(quantity) * toUnits(quantityPer); // 1e-8 units
-  const negative = product < 0n;
-  const abs = negative ? -product : product;
-  const whole = abs / 100_000_000n;
-  const frac = (abs % 100_000_000n).toString().padStart(8, "0").replace(/0+$/, "");
-  const text = frac ? `${whole}.${frac}` : `${whole}`;
-  return negative ? `-${text}` : text;
-}
 
 export interface BuildInput {
   assemblyItemId: string;
@@ -87,26 +72,66 @@ export async function buildAssembly(
     await tx.execute(sql`lock table bom_components in share mode`);
     const bom = (await tx.execute<{
       component_item_id: string;
+      component_code: string | null;
+      component_name: string;
       quantity_per: string;
       sort_order: number;
+      effective_from: string | null;
+      effective_to: string | null;
+      operation_seq: number | null;
+      scrap_pct: string | null;
+      is_byproduct: boolean;
     }>(sql`
-      select component_item_id, quantity_per, sort_order
-        from bom_components
-       where org_id = ${orgId} and assembly_item_id = ${input.assemblyItemId}
-       order by sort_order, component_item_id
+      select b.component_item_id, component.code as component_code, component.name as component_name,
+             b.quantity_per, b.sort_order,
+             b.effective_from::text as effective_from,
+             b.effective_to::text as effective_to,
+             b.operation_seq, b.scrap_pct::text as scrap_pct, b.is_byproduct
+        from bom_components b
+        join items component on component.org_id = b.org_id and component.id = b.component_item_id
+       where b.org_id = ${orgId} and b.assembly_item_id = ${input.assemblyItemId}
+         and (b.effective_from is null or b.effective_from <= ${input.date}::date)
+         and (b.effective_to is null or ${input.date}::date < b.effective_to)
+       order by b.sort_order, b.component_item_id, b.operation_seq nulls first,
+                b.is_byproduct, b.effective_from nulls first
     `));
     if (bom.rows.length === 0) {
-      throw new InventoryError("assembly has no bill of materials");
+      throw new InventoryError(`assembly has no bill of materials effective on ${input.date}`);
+    }
+    const byproduct = bom.rows.find((component) => component.is_byproduct);
+    if (byproduct) {
+      const assemblyName = (await tx.execute<{ code: string | null; name: string }>(sql`
+        select code, name from items where org_id = ${orgId} and id = ${input.assemblyItemId}`)).rows[0];
+      throw new InventoryError(
+        `assembly ${assemblyName?.code?.trim() || assemblyName?.name || input.assemblyItemId} contains by-product ${byproduct.component_code?.trim() || byproduct.component_name}; build it through a work order`,
+      );
     }
 
     const bomSnapshot = {
       format: "openbooks.inventory-bom.v1" as const,
       assemblyItemId: input.assemblyItemId,
-      components: bom.rows.map((component) => ({
-        componentItemId: component.component_item_id,
-        quantityPer: normalizeMoney(component.quantity_per),
-        sortOrder: component.sort_order,
-      })),
+      components: bom.rows.map((component) => {
+        const evidence: {
+          componentItemId: string;
+          quantityPer: string;
+          sortOrder: number;
+          effectiveFrom?: string;
+          effectiveTo?: string;
+          operationSeq?: number;
+          scrapPct?: string;
+        } = {
+          componentItemId: component.component_item_id,
+          quantityPer: normalizeMoney(component.quantity_per),
+          sortOrder: component.sort_order,
+        };
+        if (component.effective_from !== null) evidence.effectiveFrom = component.effective_from;
+        if (component.effective_to !== null) evidence.effectiveTo = component.effective_to;
+        if (component.operation_seq !== null) evidence.operationSeq = component.operation_seq;
+        if (component.scrap_pct !== null && cmp(component.scrap_pct, "0") !== 0) {
+          evidence.scrapPct = normalizeMoney(component.scrap_pct);
+        }
+        return evidence;
+      }),
     };
     const bomRevision: `sha256:${string}` =
       `sha256:${inventoryRequestHash(bomSnapshot)}`;
@@ -158,16 +183,15 @@ export async function buildAssembly(
           `tracked component ${component.component_item_id} requires explicit serial/lot consumption evidence`,
         );
       }
-      const reqQty = extendCost(input.quantity, component.quantity_per);
+      const requirement = bomRequiredQuantity(input.quantity, component.quantity_per, component.scrap_pct);
+      const reqQty = requirement.quantity;
       if (isZero(reqQty)) {
-        // A valid 4dp quantity-per times a valid 4dp build quantity can
-        // round to 0.0000 (0.0001 × 0.0001 = 0.00000001). Posting that as a
-        // zero-quantity consume dies on the inv_moves_qty_nonzero CHECK as a
-        // raw driver error — refuse by name before any posting instead, with
-        // the exact requirement stated. There is no sub-precision policy to
-        // fall back to: the operator builds more or fixes the recipe.
+        // A valid quantity-per, build quantity and scrap factor can round to
+        // 0.0000 at inventory precision. Refuse by name before posting and
+        // state the exact requirement rather than letting the database reject
+        // a zero-quantity consume.
         throw new InventoryError(
-          `component ${itemNameById.get(component.component_item_id)} needs ${exactExtension(input.quantity, component.quantity_per)}, below the 0.0001 unit precision — build a larger quantity or adjust the recipe`,
+          `component ${itemNameById.get(component.component_item_id)} needs ${requirement.exactQuantity}, below the 0.0001 unit precision — build a larger quantity or adjust the recipe`,
         );
       }
       components.push({
