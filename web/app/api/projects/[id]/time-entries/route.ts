@@ -1,8 +1,8 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../../lib/authz'
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
 import { isUuid } from '../../../../../lib/list-params'
-import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import {
   loadProjectTimeEntryPage,
   ProjectTimeDetailError,
@@ -11,17 +11,13 @@ import {
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = 'nodejs'
-
 const DIMENSIONS = new Set<ProjectTimeDimension>(['employee', 'item', 'task'])
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('projects.read')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
-  if (feature) return feature
-
-  const { id } = await params
+export const GET = defineRoute({
+  permission: 'projects.read',
+  feature: 'projects',
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, authz, params: { id } }) => {
   if (!isUuid(id)) return notFound("record")
 
   const url = new URL(request.url)
@@ -41,9 +37,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   try {
     return NextResponse.json(await loadProjectTimeEntryPage({
-      orgId: gate.user.orgId,
+      orgId: authz.user.orgId,
       projectId: id,
-      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
       dimension: rawDimension as ProjectTimeDimension,
       dimensionId: rawKey === 'unassigned' ? null : rawKey,
       page,
@@ -54,4 +50,5 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
     throw error
   }
-}
+  },
+})

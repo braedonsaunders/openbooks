@@ -1,11 +1,14 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from 'zod'
 import { NextResponse } from "next/server";
 import { runUserSql, validateUserSql } from "@openbooks/engine/src/platform/sqlapi.ts";
-import { guardFeaturePermission } from "../../../lib/feature-gates";
+import { defineRoute } from '@/lib/api/route'
 import { hasUnrestrictedQueryScope } from "../../../lib/query-console-access";
 
-export const runtime = "nodejs";
+const queryBody = z.looseObject({
+  sql: z.unknown().optional(),
+  maxRows: z.unknown().optional(),
+})
 
 /**
  * Pure pre-validation failures (thrown as plain Errors by validateUserSql)
@@ -20,15 +23,11 @@ class UserSqlValidationRefusal extends Error {
   }
 }
 
-export async function POST(req: Request) {
-  let gate: Awaited<ReturnType<typeof guardFeaturePermission>>;
-  try {
-    gate = await guardFeaturePermission("sql.execute", "queryConsole");
-  } catch (error) {
-    console.error("[query-console] authorization failed", error);
-    return NextResponse.json({ error: "query service unavailable" }, { status: 500 });
-  }
-  if (gate instanceof NextResponse) return gate;
+export const POST = defineRoute({
+  permission: 'sql.execute',
+  feature: 'queryConsole',
+  body: queryBody,
+  handler: async ({ authz: gate, body }) => {
   if (!hasUnrestrictedQueryScope(gate.allowedSubsidiaryIds)) {
     return NextResponse.json(
       { error: "query console requires unrestricted subsidiary access" },
@@ -36,19 +35,6 @@ export async function POST(req: Request) {
     );
   }
 
-  let rawBody: unknown;
-  try {
-    const parsedBody = await parseJsonBody(req, jsonObject);
-    if (!parsedBody.ok) return parsedBody.response;
-    rawBody = parsedBody.data;
-  } catch {
-    return NextResponse.json({ error: "request body must be valid JSON" }, { status: 400 });
-  }
-
-  if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) {
-    return NextResponse.json({ error: "request body must be a JSON object" }, { status: 400 });
-  }
-  const body = rawBody as { sql?: unknown; maxRows?: unknown };
   if (typeof body.sql !== "string" || !body.sql.trim()) {
     return NextResponse.json({ error: "missing sql" }, { status: 400 });
   }
@@ -77,4 +63,5 @@ export async function POST(req: Request) {
     console.error("[query-console] execution failed", e);
     return NextResponse.json({ error: "query failed" }, { status: 400 });
   }
-}
+  },
+})

@@ -42,22 +42,18 @@ function sqlText(query: unknown): string {
 stubModules({
   navigation: false,
   intl: false,
-  authz: false,
+  authz: true,
   features: false,
   extra: {
-    "../../../../../lib/authz": `
+    "@/lib/feature-gates": `
       const state = globalThis[Symbol.for('openbooks.project-time-detail-route-test')]
-      export async function guardPermission(permission) {
-        if (permission !== 'projects.read') throw new Error('unexpected permission: ' + permission)
+      export async function guardFeaturePermission(permission, feature) {
+        if (permission !== 'projects.read' || feature !== 'projects') throw new Error('unexpected route gate')
         return {
           user: { id: 'user-1', orgId: 'org-1' },
-          permissions: new Set(['projects.read']),
           allowedSubsidiaryIds: state.allowedSubsidiaryIds,
         }
       }
-    `,
-    "../../../../../lib/projects-gate": `
-      export async function guardProjectsFeature() { return null }
     `,
     "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.project-time-detail-route-test')]

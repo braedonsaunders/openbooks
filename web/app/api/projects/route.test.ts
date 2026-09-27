@@ -59,7 +59,7 @@ function sqlText(query: unknown): string {
 stubModules({
   navigation: false,
   intl: false,
-  authz: false,
+  authz: true,
   features: false,
   extra: {
     "@openbooks/engine/src/platform/db.ts": `
@@ -102,13 +102,11 @@ stubModules({
      }
      export function guardSubsidiaryScope() { return undefined }
      export function subsidiariesInScope() { return true }`,
-    "../../../lib/projects-gate": `const state = globalThis[Symbol.for('openbooks.projects-route-test')]
-     export async function guardProjectsFeature() {
-       if (state.projectGate) return null
-       return new Response(JSON.stringify({ error: 'projects feature is disabled' }), {
-         status: 404,
-         headers: { 'content-type': 'application/json' },
-       })
+    "@/lib/feature-gates": `const state = globalThis[Symbol.for('openbooks.projects-route-test')]
+     class FeatureDisabled extends Error { status = 404 }
+     export async function guardFeaturePermission() {
+       if (!state.projectGate) throw new FeatureDisabled('projects feature is disabled')
+       return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
      }`,
     "../../../lib/features": `export async function isFeatureEnabled() { return true }
      export async function acquireFeatureGateLock() {}`,
@@ -204,7 +202,11 @@ test("project creation replays only the exact request for an idempotency key", a
 
   const changed = await post(key, { name: "Harbourview Renamed" });
   assert.equal(changed.status, 409);
-  assert.deepEqual(await changed.json(), { error: "invalid_idempotency_key" });
+  assert.deepEqual(await changed.json(), {
+    error: "idempotency_key_conflict",
+    code: "idempotency_key_conflict",
+    remedy: "Close and reopen the project form to retry with a fresh idempotency key.",
+  });
 });
 
 test("a key minted in another org cannot claim the row", async () => {

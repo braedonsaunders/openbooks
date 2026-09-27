@@ -1,9 +1,11 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
-import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../lib/authz'
+import { defineRoute } from '@/lib/api/route'
+import { unprocessable } from '@/lib/api/responses'
+import { resolveIdempotentReplay } from '@/lib/api/idempotency'
+import { guardSubsidiaryScope, subsidiariesInScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { loadProject } from './_lib'
@@ -12,18 +14,38 @@ import { canonicalDecimal } from '../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
-import { guardProjectsFeature } from '../../../lib/projects-gate'
 import { listScopedPartyOptions } from '../../../lib/scoped-options'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../lib/features'
 import { notFound } from "@/lib/api/responses";
 
 
-export const runtime = 'nodejs'
-
 const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
 
+const projectCreateBody = z.looseObject({
+  name: z.unknown().optional(),
+  tasks: z.unknown().optional(),
+  isActive: z.unknown().optional(),
+  subsidiaryIncludeChildren: z.unknown().optional(),
+  status: z.unknown().optional(),
+  customerId: z.unknown().optional(),
+  foremanId: z.unknown().optional(),
+  managerId: z.unknown().optional(),
+  subsidiaryId: z.unknown().optional(),
+  startsOn: z.unknown().optional(),
+  endsOn: z.unknown().optional(),
+  invoicingPreference: z.unknown().optional(),
+  custom: z.record(z.string(), z.unknown()).optional(),
+  contractValue: z.unknown().optional(),
+  siteJurisdiction: z.unknown().optional(),
+  projectTypeId: z.unknown().optional(),
+  code: z.unknown().optional(),
+  customerPoNumber: z.unknown().optional(),
+  notes: z.unknown().optional(),
+})
+
 function bad(error: string, field?: string, status = 422) {
-  return NextResponse.json({ error, ...(field ? { field } : {}) }, { status })
+  if (status !== 400 && status !== 422) return NextResponse.json({ error, ...(field ? { field } : {}) }, { status })
+  return unprocessable(error, { ...(field ? { field } : {}), status: status as 400 | 422 })
 }
 
 /** Trimmed string or null ('' and non-strings collapse to null). */
@@ -84,19 +106,16 @@ async function partyExists(id: string, orgId: string): Promise<boolean> {
  * disabled feature. The fence is the same one the disable path holds while it
  * re-evaluates its blockers, so exactly one side wins.
  */
-export async function POST(request: Request) {
-  const gate = await guardPermission('projects.manage')
-  if (gate instanceof NextResponse) return gate
-  const feature = await guardProjectsFeature(gate.user.orgId)
-  if (feature) return feature
+export const POST = defineRoute({
+  permission: 'projects.manage',
+  feature: 'projects',
+  body: projectCreateBody,
+  handler: async ({ request, authz: gate, body }) => {
   const user = gate.user
 
   const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
   if (!isUuid(requestId)) return bad('invalid_idempotency_key', undefined, 400)
 
-  const parsedBody = await parseJsonBody(request, jsonObject)
-  if (!parsedBody.ok) return parsedBody.response
-  const body = parsedBody.data
   if (body.tasks !== undefined) {
     return bad('Work breakdown tasks must be changed through the project task endpoint', 'tasks')
   }
@@ -266,9 +285,7 @@ export async function POST(request: Request) {
   let created = false
   let featureRefused = false
   let scopeRefused = false
-  let idempotencyConflict = false
-  try {
-    await withOrgTransaction(user.orgId, async () => {
+  await withOrgTransaction(user.orgId, async () => {
     // Serialize against feature toggles, then re-ask the gate the entry guard
     // already asked: its answer may be stale by the time this write lands.
     await acquireFeatureGateLock(user.orgId)
@@ -309,20 +326,13 @@ export async function POST(request: Request) {
       // Compare replays with the immutable create snapshot in the insert
       // audit event, rather than today's project row, so an unchanged retry
       // still succeeds even when a later PATCH has legitimately edited it.
-      const original = (await db.execute<{ after: unknown }>(sql`
-        select changes->'after' as after
-          from audit_log
-         where org_id = ${user.orgId}
-           and table_name = 'projects'
-           and row_id = ${requestId}
-           and action = 'insert'
-           and request_id = ${requestId}
-         order by at asc
-         limit 1
-      `)).rows[0]?.after
-      if (!original || canonicalJson(original) !== canonicalJson(snapshot)) {
-        throw new Error('idempotency_key_conflict')
-      }
+      const replay = await resolveIdempotentReplay(db, {
+        orgId: user.orgId,
+        table: 'projects',
+        key: requestId,
+        match: snapshot,
+      })
+      if (replay !== 'replay') throw new ProjectCreateConflict()
       created = false
       return
     }
@@ -334,23 +344,24 @@ export async function POST(request: Request) {
               ${JSON.stringify({ before: null, after: snapshot })}::jsonb, ${user.id}, ${requestId})
     `)
     created = true
-    })
-  } catch (error) {
-    const message = error instanceof Error
-      ? `${error.message} ${String((error as { cause?: unknown }).cause ?? '')}`
-      : String(error)
-    if (message.includes('idempotency_key_conflict')) idempotencyConflict = true
-    else throw error
-  }
-  if (idempotencyConflict) {
-    return bad('invalid_idempotency_key', undefined, 409)
-  }
+  })
   if (featureRefused) {
-    return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
+    return notFound('project')
   }
   if (scopeRefused) return notFound("record")
 
   const payload = await loadProject(requestId, user.orgId, gate.allowedSubsidiaryIds)
   if (!payload) return bad('save_failed', undefined, 500)
   return NextResponse.json(payload, { status: created ? 201 : 200 })
+  },
+})
+
+class ProjectCreateConflict extends Error {
+  readonly status = 409 as const
+  readonly code = 'idempotency_key_conflict' as const
+  readonly remedy = 'Close and reopen the project form to retry with a fresh idempotency key.'
+
+  constructor() {
+    super('idempotency_key_conflict')
+  }
 }

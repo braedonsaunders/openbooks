@@ -1,20 +1,18 @@
-import { exactMoney, parseJsonBody } from '@/lib/api/json'
+import { exactMoney } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
-import { guardPermission, guardUnrestrictedScope } from '../../../lib/authz'
+import { defineRoute } from '@/lib/api/route'
+import { conflict, notFound, unprocessable } from '@/lib/api/responses'
 import { isFeatureEnabled } from '../../../lib/features'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { isUuid } from '../../../lib/list-params'
 import { loadItem } from './_lib'
-import { notFound } from "@/lib/api/responses";
+import { resolveIdempotentReplay } from '@/lib/api/idempotency'
 
-
-export const runtime = 'nodejs'
 
 const ITEM_KINDS = [
   'service',
@@ -70,6 +68,9 @@ const itemCreateSchema = z.looseObject({
 })
 
 function bad(error: string, status = 422) {
+  if (status === 400) return unprocessable(error, { status })
+  if (status === 409) return conflict(error)
+  if (status === 422) return unprocessable(error)
   return NextResponse.json({ error }, { status })
 }
 
@@ -113,20 +114,14 @@ function money(
  * Create one tenant-owned item. The client-generated UUID is both the row id
  * and idempotency key, so a retried Save cannot create a second item or audit.
  */
-export async function POST(request: Request) {
-  const gate = await guardPermission('items.manage')
-  if (gate instanceof NextResponse) return gate
-  // The item catalog (accounts, tax, recognition) is org-wide policy: a
-  // subsidiary-scoped catalog manager cannot mint shared items.
-  const unrestricted = guardUnrestrictedScope(gate)
-  if (unrestricted) return unrestricted
-
+export const POST = defineRoute({
+  permission: 'items.manage',
+  feature: { none: 'The item catalog is available independently of optional item capabilities.' },
+  scope: 'unrestricted',
+  body: itemCreateSchema,
+  handler: async ({ request, authz: gate, body }) => {
   const requestId = request.headers.get('Idempotency-Key')?.trim() ?? ''
-  if (!isUuid(requestId)) return bad('Invalid idempotency key', 400)
-
-  const parsed = await parseJsonBody(request, itemCreateSchema)
-  if (!parsed.ok) return parsed.response
-  const body = parsed.data
+  if (!isUuid(requestId)) return bad('invalid_idempotency_key', 400)
 
   const name = body.name.trim()
   if (!name) return bad('Name is required')
@@ -270,18 +265,13 @@ export async function POST(request: Request) {
         returning id
       `)
       if (!inserted.rows[0]) {
-        const original = (await db.execute<{ after: unknown }>(sql`
-          select changes->'after' as after
-            from audit_log
-           where org_id = ${gate.user.orgId}
-             and table_name = 'items'
-             and row_id = ${requestId}
-             and action = 'insert'
-             and request_id = ${requestId}
-           order by at asc
-           limit 1
-        `)).rows[0]?.after
-        if (!original || canonicalJson(original) !== canonicalJson(snapshot)) throw new CreateConflict()
+        const replay = await resolveIdempotentReplay(db, {
+          orgId: gate.user.orgId,
+          table: 'items',
+          key: requestId,
+          match: snapshot,
+        })
+        if (replay !== 'replay') throw new CreateConflict()
         return false
       }
 
@@ -298,7 +288,7 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof CreateNotFound) return notFound("record")
     if (error instanceof CreateInvalid) return bad(error.message)
-    if (error instanceof CreateConflict) return bad('Invalid idempotency key', 409)
+    if (error instanceof CreateConflict) throw error
     const message = error instanceof Error
       ? `${error.message} ${String((error as { cause?: unknown }).cause ?? '')}`
       : String(error)
@@ -309,8 +299,17 @@ export async function POST(request: Request) {
   const payload = await loadItem(requestId, gate.user.orgId)
   if (!payload) return bad('The item was saved but could not be read back', 500)
   return NextResponse.json(payload, { status: created ? 201 : 200 })
-}
+  },
+})
 
 class CreateInvalid extends Error {}
 class CreateNotFound extends Error {}
-class CreateConflict extends Error {}
+class CreateConflict extends Error {
+  readonly status = 409 as const
+  readonly code = 'idempotency_key_conflict' as const
+  readonly remedy = 'Close and reopen the item form to retry with a fresh idempotency key.'
+
+  constructor() {
+    super('idempotency_key_conflict')
+  }
+}

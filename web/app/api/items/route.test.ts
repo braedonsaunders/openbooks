@@ -103,9 +103,11 @@ const mockSources = new Map<string, string>([
   `],
   ['mock:authz', `
     const state = globalThis[Symbol.for('openbooks.item-create-route-test')]
+    export async function getAuthz() { return null }
     export async function guardPermission() {
       return { user: { orgId: '${ORG_ID}', id: '${ACTOR_ID}' }, allowedSubsidiaryIds: state.scope ?? null }
     }
+    export async function guardRootSubsidiaryScope() { return null }
     // Org-wide catalog gate: only an explicit unrestricted scope passes.
     export function guardUnrestrictedScope(authz) {
       if (authz.allowedSubsidiaryIds === null) return null
@@ -128,7 +130,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../../lib/features', 'mock:features'],
   ['../../../lib/custom-fields', 'mock:custom-fields'],
 ])
@@ -204,6 +206,11 @@ test('POST refuses an idempotency-key replay whose create payload changed', asyn
 
   const response = await create({ kind: 'service', name: 'Different item' })
   assert.equal(response.status, 409)
+  assert.deepEqual(await response.json(), {
+    error: 'idempotency_key_conflict',
+    code: 'idempotency_key_conflict',
+    remedy: 'Close and reopen the item form to retry with a fresh idempotency key.',
+  })
   assert.equal(state.audits.length, 1)
   assert.equal(state.item?.name, 'Consulting')
 })
@@ -213,6 +220,7 @@ test('POST requires a well-formed idempotency key before any write', async () =>
   const response = await create({ kind: 'service', name: 'Consulting' }, 'not-a-uuid')
 
   assert.equal(response.status, 400)
+  assert.deepEqual(await response.json(), { error: 'invalid_idempotency_key' })
   assert.equal(state.item, null)
   assert.equal(state.calls.length, 0)
 })

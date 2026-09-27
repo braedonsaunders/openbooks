@@ -41,6 +41,9 @@ const mockSources = new Map<string, string>([
     `
       import { NextResponse } from 'next/server'
       const state = globalThis[Symbol.for('openbooks.saved-reports-route-test')]
+      export async function getAuthz() { return null }
+      export async function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
       export async function guardPermission(permission) {
         state.permissionCalls.push(permission)
         if (!state.granted.has('*') && !state.granted.has(permission)) {
@@ -75,6 +78,7 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
+  ['@/lib/authz', mockUrl('authz')],
   ['../../../lib/authz', mockUrl('authz')],
 ])
 
