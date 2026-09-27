@@ -148,6 +148,8 @@ export const TENANT_TABLE_POLICIES = {
   "employment_assignment_versions": "clone:catalog-uuid-rebase",
   "employment_assignments": "clone:catalog-uuid-rebase",
   "employment_changes": "clone:catalog-uuid-rebase",
+  "encumbrance_links": "clone:catalog-uuid-rebase",
+  "encumbrances": "clone:catalog-uuid-rebase",
   "entitlement_ledger": "clone:catalog-uuid-rebase",
   "entitlement_plan_limits": "clone:catalog-uuid-rebase",
   "entitlement_plans": "clone:catalog-uuid-rebase",

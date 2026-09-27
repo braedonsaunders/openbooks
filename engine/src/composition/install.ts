@@ -21,6 +21,7 @@ import { releaseFundReleaseFlowApproval } from "../nonprofit/flow-release.ts";
 import { releaseCloseRunApproval } from "../close/flow-release.ts";
 import { registerBalancingLegProvider } from "../journal/balancing-hooks.ts";
 import { fundBalancingLegProvider } from "../nonprofit/fund-posting.ts";
+import { budgetaryControlProvider } from "../nonprofit/encumbrances.ts";
 import {
   releaseCompCycleApproval,
   releaseHrmChangeRequestApproval,
@@ -48,6 +49,7 @@ import { releaseResourcingRequestApproval } from "../resourcing/flow-release.ts"
 export function installEngineSeams(): void {
   registerScriptJournalWriter(createScriptJournal);
   registerBalancingLegProvider("fund", fundBalancingLegProvider);
+  registerBalancingLegProvider("budgetary-control", budgetaryControlProvider);
   // Engine-owned approval releases: the adapters delegate through
   // releaseFlowApproval; the handlers run inside decideGate's transaction.
   registerFlowApprovalReleaseHandler(ALLOCATION_RUN_SUBJECT_KIND, releaseAllocationRunApproval);
