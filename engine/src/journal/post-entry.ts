@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { assertPeriodModulesOpen, CloseError, type CloseModule } from "../periods/period-policy.ts";
-import type { SqlExecutor } from "../platform/db.ts";
+import { inExecutorTransaction, type SqlExecutor } from "../platform/db.ts";
 import { PostingError } from "./posting-contracts.ts";
 import { collectBalancingLegs } from "./balancing-hooks.ts";
 import { assertFinalKernelBalance } from "./posting-invariants.ts";
@@ -20,13 +20,16 @@ import { findLiveReplayAuthorization } from "./replay-authorization.ts";
  * writes these tables directly (scripts/check-ledger-journal-writes.mjs
  * enforces that boundary).
  *
- * One call owns the whole posting: the organization posting lock, balance
- * validation (whole entry and per subsidiary), the book / period / entity /
- * account guards, the open-period check behind the shared close/posting
- * fence, exactly-once numbering, the draft -> posted flip, and the audit
- * record. All lines of the entry go in ONE multi-row INSERT statement, which
- * is the invariant the statement-level balance triggers (migration 0381)
- * rely on: each touched entry is validated once per statement.
+ * One call owns the whole posting as one atomic unit: balance validation
+ * (whole entry and per subsidiary), the book / period / entity / account
+ * guards, the open-period check behind the shared close/posting fence,
+ * exactly-once numbering, the header and line inserts, the draft -> posted
+ * flip, and the audit record. Handed a transaction, it joins it; handed a
+ * pool-backed executor, it opens its own, so no reader ever sees a header
+ * without its lines. All lines of the entry go in ONE multi-row INSERT
+ * statement, which is the invariant the statement-level balance triggers
+ * (migration 0381) rely on: each touched entry is validated once per
+ * statement.
  *
  * Amounts are canonical ledger strings (no floats, ever). Errors are
  * LedgerPostError (a PostingError), naming the refused value and the remedy.
@@ -108,16 +111,16 @@ export interface PostEntryResult {
   lines: { id: string; lineNumber: number }[];
 }
 
-const AMOUNT_RE = /^-?\d+(\.\d{1,4})?$/;
+/** A validated line with its entry-level defaults applied. */
+type PreparedLine = PostEntryLineInput & {
+  subsidiaryId: string;
+  currency: string;
+  txnAmount: string;
+  fxRate: string;
+  lineNumber: number;
+};
 
-/**
- * How long a keyed replay waits for the winning posting's lines to become
- * visible before refusing by name, and how often it re-reads while waiting.
- * The window is normally milliseconds (the winner's next statement); the
- * bound only bites when the winner never finishes.
- */
-const KEYED_REPLAY_WAIT_MS = 5000;
-const KEYED_REPLAY_POLL_MS = 50;
+const AMOUNT_RE = /^-?\d+(\.\d{1,4})?$/;
 
 function fail(message: string): never {
   throw new LedgerPostError(message);
@@ -139,7 +142,7 @@ export async function postEntry(
     fail(`journal entry ${input.entryNumber} carries no lines — a posting needs at least one balanced line`);
 
   const seenNumbers = new Set<number>();
-  const lines = input.lines.map((line, index) => {
+  const lines = input.lines.map((line, index): PreparedLine => {
     const position = index + 1;
     if (!line.accountId)
       fail(`journal entry ${input.entryNumber} line ${position}: an account id is required`);
@@ -201,6 +204,20 @@ export async function postEntry(
     throw error;
   }
 
+  // The posting's reads and writes run in one transaction: the guards' share
+  // locks and the period fence hold through commit, and the header, its lines,
+  // the posted flip and the audit record become visible together or not at all.
+  return inExecutorTransaction(executor, (tx) => writeEntry(tx, input, lines, seenNumbers));
+}
+
+async function writeEntry(
+  executor: SqlExecutor,
+  input: PostEntryInput,
+  lines: PreparedLine[],
+  seenNumbers: Set<number>,
+): Promise<PostEntryResult> {
+  const { orgId } = input;
+
   // Idempotent postings converge on the partial unique index
   // journal_entries_org_idempotency_key (org_id, custom->>'idempotencyKey')
   // instead of an organization row lock: the friendly read below returns an
@@ -212,36 +229,29 @@ export async function postEntry(
   // parallel instead of serializing onto one row (which deadlocked
   // concurrent multi-post flows with 40P01).
   // A keyed replay must return the winner's full posted entry — header AND
-  // lines — in the one shape below, whichever path finds it. The winner's
-  // lines commit in a later statement than its header (pool executors commit
-  // each statement separately), so a replay landing between the two sees a
-  // header with no lines yet: one statement reads both, and the read waits
-  // out that window. A header that stays lineless is a defect, never a
-  // success — it is refused by name instead of returned with zero lines.
+  // lines — in the one shape below, whichever path finds it. One statement
+  // reads both, and the winner committed both in one transaction, so a
+  // visible header always has its lines. A lineless keyed header is damaged
+  // ledger data, never a success and never a replay in progress — it is
+  // refused by name instead of returned with zero lines.
   const readKeyedEntry = async (idempotencyKey: string): Promise<PostEntryResult | null> => {
-    const deadline = Date.now() + KEYED_REPLAY_WAIT_MS;
-    for (;;) {
-      const rows = (await executor.execute<{ entry_id: string; id: string | null; line_number: number | null }>(sql`
-        select je.id as entry_id, jl.id as id, jl.line_number as line_number
-          from journal_entries je
-          left join journal_lines jl
-            on jl.org_id = je.org_id and jl.entry_id = je.id
-         where je.org_id = ${orgId} and je.custom->>'idempotencyKey' = ${idempotencyKey}
-         order by jl.line_number`)).rows;
-      if (rows.length === 0) return null;
-      const entryId = rows[0]!.entry_id;
-      const replayed = rows.flatMap((row) =>
-        row.id === null ? [] : [{ id: row.id, lineNumber: row.line_number! }],
+    const rows = (await executor.execute<{ entry_id: string; id: string | null; line_number: number | null }>(sql`
+      select je.id as entry_id, jl.id as id, jl.line_number as line_number
+        from journal_entries je
+        left join journal_lines jl
+          on jl.org_id = je.org_id and jl.entry_id = je.id
+       where je.org_id = ${orgId} and je.custom->>'idempotencyKey' = ${idempotencyKey}
+       order by jl.line_number`)).rows;
+    if (rows.length === 0) return null;
+    const entryId = rows[0]!.entry_id;
+    const replayed = rows.flatMap((row) =>
+      row.id === null ? [] : [{ id: row.id, lineNumber: row.line_number! }],
+    );
+    if (replayed.length === 0)
+      fail(
+        `journal entry ${input.entryNumber}: idempotency key ${idempotencyKey} resolves to entry ${entryId}, which has no lines — a keyed posting commits its header and lines together, so this entry is damaged ledger data, not a replay; retrying resolves to the same entry, so have entry ${entryId} investigated before posting again`,
       );
-      if (replayed.length > 0) return { entryId, lines: replayed };
-      if (Date.now() >= deadline)
-        fail(
-          `journal entry ${input.entryNumber}: idempotency key ${idempotencyKey} already posted entry ${entryId} with no lines — the winning posting did not finish; retry the posting`,
-        );
-      await new Promise<void>((resolve) => {
-        setTimeout(() => resolve(), KEYED_REPLAY_POLL_MS);
-      });
-    }
+    return { entryId, lines: replayed };
   };
   if (input.idempotencyKey) {
     const prior = await readKeyedEntry(input.idempotencyKey);
@@ -408,10 +418,8 @@ export async function postEntry(
   // dedupe, not a dropped write: a conflict is only possible when this
   // exact key already committed, and the follow-up read makes that entry
   // the returned effect — every conflict is therefore observed, never
-  // swallowed. This also works on pool executors, where a savepoint-based
-  // 23505 handler cannot run (SAVEPOINT is refused outside a transaction
-  // block) and a bare 23505 catch would leave a joined caller transaction
-  // aborted.
+  // swallowed. Unlike a bare 23505 catch, it never leaves a joined caller
+  // transaction aborted.
   const keyConflict = input.idempotencyKey
     ? sql`on conflict (org_id, (custom->>'idempotencyKey')) where custom ? 'idempotencyKey' do nothing`
     : sql``;
