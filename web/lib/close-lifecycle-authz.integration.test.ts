@@ -166,39 +166,17 @@ for (const boundary of ['creation', 'actions', 'task', 'evidence', 'binder', 'pa
 
 const closeRunCases = [
   { label: "close run subsidiary authz", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
         const { randomUUID } = await import("node:crypto");
         const { sql } = await import("drizzle-orm");
         // Live-Postgres route regression: close-run creation must never turn a
         // restricted caller's omitted, malformed, empty, or out-of-scope subsidiary
-        // selection into the engine's org-wide [] sentinel. Authorization is mocked at
-        // the route seam; the real route and close engine persist the accepted scope.
-        const stateKey = Symbol.for("openbooks.close-run-subsidiary-authz-test");
-        interface RouteState {
-          authz: {
-            user: { orgId: string; id: string };
-            permissions: Set<string>;
-            allowedSubsidiaryIds: Set<string> | null;
-          } | null;
-        }
-        const routeState: RouteState = { authz: null };
-        (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
-
-        const mockFeatureGates = `
-          const state = globalThis[Symbol.for('openbooks.close-run-subsidiary-authz-test')]
-          export async function guardFeaturePermission(_permission, _feature) {
-            if (!state.authz) return new Response(null, { status: 403 })
-            return state.authz
-          }
-        `;
-
+        // selection into the engine's org-wide [] sentinel. The real session gate
+        // resolves the test role, and the route and close engine persist the accepted scope.
         const hooks = registerHooks({
           resolve(specifier, context, nextResolve) {
-            if (specifier === "../../../../lib/feature-gates" && context.parentURL?.includes("/api/close/runs/route")) {
-              return { url: "mock:close-run-feature-gates", shortCircuit: true };
-            }
             if (specifier.startsWith("@openbooks/engine/") && context.parentURL?.includes("/api/close/runs/route")) {
               const parentDir = decodeURIComponent(new URL(".", context.parentURL).href);
               const webRoot = parentDir.lastIndexOf("/web/");
@@ -213,12 +191,6 @@ const closeRunCases = [
               );
             }
             return nextResolve(specifier, context);
-          },
-          load(url, context, nextLoad) {
-            if (url === "mock:close-run-feature-gates") {
-              return { format: "module", source: mockFeatureGates, shortCircuit: true };
-            }
-            return nextLoad(url, context);
           },
         });
 
@@ -241,16 +213,32 @@ const closeRunCases = [
           }));
         }
 
-        function setAuthz(
-          orgId: string,
+        async function setAuthz(
+          org: Awaited<ReturnType<typeof createScratchOrg>>,
           actorId: string,
           allowedSubsidiaryIds: Set<string> | null,
-        ): void {
-          routeState.authz = {
-            user: { orgId, id: actorId },
-            permissions: new Set(["close.run"]),
-            allowedSubsidiaryIds,
+        ): Promise<void> {
+          state.user = {
+            id: actorId,
+            orgId: org.orgId,
+            name: "Close run controller",
+            email: "close-run@scratch.test",
+            roles: [],
+            isSuperAdmin: false,
+            envKind: "production",
+            productionOrgId: org.orgId,
+            homeOrgId: org.orgId,
+            homeUserId: actorId,
           };
+          const restriction = allowedSubsidiaryIds === null
+            ? { mode: "all" }
+            : { mode: "list", subsidiaryIds: [...allowedSubsidiaryIds] };
+          await withBypassContext(() => db.execute(sql`
+            update app_roles
+               set permissions='["close.run"]'::jsonb,
+                   subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
+             where org_id=${org.orgId} and key='admin'
+          `));
         }
 
         test(
@@ -261,6 +249,12 @@ const closeRunCases = [
             const actors = await withBypassContext(() => (seedFlowActors(org.orgId)));
             const otherSubsidiaryId = randomUUID();
             try {
+              await withBypassContext(() => db.execute(sql`
+                update orgs
+                   set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)
+                     || '{"multiSubsidiary":true,"continuousClose":true,"advancedClose":true}'::jsonb)
+                 where id=${org.orgId}
+              `));
               await withBypassContext(() => (db.execute(sql`
                 insert into subsidiaries
                   (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
@@ -272,7 +266,7 @@ const closeRunCases = [
 
               // A concrete target cannot grant access to the engine's organization-wide
               // diagnostics and evidence. Refuse before any run is persisted.
-              setAuthz(org.orgId, actors.adminId, new Set([org.subsidiaryId]));
+              await setAuthz(org, actors.adminId, new Set([org.subsidiaryId]));
               const omitted = await post(validBody);
               assert.equal(omitted.status, 404);
               const omittedRun = (await db.execute<{ scope: { subsidiaryIds?: string[] } }>(sql`
@@ -289,17 +283,17 @@ const closeRunCases = [
 
               // An empty restricted policy has no legal close scope and omission must
               // fail closed rather than widening to the organization.
-              setAuthz(org.orgId, actors.adminId, new Set());
+              await setAuthz(org, actors.adminId, new Set());
               const emptyRestricted = await post(validBody);
               assert.equal(emptyRestricted.status, 403);
 
               // Only the null sentinel requests an org-wide scope for an unrestricted
               // caller; [] is rejected so an accidental empty list cannot widen scope.
-              setAuthz(org.orgId, actors.adminId, null);
+              await setAuthz(org, actors.adminId, null);
               const emptyUnrestricted = await post({ ...validBody, subsidiaryIds: [] });
               assert.equal(emptyUnrestricted.status, 400);
             } finally {
-              routeState.authz = null;
+              state.user = null;
               await dropScratchOrg(org.orgId);
             }
           },

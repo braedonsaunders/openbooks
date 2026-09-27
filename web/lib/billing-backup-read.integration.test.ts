@@ -97,7 +97,7 @@ test('backup GET with no stored packet is a 404 that writes nothing', { skip: !D
 
 const consolidatedRows = [
   { label: "billing backup generate", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const test = (await import("node:test")).default;
         const { registerHooks } = await import("node:module");
         const { pathToFileURL } = await import("node:url");
@@ -259,7 +259,7 @@ const consolidatedRows = [
         })
   } },
   { label: "billing backup immutable", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const test = (await import("node:test")).default;
         const { registerHooks } = await import("node:module");
         const { pathToFileURL } = await import("node:url");
@@ -410,7 +410,7 @@ const consolidatedRows = [
         })
   } },
   { label: "billing backup required", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const test = (await import("node:test")).default;
         const { registerHooks } = await import("node:module");
         const { pathToFileURL } = await import("node:url");
@@ -581,7 +581,8 @@ test('costed invoice backup preserves cents in large exact cost totals',{skip:!p
   }});
   const org=await withBypassContext(()=>createScratchOrg());
   try{
-    const {assembleInvoiceBackup}=await import('./invoice-backup?backup-precision');
+    const invoiceBackupModule: string = './invoice-backup?backup-precision';
+    const {assembleInvoiceBackup}=await import(invoiceBackupModule) as typeof import('./invoice-backup');
     const {createMoneyFormatter}=await import('./money-format');
     const {actor,invoice}=await withBypassContext(async()=>{
       const actor=await createScratchUser(org.orgId,'Backup controller','reviewer');

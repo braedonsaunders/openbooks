@@ -1,8 +1,9 @@
+export {};
 
 
 const allocationCases = [
   { label: "allocations features", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const { registerHooks } = await import('node:module');
         const { pathToFileURL } = await import('node:url');
         const test = (await import('node:test')).default;
@@ -65,7 +66,7 @@ const allocationCases = [
         })
   } },
   { label: "allocations reports", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm');
         const { db, pool, withBypass, withOrgContext } = await import('../../engine/src/platform/db.ts');

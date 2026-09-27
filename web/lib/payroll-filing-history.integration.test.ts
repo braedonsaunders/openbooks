@@ -24,17 +24,25 @@ const routeState: RouteState = { authz: null };
   routeState;
 
 const mockFeatureGates = `
-  const state = globalThis[Symbol.for('openbooks.payroll-filing-history-test')]
+  function currentGate() {
+    let current = null
+    for (const symbol of Object.getOwnPropertySymbols(globalThis)) {
+      const state = globalThis[symbol]
+      const gate = state && (state.authz || state.gate)
+      if (gate && gate.user && gate.permissions) current = gate
+    }
+    if (current) return current
+    throw new Error('The payroll route test must establish its authorization fixture before the request')
+  }
   export async function guardFeaturePermission() {
-    if (!state.authz) return new Response(null, { status: 403 })
-    return state.authz
+    return currentGate()
   }
 `;
 
 // This file lives in web/lib; route aliases resolve against web/.
 const webRoot = new URL("../", import.meta.url);
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     // Keep workspace imports inside the checkout under test. node_modules
     // symlinks resolve @openbooks/* to the main checkout, so without this a
@@ -45,7 +53,33 @@ const hooks = registerHooks({
         specifier === "@openbooks/schema"
           ? "schema/src/index.ts"
           : specifier.slice("@openbooks/".length);
-      return nextResolve(new URL(`../${rest}`, webRoot).href, context);
+      const workspacePath = rest.includes("/")
+        ? rest
+        : `packages/${rest}/src/index.ts`;
+      return nextResolve(new URL(`../${workspacePath}`, webRoot).href, context);
+    }
+    // The route factory loads this module from its own lazy gate path. Its
+    // permission reader normally reaches Next's request cookies, which do not
+    // exist in this plain Node route harness; preserve the real feature gate
+    // while supplying the test's live authorization fixture.
+    if (specifier === "./authz" && context.parentURL?.endsWith("/lib/feature-gates.ts")) {
+      return {
+        url: "data:text/javascript," + encodeURIComponent(`
+          function currentGate() {
+            for (const symbol of Object.getOwnPropertySymbols(globalThis)) {
+              const state = globalThis[symbol];
+              const gate = state && (state.authz || state.gate);
+              if (gate && gate.user && gate.permissions) return gate;
+            }
+            throw new Error('The payroll route test must establish its authorization fixture before the request');
+          }
+          export async function guardPermission() { return currentGate(); }
+        `),
+        shortCircuit: true,
+      };
+    }
+    if (specifier === "./features" && context.parentURL?.endsWith("/lib/feature-gates.ts")) {
+      return { url: "data:text/javascript,export async function isFeatureEnabled(){return true}", shortCircuit: true };
     }
     // The server-only marker gates RSC bundling; shim it so server modules
     // load under the plain runner (same seam as platform.test.ts).
@@ -67,7 +101,6 @@ const routeUrl = "../app/api/payroll/remittances/route.ts?filing-history";
 const { GET } = (await import(
   routeUrl
 )) as typeof import("../app/api/payroll/remittances/route.ts");
-hooks.deregister();
 const get = (orgId: string) =>
   withOrgContext(orgId, () =>
     GET(
@@ -156,7 +189,7 @@ for (const change of [
 
 const consolidatedRows = [
   { label: "payroll filing history scope", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
@@ -335,7 +368,7 @@ const consolidatedRows = [
         );
   } },
   { label: "payroll filing row scope", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
@@ -476,7 +509,7 @@ for (const row of consolidatedRows) await row.register();
 
 const payrollFilingScopeCases = [
   { label: "payroll 941 source scope", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
@@ -687,7 +720,7 @@ const payrollFilingScopeCases = [
         );
   } },
   { label: "payroll remittance history scope", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
@@ -858,6 +891,12 @@ const payrollFilingScopeCases = [
                   sql`update pay_components set remittance_party_id=${vendor} where org_id=${fx.orgId}`,
                 ),
               );
+              const filingAccountId = randomUUID();
+              await withBypassContext(() => db.execute(sql`insert into payroll_filing_accounts
+                (id,org_id,country,program_type,account_number,name,subsidiary_id,remitter_type,is_default)
+                values(${filingAccountId},${fx.orgId},'CA','ca_rp','123456789RP0001','Shared remitter',${fx.subsidiaryId},'regular',true)`));
+              await withBypassContext(() => db.execute(sql`update employee_payroll_profiles
+                set filing_account_id=${filingAccountId} where org_id=${fx.orgId}`));
               await withBypassContext(() =>
                 db.execute(
                   sql`update parties set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.employeeId}`,
@@ -1005,7 +1044,7 @@ const payrollFilingScopeCases = [
         );
   } },
   { label: "payroll roe source scope", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
@@ -1149,7 +1188,7 @@ const payrollFilingScopeCases = [
               assert.equal(
                 response.status,
                 404,
-                "selected employee files use the same source boundary",
+                `selected employee files use the same source boundary: ${JSON.stringify(await response.clone().json())}`,
               );
               assert.equal(
                 (

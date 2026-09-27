@@ -149,7 +149,9 @@ const scriptLifecycleCases = [{ label: "script lifecycle cursor", register: asyn
   const patch = (orgId: string, id: string, body: Record<string, unknown>) => withOrgContext(orgId, () => PATCH(new Request('http://audit.local/api/admin/scripts', {
     method: 'PATCH', body: JSON.stringify({ id, name: 'Edited', triggerPoint: 'scheduled', source: 'function main(ctx) { return 1; }', cron: '0 12 * * *', isActive: true, ...body }),
   })));
-  const runNow = (orgId: string, id: string) => withOrgContext(orgId, () => RUN(new Request(`http://audit.local/api/admin/scripts/${id}/run`, { method: 'POST' }), { params: Promise.resolve({ id }) }));
+  const runNow = (orgId: string, id: string) => withOrgContext(orgId, () => RUN(new Request(`http://audit.local/api/admin/scripts/${id}/run`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}),
+  }), { params: Promise.resolve({ id }) }));
   const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
   test('ordinary script edits retain the live locked cursor and its microseconds', enabled, async () => fixture(async (orgId, id) => {
     const blocker = await pool.connect(); let pending: Promise<Response> | undefined;
@@ -158,7 +160,7 @@ const scriptLifecycleCases = [{ label: "script lifecycle cursor", register: asyn
       const pid = (await blocker.query<{ pid: number }>('select pg_backend_pid() as pid')).rows[0]!.pid;
       await blocker.query("update user_scripts set next_run_at='2031-01-01 12:00:00.654321+00' where org_id=$1 and id=$2", [orgId, id]);
       pending = patch(orgId, id, { timeoutMs: 3000, sortOrder: 42 });
-      let waiting = false; for (let i = 0; i < 200; i++) { waiting = (await db.execute(sql`select exists(select 1 from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))) as waiting`)).rows[0]!.waiting; if (waiting) break; await delay(10); }
+      let waiting = false; for (let i = 0; i < 200; i++) { waiting = (await db.execute<{ waiting: boolean }>(sql`select exists(select 1 from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))) as waiting`)).rows[0]!.waiting; if (waiting) break; await delay(10); }
       assert.ok(waiting); await blocker.query('commit'); assert.equal((await pending).status, 200); assert.match((await cursor(orgId, id))!, /^2031-01-01 .*\.654321/);
     } finally { await blocker.query('rollback'); blocker.release(); await pending?.catch(() => undefined); }
   }));

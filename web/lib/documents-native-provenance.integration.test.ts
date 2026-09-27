@@ -2032,7 +2032,7 @@ const consolidatedRows = [
 for (const row of consolidatedRows) await row.register();
 
 const salesInvoiceCurrencyCases = [{ label: "sales-invoice-currency-exposure", register: async () => {
-const assert = (await import("node:assert/strict")).default;
+const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const { randomUUID } = await import("node:crypto");
 const test = (await import("node:test")).default;
 type ScratchOrg = import("@openbooks/engine/src/testing/fixtures.ts").ScratchOrg;
@@ -2912,8 +2912,10 @@ const documentRevisionCases = [{ label: "interactive document revision lifecycle
       return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__documentRevisionSession.user}" };
     return next(specifier, context);
   }});
-  const { POST } = await import("../app/api/documents/[id]/void/route.ts?document-revision");
-  const { DELETE } = await import("../app/api/documents/[id]/route.ts?document-revision");
+  const documentVoidRouteModule: string = "../app/api/documents/[id]/void/route.ts?document-revision";
+  const documentRouteModule: string = "../app/api/documents/[id]/route.ts?document-revision";
+  const { POST } = await import(documentVoidRouteModule) as typeof import("../app/api/documents/[id]/void/route");
+  const { DELETE } = await import(documentRouteModule) as typeof import("../app/api/documents/[id]/route");
   hooks.deregister();
   for (const operation of ["void stale", "void current", "void missing", "delete stale", "delete current", "delete missing"]) {
     test(`interactive document lifecycle: ${operation}`, { skip: !DB }, async () => {
@@ -2935,7 +2937,12 @@ const documentRevisionCases = [{ label: "interactive document revision lifecycle
         const response = await withOrgContext(org.orgId, () => (isVoid ? POST : DELETE)(new Request(`http://audit.local/api/documents/${id}/void`, {
           method: isVoid ? "POST" : "DELETE", body: JSON.stringify({ reason: "Cancel reviewed invoice", reversalDate: org.date, expectedUpdatedAt: operation.endsWith("missing") ? undefined : token }),
         }), { params: Promise.resolve({ id }) }));
-        assert.equal(response.status, operation.endsWith("current") ? 200 : 409, JSON.stringify(await response.json()));
+        const expectedStatus = operation.endsWith("current")
+          ? 200
+          : operation.endsWith("missing")
+            ? 400
+            : 409;
+        assert.equal(response.status, expectedStatus, JSON.stringify(await response.json()));
         const row = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`select status from documents where id=${id}`))).rows[0];
         if (operation === "delete current") assert.equal(row, undefined);
         else assert.equal(row?.status, operation === "void current" ? "voided" : isVoid ? "approved" : "draft");

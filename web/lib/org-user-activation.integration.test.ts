@@ -74,7 +74,7 @@ for (const kind of ["production", "preview", "sandbox"] as const) {
 }
 
 const orgAccessPermissionCases = [{ label: "sandbox access permissions", register: async () => {
-const assert = (await import("node:assert/strict")).default;
+const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const test = (await import("node:test")).default;
 const { sql } = await import("drizzle-orm");
 const { db } = await import("@openbooks/engine/src/platform/db.ts");

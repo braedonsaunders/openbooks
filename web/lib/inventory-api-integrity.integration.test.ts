@@ -9,10 +9,27 @@ import { receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { withSimClock } from "@openbooks/engine/src/platform/clock.ts";
 
-const state = { user: { orgId: "", id: "" } };
+type InventorySessionUser = {
+  id: string;
+  orgId: string;
+  name: string;
+  email: string;
+  roles: string[];
+  isSuperAdmin: false;
+  envKind: "production";
+  productionOrgId: string;
+  homeOrgId: string;
+  homeUserId: string;
+};
+const state: { user: InventorySessionUser | null } = { user: null };
 Object.assign(globalThis, { __inventoryApiAudit: state });
 registerHooks({
   resolve(specifier, context, next) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
+      return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
+        "export async function currentUser(){return globalThis.__inventoryApiAudit.user}",
+      ) };
+    }
     if (specifier === "../../../../lib/authz" && context.parentURL?.includes("/api/inventory/")) {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
         "export async function guardPermission(){return {user:globalThis.__inventoryApiAudit.user,allowedSubsidiaryIds:null}}",
@@ -27,7 +44,7 @@ for (const scenario of ["receive date", "receive subsidiary", "transfer subsidia
     const org = await createScratchOrg();
     try {
       const actor = (await seedFlowActors(org.orgId)).adminId;
-      state.user = { orgId: org.orgId, id: actor };
+      state.user = inventorySession(org.orgId, actor);
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`);
       await receiveInventory(org.orgId, actor, { itemId: org.items.fifo, stockLocationId: org.stockLocationId,
         quantity: "5", unitCost: "10", subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date });
@@ -57,7 +74,7 @@ for (const scenario of ["receive date", "receive subsidiary", "transfer subsidia
       assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from inventory_movements where org_id=${org.orgId}`)).rows[0]!.n, before);
       assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from transfer_orders where org_id=${org.orgId}`)).rows[0]!.n, 0);
       assert.equal((await db.execute<{ n: number }>(sql`select count(*)::int as n from landed_cost_vouchers where org_id=${org.orgId}`)).rows[0]!.n, 0);
-    } finally { await dropScratchOrg(org.orgId); }
+    } finally { state.user = null; await dropScratchOrg(org.orgId); }
   });
 }
 
@@ -65,7 +82,7 @@ test("valid inventory requests retain omission defaults and exact idempotent rep
   const org = await createScratchOrg();
   try {
     const actor = (await seedFlowActors(org.orgId)).adminId;
-    state.user = { orgId: org.orgId, id: actor };
+    state.user = inventorySession(org.orgId, actor);
     await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb) where id=${org.orgId}`);
     // The transfer defaults to the deterministic transit warehouse among
     // active transit locations admitting its subsidiary. The scratch org
@@ -100,25 +117,29 @@ test("valid inventory requests retain omission defaults and exact idempotent rep
     assert.equal(movements[0]!.moved_on, await withSimClock(org.date, () => businessToday(org.orgId)));
     assert.equal(movements[0]!.subsidiary_id, org.subsidiaryId);
     assert.equal((await db.execute(sql`select entry_id from journal_lines where org_id=${org.orgId} group by entry_id having sum(amount)<>0`)).rows.length, 0);
-  } finally { await dropScratchOrg(org.orgId); }
+  } finally { state.user = null; await dropScratchOrg(org.orgId); }
 });
+
+function inventorySession(orgId: string, id: string): InventorySessionUser {
+  return {
+    id,
+    orgId,
+    name: "Inventory controller",
+    email: "inventory@scratch.test",
+    roles: [],
+    isSuperAdmin: false,
+    envKind: "production",
+    productionOrgId: orgId,
+    homeOrgId: orgId,
+    homeUserId: id,
+  };
+}
 
 
 const inventoryFeatureCases = [
   { label: "inventory costing feature race", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
-        const { registerHooks } = await import("node:module");
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const test = (await import("node:test")).default;
-        type Authz = import("./authz").Authz;
-        const state: { gate: Authz | null } = { gate: null };
-        (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.costing-feature-race")] = state;
-        registerHooks({ resolve(specifier, context, next) {
-          const parent = decodeURIComponent(context.parentURL ?? "");
-          const virtual = (source: string) => ({ shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(source) });
-          if (specifier.endsWith("/lib/feature-gates") && parent.endsWith("/costing/route.ts")) return virtual(
-            "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.costing-feature-race')].gate}");
-          return next(specifier, context);
-        } });
         const { sql } = await import("drizzle-orm");
         const { withBypassContext, db, pool } = await import("@openbooks/engine/src/platform/db.ts");
         const { documentRevisionSql } = await import("@openbooks/engine/src/records/revision.ts");
@@ -130,7 +151,13 @@ const inventoryFeatureCases = [
             const org = await withBypassContext(() => (createScratchOrg()));
             try {
               const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId;
-              state.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["items.manage"]), allowedSubsidiaryIds: null } as Authz;
+              state.user = inventorySession(org.orgId, actorId);
+              await withBypassContext(() => db.execute(sql`
+                update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb)
+                 where id=${org.orgId}`));
+              await withBypassContext(() => db.execute(sql`
+                update app_roles set permissions='["items.manage"]'::jsonb, subsidiary_restriction='{"mode":"all"}'::jsonb
+                 where org_id=${org.orgId} and key='admin'`));
               const revision = (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision
                 from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.revision;
               const evidence = async () => (await db.execute(sql`select to_jsonb(p) as profile,
@@ -139,6 +166,7 @@ const inventoryFeatureCases = [
               const before = await evidence();
               const body = { costingMethod: "fifo", tracking: "none", expectedUpdatedAt: revision,
                 assetAccountId: org.accounts.invAsset, cogsAccountId: org.accounts.cogs,
+                baseUnit: "ea",
                 adjustmentAccountId: org.accounts.adjustment, varianceAccountId: org.accounts.adjustment,
                 receivedNotBilledAccountId: org.accounts.clearing };
               const request = (value: object) => PUT(new Request("http://localhost/api/items/" + org.items.fifo + "/costing", {
@@ -150,7 +178,7 @@ const inventoryFeatureCases = [
               assert.deepEqual(await evidence(), before);
               const allowed = await request(body);
               assert.equal(allowed.status, 200, JSON.stringify(await allowed.json()));
-            } finally { state.gate = null; await dropScratchOrg(org.orgId); }
+            } finally { state.user = null; await dropScratchOrg(org.orgId); }
           });
         }
 
@@ -160,7 +188,13 @@ const inventoryFeatureCases = [
           let pending: Promise<Awaited<ReturnType<typeof PUT>>> | undefined;
           try {
             const actorId = (await withBypassContext(() => (seedFlowActors(org.orgId)))).adminId;
-            state.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["items.manage"]), allowedSubsidiaryIds: null } as Authz;
+            state.user = inventorySession(org.orgId, actorId);
+            await withBypassContext(() => db.execute(sql`
+              update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"inventory":true}'::jsonb)
+               where id=${org.orgId}`));
+            await withBypassContext(() => db.execute(sql`
+              update app_roles set permissions='["items.manage"]'::jsonb, subsidiary_restriction='{"mode":"all"}'::jsonb
+               where org_id=${org.orgId} and key='admin'`));
             const revision = (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision
               from item_inventory_profiles where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows[0]!.revision;
             const evidence = async () => (await db.execute(sql`select to_jsonb(p) as profile,
@@ -168,10 +202,10 @@ const inventoryFeatureCases = [
               from item_inventory_profiles p where org_id=${org.orgId} and item_id=${org.items.fifo}`)).rows;
             const before = await evidence();
             const request = () => PUT(new Request("http://localhost/api/items/" + org.items.fifo + "/costing", {
-              method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({
-                costingMethod: "fifo", tracking: "none", expectedUpdatedAt: revision,
-                assetAccountId: org.accounts.invAsset, cogsAccountId: org.accounts.cogs,
-                adjustmentAccountId: org.accounts.adjustment, reorderPoint: "3",
+                method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({
+                  costingMethod: "fifo", tracking: "none", expectedUpdatedAt: revision,
+                  assetAccountId: org.accounts.invAsset, cogsAccountId: org.accounts.cogs,
+                baseUnit: "ea", adjustmentAccountId: org.accounts.adjustment, reorderPoint: "3",
               }),
             }), { params: Promise.resolve({ id: org.items.fifo }) });
             await writer.query("begin");
@@ -196,7 +230,7 @@ const inventoryFeatureCases = [
             assert.equal(allowed.status, 200, JSON.stringify(await allowed.json()));
           } finally {
             await writer.query("rollback"); writer.release(); await pending;
-            state.gate = null; await dropScratchOrg(org.orgId);
+            state.user = null; await dropScratchOrg(org.orgId);
           }
         });
   } },
@@ -207,7 +241,7 @@ for (const row of inventoryFeatureCases) await row.register();
 
 const inventoryMovementCases = [
   { label: "shipments", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm');
@@ -334,7 +368,7 @@ const inventoryMovementCases = [
         })
   } },
   { label: "stock locations", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");

@@ -704,7 +704,7 @@ const consolidatedRows = [
 for (const row of consolidatedRows) await row.register();
 
 const wipNtePolicyCases = [{ label: "wip-nte-policy-switch", register: async () => {
-const assert = (await import("node:assert/strict")).default;
+const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const { randomUUID } = await import("node:crypto");
 const { registerHooks } = await import("node:module");
 const test = (await import("node:test")).default;
@@ -788,7 +788,7 @@ test('converting after a switch to NTE enforces the new ceiling', enabled, async
 
 const consolidatedRows = [
   { label: "wip nte zero contract", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')

@@ -209,7 +209,8 @@ const flowReleaseCases = [{ label: 'flow approval release handlers', register: a
       return next(specifier, context)
     }})
     const { hasFlowApprovalReleaseHandler, handlerReleasedSubjectKinds } = await import('@openbooks/engine/src/flows/index.ts')
-    const { registerFlowApprovalReleaseHandlers } = await import('./flow-approval-releases?flow-release-test')
+    const flowReleaseModule: string = './flow-approval-releases?flow-release-test'
+    const { registerFlowApprovalReleaseHandlers } = await import(flowReleaseModule) as typeof import('./flow-approval-releases')
     const { installEngineSeams } = await import('@openbooks/engine/src/composition/install.ts')
     releaseHooks.deregister()
     installEngineSeams()

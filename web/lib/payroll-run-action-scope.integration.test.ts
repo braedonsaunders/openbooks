@@ -6,7 +6,39 @@ import type { Authz } from "./authz";
 
 const state: { gate: Authz | null } = { gate: null };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-run-action-scope")] = state;
+const factoryFeatureGate = `
+  function currentGate() {
+    let current = null
+    for (const symbol of Object.getOwnPropertySymbols(globalThis)) {
+      const state = globalThis[symbol]
+      const gate = state && (state.authz || state.gate)
+      if (gate && gate.user && gate.permissions) current = gate
+    }
+    if (current) return current
+    throw new Error('The payroll route test must establish its authorization fixture before the request')
+  }
+  export async function guardFeaturePermission() { return currentGate() }
+`;
 registerHooks({ resolve(specifier, context, next) {
+  if (specifier === "./authz" && context.parentURL?.endsWith("/lib/feature-gates.ts")) {
+    return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(`
+      function currentGate() {
+        for (const symbol of Object.getOwnPropertySymbols(globalThis)) {
+          const state = globalThis[symbol];
+          const gate = state && (state.authz || state.gate);
+          if (gate && gate.user && gate.permissions) return gate;
+        }
+        throw new Error('The payroll route test must establish its authorization fixture before the request');
+      }
+      export async function guardPermission() { return currentGate(); }
+    `) };
+  }
+  if (specifier === "./features" && context.parentURL?.endsWith("/lib/feature-gates.ts")) {
+    return { shortCircuit: true, url: "data:text/javascript,export async function isFeatureEnabled(){return true}" };
+  }
+  if (specifier === "@/lib/feature-gates") {
+    return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(factoryFeatureGate) };
+  }
   if (specifier === "../../../../../lib/feature-gates" && decodeURIComponent(context.parentURL ?? "").endsWith("/api/payroll/runs/[id]/route.ts")) {
     return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
       "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.payroll-run-action-scope')].gate}") };
@@ -33,7 +65,7 @@ for (const action of ["add-adjustment", "delete-adjustment", "exclude-employee",
       const { input } = await withOrgContext(fx.orgId, () => calculatedRun(fx));
       const componentId = (await withOrgContext(fx.orgId, () => db.execute<{ id: string }>(sql`select id from pay_components where org_id=${fx.orgId} and system_key='base_pay' and kind='earning'`))).rows[0]!.id;
       let adjustmentId: string | undefined;
-      if (action === "delete-adjustment" || action === "include-employee" || action === "read-adjustments") {
+      if (action === "delete-adjustment" || action === "include-employee" || action === "set-scope" || action === "read-adjustments") {
         await withOrgContext(fx.orgId, () => mutatePayRunAdjustment({ ...input, mutation: { action: "exclude", employeePartyId: fx.employeeId } }));
         adjustmentId = (await withOrgContext(fx.orgId, () => db.execute<{ id: string }>(sql`select id from pay_run_adjustments where org_id=${fx.orgId} and pay_run_document_id=${input.documentId}`))).rows[0]!.id;
       }
@@ -44,8 +76,17 @@ for (const action of ["add-adjustment", "delete-adjustment", "exclude-employee",
         'adjustments',(select jsonb_agg(to_jsonb(a) order by id) from pay_run_adjustments a where org_id=${fx.orgId})
         ) as state`))).rows[0]!.state;
       const before = await snapshot();
-      const body = { action, employeePartyId: fx.employeeId, componentId, amount: "10", adjustmentId,
-        employeePartyIds: action === "set-scope" ? [] : [fx.employeeId], rosterPartyIds: [fx.employeeId] };
+      const body = action === "add-adjustment"
+        ? { action, employeePartyId: fx.employeeId, componentId, amount: "10" }
+        : action === "delete-adjustment"
+          ? { action, adjustmentId }
+          : action === "bulk-adjustment"
+            ? { action, componentId, amount: "10", employeePartyIds: [fx.employeeId] }
+            : action === "set-scope"
+              ? { action, employeePartyIds: [fx.employeeId], rosterPartyIds: [fx.employeeId] }
+              : action === "exclude-employee" || action === "include-employee"
+                ? { action, employeePartyId: fx.employeeId }
+                : { action };
       const read = action === "read" || action === "read-adjustments";
       // The mocked gate establishes authz but no connection scope; the route
       // reads through the ambient scope as the middleware provides.
@@ -106,7 +147,7 @@ test("payroll detail rechecks employee ownership after a concurrent transfer", {
 
 const consolidatedRows = [
   { label: "payroll run holiday eligibility", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
         type Authz = import("./authz").Authz;
@@ -493,7 +534,7 @@ const consolidatedRows = [
               employeePartyId: fx.employeeId, holidayKey: "nope", holidayDate: "2025-12-25",
               absentWithoutConsent: false,
             }));
-            assert.equal(res.status, 422);
+              assert.equal(res.status, 422);
             // Several demanding occurrences and no identity: specify, don't guess.
             res = await scoped(() => post({ employeePartyId: fx.employeeId, absentWithoutConsent: false }));
             assert.equal(res.status, 422);
@@ -510,9 +551,14 @@ const consolidatedRows = [
               }));
               assert.equal(res.status, 200, JSON.stringify(await res.clone().json()).slice(0, 300));
             }
-            // Nothing to file is a request error, not a silent no-op.
-            res = await scoped(() => post({ employeePartyId: fx.employeeId }));
-            assert.equal(res.status, 422);
+            // An incomplete assertion never turns into a successful no-op.
+            const demandingHoliday = demanding.find((holiday) => holiday.needsAbsenceAssertion)!;
+            res = await scoped(() => post({
+              employeePartyId: fx.employeeId,
+              holidayKey: demandingHoliday.key,
+              holidayDate: demandingHoliday.date,
+            }));
+            assert.equal(res.status, 400);
             // Filed rows are visible on the surface's GET.
             const gate = state.gate;
             assert.ok(gate);
@@ -593,7 +639,7 @@ const consolidatedRows = [
         });
   } },
   { label: "payroll run set scope diff", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
@@ -867,7 +913,7 @@ for (const row of consolidatedRows) await row.register();
 
 const payrollRunRouteCases = [
   { label: "payroll bank file scope", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
@@ -978,7 +1024,7 @@ const payrollRunRouteCases = [
         });
   } },
   { label: "payroll create picker scope", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const { registerHooks } = await import("node:module");
         const { resolveAppModule } = await import('./test-module-hooks');
@@ -1123,7 +1169,7 @@ const payrollRunRouteCases = [
         });
   } },
   { label: "payroll retro route", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
         type Authz = import("./authz").Authz;
@@ -1195,13 +1241,16 @@ const payrollRunRouteCases = [
           const fx = await withBypassContext(() => seedAdoption());
           try {
             state.gate = runGate(fx);
-            for (const body of [
-              { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", excludeSourcePayRunDocumentIds: ["nope"] },
-              { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", excludeSourcePayRunDocumentIds: "nope" },
-              { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", employeePartyIds: ["nope"] },
-            ]) {
+            const malformedRequests: { body: Record<string, unknown>; expectedMessage: RegExp }[] = [
+              { body: { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", excludeSourcePayRunDocumentIds: ["nope"] }, expectedMessage: /UUID/i },
+              { body: { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", excludeSourcePayRunDocumentIds: "nope" }, expectedMessage: /array/i },
+              { body: { action: "propose", payScheduleId: fx.scheduleId, payDate: "2026-07-21", employeePartyIds: ["nope"] }, expectedMessage: /UUID/i },
+            ];
+            for (const { body, expectedMessage } of malformedRequests) {
               const res = await propose(body);
-              assert.equal(res.status, 422, JSON.stringify(await res.clone().json()).slice(0, 200));
+              const refusal = await res.clone().json() as { issues?: { message: string }[] };
+              assert.equal(res.status, 400, JSON.stringify(refusal).slice(0, 200));
+              assert.ok(refusal.issues?.some((issue) => expectedMessage.test(issue.message)), JSON.stringify(refusal));
             }
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });

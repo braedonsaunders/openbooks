@@ -381,7 +381,7 @@ for (const row of consolidatedRows) await row.register();
 
 const billingTimeSelectionCases = [
   { label: "billing request scope", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
         const { registerHooks } = await import('node:module');
         type SessionUser = import('./auth').SessionUser;
@@ -465,7 +465,7 @@ const billingTimeSelectionCases = [
         }
   } },
   { label: "billing time entry reconciliation", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
         const { registerHooks } = await import('node:module');
         type SessionUser = import('./auth').SessionUser;
@@ -551,7 +551,7 @@ const billingTimeSelectionCases = [
         })
   } },
   { label: "billing time selection", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
         const { registerHooks } = await import('node:module');
         type SessionUser = import('./auth').SessionUser;
@@ -704,48 +704,12 @@ for (const row of billingTimeSelectionCases) await row.register();
 
 const billingRateAndTaxCases = [
   { label: "billing rate adjustments", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
-        const { registerHooks } = await import('node:module');
         const { pathToFileURL } = await import('node:url');
-        type SessionUser = import('./auth').SessionUser;
         // Rate-card commercial adjustments, priced through invoice generation:
         // the card assignment selects WHICH adjustments apply, and each
         // adjustment's own targets select WHICH lines they measure.
-        const session: { user: SessionUser | null } = { user: null }
-        Object.assign(globalThis, { __billingRateAdjustmentSession: session })
-        const lrcState: {
-          authz: {
-            user: { orgId: string; id: string }
-            permissions: Set<string>
-            allowedSubsidiaryIds: null
-          } | null
-        } = { authz: null }
-        Object.assign(globalThis, { __billingRateAdjustmentLrc: lrcState })
-        const mockLrcAuthz = `
-          const state = globalThis.__billingRateAdjustmentLrc
-          export async function guardPermission(_permission) {
-            if (!state.authz) return new Response(null, { status: 403 })
-            return state.authz
-          }
-        `
-        registerHooks({
-          resolve(specifier, context, next) {
-            if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
-              return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__billingRateAdjustmentSession.user}' }
-            }
-            if (specifier === '../../../../lib/authz' && context.parentURL?.includes('labor-rate-cards')) {
-              return { shortCircuit: true, url: 'mock:billing-adj-lrc-authz' }
-            }
-            return next(specifier, context)
-          },
-          load(url, context, nextLoad) {
-            if (url === 'mock:billing-adj-lrc-authz') {
-              return { format: 'module', source: mockLrcAuthz, shortCircuit: true }
-            }
-            return nextLoad(url, context)
-          },
-        })
         const { sql } = await import('drizzle-orm')
         const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
         const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
@@ -1044,12 +1008,45 @@ const billingRateAndTaxCases = [
           }
         })
 
-        test('a 6dp percent saved on a card prices the invoice exactly', { skip: !DB }, async () => {
+          test('a 6dp percent saved on a card prices the invoice exactly', { skip: !DB }, async () => {
           // PRC11: the save keeps percents to 10dp; pricing reads the full scale and
           // rounds the result once. A 3.123456% surcharge used to throw at invoicing.
           const fx = await setup()
           try {
             const { org, actor, project } = fx
+            await withBypassContext(() => db.execute(sql`
+              update app_roles set permissions='["*"]'::jsonb
+               where org_id=${org.orgId} and key='reviewer'
+            `))
+            await withBypassContext(() => db.execute(sql`
+              update orgs
+                 set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)
+                   || '{"projects":true}'::jsonb)
+               where id=${org.orgId}
+            `))
+            const currentUser: SessionUser = {
+              id: actor,
+              orgId: org.orgId,
+              name: 'Billing controller',
+              email: 'billing@scratch.test',
+              roles: [],
+              isSuperAdmin: false,
+              envKind: 'production',
+              productionOrgId: org.orgId,
+              homeOrgId: org.orgId,
+              homeUserId: actor,
+            }
+            session.user = currentUser
+            // Earlier consolidated route cases install request-user hooks with
+            // their own mutable sessions. The route factory resolves its auth
+            // module only when the request runs, so keep those hooks on this
+            // fixture's authenticated identity as well.
+            const priorSessions = globalThis as typeof globalThis & {
+              __billingScopeSession?: { user: SessionUser | null }
+              __billingTimeSelectionSession?: { user: SessionUser | null }
+            }
+            if (priorSessions.__billingScopeSession) priorSessions.__billingScopeSession.user = currentUser
+            if (priorSessions.__billingTimeSelectionSession) priorSessions.__billingTimeSelectionSession.user = currentUser
             const book = randomUUID(), version = randomUUID()
             await withBypassContext(async () => {
               await db.execute(sql`insert into item_rate_books (id, org_id, code, name, currency, is_active) values (${book}, ${org.orgId}, 'PREC', 'Precision rates', 'CAD', true)`)
@@ -1057,11 +1054,6 @@ const billingRateAndTaxCases = [
               await db.execute(sql`insert into labor_rate_version_policies (org_id, version_id, derivation_policy) values (${org.orgId}, ${version}, 'explicit')`)
               await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, project_id, date_basis, is_active) values (${org.orgId}, ${book}, ${project}, 'usage_date', true)`)
             })
-            lrcState.authz = {
-              user: { orgId: org.orgId, id: actor },
-              permissions: new Set(['*']),
-              allowedSubsidiaryIds: null,
-            }
             const response = (await withOrgContext(org.orgId, () => PUT(
               new Request(`http://openbooks.test/api/labor-rate-cards/${version}`, {
                 method: 'PUT',
@@ -1070,6 +1062,7 @@ const billingRateAndTaxCases = [
                   name: 'Precision rates',
                   code: 'PREC',
                   effective_from: '2026-07-01',
+                  effective_to: null,
                   status: 'active',
                   derivation_policy: 'explicit',
                   custom: {},
@@ -1095,7 +1088,13 @@ const billingRateAndTaxCases = [
             // 3.123456% of 1000.0000 is 31.23456, rounded once to the cent.
             assert.equal(lines.filter((l) => l.description === 'Precise surcharge')[0]?.amount, '31.2300')
           } finally {
-            lrcState.authz = null
+            session.user = null
+            const priorSessions = globalThis as typeof globalThis & {
+              __billingScopeSession?: { user: SessionUser | null }
+              __billingTimeSelectionSession?: { user: SessionUser | null }
+            }
+            if (priorSessions.__billingScopeSession) priorSessions.__billingScopeSession.user = null
+            if (priorSessions.__billingTimeSelectionSession) priorSessions.__billingTimeSelectionSession.user = null
             await dropScratchOrg(fx.org.orgId)
           }
         })
@@ -1215,7 +1214,7 @@ const billingRateAndTaxCases = [
         })
   } },
   { label: "bills provider tax", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const { randomUUID } = await import('node:crypto');
         const { createServer } = await import('node:http');
         type IncomingMessage = import('node:http').IncomingMessage;
