@@ -139,5 +139,40 @@
     "release": "Liberar",
     "saving": "Salvando…",
     "save": "Salvar"
+  },
+  "demandLines": {
+    "title": "Demanda de equipe",
+    "description": "Planeje as necessidades por departamento, função e semana; a ponderação das oportunidades permanece atualizada.",
+    "actions": { "new": "Nova linha de demanda" },
+    "tabs": { "aria": "Seções da linha de demanda", "details": "Detalhes", "weighting": "Ponderação" },
+    "fields": {
+      "department": "Departamento",
+      "jobTitle": "Cargo",
+      "firstWeek": "Primeira semana (domingo)",
+      "lastWeek": "Última semana (domingo)",
+      "hoursPerWeek": "Horas por semana",
+      "note": "Observação",
+      "opportunity": "Oportunidade",
+      "manual": "Demanda manual"
+    },
+    "departmentInactive": "inativo",
+    "drawer": {
+      "newTitle": "Nova demanda de equipe",
+      "deleteConfirm": "Excluir esta linha de demanda? O histórico de auditoria será mantido.",
+      "unsavedChanges": "Alterações não salvas na demanda de equipe"
+    },
+    "weighting": {
+      "week": "Semana",
+      "storedHours": "Horas registradas",
+      "basis": "Origem",
+      "exclusion": "Motivo da exclusão",
+      "liveDescription": "A probabilidade e a inclusão da oportunidade na previsão são consultadas em tempo real. Esta tela não altera a demanda registrada.",
+      "empty": "Não há linhas de demanda semanal disponíveis."
+    },
+    "errors": {
+      "saveFailed": "Não foi possível salvar a linha de demanda. Tente novamente.",
+      "deleteFailed": "Não foi possível excluir a linha de demanda. Tente novamente.",
+      "customFields": "Corrija os campos personalizados destacados."
+    }
   }
 }

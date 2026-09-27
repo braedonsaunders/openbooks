@@ -139,5 +139,40 @@
     "release": "释放",
     "saving": "正在保存…",
     "save": "保存"
+  },
+  "demandLines": {
+    "title": "人员需求",
+    "description": "按部门、岗位和周规划人员需求，并实时更新商机加权结果。",
+    "actions": { "new": "新建需求明细" },
+    "tabs": { "aria": "需求明细分区", "details": "详情", "weighting": "加权结果" },
+    "fields": {
+      "department": "部门",
+      "jobTitle": "岗位名称",
+      "firstWeek": "首周（星期日）",
+      "lastWeek": "末周（星期日）",
+      "hoursPerWeek": "每周工时",
+      "note": "备注",
+      "opportunity": "商机",
+      "manual": "手动需求"
+    },
+    "departmentInactive": "未启用",
+    "drawer": {
+      "newTitle": "新建人员需求",
+      "deleteConfirm": "删除此需求明细？其审计记录将予以保留。",
+      "unsavedChanges": "人员需求有未保存的更改"
+    },
+    "weighting": {
+      "week": "周",
+      "storedHours": "已存工时",
+      "basis": "依据",
+      "exclusion": "排除原因",
+      "liveDescription": "实时读取商机概率和预测资格。此视图不会更改已存储的人员需求。",
+      "empty": "没有可用的每周需求明细。"
+    },
+    "errors": {
+      "saveFailed": "无法保存需求明细，请重试。",
+      "deleteFailed": "无法删除需求明细，请重试。",
+      "customFields": "请更正标记的自定义字段。"
+    }
   }
 }

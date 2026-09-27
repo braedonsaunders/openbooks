@@ -139,5 +139,40 @@
     "release": "解除",
     "saving": "保存中…",
     "save": "保存"
+  },
+  "demandLines": {
+    "title": "要員需要",
+    "description": "部門、職種、週ごとの要員需要を計画し、商談の加重値を最新の状態に保ちます。",
+    "actions": { "new": "需要明細を新規作成" },
+    "tabs": { "aria": "需要明細のセクション", "details": "詳細", "weighting": "加重結果" },
+    "fields": {
+      "department": "部門",
+      "jobTitle": "職種",
+      "firstWeek": "開始週（日曜日）",
+      "lastWeek": "終了週（日曜日）",
+      "hoursPerWeek": "週あたりの時間",
+      "note": "メモ",
+      "opportunity": "商談",
+      "manual": "手動の需要"
+    },
+    "departmentInactive": "無効",
+    "drawer": {
+      "newTitle": "要員需要を新規作成",
+      "deleteConfirm": "この需要明細を削除しますか？監査履歴は保持されます。",
+      "unsavedChanges": "要員需要に未保存の変更があります"
+    },
+    "weighting": {
+      "week": "週",
+      "storedHours": "登録済み時間",
+      "basis": "区分",
+      "exclusion": "除外理由",
+      "liveDescription": "商談の確度と予測対象かどうかを最新情報から表示します。この画面では登録済みの要員需要は変更されません。",
+      "empty": "週ごとの需要データはありません。"
+    },
+    "errors": {
+      "saveFailed": "需要明細を保存できませんでした。もう一度お試しください。",
+      "deleteFailed": "需要明細を削除できませんでした。もう一度お試しください。",
+      "customFields": "強調表示されたカスタム項目を修正してください。"
+    }
   }
 }

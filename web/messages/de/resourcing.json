@@ -139,5 +139,40 @@
     "release": "Freigeben",
     "saving": "Wird gespeichert…",
     "save": "Speichern"
+  },
+  "demandLines": {
+    "title": "Personalbedarf",
+    "description": "Planen Sie den Bedarf je Abteilung, Rolle und Woche; die Gewichtung nach Verkaufschancen bleibt aktuell.",
+    "actions": { "new": "Neue Bedarfszeile" },
+    "tabs": { "aria": "Bereiche der Bedarfszeile", "details": "Einzelheiten", "weighting": "Gewichtung" },
+    "fields": {
+      "department": "Abteilung",
+      "jobTitle": "Berufsbezeichnung",
+      "firstWeek": "Erste Woche (Sonntag)",
+      "lastWeek": "Letzte Woche (Sonntag)",
+      "hoursPerWeek": "Stunden pro Woche",
+      "note": "Notiz",
+      "opportunity": "Verkaufschance",
+      "manual": "Manueller Bedarf"
+    },
+    "departmentInactive": "inaktiv",
+    "drawer": {
+      "newTitle": "Neuer Personalbedarf",
+      "deleteConfirm": "Diese Bedarfszeile löschen? Der Prüfverlauf bleibt erhalten.",
+      "unsavedChanges": "Nicht gespeicherte Änderungen am Personalbedarf"
+    },
+    "weighting": {
+      "week": "Woche",
+      "storedHours": "Gespeicherte Stunden",
+      "basis": "Grundlage",
+      "exclusion": "Ausschlussgrund",
+      "liveDescription": "Die Wahrscheinlichkeit und Prognoseberechtigung der Verkaufschance werden aktuell gelesen. Diese Ansicht ändert den gespeicherten Personalbedarf nicht.",
+      "empty": "Keine wöchentlichen Bedarfszeilen verfügbar."
+    },
+    "errors": {
+      "saveFailed": "Die Bedarfszeile konnte nicht gespeichert werden. Versuchen Sie es erneut.",
+      "deleteFailed": "Die Bedarfszeile konnte nicht gelöscht werden. Versuchen Sie es erneut.",
+      "customFields": "Korrigieren Sie die markierten benutzerdefinierten Felder."
+    }
   }
 }
