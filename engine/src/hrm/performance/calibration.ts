@@ -7,6 +7,7 @@ import {
 } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, mathRefusal } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 import { assertRatingInScale, parseRatingScale, type RatingScale } from "./performance-math.ts";
 import { employerSubsidiaryScope } from "./subsidiary-scope.ts";
 import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
@@ -42,14 +43,7 @@ export const HRM_CALIBRATION_KEY = "hrmCalibration" as const;
 export type CalibrationSessionStatus = "draft" | "open" | "closed";
 export type CalibrationEventKind = "opened" | "rating_changed" | "potential_set" | "reverted" | "closed";
 
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || !UUID_RE.test(value)) {
-    throw new HrmPerformanceError("INVALID_INPUT", `${field} must be a uuid`);
-  }
-  return value;
-}
+const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 export async function assertCalibrationFeature(db: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
@@ -301,14 +295,14 @@ export async function createCalibrationSession(args: {
   scope?: Record<string, unknown> | null;
   facilitatorPartyId?: string | null;
 }): Promise<CalibrationSessionDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const cycleId = requireId("cycleId", args.cycleId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const cycleId = requireUuid(args.cycleId, "cycleId");
   if (typeof args.name !== "string" || args.name.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "a calibration session needs a name — say which group is being calibrated");
   }
   if (args.facilitatorPartyId !== undefined && args.facilitatorPartyId !== null) {
-    requireId("facilitatorPartyId", args.facilitatorPartyId);
+    requireUuid(args.facilitatorPartyId, "facilitatorPartyId");
   }
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
@@ -338,9 +332,9 @@ export async function createCalibrationSession(args: {
 }
 
 export async function openCalibrationSession(args: { orgId: string; actorId: string; id: string }): Promise<CalibrationSessionDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const id = requireId("id", args.id);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const id = requireUuid(args.id, "id");
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
@@ -503,9 +497,9 @@ export async function setCalibratedRating(args: {
   calibratedRating: string;
   justification: string;
 }): Promise<CalibrationEntryDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const entryId = requireId("entryId", args.entryId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const entryId = requireUuid(args.entryId, "entryId");
   if (typeof args.justification !== "string" || args.justification.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "changing a calibrated rating needs a justification — say what evidence moved it");
   }
@@ -559,9 +553,9 @@ export async function calibrationPotentialOptions(args: {
   actorId: string;
   sessionId: string;
 }): Promise<string[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const sessionId = requireId("sessionId", args.sessionId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const sessionId = requireUuid(args.sessionId, "sessionId");
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
@@ -588,9 +582,9 @@ export async function setPotential(args: {
   entryId: string;
   potentialKey: string;
 }): Promise<void> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const entryId = requireId("entryId", args.entryId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const entryId = requireUuid(args.entryId, "entryId");
   if (typeof args.potentialKey !== "string" || args.potentialKey.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "potential needs a key from the org-declared scale — pick the label the template declares");
   }
@@ -629,9 +623,9 @@ export async function setPotential(args: {
 }
 
 export async function revertEntry(args: { orgId: string; actorId: string; entryId: string; reason: string }): Promise<void> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const entryId = requireId("entryId", args.entryId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const entryId = requireUuid(args.entryId, "entryId");
   if (typeof args.reason !== "string" || args.reason.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "reverting a calibration needs a reason — say why the proposed rating stands");
   }
@@ -658,9 +652,9 @@ export async function closeCalibrationSession(args: {
   actorId: string;
   id: string;
 }): Promise<CalibrationSessionDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const id = requireId("id", args.id);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const id = requireUuid(args.id, "id");
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
@@ -747,9 +741,9 @@ export async function getCalibrationSession(args: {
   actorId: string;
   id: string;
 }): Promise<CalibrationSessionDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const id = requireId("id", args.id);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const id = requireUuid(args.id, "id");
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
@@ -769,8 +763,8 @@ export async function listCalibrationSessions(args: {
   actorId: string;
   cycleId?: string;
 }): Promise<readonly { id: string; cycleId: string; name: string; status: CalibrationSessionStatus; openedAt: string | null; closedAt: string | null }[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertCalibrationFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);

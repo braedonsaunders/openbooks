@@ -22,6 +22,7 @@ import type {
   PayrollYearEndFiling,
 } from "../filing-registry.ts";
 import { DE_TAX_YEARS } from "./rates.ts";
+import { isUuid } from "../../platform/uuid.ts";
 
 /**
  * The DE pack's year-end filing: the Ausdruck der elektronischen
@@ -64,16 +65,6 @@ import { DE_TAX_YEARS } from "./rates.ts";
 
 const num = (value: unknown): string => (value == null ? "0" : String(value));
 
-/**
- * The row-id UUID shape, owned locally (the canada/filings.ts UUID_RE
- * precedent) rather than imported from filing-registry.ts: that module
- * imports packs.ts at evaluation time, and a pack-tree module that reaches
- * it would put its own pack object mid-flight when packs.ts evaluates
- * PAYROLL_COUNTRY_PACKS — `Cannot access 'DE_PAYROLL_PACK' before
- * initialization` for any entry starting at de/pack.ts.
- */
-const ROW_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** The only year whose Ausdruck layout the authority has published. */
 
 /**
@@ -115,13 +106,13 @@ export function assertLohnsteuerbescheinigungYear(taxYear: number): void {
  */
 export function parseLohnsteuerbescheinigungRowId(rowId: string): PayrollFilingRowScope | null {
   const parts = rowId.split(":");
-  if (parts.length === 1 && ROW_UUID_RE.test(parts[0]!)) {
+  if (parts.length === 1 && isUuid(parts[0]!)) {
     return { employees: [parts[0]!], accounts: [] };
   }
   const employee = parts[0] ?? "";
   const account = parts[1] ?? "";
-  if (parts.length !== 2 || !ROW_UUID_RE.test(employee)) return null;
-  if (account && !ROW_UUID_RE.test(account)) return null;
+  if (parts.length !== 2 || !isUuid(employee)) return null;
+  if (account && !isUuid(account)) return null;
   return { employees: [employee], accounts: account ? [account] : [] };
 }
 

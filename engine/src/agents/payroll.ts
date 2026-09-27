@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { add, cmp, neg, sum } from "../money/money.ts";
-import { addCalendarDays, businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, addMonthsStart, businessToday, endOfMonth } from "../platform/business-date.ts";
 import {
   effectiveDetectorMateriality,
   type ContinuousCloseDetectorPolicy,
@@ -34,18 +34,6 @@ import type { AgentFinding } from "./types.ts";
 const REMITTANCE_HREF = "/payroll/remittances";
 const EMPLOYEES_HREF = "/entities/employees";
 
-/** First day of the month after the given first-of-month ISO date. */
-function nextMonthStart(first: string): string {
-  const year = Number(first.slice(0, 4));
-  const month = Number(first.slice(5, 7));
-  return month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, "0")}-01`;
-}
-
-/** Last calendar day of the given first-of-month ISO date. */
-function monthEndOf(first: string): string {
-  return addCalendarDays(nextMonthStart(first), -1);
-}
-
 export async function payrollFindings(
   orgId: string,
   agentThreshold: string,
@@ -66,8 +54,8 @@ export async function payrollFindings(
     // slices that share a due date (a quarterly remitter's three monthly
     // slices collapse into the one quarterly bill it will actually raise).
     const months: { from: string; to: string }[] = [];
-    for (let cursor = `${from.slice(0, 7)}-01`; cursor <= today; cursor = nextMonthStart(cursor)) {
-      const end = monthEndOf(cursor);
+    for (let cursor = `${from.slice(0, 7)}-01`; cursor <= today; cursor = addMonthsStart(cursor, 1)) {
+      const end = endOfMonth(cursor);
       months.push({ from: cursor < from ? from : cursor, to: end > today ? today : end });
     }
     const merged = new Map<

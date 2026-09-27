@@ -1,13 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assignmentCoveredDays, assignmentCoversPeriod, inclusiveDays } from "./assignment-windows.ts";
-
-test("a period crossing 0099-12-31 into 0100 spans 14 days, not a negative span", () => {
-  // Date.UTC maps years 0-99 onto 1900-1999, so this window used to read as
-  // -693946 days; prorateDays saw a nonpositive total and returned 0.
-  assert.equal(inclusiveDays("0099-12-25", "0100-01-07"), 14);
-  assert.equal(inclusiveDays("0100-01-07", "0100-01-07"), 1);
-});
+import { assignmentCoveredDays, assignmentCoversPeriod } from "./assignment-windows.ts";
 
 test("a fixed assignment starting mid-period in a cross-century period prorates over 14 days", () => {
   const window = {

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../../platform/db.ts";
+import { isUuid } from "../../platform/uuid.ts";
 import { HrmAuthorizationError, requireRecruitingFeature } from "../authorization.ts";
 import { RecruitingError } from "./errors.ts";
 
@@ -145,7 +146,7 @@ export async function enqueueRecruitingEmailJob(
  */
 export function pgUuidArray(ids: readonly string[]): string {
   for (const [index, id] of ids.entries()) {
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    if (!isUuid(id)) {
       throw new RecruitingError("INVALID_INPUT", `array element ${index + 1} is not a valid UUID — pass ids, not names`);
     }
   }

@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { addCalendarDays } from "../platform/civil-date.ts";
 import type { SimOrg } from "./world.ts";
 
 /**
@@ -95,7 +96,7 @@ export function newManifest(args: {
     startDate: args.startDate,
     endDate: args.endDate,
     // Before the first day runs, the cursor sits one day before the start.
-    simDate: addDays(args.startDate, -1),
+    simDate: addCalendarDays(args.startDate, -1),
     rngState: args.rngState,
     counters: {},
     coverage: [],
@@ -106,13 +107,7 @@ export function newManifest(args: {
   };
 }
 
-// --- small, dependency-free date helpers on YYYY-MM-DD (UTC) ----------------
-
-export function addDays(isoDate: string, days: number): string {
-  const d = new Date(`${isoDate}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
+// --- small date helpers on YYYY-MM-DD (UTC) ---------------------------------
 
 export function isWeekend(isoDate: string): boolean {
   const dow = new Date(`${isoDate}T00:00:00.000Z`).getUTCDay();
@@ -124,7 +119,7 @@ export function dayOfMonth(isoDate: string): number {
 }
 
 export function isMonthEnd(isoDate: string): boolean {
-  return addDays(isoDate, 1).slice(5, 7) !== isoDate.slice(5, 7);
+  return addCalendarDays(isoDate, 1).slice(5, 7) !== isoDate.slice(5, 7);
 }
 
 /** Generate the inclusive list of dates from start..end. */
@@ -133,7 +128,7 @@ export function eachDay(start: string, end: string): string[] {
   let cur = start;
   while (cur <= end) {
     out.push(cur);
-    cur = addDays(cur, 1);
+    cur = addCalendarDays(cur, 1);
   }
   return out;
 }

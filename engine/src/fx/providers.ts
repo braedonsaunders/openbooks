@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
@@ -244,19 +244,9 @@ export function computeNextSyncAt(schedule: FxSyncSchedule, hourUtc: number, now
   return next;
 }
 
-function isoDate(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function addDays(date: string, days: number): string {
-  const d = new Date(`${date}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return isoDate(d);
-}
-
 function syncRange(config: FxProviderConfigRow, to: string): { from: string; to: string } {
-  const lookbackStart = addDays(to, -(config.lookbackDays - 1));
-  const revisionStart = config.lastObservationDate ? addDays(config.lastObservationDate, -2) : lookbackStart;
+  const lookbackStart = addCalendarDays(to, -(config.lookbackDays - 1));
+  const revisionStart = config.lastObservationDate ? addCalendarDays(config.lastObservationDate, -2) : lookbackStart;
   return { from: revisionStart > lookbackStart ? revisionStart : lookbackStart, to };
 }
 
@@ -466,7 +456,7 @@ async function fetchProviderSnapshots(config: FxProviderConfigRow, from: string,
       : unsealJson<{ apiKey?: string }>(config.secrets, { orgId: config.orgId, purpose: "fx.provider.secrets" }).apiKey;
   if (!apiKey) throw new FxProviderError("Open Exchange Rates API key is missing");
   const snapshots: FxSnapshot[] = [];
-  for (let date = from; date <= to; date = addDays(date, 1)) {
+  for (let date = from; date <= to; date = addCalendarDays(date, 1)) {
     const url = new URL(`https://openexchangerates.org/api/historical/${date}.json`);
     url.searchParams.set("app_id", apiKey);
     // Only a malformed body is a payload fault; transport failures — refused
@@ -709,7 +699,7 @@ export async function runFxProvider(
   }
   const today = await businessToday(orgId);
   const range = trigger === "test"
-    ? { from: addDays(today, -6), to: today }
+    ? { from: addCalendarDays(today, -6), to: today }
     : syncRange(config, today);
   const claim = await createRun(config, trigger, range.from, range.to, actorId, scheduledOccurrence);
   if (!claim) throw new FxScheduleClaimLostError();

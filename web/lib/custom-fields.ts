@@ -5,6 +5,7 @@ import { isIsoCalendarDate as isValidIsoDate } from '@openbooks/engine/src/platf
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, compareDecimal } from './exact-decimal'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 /**
  * Custom fields platform — source platform-style header/line/entity extensions.
@@ -152,7 +153,7 @@ export function validateCustomValues(
         break
       }
       case 'reference': {
-        if (typeof raw !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(raw)) {
+        if (!isUuid(raw)) {
           errors[def.key] = `${def.label} must be a valid record reference`
         } else {
           cleaned[def.key] = raw
@@ -167,9 +168,6 @@ export function validateCustomValues(
 const REFERENCE_OWNER_TABLES: ReadonlySet<string> = new Set(
   CUSTOM_FIELD_REFERENCE_TABLES as readonly string[],
 )
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * Tenant ownership for `reference`-type custom values. `validateCustomValues`
@@ -194,7 +192,7 @@ export async function findUnownedCustomReferences(
     const table = def.config?.referenceTable
     if (typeof table !== 'string' || !REFERENCE_OWNER_TABLES.has(table)) continue
     const raw = values[def.key]
-    if (typeof raw !== 'string' || !UUID_RE.test(raw)) continue
+    if (!isUuid(raw)) continue
     const list = wanted.get(table) ?? []
     list.push({ def, value: raw })
     wanted.set(table, list)

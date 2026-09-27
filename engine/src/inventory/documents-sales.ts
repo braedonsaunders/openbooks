@@ -6,7 +6,8 @@ import { assertDocumentLinesUntracked } from "./tracking.ts";
 import { assertMovementOwner, inventoryFeatureEnabled } from "./profile-policy.ts";
 import { lockInventoryPosition } from "./position.ts";
 import { issueInventory, type IssueInput } from "./movements.ts";
-import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofiledInventoryLines, inventoryPostingEffectKey, UUID_RE, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
+import { loadDocumentInventoryLines, unprofiledInventoryLines, assertNoUnprofiledInventoryLines, inventoryPostingEffectKey, isJsonRecord, type DocumentInventoryLine } from "./document-lines.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * One predicate for "the fulfilment path owns this invoice's stock", read by
@@ -69,15 +70,15 @@ function salesFulfillmentTrackingSelection(
   const sourceLineId = evidence.sourceLineId;
   const lotId = evidence.lotId ?? null;
   const serialId = evidence.serialId ?? null;
-  if (typeof sourceLineId !== "string" || !UUID_RE.test(sourceLineId)) {
+  if (!isUuid(sourceLineId)) {
     throw new InventoryError(`${label} requires a valid source sales-order line`);
   }
-  if (lotId !== null && (typeof lotId !== "string" || !UUID_RE.test(lotId))) {
+  if (lotId !== null && !isUuid(lotId)) {
     throw new InventoryError(`${label} lotId must be a UUID`);
   }
   if (
     serialId !== null &&
-    (typeof serialId !== "string" || !UUID_RE.test(serialId))
+    !isUuid(serialId)
   ) {
     throw new InventoryError(`${label} serialId must be a UUID`);
   }

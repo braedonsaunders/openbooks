@@ -1,8 +1,8 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { ACCOUNT_CLASS_TYPES } from "../../../engine/src/records/account-types.ts";
-import { advanceAnchoredMonth, lastDayOfMonth } from "@openbooks/engine/src/billing/cadence.ts";
-import { businessToday, daysInCivilMonth, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
+import { advanceAnchoredMonth } from "@openbooks/engine/src/billing/cadence.ts";
+import { addCalendarDays, addMonthsClamped, businessToday, calendarDaysBetween, daysInCivilMonth, parseIsoDate, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, div as moneyDiv, mulDecimal, neg as moneyNeg, normalizeMoney, sum as moneySum } from "@openbooks/engine/src/money/money.ts";
 import { evaluateFormula } from "./formula";
@@ -70,8 +70,10 @@ export const divideMoney = moneyDiv;
 export const multiplyMoney = mulDecimal;
 export const parseISO = (s: string) => new Date(s + "T00:00:00Z");
 export const toISO = (d: Date) => d.toISOString().slice(0, 10);
-export const addDays = (d: Date, n: number) => new Date(d.getTime() + n * MS_DAY);
-export const daysBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / MS_DAY);
+// Date-shaped adapters over the platform civil-date arithmetic: the cash
+// grid carries UTC-midnight Dates, the arithmetic itself lives in one place.
+export const addDays = (d: Date, n: number) => parseIsoDate(addCalendarDays(toISO(d), n));
+export const daysBetween = (a: Date, b: Date) => calendarDaysBetween(toISO(a), toISO(b));
 /** Sunday of the week (date − getDay()). */
 export const weekStart = (d: Date) => addDays(d, -d.getUTCDay());
 /** Weekend → next business day (Sat +2, Sun +1). */
@@ -447,20 +449,14 @@ export async function resolveFormulaTaxRate(
 
 /* ------------------- category engine helpers ------------------------------- */
 
-const addMonthsUTC = (d: Date, n: number): Date => {
-  const r = new Date(d);
-  const day = r.getUTCDate();
-  r.setUTCMonth(r.getUTCMonth() + n);
-  if (r.getUTCDate() < day) r.setUTCDate(0);
-  return r;
-};
+const addMonthsUTC = (d: Date, n: number): Date => parseIsoDate(addMonthsClamped(toISO(d), n));
 
 /** Strict YYYY-MM-DD anchor: a real calendar date, or null for legacy rows. */
 export function parseAnchorDate(value: unknown): string | null {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const [y, m, d] = value.split("-").map(Number);
   if (m! < 1 || m! > 12 || d! < 1 || d! > 31) return null;
-  if (d! > lastDayOfMonth(y!, m!)) return null;
+  if (d! > daysInCivilMonth(y!, m!)) return null;
   // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
   // onto 1900-1999 (an 0096 anchor used to fail validation as "not real").
   const roundTrip = utcDateFromParts(y!, m! - 1, d!);
@@ -476,7 +472,7 @@ export function parseAnchorDate(value: unknown): string | null {
  * Monthly occurrence dates of an anchored schedule inside [fromIso, toIso].
  * Forward months step through billing/cadence.ts's advanceAnchoredMonth (the
  * shared anchored step: Jan 31 → Feb 28 → Mar 31, never drifting to Mar 28);
- * months before the anchor month use the same module's lastDayOfMonth clamp,
+ * months before the anchor month clamp through platform daysInCivilMonth,
  * since advanceAnchoredMonth only steps forward.
  */
 export function anchoredMonthlyOccurrences(anchorIso: string, fromIso: string, toIso: string): string[] {
@@ -493,7 +489,7 @@ export function anchoredMonthlyOccurrences(anchorIso: string, fromIso: string, t
     else {
       const yy = Math.floor((m - 1) / 12);
       const mm = ((m - 1) % 12) + 1;
-      iso = `${pad(yy, 4)}-${pad(mm, 2)}-${pad(Math.min(aday, lastDayOfMonth(yy, mm)), 2)}`;
+      iso = `${pad(yy, 4)}-${pad(mm, 2)}-${pad(Math.min(aday, daysInCivilMonth(yy, mm)), 2)}`;
     }
     if (iso >= fromIso && iso <= toIso) out.push(iso);
   }
@@ -754,7 +750,7 @@ export async function categoryWeekly(
       }
     } else if (freq === "biweekly") {
       const anchor = parseISO(anchorIso);
-      const gapDays = Math.round((asOf.getTime() - anchor.getTime()) / MS_DAY);
+      const gapDays = daysBetween(anchor, asOf);
       let curr = addDays(anchor, Math.floor(gapDays / 14) * 14);
       while (curr < asOf) curr = addDays(curr, 14);
       while (curr <= tEnd) {

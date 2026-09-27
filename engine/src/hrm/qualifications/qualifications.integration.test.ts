@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../../platform/db.ts";
-import { businessToday } from "../../platform/business-date.ts";
+import { addCalendarDays, businessToday } from "../../platform/business-date.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -92,12 +92,6 @@ async function seedResource(orgId: string, projectId: string, partyId: string | 
   return id;
 }
 
-function addDays(ymd: string, days: number): string {
-  const dt = new Date(`${ymd}T00:00:00Z`);
-  dt.setUTCDate(dt.getUTCDate() + days);
-  return dt.toISOString().slice(0, 10);
-}
-
 async function seedType(
   orgId: string,
   adminId: string,
@@ -175,7 +169,7 @@ test("record refuses by name: window, undeclared type, missing evidence, retired
     await assert.rejects(
       recordQualification(db, {
         orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
-        typeId, issuedOn: today, expiresOn: addDays(today, -1),
+        typeId, issuedOn: today, expiresOn: addCalendarDays(today, -1),
       }),
       /cannot expire before it is issued/,
     );
@@ -217,7 +211,7 @@ test("verify, renew-as-new-row, revoke: hostile loops refused", { skip: !DB }, a
     const today = await businessToday(h.org.orgId);
     const q = await recordQualification(db, {
       orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
-      typeId, issuedOn: addDays(today, -400),
+      typeId, issuedOn: addCalendarDays(today, -400),
     });
     const verified = await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: q.id });
     assert.equal(verified.storedStatus, "valid");
@@ -313,25 +307,25 @@ test("derived status projects at read: expiring, expired, pending, valid", { ski
     // Expiring inside the lead window.
     const expiring = await recordQualification(db, {
       orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
-      typeId, issuedOn: addDays(today, -300), expiresOn: addDays(today, 10),
+      typeId, issuedOn: addCalendarDays(today, -300), expiresOn: addCalendarDays(today, 10),
     });
     await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: expiring.id });
     // Already expired.
     const expired = await recordQualification(db, {
       orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
-      typeId, issuedOn: addDays(today, -400), expiresOn: addDays(today, -1),
+      typeId, issuedOn: addCalendarDays(today, -400), expiresOn: addCalendarDays(today, -1),
     });
     await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: expired.id });
     // Pending stays pending regardless of dates (distinct issue date:
     // one row per employment × type × issued_on).
     const pending = await recordQualification(db, {
       orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
-      typeId, issuedOn: addDays(today, -401), expiresOn: addDays(today, -1),
+      typeId, issuedOn: addCalendarDays(today, -401), expiresOn: addCalendarDays(today, -1),
     });
     // Never expires.
     const forever = await recordQualification(db, {
       orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
-      typeId, issuedOn: addDays(today, -900), expiresOn: null,
+      typeId, issuedOn: addCalendarDays(today, -900), expiresOn: null,
     });
     await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: forever.id });
     const byId = new Map(
@@ -354,8 +348,8 @@ test("derived status projects at read: expiring, expired, pending, valid", { ski
     assert.ok(stored.length > 0, "the fixture must have stored qualification rows to check");
     for (const s of stored) assert.ok(["valid", "revoked", "pending_verification"].includes(s));
     // The pure projector agrees with the service at the boundaries.
-    assert.equal(projectDerivedStatus({ stored: "valid", expiresOn: addDays(today, 30), leadDays: 30, today }), "expiring");
-    assert.equal(projectDerivedStatus({ stored: "valid", expiresOn: addDays(today, 31), leadDays: 30, today }), "valid");
+    assert.equal(projectDerivedStatus({ stored: "valid", expiresOn: addCalendarDays(today, 30), leadDays: 30, today }), "expiring");
+    assert.equal(projectDerivedStatus({ stored: "valid", expiresOn: addCalendarDays(today, 31), leadDays: 30, today }), "valid");
   });
 });
 
@@ -364,7 +358,7 @@ test("future-issued credentials project not-yet-effective and the gate refuses b
     const worker = await seedNamedWorker(h.org.orgId, h.org.subsidiaryId, "Future Hand");
     const typeId = await seedType(h.org.orgId, h.adminId, { validityMonths: null, renewalLeadDays: 30 });
     const today = await businessToday(h.org.orgId);
-    const issued = addDays(today, 1);
+    const issued = addCalendarDays(today, 1);
     const projectId = await seedProject(h.org.orgId, "Future Tower");
     await setRequirement(db, {
       orgId: h.org.orgId, actorId: h.adminId, subjectKind: "project", subjectId: projectId, typeId, severity: "block",
@@ -374,7 +368,7 @@ test("future-issued credentials project not-yet-effective and the gate refuses b
     // both succeed, and the hole below is what the projection must close.
     const q = await recordQualification(db, {
       orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
-      typeId, issuedOn: issued, expiresOn: addDays(issued, 300),
+      typeId, issuedOn: issued, expiresOn: addCalendarDays(issued, 300),
     });
     await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: q.id });
     // The display projection names it: not yet effective, never valid.
@@ -479,7 +473,7 @@ test("dispatch gate: block refuses by name, warn records a warned event", { skip
     // An expired credential still blocks (reason expired).
     const q = await recordQualification(db, {
       orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
-      typeId, issuedOn: addDays(today, -400), expiresOn: addDays(today, -1),
+      typeId, issuedOn: addCalendarDays(today, -400), expiresOn: addCalendarDays(today, -1),
     });
     await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: q.id });
     const expiredGate = await checkAssignment(db, {
@@ -742,7 +736,7 @@ test("alerts: due rows written once, second run changes nothing", { skip: !DB },
     const today = await businessToday(h.org.orgId);
     const q = await recordQualification(db, {
       orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
-      typeId, issuedOn: addDays(today, -300), expiresOn: addDays(today, 30),
+      typeId, issuedOn: addCalendarDays(today, -300), expiresOn: addCalendarDays(today, 30),
     });
     await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: q.id });
     const first = await runQualificationAlertScan(new Date());
@@ -832,7 +826,7 @@ test("expiry alerts resolve managers from the exact holder employment", { skip: 
     const today = await businessToday(h.org.orgId);
     const qualification = await recordQualification(db, {
       orgId: h.org.orgId, actorId: h.adminId, employmentId: holderB,
-      typeId, issuedOn: addDays(today, -100), expiresOn: addDays(today, 30),
+      typeId, issuedOn: addCalendarDays(today, -100), expiresOn: addCalendarDays(today, 30),
     });
     await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: qualification.id });
 
@@ -853,7 +847,7 @@ test("alert scan enumerates orgs past RLS: a constrained caller still scans", { 
     const today = await businessToday(h.org.orgId);
     const q = await recordQualification(db, {
       orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
-      typeId, issuedOn: addDays(today, -300), expiresOn: addDays(today, 30),
+      typeId, issuedOn: addCalendarDays(today, -300), expiresOn: addCalendarDays(today, 30),
     });
     await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: q.id });
     // A second org with the alerts chain OFF is the constrained vantage
@@ -889,7 +883,7 @@ test("alert scan catches up crossed thresholds instead of skipping them", { skip
     // 7-day row and lose the earlier warnings forever.
     const q = await recordQualification(db, {
       orgId: h.org.orgId, actorId: h.adminId, employmentId: worker.employmentId,
-      typeId, issuedOn: addDays(today, -300), expiresOn: addDays(today, 7),
+      typeId, issuedOn: addCalendarDays(today, -300), expiresOn: addCalendarDays(today, 7),
     });
     await verifyQualification(db, { orgId: h.org.orgId, actorId: h.adminId, qualificationId: q.id });
     const first = await runQualificationAlertScan(new Date());
@@ -922,7 +916,7 @@ test("alert scan catches up crossed thresholds instead of skipping them", { skip
     // The 1-day threshold fires exactly once when it is crossed: move
     // expiry to tomorrow and scan again.
     await db.execute(sql`
-      update hrm_worker_qualifications set expires_on = ${addDays(today, 1)}::date
+      update hrm_worker_qualifications set expires_on = ${addCalendarDays(today, 1)}::date
        where id = ${q.id}::uuid
     `);
     const third = await runQualificationAlertScan(new Date());

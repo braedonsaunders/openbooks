@@ -78,6 +78,7 @@ import type {
   SourcePersonRow,
   SubsidiaryFact,
 } from "./migration-preflight.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /** Source namespace for legacy-extracted employment evidence. */
 export const LEGACY_EMPLOYMENT_SOURCE_NAMESPACE = "legacy-extract";
@@ -89,9 +90,6 @@ export const LEGACY_EMPLOYMENT_SOURCE_NAMESPACE = "legacy-extract";
 export const COLLECTOR_SOURCE_VERSION = "collect-v2";
 
 const EVIDENCE_HASH_VERSION = "openbooks/hrm-migration-collect/evidence/v1";
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A computed refusal that must reach the caller. */
 export class EmploymentCollectionError extends Error {
@@ -224,7 +222,7 @@ interface WeekRecord {
 }
 
 function assertUuid(value: string, what: string): void {
-  if (!UUID_PATTERN.test(value)) {
+  if (!isUuid(value)) {
     throw new EmploymentCollectionError(
       `${what} ${JSON.stringify(value)} is not a valid UUID; refusing to collect ` +
         "without an explicit tenant scope",

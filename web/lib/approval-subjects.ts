@@ -3,6 +3,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { pgTextArrayLiteral } from './pg-array'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 /**
  * Party + decision summary for subject-kind approval rows.
@@ -33,8 +34,6 @@ type SubjectResolver = (
   subjectIds: string[],
   text: ApprovalSubjectText,
 ) => Promise<Map<string, ApprovalSubjectDetail>>
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Change kinds with requestKinds catalog labels (me.requestKinds.*). */
 const KNOWN_CHANGE_KINDS = [
@@ -92,7 +91,7 @@ async function resolveHrmChangeRequests(
   text: ApprovalSubjectText,
 ): Promise<Map<string, ApprovalSubjectDetail>> {
   const out = new Map<string, ApprovalSubjectDetail>()
-  const ids = [...new Set(subjectIds)].filter((id) => UUID_RE.test(id))
+  const ids = [...new Set(subjectIds)].filter((id) => isUuid(id))
   if (ids.length === 0) return out
   const rows = (await db.execute<{
     id: string

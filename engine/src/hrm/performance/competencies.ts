@@ -12,6 +12,7 @@ import {
 } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, isUniqueViolationOn, mathRefusal } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 import { parseAppliesScope } from "./performance-math.ts";
 import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
 
@@ -39,14 +40,7 @@ export const HRM_COMPETENCIES_KEY = "hrmCompetencies" as const;
 
 export type CompetencyLinkKind = "job_level" | "position" | "review_template_section";
 
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || !UUID_RE.test(value)) {
-    throw new HrmPerformanceError("INVALID_INPUT", `${field} must be a uuid`);
-  }
-  return value;
-}
+const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 async function assertCompetenciesFeature(db: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
@@ -202,8 +196,8 @@ export async function createFramework(args: {
   name: string;
   appliesTo?: Record<string, unknown> | null;
 }): Promise<CompetencyFrameworkDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   if (typeof args.name !== "string" || args.name.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "a competency framework needs a name — say which workforce it describes");
   }
@@ -265,9 +259,9 @@ export async function setFrameworkActive(args: {
   id: string;
   isActive: boolean;
 }): Promise<void> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const id = requireId("id", args.id);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const id = requireUuid(args.id, "id");
   await withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
@@ -288,9 +282,9 @@ export async function getFramework(args: {
   actorId: string;
   id: string;
 }): Promise<CompetencyFrameworkDTO | null> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const id = requireId("id", args.id);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const id = requireUuid(args.id, "id");
   return withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
     const allowed = await requireCompetenciesRead(db, orgId, actorId);
@@ -314,8 +308,8 @@ export async function getFramework(args: {
 }
 
 export async function listFrameworks(args: { orgId: string; actorId: string }): Promise<readonly CompetencyFrameworkDTO[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
     const allowed = await requireCompetenciesRead(db, orgId, actorId);
@@ -373,9 +367,9 @@ export async function createCompetency(args: {
   description?: string | null;
   category?: string | null;
 }): Promise<CompetencyDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const frameworkId = requireId("frameworkId", args.frameworkId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const frameworkId = requireUuid(args.frameworkId, "frameworkId");
   if (typeof args.code !== "string" || args.code.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "a competency needs a code — say which shorthand reviews and job levels use");
   }
@@ -424,9 +418,9 @@ export async function addCompetencyLevel(args: {
   label: string;
   expectation: string;
 }): Promise<CompetencyLevelDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const competencyId = requireId("competencyId", args.competencyId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const competencyId = requireUuid(args.competencyId, "competencyId");
   if (!Number.isInteger(args.levelRank) || args.levelRank < 1) {
     throw new HrmPerformanceError("INVALID_INPUT", "level rank must be a positive integer — rank 1 is the entry expectation");
   }
@@ -473,10 +467,10 @@ export async function linkCompetency(args: {
   targetKind: CompetencyLinkKind;
   targetId: string;
 }): Promise<void> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const competencyId = requireId("competencyId", args.competencyId);
-  const targetId = requireId("targetId", args.targetId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const competencyId = requireUuid(args.competencyId, "competencyId");
+  const targetId = requireUuid(args.targetId, "targetId");
   if (!["job_level", "position", "review_template_section"].includes(args.targetKind)) {
     throw new HrmPerformanceError("INVALID_INPUT", "link target must be job_level, position, or review_template_section");
   }
@@ -534,10 +528,10 @@ export async function setSectionCompetency(args: {
   sectionId: string;
   competencyId: string | null;
 }): Promise<void> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const sectionId = requireId("sectionId", args.sectionId);
-  if (args.competencyId !== null) requireId("competencyId", args.competencyId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const sectionId = requireUuid(args.sectionId, "sectionId");
+  if (args.competencyId !== null) requireUuid(args.competencyId, "competencyId");
   await withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
@@ -620,9 +614,9 @@ export async function competencyProfileForEmployment(args: {
   actorId: string;
   employmentId: string;
 }): Promise<readonly CompetencyProfileRow[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const employmentId = requireId("employmentId", args.employmentId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const employmentId = requireUuid(args.employmentId, "employmentId");
   return withOrgTransaction(orgId, async () => {
     await assertCompetenciesFeature(db, orgId);
     // Subject plus allowed-employer fence before any profile read: HR

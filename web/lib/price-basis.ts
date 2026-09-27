@@ -1,4 +1,5 @@
 import { canonicalDecimal } from './exact-decimal'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 /**
  * Pricing provenance for a priced document line (0336). When a line's price
@@ -18,11 +19,10 @@ export interface PriceBasis {
 }
 
 const KINDS = new Set(['customer_item', 'customer_level', 'base_level', 'simple'])
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function uuidOrNull(value: unknown): string | null | undefined {
   if (value === null || value === undefined) return null
-  return typeof value === 'string' && UUID.test(value) ? value : undefined
+  return isUuid(value) ? value : undefined
 }
 
 /**

@@ -50,6 +50,7 @@ import {
   TemporalError,
   type RecordedRevision,
 } from "./temporal.ts";
+import { inputGuards } from "./input-guards.ts";
 
 export class EmploymentReadError extends Error {
   constructor(message: string) {
@@ -159,12 +160,7 @@ export interface EmploymentDTO {
   readonly assignments: readonly AssignmentDTO[];
 }
 
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new EmploymentReadError(`${field} must be a non-empty string`);
-  }
-  return value;
-}
+const { requireId } = inputGuards((message) => new EmploymentReadError(message));
 
 function requireText(field: string, value: unknown): string {
   if (typeof value !== "string" || value.length === 0) {
@@ -475,9 +471,9 @@ export async function loadEmploymentAsOf(
   exec: SqlExecutor,
   query: EmploymentAsOfQuery,
 ): Promise<EmploymentDTO> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
-  const employmentId = requireId("employmentId", query.employmentId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  const employmentId = requireId(query.employmentId, "employmentId");
   validateAsOf(query.effectiveDate, query.knownAt);
 
   // Authority first: denial (including unknown id) reports uniformly, so a
@@ -513,7 +509,7 @@ export async function loadEmploymentAsOf(
  * only: no mutations, no payroll fanout, no party/role fallback.
  */
 export async function getEmploymentAsOf(query: EmploymentAsOfQuery): Promise<EmploymentDTO> {
-  const orgId = requireId("orgId", query.orgId);
+  const orgId = requireId(query.orgId, "orgId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     return loadEmploymentAsOf(db, query);
@@ -582,9 +578,9 @@ export async function loadEmploymentEpisodes(
   exec: SqlExecutor,
   query: Pick<EmploymentAsOfQuery, "orgId" | "actorId" | "employmentId">,
 ): Promise<EmploymentEpisodesDTO> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
-  const employmentId = requireId("employmentId", query.employmentId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  const employmentId = requireId(query.employmentId, "employmentId");
   const subject = await requireEmploymentOrTeamSubject(exec, orgId, actorId, employmentId);
   const snapshot = await loadEmploymentSnapshot(exec, orgId, employmentId);
   const episodes = snapshot.employmentVersions
@@ -659,9 +655,9 @@ export async function loadEmploymentChangeRequests(
   exec: SqlExecutor,
   query: Pick<EmploymentAsOfQuery, "orgId" | "actorId" | "employmentId">,
 ): Promise<readonly EmploymentChangeRequestDTO[]> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
-  const employmentId = requireId("employmentId", query.employmentId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  const employmentId = requireId(query.employmentId, "employmentId");
   await requireEmploymentOrTeamSubject(exec, orgId, actorId, employmentId);
   // No arbitrary SQL identifiers: every value is a bound parameter, every
   // column list is explicit, stamps are microsecond UTC text, uuids are text.
@@ -722,9 +718,9 @@ export async function loadEmploymentsByParty(
   exec: SqlExecutor,
   query: EmploymentsByPartyQuery,
 ): Promise<readonly string[]> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
-  const workerPartyId = requireId("workerPartyId", query.workerPartyId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  const workerPartyId = requireId(query.workerPartyId, "workerPartyId");
   const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
   const rows = (await exec.execute<{ id: string; employerSubsidiaryId: string | null }>(sql`
     select id::text as id, employer_subsidiary_id::text as "employerSubsidiaryId"
@@ -744,7 +740,7 @@ export async function loadEmploymentsByParty(
  * resolution. Read only.
  */
 export async function findEmploymentsByParty(query: EmploymentsByPartyQuery): Promise<readonly string[]> {
-  const orgId = requireId("orgId", query.orgId);
+  const orgId = requireId(query.orgId, "orgId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     return loadEmploymentsByParty(db, query);
@@ -785,9 +781,9 @@ export interface EmploymentRecordDTO {
  * employment the actor cannot see is returned piecemeal.
  */
 export async function getEmploymentRecord(query: EmploymentAsOfQuery): Promise<EmploymentRecordDTO> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
-  const employmentId = requireId("employmentId", query.employmentId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
+  const employmentId = requireId(query.employmentId, "employmentId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     // One pinned client inside the transaction: sequential, never parallel.
@@ -1061,8 +1057,8 @@ function resolveCountedEmployments(
  * no name row is a refusal: headcount must never be misattributed.
  */
 export async function loadHeadcountAsOf(exec: SqlExecutor, query: HeadcountQuery): Promise<HeadcountDTO> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
   validateAsOf(query.effectiveDate, query.knownAt);
   const source = await loadHeadcountTemporalSource(exec, orgId, actorId);
   const counted = resolveCountedEmployments(source, orgId, query.effectiveDate, query.knownAt);
@@ -1154,8 +1150,8 @@ export async function loadHeadcountTotalsAsOf(
   exec: SqlExecutor,
   query: HeadcountTotalsQuery,
 ): Promise<HeadcountTotalsDTO> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
   if (!Array.isArray(query.effectiveDates) || query.effectiveDates.length === 0) {
     throw new EmploymentReadError("effectiveDates must contain at least one civil date");
   }
@@ -1183,7 +1179,7 @@ export async function loadHeadcountTotalsAsOf(
  * only: no mutations, no payroll fanout, no party/role fallback.
  */
 export async function getHeadcountAsOf(query: HeadcountQuery): Promise<HeadcountDTO> {
-  const orgId = requireId("orgId", query.orgId);
+  const orgId = requireId(query.orgId, "orgId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     return loadHeadcountAsOf(db, query);
@@ -1192,7 +1188,7 @@ export async function getHeadcountAsOf(query: HeadcountQuery): Promise<Headcount
 
 /** Public boundary for a bounded headcount trend under one known-at view. */
 export async function getHeadcountTotalsAsOf(query: HeadcountTotalsQuery): Promise<HeadcountTotalsDTO> {
-  const orgId = requireId("orgId", query.orgId);
+  const orgId = requireId(query.orgId, "orgId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     return loadHeadcountTotalsAsOf(db, query);
@@ -1247,8 +1243,8 @@ export async function loadEmploymentOptions(
   exec: SqlExecutor,
   query: EmploymentOptionsQuery,
 ): Promise<readonly EmploymentOptionDTO[]> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
   const limit = requireOptionsLimit(query.limit);
   const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
   const fragment = (query.q ?? "").trim();
@@ -1338,7 +1334,7 @@ export async function loadEmploymentOptions(
 export async function listEmploymentOptions(
   query: EmploymentOptionsQuery,
 ): Promise<readonly EmploymentOptionDTO[]> {
-  const orgId = requireId("orgId", query.orgId);
+  const orgId = requireId(query.orgId, "orgId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     return loadEmploymentOptions(db, query);
@@ -1373,8 +1369,8 @@ export async function loadPeopleOptions(
   exec: SqlExecutor,
   query: PeopleOptionsQuery,
 ): Promise<readonly PeopleOptionDTO[]> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
   const limit = requireOptionsLimit(query.limit);
   const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
   const fragment = (query.q ?? "").trim();
@@ -1429,7 +1425,7 @@ export async function loadPeopleOptions(
 export async function listPeopleOptions(
   query: PeopleOptionsQuery,
 ): Promise<readonly PeopleOptionDTO[]> {
-  const orgId = requireId("orgId", query.orgId);
+  const orgId = requireId(query.orgId, "orgId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     return loadPeopleOptions(db, query);
@@ -1464,8 +1460,8 @@ export async function loadLocationOptions(
   exec: SqlExecutor,
   query: LocationOptionsQuery,
 ): Promise<readonly LocationOptionDTO[]> {
-  const orgId = requireId("orgId", query.orgId);
-  const actorId = requireId("actorId", query.actorId);
+  const orgId = requireId(query.orgId, "orgId");
+  const actorId = requireId(query.actorId, "actorId");
   const limit = requireOptionsLimit(query.limit);
   const allowed = await requireAggregateEmploymentRead(exec, orgId, actorId);
   const fragment = (query.q ?? "").trim();
@@ -1518,7 +1514,7 @@ export async function loadLocationOptions(
  * Read only.
  */
 export async function listLocationOptions(query: LocationOptionsQuery): Promise<readonly LocationOptionDTO[]> {
-  const orgId = requireId("orgId", query.orgId);
+  const orgId = requireId(query.orgId, "orgId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     return loadLocationOptions(db, query);

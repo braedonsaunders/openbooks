@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { actorAllowedSubsidiaryIds } from "../../organization/actor-subsidiaries.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
-import { businessToday, daysInCivilMonth, utcDateFromParts } from "../../platform/business-date.ts";
+import { addMonthsClamped, businessToday } from "../../platform/business-date.ts";
 import {
   loadApprovalPerson,
   loadManagedEmploymentIds,
@@ -12,6 +12,7 @@ import {
 } from "../authorization.ts";
 import { HRM_FEATURE_KEY, loadHeadcountAsOf } from "../employment-read.ts";
 import { HrmPerformanceError, mathRefusal } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 import {
   computeTurnover,
   parseAppliesScope,
@@ -52,14 +53,7 @@ import type { CycleDTO } from "./review-cycles.ts";
  * touch packages/payroll. Existing refusal classes are untouched.
  */
 
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || !UUID_RE.test(value)) {
-    throw new HrmPerformanceError("INVALID_INPUT", `${field} must be a uuid`);
-  }
-  return value;
-}
+const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 async function assertPerformanceFeature(db: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(db, orgId, HRM_FEATURE_KEY))) {
@@ -253,8 +247,8 @@ export async function listCycleProgress(args: {
   orgId: string;
   actorId: string;
 }): Promise<CycleProgressDTO[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const granted = await hasPerformanceGrant(db, orgId, actorId);
@@ -297,9 +291,9 @@ export async function getCycleDetail(args: {
   actorId: string;
   cycleId: string;
 }): Promise<CycleDetailDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const cycleId = requireId("cycleId", args.cycleId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const cycleId = requireUuid(args.cycleId, "cycleId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const granted = await hasPerformanceGrant(db, orgId, actorId);
@@ -378,9 +372,9 @@ export async function getReviewDetail(args: {
   actorId: string;
   reviewId: string;
 }): Promise<ReviewDetailDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const reviewId = requireId("reviewId", args.reviewId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const reviewId = requireUuid(args.reviewId, "reviewId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const granted = await hasPerformanceGrant(db, orgId, actorId);
@@ -428,8 +422,8 @@ export interface MyReviewsDTO {
 
 /** The self-service inbox: shared reviews to acknowledge, drafts to answer. */
 export async function listMyReviews(args: { orgId: string; actorId: string }): Promise<MyReviewsDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const granted = await hasPerformanceGrant(db, orgId, actorId);
@@ -484,9 +478,9 @@ export async function listGoals(args: {
   actorId: string;
   employmentId?: string;
 }): Promise<GoalListDTO[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const employmentId = args.employmentId == null ? null : requireId("employmentId", args.employmentId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const employmentId = args.employmentId == null ? null : requireUuid(args.employmentId, "employmentId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     let employments: string[];
@@ -570,8 +564,8 @@ export async function getTurnover(args: {
   periods: readonly TurnoverPeriodInput[];
   departmentId?: string | null;
 }): Promise<TurnoverDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   if (!Array.isArray(args.periods) || args.periods.length === 0 || args.periods.length > 24) {
     throw new HrmPerformanceError(
       "INVALID_INPUT",
@@ -591,7 +585,7 @@ export async function getTurnover(args: {
     }
   }
   const departmentId =
-    args.departmentId == null ? null : requireId("departmentId", args.departmentId);
+    args.departmentId == null ? null : requireUuid(args.departmentId, "departmentId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireHrmRetentionRead(db, orgId, actorId);
@@ -800,13 +794,13 @@ export async function getRetentionOverview(args: {
   orgId: string;
   actorId: string;
 }): Promise<RetentionOverviewDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const allowed = await requireHrmRetentionRead(db, orgId, actorId);
     const today = await businessToday(orgId);
-    const start = shiftMonths(today, -12);
+    const start = addMonthsClamped(today, -12);
     // Start leg as known at its own date (a termination recorded since
     // would otherwise drop its leaver from the start headcount); the end
     // leg is today, read as known now.
@@ -909,15 +903,4 @@ export async function getRetentionOverview(args: {
       exitRecordsWithoutInterview: noInterview,
     };
   });
-}
-
-/** Shift a civil date by whole months, clamped to month end. */
-function shiftMonths(date: string, months: number): string {
-  const [y, m, d] = date.split("-").map(Number);
-  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
-  // onto 1900-1999; the clamp-then-setUTCDate shape is unchanged.
-  const dt = utcDateFromParts(y!, m! - 1 + months, 1);
-  const lastDay = daysInCivilMonth(dt.getUTCFullYear(), dt.getUTCMonth() + 1);
-  dt.setUTCDate(Math.min(d!, lastDay));
-  return dt.toISOString().slice(0, 10);
 }

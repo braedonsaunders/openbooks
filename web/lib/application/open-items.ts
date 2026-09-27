@@ -1,5 +1,5 @@
 import "server-only";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { openItems } from "../cash/open-items";
 import { normalizeMoneyValue } from "../cash/core";
 import { clamp } from "../list-params";
@@ -9,8 +9,8 @@ import { invalidInput } from "./errors";
 
 export type OpenItemSide = "ar" | "ap";
 
-function isoDate(value: string): string {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+function requireAsOf(value: string): string {
+  if (!isIsoCalendarDate(value)) {
     throw invalidInput("asOf must be YYYY-MM-DD");
   }
   return value;
@@ -26,7 +26,7 @@ export async function listApplicationOpenItems(
   }
   const side = input.side as OpenItemSide;
   assertApplicationPermission(context, side === "ar" ? "ar.read" : "ap.read");
-  const asOf = input.asOf ? isoDate(input.asOf) : await businessToday(context.authz.user.orgId);
+  const asOf = input.asOf ? requireAsOf(input.asOf) : await businessToday(context.authz.user.orgId);
   const allowed = context.authz.allowedSubsidiaryIds;
   const all = await openItems(
     context.authz.user.orgId,

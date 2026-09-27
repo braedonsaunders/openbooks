@@ -5,10 +5,9 @@ import {
   SESSION_COOKIE,
 } from "../../../../../lib/auth";
 import { hasExpectedOrigin, secureCookiesEnabled } from "../../../../../lib/auth-policy";
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 export const runtime = "nodejs";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function DELETE(
   request: NextRequest,
@@ -18,7 +17,7 @@ export async function DELETE(
   const user = await currentUser();
   if (!user?.sessionId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await context.params;
-  if (!UUID.test(id)) return NextResponse.json({ error: "invalid session" }, { status: 400 });
+  if (!isUuid(id)) return NextResponse.json({ error: "invalid session" }, { status: 400 });
   const result = await revokeUserSession(user.homeUserId, id, user.sessionId);
   if (!result.ok) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!result.revoked) return NextResponse.json({ error: "session not found" }, { status: 404 });

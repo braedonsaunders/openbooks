@@ -25,7 +25,6 @@ import {
   countHolidayQualifyingDays,
   hoursOn,
   loadHolidayDayEvidence,
-  shiftDays,
 } from "./holidays.ts";
 import type { EntitlementMovement } from "./entitlements-movement-kernel.ts";
 import type { EntitlementPlan } from "./entitlements-types.ts";
@@ -34,6 +33,7 @@ import {
   resolveWorkSchedule,
   scheduledHoursOn,
 } from "./work-schedules.ts";
+import { addCalendarDays } from "../platform/business-date.ts";
 
 export interface RemembranceGrantArgs {
   employeeName: string;
@@ -163,8 +163,8 @@ export async function grantRemembranceAlternateDay(
   if (cmp(workedHours, "0") <= 0) return null;
 
   const qualifyingWindow = {
-    from: shiftDays(statutoryDate, -rule.qualifyingWindowDays),
-    to: shiftDays(statutoryDate, -1),
+    from: addCalendarDays(statutoryDate, -rule.qualifyingWindowDays),
+    to: addCalendarDays(statutoryDate, -1),
   };
   const schedule = await resolveWorkSchedule(tx, orgId, employeePartyId, statutoryDate);
   const evidence = await loadHolidayDayEvidence(

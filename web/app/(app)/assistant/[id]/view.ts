@@ -10,6 +10,7 @@ import {
   ownsConversation,
   recentMessages,
 } from '../../../../lib/ai-conversations'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 /**
  * One deep-linkable assistant conversation, split into a loader and a spec.
@@ -53,15 +54,13 @@ export interface AssistantConversationData {
   aiEnabled: boolean
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 export async function loadAssistantConversation(id: string): Promise<AssistantConversationData> {
   // Native page.tsx, verbatim: permission first, then the UUID shape check +
   // owner check (redirect, not a body — see the registry entry §4), then the
   // sidebar + thread window + model config in parallel. No search params:
   // like loadDocArticle(slug), the loader takes only the segment param.
   const authz = await requirePermission('assistant.use')
-  if (!UUID_RE.test(id) || !(await ownsConversation(authz, id, 'assistant'))) {
+  if (!isUuid(id) || !(await ownsConversation(authz, id, 'assistant'))) {
     redirect('/assistant')
   }
   const [conversations, messages, aiConfig] = await Promise.all([

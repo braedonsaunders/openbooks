@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { AiRailsError } from "@openbooks/engine/src/hrm/ai/errors.ts";
 import { can, getAuthz, type Authz } from "./authz";
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 /**
  * Shared HTTP plumbing for the HR-21 AI rails routes. Engine refusals
@@ -49,7 +50,7 @@ export function uuidParam(url: URL, name: string, required: boolean): string | n
       ? NextResponse.json({ error: `${name} is required` }, { status: 400 })
       : null;
   }
-  if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value)) {
+  if (!isUuid(value)) {
     return NextResponse.json({ error: `${name} must be a uuid` }, { status: 400 });
   }
   return value;

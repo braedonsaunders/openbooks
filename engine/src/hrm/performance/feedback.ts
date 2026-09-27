@@ -12,6 +12,7 @@ import {
 } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
 
 /**
@@ -58,8 +59,8 @@ export const DEFAULT_FEEDBACK_SETTINGS: FeedbackSettings = { publicPraiseBy: "an
  * enforced in writeFeedback below — never UI-only.
  */
 export async function getFeedbackSettings(args: { orgId: string; actorId: string }): Promise<FeedbackSettings> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertFeedbackFeature(db, orgId);
     if (!(await hasPerformanceManage(db, orgId, actorId))) {
@@ -85,8 +86,8 @@ export async function setFeedbackSettings(args: {
   actorId: string;
   publicPraiseBy: PublicPraiseBy;
 }): Promise<FeedbackSettings> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   if (!["anyone", "managers_and_hr"].includes(args.publicPraiseBy)) {
     throw new HrmPerformanceError("INVALID_INPUT", "public praise may be opened to anyone or limited to managers_and_hr");
   }
@@ -126,14 +127,7 @@ async function readFeedbackSettings(db: SqlExecutor, orgId: string): Promise<Fee
 export type FeedbackKind = "praise" | "feedback" | "request" | "retraction";
 export type FeedbackVisibility = "public" | "manager_and_subject" | "manager_only" | "subject_only";
 
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || !UUID_RE.test(value)) {
-    throw new HrmPerformanceError("INVALID_INPUT", `${field} must be a uuid`);
-  }
-  return value;
-}
+const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 /**
  * The one probe for the feedback surface: every feature key the service
@@ -358,9 +352,9 @@ export async function writeFeedback(args: {
   context?: Record<string, unknown> | null;
   requestedFromPartyId?: string | null;
 }): Promise<FeedbackDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const subjectEmploymentId = requireId("subjectEmploymentId", args.subjectEmploymentId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const subjectEmploymentId = requireUuid(args.subjectEmploymentId, "subjectEmploymentId");
   if (!["praise", "feedback", "request"].includes(args.kind)) {
     throw new HrmPerformanceError("INVALID_INPUT", "feedback kind must be praise, feedback, or request");
   }
@@ -475,9 +469,9 @@ export async function writeFeedback(args: {
 }
 
 export async function retractFeedback(args: { orgId: string; actorId: string; id: string }): Promise<void> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const id = requireId("id", args.id);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const id = requireUuid(args.id, "id");
   await withOrgTransaction(orgId, async () => {
     await assertFeedbackFeature(db, orgId);
     const rows = (await db.execute<StoredFeedback>(sql`
@@ -541,8 +535,8 @@ export async function listFeedback(args: {
   actorId: string;
   subjectEmploymentId?: string;
 }): Promise<readonly FeedbackDTO[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertFeedbackFeature(db, orgId);
     const subjectFilter = args.subjectEmploymentId ? sql` and f.subject_employment_id = ${args.subjectEmploymentId}` : sql``;
@@ -579,8 +573,8 @@ export async function listOpenRequestsForParty(args: {
   orgId: string;
   actorId: string;
 }): Promise<readonly FeedbackDTO[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertFeedbackFeature(db, orgId);
     const person = await loadApprovalPerson(db, orgId, actorId);
@@ -631,9 +625,9 @@ export async function fulfillRequest(args: {
   visibility: FeedbackVisibility;
   body: string;
 }): Promise<FeedbackDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const requestId = requireId("requestId", args.requestId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const requestId = requireUuid(args.requestId, "requestId");
   if (typeof args.body !== "string" || args.body.trim().length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "fulfilling a request needs a body — write the feedback you were asked for");
   }

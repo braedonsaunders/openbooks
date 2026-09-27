@@ -30,7 +30,7 @@
 
 export { MAX_RECOGNITION_TERM_MONTHS } from "./recognition-limits.ts";
 export { allocateByRelativeSSP, fairValueRangeFlag } from "./recognition-apportionment.ts";
-export { addDays } from "./recognition-dates.ts";
+export { shiftRecognitionDate } from "./recognition-dates.ts";
 export { recordRecognitionEvent } from "./recognition-events.ts";
 export type { RecordRecognitionEventInput, RecordRecognitionEventResult } from "./recognition-events.ts";
 export { createObligationsFromInvoice, revenueContractPostingEffectKey, revenueObligationPostingEffectKey } from "./recognition-obligations.ts";

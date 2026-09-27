@@ -10,13 +10,12 @@ import {
 } from '@openbooks/engine/src/projects/financial-profile-versions.ts'
 import type { FinancialProfile } from '@openbooks/schema'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts'
 import { guardPermission, guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { isFeatureEnabled } from '../../../../../lib/features'
-import { isCalendarDate } from '../../../../../lib/setup/coerce'
 import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = 'nodejs'
 
@@ -161,7 +160,7 @@ export async function PATCH(req: Request) {
   // with a Postgres message instead of a field error.
   if (b.financialProfile && b.financialEffectiveFrom !== undefined) {
     const financialEffectiveFrom = String(b.financialEffectiveFrom)
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(financialEffectiveFrom) || !isCalendarDate(financialEffectiveFrom)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(financialEffectiveFrom) || !isIsoCalendarDate(financialEffectiveFrom)) {
       return NextResponse.json({ error: 'financialEffectiveFrom (YYYY-MM-DD) required' }, { status: 422 })
     }
   }

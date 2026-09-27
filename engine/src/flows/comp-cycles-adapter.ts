@@ -12,6 +12,7 @@ import {
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Compensation cycles as a native flow subject.
@@ -79,6 +80,7 @@ type CycleRow = {
 };
 
 async function loadCycle(subjectId: string): Promise<CycleRow | null> {
+  if (!isUuid(subjectId)) return null;
   // No ambient-tenant requirement and no org predicate here, by adapter
   // parity (documents, budget, timesheet, leave, change-requests):
   // decideGate's pre-flight resolves the submitter outside withOrg, and

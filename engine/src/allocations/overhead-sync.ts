@@ -5,6 +5,7 @@ import { fromUnits, toUnits } from "../money/money.ts";
 import { loadRuleInEffectByKey } from "./rules.ts";
 import type { AllocationRuleVersion, RuleInEffect } from "./types.ts";
 import { definitionHash, validateRuleVersion } from "./validate.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Overhead system rule — derives the system-owned post rule from the
@@ -37,8 +38,6 @@ export const OVERHEAD_SYSTEM_RULE_KEY = "overhead-net-zero-pair";
 export const OVERHEAD_SYSTEM_DRIVER_KEY = "overhead-labor-hours";
 export const OVERHEAD_EVENT_DOCUMENT_KIND = "time_entry_approval";
 export const OVERHEAD_SYSTEM_RULE_NAME = "Overhead net-zero pair (system)";
-
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class OverheadSyncError extends Error {
   constructor(message: string) {
@@ -194,7 +193,7 @@ export interface OverheadSyncResult {
 }
 
 function checkedUuid(value: string, what: string): string {
-  if (!UUID_PATTERN.test(value)) throw new OverheadSyncError(`${what} must be a uuid`);
+  if (!isUuid(value)) throw new OverheadSyncError(`${what} must be a uuid`);
   return value;
 }
 

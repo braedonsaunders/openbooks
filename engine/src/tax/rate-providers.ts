@@ -7,6 +7,7 @@ import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { guardedFetch, resolveVerifiedAddresses, type AddressLookup } from "../connectors/ssrf-guard.ts";
 import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * External sales-tax rate providers. Quotes are persisted as immutable evidence;
@@ -127,7 +128,7 @@ export async function readTaxRateProviderConfigForPosting(
     // are no valid targets to lock until that configuration is repaired.
     return config;
   }
-  const codeIds = [...new Set(Object.values(mapping).filter((id) => UUID_SHAPE.test(id)))].sort();
+  const codeIds = [...new Set(Object.values(mapping).filter((id) => isUuid(id)))].sort();
   for (const codeId of codeIds) {
     await runner.execute(sql`
       select id from tax_codes where org_id = ${orgId} and id = ${codeId} for share
@@ -183,10 +184,8 @@ export function readJurisdictionMapping(settings: Record<string, unknown>): Reco
   return mapping;
 }
 
-const UUID_SHAPE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 function uuidOrThrow(value: string, what: string): string {
-  if (!UUID_SHAPE.test(value)) {
+  if (!isUuid(value)) {
     throw new TaxRateProviderError(`${what} is not a valid id — refusing to quote provider tax`);
   }
   return value;
@@ -339,7 +338,7 @@ export async function validateJurisdictionTaxCodes(
     normalized[name] = codeId.trim();
   }
   for (const [jurisdiction, codeId] of Object.entries(normalized)) {
-    if (!UUID_SHAPE.test(codeId)) {
+    if (!isUuid(codeId)) {
       throw new TaxRateProviderError(
         `provider jurisdiction "${jurisdiction}" is mapped to "${codeId}", which is not a tax code id`,
       );

@@ -30,13 +30,11 @@ const mocks = new Map<string, string>([
         : { rows: [] } };
   `],
   ["mock:business-date", `
+    export * from ${JSON.stringify(new URL("../../../engine/src/platform/civil-date.ts", import.meta.url).href)};
     export async function businessToday() { return "2026-09-01"; }
-    export function daysInCivilMonth(year, month) { return new Date(Date.UTC(year, month, 0)).getUTCDate(); }
-    export function utcDateFromParts(year, month, day) { return new Date(Date.UTC(year, month - 1, day)); }
   `],
   ["mock:cadence", `
     export function advanceAnchoredMonth(date) { return date; }
-    export function lastDayOfMonth(year, month) { return new Date(Date.UTC(year, month, 0)).getUTCDate(); }
   `],
   ["mock:config", `export async function analyticsConfig() { return { weeklyApCap: "0.0000", restrictToSafe: 0 }; }`],
   ["mock:subsidiaries", `export function subsidiaryVisibleFilter() { return globalThis.__cashflowSqlEmpty; }`],

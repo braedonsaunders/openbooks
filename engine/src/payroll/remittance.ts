@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { lockScopeRow, ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import { civilDateFromParts, daysInCivilMonth, isIsoCalendarDate } from "../platform/business-date.ts";
+import { civilDateFromParts, endOfMonth, isIsoCalendarDate } from "../platform/business-date.ts";
 import { add, cmp, div, formatMoney, mulRate, neg, roundMoney, sum } from "../money/money.ts";
 import {
   filingAccountRef,
@@ -18,7 +18,6 @@ import {
 import { PayrollError } from "./error.ts";
 import {
   allRemittanceSchedules,
-  packRemittanceVendorSettingsKeys,
   PAYROLL_COUNTRY_PACKS,
   remittanceBandForAverage,
   remittanceFrequencyBand,
@@ -1419,22 +1418,12 @@ function scheduleCalendar(around: string, jurisdiction: string): ReadonlySet<str
   }));
 }
 
-/** The last day of the month `date` falls in. */
-function monthEnd(date: string): string {
-  const [y, m] = date.split("-").map(Number);
-  return civilDateFromParts(y!, m!, daysInCivilMonth(y!, m!));
-}
-
 /** The `day`th of the month `offsetMonths` after the one `date` falls in. */
 function dayOfMonth(date: string, offsetMonths: number, day: number): string {
   const [y, m] = date.split("-").map(Number);
-  // Month overflow normalizes exactly like the Date.UTC idiom this replaces
-  // (day 31 in a short month rolls into the next month); only the 0-99 →
-  // 1900-1999 remap is gone.
-  const total = (m! - 1) + offsetMonths;
-  const targetYear = y! + Math.floor(total / 12);
-  const targetMonth1 = (((total % 12) + 12) % 12) + 1;
-  return civilDateFromParts(targetYear, targetMonth1, day);
+  // Parts normalize like Date.UTC: month overflow carries into the year, and
+  // day 31 in a short month rolls into the next month.
+  return civilDateFromParts(y!, m! + offsetMonths, day);
 }
 
 export interface RemittanceDue {
@@ -1541,7 +1530,7 @@ export function scheduledRemittanceDueDateExplained(
       const periodEnd = day <= 7 ? dayOfMonth(date, 0, 7)
         : day <= 14 ? dayOfMonth(date, 0, 14)
         : day <= 21 ? dayOfMonth(date, 0, 21)
-        : monthEnd(date);
+        : endOfMonth(date);
       return {
         dueDate: addBusinessDays(periodEnd, band.due.workingDays, holidays),
         rule: band.rule,

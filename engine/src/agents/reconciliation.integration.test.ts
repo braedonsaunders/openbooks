@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import { defaultContinuousCloseDetectors } from "./continuous-close-config.ts";
 import { db, withBypass, withBypassContext } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
@@ -16,12 +16,6 @@ import { reconciliationFindings } from "./reconciliation.ts";
  */
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
-
-function shiftDays(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
 
 type OrgShape = { orgId: string; bookId: string; subsidiaryId: string; periodId: string; date: string; accounts: Record<string, string> };
 
@@ -78,9 +72,9 @@ test(
 
       // Candidate pair: $2500 line two days old, journal posted yesterday.
       const statement = await seedStatement(org.orgId, bank, today);
-      const lineId = await seedLine(statement, org.orgId, bank, shiftDays(today, -2), "2500.00", "Counterparty transfer");
-      await seedLine(statement, org.orgId, bank, shiftDays(today, -10), "200.00", "Small debit");
-      await seedBankReceipt(org, bank, org.accounts.revenue, "2500.00", shiftDays(today, -1));
+      const lineId = await seedLine(statement, org.orgId, bank, addCalendarDays(today, -2), "2500.00", "Counterparty transfer");
+      await seedLine(statement, org.orgId, bank, addCalendarDays(today, -10), "200.00", "Small debit");
+      await seedBankReceipt(org, bank, org.accounts.revenue, "2500.00", addCalendarDays(today, -1));
       const session = randomUUID();
       await withBypassContext(() => db.execute(sql`
         insert into reconciliations (id, org_id, account_id, through_date, statement_balance, status, currency)
@@ -91,23 +85,23 @@ test(
       const staleSession = randomUUID();
       await withBypassContext(() => db.execute(sql`
         insert into reconciliations (id, org_id, account_id, through_date, statement_balance, status, currency)
-        values (${staleSession}, ${org.orgId}, ${staleAccount}, ${shiftDays(today, -30)}, '0', 'in_progress', 'CAD')`));
+        values (${staleSession}, ${org.orgId}, ${staleAccount}, ${addCalendarDays(today, -30)}, '0', 'in_progress', 'CAD')`));
       await withBypassContext(() => db.execute(sql`
-        update reconciliations set updated_at = ${`${shiftDays(today, -10)}T00:00:00Z`}::timestamptz
+        update reconciliations set updated_at = ${`${addCalendarDays(today, -10)}T00:00:00Z`}::timestamptz
          where id = ${staleSession}`));
 
       // Never reconciled: activity with no session row at all.
       const freshAccount = await seedReconcilableAccount(org.orgId, "1030", "Payroll");
       const freshStatement = await seedStatement(org.orgId, freshAccount, today);
-      await seedLine(freshStatement, org.orgId, freshAccount, shiftDays(today, -20), "4500.00", "Payroll funding");
+      await seedLine(freshStatement, org.orgId, freshAccount, addCalendarDays(today, -20), "4500.00", "Payroll funding");
       // Below the floor: stays silent.
       const quietAccount = await seedReconcilableAccount(org.orgId, "1040", "Petty");
       const quietStatement = await seedStatement(org.orgId, quietAccount, today);
-      await seedLine(quietStatement, org.orgId, quietAccount, shiftDays(today, -5), "800.00", "Petty top-up");
+      await seedLine(quietStatement, org.orgId, quietAccount, addCalendarDays(today, -5), "800.00", "Petty top-up");
 
       // Another tenant's unmatched line: must not leak in.
       const foreignStatement = await seedStatement(other.orgId, other.accounts.bank, today);
-      await seedLine(foreignStatement, other.orgId, other.accounts.bank, shiftDays(today, -2), "99999.00", "Foreign line");
+      await seedLine(foreignStatement, other.orgId, other.accounts.bank, addCalendarDays(today, -2), "99999.00", "Foreign line");
 
       const findings = await withBypassContext(() =>
         reconciliationFindings(org.orgId, "1000.0000", defaultContinuousCloseDetectors("reconciliation")),
@@ -129,7 +123,7 @@ test(
       assert.deepEqual(stale[0]!.proposal, {
         tool: "sign_off_reconciliation",
         input: { reconciliationId: staleSession },
-        label: `Sign off Reserve through ${shiftDays(today, -30)}`,
+        label: `Sign off Reserve through ${addCalendarDays(today, -30)}`,
       });
 
       const never = byType("never_reconciled_account");

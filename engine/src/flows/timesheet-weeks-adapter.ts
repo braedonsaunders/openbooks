@@ -9,7 +9,8 @@ import {
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
-import { defineTableSubjectAdapter, isTableSubjectId } from "./table-subject-adapter.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 export const TIMESHEET_WEEK_SUBJECT_KIND = "timesheet_week";
 
@@ -68,7 +69,7 @@ export async function resolveTimesheetWeek(
   subjectId: string,
   orgId?: string,
 ): Promise<{ employeePartyId: string; weekStart: string; orgId: string } | null> {
-  if (!isTableSubjectId(subjectId)) return null;
+  if (!isUuid(subjectId)) return null;
   const result = (await db.execute<{ org_id: string; employee_party_id: string; week_start: string }>(sql`
     select org_id, employee_party_id, week_start::text as week_start
       from timesheet_weeks
@@ -100,6 +101,7 @@ type WeekRow = {
 };
 
 async function loadWeekSummary(subjectId: string): Promise<WeekRow | null> {
+  if (!isUuid(subjectId)) return null;
   // Status comes from the header — the record's own lifecycle — while the
   // measures aggregate the hours the header covers.
   const result = (await db.execute<WeekRow>(sql`

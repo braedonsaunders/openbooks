@@ -133,16 +133,6 @@ function escapeHtml(value: string): string {
   );
 }
 
-/**
- * Signed whole days from one ISO date to another. The single civil-date
- * definition lives in platform/business-date.ts: Date.UTC remaps years 0-99
- * onto 1900-1999, which made a cross-century overdue span hugely negative and
- * selected the wrong collection rung.
- */
-export function daysBetween(fromIso: string, toIsoDate: string): number {
-  return calendarDaysBetween(fromIso, toIsoDate);
-}
-
 export interface DunningRunResult {
   scanned: number;
   /**
@@ -447,7 +437,7 @@ async function runOneOrgDunning(asOf: string | undefined, orgId: string): Promis
           // still before it, which is exactly how courtesy rungs are reached.
           // The grace gate lives inside selectDueStage, where it delays the
           // post-due rungs without ever holding back a pre-due one.
-          const daysOverdue = daysBetween(doc.dueDate, today);
+          const daysOverdue = calendarDaysBetween(doc.dueDate, today);
 
           const fired = (await db.execute<{ stageId: string }>(sql`
             select stage_id as "stageId" from dunning_log

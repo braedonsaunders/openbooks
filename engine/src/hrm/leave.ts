@@ -37,6 +37,8 @@ import {
   type PolicyRow,
   type PolicyScope,
 } from "./leave-read.ts";
+import { isUuid } from "../platform/uuid.ts";
+import { inputGuards } from "./input-guards.ts";
 
 /**
  * HRM leave and attendance service (HR-5).
@@ -109,22 +111,9 @@ export interface LeaveRequestDTO {
   readonly attachmentId: string | null;
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function requireOrgId(orgId: unknown): string {
-  if (typeof orgId !== "string" || orgId.length === 0) throw new LeaveError("REFUSED", "orgId must be a non-empty string");
-  return orgId;
-}
-
-function requireActorId(actorId: unknown): string {
-  if (typeof actorId !== "string" || actorId.length === 0) throw new LeaveError("REFUSED", "actorId must be a non-empty string");
-  return actorId;
-}
-
-function requireId(value: unknown, field: string): string {
-  if (typeof value !== "string" || !UUID_RE.test(value)) throw new LeaveError("INVALID_INPUT", `${field} must be a uuid`);
-  return value;
-}
+const { requireOrgId, requireActorId, requireUuid } = inputGuards((message, kind) =>
+  new LeaveError(kind === "scope" ? "REFUSED" : "INVALID_INPUT", message),
+);
 
 function requireReason(reason: unknown, what: string): string {
   if (typeof reason !== "string" || reason.trim().length === 0) {
@@ -277,7 +266,7 @@ function validateAppliesTo(value: unknown): { employer_subsidiary_id: string | n
   const record = value as Record<string, unknown>;
   for (const key of ["employer_subsidiary_id", "department_id"] as const) {
     const entry = record[key];
-    if (entry !== null && entry !== undefined && (typeof entry !== "string" || !UUID_RE.test(entry))) {
+    if (entry !== null && entry !== undefined && !isUuid(entry)) {
       throw new LeaveError("INVALID_INPUT", `applies_to.${key} is a uuid or null for org-wide — record the scope`);
     }
   }
@@ -317,7 +306,7 @@ export interface CreateLeavePolicyQuery {
 export async function createLeavePolicy(query: CreateLeavePolicyQuery): Promise<LeavePolicyDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const leaveTypeId = requireId(query.leaveTypeId, "leaveTypeId");
+  const leaveTypeId = requireUuid(query.leaveTypeId, "leaveTypeId");
   const appliesTo = validateAppliesTo(query.appliesTo ?? { employer_subsidiary_id: null, department_id: null });
   const accrualRule = validateAccrualRule(query.accrualRule ?? { kind: "none" });
   const carryoverRule = validateCarryoverRule(query.carryoverRule ?? { kind: "none" });
@@ -651,8 +640,8 @@ export interface FileLeaveRequestQuery {
 export async function fileLeaveRequest(query: FileLeaveRequestQuery): Promise<LeaveRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const employmentId = requireId(query.employmentId, "employmentId");
-  const leaveTypeId = requireId(query.leaveTypeId, "leaveTypeId");
+  const employmentId = requireUuid(query.employmentId, "employmentId");
+  const leaveTypeId = requireUuid(query.leaveTypeId, "leaveTypeId");
   const startsOn = requireCivilDate(query.startsOn, "startsOn");
   const endsOn = requireCivilDate(query.endsOn, "endsOn");
   if (endsOn < startsOn) throw new LeaveError("INVALID_INPUT", `effective end ${endsOn} must not precede start ${startsOn} — file the range forward`);
@@ -734,7 +723,7 @@ export interface SubmitLeaveRequestQuery {
 export async function submitLeaveRequest(query: SubmitLeaveRequestQuery): Promise<LeaveRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const requestId = requireId(query.requestId, "requestId");
+  const requestId = requireUuid(query.requestId, "requestId");
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);
     const { onBehalf } = await requireRequestAccess(db, orgId, actorId, current.employment_id);
@@ -803,8 +792,8 @@ export async function submitLeaveRequest(query: SubmitLeaveRequestQuery): Promis
 export async function recordLeaveAttachment(query: { orgId: string; actorId: string; requestId: string; attachmentId: unknown }): Promise<LeaveRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const requestId = requireId(query.requestId, "requestId");
-  const attachmentId = requireId(query.attachmentId, "attachmentId");
+  const requestId = requireUuid(query.requestId, "requestId");
+  const attachmentId = requireUuid(query.attachmentId, "attachmentId");
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);
     await requireRequestAccess(db, orgId, actorId, current.employment_id);
@@ -837,7 +826,7 @@ export interface WithdrawLeaveRequestQuery {
 export async function withdrawLeaveRequest(query: WithdrawLeaveRequestQuery): Promise<LeaveRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const requestId = requireId(query.requestId, "requestId");
+  const requestId = requireUuid(query.requestId, "requestId");
   const reason = requireReason(query.reason, "a withdrawal");
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);
@@ -930,7 +919,7 @@ async function committedRunCoveringDay(
 export async function releaseLeaveRequest(query: ReleaseLeaveRequestQuery): Promise<LeaveRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const requestId = requireId(query.requestId, "requestId");
+  const requestId = requireUuid(query.requestId, "requestId");
   if (query.outcome !== "approved" && query.outcome !== "rejected") {
     throw new LeaveError("INVALID_INPUT", "outcome is approved or rejected — there is no third decision");
   }
@@ -1101,7 +1090,7 @@ export interface CancelLeaveRequestQuery {
 export async function cancelLeaveRequest(query: CancelLeaveRequestQuery): Promise<LeaveRequestDTO> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const requestId = requireId(query.requestId, "requestId");
+  const requestId = requireUuid(query.requestId, "requestId");
   const reason = requireReason(query.reason, "a cancellation");
   return withOrgTransaction(orgId, async () => {
     const current = await loadRequestForUpdate(db, orgId, requestId);

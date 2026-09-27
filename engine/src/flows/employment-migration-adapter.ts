@@ -31,7 +31,8 @@ import {
   EVENT_SOURCE_OPTIONS,
 } from "./subject-profiles.ts";
 import { HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND } from "@openbooks/schema/src/hrm.ts";
-import { defineTableSubjectAdapter, isTableSubjectId } from "./table-subject-adapter.ts";
+import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 const MAPPING_APPROVAL_STATUSES = [
   { value: "draft", label: "Draft" },
@@ -68,7 +69,7 @@ type ApprovalRow = {
 };
 
 async function loadApproval(subjectId: string): Promise<ApprovalRow | null> {
-  if (!isTableSubjectId(subjectId)) return null;
+  if (!isUuid(subjectId)) return null;
   // No ambient-tenant requirement and no org predicate here, by adapter
   // parity (documents, budget, timesheet, HRM change requests): decideGate's
   // pre-flight resolves the decider outside withOrg, and every caller scopes
@@ -136,7 +137,7 @@ export const employmentMigrationFlowAdapter: FlowSubjectAdapter = defineTableSub
     ctx: FlowExecCtx,
     detail?: { comment?: string | null },
   ): Promise<void> {
-    if (!isTableSubjectId(subjectId)) {
+    if (!isUuid(subjectId)) {
       throw new Error(`unknown employment migration approval ${subjectId}`);
     }
     if (outcome !== "approved" && outcome !== "rejected") {

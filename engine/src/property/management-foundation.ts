@@ -7,6 +7,7 @@ import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsi
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { dataDependentFeatureDefault } from "../organization/feature-defaults.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import { addCalendarDays, addMonthsStart, endOfMonth, inclusiveCalendarDays, isIsoCalendarDate, startOfMonth } from "../platform/civil-date.ts";
 
 export class PropertyManagementError extends Error {
   constructor(message: string, readonly status = 422) {
@@ -89,7 +90,6 @@ export function assertLockedSubsidiaryInScope(
   if (!subsidiaryScopeAllows(allowedSubsidiaryIds, subsidiaryId)) throw new ScopeNotFoundError();
 }
 export const INVENTORY_ITEM_KINDS = new Set(["inventory", "assembly", "kit"]);
-export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 /** Cash and control classes never serve as the offset for deposit interest or adjustments. */
 export const DEPOSIT_OFFSET_EXCLUDED_TYPES = new Set(["asset_bank", "asset_receivable", "liability_payable", "liability_card"]);
 export function exactMoney(value: unknown, label: string): string {
@@ -106,23 +106,11 @@ export function exactMoney(value: unknown, label: string): string {
     throw new PropertyManagementError(`${label} must be an exact decimal`);
   }
 }
-export const isoDate = /^\d{4}-\d{2}-\d{2}$/;
 export function validDate(value: string | null | undefined, label: string): string | null {
   if (value == null || value === "") return null;
-  if (!isoDate.test(value)) throw new PropertyManagementError(`${label} is invalid`);
-  const parsed = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime()) || toIso(parsed) !== value) throw new PropertyManagementError(`${label} is invalid`);
+  if (!isIsoCalendarDate(value)) throw new PropertyManagementError(`${label} is invalid`);
   return value;
 }
-export function utc(iso: string): Date { return new Date(`${iso}T00:00:00Z`); }
-export function toIso(date: Date): string { return date.toISOString().slice(0, 10); }
-export function addDays(iso: string, days: number): string { const d = utc(iso); d.setUTCDate(d.getUTCDate() + days); return toIso(d); }
-export function startOfMonth(iso: string): string { return `${iso.slice(0, 7)}-01`; }
-export function addMonths(iso: string, months: number): string {
-  const d = utc(startOfMonth(iso)); d.setUTCMonth(d.getUTCMonth() + months); return toIso(d);
-}
-export function endOfMonth(iso: string): string { return addDays(addMonths(startOfMonth(iso), 1), -1); }
-export function dayCount(a: string, b: string): number { return Math.round((utc(b).getTime() - utc(a).getTime()) / 86_400_000) + 1; }
 export function clampDue(month: string, billingDay: number): string {
   const last = Number(endOfMonth(month).slice(8, 10));
   return `${month.slice(0, 8)}${String(Math.min(Math.max(1, billingDay), last)).padStart(2, "0")}`;
@@ -133,7 +121,7 @@ export function minDate(...dates: string[]): string { return dates.reduce((a, b)
 export function overlapDayCount(aStart: string, aEnd: string, bStart: string, bEnd: string): number {
   const start = maxDate(aStart, bStart);
   const end = minDate(aEnd, bEnd);
-  return end < start ? 0 : dayCount(start, end);
+  return end < start ? 0 : inclusiveCalendarDays(start, end);
 }
 export interface SchedulePeriod {
   periodStartsOn: string;
@@ -204,8 +192,8 @@ export interface DepositLeaseRow extends Record<string, unknown> {
 }
 /** Exact, inclusive-day proration for partial first/last rental periods. */
 export function prorateLeaseCharge(amount: string, nominalStart: string, nominalEnd: string, activeStart: string, activeEnd: string): string {
-  const total = dayCount(nominalStart, nominalEnd);
-  const active = Math.max(0, dayCount(maxDate(nominalStart, activeStart), minDate(nominalEnd, activeEnd)));
+  const total = inclusiveCalendarDays(nominalStart, nominalEnd);
+  const active = Math.max(0, inclusiveCalendarDays(maxDate(nominalStart, activeStart), minDate(nominalEnd, activeEnd)));
   if (active <= 0 || total <= 0) return "0.0000";
   return mulRatio(exactMoney(amount, "Charge amount"), BigInt(active), BigInt(total));
 }
@@ -224,8 +212,8 @@ export function leaseChargeSchedule(input: {
   if (input.frequency === "one_time") return [{ periodStartsOn: start, periodEndsOn: start, dueOn: start, amount: exactMoney(input.amount, "Charge amount") }];
   const step = input.frequency === "monthly" ? 1 : input.frequency === "quarterly" ? 3 : 12;
   const rows: SchedulePeriod[] = [];
-  for (let nominalStart = startOfMonth(start); nominalStart <= end; nominalStart = addMonths(nominalStart, step)) {
-    const nominalEnd = addDays(addMonths(nominalStart, step), -1);
+  for (let nominalStart = startOfMonth(start); nominalStart <= end; nominalStart = addMonthsStart(nominalStart, step)) {
+    const nominalEnd = addCalendarDays(addMonthsStart(nominalStart, step), -1);
     const activeStart = maxDate(nominalStart, start);
     const activeEnd = minDate(nominalEnd, end);
     if (activeEnd < activeStart) continue;

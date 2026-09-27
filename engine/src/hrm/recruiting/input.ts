@@ -1,27 +1,9 @@
 import { isCivilDate } from "../temporal.ts";
 import { RecruitingError } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 
-/** UUID-shaped input validation shared by every recruiting service. */
-export function requireOrgId(orgId: unknown): string {
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new RecruitingError("INVALID_INPUT", "orgId must be a non-empty string");
-  }
-  return orgId;
-}
-
-export function requireActorId(actorId: unknown): string {
-  if (typeof actorId !== "string" || actorId.length === 0) {
-    throw new RecruitingError("INVALID_INPUT", "actorId must be a non-empty string");
-  }
-  return actorId;
-}
-
-export function requireId(value: unknown, name: string): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new RecruitingError("INVALID_INPUT", `${name} must be a non-empty string`);
-  }
-  return value;
-}
+/** Id presence checks shared by every recruiting service. */
+export const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new RecruitingError("INVALID_INPUT", message));
 
 /** ISO 8601 instant with an explicit UTC designator or numeric offset. */
 export function isIsoInstantWithOffset(value: string): boolean {

@@ -18,6 +18,7 @@ import {
 } from "../performance/reviews.ts";
 import { updateGoalProgress } from "../performance/goals.ts";
 import { changeEnrollment, electEnrollment } from "../benefits/enrollments.ts";
+import { inputGuards } from "../input-guards.ts";
 
 /**
  * Me-workspace reviews and benefits reads and writes (HR-10).
@@ -65,19 +66,7 @@ async function assertHrmFeatureOn(exec: SqlExecutor, orgId: string): Promise<voi
   }
 }
 
-function requireOrgId(orgId: unknown): string {
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new SelfServiceError("REFUSED", "orgId must be a non-empty string");
-  }
-  return orgId;
-}
-
-function requireActorId(actorId: unknown): string {
-  if (typeof actorId !== "string" || actorId.length === 0) {
-    throw new SelfServiceError("REFUSED", "actorId must be a non-empty string");
-  }
-  return actorId;
-}
+const { requireOrgId, requireActorId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
 
 // --- Reviews ---------------------------------------------------------------
 

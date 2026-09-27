@@ -4,6 +4,7 @@ import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { BenefitsError } from "./errors.ts";
 import { parseCivilDate } from "../temporal.ts";
+import { inputGuards } from "../input-guards.ts";
 
 /**
  * Shared benefits service plumbing: the HRM feature gate (rechecked inside
@@ -21,26 +22,7 @@ export async function assertHrmEnabled(exec: SqlExecutor, orgId: string): Promis
   }
 }
 
-export function requireOrgId(orgId: unknown): string {
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new BenefitsError("INVALID_INPUT", "orgId must be a non-empty string");
-  }
-  return orgId;
-}
-
-export function requireActorId(actorId: unknown): string {
-  if (typeof actorId !== "string" || actorId.length === 0) {
-    throw new BenefitsError("INVALID_INPUT", "actorId must be a non-empty string");
-  }
-  return actorId;
-}
-
-export function requireId(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new BenefitsError("INVALID_INPUT", `${field} must be a non-empty id string`);
-  }
-  return value;
-}
+export const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new BenefitsError("INVALID_INPUT", message));
 
 /** Strict civil date (YYYY-MM-DD), refused with the remedy otherwise. */
 export function requireCivilDate(value: unknown, field: string): string {

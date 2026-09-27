@@ -3,6 +3,7 @@ import { z } from "zod";
 import { PERIOD_PRESET_IDS, type DateRange } from "@openbooks/reports";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { canonicalDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
+import { UUID_RE } from "@openbooks/engine/src/platform/uuid.ts";
 import { fiscalStartMonth } from "../fiscal";
 import { resolveRangeArgs, type RangeArgs } from "./period-range";
 
@@ -13,14 +14,6 @@ import { resolveRangeArgs, type RangeArgs } from "./period-range";
  * exact-decimal money, ISO dates.
  */
 
-/**
- * Canonical tool-input UUID pattern. Written WITHOUT a case-insensitive flag
- * on purpose: JSON Schema patterns carry no flags, so a flag-dependent regex
- * would validate one set of values in zod and a narrower set provider-side.
- * The explicit A-F class keeps both sides identical (see
- * tool-schema-lint.test.ts, which pins the emitted pattern).
- */
-export const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const dateInput = z.string().regex(ISO_DATE, "YYYY-MM-DD")

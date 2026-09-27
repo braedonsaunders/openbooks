@@ -6,6 +6,7 @@ import {
   requireHrmLeaveRead,
 } from "./authorization.ts";
 import { LeaveError } from "./leave-errors.ts";
+import { inputGuards } from "./input-guards.ts";
 import { isUniqueViolation } from "./field-time/errors.ts";
 import { addHours, formatCents, parseHoursToCents } from "./leave-math.ts";
 import { parseCivilDate } from "./temporal.ts";
@@ -19,6 +20,10 @@ import { parseCivilDate } from "./temporal.ts";
  * approval; a day a committed run already covers is refused with the retro
  * remedy.
  */
+
+const { requireOrgId, requireActorId, requireId } = inputGuards((message, kind) =>
+  new LeaveError(kind === "scope" ? "REFUSED" : "INVALID_INPUT", message),
+);
 
 export interface RecordAbsenceQuery {
   readonly orgId: string;
@@ -67,15 +72,10 @@ function requirePositiveHours(value: unknown): string {
 
 /** Record an absence after the fact (manager-held, reasoned elsewhere). */
 export async function recordAbsence(query: RecordAbsenceQuery): Promise<AbsenceDay> {
-  const { orgId, actorId } = query;
-  if (typeof orgId !== "string" || orgId.length === 0) throw new LeaveError("REFUSED", "orgId must be a non-empty string");
-  if (typeof actorId !== "string" || actorId.length === 0) throw new LeaveError("REFUSED", "actorId must be a non-empty string");
-  if (typeof query.employmentId !== "string" || query.employmentId.length === 0) {
-    throw new LeaveError("INVALID_INPUT", "employmentId must be a uuid");
-  }
-  if (typeof query.leaveTypeId !== "string" || query.leaveTypeId.length === 0) {
-    throw new LeaveError("INVALID_INPUT", "leaveTypeId must be a uuid");
-  }
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  requireId(query.employmentId, "employmentId");
+  requireId(query.leaveTypeId, "leaveTypeId");
   const onDate = requireCivilDate(query.onDate);
   const hours = requirePositiveHours(query.hours);
   return withOrgTransaction(orgId, async () => {

@@ -2,8 +2,9 @@ import {
   accrualEarned,
   carryoverApplied,
 } from "@openbooks/engine/src/hrm/leave-math.ts";
-import { UUID_RE } from "./coerce.ts";
+import {} from "./coerce.ts";
 import { foldWholeNumber } from "./whole-number";
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 /**
  * HRM leave-policy rule normalization (pure — no server imports, so unit
@@ -78,7 +79,7 @@ export function leavePolicyRuleProblem(values: LeavePolicyRuleValues): string | 
     const record = raw as Record<string, unknown>;
     for (const key of ["employer_subsidiary_id", "department_id"] as const) {
       const entry = record[key] ?? null;
-      if (entry !== null && (typeof entry !== "string" || !UUID_RE.test(entry))) {
+      if (entry !== null && !isUuid(entry)) {
         return "The applies-to subsidiary and department must be ids, or null for all";
       }
     }

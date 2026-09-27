@@ -15,6 +15,7 @@ import {
   DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID,
 } from "../connectors/netsuite-bridge.ts";
 import { unsealJson } from "../platform/secrets.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 const SOURCE_SYSTEM = "netsuite";
 const RESTLET_BATCH_SIZE = 50;
@@ -46,8 +47,6 @@ export interface ImportOptions {
   sourceFileIds?: string[];
 }
 
-const USER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 /**
  * Normalize the optional audit actor without inventing an identity. A missing
  * actor is an intentional system import and is persisted as NULL; a supplied
@@ -58,7 +57,7 @@ export function normalizeImportActorId(actorId: string | null | undefined): stri
   if (typeof actorId !== "string") throw new Error("attachment import actorId must be a valid user id");
   const normalized = actorId.trim();
   if (!normalized) return null;
-  if (!USER_ID.test(normalized)) throw new Error("attachment import actorId must be a valid user id");
+  if (!isUuid(normalized)) throw new Error("attachment import actorId must be a valid user id");
   return normalized;
 }
 

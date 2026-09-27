@@ -24,11 +24,11 @@ import { stockLocationDim, postInventoryEntry, type JournalLineInput } from "./j
 import {
   loadDocumentInventoryLines,
   inventoryPostingEffectKey,
-  UUID_RE,
   isJsonRecord,
   type DocumentInventoryLine,
 } from "./document-lines.ts";
 import { postedReturnQuantity } from "./return-quantities.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Immutable operational document created when stock physically leaves on a
@@ -67,18 +67,18 @@ export function parseCustomerCreditInventoryReturnSelection(
   const serialId = evidence.serialId ?? null;
   if (
     typeof sourceIssueMovementId !== "string" ||
-    !UUID_RE.test(sourceIssueMovementId)
+    !isUuid(sourceIssueMovementId)
   ) {
     throw new InventoryError(
       `${lineLabel} requires a valid inventoryReturn.sourceIssueMovementId`,
     );
   }
-  if (lotId !== null && (typeof lotId !== "string" || !UUID_RE.test(lotId))) {
+  if (lotId !== null && !isUuid(lotId)) {
     throw new InventoryError(`${lineLabel} inventoryReturn.lotId must be a UUID`);
   }
   if (
     serialId !== null &&
-    (typeof serialId !== "string" || !UUID_RE.test(serialId))
+    !isUuid(serialId)
   ) {
     throw new InventoryError(
       `${lineLabel} inventoryReturn.serialId must be a UUID`,

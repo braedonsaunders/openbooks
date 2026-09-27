@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import {
@@ -100,12 +100,6 @@ export type PayablesLoaders = {
   discountOpportunities: (orgId: string, minPercent: number) => Promise<DiscountOpportunityRow[]>;
   staleApprovals: (orgId: string, cutoff: string) => Promise<StaleApprovalRow[]>;
 };
-
-function shiftDaysIso(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
 
 async function loadDuplicatePairs(orgId: string, windowDays: number, floor: string): Promise<DuplicateBillPair[]> {
   // Kinds narrow Sentinel's spend set to bills: checks and vendor payments
@@ -393,7 +387,7 @@ export async function payablesFindings(
   const payrunPolicy = byKey.get("bills_due_before_payrun");
   if (payrunPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(payrunPolicy, agentThreshold);
-    const horizonEnd = shiftDaysIso(today, payrunPolicy.parameters.payRunHorizonDays!);
+    const horizonEnd = addCalendarDays(today, payrunPolicy.parameters.payRunHorizonDays!);
     const { due, beyondCount, beyondTotal } = await loaders.payrunBills(orgId, horizonEnd);
     if (due.length > 0) {
       const materiality = fromUnits(due.reduce((sum, bill) => sum + toUnits(bill.openBalance), 0n));
@@ -491,7 +485,7 @@ export async function payablesFindings(
   const approvalPolicy = byKey.get("bills_missing_approval");
   if (approvalPolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(approvalPolicy, agentThreshold);
-    const cutoff = shiftDaysIso(today, -(approvalPolicy.parameters.staleAfterDays!));
+    const cutoff = addCalendarDays(today, -(approvalPolicy.parameters.staleAfterDays!));
     const rows = await loaders.staleApprovals(orgId, cutoff);
     if (rows.length > 0) {
       const materiality = fromUnits(rows.reduce((sum, row) => sum + toUnits(row.total), 0n));

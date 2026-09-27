@@ -44,6 +44,7 @@ import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../engine/src/platform/db.ts";
+import { isUuid } from "../engine/src/platform/uuid.ts";
 import { decideProductionApply } from "../engine/src/hrm/migration-cli-gate.ts";
 import {
   collectLegacyEmployments,
@@ -66,9 +67,6 @@ import {
   type MappingSetEntry,
   type SourcePersonRow,
 } from "../engine/src/hrm/migration-preflight.ts";
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function usage(): string {
   return [
@@ -214,11 +212,11 @@ async function runRequestApproval(options: {
     console.error(usage());
     return fail("refusing --request-approval without --operator-mappings=<map.json>: approval covers an exact mapping set");
   }
-  if (requestedBy === null || !UUID_PATTERN.test(requestedBy)) {
+  if (requestedBy === null || !isUuid(requestedBy)) {
     console.error(usage());
     return fail("--requested-by=<uuid> is required; refusing to request approval without an explicit requester");
   }
-  if (orgFlag === null || !UUID_PATTERN.test(orgFlag)) {
+  if (orgFlag === null || !isUuid(orgFlag)) {
     console.error(usage());
     return fail("--org=<uuid> is required; refusing to request approval without an explicit tenant scope");
   }
@@ -309,7 +307,7 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
     console.error(usage());
     return fail(`unknown arguments: ${unknown.join(" ")}`);
   }
-  if (appliedBy !== null && !UUID_PATTERN.test(appliedBy)) {
+  if (appliedBy !== null && !isUuid(appliedBy)) {
     console.error(usage());
     return fail(`--applied-by=${appliedBy} is not a valid UUID; refusing without an explicit applying actor`);
   }
@@ -333,13 +331,13 @@ export async function runHrmMigrationCli(options: HrmMigrationCliOptions): Promi
         "— migrate one org per run",
     );
   }
-  if (orgId === null || !UUID_PATTERN.test(orgId)) {
+  if (orgId === null || !isUuid(orgId)) {
     console.error(usage());
     return fail("--org=<uuid> (or --collect=<uuid>) is required; refusing to migrate without an explicit tenant scope");
   }
   let rows: SourcePersonRow[];
   if (collectOrg !== null) {
-    if (!UUID_PATTERN.test(collectOrg)) {
+    if (!isUuid(collectOrg)) {
       console.error(usage());
       return fail(`--collect=${collectOrg} is not a valid UUID; refusing to collect without an explicit tenant scope`);
     }

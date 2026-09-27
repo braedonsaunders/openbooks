@@ -1,3 +1,4 @@
+import { addCalendarDays } from "../platform/civil-date.ts";
 import { compareCivilDates, parseCivilDate, type CivilDate } from "./temporal.ts";
 
 /**
@@ -30,45 +31,6 @@ export class ProcessMathError extends Error {
   }
 }
 
-/** Days since 0001-01-01 (day 0), proleptic Gregorian — mirrors temporal.ts. */
-function dayNumberOf(year: number, month: number, day: number): number {
-  const shiftedYear = month <= 2 ? year - 1 : year;
-  const era = Math.floor(shiftedYear / 400);
-  const yearOfEra = shiftedYear - era * 400;
-  const monthPrime = month > 2 ? month - 3 : month + 9;
-  const dayOfYear = Math.floor((153 * monthPrime + 2) / 5) + day - 1;
-  const dayOfEra =
-    yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
-  return era * 146097 + dayOfEra - 306;
-}
-
-/** Inverse of dayNumberOf: civil date for a day number (Hinnant's algorithm). */
-function civilFromDayNumber(dayNumber: number): { year: number; month: number; day: number } {
-  const shifted = dayNumber + 306;
-  const era = Math.floor(shifted / 146097);
-  const dayOfEra = shifted - era * 146097;
-  const yearOfEra = Math.floor(
-    (dayOfEra - Math.floor(dayOfEra / 1460) + Math.floor(dayOfEra / 36524) - Math.floor(dayOfEra / 146096)) / 365,
-  );
-  const year = yearOfEra + era * 400;
-  const dayOfYear = dayOfEra - (365 * yearOfEra + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100));
-  const monthPrime = Math.floor((5 * dayOfYear + 2) / 153);
-  const day = dayOfYear - Math.floor((153 * monthPrime + 2) / 5) + 1;
-  const month = monthPrime < 10 ? monthPrime + 3 : monthPrime - 9;
-  return { year: month <= 2 ? year + 1 : year, month, day };
-}
-
-function pad2(value: number): string {
-  return value < 10 ? `0${value}` : String(value);
-}
-
-function padYear(year: number): string {
-  if (year < 10) return `000${year}`;
-  if (year < 100) return `00${year}`;
-  if (year < 1000) return `0${year}`;
-  return String(year);
-}
-
 /**
  * Add whole calendar days to a civil date on the integer day grid.
  * Negative offsets walk backwards (pre-start preparation steps). A result
@@ -83,16 +45,16 @@ export function addOffsetDays(effectiveDate: string, offsetDays: number): CivilD
       `due offset ${String(offsetDays)} is not a whole number of days — store due offsets as integer days relative to the effective date`,
     );
   }
-  const parts = start.split("-").map(Number);
-  const target = dayNumberOf(parts[0]!, parts[1]!, parts[2]!) + offsetDays;
-  const civil = civilFromDayNumber(target);
-  if (civil.year < 1 || civil.year > 9999) {
+  let shifted: string;
+  try {
+    shifted = addCalendarDays(start, offsetDays);
+  } catch {
     throw new ProcessMathError(
       "DATE_OUT_OF_RANGE",
       `effective date ${start} plus ${offsetDays} days leaves the supported calendar (0001 through 9999) — shorten the offset`,
     );
   }
-  return parseCivilDate(`${padYear(civil.year)}-${pad2(civil.month)}-${pad2(civil.day)}`);
+  return parseCivilDate(shifted);
 }
 
 /**

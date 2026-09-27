@@ -2,7 +2,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
@@ -30,7 +30,6 @@ import {
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
-import { isCalendarDate } from '../../../../../lib/setup/coerce'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { notFound } from "@/lib/api/responses";
 
@@ -549,7 +548,7 @@ export async function POST(req: Request) {
     const effectiveFrom = body.effectiveFrom
     // Shape alone admits impossible dates ('2026-02-30') that PostgreSQL
     // then refuses with a driver error instead of this field error.
-    if (typeof effectiveFrom !== 'string' || !DATE_RE.test(effectiveFrom) || !isCalendarDate(effectiveFrom)) {
+    if (typeof effectiveFrom !== 'string' || !DATE_RE.test(effectiveFrom) || !isIsoCalendarDate(effectiveFrom)) {
       return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 422 })
     }
     const reason = bodyReason(body.reason, 'wage rate saved')
@@ -616,7 +615,7 @@ export async function POST(req: Request) {
     const id = body.id
     if (typeof id !== 'string' || !isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
     const to = body.effectiveTo
-    if (to !== null && (typeof to !== 'string' || !DATE_RE.test(to) || !isCalendarDate(to))) {
+    if (to !== null && (typeof to !== 'string' || !DATE_RE.test(to) || !isIsoCalendarDate(to))) {
       return NextResponse.json({ error: 'invalid effectiveTo' }, { status: 422 })
     }
     const reason = bodyReason(body.reason, to ? 'wage rate ended' : 'wage rate end date cleared')
@@ -733,7 +732,7 @@ export async function POST(req: Request) {
   // Payroll true-up: read the clearing wash for a period / post its residue.
   // An impossible date that passes the shape check reaches the engine, whose
   // SQL date comparisons throw past the route's 422 mapping as a 500.
-  const DATE_OK = (v: unknown): v is string => typeof v === 'string' && DATE_RE.test(v) && isCalendarDate(v)
+  const DATE_OK = (v: unknown): v is string => typeof v === 'string' && DATE_RE.test(v) && isIsoCalendarDate(v)
   if (body.action === 'reconcile') {
     if (!DATE_OK(body.periodStart) || !DATE_OK(body.periodEnd) || body.periodEnd < body.periodStart) {
       return NextResponse.json({ error: 'periodStart/periodEnd (YYYY-MM-DD) required' }, { status: 422 })

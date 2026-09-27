@@ -22,6 +22,7 @@ import { getS3Blob } from './file-storage'
 import { can, resolveAuthzByUserId, subsidiaryScopeAllows } from './authz'
 import { postPermission } from './document-kinds'
 import { lockEquipmentProjectScope, resolveDraftSubsidiary, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 /**
  * Field tickets — the signed crew timesheet for T&M work (the industry's
@@ -350,8 +351,6 @@ export interface CrewRowInput {
   hours: Record<string, string | number>
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 /** Exact numeric(19,4) hours for the money column, or null (blank/zero). */
 function exactTicketHours(value: unknown): string | null {
   if (value == null || value === '') return null
@@ -445,7 +444,7 @@ export async function saveCrewGrid(
       // never makes an older draft impossible to save.
       const requestedTypeIds = [...new Set(rows.map((row) => row.timeTypeId).filter(Boolean))]
       if (requestedTypeIds.length) {
-        if (requestedTypeIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+        if (requestedTypeIds.some((id) => !isUuid(id))) {
           throw new FieldTicketError('Choose a valid time type')
         }
         const existingTypeIds = new Set(existing.rows.map((entry) => entry.time_type_id))
@@ -465,7 +464,7 @@ export async function saveCrewGrid(
       // so deactivating a person or item never bricks an older draft — the
       // same grandfathering the time-type check above applies.
       const requestedEmployeeIds = [...new Set(rows.map((row) => row.employeePartyId).filter(Boolean))]
-      if (requestedEmployeeIds.some((id) => !UUID_RE.test(id))) {
+      if (requestedEmployeeIds.some((id) => !isUuid(id))) {
         throw new FieldTicketError('Choose a valid crew member')
       }
       const existingEmployeeIds = new Set(existing.rows.map((entry) => entry.employee_party_id))
@@ -488,7 +487,7 @@ export async function saveCrewGrid(
         }
       }
       const requestedItemIds = [...new Set(rows.map((row) => row.itemId).filter((id): id is string => Boolean(id)))]
-      if (requestedItemIds.some((id) => !UUID_RE.test(id))) {
+      if (requestedItemIds.some((id) => !isUuid(id))) {
         throw new FieldTicketError('Choose a valid item')
       }
       const existingItemIds = new Set(existing.rows.map((entry) => entry.item_id).filter((id): id is string => Boolean(id)))
@@ -504,7 +503,7 @@ export async function saveCrewGrid(
       }
       const requestedTaskIds = [...new Set(rows.map((row) => row.projectTaskId).filter((id): id is string => Boolean(id)))]
       if (requestedTaskIds.length) {
-        if (requestedTaskIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
+        if (requestedTaskIds.some((id) => !isUuid(id))) {
           throw new FieldTicketError('Choose a valid project task')
         }
         const validTasks = (await db.execute<{ id: string }>(sql`

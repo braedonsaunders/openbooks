@@ -1,5 +1,6 @@
 import { PAYROLL_COUNTRY_PACKS, PayrollPackError } from "./packs.ts";
 import type { PayrollSubsidiaryScope } from "./scope.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * The payroll FILING registry — the jurisdiction layer's answer to "what does
@@ -342,16 +343,12 @@ export interface PayrollFilingRowScope {
 }
 
 /**
- * The lax UUID shape the web layer guards `[id]` params with (any hex
- * version nibble — ids are opaque here, not validated). One definition for
- * every filing's row grammar, so a stricter copy cannot 404 another pack's
- * real rows.
+ * True when the value has the row-id UUID shape: the house `isUuid` (any hex
+ * version nibble — ids are opaque here, not validated), so no filing's row
+ * grammar can be stricter than another's and 404 its real rows.
  */
-const FILING_ROW_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** True when the value has the row-id UUID shape. */
 export function isFilingRowUuid(value: string): boolean {
-  return FILING_ROW_UUID_RE.test(value);
+  return isUuid(value);
 }
 
 export interface PayrollYearEndFiling {

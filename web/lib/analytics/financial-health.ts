@@ -1,5 +1,4 @@
 import "server-only";
-import { addMonthsIso } from "@openbooks/reports";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -13,6 +12,7 @@ import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { englishFinancialHealthNotes, type FinancialHealthNotes } from "./health-strings";
 import { OPERATING_EXPENSE_TYPES } from "./operating-expenses";
 import { decimalSum, type ExactDecimal } from '../statement-format'
+import { addMonthsClamped } from '@openbooks/engine/src/platform/business-date.ts';
 
 /**
  * Financial Health — the ratio + scorecard engine behind
@@ -235,7 +235,7 @@ function scoreOf(value: number | null, benchmark: number, inverse?: boolean): nu
 
 /** Shift an ISO date back one year (prior-year comparison period). */
 function priorYear(iso: string): string {
-  return addMonthsIso(iso, -12);
+  return addMonthsClamped(iso, -12);
 }
 
 function monthsBetween(from: string, to: string): number {

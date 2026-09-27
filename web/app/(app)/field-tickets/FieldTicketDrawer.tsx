@@ -13,6 +13,7 @@ import { Mail, Plus, Send, Trash2 } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, cn } from '@openbooks/ui'
 import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
 import { add } from '@openbooks/engine/src/money/money.ts'
+import { addCalendarDays, parseIsoDate } from '@openbooks/engine/src/platform/civil-date.ts'
 import {
   executeDocumentSave,
   persistedDocumentRevision,
@@ -164,27 +165,20 @@ const STATUS_VARIANT: Record<string, 'secondary' | 'warning' | 'success' | 'outl
   voided: 'outline',
 }
 
-function daysBetween(start: string, end: string): string[] {
+/** Each day of the window, capped at two weeks. */
+function daysInWindow(start: string, end: string): string[] {
   const out: string[] = []
-  const [y, m, d] = start.split('-').map(Number)
-  const cur = new Date(Date.UTC(y!, m! - 1, d!, 12))
-  for (let i = 0; i < 14; i++) {
-    const isoDay = cur.toISOString().slice(0, 10)
-    out.push(isoDay)
-    if (isoDay >= end) break
-    cur.setUTCDate(cur.getUTCDate() + 1)
+  for (let day = start; out.length < 14; day = addCalendarDays(day, 1)) {
+    out.push(day)
+    if (day >= end) break
   }
   return out
 }
 
 function ticketWindow(period: string, anchor: string): { start: string; end: string } {
-  const [y, m, d] = anchor.split('-').map(Number)
   if (period !== 'weekly') return { start: anchor, end: anchor }
-  const date = new Date(Date.UTC(y!, m! - 1, d!, 12))
-  date.setUTCDate(date.getUTCDate() - date.getUTCDay())
-  const start = date.toISOString().slice(0, 10)
-  date.setUTCDate(date.getUTCDate() + 6)
-  return { start, end: date.toISOString().slice(0, 10) }
+  const start = addCalendarDays(anchor, -parseIsoDate(anchor).getUTCDay())
+  return { start, end: addCalendarDays(start, 6) }
 }
 
 export function buildGrid(entries: EntryRow[]): GridRow[] {
@@ -378,7 +372,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       : { start: ticket.fieldTicket.periodStart, end: ticket.fieldTicket.periodEnd },
     [documentDate, editable, gridHasHours, period, ticket.fieldTicket.periodEnd, ticket.fieldTicket.periodStart],
   )
-  const days = useMemo(() => daysBetween(visibleWindow.start, visibleWindow.end), [visibleWindow])
+  const days = useMemo(() => daysInWindow(visibleWindow.start, visibleWindow.end), [visibleWindow])
   const sig = ticket.fieldTicket.signatures
 
   const selectedItem = props.catalogItems.find((item) => item.id === lineItem)

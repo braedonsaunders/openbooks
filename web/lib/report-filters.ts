@@ -16,6 +16,7 @@ import type {
 } from './statement-matrix'
 import type { ReportDrillTarget } from './report-drill'
 import type { AgingCurrencyBasis } from './reports/aging'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 export type ReportScale = 'actual' | 'thousands' | 'millions'
 export type ProjectReportScope = 'active' | 'all'
@@ -43,7 +44,6 @@ const BREAKOUTS: StatementBreakout[] = ['none', 'department', 'project', 'locati
 const COMPARES: StatementCompare[] = ['none', 'prior_period', 'prior_year']
 const BASES: StatementBasis[] = ['accrual', 'cash']
 const SCALES: ReportScale[] = ['actual', 'thousands', 'millions']
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 /** URL param keys — stable; persisted in saved views. */
 export const REPORT_PARAM_KEYS = {
@@ -81,13 +81,13 @@ function oneOf<T extends string>(v: string | undefined, allowed: T[], fallback: 
 /** A uuid-valued param, or undefined when absent or malformed. */
 function uuidParam(sp: ParamSource, key: string): string | undefined {
   const value = read(sp, key)
-  return value && UUID.test(value) ? value : undefined
+  return value && isUuid(value) ? value : undefined
 }
 
 /** True when `value` is a well-formed uuid — for page/route params that bind
  *  into uuid predicates outside the shared query (e.g. `account`). */
 export function isReportUuidParam(value: string | null | undefined): value is string {
-  return !!value && UUID.test(value)
+  return !!value && isUuid(value)
 }
 
 function segmentFilters(sp: ParamSource): Record<string, string> {

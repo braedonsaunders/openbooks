@@ -1,4 +1,5 @@
 import { mulPercent, mulRatio, normalizeMoney } from "../../money/money.ts";
+import { addCalendarDays, civilDayIndex, daysInCivilMonth } from "../../platform/civil-date.ts";
 import { BenefitsError } from "./errors.ts";
 
 /**
@@ -18,30 +19,9 @@ export type BenefitProrationBasis = "full_month" | "daily";
 const CIVIL_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const COVERAGE_MONTH_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
-function dayNumber(year: number, month: number, day: number): number {
-  const a = Math.floor((14 - month) / 12);
-  const y = year + 4800 - a;
-  const m = month + 12 * a - 3;
-  return day + Math.floor((153 * m + 2) / 5) + 365 * y + Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045;
-}
-
-function fromDayNumber(jd: number): string {
-  const a = jd + 32044;
-  const b = Math.floor((4 * a + 3) / 146097);
-  const c = a - Math.floor((146097 * b) / 4);
-  const d = Math.floor((4 * c + 3) / 1461);
-  const e = c - Math.floor((1461 * d) / 4);
-  const m = Math.floor((5 * e + 2) / 153);
-  const day = e - Math.floor((153 * m + 2) / 5) + 1;
-  const month = m + 3 - 12 * Math.floor(m / 10);
-  const year = 100 * b + d - 4800 + Math.floor(m / 10);
-  const pad = (n: number, w: number) => String(n).padStart(w, "0");
-  return `${pad(year, 4)}-${pad(month, 2)}-${pad(day, 2)}`;
-}
-
 function parseDay(date: string, label: string): number {
   const match = CIVIL_DATE_RE.exec(date);
-  if (!match) {
+  if (!match || Number(match[1]) < 1 || Number(match[2]) < 1 || Number(match[2]) > 12) {
     throw new BenefitsError(
       "INVALID_INPUT",
       `${label} ${JSON.stringify(date)} is not a civil date — use YYYY-MM-DD`,
@@ -50,30 +30,14 @@ function parseDay(date: string, label: string): number {
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  const daysIn = daysInMonth(year, month);
+  const daysIn = daysInCivilMonth(year, month);
   if (day < 1 || day > daysIn) {
     throw new BenefitsError(
       "INVALID_INPUT",
       `${label} ${JSON.stringify(date)} is not a calendar day — ${year}-${String(month).padStart(2, "0")} has ${daysIn} days`,
     );
   }
-  return dayNumber(year, month, day);
-}
-
-export function daysInMonth(year: number, month: number): number {
-  if (month === 2) {
-    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-    return leap ? 29 : 28;
-  }
-  return [4, 6, 9, 11].includes(month) ? 30 : 31;
-}
-
-/** Add (or subtract) whole days to a civil date. */
-export function addDaysCivil(date: string, days: number): string {
-  if (!Number.isInteger(days)) {
-    throw new BenefitsError("INVALID_INPUT", `day offset ${days} is not a whole number of days`);
-  }
-  return fromDayNumber(parseDay(date, "date") + days);
+  return civilDayIndex(date);
 }
 
 export interface MonthBounds {
@@ -93,7 +57,7 @@ export function monthBounds(coverageMonth: string): MonthBounds {
   }
   const year = Number(match[1]);
   const month = Number(match[2]);
-  const days = daysInMonth(year, month);
+  const days = daysInCivilMonth(year, month);
   const pad = (n: number) => String(n).padStart(2, "0");
   return { from: `${match[1]}-${pad(month)}-01`, to: `${match[1]}-${pad(month)}-${days}`, days };
 }
@@ -234,7 +198,8 @@ export function waitingEligibleDate(hireStart: string, waitingPeriodDays: number
       `waiting period ${waitingPeriodDays} is not a non-negative whole number of days`,
     );
   }
-  return addDaysCivil(hireStart, waitingPeriodDays);
+  parseDay(hireStart, "hire start");
+  return addCalendarDays(hireStart, waitingPeriodDays);
 }
 
 export interface WindowShape {

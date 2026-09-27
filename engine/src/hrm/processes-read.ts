@@ -9,6 +9,7 @@ import { requireHrmProcessRead } from "./authorization.ts";
 import { HRM_FEATURE_KEY } from "./employment-read.ts";
 import { addOffsetDays, isStepOverdue, summarizeProgress } from "./process-math.ts";
 import { HrmProcessError, resolveStepActor } from "./processes.ts";
+import { inputGuards } from "./input-guards.ts";
 
 /**
  * Canonical HRM process READ service (no mutations).
@@ -33,19 +34,7 @@ async function assertHrmFeatureOn(exec: SqlExecutor, orgId: string): Promise<voi
   }
 }
 
-function requireOrgId(orgId: unknown): string {
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new HrmProcessError("REFUSED", "orgId must be a non-empty string");
-  }
-  return orgId;
-}
-
-function requireActorId(actorId: unknown): string {
-  if (typeof actorId !== "string" || actorId.length === 0) {
-    throw new HrmProcessError("REFUSED", "actorId must be a non-empty string");
-  }
-  return actorId;
-}
+const { requireOrgId, requireActorId, requireId } = inputGuards((message) => new HrmProcessError("REFUSED", message));
 
 export type ProcessSegment = "open" | "overdue" | "completed" | "cancelled";
 
@@ -207,10 +196,7 @@ export async function getProcess(query: {
 }): Promise<ProcessDetail> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const processId = typeof query.processId === "string" && query.processId.length > 0 ? query.processId : null;
-  if (processId === null) {
-    throw new HrmProcessError("REFUSED", "processId must be a non-empty string");
-  }
+  const processId = requireId(query.processId, "processId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     const head = (await db.execute<{
@@ -449,10 +435,7 @@ export async function getOwnStep(query: {
 }): Promise<OwnStep> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
-  const stepId = typeof query.stepId === "string" && query.stepId.length > 0 ? query.stepId : null;
-  if (stepId === null) {
-    throw new HrmProcessError("REFUSED", "stepId must be a non-empty string");
-  }
+  const stepId = requireId(query.stepId, "stepId");
   return withOrgTransaction(orgId, async () => {
     await assertHrmFeatureOn(db, orgId);
     const row = (await db.execute<{

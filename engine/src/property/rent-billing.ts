@@ -1,7 +1,7 @@
 /** Rent billing, straight-line levelling, late fees, scheduler run. Split from property/management.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg, withOrgTransaction } from "../platform/db.ts";
-import { businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, addMonthsStart, businessToday, inclusiveCalendarDays, startOfMonth } from "../platform/business-date.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { createSubscriptionInvoice } from "../billing/subscription-billing.ts";
 import type { AdvancedBillingLine } from "../billing/advanced-subscriptions.ts";
@@ -12,7 +12,7 @@ import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { apportion, cmp, fromUnits, mulPercent, mulRatio, neg, toUnits } from "../money/money.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { addDays, addMonths, assertEnabled, assertLockedSubsidiaryInScope, audit, dayCount, exactMoney, INVENTORY_ITEM_KINDS, lockLeasePropertyInScope, lockPropertyInScope, PropertyManagementError, startOfMonth, validDate, type DueLeaseChargeRow, type LateFeeRow } from "./management-foundation.ts";
+import { assertEnabled, assertLockedSubsidiaryInScope, audit, exactMoney, INVENTORY_ITEM_KINDS, lockLeasePropertyInScope, lockPropertyInScope, PropertyManagementError, validDate, type DueLeaseChargeRow, type LateFeeRow } from "./management-foundation.ts";
 import { leaseChargeSchedule } from "./management-foundation.ts";
 import { scheduleLeaseCharges } from "./lease-schedules.ts";
 
@@ -137,9 +137,9 @@ export async function levelLeaseRentStraightLine(
           throughOn: lease.endsOn, billingDay: lease.billingDay,
         })) {
           const nominalStart = startOfMonth(period.periodStartsOn);
-          const nominalEnd = addDays(addMonths(nominalStart, step), -1);
-          const active = dayCount(period.periodStartsOn, period.periodEndsOn);
-          const nominal = dayCount(nominalStart, nominalEnd);
+          const nominalEnd = addCalendarDays(addMonthsStart(nominalStart, step), -1);
+          const active = inclusiveCalendarDays(period.periodStartsOn, period.periodEndsOn);
+          const nominal = inclusiveCalendarDays(nominalStart, nominalEnd);
           rows.push({
             periodEndsOn: period.periodEndsOn,
             amount: period.amount,
@@ -386,7 +386,7 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
         const generated = await createSubscriptionInvoice({ orgId, actorId, customerId: first.tenantId, subsidiaryId: first.subsidiaryId,
           locationId: first.locationId, currency: first.currency, incomeAccountId: null, itemId: null, taxCodeId: null,
           description: `Lease ${first.leaseNumber}`, quantity: "1", unitPrice: "0", memo: `Lease ${first.leaseNumber}`,
-          invoiceDate: through, dueDate: addDays(through, first.paymentTermsDays), autoPost: first.autoPost, lines,
+          invoiceDate: through, dueDate: addCalendarDays(through, first.paymentTermsDays), autoPost: first.autoPost, lines,
           postingAuditSource: "property_rent_billing",
           custom: { propertyManagement: {
             billingKey: generationKey, originalBillingKey: key,

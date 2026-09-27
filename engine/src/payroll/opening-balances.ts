@@ -15,6 +15,7 @@ import type { PayrollSubsidiaryScope } from "./scope.ts";
 import { PACK_OPENING_BALANCE_FIELDS } from "./opening-ytd-registry.ts";
 import { requirePayrollFeature } from "./feature-gate.ts";
 import { US_STATES } from "./us/rates.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 function openingSubsidiaryScopeFilter(
   column: SQL,
@@ -357,7 +358,7 @@ function normalizeOpeningAccountBases(
     const field = fields.get(programKey);
     if (!field) throw new PayrollError(`"${programKey}" is not an account-scoped opening base declared by the ${country} payroll pack`);
     const filingAccountId = String(raw.filingAccountId ?? "").trim();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(filingAccountId)) {
+    if (!isUuid(filingAccountId)) {
       throw new PayrollError(`${field.label} requires a valid filing account id`);
     }
     const region = raw.region == null || raw.region === "" ? null : String(raw.region).trim().toUpperCase();
@@ -1041,7 +1042,7 @@ export async function saveOpeningBalances(input: {
       ...storedAccountBases.rows.map((base) => base.filing_account_id),
     ]);
     for (const accountId of accountIds) {
-      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(accountId)
+      if (!isUuid(accountId)
         || accountInfo.has(accountId)) continue;
       const found = await tx.execute<{
         country: string; program_type: string; state_code: string | null;

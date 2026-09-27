@@ -44,8 +44,8 @@ test("a jaaropgaaf row id refuses every foreign grammar", () => {
 });
 
 test("the local row-id legs agree with the registry's single definition", () => {
-  // UUID_RE above is a verbatim local copy of isFilingRowUuid (a runtime
-  // registry import would cycle through packs.ts during pack evaluation).
+  // The NL grammar checks its legs with the platform isUuid, the same
+  // predicate isFilingRowUuid delegates to (the registry cannot be imported).
   // This pins the two together on bare legs: a drift that 404s real rows
   // fails here. Composite rows are not UUIDs, so only their legs agree.
   const samples = [

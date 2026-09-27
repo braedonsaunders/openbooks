@@ -33,6 +33,8 @@ import {
   allocationRuleVisible,
   type SubsidiaryScope,
 } from "../organization/allocation-scope.ts";
+import { isUuid } from "../platform/uuid.ts";
+import { isIsoCalendarDate } from "../platform/iso-date.ts";
 
 /**
  * Rule/version service: versioned, effective-dated allocation
@@ -221,8 +223,6 @@ const IMPACTS: readonly AllocationImpact[] = ["reclass", "net_zero_pair", "repor
 const RESIDUAL_POLICIES: readonly AllocationResidualPolicy[] = ["largest_share", "first_target", "last_target", "explicit_target"];
 const SOLVE_METHODS: readonly AllocationSolveMethod[] = ["sequential", "simultaneous"];
 const RUN_POLICIES: readonly AllocationRunPolicy[] = ["manual", "auto_preview", "auto_post"];
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KEY_PATTERN = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], what: string): T {
@@ -248,14 +248,14 @@ function slug(value: unknown, what: string): string {
 }
 
 function uuid(value: unknown, what: string): string {
-  if (typeof value !== "string" || !UUID_PATTERN.test(value)) {
+  if (!isUuid(value)) {
     throw new AllocationRuleError("INVALID", `${what} must be a uuid`);
   }
   return value;
 }
 
-function isoDate(value: unknown, what: string): string {
-  if (typeof value !== "string" || !DATE_PATTERN.test(value)) {
+function requireIsoDate(value: unknown, what: string): string {
+  if (!isIsoCalendarDate(value)) {
     throw new AllocationRuleError("INVALID", `${what} must be an ISO date (YYYY-MM-DD)`);
   }
   return value;
@@ -810,10 +810,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function resolveDefinition(input: DraftVersionInput | UpdateDraftInput, kind: "create" | "update"): Partial<ResolvedDefinition> {
   const def: Partial<ResolvedDefinition> = {};
-  if (input.effectiveFrom !== undefined) def.effectiveFrom = isoDate(input.effectiveFrom, "effectiveFrom");
+  if (input.effectiveFrom !== undefined) def.effectiveFrom = requireIsoDate(input.effectiveFrom, "effectiveFrom");
   else if (kind === "create") throw new AllocationRuleError("INVALID", "effectiveFrom is required for a new version");
   if (input.effectiveTo !== undefined) {
-    def.effectiveTo = input.effectiveTo === null ? null : isoDate(input.effectiveTo, "effectiveTo");
+    def.effectiveTo = input.effectiveTo === null ? null : requireIsoDate(input.effectiveTo, "effectiveTo");
   }
   if (input.bookScope !== undefined) def.bookScope = oneOf(input.bookScope, BOOK_SCOPES, "bookScope");
   if (input.bookIds !== undefined) {
@@ -1290,7 +1290,7 @@ async function queryRulesInEffect(args: {
   bookId?: string;
 }): Promise<RuleInEffect[]> {
   const orgId = uuid(args.orgId, "orgId");
-  const onDate = isoDate(args.onDate, "onDate");
+  const onDate = requireIsoDate(args.onDate, "onDate");
   const modeFilter = args.mode === undefined ? sql`` : sql`and r.mode = ${oneOf(args.mode, MODES, "mode")}`;
   const keyFilter = args.key === undefined ? sql`` : sql`and r.key = ${nonEmpty(args.key, "key")}`;
   let bookFilter = sql``;

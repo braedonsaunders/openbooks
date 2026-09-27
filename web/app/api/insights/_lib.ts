@@ -227,7 +227,7 @@ export function normalizeLayout(v: unknown): { cardId: string; x: number; y: num
   for (const item of v) {
     if (!item || typeof item !== 'object') continue
     const cardId = ((item)).cardId
-    if (typeof cardId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cardId)) throw new Error('layout must reference valid card ids')
+    if (!isUuid(cardId)) throw new Error('layout must reference valid card ids')
     const clamp = (n: unknown, min: number, max: number, dflt: number) => {
       const num = Number(n)
       if (!Number.isFinite(num)) return dflt

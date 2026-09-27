@@ -4,6 +4,7 @@ import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { requireAggregatePerformanceManage } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, isUniqueViolationOn } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 import { HRM_PERFORMANCE_CONTINUOUS_KEY } from "./one-on-ones.ts";
 import { employerSubsidiaryScope } from "./subsidiary-scope.ts";
 
@@ -33,14 +34,7 @@ export type LossLevel = "low" | "medium" | "high";
 export type CandidateReadiness = "ready_now" | "one_to_two_years" | "three_plus";
 export type SuccessionPlanStatus = "draft" | "active" | "archived";
 
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || !UUID_RE.test(value)) {
-    throw new HrmPerformanceError("INVALID_INPUT", `${field} must be a uuid`);
-  }
-  return value;
-}
+const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 /**
  * SQL predicate restricting employment-anchored rows to the actor's allowed
@@ -139,10 +133,10 @@ export async function recordTalentReview(args: {
   promotionReady?: boolean;
   notes?: string | null;
 }): Promise<TalentReviewDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const employmentId = requireId("employmentId", args.employmentId);
-  const cycleId = args.cycleId ? requireId("cycleId", args.cycleId) : null;
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const employmentId = requireUuid(args.employmentId, "employmentId");
+  const cycleId = args.cycleId ? requireUuid(args.cycleId, "cycleId") : null;
   if (!cycleId) {
     throw new HrmPerformanceError(
       "INVALID_INPUT",
@@ -238,8 +232,8 @@ export async function listTalentReviews(args: {
   actorId: string;
   cycleId?: string;
 }): Promise<readonly TalentReviewDTO[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
     // HR-only: the subject never sees these rows. A non-HR actor gets
@@ -318,9 +312,9 @@ export async function resolveTalentScales(args: {
   actorId: string;
   cycleId: string;
 }): Promise<{ readonly performance: readonly string[]; readonly potential: readonly string[] }> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const cycleId = requireId("cycleId", args.cycleId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const cycleId = requireUuid(args.cycleId, "cycleId");
   return withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
     let allowed: Set<string> | null;
@@ -345,8 +339,8 @@ export async function listTalentDirectory(args: {
   orgId: string;
   actorId: string;
 }): Promise<{ employments: readonly { id: string; name: string }[]; positions: readonly { id: string; code: string; title: string }[] }> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
@@ -485,11 +479,11 @@ export async function createSuccessionPlan(args: {
   incumbentEmploymentId?: string | null;
   notes?: string | null;
 }): Promise<SuccessionPlanDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const positionId = requireId("positionId", args.positionId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const positionId = requireUuid(args.positionId, "positionId");
   if (args.incumbentEmploymentId !== undefined && args.incumbentEmploymentId !== null) {
-    requireId("incumbentEmploymentId", args.incumbentEmploymentId);
+    requireUuid(args.incumbentEmploymentId, "incumbentEmploymentId");
   }
   return withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
@@ -543,9 +537,9 @@ export async function setSuccessionPlanStatus(args: {
   id: string;
   status: SuccessionPlanStatus;
 }): Promise<void> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const id = requireId("id", args.id);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const id = requireUuid(args.id, "id");
   if (!["draft", "active", "archived"].includes(args.status)) {
     throw new HrmPerformanceError("INVALID_INPUT", "succession plan status must be draft, active, or archived");
   }
@@ -573,9 +567,9 @@ export async function setSuccessionPlanNotes(args: {
   id: string;
   notes: string | null;
 }): Promise<void> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const id = requireId("id", args.id);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const id = requireUuid(args.id, "id");
   await withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);
@@ -643,8 +637,8 @@ async function readSuccessionPlan(
 }
 
 export async function listSuccessionPlans(args: { orgId: string; actorId: string }): Promise<readonly SuccessionPlanDTO[]> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
   return withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
     // HR-only: a candidate's own view never exists. Non-HR actors get
@@ -685,10 +679,10 @@ export async function addSuccessionCandidate(args: {
   readiness: CandidateReadiness;
   notes?: string | null;
 }): Promise<SuccessionCandidateDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const planId = requireId("planId", args.planId);
-  const employmentId = requireId("employmentId", args.employmentId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const planId = requireUuid(args.planId, "planId");
+  const employmentId = requireUuid(args.employmentId, "employmentId");
   if (!["ready_now", "one_to_two_years", "three_plus"].includes(args.readiness)) {
     throw new HrmPerformanceError("INVALID_INPUT", "candidate readiness must be ready_now, one_to_two_years, or three_plus");
   }
@@ -767,10 +761,10 @@ export async function removeSuccessionCandidate(args: {
   planId: string;
   candidateId: string;
 }): Promise<void> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const planId = requireId("planId", args.planId);
-  const candidateId = requireId("candidateId", args.candidateId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const planId = requireUuid(args.planId, "planId");
+  const candidateId = requireUuid(args.candidateId, "candidateId");
   await withOrgTransaction(orgId, async () => {
     await assertTalentFeature(db, orgId);
     const allowed = await requireAggregatePerformanceManage(db, orgId, actorId);

@@ -52,6 +52,7 @@ import type {
 } from "../tax-years.ts";
 import type { PayrollPackRates } from "../statutory-rates.ts";
 import type { PayrollPackFilings } from "../filing-registry.ts";
+import { utcDateFromParts } from "../../platform/civil-date.ts";
 
 /**
  * The IE pack as it will register once `PayrollCountry` opens: every member
@@ -451,19 +452,6 @@ export async function ieEmployeeYtd(
   return r.rows[0]!;
 }
 
-/**
- * Epoch milliseconds for civil (year, monthIndex, day) parts. Local copy of
- * the platform/business-date.ts utcDateFromParts idiom (`new Date(0)` +
- * setUTCFullYear, which keeps literal years 0001-0099 that Date.UTC would
- * remap onto 1900-1999): this country pack stays dependency-light and must
- * not load the db-backed platform stack.
- */
-function utcMs(year: number, monthIndex: number, day: number): number {
-  const date = new Date(0);
-  date.setUTCFullYear(year, monthIndex, day);
-  return date.getTime();
-}
-
 function elapsedPeriodsForPayDate(payDate: string, periodsPerYear: number): number {
   if (periodsPerYear === 52) {
     const week = ieWeekNumber(payDate);
@@ -489,8 +477,8 @@ function elapsedPeriodsForPayDate(payDate: string, periodsPerYear: number): numb
   if (periodsPerYear === 13) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(payDate);
     if (!m) throw new PayrollPackError(`IE payroll: pay date is not an ISO date: "${payDate}"`);
-    const start = utcMs(Number(m[1]), 0, 1);
-    const day = utcMs(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const start = utcDateFromParts(Number(m[1]), 0, 1).getTime();
+    const day = utcDateFromParts(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
     const index = Math.floor((day - start) / 86_400_000 / 28) + 1;
     if (index > 13 || index < 1) {
       throw new PayrollPackError(

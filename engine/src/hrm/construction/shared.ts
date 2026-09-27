@@ -4,6 +4,7 @@ import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { requireUnrestrictedHrmScope } from "../authorization.ts";
 import { HrmConstructionError } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 
 /**
  * Shared construction-compliance plumbing (HR-13): feature asserts
@@ -33,12 +34,7 @@ export async function assertConstructionFeature(
   }
 }
 
-export function requireId(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new HrmConstructionError(`${field} must be a non-empty id string.`);
-  }
-  return value;
-}
+export const { requireId } = inputGuards((message) => new HrmConstructionError(message));
 
 export function requireDate(value: unknown, field: string): string {
   if (typeof value !== "string" || !isCivilDate(value)) {

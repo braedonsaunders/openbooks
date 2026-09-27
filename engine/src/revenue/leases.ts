@@ -25,7 +25,7 @@ import {
   sum,
   toUnits,
 } from "../money/money.ts";
-import { addCalendarDays, civilDateFromParts, daysInCivilMonth, isIsoCalendarDate } from "../platform/business-date.ts";
+import { addCalendarDays, addMonthsClamped, isIsoCalendarDate } from "../platform/business-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import {
@@ -688,23 +688,6 @@ const PERIODS_PER_YEAR: Record<string, number> = {
   annual: 1,
 };
 
-export function addMonths(date: string, months: number): string {
-  const [y, m, d] = date.split("-").map(Number);
-  // Month overflow normalizes exactly like the Date.UTC idiom this replaces;
-  // only the 0-99 → 1900-1999 remap is gone.
-  const total = (m! - 1) + months;
-  const baseYear = y! + Math.floor(total / 12);
-  const baseMonth1 = (((total % 12) + 12) % 12) + 1;
-  const lastDay = daysInCivilMonth(baseYear, baseMonth1);
-  const day = Math.min(d!, lastDay);
-  return civilDateFromParts(baseYear, baseMonth1, day);
-}
-export function addDays(date: string, days: number): string {
-  // addCalendarDays parses the ISO string (exact for years 0001-0099) instead
-  // of Date.UTC, which would remap years 0-99 onto 1900-1999.
-  return addCalendarDays(date, days);
-}
-
 /** Payment timing is a contractual fact, never a suggested workaround. */
 export function assertLeaseTimingSupported(
   timing: "arrears" | "advance",
@@ -792,9 +775,9 @@ export function assertOpeningAsOfOnPeriodBoundary(args: {
 }): void {
   let firstStart: string | null = null;
   for (let i = 0; i < args.termPeriods; i++) {
-    const start = addMonths(args.commencementOn, i * args.frequencyMonths);
-    const end = addDays(
-      addMonths(args.commencementOn, (i + 1) * args.frequencyMonths),
+    const start = addMonthsClamped(args.commencementOn, i * args.frequencyMonths);
+    const end = addCalendarDays(
+      addMonthsClamped(args.commencementOn, (i + 1) * args.frequencyMonths),
       -1,
     );
     if (end > args.asOf) {
@@ -1417,9 +1400,9 @@ export async function commenceLease(
     // Period boundaries: period i covers [start + i·f months, next boundary).
     const boundaries: { start: string; end: string; dueOn: string }[] = [];
     for (let i = 0; i < lease.term_periods; i++) {
-      const start = addMonths(lease.commencement_on, i * frequencyMonths);
-      const end = addDays(
-        addMonths(lease.commencement_on, (i + 1) * frequencyMonths),
+      const start = addMonthsClamped(lease.commencement_on, i * frequencyMonths);
+      const end = addCalendarDays(
+        addMonthsClamped(lease.commencement_on, (i + 1) * frequencyMonths),
         -1,
       );
       const dueOn = lease.payment_timing === "advance" ? start : end;

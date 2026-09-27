@@ -3,6 +3,7 @@ import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 export interface PayrollLiabilityReconciliation {
   lineId: string;
@@ -27,15 +28,13 @@ export async function reconcilePayrollLiabilityAccounts(input: {
       "Provide between 1 and 1000 reviewed payroll liability rows.",
     );
   }
-  const uuid =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const seen = new Set<string>();
   for (const row of input.rows) {
     if (
       !row ||
       typeof row.lineId !== "string" ||
-      !uuid.test(row.lineId) ||
-      (typeof row.accountId !== "string" || !uuid.test(row.accountId)) ||
+      !isUuid(row.lineId) ||
+      !isUuid(row.accountId) ||
       typeof row.reason !== "string" ||
       !row.reason.trim() ||
       typeof row.reference !== "string" ||

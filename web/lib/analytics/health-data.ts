@@ -1,8 +1,7 @@
 import "server-only";
-import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
+import { addMonthsClamped, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { abs, add, cmp, isZero, mulDecimal, neg, roundDiv, sum, toUnits } from "@openbooks/engine/src/money/money.ts";
 import { canonicalDecimal, compareDecimal, divideDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
 import { flowRates } from "../fx-presentation";
@@ -262,7 +261,7 @@ function insightNumber(value: string): number {
 }
 
 function priorYear(iso: string): string {
-  return addMonthsIso(iso, -12);
+  return addMonthsClamped(iso, -12);
 }
 
 /** 12-month P&L series ending at the period end (fills gaps with zero). */

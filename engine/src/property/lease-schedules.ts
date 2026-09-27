@@ -1,11 +1,11 @@
 /** Schedule generation, lease lifecycle, escalations. Split from property/management.ts (pure moves only). */
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, addMonthsStart, businessToday, inclusiveCalendarDays, startOfMonth } from "../platform/business-date.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { cmp, mulRatio } from "../money/money.ts";
-import { addDays, addMonths, assertEnabled, audit, dayCount, exactMoney, INVENTORY_ITEM_KINDS, lockLeasePropertyInScope, PropertyManagementError, startOfMonth, validDate, type BaseRentChargeRow, type LeaseChargeScheduleRow, type LeaseEscalationDbRow, type LeaseScheduleContextRow } from "./management-foundation.ts";
+import { assertEnabled, audit, exactMoney, INVENTORY_ITEM_KINDS, lockLeasePropertyInScope, PropertyManagementError, validDate, type BaseRentChargeRow, type LeaseChargeScheduleRow, type LeaseEscalationDbRow, type LeaseScheduleContextRow } from "./management-foundation.ts";
 import { escalatedRent, leaseChargeSchedule } from "./management-foundation.ts";
 
 /**
@@ -29,11 +29,11 @@ async function generateLeaseSchedule(runner: Pick<typeof db, "execute">, orgId: 
   const lease = leaseResult.rows[0]; if (!lease || !["active", "notice"].includes(lease.status)) throw new PropertyManagementError("Active lease not found");
   const currentMonth = startOfMonth(await businessToday(orgId));
   const requested = validDate(throughOn, "Schedule horizon");
-  const cap = addDays(addMonths(currentMonth, MAX_LEASE_SCHEDULE_HORIZON_MONTHS), -1);
+  const cap = addCalendarDays(addMonthsStart(currentMonth, MAX_LEASE_SCHEDULE_HORIZON_MONTHS), -1);
   if (requested != null && requested > cap) {
     throw new PropertyManagementError(`Schedule horizon cannot exceed ${MAX_LEASE_SCHEDULE_HORIZON_MONTHS} months ahead (through ${cap})`);
   }
-  const horizon = requested ?? addDays(addMonths(currentMonth, 13), -1);
+  const horizon = requested ?? addCalendarDays(addMonthsStart(currentMonth, 13), -1);
   const charges = (await runner.execute<LeaseChargeScheduleRow>(sql`select id,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by effective_from`));
   let created = 0;
   for (const charge of charges.rows) {
@@ -104,7 +104,7 @@ export async function terminatePropertyLease(orgId: string, actorId: string, all
     const partials = (await tx.execute<{ id: string; period_starts_on: string; period_ends_on: string; amount: string }>(sql`select id,period_starts_on,period_ends_on,amount from lease_schedule_lines
       where org_id=${orgId} and lease_id=${leaseId} and status='scheduled' and period_starts_on<=${effectiveOn} and period_ends_on>${effectiveOn} for update`));
     for (const period of partials.rows) {
-      const prorated = mulRatio(period.amount, BigInt(dayCount(period.period_starts_on, effectiveOn)), BigInt(dayCount(period.period_starts_on, period.period_ends_on)));
+      const prorated = mulRatio(period.amount, BigInt(inclusiveCalendarDays(period.period_starts_on, effectiveOn)), BigInt(inclusiveCalendarDays(period.period_starts_on, period.period_ends_on)));
       await tx.execute(sql`update lease_schedule_lines set period_ends_on=${effectiveOn},amount=${prorated},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${period.id} and status='scheduled'`);
     }
     await tx.execute(sql`update lease_schedule_lines set status='cancelled',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and lease_id=${leaseId} and status='scheduled' and period_starts_on>${effectiveOn}`);
@@ -196,8 +196,8 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, allow
       if (period.period_starts_on >= e.effective_on) {
         await tx.execute(sql`update lease_schedule_lines set status='cancelled',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${period.id}`);
       } else {
-        const oldEnd = addDays(e.effective_on, -1);
-        const amount = mulRatio(period.amount, BigInt(dayCount(period.period_starts_on, oldEnd)), BigInt(dayCount(period.period_starts_on, period.period_ends_on)));
+        const oldEnd = addCalendarDays(e.effective_on, -1);
+        const amount = mulRatio(period.amount, BigInt(inclusiveCalendarDays(period.period_starts_on, oldEnd)), BigInt(inclusiveCalendarDays(period.period_starts_on, period.period_ends_on)));
         await tx.execute(sql`update lease_schedule_lines set period_ends_on=${oldEnd},amount=${amount},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${period.id}`);
       }
     }

@@ -3,11 +3,9 @@ import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../../../lib/authz";
 import { createDbOwnedRunStore } from "../../../../../../lib/assistant/owned-runs-db";
 import { notFound } from "@/lib/api/responses";
-
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 export const runtime = "nodejs";
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Explicitly stop an owned run. Runs are server-owned: closing the stream or
@@ -20,7 +18,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ runId: 
   const gate = await guardPermission("assistant.use");
   if (gate instanceof NextResponse) return gate;
   const { runId } = await params;
-  if (!UUID_RE.test(runId)) return NextResponse.json({ error: "bad request" }, { status: 400 });
+  if (!isUuid(runId)) return NextResponse.json({ error: "bad request" }, { status: 400 });
   const aborted = await createDbOwnedRunStore(gate).requestAbort(runId);
   if (!aborted) return notFound("record");
   return NextResponse.json({ ok: true });

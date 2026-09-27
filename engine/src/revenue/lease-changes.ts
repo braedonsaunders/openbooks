@@ -9,7 +9,7 @@ import {
   completeFinancialChange,
 } from "../platform/financial-changes.ts";
 import { assertFinancialChangeAccess } from "../organization/financial-change-access.ts";
-import { isIsoCalendarDate } from "../platform/business-date.ts";
+import { addCalendarDays, addMonthsClamped, calendarDaysBetween, inclusiveCalendarDays, isIsoCalendarDate } from "../platform/business-date.ts";
 import { orgReportingFramework } from "../platform/reporting-framework.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import {
@@ -35,8 +35,6 @@ import {
   classifyLease,
   assertLeaseTermWithinHorizon,
   shortTermExemptionEligible,
-  addDays,
-  addMonths,
   createLeaseAgreement,
   commenceLease,
   type LeaseRow,
@@ -172,7 +170,7 @@ async function snapshot(
   const startsOn =
     previous?.effective_on ??
     (lease.opening_balances_as_of
-      ? addDays(lease.opening_balances_as_of, 1)
+      ? addCalendarDays(lease.opening_balances_as_of, 1)
       : lease.commencement_on);
   if (effectiveOn < startsOn)
     throw new LeaseError(
@@ -199,7 +197,7 @@ async function snapshot(
     )
   ) {
     throw new LeaseError(
-      `post the lease schedule through ${addDays(effectiveOn, -1)} before proposing this change`,
+      `post the lease schedule through ${addCalendarDays(effectiveOn, -1)} before proposing this change`,
     );
   }
   const baseLiability = String(
@@ -229,14 +227,8 @@ async function snapshot(
   // is separately posted at the change date, never written into the old row.
   const prorate = (value: string | null) => {
     if (!partial || value === null) return "0.0000";
-    const elapsed = BigInt(
-      (Date.parse(effectiveOn) - Date.parse(partial.period_start)) / 86400000,
-    );
-    const days = BigInt(
-      (Date.parse(addDays(partial.period_end, 1)) -
-        Date.parse(partial.period_start)) /
-        86400000,
-    );
+    const elapsed = BigInt(calendarDaysBetween(partial.period_start, effectiveOn));
+    const days = BigInt(inclusiveCalendarDays(partial.period_start, partial.period_end));
     return fromUnits(roundDiv(toUnits(value) * elapsed, days));
   };
   const stubInterest = prorate(partial?.interest ?? null);
@@ -768,8 +760,8 @@ export async function applyLeaseChange(
           }).schedule;
       for (let i = 0; i < schedule.length; i++) {
         const line = schedule[i]!,
-          start = addMonths(input.effectiveOn, i * months),
-          end = addDays(addMonths(input.effectiveOn, (i + 1) * months), -1);
+          start = addMonthsClamped(input.effectiveOn, i * months),
+          end = addCalendarDays(addMonthsClamped(input.effectiveOn, (i + 1) * months), -1);
         await tx.execute(sql`insert into lease_agreement_schedule_lines
           (id,org_id,lease_id,sequence,revision,due_on,period_start,period_end,opening_liability,payment,interest,principal,closing_liability,
            amortization,single_cost,rou_adjustment,created_by,updated_by)

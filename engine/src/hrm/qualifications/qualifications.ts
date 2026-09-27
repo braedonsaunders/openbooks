@@ -7,13 +7,12 @@ import {
   requireEmploymentOrTeamSubject,
   lockEmploymentsForScope,
 } from "../authorization.ts";
-import { businessToday } from "../../platform/business-date.ts";
+import { addMonthsClamped, businessToday } from "../../platform/business-date.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { HrmAuthorizationError } from "../authorization.ts";
 import { HrmQualificationError } from "./errors.ts";
 import {
   HRM_CERTIFICATIONS_FEATURE,
-  addMonthsUtc,
   assertQualificationsFeature,
   projectDerivedStatus,
   requireDate,
@@ -353,7 +352,7 @@ export async function recordQualification(
       expiresOn === undefined || expiresOn === null
         ? type.validity_months === null
           ? null
-          : addMonthsUtc(issuedOn, type.validity_months)
+          : addMonthsClamped(issuedOn, type.validity_months)
         : expiresOn;
     const identifier = input.identifier?.trim() ? input.identifier.trim() : null;
     const notes = input.notes?.trim() ? input.notes.trim() : null;

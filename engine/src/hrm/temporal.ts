@@ -31,6 +31,8 @@
  * unbounded end maps to 'infinity' only inside SQL range expressions.
  */
 
+import { daysInCivilMonth } from "../platform/civil-date.ts";
+
 export type CivilDate = string & { readonly __civilDate: unique symbol };
 
 export interface EffectiveInterval {
@@ -160,24 +162,6 @@ function preview(value: unknown): string {
 
 const CIVIL_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-function isLeapYear(year: number): boolean {
-  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-}
-
-function daysInMonth(year: number, month: number): number {
-  switch (month) {
-    case 2:
-      return isLeapYear(year) ? 29 : 28;
-    case 4:
-    case 6:
-    case 9:
-    case 11:
-      return 30;
-    default:
-      return 31;
-  }
-}
-
 interface CivilParts {
   readonly year: number;
   readonly month: number;
@@ -194,7 +178,7 @@ function splitCivilDate(value: string): CivilParts | null {
   const day = Number(match[3]);
   if (!Number.isSafeInteger(year) || year < 1 || year > 9999) return null;
   if (!Number.isSafeInteger(month) || month < 1 || month > 12) return null;
-  if (!Number.isSafeInteger(day) || day < 1 || day > daysInMonth(year, month)) return null;
+  if (!Number.isSafeInteger(day) || day < 1 || day > daysInCivilMonth(year, month)) return null;
   return { year, month, day };
 }
 
@@ -340,7 +324,7 @@ function parseRecordedStamp(value: unknown, field: string): RecordedStamp {
   if (
     !Number.isSafeInteger(year) || year < 1 || year > 9999 ||
     !Number.isSafeInteger(month) || month < 1 || month > 12 ||
-    !Number.isSafeInteger(day) || day < 1 || day > daysInMonth(year, month) ||
+    !Number.isSafeInteger(day) || day < 1 || day > daysInCivilMonth(year, month) ||
     !Number.isSafeInteger(hour) || hour > 23 ||
     !Number.isSafeInteger(minute) || minute > 59 ||
     !Number.isSafeInteger(second) || second > 59

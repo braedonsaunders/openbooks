@@ -5,8 +5,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 // bare @openbooks/* to the main checkout, so a relative import binds this
 // checkout everywhere.
 import { ACCOUNT_CLASS_TYPES } from "../../../engine/src/records/account-types.ts";
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 /** The single asset type that counts as a bank account for the register. */
 export const BANK_ACCOUNT_TYPE = "asset_bank";
@@ -56,7 +55,7 @@ type PartyRow = {
 
 async function checkAccounts(orgId: string, spec: ReferenceSpec): Promise<string | null> {
   for (const id of spec.ids) {
-    if (!UUID_RE.test(id)) return `${spec.field} "${id}" is not a valid UUID`;
+    if (!isUuid(id)) return `${spec.field} "${id}" is not a valid UUID`;
   }
   if (!spec.ids.length) return null;
   // House array idiom (see web/lib/billing.ts): a Postgres array literal,
@@ -93,7 +92,7 @@ async function checkAccounts(orgId: string, spec: ReferenceSpec): Promise<string
 
 async function checkParties(orgId: string, spec: ReferenceSpec): Promise<string | null> {
   for (const id of spec.ids) {
-    if (!UUID_RE.test(id)) return `${spec.field} "${id}" is not a valid UUID`;
+    if (!isUuid(id)) return `${spec.field} "${id}" is not a valid UUID`;
   }
   if (!spec.ids.length) return null;
   // parties.kind is only the PRIMARY kind: a customer-kind party can still
@@ -134,7 +133,7 @@ async function checkParties(orgId: string, spec: ReferenceSpec): Promise<string 
  */
 async function checkSubsidiaries(orgId: string, spec: ReferenceSpec): Promise<string | null> {
   for (const id of spec.ids) {
-    if (!UUID_RE.test(id)) return `${spec.field} "${id}" is not a valid UUID`;
+    if (!isUuid(id)) return `${spec.field} "${id}" is not a valid UUID`;
   }
   if (!spec.ids.length) return null;
   const rows = await db.execute<{ id: string }>(sql`

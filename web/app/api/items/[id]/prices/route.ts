@@ -12,7 +12,7 @@ import { conflict, created, notFound, unprocessable } from '@/lib/api/responses'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { addCalendarDays, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { normalizeMoney, cmp } from '@openbooks/engine/src/money/money.ts'
 import { auditSetupChange } from '@/lib/setup/audit'
 import { claimIdempotentCreate, resolveIdempotentReplay } from '@/lib/api/idempotency'
@@ -89,13 +89,6 @@ async function requireCustomerVisible(tx: Pick<typeof db, 'execute'>, orgId: str
 function toDay(value: unknown): string {
   if (value instanceof Date) return value.toISOString().slice(0, 10)
   return String(value).slice(0, 10)
-}
-
-/** Add (or subtract) whole days to a YYYY-MM-DD calendar date in UTC. */
-function addDays(day: string, delta: number): string {
-  const base = new Date(`${day}T00:00:00Z`)
-  base.setUTCDate(base.getUTCDate() + delta)
-  return base.toISOString().slice(0, 10)
 }
 
 function breaksEqual(prior: { minimum_quantity: string; unit_price: string }[], next: { minimumQuantity: string; unitPrice: string }[]): boolean {
@@ -359,7 +352,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         // Truncate only when the predecessor still covers the successor
         // start; an already-ended predecessor is left untouched.
         const truncates = before.toDay === null || before.toDay >= parsed.effectiveFrom
-        const truncatedTo = addDays(parsed.effectiveFrom, -1)
+        const truncatedTo = addCalendarDays(parsed.effectiveFrom, -1)
         if (truncates && truncatedTo < before.fromDay) throw new Error('The successor must start after the current schedule begins')
         // Every applied change bumps the counter under a revision predicate:
         // zero rows means a racer committed first, and the loser is refused

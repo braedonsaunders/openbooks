@@ -7,15 +7,14 @@
  */
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { releaseCompCycleDecision } from "./compensation/cycles.ts";
 import { releaseHrmChangeRequest } from "./change-requests.ts";
 import { releaseLeaveRequest } from "./leave.ts";
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /** Minimal release guard: the owning org of a compensation cycle. */
 async function loadCycleOrg(subjectId: string): Promise<{ org_id: string } | null> {
-  if (!UUID_RE.test(subjectId)) return null;
+  if (!isUuid(subjectId)) return null;
   const result = await db.execute<{ org_id: string }>(sql`
     select org_id from hrm_comp_cycles where id = ${subjectId}`);
   return result.rows[0] ?? null;
@@ -36,7 +35,7 @@ type ReleaseArgs = {
  */
 export async function releaseCompCycleApproval(args: ReleaseArgs): Promise<void> {
   const { subjectId, outcome, ctx } = args;
-  if (!UUID_RE.test(subjectId)) {
+  if (!isUuid(subjectId)) {
     throw new Error(`unknown compensation cycle ${subjectId}`);
   }
   if (outcome !== "approved" && outcome !== "rejected") {
@@ -52,7 +51,7 @@ export async function releaseCompCycleApproval(args: ReleaseArgs): Promise<void>
 /** Release an employment change-request approval (same seam contract). */
 export async function releaseHrmChangeRequestApproval(args: ReleaseArgs): Promise<void> {
   const { subjectId, outcome, ctx } = args;
-  if (!UUID_RE.test(subjectId)) {
+  if (!isUuid(subjectId)) {
     throw new Error(`unknown employment change request ${subjectId}`);
   }
   await releaseHrmChangeRequest({
@@ -67,7 +66,7 @@ export async function releaseHrmChangeRequestApproval(args: ReleaseArgs): Promis
 /** Release a leave-request approval (same seam contract). */
 export async function releaseLeaveRequestApproval(args: ReleaseArgs): Promise<void> {
   const { subjectId, outcome, ctx } = args;
-  if (!UUID_RE.test(subjectId)) {
+  if (!isUuid(subjectId)) {
     throw new Error(`unknown leave request ${subjectId}`);
   }
   if (outcome !== "approved" && outcome !== "rejected") {

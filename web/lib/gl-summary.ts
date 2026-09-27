@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { civilDateFromParts, utcDateFromParts } from '@openbooks/engine/src/platform/business-date.ts'
+import { civilDateFromParts, endOfMonth } from '@openbooks/engine/src/platform/business-date.ts'
 
 /**
  * Read-side of the gl_month_activity summary (maintained by the
@@ -50,12 +50,7 @@ function nextMonthStart(d: string): string {
   return m === 12 ? civilDateFromParts(y + 1, 1, 1) : civilDateFromParts(y, m + 1, 1)
 }
 
-const isMonthEnd = (d: string) => {
-  // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
-  // onto 1900-1999; the day+1 overflow probe is unchanged.
-  const next = utcDateFromParts(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10)) + 1)
-  return next.getUTCDate() === 1
-}
+const isMonthEnd = (d: string) => endOfMonth(d) === d
 
 /**
  * The book a statement reads, as an inline SQL value expression: the caller's

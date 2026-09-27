@@ -75,7 +75,7 @@ const forecastMocks = new Map<string, string>([
       export function addCalendarDays(iso, days) {
         const date = day(iso); date.setUTCDate(date.getUTCDate() + days); return isoDay(date)
       }
-      export function addCalendarMonthsStart(iso, months) {
+      export function addMonthsStart(iso, months) {
         const date = day(iso); date.setUTCDate(1); date.setUTCMonth(date.getUTCMonth() + months); return isoDay(date)
       }
     `,

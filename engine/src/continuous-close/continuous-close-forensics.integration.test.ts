@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import { defaultContinuousCloseDetectors } from "../agents/continuous-close-config.ts";
 import { db, withBypass, withBypassContext } from "../platform/db.ts";
 import { forensicsFindings } from "../agents/forensics.ts";
@@ -28,12 +28,6 @@ function lastSaturday(iso: string): string {
   const date = new Date(`${iso}T00:00:00Z`);
   const back = (date.getUTCDay() + 1) % 7;
   date.setUTCDate(date.getUTCDate() - back);
-  return date.toISOString().slice(0, 10);
-}
-
-function addDays(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
 }
 
@@ -67,8 +61,8 @@ test(
     try {
       // The detectors window off the org business day, not the fixture date.
       const saturday = lastSaturday(await businessToday(org.orgId));
-      const friday = addDays(saturday, -1);
-      const thursday = addDays(saturday, -2);
+      const friday = addCalendarDays(saturday, -1);
+      const thursday = addCalendarDays(saturday, -2);
 
       const weekendId = await insertSpendDoc(org, {
         kind: "vendor_bill", number: "FORENSIC-WKND", date: saturday, total: "1500.0000",

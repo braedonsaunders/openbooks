@@ -6,7 +6,7 @@ import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { DOCUMENT_KINDS } from "../periods/period-policy.ts";
 import { DOC_KIND_FEATURE } from "../records/document-kind-features.ts";
-import { addCalendarDays, parseIsoDate, businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday, calendarDaysBetween, parseIsoDate } from "../platform/business-date.ts";
 import { now } from "../platform/clock.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
 import { inventoryFeatureEnabled } from "../inventory/profile-policy.ts";
@@ -142,13 +142,6 @@ export function advanceCadence(
   }
 }
 
-/** Whole-day difference b − a (both ISO), used to carry the payment term. */
-function dayDiff(a: string, b: string): number {
-  return (parseIsoDate(b).getTime() - parseIsoDate(a).getTime()) / 86_400_000;
-}
-
-const addDays = addCalendarDays;
-
 async function nextNumber(orgId: string, kind: string): Promise<string> {
   return allocateDocumentNumber(db, orgId, kind, defaultPrefix(kind));
 }
@@ -244,7 +237,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
   // The org-spanning query is only a bounded candidate scan. UTC+14 can already
   // be on tomorrow's calendar date, so include that horizon; the authoritative
   // due gate below uses each candidate's org business day before claiming it.
-  const scanCutoff = asOf ?? addDays(toIso(now()), 1);
+  const scanCutoff = asOf ?? addCalendarDays(toIso(now()), 1);
   const result: RecurringRunResult = { generated: 0, posted: 0, failed: 0, documents: [] };
   const orgBusinessDates = new Map<string, string>();
 
@@ -531,8 +524,8 @@ async function generateFromTemplate(
   }
 
   const termDays =
-    tpl.document_date && tpl.due_date ? dayDiff(tpl.document_date, tpl.due_date) : null;
-  const dueDate = termDays != null ? addDays(documentDate, termDays) : null;
+    tpl.document_date && tpl.due_date ? calendarDaysBetween(tpl.document_date, tpl.due_date) : null;
+  const dueDate = termDays != null ? addCalendarDays(documentDate, termDays) : null;
 
   const documentNumber = await nextNumber(orgId, tpl.kind);
   const provenance = {

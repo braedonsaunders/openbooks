@@ -14,6 +14,7 @@ import type { FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 export const CREW_TIME_BATCH_SUBJECT_KIND = "crew_time_batch" as const;
 
@@ -67,6 +68,7 @@ type BatchRow = {
 };
 
 async function loadBatchSummary(subjectId: string): Promise<BatchRow | null> {
+  if (!isUuid(subjectId)) return null;
   const result = (await db.execute<BatchRow>(sql`
     select b.org_id,
            foreman.display_name as foreman_name,

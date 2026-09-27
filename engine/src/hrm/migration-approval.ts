@@ -32,6 +32,7 @@ import {
   type MappingSetEntry,
   type SourcePersonRow,
 } from "./migration-preflight.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /** A mapping-approval authority failure that must reach the operator. */
 export class MappingApprovalError extends Error {
@@ -41,15 +42,12 @@ export class MappingApprovalError extends Error {
   }
 }
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 const APPROVAL_REMEDY =
   "request Flows approval for the exact mapping set, then re-run with the " +
   "decided approval gate id and the applying actor (--applied-by)";
 
 function requireUuid(value: string, what: string): string {
-  if (!UUID_PATTERN.test(value)) {
+  if (!isUuid(value)) {
     throw new MappingApprovalError(
       `${what} ${JSON.stringify(value)} is not a valid UUID; refusing to resolve mapping approval ` +
         `without an explicit identity — ${APPROVAL_REMEDY}`,

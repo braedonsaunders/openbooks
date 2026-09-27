@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { utcDateFromParts } from "../platform/business-date.ts";
+import { addCalendarDays, endOfMonth, startOfMonth } from "../platform/business-date.ts";
 import {
   add, apportion, cmp, formatMoney, fromUnits, mul, mulPercent, roundMoney, sum, toUnits,
 } from "../money/money.ts";
@@ -272,11 +272,6 @@ export class DerivedCoverageError extends DerivedEarningsError {
   }
 }
 
-const DAY = 24 * 60 * 60 * 1000;
-const at = (s: string) => new Date(`${s}T00:00:00Z`);
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-const shiftDays = (s: string, days: number) => iso(new Date(at(s).getTime() + days * DAY));
-
 /** Job titles are free text typed by whoever set the employee up. */
 const normalizeTitle = (value: string | null | undefined) =>
   (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -309,23 +304,9 @@ export function settlementMonth(
   periodStart: string,
   periodEnd: string,
 ): { start: string; end: string } | null {
-  const end = at(periodEnd);
-  for (
-    let cursor = at(periodStart);
-    cursor.getTime() <= end.getTime();
-    cursor = new Date(cursor.getTime() + DAY)
-  ) {
-    const monthEnd = utcDateFromParts(
-      cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 0,
-    );
-    if (iso(monthEnd) === iso(cursor)) {
-      return {
-        start: iso(utcDateFromParts(cursor.getUTCFullYear(), cursor.getUTCMonth(), 1)),
-        end: iso(cursor),
-      };
-    }
-  }
-  return null;
+  // The first month end on or after the period start is the only candidate.
+  const monthEnd = endOfMonth(periodStart);
+  return monthEnd <= periodEnd ? { start: startOfMonth(monthEnd), end: monthEnd } : null;
 }
 
 /** The widest span of time a rule set needs to read, including lookbacks. */
@@ -337,7 +318,7 @@ export function derivedEntryWindow(
   let from = periodStart;
   // A night is credited to the morning after, so the first day of the period
   // can only be judged with the last day of the previous one.
-  if (rules.some((r) => r.trigger === "night_stayed")) from = shiftDays(from, -1);
+  if (rules.some((r) => r.trigger === "night_stayed")) from = addCalendarDays(from, -1);
   if (rules.some((r) => r.trigger === "month_end")) {
     const month = settlementMonth(periodStart, periodEnd);
     if (month && month.start < from) from = month.start;
@@ -594,7 +575,7 @@ function unitsForRule(
     const units: PendingUnit[] = [];
     for (const day of [...byDay.keys()].sort()) {
       if (day < window.start || day > window.end) continue;
-      const previous = byDay.get(shiftDays(day, -1));
+      const previous = byDay.get(addCalendarDays(day, -1));
       if (!previous) continue;
       const slept = previous[0]!;
       units.push({
@@ -1120,7 +1101,7 @@ export async function resolveDerivedEarnings(
   const window = derivedEntryWindow(applicable, periodStart, periodEnd);
   const entries = [...params.timeEntries];
   if (window.from < periodStart) {
-    const extra = await loadEntries(tx, orgId, [employeePartyId], window.from, shiftDays(periodStart, -1));
+    const extra = await loadEntries(tx, orgId, [employeePartyId], window.from, addCalendarDays(periodStart, -1));
     entries.push(...(extra.get(employeePartyId) ?? []));
   }
   const seen = new Set<string>();

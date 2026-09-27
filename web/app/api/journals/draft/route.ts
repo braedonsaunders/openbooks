@@ -2,12 +2,9 @@ import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../lib/authz";
 import { createDraftJournal } from "../../../../lib/journals";
 import { notFound } from "@/lib/api/responses";
-
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 export const runtime = "nodejs";
-
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type DraftBody = { subsidiaryId?: string };
 
@@ -54,7 +51,7 @@ async function readDraftBody(
   }
   const candidate = (value as Record<string, unknown>).subsidiaryId;
   if (candidate === undefined) return { ok: true, body: {} };
-  if (typeof candidate !== "string" || !UUID_RE.test(candidate)) {
+  if (!isUuid(candidate)) {
     return {
       ok: false,
       response: NextResponse.json(

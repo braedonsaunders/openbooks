@@ -11,6 +11,7 @@ import { ScopeNotFoundError, assertUnrestrictedScope, subsidiaryScopeAllows } fr
 import { loadSubsidiaryContext, SubsidiaryError, uuidArray, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { fromMinorUnits, THREE_DECIMAL_CURRENCIES } from "./acceptance.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * PSP settlement import — Stripe / Recurly / Chargebee payout batches post
@@ -57,9 +58,6 @@ export class PspSettlementConflictError extends PspSettlementError {
   }
 }
 
-const PSP_ACCOUNT_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 /**
  * Every account a settlement batch can post to must resolve as a postable
  * account of the caller's org (active, non-summary). Tenant-coherent FKs
@@ -82,7 +80,7 @@ async function validateSettlementPostingAccounts(
     ),
   ];
   if (ids.length === 0) return;
-  const malformed = ids.find((id) => !PSP_ACCOUNT_UUID_RE.test(id));
+  const malformed = ids.find((id) => !isUuid(id));
   if (malformed) {
     throw new PspSettlementError(
       `settlement account ${malformed} is not a valid account reference`,
@@ -1009,7 +1007,7 @@ export async function importSettlementBatch(
       ? accounts.subsidiaryId
       : null;
   if (subsidiaryId !== null) {
-    if (!PSP_ACCOUNT_UUID_RE.test(subsidiaryId)) {
+    if (!isUuid(subsidiaryId)) {
       throw new PspSettlementError(
         `settlement subsidiary ${subsidiaryId} is not a valid subsidiary reference`,
       );

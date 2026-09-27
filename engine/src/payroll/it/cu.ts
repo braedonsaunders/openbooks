@@ -88,19 +88,10 @@ import type {
   PayrollFilingSlipData,
   PayrollSlipBox,
 } from "../filing-registry.ts";
-
-/**
- * The row-id UUID shape, stated locally rather than imported — a runtime
- * import of ../filing-registry.ts from a pack builder is a
- * module-evaluation cycle (packs.ts reaches this module through the pack,
- * and the registry reaches back), and the failure it produces is a TDZ
- * ReferenceError, not a wrong figure. Same pattern, same lax shape the web
- * layer guards `[id]` params with — ids are opaque here, not validated.
- */
-const CU_ROW_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 import { certificateFlag, type ResolvedCertificate } from "../certificates.ts";
 import { IT_CERTIFICATES } from "./certificates.ts";
 import { IT_REGIONS } from "./regions.ts";
+import { isUuid } from "../../platform/uuid.ts";
 
 /** The only tax year whose CU box layout is transcribed (CU 2026). */
 export const CU_SUPPORTED_TAX_YEAR = 2025;
@@ -156,7 +147,7 @@ const num = (value: unknown): string => (value == null ? "0" : String(value));
  * parses through the declaration, never its own copy of this shape.
  */
 export function parseCuRowId(rowId: string): PayrollFilingRowScope | null {
-  if (!CU_ROW_UUID_RE.test(rowId)) return null;
+  if (!isUuid(rowId)) return null;
   return { employees: [rowId], accounts: [] };
 }
 

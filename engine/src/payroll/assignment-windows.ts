@@ -27,17 +27,6 @@ export function assignmentOverlapsPeriod(
 }
 
 /**
- * Whole calendar days in the INCLUSIVE window [from, to] (both ISO dates).
- * The single civil-date definition lives in platform/business-date.ts, which
- * keeps literal years 0001-0099 instead of remapping them onto 1900-1999 (a
- * 0099-12-25..0100-01-07 period used to read as -693946 days, zeroing every
- * mid-period fixed assignment in it).
- */
-export function inclusiveDays(from: string, to: string): number {
-  return inclusiveCalendarDays(from, to);
-}
-
-/**
  * The assignment window's coverage of a pay period, in whole calendar days
  * on the same inclusive basis the 0250 guard stores windows ('[]'): an
  * effective_to of the 15th covers THROUGH the 15th, and a successor starting
@@ -57,8 +46,8 @@ export function assignmentCoveredDays(args: {
     ? args.periodEnd
     : args.effectiveTo;
   return {
-    coveredDays: through >= from ? inclusiveDays(from, through) : 0,
-    periodDays: inclusiveDays(args.periodStart, args.periodEnd),
+    coveredDays: through >= from ? inclusiveCalendarDays(from, through) : 0,
+    periodDays: inclusiveCalendarDays(args.periodStart, args.periodEnd),
   };
 }
 

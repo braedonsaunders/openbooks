@@ -12,12 +12,11 @@ import { abortActiveRun } from "../../../../../lib/assistant/owned-runs";
 import { createDbOwnedRunStore } from "../../../../../lib/assistant/owned-runs-db";
 import { markTitleRenamed } from "../../../../../lib/assistant/conversation-title";
 import { notFound } from "@/lib/api/responses";
-
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 export const runtime = "nodejs";
 
 const SCOPE = "assistant";
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Recent messages of one owned conversation, oldest first. With
@@ -28,14 +27,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const gate = await guardPermission("assistant.use");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
-  if (!UUID_RE.test(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
+  if (!isUuid(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
   if (!(await ownsConversation(gate, id, SCOPE))) {
     return notFound("record");
   }
   const { searchParams } = new URL(req.url);
   const before = searchParams.get("before");
   if (before !== null) {
-    if (!UUID_RE.test(before)) return NextResponse.json({ error: "bad request" }, { status: 400 });
+    if (!isUuid(before)) return NextResponse.json({ error: "bad request" }, { status: 400 });
     const limit = Number.parseInt(searchParams.get("limit") ?? "", 10);
     const page = await olderMessages(gate, id, before, Number.isFinite(limit) ? limit : undefined);
     return NextResponse.json(page);
@@ -49,7 +48,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardPermission("assistant.use");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
-  if (!UUID_RE.test(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
+  if (!isUuid(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
   let body: { title?: unknown };
   try {
     const parsedBody = await parseJsonBody(req, jsonObject);
@@ -73,7 +72,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await guardPermission("assistant.use");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
-  if (!UUID_RE.test(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
+  if (!isUuid(id)) return NextResponse.json({ error: "bad request" }, { status: 400 });
   // Stop its live run first so it cannot write past the cascade; other
   // conversations' runs are untouched (different rows, different runs).
   await abortActiveRun(createDbOwnedRunStore(gate), id);

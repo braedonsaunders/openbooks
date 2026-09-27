@@ -260,8 +260,8 @@ const DRAFT_ID_NAMESPACE = '8f2c3a90-5b1e-4d6f-a7c8-e9f0a1b2c3d4'
  * name a document.
  */
 export function draftDocumentId(orgId: string, idempotencyKey: string): string {
-  if (isUuid(idempotencyKey)) return idempotencyKey
   if (!idempotencyKey.trim()) throw new OrderDraftError('invalid_idempotency_key', 400)
+  if (isUuid(idempotencyKey)) return idempotencyKey
   const namespace = Buffer.from(DRAFT_ID_NAMESPACE.replaceAll('-', ''), 'hex')
   const digest = createHash('sha1')
     .update(namespace)

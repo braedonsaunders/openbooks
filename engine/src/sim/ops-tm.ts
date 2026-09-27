@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postProjectLaborCost } from "../projects/recognition.ts";
 import { mul, sum as sumMoney } from "../money/money.ts";
-import { addDays } from "./manifest.ts";
+import { addCalendarDays } from "../platform/civil-date.ts";
 import { postDraftDocument } from "./activities/documents.ts";
 import type { SimOrg } from "./world.ts";
 
@@ -144,8 +144,8 @@ export async function billTimeAndMaterials(
   const documentNumber = `${fee === undefined ? "TM" : "CP"}-${proj.rows[0]!.code}-${invoiceDate.replace(/-/g, "")}`;
   // Net-30 terms with a modest collection lag, so the environment's collection
   // step remits against this invoice (otherwise billed T&M never gets paid).
-  const dueDate = addDays(invoiceDate, 30);
-  const expectedPayDate = addDays(invoiceDate, 38);
+  const dueDate = addCalendarDays(invoiceDate, 30);
+  const expectedPayDate = addCalendarDays(invoiceDate, 38);
   await db.execute(sql`
     insert into documents
       (id, org_id, kind, status, document_number, party_id, document_date, due_date, expected_pay_date,

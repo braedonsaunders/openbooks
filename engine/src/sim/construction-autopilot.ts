@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { isMonthEnd, addDays } from "./manifest.ts";
+import { isMonthEnd } from "./manifest.ts";
+import { addCalendarDays } from "../platform/civil-date.ts";
 import { postLaborForProject, billTimeAndMaterials, type ExtraBillLine } from "./ops-tm.ts";
 import { runProgressBilling, billFixedPrice, releaseProjectRetainage } from "./ops-construction.ts";
 import type { SimJob, SimOrg } from "./world.ts";
@@ -35,8 +36,8 @@ const POC_MARKUP = 1.78;
 async function stampCollectible(world: SimOrg, invoiceId: string, today: string): Promise<void> {
   await db.execute(sql`
     update documents
-       set expected_pay_date = ${addDays(today, 40)},
-           due_date = coalesce(due_date, ${addDays(today, 30)}),
+       set expected_pay_date = ${addCalendarDays(today, 40)},
+           due_date = coalesce(due_date, ${addCalendarDays(today, 30)}),
            custom = jsonb_set(coalesce(custom, '{}'::jsonb), '{sim,payFraction}', '"1"'::jsonb, true)
      where id = ${invoiceId} and org_id = ${world.orgId}`);
 }

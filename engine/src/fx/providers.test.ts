@@ -3,6 +3,7 @@ import { createServer, type Server } from "node:http";
 import test from "node:test";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withBypass } from "../platform/db.ts";
+import { addCalendarDays } from "../platform/civil-date.ts";
 import {
   applyNormalizedRates,
   computeNextSyncAt,
@@ -709,7 +710,7 @@ test(
       const from = url.searchParams.get("start_date")!;
       const to = url.searchParams.get("end_date")!;
       const observations: Array<Record<string, unknown>> = [];
-      for (let day = from; day <= to; day = addDaysForTest(day)) {
+      for (let day = from; day <= to; day = addCalendarDays(day, 1)) {
         const observation: Record<string, unknown> = { d: day };
         foreigns.forEach((code, i) => {
           observation[`FX${code}CAD`] = { v: (1 + (i + 1) * 0.01).toFixed(4) };
@@ -730,12 +731,6 @@ test(
       }
       return originalFetch(requested, init);
     }) as typeof fetch;
-
-    function addDaysForTest(date: string): string {
-      const d = new Date(`${date}T00:00:00Z`);
-      d.setUTCDate(d.getUTCDate() + 1);
-      return d.toISOString().slice(0, 10);
-    }
 
     const org = await withBypass(() => createScratchOrg());
     try {

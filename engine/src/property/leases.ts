@@ -2,7 +2,8 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { cmp, normalizeMoney } from "../money/money.ts";
-import { assertEnabled, audit, exactMoney, lockLeasePropertyInScope, lockPropertiesInScope, lockPropertyInScope, PropertyManagementError, UUID_RE, validDate } from "./management-foundation.ts";
+import { assertEnabled, audit, exactMoney, lockLeasePropertyInScope, lockPropertiesInScope, lockPropertyInScope, PropertyManagementError, validDate } from "./management-foundation.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 export async function createPropertyLease(input: {
   orgId: string; actorId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string;
@@ -252,13 +253,13 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; al
     await assertEnabled(tx, input.orgId);
     await lockLeasePropertyInScope(tx, input.orgId, input.leaseId, input.allowedSubsidiaryIds);
     if (input.incomeAccountId != null) {
-      if (!UUID_RE.test(input.incomeAccountId)) throw new PropertyManagementError("Charge income account is invalid");
+      if (!isUuid(input.incomeAccountId)) throw new PropertyManagementError("Charge income account is invalid");
       const income = (await tx.execute<{ ok: boolean }>(sql`select exists(select 1 from accounts
         where org_id=${input.orgId} and id=${input.incomeAccountId} and type in ('income','income_other') and is_active and not is_summary) as ok`));
       if (!income.rows[0]?.ok) throw new PropertyManagementError("Charge income account must be an active income account");
     }
     if (input.itemId != null) {
-      if (!UUID_RE.test(input.itemId)) throw new PropertyManagementError("Charge item is invalid");
+      if (!isUuid(input.itemId)) throw new PropertyManagementError("Charge item is invalid");
       const item = (await tx.execute<{ ok: boolean }>(sql`select exists(select 1 from items
         where org_id=${input.orgId} and id=${input.itemId} and is_active) as ok`));
       if (!item.rows[0]?.ok) throw new PropertyManagementError("Charge item must be an active item");
@@ -267,7 +268,7 @@ export async function addLeaseCharge(input: { orgId: string; actorId: string; al
     // treat it as absent like a missing value rather than a malformed uuid.
     const taxCodeId = emptyRefToNull(input.taxCodeId);
     if (taxCodeId != null) {
-      if (!UUID_RE.test(taxCodeId)) throw new PropertyManagementError("Charge tax code is invalid");
+      if (!isUuid(taxCodeId)) throw new PropertyManagementError("Charge tax code is invalid");
       const tax = (await tx.execute<{ ok: boolean }>(sql`select exists(select 1 from tax_codes
         where org_id=${input.orgId} and id=${taxCodeId} and is_active) as ok`));
       if (!tax.rows[0]?.ok) throw new PropertyManagementError("Charge tax code must be an active tax code");

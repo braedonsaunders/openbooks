@@ -3,13 +3,13 @@ import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
 import { add, cmp, div, mulDecimal } from "@openbooks/engine/src/money/money.ts";
-import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig } from "./config";
 import { operatingExpenseRatio, periodOperatingExpenses } from "./operating-expenses";
 import { englishSpendVelocityStrings, type SpendVelocityStrings } from "./spend-velocity-strings";
 import { getMoneyFormatter } from '../money-server'
+import { addMonthsClamped } from '@openbooks/engine/src/platform/business-date.ts';
 
 /**
  * Spend Velocity — an implementation of the SpendVelocity dashboard
@@ -290,8 +290,8 @@ export async function spendVelocityData(
   // Period windows for comparison (inclusive current and back-to-back prior).
   const { priorFrom, priorTo, twoBackFrom, twoBackTo } = getSpendVelocityComparisonWindows(from, to);
   // Prior YEAR window for YoY trends.
-  const pyFrom = addMonthsIso(from, -12);
-  const pyTo = addMonthsIso(to, -12);
+  const pyFrom = addMonthsClamped(from, -12);
+  const pyTo = addMonthsClamped(to, -12);
 
   const spendKindsIn = sql.join(SPEND_KINDS.map((k) => sql`${k}`), sql`, `);
   // The spend base: expense/COGS journal lines sourced from spend documents,

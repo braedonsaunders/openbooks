@@ -50,6 +50,7 @@ import {
   type PreflightNote,
   type SourcePersonRow,
 } from "./migration-preflight.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /** Versioned identity for the evidence token and the report envelope. */
 export const EMPLOYMENT_MIGRATION_REF_PREFIX = "hrm-employment-migration/v1";
@@ -58,9 +59,6 @@ export const EMPLOYMENT_MIGRATION_REPORT_VERSION =
 
 /** Stable assignment slot key for the single slot the migration opens. */
 export const MIGRATION_ASSIGNMENT_KEY = "migration-primary";
-
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type PersonMigrationOutcome =
   | "migrated"
@@ -480,7 +478,7 @@ function effectiveEmployerOf(row: SourcePersonRow): string | null {
 }
 
 function assertUuid(value: string, what: string, remedy: string): void {
-  if (!UUID_PATTERN.test(value)) {
+  if (!isUuid(value)) {
     throw new EmploymentMigrationError(
       `${what} ${JSON.stringify(value)} is not a valid UUID; ${remedy}`,
     );
@@ -517,7 +515,7 @@ export async function executeEmploymentMigration(
   const dryRun = options.dryRun ?? false;
   const allowPartial = options.allowPartial ?? false;
   const appliedBy = options.appliedBy;
-  if (!UUID_PATTERN.test(orgId)) {
+  if (!isUuid(orgId)) {
     throw new EmploymentMigrationError(
       `org ${JSON.stringify(orgId)} is not a valid UUID; refusing to migrate ` +
         "without an explicit tenant scope",

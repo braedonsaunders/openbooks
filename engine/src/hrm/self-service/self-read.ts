@@ -4,6 +4,7 @@ import { businessToday } from "../../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { loadOwnEmploymentIds, requireHrmSelfRead } from "../authorization.ts";
 import { actorPartyOf, SelfServiceError } from "./actor.ts";
+import { inputGuards } from "../input-guards.ts";
 
 /**
  * Self-service reads (HR-9): the person's own rows, nothing else.
@@ -31,19 +32,7 @@ async function assertHrmFeatureOn(exec: SqlExecutor, orgId: string): Promise<voi
   }
 }
 
-function requireOrgId(orgId: unknown): string {
-  if (typeof orgId !== "string" || orgId.length === 0) {
-    throw new SelfServiceError("REFUSED", "orgId must be a non-empty string");
-  }
-  return orgId;
-}
-
-function requireActorId(actorId: unknown): string {
-  if (typeof actorId !== "string" || actorId.length === 0) {
-    throw new SelfServiceError("REFUSED", "actorId must be a non-empty string");
-  }
-  return actorId;
-}
+const { requireOrgId, requireActorId } = inputGuards((message) => new SelfServiceError("REFUSED", message));
 
 // --- Profile ---------------------------------------------------------------
 

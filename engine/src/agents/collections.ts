@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { businessToday } from "../platform/business-date.ts";
+import { addCalendarDays, businessToday } from "../platform/business-date.ts";
 import { db } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import {
@@ -294,12 +294,6 @@ export const productionCollectionsLoaders: CollectionsLoaders = {
   brokenPromises: loadBrokenPromises,
 };
 
-function addCalendarDaysIso(iso: string, days: number): string {
-  const date = new Date(`${iso}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
-
 export async function collectionsFindings(
   orgId: string,
   agentThreshold: string,
@@ -476,7 +470,7 @@ export async function collectionsFindings(
   const promisePolicy = byKey.get("broken_payment_promise");
   if (promisePolicy?.enabled) {
     const threshold = effectiveDetectorMateriality(promisePolicy, agentThreshold);
-    const cutoff = addCalendarDaysIso(today, -(promisePolicy.parameters.breachToleranceDays ?? 3));
+    const cutoff = addCalendarDays(today, -(promisePolicy.parameters.breachToleranceDays ?? 3));
     const rows = await loaders.brokenPromises(orgId, cutoff);
     const byParty = new Map<string, BrokenPromiseRow[]>();
     for (const row of rows) {

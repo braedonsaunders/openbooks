@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  addDays,
-  daysBetween,
   evaluateBillRelease,
   evaluateLienWaiverCoverage,
   evaluateRequirement,
@@ -14,6 +12,7 @@ import {
   type RequirementPolicy,
   type WaiverRecord,
 } from "./compliance.ts";
+import { calendarDaysBetween } from "../platform/business-date.ts";
 
 const ASOF = "2026-07-01";
 
@@ -75,15 +74,6 @@ function waiver(over: Partial<WaiverRecord> = {}): WaiverRecord {
 const evaluate = (p: RequirementPolicy, records: EvidenceRecord[], waivers: WaiverRecord[] = [], projectId: string | null = null) =>
   evaluateRequirement({ policy: p, records, waivers, asOf: ASOF, projectId });
 
-// --- date helpers ----------------------------------------------------------
-
-test("daysBetween and addDays are calendar-exact across a leap day", () => {
-  assert.equal(daysBetween("2028-02-28", "2028-03-01"), 2);
-  assert.equal(daysBetween("2027-02-28", "2027-03-01"), 1);
-  assert.equal(daysBetween("2026-07-01", "2026-06-29"), -2);
-  assert.equal(addDays("2026-12-31", 1), "2027-01-01");
-});
-
 // --- basic states ----------------------------------------------------------
 
 test("current verified evidence is compliant", () => {
@@ -91,7 +81,7 @@ test("current verified evidence is compliant", () => {
   assert.equal(f.state, "compliant");
   assert.equal(f.blocksPayment, false);
   assert.deepEqual(f.reasons, []);
-  assert.equal(f.daysToExpiry, daysBetween(ASOF, "2027-01-01"));
+  assert.equal(f.daysToExpiry, calendarDaysBetween(ASOF, "2027-01-01"));
 });
 
 test("no evidence on file blocks when the policy blocks payment", () => {

@@ -9,6 +9,7 @@ import {
 } from "../authorization.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { HrmPerformanceError, mathRefusal } from "./errors.ts";
+import { inputGuards } from "../input-guards.ts";
 import { assertRatingInScale, parseRatingScale } from "./performance-math.ts";
 
 /**
@@ -32,14 +33,7 @@ import { assertRatingInScale, parseRatingScale } from "./performance-math.ts";
 export type ReviewKind = "self" | "manager" | "peer";
 export type ReviewStatus = "pending" | "submitted" | "calibrated" | "shared" | "acknowledged";
 
-const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-
-function requireId(field: string, value: unknown): string {
-  if (typeof value !== "string" || !UUID_RE.test(value)) {
-    throw new HrmPerformanceError("INVALID_INPUT", `${field} must be a uuid`);
-  }
-  return value;
-}
+const { requireUuid } = inputGuards((message) => new HrmPerformanceError("INVALID_INPUT", message));
 
 async function assertPerformanceFeature(exec: SqlExecutor, orgId: string): Promise<void> {
   if (!(await lockAndCheckOrgFeature(exec, orgId, HRM_FEATURE_KEY))) {
@@ -265,9 +259,9 @@ export async function submitReview(args: {
   answers: readonly SubmitAnswer[];
   overallRating?: string | number | null;
 }): Promise<ReviewDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const reviewId = requireId("reviewId", args.reviewId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const reviewId = requireUuid(args.reviewId, "reviewId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const partyId = await actorParty(db, orgId, actorId);
@@ -366,9 +360,9 @@ export async function calibrateReview(args: {
   calibratedRating: string | number;
   reason: string;
 }): Promise<ReviewDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const reviewId = requireId("reviewId", args.reviewId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const reviewId = requireUuid(args.reviewId, "reviewId");
   const rating = String(args.calibratedRating ?? "").trim();
   if (rating.length === 0) {
     throw new HrmPerformanceError("INVALID_INPUT", "calibratedRating must be a decimal rating");
@@ -437,9 +431,9 @@ export async function shareReview(args: {
   actorId: string;
   reviewId: string;
 }): Promise<ReviewDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const reviewId = requireId("reviewId", args.reviewId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const reviewId = requireUuid(args.reviewId, "reviewId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const partyId = await actorParty(db, orgId, actorId);
@@ -502,9 +496,9 @@ export async function acknowledgeReview(args: {
   actorId: string;
   reviewId: string;
 }): Promise<ReviewDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const reviewId = requireId("reviewId", args.reviewId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const reviewId = requireUuid(args.reviewId, "reviewId");
   return withOrgTransaction(orgId, async () => {
     await assertPerformanceFeature(db, orgId);
     const partyId = await actorParty(db, orgId, actorId);
@@ -552,9 +546,9 @@ export async function reopenReview(args: {
   reviewId: string;
   reason: string;
 }): Promise<ReviewDTO> {
-  const orgId = requireId("orgId", args.orgId);
-  const actorId = requireId("actorId", args.actorId);
-  const reviewId = requireId("reviewId", args.reviewId);
+  const orgId = requireUuid(args.orgId, "orgId");
+  const actorId = requireUuid(args.actorId, "actorId");
+  const reviewId = requireUuid(args.reviewId, "reviewId");
   if (typeof args.reason !== "string" || args.reason.trim().length === 0) {
     throw new HrmPerformanceError(
       "REFUSED",

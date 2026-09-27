@@ -19,7 +19,7 @@ import {
   updatePropertyLease,
   updatePropertyUnit,
 } from '@openbooks/engine/src/property/management.ts'
-import { coerceBoolean, UUID_RE } from '../setup/coerce'
+import { coerceBoolean } from '../setup/coerce'
 import { INVENTORY_ITEM_KINDS } from './master-data-resources'
 import {
   enforceExportRowLimit,
@@ -34,6 +34,7 @@ import {
   type ResourceField,
   type WriteOutcome,
 } from './types'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 // --- Property-management migration resources --------------------------------
 
 export const PROPERTY_DESCRIPTORS: ResourceDescriptor[] = [
@@ -101,7 +102,7 @@ async function naturalId(orgId: string, table: string, column: string, value: un
   // Every table resolved here is org-scoped: a UUID must belong to THIS org,
   // otherwise a file carrying another tenant's id would attach to a foreign
   // subsidiary, location, asset, property, or item.
-  const idColumn = UUID_RE.test(human) ? 'id' : column
+  const idColumn = isUuid(human) ? 'id' : column
   const found = (await db.execute(sql`
     select id from ${sql.raw(table)} where org_id=${orgId} and ${sql.raw(idColumn)}=${human} limit 1`)) as { rows: { id: string }[] }
   return found.rows[0]?.id ?? null

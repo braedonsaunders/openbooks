@@ -9,6 +9,7 @@ import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.
 import { acquireFeatureGateLock, isFeatureEnabled } from "./features";
 import { lockAndCheckOrgFeature } from "@openbooks/engine/src/organization/org-feature-lock.ts";
 import { subsidiaryVisibleFilter } from "./subsidiaries";
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 /** CRUD for project billing requests + milestone schedules. */
 
@@ -58,7 +59,6 @@ const BASES = new Set([
   "milestone",
   "field_ticket",
 ]);
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
 function wholeDigits(canonical: string): number {
@@ -128,7 +128,7 @@ export async function createBillingRequest(
     // relies on; sending [] is never what the caller meant.
     if (input.selectedTimeEntryIds !== undefined && input.selectedTimeEntryIds !== null && selectedTimeEntryIds.length === 0)
       throw new Error("Select at least one time entry to bill — an empty selection would bill every eligible entry");
-    if (selectedTimeEntryIds.some((id) => !UUID.test(id)))
+    if (selectedTimeEntryIds.some((id) => !isUuid(id)))
       throw new Error("A selected time entry is invalid");
   } else if (selectedTimeEntryIds.length > 0) {
     throw new Error(
@@ -141,7 +141,7 @@ export async function createBillingRequest(
   if (basis === "field_ticket") {
     if (fieldTicketIds.length === 0)
       throw new Error("Select at least one Field Ticket");
-    if (fieldTicketIds.some((id) => !UUID.test(id)))
+    if (fieldTicketIds.some((id) => !isUuid(id)))
       throw new Error("A selected Field Ticket is invalid");
   } else if (fieldTicketIds.length > 0) {
     throw new Error(

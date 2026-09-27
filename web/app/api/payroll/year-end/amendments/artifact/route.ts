@@ -29,8 +29,9 @@ export async function GET(req: Request) {
   // PostgreSQL still raises `invalid input syntax for type uuid` for values
   // a bare 36-char shape check accepted (36 hex digits, 36 dashes). Shape
   // refusals stay 422 and never bind the parameter.
+  const blank = id.trim() === ''
   if (!isUuid(id)) {
-    const error = id.trim() === ''
+    const error = blank
       ? 'a submission id is required'
       : `submission id must be a UUID — "${suppliedValue(id)}" is not a UUID`
     return NextResponse.json({ error }, { status: 422 })

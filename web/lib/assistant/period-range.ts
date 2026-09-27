@@ -1,4 +1,5 @@
 import { resolvePreset, type DateRange } from "@openbooks/reports";
+import { addMonthsClamped } from "@openbooks/engine/src/platform/civil-date.ts";
 
 /**
  * Date-window inputs shared by every range-taking assistant tool. The model
@@ -8,19 +9,6 @@ import { resolvePreset, type DateRange } from "@openbooks/reports";
  * DB-free so the precedence rules are unit-testable.
  */
 export type RangeArgs = { period?: string; fromDate?: string; toDate?: string; priorYears?: number };
-
-/** Shift an ISO date back N years, clamping Feb 29 to Feb 28. */
-function shiftYears(iso: string, years: number): string {
-  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
-  const year = y - years;
-  // setUTCFullYear keeps literal years 0001-0099 that Date.UTC would remap
-  // onto 1900-1999 (the platform/business-date.ts utcDateFromParts idiom,
-  // copied here so this pure DB-free module loads no platform stack).
-  const probe = new Date(0);
-  probe.setUTCFullYear(year, m, 0);
-  const day = Math.min(d, probe.getUTCDate());
-  return `${String(year).padStart(4, "0")}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
 
 export function resolveRangeArgs(
   a: RangeArgs,
@@ -36,8 +24,8 @@ export function resolveRangeArgs(
   // repeats yearly, so a plain year shift keeps the window on its own
   // period edges (Q1 FY2027 → Q1 FY2026, "FY to date" → prior-year to date).
   return {
-    from: shiftYears(base.from, years),
-    to: shiftYears(base.to, years),
+    from: addMonthsClamped(base.from, -12 * years),
+    to: addMonthsClamped(base.to, -12 * years),
     label: `${base.label} (${years === 1 ? "prior year" : `${years} years earlier`})`,
   };
 }

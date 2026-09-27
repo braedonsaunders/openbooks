@@ -6,7 +6,8 @@ import { assetBasisDelta } from "./asset-basis.ts";
 import { computeScheduleByFormula } from "./depreciation-formula.ts";
 import { add, cmp, isZero, mulRatio, neg, toUnits } from "../money/money.ts";
 import { DepreciationRefusalError, assertPostableDepreciationStatus } from "./depreciation-errors.ts";
-import { computeSchedule, computeUnitsOfProductionCharge, conventionFraction, addMonths, monthStart, type DepreciationMethod, type ScheduleInput, type ScheduleLinePlan } from "./depreciation-schedule-math.ts";
+import { computeSchedule, computeUnitsOfProductionCharge, conventionFraction, monthStart, type DepreciationMethod, type ScheduleInput, type ScheduleLinePlan } from "./depreciation-schedule-math.ts";
+import { addMonthsStart } from "../platform/civil-date.ts";
 
 // ---------------------------------------------------------------------------
 // Persist a schedule (plan → depreciation_schedules + lines)
@@ -247,7 +248,7 @@ async function loadUnremeasuredAssetPlan(
       firstFractionPeriods,
     }).map((r) => ({
       sequence: r.sequence,
-      periodMonth: addMonths(start, r.sequence),
+      periodMonth: addMonthsStart(start, r.sequence),
       planned: r.planned,
       accumulated: r.accumulated,
       netBookValue: r.netBookValue,

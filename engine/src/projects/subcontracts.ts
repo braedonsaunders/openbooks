@@ -6,13 +6,13 @@ import { businessToday } from "../platform/business-date.ts";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { add, cmp, mulPercent, neg, normalizeMoney, sum } from "../money/money.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 export class SubcontractError extends Error {}
 
 export class SubcontractConflictError extends SubcontractError {}
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Calendar-day boundary check for every date interpolated into a DATE column.
@@ -781,7 +781,7 @@ export async function updateVendorPayApplicationLines(input: {
       throw new SubcontractError(`${label}: a pay-application line object is required`);
     }
     const sovLineId = String(update.sovLineId ?? "");
-    if (!UUID_RE.test(sovLineId)) {
+    if (!isUuid(sovLineId)) {
       throw new SubcontractError(`${label}: sovLineId must be a valid uuid`);
     }
     const tagged = `${label} (${sovLineId})`;

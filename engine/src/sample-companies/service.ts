@@ -21,6 +21,7 @@ import {
   SampleCompanyPreconditionError,
   runProvisioningStage,
 } from "./provisioning-failures.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 export { SampleCompanyError, SampleCompanyPreconditionError } from "./provisioning-failures.ts";
 export {
@@ -613,7 +614,7 @@ async function assertShellOrgHasNoTenantRows(orgId: string): Promise<void> {
   // The org id travels in raw SQL below: it is DB-sourced (the marker
   // lookup), but assert its shape at this boundary anyway; the table names
   // above are allow-listed from the live catalog.
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) {
+  if (!isUuid(orgId)) {
     throw new Error(`not a uuid: ${orgId}`);
   }
   for (let offset = 0; offset < probes.length; offset += 50) {

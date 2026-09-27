@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addCalendarDays, addCalendarMonthsStart } from "../platform/business-date.ts";
+import { addCalendarDays, addMonthsStart } from "../platform/business-date.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { db } from "../platform/db.ts";
 import type { QboClient } from "../connectors/qbo.ts";
@@ -163,5 +163,5 @@ test("Xero trial-balance month-ends follow the org calendar", async (t) => {
   await withSimClock("2026-06-30T13:00:00Z", async () => {
     await source.monthlyActivity();
   });
-  assert.equal(dates.at(-1), addCalendarDays(addCalendarMonthsStart("2026-07-01", 1), -1));
+  assert.equal(dates.at(-1), addCalendarDays(addMonthsStart("2026-07-01", 1), -1));
 });

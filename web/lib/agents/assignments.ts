@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { can, subsidiaryScopeAllows, type Authz } from "../authz";
 import { canReadContinuousCloseAgent, loadWorkItemAccess } from "../continuous-close";
+import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
 /**
  * Assignment & SLA for workbench findings (migration 0153): assign a finding
@@ -16,8 +17,6 @@ import { canReadContinuousCloseAgent, loadWorkItemAccess } from "../continuous-c
 
 export const MAX_NOTE_CHARS = 4000;
 export const MAX_NOTES = 50;
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type AssignmentError =
   | "forbidden"
@@ -67,7 +66,7 @@ async function resolveAssignee(
   // Shape-check before querying: a non-UUID id would die in the driver with
   // a 22P02 throw instead of failing closed as invalid_assignee.
   if (assigneeUserId !== undefined && assigneeUserId !== null) {
-    if (typeof assigneeUserId !== "string" || !UUID_RE.test(assigneeUserId)) return null;
+    if (!isUuid(assigneeUserId)) return null;
     const found = await db.execute<{ id: string }>(sql`
       select id from users where id = ${assigneeUserId} and org_id = ${orgId} and is_active
     `);
@@ -75,7 +74,7 @@ async function resolveAssignee(
     userId = String(found.rows[0]?.id);
   }
   if (assigneeRole !== undefined && assigneeRole !== null) {
-    if (typeof assigneeRole !== "string" || !UUID_RE.test(assigneeRole)) return null;
+    if (!isUuid(assigneeRole)) return null;
     const found = await db.execute<{ id: string }>(sql`
       select id from app_roles where id = ${assigneeRole} and org_id = ${orgId}
     `);

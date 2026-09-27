@@ -8,8 +8,9 @@
  * a uuid column (Postgres answers with `invalid input syntax for type uuid`)
  * or lets a non-UUID ride an actor/idempotency path that must be attributable.
  * The house rule: the 8-4-4-4-12 hex shape, enforced through exactly one
- * validator per runtime — `engine/src/platform/uuid.ts` (`isUuid`) in the
- * engine, `web/lib/list-params.ts` (`isUuid`) on web — never a local copy.
+ * validator — `engine/src/platform/uuid.ts` (`isUuid`, `UUID_RE`), which web
+ * imports directly or through the `web/lib/list-params.ts` re-export of
+ * `isUuid` — never a local copy.
  *
  * The rule, derived from the shape (no file list, no allowlist):
  *   - scan .ts/.tsx/.js/.mjs sources for an ANCHORED full-string pattern

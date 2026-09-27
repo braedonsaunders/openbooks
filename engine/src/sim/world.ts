@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withBypassContext, withOrgContext } from "../platform/db.ts";
-import { daysInCivilMonth } from "../platform/business-date.ts";
+import { civilDateFromParts, endOfMonth } from "../platform/business-date.ts";
 import { dropSimOrg } from "../testing/fixtures.ts";
 import { provisionOrganizationDefaults } from "../provisioning/organization-provisioning.ts";
 import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
@@ -218,14 +218,6 @@ function openingBalanceLines(accounts: Record<string, string>, scale: string): {
   return lines;
 }
 
-function lastDayOfMonth(year: number, month: number): string {
-  // daysInCivilMonth keeps literal years 0001-0099 that Date.UTC would remap
-  // onto 1900-1999; the year renders zero-padded so the YYYY-MM-DD contract
-  // holds below year 1000 too.
-  const day = daysInCivilMonth(year, month);
-  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
 /** Enumerate (year, month) pairs from the start month through the end month. */
 function monthsInWindow(startDate: string, endDate: string): { year: number; month: number }[] {
   const out: { year: number; month: number }[] = [];
@@ -283,7 +275,7 @@ export async function provisionOrg(
     for (const { year, month } of monthsInWindow(window.startDate, window.endDate)) {
       const id = randomUUID();
       const startsOn = `${year}-${String(month).padStart(2, "0")}-01`;
-      const endsOn = lastDayOfMonth(year, month);
+      const endsOn = endOfMonth(civilDateFromParts(year, month, 1));
       const name = `${year}-${String(month).padStart(2, "0")}`;
       await db.execute(sql`
         insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)

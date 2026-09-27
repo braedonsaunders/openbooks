@@ -44,15 +44,7 @@ import {
   es296Population,
   es296Slip,
 } from "./yearend.ts";
-
-/**
- * The lax UUID shape, copied from the web layer's shared guard
- * (`isFilingRowUuid` in ../filing-registry.ts) the way CA's row grammar keeps
- * its own copy: this module must not runtime-import the registry (see the
- * cycle note on the lazy builder below), so the grammar cannot call it.
- */
-const ES_ROW_UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isUuid } from "../../platform/uuid.ts";
 
 /**
  * The 190 row grammar, as the inverse of es190Population's
@@ -66,7 +58,7 @@ export function parseEs190RowId(rowId: string): PayrollFilingRowScope | null {
   const parts = rowId.split(":");
   const employee = parts[0] ?? "";
   const province = parts[1] ?? "";
-  if (parts.length !== 2 || !ES_ROW_UUID_RE.test(employee) || !/^\d{2}$/.test(province)) {
+  if (parts.length !== 2 || !isUuid(employee) || !/^\d{2}$/.test(province)) {
     return null;
   }
   return { employees: [employee], accounts: [] };
@@ -106,7 +98,7 @@ export function parseEs216RowId(rowId: string): PayrollFilingRowScope | null {
  * employee UUID — the inverse of es296Population's rowId construction.
  */
 export function parseEs296RowId(rowId: string): PayrollFilingRowScope | null {
-  if (!ES_ROW_UUID_RE.test(rowId)) return null;
+  if (!isUuid(rowId)) return null;
   return { employees: [rowId], accounts: [] };
 }
 

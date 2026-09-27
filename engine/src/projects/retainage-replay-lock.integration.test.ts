@@ -4,6 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 import { db, withOrgTransaction } from "../platform/db.ts";
+import { addCalendarDays } from "../platform/civil-date.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import {
   approvePayApplication,
@@ -68,12 +69,6 @@ async function controlAccounts(org: Org): Promise<void> {
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts}',coalesce(settings->'controlAccounts','{}'::jsonb)||jsonb_build_object('retainageReceivable',${org.accounts.invAsset}::text)) where id=${org.orgId}`);
 }
 
-function nextDay(isoDate: string): string {
-  const [y, m, d] = isoDate.split("-").map(Number);
-  const next = new Date(Date.UTC(y!, m! - 1, d! + 1));
-  return next.toISOString().slice(0, 10);
-}
-
 async function postInvoice(org: Org, actor: string, approver: string, kind: string, id: string): Promise<void> {
   assert.equal((await submitAndReleaseIfUngated(kind, id, actor)).autoApproved, true);
   await postDocument(
@@ -111,7 +106,7 @@ test("concurrent customer draws serialize on the project lock during replay", en
     await withOrgTransaction(org.orgId, () => approvePayApplication(org.orgId, approver, prior.id, null));
     const generated = await withOrgTransaction(org.orgId, () => generatePayApplicationInvoice(org.orgId, actor, prior.id, null));
     await postInvoice(org, actor, approver, "customer_invoice", generated.invoiceId);
-    const draft = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, nextDay(org.date), "10", null));
+    const draft = await withOrgTransaction(org.orgId, () => createPayApplication(org.orgId, actor, project, addCalendarDays(org.date, 1), "10", null));
 
     let held = false;
     const holder = holdRowLock(org.orgId, "projects", project, () => { held = true; }, released);
@@ -168,7 +163,7 @@ test("concurrent vendor draws serialize on the subcontract lock during replay", 
       return appId;
     };
     await closeDraw("333.33", org.date);
-    const draftId = await draw("333.33", nextDay(org.date));
+    const draftId = await draw("333.33", addCalendarDays(org.date, 1));
 
     let held = false;
     const holder = holdRowLock(org.orgId, "subcontracts", subcontract, () => { held = true; }, released);

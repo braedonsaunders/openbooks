@@ -37,7 +37,6 @@ import {
   carrierCheckRefusal,
   carrierTrackingTemplateProblem,
   taxRatePercentProblem,
-  UUID_RE,
 } from './coerce'
 import { normalizeHrmProcessTemplateInput } from './hrm-process-template'
 import { normalizeHrmPipelineStageInput } from './hrm-pipeline'
@@ -273,7 +272,7 @@ async function syncMembers(
   taxCodeIds: string[],
   runner: Pick<typeof db, 'execute'> = db,
 ) {
-  const clean = [...new Set(taxCodeIds.filter((v) => UUID_RE.test(v)))]
+  const clean = [...new Set(taxCodeIds.filter((v) => isUuid(v)))]
   await runner.execute(sql`
     delete from tax_group_members
      where tax_group_id = ${groupId}
@@ -459,7 +458,7 @@ export async function validateEntityIntegrity(
     const submittedSubsidiaryId = body.subsidiaryId || null
     if (submittedSubsidiaryId) {
       if (!(await subsidiaryFeatureEnabled(orgId, executor))) return 'Subsidiaries are not enabled for this organization'
-      if (!UUID_RE.test(String(submittedSubsidiaryId))) return 'Choose a valid subsidiary'
+      if (!isUuid(String(submittedSubsidiaryId))) return 'Choose a valid subsidiary'
       const subsidiary = ((await executor.execute(sql`
         select 1 from subsidiaries
          where id = ${String(submittedSubsidiaryId)} and org_id = ${orgId}
@@ -570,7 +569,7 @@ export async function validateEntityIntegrity(
              order by tgm.sequence`)))).rows.map((row) => String(row.tax_code_id))
         : []
     if (members.length === 0) return 'tax-group-members-required'
-    if (new Set(members).size !== members.length || members.some((id: string) => !UUID_RE.test(id))) return 'invalid-tax-group-members'
+    if (new Set(members).size !== members.length || members.some((id: string) => !isUuid(id))) return 'invalid-tax-group-members'
     const rows = ((await executor.execute(sql`
       select id, calculation_type from tax_codes
        where org_id = ${orgId} and is_active and id = any(${`{${members.join(',')}}`}::uuid[])
@@ -844,7 +843,7 @@ export async function validateEntityIntegrity(
       : null
     if (rowId && !existing) return 'not found'
     const segmentId = String(body.segmentId ?? existing?.segment_id ?? '')
-    if (!UUID_RE.test(segmentId)) return 'Values can only be created for a custom segment'
+    if (!isUuid(segmentId)) return 'Values can only be created for a custom segment'
     const segment = ((await executor.execute(sql`
       select id, is_hierarchical from segment_definitions
        where id = ${segmentId} and org_id = ${orgId} and source_kind = 'custom'`)))
@@ -852,7 +851,7 @@ export async function validateEntityIntegrity(
     const parentId = body.parentId === undefined ? existing?.parent_id ?? null : body.parentId || null
     if (parentId) {
       if (!segment.rows[0].is_hierarchical) return 'This segment is not hierarchical'
-      if (!UUID_RE.test(String(parentId))) return 'Choose a parent value from the same segment'
+      if (!isUuid(String(parentId))) return 'Choose a parent value from the same segment'
       const parent = ((await executor.execute(sql`
         select id from segment_values where id = ${String(parentId)} and org_id = ${orgId}
          and segment_id = ${segmentId}`)))
@@ -888,7 +887,7 @@ export async function validateEntityIntegrity(
     if (existing?.parent_id === null && parentId) return 'The root subsidiary cannot be moved'
     if (existing?.parent_id === null && body.isActive === false) return 'The root subsidiary cannot be archived'
     if (parentId) {
-      if (!UUID_RE.test(String(parentId))) return 'Invalid parent subsidiary'
+      if (!isUuid(String(parentId))) return 'Invalid parent subsidiary'
       const parent = ((await executor.execute(sql`
         select id from subsidiaries
          where id = ${String(parentId)} and org_id = ${orgId} and is_active`)))
@@ -955,14 +954,14 @@ export async function validateEntityIntegrity(
       : null
     const holderId = String(body.holderPartyId ?? current?.holder_party_id ?? '')
     const liabilityId = String(body.liabilityAccountId ?? current?.liability_account_id ?? '')
-    const holder = holderId && UUID_RE.test(holderId)
+    const holder = holderId && isUuid(holderId)
       ? ((await executor.execute(sql`
           select p.id from parties p
            join employee_roles e on e.party_id = p.id and e.org_id = p.org_id and e.is_active
           where p.id = ${holderId} and p.org_id = ${orgId} and p.is_active`)))
       : null
     if (!holder?.rows.length) return 'Choose an active employee of this organization as the cardholder'
-    const liability = liabilityId && UUID_RE.test(liabilityId)
+    const liability = liabilityId && isUuid(liabilityId)
       ? ((await executor.execute(sql`
           select id, type from accounts
            where id = ${liabilityId} and org_id = ${orgId} and is_active and not is_summary`)))
@@ -1115,8 +1114,7 @@ export async function validateEntityIntegrity(
     }
     const subsidiary = (parsed.employer_subsidiary_id ?? null) as string | null
     const department = (parsed.department_id ?? null) as string | null
-    const uuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
-    if ((subsidiary !== null && !uuid.test(subsidiary)) || (department !== null && !uuid.test(department))) {
+    if ((subsidiary !== null && !isUuid(subsidiary)) || (department !== null && !isUuid(department))) {
       return 'The applies-to subsidiary and department must be ids, or null for all'
     }
     const refs = await executor.execute(sql`
@@ -1997,7 +1995,7 @@ export async function createSetupRecord(
   try {
     const members = multirefField(entity)
     const memberIds = members && Array.isArray(body[members.key])
-      ? [...new Set((body[members.key] as unknown[]).map(String).filter((v) => UUID_RE.test(v)))]
+      ? [...new Set((body[members.key] as unknown[]).map(String).filter((v) => isUuid(v)))]
       : undefined
     const match = setupCreateMatch({
       ...(memberIds === undefined ? {} : { members: memberIds }),
@@ -2110,7 +2108,7 @@ export async function updateSetupRecord(
   const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmBenefitPlanInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, reviewFolded))))
   const id = String(body.id ?? '')
   if (!id) return { status: 400, body: { error: 'id required' } }
-  if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !UUID_RE.test(id)) {
+  if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !isUuid(id)) {
     return { status: 404, body: { error: 'not_found' } }
   }
 
@@ -2674,7 +2672,7 @@ export async function deleteSetupRecord(
   }
 
   if (!id) return { status: 400, body: { error: 'id required' } }
-  if (idColumn(entity) === 'id' && !UUID_RE.test(id)) {
+  if (idColumn(entity) === 'id' && !isUuid(id)) {
     return { status: 404, body: { error: 'not_found' } }
   }
 

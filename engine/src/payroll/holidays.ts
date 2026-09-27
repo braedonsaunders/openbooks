@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { resolveStoredEmployerFact } from "./employer-fact-store.ts";
 import { MB_CONSTRUCTION_HOLIDAY } from "./canada/employment-standards.ts";
-import { utcDateFromParts } from "../platform/business-date.ts";
+import { addCalendarDays, calendarDaysBetween, isoDateOf, utcDateFromParts } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, mulRatio, prorateDays, roundDiv, roundMoney, sum, toUnits } from "../money/money.ts";
 import {
   countryOfJurisdiction,
@@ -98,15 +98,6 @@ function at(date: string): Date {
   return parsed;
 }
 
-const iso = (date: Date): string => date.toISOString().slice(0, 10);
-
-export const shiftDays = (date: string, days: number): string =>
-  iso(new Date(at(date).getTime() + days * DAY_MS));
-
-/** Whole days from `from` to `to`; negative when `to` precedes `from`. */
-export const daysBetween = (from: string, to: string): number =>
-  Math.round((at(to).getTime() - at(from).getTime()) / DAY_MS);
-
 /** 0 = Sunday … 6 = Saturday. */
 export const weekdayOf = (date: string): number => at(date).getUTCDay();
 
@@ -139,7 +130,7 @@ export function easterSunday(year: number): string {
   const m = Math.floor((a + 11 * h + 22 * l) / 451);
   const month = Math.floor((h + l - 7 * m + 114) / 31);
   const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return iso(utcDateFromParts(year, month - 1, day));
+  return isoDateOf(utcDateFromParts(year, month - 1, day));
 }
 
 /** The calendar date a recurrence rule produces in a given year, before any
@@ -147,21 +138,21 @@ export function easterSunday(year: number): string {
 export function resolveHolidayRule(rule: PayrollHolidayRule, year: number): string {
   switch (rule.kind) {
     case "fixed":
-      return iso(utcDateFromParts(year, rule.month - 1, rule.day));
+      return isoDateOf(utcDateFromParts(year, rule.month - 1, rule.day));
     case "easter_offset":
-      return shiftDays(easterSunday(year), rule.days);
+      return addCalendarDays(easterSunday(year), rule.days);
     case "nth_weekday": {
       if (rule.nth > 0) {
         const first = utcDateFromParts(year, rule.month - 1, 1);
         const offset = (rule.weekday - first.getUTCDay() + 7) % 7;
-        return iso(utcDateFromParts(year, rule.month - 1, 1 + offset + (rule.nth - 1) * 7));
+        return isoDateOf(utcDateFromParts(year, rule.month - 1, 1 + offset + (rule.nth - 1) * 7));
       }
       // nth < 0 counts back from the end of the month: -1 is the LAST such
       // weekday (US Memorial Day is the last Monday in May, which is the
       // fourth Monday in four years out of seven and the fifth otherwise).
       const last = utcDateFromParts(year, rule.month, 0);
       const back = (last.getUTCDay() - rule.weekday + 7) % 7;
-      return iso(new Date(last.getTime() - (back + (-rule.nth - 1) * 7) * DAY_MS));
+      return isoDateOf(new Date(last.getTime() - (back + (-rule.nth - 1) * 7) * DAY_MS));
     }
     case "weekday_before": {
       // The last <weekday> STRICTLY before month/day. Victoria Day is the
@@ -169,7 +160,7 @@ export function resolveHolidayRule(rule: PayrollHolidayRule, year: number): stri
       // is May 18 — the single most commonly mis-implemented Canadian holiday.
       const anchor = utcDateFromParts(year, rule.month - 1, rule.day);
       const back = ((anchor.getUTCDay() - rule.weekday + 7) % 7) || 7;
-      return iso(new Date(anchor.getTime() - back * DAY_MS));
+      return isoDateOf(new Date(anchor.getTime() - back * DAY_MS));
     }
   }
 }
@@ -193,8 +184,8 @@ function applyObservance(
     // on the following Monday. It can cross a year boundary — New Year's Day
     // on a Saturday is observed on December 31 of the PREVIOUS year.
     const weekday = weekdayOf(date);
-    if (weekday === 6) return shiftDays(date, -1);
-    if (weekday === 0) return shiftDays(date, 1);
+    if (weekday === 6) return addCalendarDays(date, -1);
+    if (weekday === 0) return addCalendarDays(date, 1);
     return date;
   }
   // next_monday — Canada Labour Code s. 195: a general holiday falling on a
@@ -202,7 +193,7 @@ function applyObservance(
   let candidate = date;
   for (let guard = 0; guard < 10; guard += 1) {
     if (!isWeekend(candidate) && !taken.has(candidate)) return candidate;
-    candidate = shiftDays(candidate, 1);
+    candidate = addCalendarDays(candidate, 1);
   }
   throw new PayrollHolidayError(`could not place the observed date for ${date}`);
 }
@@ -470,7 +461,7 @@ export function nextBusinessDay(date: string, holidays: ReadonlySet<string>): st
   let candidate = date;
   for (let guard = 0; guard <= 30; guard += 1) {
     if (isBusinessDay(candidate, holidays)) return candidate;
-    candidate = shiftDays(candidate, 1);
+    candidate = addCalendarDays(candidate, 1);
   }
   throw new PayrollHolidayError(`no business day within 30 days of ${date}`);
 }
@@ -496,7 +487,7 @@ export function addBusinessDays(
   let candidate = date;
   for (let guard = 0; remaining > 0; guard += 1) {
     if (guard > 400) throw new PayrollHolidayError(`could not add ${days} business days to ${date}`);
-    candidate = shiftDays(candidate, step);
+    candidate = addCalendarDays(candidate, step);
     if (isBusinessDay(candidate, holidays)) remaining -= 1;
   }
   return candidate;
@@ -509,7 +500,7 @@ export function businessDaysBetween(
   holidays: ReadonlySet<string>,
 ): number {
   let count = 0;
-  for (let cursor = from; cursor <= to; cursor = shiftDays(cursor, 1)) {
+  for (let cursor = from; cursor <= to; cursor = addCalendarDays(cursor, 1)) {
     if (isBusinessDay(cursor, holidays)) count += 1;
   }
   return count;
@@ -1316,24 +1307,24 @@ export async function applyOccupationWeeklyCap(
     excludeDocumentId: args.excludeDocumentId,
   };
   const intoWeek = weekdayOf(args.holidayDate) % 7;
-  const weekStart = shiftDays(args.holidayDate, -intoWeek);
-  const weekEnd = shiftDays(weekStart, 6);
+  const weekStart = addCalendarDays(args.holidayDate, -intoWeek);
+  const weekEnd = addCalendarDays(weekStart, 6);
   const total = (earnings: HolidayLookbackEarnings): string =>
     sum([earnings.regular, earnings.overtime, earnings.vacationPay, earnings.holidayPay]);
   const average = fromUnits(
     roundDiv(
       toUnits(total(await lookbackEarnings(tx, stubInput, {
-        from: shiftDays(weekStart, -(cap.lookbackWeeks * 7)),
-        to: shiftDays(weekStart, -1),
+        from: addCalendarDays(weekStart, -(cap.lookbackWeeks * 7)),
+        to: addCalendarDays(weekStart, -1),
       }))),
       BigInt(cap.lookbackWeeks),
     ),
   );
   const committed = total(await lookbackEarnings(tx, stubInput, { from: weekStart, to: weekEnd }));
-  const periodDays = daysBetween(args.periodStart, args.periodEnd) + 1;
+  const periodDays = calendarDaysBetween(args.periodStart, args.periodEnd) + 1;
   const overlapFrom = args.periodStart > weekStart ? args.periodStart : weekStart;
   const overlapTo = args.periodEnd < weekEnd ? args.periodEnd : weekEnd;
-  const overlapDays = daysBetween(overlapFrom, overlapTo) + 1;
+  const overlapDays = calendarDaysBetween(overlapFrom, overlapTo) + 1;
   const currentTotal = sum(
     (args.currentLines ?? [])
       .filter((line) => line.kind === "earning" && !line.nonPeriodic)
@@ -1421,8 +1412,8 @@ export async function resolveStatutoryHolidayPay(
     // sentences and are kept separate.
     const qualifyingWindow = rule.qualifying.minDaysWorkedInWindow
       ? {
-          from: shiftDays(holiday.date, -rule.qualifying.minDaysWorkedInWindow.ofDays),
-          to: shiftDays(holiday.date, -1),
+          from: addCalendarDays(holiday.date, -rule.qualifying.minDaysWorkedInWindow.ofDays),
+          to: addCalendarDays(holiday.date, -1),
         }
       : window;
     const lookbackBasis = holidayPayLookbackBasis(rule.basis);
@@ -1529,8 +1520,8 @@ export async function resolveStatutoryHolidayPay(
         ? await hoursWorkedInLookback(tx, input, window)
         : undefined,
       daysWorkedInQualifyingWindow,
-      employmentDays: hiredOn ? daysBetween(hiredOn, holiday.date) : null,
-      employmentWeeks: hiredOn ? Math.floor(daysBetween(hiredOn, holiday.date) / 7) : null,
+      employmentDays: hiredOn ? calendarDaysBetween(hiredOn, holiday.date) : null,
+      employmentWeeks: hiredOn ? Math.floor(calendarDaysBetween(hiredOn, holiday.date) / 7) : null,
       commissionEarnings: commissionWindow
         ? await lookbackEarnings(tx, input, commissionWindow)
         : undefined,
@@ -1622,7 +1613,7 @@ export async function resolveStatutoryHolidayPay(
       const schedule = await resolveWorkSchedule(tx, input.orgId, input.employeePartyId, date);
       const result = computeWorkTriggeredHolidayPay(rule, event, {
         employee: input.employeeName, holiday, earnings, daysWorked: 0,
-        employmentDays: hiredOn ? daysBetween(hiredOn, date) : null,
+        employmentDays: hiredOn ? calendarDaysBetween(hiredOn, date) : null,
         hoursWorked, hourlyRate: input.hourlyRate, schedule,
       });
       if (!result.qualified) continue;
@@ -1668,7 +1659,7 @@ export function lookbackWindowEnd(
   employerWeekStartsOn?: number,
 ): string {
   const boundary = rule.lookbackEnds;
-  if (boundary.kind === "day_before") return shiftDays(holidayDate, -1);
+  if (boundary.kind === "day_before") return addCalendarDays(holidayDate, -1);
   // Back up to the first day of the holiday's own week, then take the day
   // before it: the last day of the preceding week.
   const weekStartsOn = employerWeekStartsOn ?? boundary.weekStartsOn;
@@ -1676,7 +1667,7 @@ export function lookbackWindowEnd(
     throw new PayrollHolidayError(`invalid employer work-week start day: ${weekStartsOn}`);
   }
   const intoWeek = (weekdayOf(holidayDate) - weekStartsOn + 7) % 7;
-  return shiftDays(holidayDate, -(intoWeek + 1));
+  return addCalendarDays(holidayDate, -(intoWeek + 1));
 }
 
 /**
@@ -1710,7 +1701,7 @@ export function lookbackWindow(
 
 /** The `days`-long window ending on (and including) `to`. */
 const spanBefore = (to: string, days: number) => ({
-  from: shiftDays(to, -(days - 1)),
+  from: addCalendarDays(to, -(days - 1)),
   to,
 });
 
@@ -1754,7 +1745,7 @@ async function lookbackEarnings(
     const periodEnd = day(row.period_end);
     const overlapFrom = periodStart > window.from ? periodStart : window.from;
     const overlapTo = periodEnd < window.to ? periodEnd : window.to;
-    const overlapDays = daysBetween(overlapFrom, overlapTo) + 1;
+    const overlapDays = calendarDaysBetween(overlapFrom, overlapTo) + 1;
     if (overlapDays <= 0) continue;
     const earnedFrom = row.earned_from == null ? null : day(row.earned_from);
     const earnedTo = row.earned_to == null ? null : day(row.earned_to);
@@ -1891,7 +1882,7 @@ export function countHolidayQualifyingDays(input: {
         + "as time entries. It will not assume a working week it has not been told about",
       );
     }
-    for (let cursor = from; cursor <= to; cursor = shiftDays(cursor, 1)) {
+    for (let cursor = from; cursor <= to; cursor = addCalendarDays(cursor, 1)) {
       if (isScheduledOn(schedule, cursor) === true) days.add(cursor);
     }
   }
@@ -2023,7 +2014,7 @@ export async function evidencedEntitledPayDays(
   if (qualifier?.counting !== "entitled_to_pay") {
     throw new PayrollHolidayError(`${input.jurisdiction} does not declare an entitlement-to-pay day assessment on ${input.holidayDate}`);
   }
-  const window = spanBefore(shiftDays(input.holidayDate, -1), qualifier.ofDays);
+  const window = spanBefore(addCalendarDays(input.holidayDate, -1), qualifier.ofDays);
   const overrides = await loadHolidayOverrides(tx, input.orgId, input.jurisdiction);
   const observed = resolveObservedHolidays({
     jurisdiction: input.jurisdiction, from: window.from, to: window.to, overrides,

@@ -21,7 +21,7 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { addCalendarDays, addCalendarMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { addCalendarDays, addMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { can, requirePermission } from '../../../../lib/authz'
 import { customerGroupTabs } from '../../../../components/module-home/group-tabs'
 import { calculateForecast, countUndatedForecastExcluded, type ForecastRow } from '../../../../lib/crm'
@@ -186,7 +186,7 @@ export async function loadForecasts(
   const requestedStart = pickString(sp.periodStart)
   const requestedEnd = pickString(sp.periodEnd)
   const start = requestedStart && isIsoCalendarDate(requestedStart) ? requestedStart : defaultStart
-  const startBasedEnd = addCalendarDays(addCalendarMonthsStart(start, 3), -1)
+  const startBasedEnd = addCalendarDays(addMonthsStart(start, 3), -1)
   const end = requestedEnd && isIsoCalendarDate(requestedEnd) && requestedEnd >= start ? requestedEnd : startBasedEnd
   const requestedOwner = pickString(sp.owner)
   const requestedTeam = pickString(sp.team)

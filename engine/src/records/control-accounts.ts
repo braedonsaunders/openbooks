@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 /**
  * Every org-level account role that can feed a posting path. Account type is
@@ -153,10 +154,7 @@ function parseStoredControlAccounts(value: unknown): OrgControlAccounts {
     if (accountId === undefined || accountId === null || accountId === "")
       continue;
     if (
-      typeof accountId !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        accountId,
-      )
+      !isUuid(accountId)
     ) {
       throw new ControlAccountsIncompleteError(
         `${role} control account id is invalid`,

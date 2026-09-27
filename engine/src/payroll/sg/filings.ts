@@ -70,16 +70,7 @@ import type {
   PayrollYearEndFiling,
 } from "../filing-registry.ts";
 import { sgRatesForTaxYear } from "./cpf.ts";
-
-/**
- * The row-id UUID shape, owned HERE rather than imported from
- * `../filing-registry.ts` (the canada/filings.ts precedent): that module
- * imports `./packs.ts`, which imports `./sg/pack.ts`, which imports this
- * module — a runtime import would re-enter packs evaluation while
- * `SG_PAYROLL_PACK` is still initializing (TDZ crash). The grammar is the
- * same lax shape the web layer guards `[id]` params with.
- */
-const IR8A_ROW_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isUuid } from "../../platform/uuid.ts";
 
 const num = (value: unknown): string => (value == null ? "0" : String(value));
 
@@ -185,7 +176,7 @@ export async function ir8aSlips(orgId: string, taxYear: number): Promise<Ir8aSli
  * copy of this shape.
  */
 export function parseIr8aRowId(rowId: string): PayrollFilingRowScope | null {
-  if (!IR8A_ROW_UUID_RE.test(rowId)) return null;
+  if (!isUuid(rowId)) return null;
   return { employees: [rowId], accounts: [] };
 }
 

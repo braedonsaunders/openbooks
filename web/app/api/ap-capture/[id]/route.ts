@@ -13,7 +13,7 @@ import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isFeatureEnabled } from '../../../../lib/features'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { notFound } from "@/lib/api/responses";
-
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
 export const runtime = 'nodejs'
 
@@ -57,7 +57,6 @@ function resolvedAssociationsInScope(
   return sql`${vendorOk} and ${purchaseOrderOk}`
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 function optionalText(value: unknown, max = 500): string | null {
@@ -82,7 +81,7 @@ function optionalUuid(value: unknown): string | null {
   if (typeof value !== 'string') throw new CapturePatchRefusal('invalid_capture_reference')
   const text = value.trim()
   if (!text) return null
-  if (!UUID.test(text)) throw new CapturePatchRefusal('invalid_capture_reference')
+  if (!isUuid(text)) throw new CapturePatchRefusal('invalid_capture_reference')
   return text
 }
 
@@ -143,7 +142,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params
   // A malformed id names nothing: same answer as an unknown one, never a
   // PostgreSQL uuid cast error escaping as a 500.
-  if (!UUID.test(id)) return notFound("record")
+  if (!isUuid(id)) return notFound("record")
   return withScopeSnapshot(gate.user.orgId, async () => {
   const result = (await db.execute<Record<string, unknown>>(sql`
     select ci.*, f.content_type, f.size_bytes
@@ -173,7 +172,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const gate = await guardPermission('ap.create')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!UUID.test(id)) return notFound("record")
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(request, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>

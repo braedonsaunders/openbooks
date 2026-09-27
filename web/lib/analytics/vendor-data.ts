@@ -3,9 +3,8 @@ import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
 import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
-import { addMonthsIso } from "@openbooks/reports";
 import { sql } from "drizzle-orm";
-import { businessToday, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
+import { addMonthsClamped, businessToday, calendarDaysBetween, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { englishVendorStrings, type VendorStrings } from "./vendor-strings";
 
@@ -103,10 +102,7 @@ interface VendorPaymentRow extends Record<string, unknown> {
 }
 
 function priorYear(iso: string): string {
-  return addMonthsIso(iso, -12);
-}
-function daysBetween(a: string, b: string): number {
-  return Math.round((new Date(b + "T00:00:00Z").getTime() - new Date(a + "T00:00:00Z").getTime()) / 86_400_000);
+  return addMonthsClamped(iso, -12);
 }
 function clamp(n: number, lo = 0, hi = 100): number {
   return Math.max(lo, Math.min(hi, n));
@@ -297,7 +293,7 @@ export async function vendorData(
         bills,
         avgBill: bills > 0 ? spend / bills : 0,
         lastBill,
-        recencyDays: lastBill ? daysBetween(lastBill, ref) : null,
+        recencyDays: lastBill ? calendarDaysBetween(lastBill, ref) : null,
         paidBills,
         avgDaysToPay: paidBills > 0 && pm ? Math.round((pm.daysSum / paidBills) * 10) / 10 : null,
         onTimePct: paidBills > 0 ? onTime / paidBills : null,

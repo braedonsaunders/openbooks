@@ -8,7 +8,7 @@ import { canonicalDecimal } from '../exact-decimal'
 import { ensurePartyRoleRow } from '../party-roles'
 import { assetBankHygieneWarning } from '../accounts-hygiene'
 import { toSnake } from '../setup/registry'
-import { coerceBoolean, UUID_RE } from '../setup/coerce'
+import { coerceBoolean } from '../setup/coerce'
 import { loadFieldDefs, validateCustomValues, type CustomFieldDef } from '../custom-fields'
 import {
   enforceExportRowLimit,
@@ -29,6 +29,7 @@ import {
   type ResourceRefTarget,
   type WriteOutcome,
 } from './types'
+import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 // --- Master-data resources ----------------------------------------------------
 
 interface MasterCol {
@@ -217,7 +218,7 @@ async function resolveMasterRefId(
   if (!id) return null
 
   const value = String(human ?? '').trim()
-  if (target.resource !== 'accounts' || !UUID_RE.test(value)) return id
+  if (target.resource !== 'accounts' || !isUuid(value)) return id
 
   const owned = (await db.execute(sql`
     select id from accounts
@@ -238,7 +239,7 @@ async function exportMasterCell(
 ): Promise<CellValue> {
   if (field.kind === 'reference' && field.ref?.resource === 'accounts') {
     const id = String(value ?? '').trim()
-    if (UUID_RE.test(id)) {
+    if (isUuid(id)) {
       const owned = (await db.execute(sql`
         select number as label from accounts
          where id = ${id} and org_id = ${orgId}

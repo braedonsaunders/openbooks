@@ -61,6 +61,7 @@ import {
   type GbYearTables,
 } from "./year-tables.ts";
 import type { GbTaxCode } from "./tax-codes.ts";
+import { utcDateFromParts } from "../../platform/civil-date.ts";
 
 /** The transcribed 2026/27 month-one end, re-exported from the year tables. */
 export { GB_MONTH_ONE_END };
@@ -476,27 +477,14 @@ export function gbTaxMonthNumber(payDate: string): number {
   return index + 1;
 }
 
-/**
- * Epoch milliseconds for civil (year, monthIndex, day) parts. Local copy of
- * the platform/business-date.ts utcDateFromParts idiom (`new Date(0)` +
- * setUTCFullYear, which keeps literal years 0001-0099 that Date.UTC would
- * remap onto 1900-1999): this statutory arithmetic is pure with no database
- * and must not load the db-backed platform stack.
- */
-function utcMs(year: number, monthIndex: number, day: number): number {
-  const date = new Date(0);
-  date.setUTCFullYear(year, monthIndex, day);
-  return date.getTime();
-}
-
 /** HMRC tax-week number (1–53) for a pay date in the given year. Week 1 = 6–12 Apr. */
 export function gbTaxWeekNumber(payDate: string, yearStart: string = GB_TAX_YEAR_START): number {
-  const start = utcMs(
+  const start = utcDateFromParts(
     Number(yearStart.slice(0, 4)), Number(yearStart.slice(5, 7)) - 1, Number(yearStart.slice(8, 10)),
-  );
-  const day = utcMs(
+  ).getTime();
+  const day = utcDateFromParts(
     Number(payDate.slice(0, 4)), Number(payDate.slice(5, 7)) - 1, Number(payDate.slice(8, 10)),
-  );
+  ).getTime();
   return Math.floor((day - start) / (7 * 86_400_000)) + 1;
 }
 
