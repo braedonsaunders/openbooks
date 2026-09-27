@@ -284,7 +284,7 @@ test("reduced-rate eligibility resolves only from the employer's account", () =>
     supersededOn: null,
   };
   const resolution = buildResolution({
-    country: "FR", taxYear: 2026, pack: FR_PACK_RATES, rows: [rate], legacy: [],
+    country: "FR", taxYear: 2026, pack: FR_PACK_RATES, rows: [rate],
   });
   assert.equal(frAllocFamReducedEligible(resolution, "FR", "siret-eligible"), true);
   assert.equal(frAllocFamReducedEligible(resolution, "FR", "siret-ordinary"), false);

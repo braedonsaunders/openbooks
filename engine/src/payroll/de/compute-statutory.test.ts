@@ -236,10 +236,10 @@ test("blank PV child facts cannot inherit synthesized childless defaults", () =>
 
 test("de_kvz resolves through the generic resolution (pure half)", () => {
   const decl = DE_PACK_RATES;
-  const empty = buildResolution({ country: "DE", taxYear: 2026, pack: decl, rows: [], legacy: [] });
+  const empty = buildResolution({ country: "DE", taxYear: 2026, pack: decl, rows: [] });
   assert.equal(empty.values("de_kvz"), null, "unconfigured: no values, so the engine refuses");
   const filled = buildResolution({
-    country: "DE", taxYear: 2026, pack: decl, legacy: [],
+    country: "DE", taxYear: 2026, pack: decl,
     rows: [{
       id: "r1", country: "DE", rateKey: "de_kvz", region: null,
       filingAccountId: null, taxYear: 2026, values: { rate: "2.90" },

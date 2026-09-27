@@ -39,8 +39,10 @@ export const FR_PACK_RATES: PayrollPackRates = {
       programType: "fr_siret",
       systemKeys: ["versement_mobilite_er"],
       regions: ["FR"],
-      whenUnconfigured: "legacy",
-      citation: "URSSAF, taux et barèmes — versement mobilité (employers with 11+ employees)",
+      whenUnconfigured: "refuse",
+      citation:
+        "URSSAF, Versement mobilité (employers with 11+ employees; rate set by the AOM) — "
+        + "https://www.urssaf.fr/accueil/employeur/cotisations/liste-cotisations/versement-mobilite.html",
       variesBecause:
         "The rate is set per autorité organisatrice de la mobilité from the establishment's commune — a figure no published table can supply.",
       fields: [

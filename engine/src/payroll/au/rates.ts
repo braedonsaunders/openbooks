@@ -29,13 +29,9 @@ export const AU_PACK_RATES: PayrollPackRates = {
       label: "Workers' compensation premium",
       scope: "region",
       regions: AU_KNOWN_REGIONS,
-      // Consumed by applyAuEmployerLevies (./employer-levies.ts), which
-      // prices each stub's gross at the resolving regional fraction. A
-      // region with no row stays inert — readiness warns by name until one
-      // resolves — so the slot keeps `legacy`, never a refusal. (State
-      // payroll-tax thresholds and rates remain undeclared: that aggregate
-      // channel is still in review — see the ledger.)
-      whenUnconfigured: "legacy",
+      // A positive-wage employer must supply its insurer-notified rate; an
+      // explicit zero represents an insurer-confirmed nil liability.
+      whenUnconfigured: "refuse",
       systemKeys: ["wcb"],
       fields: [
         {
@@ -51,8 +47,9 @@ export const AU_PACK_RATES: PayrollPackRates = {
         },
       ],
       citation:
-        "State and territory workers' compensation schemes — "
-        + "employer premium notices",
+        "Safe Work Australia, Workers’ compensation and Premiums — "
+        + "https://www.safeworkaustralia.gov.au/workers-compensation — "
+        + "https://www.safeworkaustralia.gov.au/book/comparison-wc-arrangements-29ed/chapter-8/premiums",
       variesBecause:
         "Premium rates are set per employer by each state or territory's "
         + "workers' compensation insurer from the employer's industry and "

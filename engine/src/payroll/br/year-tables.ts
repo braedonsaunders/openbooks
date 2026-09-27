@@ -1,12 +1,10 @@
 /**
  * BR prior-year edition selector: which transcribed tables price a pay date.
  *
- * Both 2024 and 2025 changed the IRRF monthly table mid-year while the INSS
- * table held all year (the January portaria), so each year has one INSS
- * table and two IRRF editions. The selector returns the bundle in force for
- * the pay month — the ES `ratesForPayDate` precedent's shape. It throws for
- * any date outside the transcribed year: never extrapolate, never clamp to
- * the nearest table.
+ * 2024 and 2025 changed the IRRF monthly table mid-year while the INSS table
+ * held all year. The selector returns the bundle in force for the pay month;
+ * it throws for any date outside the transcribed year rather than
+ * extrapolating or clamping to the nearest table.
  *
  * Boundaries (each cited on the year module):
  * - 2024-02-01: Lei 14.848/2024 item XI "a partir do mês de fevereiro";
@@ -35,6 +33,17 @@ import {
   BR_2025_IRRF_LATE,
   BR_2025_PATRONAL,
 } from "./tax-year-2025.ts";
+import {
+  BR_2026_DEPENDENTE,
+  BR_2026_DESCONTO_SIMPLIFICADO,
+  BR_2026_FGTS,
+  BR_2026_INSS_BRACKETS,
+  BR_2026_INSS_TETO,
+  BR_2026_IRRF_BANDS,
+  BR_2026_PATRONAL,
+  BR_2026_REDUCAO,
+  BR_2026_EDITION_LABEL,
+} from "./tax-year-2026.ts";
 
 /** Every transcribed table a prior-year monthly payslip prices through. */
 export interface BrYearTables {
@@ -48,7 +57,7 @@ export interface BrYearTables {
   fgts: string;
 }
 
-export function brTablesForPayDate(year: 2024 | 2025, payDate: string): BrYearTables {
+export function brTablesForPayDate(year: 2024 | 2025 | 2026, payDate: string): BrYearTables {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(payDate)) {
     throw new PayrollPackError(`BR payroll: pay date is not an ISO date: "${payDate}"`);
   }
@@ -71,6 +80,25 @@ export function brTablesForPayDate(year: 2024 | 2025, payDate: string): BrYearTa
       irrfLabel: irrf.label,
       patronal: BR_2024_PATRONAL,
       fgts: BR_2024_FGTS,
+    };
+  }
+  if (year === 2026) {
+    return {
+      inss: {
+        brackets: BR_2026_INSS_BRACKETS,
+        teto: BR_2026_INSS_TETO,
+        tag: "BR 2026 INSS",
+      },
+      irrf: {
+        bands: BR_2026_IRRF_BANDS,
+        simplificado: BR_2026_DESCONTO_SIMPLIFICADO,
+        dependente: BR_2026_DEPENDENTE,
+        tag: "BR 2026 IRRF",
+        reduction: BR_2026_REDUCAO,
+      },
+      irrfLabel: BR_2026_EDITION_LABEL,
+      patronal: BR_2026_PATRONAL,
+      fgts: BR_2026_FGTS,
     };
   }
   const irrf = payDate < "2025-05-01" ? BR_2025_IRRF_EARLY : BR_2025_IRRF_LATE;

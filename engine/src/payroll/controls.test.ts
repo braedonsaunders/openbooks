@@ -16,7 +16,6 @@ import {
 } from "./derived-earnings.ts";
 import { payRateIsUsable } from "./rate.ts";
 import { payRunReadiness, payRunStaleness } from "./readiness.ts";
-import { remittanceDueDate } from "./remittance.ts";
 import { isCanadianSin, renderRoeXml, type RoeRecordToFile } from "./canada/roexml.ts";
 import { roeCandidates, t4Slips, type RoeRecord } from "./yearend.ts";
 import { employeeYtd } from "./canada/compute-statutory.ts";
@@ -981,44 +980,4 @@ test("largest-remainder allocation: exact sum, faithful shares, deterministic", 
     allocateByQuantity("5.0000", Array(40).fill("1")),
     allocateByQuantity("5.0000", Array(40).fill("1")),
   );
-});
-
-/* ------------------------------------------------------------------ */
-/* C8b — an invented remittance due date                               */
-/* ------------------------------------------------------------------ */
-
-test("a remittance due date follows the remitter type, never one schedule for all", () => {
-  // The control: the 15th of the following month is the REGULAR schedule, and
-  // it was once stamped on every bill regardless of `remitter_type` — so an
-  // accelerated remitter's bill carried a confidently wrong date weeks late,
-  // and the CRA penalty is 3-10%. The schedules diverge, and they must stay
-  // diverged.
-  //
-  // Until the statutory holiday calendar existed the other three schedules
-  // REFUSED (returned null) rather than invent a date. They are now computed
-  // from that calendar — engine/src/payroll/holidays.ts — and the exhaustive
-  // case-by-case verification against the CRA's published table lives in
-  // engine/src/payroll/remittance-due-dates.test.ts. What this control asserts
-  // is only that one schedule is never silently used for another.
-  const period = "2026-07-31";
-  const byType = new Map(
-    (["regular", "quarterly", "accelerated_1", "accelerated_2"] as const)
-      .map((remitter) => [remitter, remittanceDueDate(period, remitter)]),
-  );
-  assert.equal(new Set(byType.values()).size, 4, "every remitter type has its own deadline");
-
-  // Regular: the 15th of the following month, moved off the weekend. August 15
-  // 2026 is a Saturday, and the CRA's rule is that the remittance is on time if
-  // it is received on the next business day.
-  assert.equal(byType.get("regular"), "2026-08-17");
-  assert.equal(remittanceDueDate("2026-12-31", "regular"), "2027-01-15");
-  // No filing account = the CRA's default registration for a new employer,
-  // which is a regular remitter. The single-account org is unchanged.
-  assert.equal(remittanceDueDate(period, null), "2026-08-17");
-  // And no schedule ever stamps a Saturday, a Sunday, or a CRA holiday.
-  for (const [remitter, due] of byType) {
-    const weekday = new Date(`${due}T00:00:00Z`).getUTCDay();
-    assert.ok(weekday !== 0 && weekday !== 6, `${remitter} landed on a weekend (${due})`);
-    assert.ok(due > period, `${remitter} must fall after the period it closes`);
-  }
 });

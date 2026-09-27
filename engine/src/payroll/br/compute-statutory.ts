@@ -1,10 +1,10 @@
 /**
  * Phase 9 — BR pack statutory pass: 2026 INSS + IRRF + employer cost.
  *
- * Pure calculators live in ./inss-2026.ts and ./irrf-2026.ts (proven by
- * goldens); this adapter maps the generic run context onto them. The BR pack
- * is monthly: periodsPerYear must be 12 (13º, férias and rescisão are named
- * refusals, never priced through this path).
+ * Pure year-table calculators live in ./inss-year.ts and ./irrf-year.ts
+ * (proven by goldens); this adapter maps the generic run context onto them.
+ * The BR pack is monthly: periodsPerYear must be 12 (13º, férias and rescisão
+ * are named refusals, never priced through this path).
  *
  * Pack-owned emp keys (named refusals when absent, never defaulted into a
  * different withholding): br_dependentes (integer ≥ 0, required),
@@ -25,8 +25,6 @@ import "./employee-facts.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import { resolveStatutoryRates } from "../statutory-rates.ts";
-import { calculateBrInss2026 } from "./inss-2026.ts";
-import { calculateBrIrrf2026 } from "./irrf-2026.ts";
 import { calculateBrInssFromTables } from "./inss-year.ts";
 import { calculateBrIrrfFromTables } from "./irrf-year.ts";
 import { brTablesForPayDate } from "./year-tables.ts";
@@ -122,9 +120,8 @@ export async function computeBrStatutoryWithRates(
       + "Transcribe the year's Portaria + monthly tables before calculating",
     );
   }
-  // Prior years price through their own transcribed tables, selected by pay
-  // month (each changed the IRRF table mid-year); 2026 keeps its own path
-  // below, byte-for-byte the behaviour the 2026 suite proves.
+  // Every year prices through its own transcribed table bundle, selected by
+  // pay month where an edition changed mid-year.
   const payDate = run.pay_date;
   if (taxYear !== 2026 && (typeof payDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(payDate))) {
     fail(
@@ -132,8 +129,10 @@ export async function computeBrStatutoryWithRates(
       + "prior-year tables are selected by pay month, so the run must carry its pay_date",
     );
   }
-  const priorTables =
-    taxYear === 2024 || taxYear === 2025 ? brTablesForPayDate(taxYear, payDate as string) : null;
+  const tables = brTablesForPayDate(
+    taxYear,
+    typeof payDate === "string" ? payDate : `${taxYear}-01-01`,
+  );
   assertRegionSupported(region);
   if (region !== "BR") {
     fail(`region "${region}" is not covered — the BR pack withholds nationally, never by state`);
@@ -182,26 +181,17 @@ export async function computeBrStatutoryWithRates(
   const fmtCents = (c: bigint): string => `${c / 100n}.${String(c % 100n).padStart(2, "0")}`;
 
   // 1. INSS first: it is deductible from the IRRF base, so the order matters.
-  const inss = priorTables === null
-    ? calculateBrInss2026({ salarioContribuicao: fmtCents(salarioContribuicao) })
-    : calculateBrInssFromTables(priorTables.inss, { salarioContribuicao: fmtCents(salarioContribuicao) });
+  const inss = calculateBrInssFromTables(tables.inss, {
+    salarioContribuicao: fmtCents(salarioContribuicao),
+  });
 
   // 2. IRRF on the month's aggregate, with the INSS deduction inside.
-  // Pre-2026 editions carry no art. 3º-A reduction (Lei 15.270/2025 takes
-  // effect 1 January 2026), so the generic calculator prices table tax only.
-  const irrf = priorTables === null
-    ? calculateBrIrrf2026({
-      rendimentos: fmtCents(rendimentos),
-      inss: inss.contribuicao,
-      dependentes,
-      pensaoMensal: pensao,
-    })
-    : calculateBrIrrfFromTables(priorTables.irrf, {
-      rendimentos: fmtCents(rendimentos),
-      inss: inss.contribuicao,
-      dependentes,
-      pensaoMensal: pensao,
-    });
+  const irrf = calculateBrIrrfFromTables(tables.irrf, {
+    rendimentos: fmtCents(rendimentos),
+    inss: inss.contribuicao,
+    dependentes,
+    pensaoMensal: pensao,
+  });
 
   // 2b. Salário-família (Portaria Interministerial MPS/MF nº 13/2026
   // art. 4º): R$ 67,54 per qualifying child (<14 or disabled) when the
@@ -335,7 +325,7 @@ export async function computeBrStatutoryWithRates(
 /**
  * Trace-factor labels for the stub calculation trace, keyed by the factor
  * keys this pass returns. Terms are the CLT computation's own (rendimentos,
- * INSS, IRRF, FGTS) — see irrf-2026.ts.
+ * INSS, IRRF, FGTS) — see irrf-year.ts.
  */
 export const BR_FACTOR_LABELS: Readonly<Record<string, string>> = {
   BR_RENDIMENTOS: "Rendimentos tributáveis",

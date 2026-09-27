@@ -31,7 +31,7 @@ export { resolvePayrollRunContext, resolveEmployeePayrollContext, declaredPackRa
 export type { PayrollRunContext, EmployeePayrollContext } from "./pack-run-context"
 export { declaredJurisdictions, payrollJurisdiction, jurisdictionKey, countryOfJurisdiction, holidayOccupationClassesOf, labourJurisdictionProblem, payrollJurisdictionDeclared, employmentJurisdictionsOf } from "./pack-jurisdictions"
 export type { RecognisedHolidayOccupation } from "./pack-jurisdictions"
-export { statutoryRemittanceDeclaration, allRemittanceSchedules, remittanceScheduleInForce, remittanceFrequencyBand, remittanceBandForAverage, packRemittanceSchedules, remittanceScheduleForFrequencyKey, declaredRemittanceFrequencySettingsKeys, declaredRemittanceVendorSettingsKeys, packRemittanceVendorSettingsKeys, packAllowsRegistrationTimetableFallback, legacyStatutoryLiabilityAccount } from "./pack-remittance-schedules"
+export { statutoryRemittanceDeclaration, allRemittanceSchedules, remittanceScheduleInForce, remittanceFrequencyBand, remittanceBandForAverage, packRemittanceSchedules, remittanceScheduleForFrequencyKey, declaredRemittanceFrequencySettingsKeys, declaredRemittanceVendorSettingsKeys, packRemittanceVendorSettingsKeys, legacyStatutoryLiabilityAccount } from "./pack-remittance-schedules"
 export { assertContributoryBasesDeclared, packSlotAppliesToPopulation, packSlotState, uninstallPayrollPack, setPackSlotAccount, ensurePackSlotRoleAccounts } from "./pack-slots"
 export type { PackSlotState } from "./pack-slots"
 export { taxYearFor } from "./tax-year-math.ts"

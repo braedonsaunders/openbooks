@@ -18,8 +18,8 @@ import { US_PACK_RATES } from "./us/rates.ts";
  * The two-field model: appliesWhen (regions) + whenUnconfigured.
  *
  * A live-but-unconfigured `refuse` slot stops the employee BY NAME with the
- * readiness detector's own sentence; `zero` and `legacy` slots keep today's
- * behaviour — compute when configured, nothing when not, never a refusal.
+ * readiness detector's own sentence; only an explicitly justified `zero`
+ * slot may continue without a configured rate.
  * Every case is per scope point (this region, this assigned filing account),
  * never "a rate exists somewhere in the org".
  */
@@ -49,8 +49,7 @@ test("every declared rate slot answers whenUnconfigured explicitly", () => {
     for (const slot of pack.slots) {
       assert.ok(
         slot.whenUnconfigured === "refuse"
-          || slot.whenUnconfigured === "zero"
-          || slot.whenUnconfigured === "legacy",
+          || slot.whenUnconfigured === "zero",
         `${pack.country}/${slot.key} answers whenUnconfigured`,
       );
       answers.set(`${pack.country}/${slot.key}`, slot.whenUnconfigured);
@@ -60,6 +59,7 @@ test("every declared rate slot answers whenUnconfigured explicitly", () => {
   assert.deepEqual(
     [...answers.entries()].filter(([, answer]) => answer === "refuse").map(([key]) => key).sort(),
     [
+      "AU/au_workers_comp",
       "BR/br_fap",
       "BR/br_rat",
       "BR/br_terceiros",
@@ -67,6 +67,7 @@ test("every declared rate slot answers whenUnconfigured explicitly", () => {
       "CA/ca_hsf",
       "DE/de_kvz",
       "FR/fr_atmp",
+      "FR/fr_versement_mobilite",
       "IT/it_addizionale_comunale",
       "IT/it_addizionale_regionale",
       "JP/jp_health_rate",
@@ -86,15 +87,11 @@ test("every declared rate slot answers whenUnconfigured explicitly", () => {
     [...answers.entries()].filter(([, answer]) => answer === "zero").map(([key]) => key).sort(),
     ["FR/fr_allocfam", "GB/gb_employment_allowance", "US/us_futa", "US/us_pa_lst", "US/us_vt_ccce"],
   );
-  assert.deepEqual(
-    [...answers.entries()].filter(([, answer]) => answer === "legacy").map(([key]) => key).sort(),
-    ["AU/au_workers_comp", "FR/fr_versement_mobilite"],
-  );
 });
 
 test("TX SUI with nothing configured refuses with the detector's sentence", () => {
   const resolution = buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows: [], legacy: [],
+    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows: [],
   });
   const account = randomUUID();
   const point = { region: "TX", filingAccountId: account };
@@ -124,7 +121,6 @@ test("SUI rates on other accounts do not pass the EIN-assigned employee", () => 
       row("us_sui", "CA", otherSui, { rate: "0.034", wageBase: "7000" }),
       row("us_sui", "NY", otherSui, { rate: "0.041", wageBase: "12700" }),
     ],
-    legacy: [],
   });
   assert.throws(
     () => assertConfiguredStatutoryRates(
@@ -148,7 +144,6 @@ test("a resolving SUI rate computes — no refusal", () => {
     taxYear: 2026,
     pack: US_PACK_RATES,
     rows: [row("us_sui", "TX", account, { rate: "0.027", wageBase: "9000" })],
-    legacy: [],
   });
   assert.doesNotThrow(() =>
     assertConfiguredStatutoryRates(resolution, { region: "TX", filingAccountId: account }, "Tex Worker"),
@@ -157,7 +152,7 @@ test("a resolving SUI rate computes — no refusal", () => {
 
 test("QC HSF unconfigured refuses; ON refuses on its own EHT instead", () => {
   const resolution = buildResolution({
-    country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [], legacy: [],
+    country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [],
   });
   assert.throws(
     () => assertConfiguredStatutoryRates(
@@ -178,7 +173,7 @@ test("EHT in Ontario unconfigured refuses — unknown liability, not zero", () =
   // Per RSO 1990 c E.11, the rate turns on the employer's own
   // Ontario remuneration, which no pack can know — explicit zero excepted.
   const resolution = buildResolution({
-    country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [], legacy: [],
+    country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [],
   });
   assert.throws(
     () => assertConfiguredStatutoryRates(
@@ -250,15 +245,16 @@ test("mapping an unknown slot refuses as a pack error, not a bare Error", async 
   );
 });
 
-test("legacy and zero slots keep today's behaviour when unconfigured", () => {
+test("zero slots keep today's behaviour when unconfigured", () => {
   const au = buildResolution({
-    country: "AU", taxYear: 2026, pack: AU_PACK_RATES, rows: [], legacy: [],
+    country: "AU", taxYear: 2026, pack: AU_PACK_RATES, rows: [],
   });
-  assert.doesNotThrow(() =>
+  assert.throws(() =>
     assertConfiguredStatutoryRates(au, { region: "NSW", filingAccountId: null }, "Sydney Worker"),
+    /Sydney Worker: no Workers' compensation premium is configured for NSW in 2026/,
   );
   const us = buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows: [], legacy: [],
+    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows: [],
   });
   // us_futa is `zero`: the detector still reports it (readiness stays
   // advisory-complete) but the money path never refuses on it.

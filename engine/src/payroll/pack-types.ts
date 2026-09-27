@@ -650,25 +650,12 @@ export interface PayrollCountryPack {
    * bands and due-date rules as DATA (see `PayrollRemittanceSchedule`). The
    * generic remittance layer dates a bill from the schedule governing its
    * destination vendor and never from a jurisdiction branch — a destination
-   * with no declared schedule keeps the legacy registration-timetable
-   * behaviour only when its pack allows the fallback below, and otherwise
-   * refuses instead of borrowing another authority's timetable.
+   * with no declared schedule refuses instead of borrowing another
+   * authority's timetable.
    * OPTIONAL: a pack with no agency of its own to remit to on its own
    * timetable declares none (the US pack's federal deposits ride EFTPS).
    */
    remittanceSchedules?: readonly PayrollRemittanceSchedule[];
-  /**
-   * Whether destinations this pack declares (its vendor keys) but for which
-   * no schedule governs the period may fall back to the legacy
-   * registration-based timetable (the CRA remitter-type function) instead of
-   * refusing. Absent/false = refuse: a declared but undated destination must
-   * never borrow another authority's timetable (see remittanceGroupDueDate).
-   * Declared ONLY by the pack whose authority owns that timetable — today
-   * the CA pack, while the CRA schedule handoff (F-f7-001) still leaves the
-   * legacy function the live path for destinations the schedule does not
-   * yet govern.
-   */
-  allowsRegistrationTimetableFallback?: boolean;
   /**
    * region code → the `tax_administration` calendar key whose holidays move
    * a statutory remittance deadline for a payroll worked WHOLLY in that
@@ -1633,7 +1620,7 @@ export type RemittanceDueRule =
  * Amounts are decimal strings compared with the money helpers, never floats.
  */
 export interface PayrollRemittanceFrequencyBand {
-  /** Stable key, stored in org configuration (`frequencySettingsKey`). */
+  /** Stable frequency name, read from the schedule's declared source. */
   frequency: string;
   /** Operator-facing label for setup and readiness surfaces. */
   label: string;
@@ -1678,8 +1665,10 @@ export interface PayrollRemittanceSchedule {
    * (a `scope: 'tax_administration'` calendar — never an employment one).
    */
   calendar: string;
-  /** orgs.settings.payroll key holding the org's frequency for this destination. */
-  frequencySettingsKey: string;
+  /** Authoritative source of the frequency applied to this destination. */
+  frequencySource: "organization" | "filing_account";
+  /** orgs.settings.payroll key, required when frequencySource is organization. */
+  frequencySettingsKey?: string;
   /** Frequency when the org configured none (the agency's new-employer rule). */
   defaultFrequency: string;
   frequencies: readonly PayrollRemittanceFrequencyBand[];

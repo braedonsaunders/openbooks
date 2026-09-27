@@ -36,6 +36,7 @@ import {
 import { payrollBankProfiles } from "./bank-file.ts";
 import { undeclaredJurisdictionHolidayConflict } from "./holidays.ts";
 import { effectiveFilingAccountSql } from "./filing.ts";
+import type { PayrollFilingAccount } from "./filing.ts";
 import {
   resolveStatutoryRates,
   unconfiguredStatutoryRates,
@@ -446,17 +447,65 @@ export async function payrollSetupState(
     checks.push(setupTaxYearCheck(country, today, setupHref));
   }
 
-  // Destination remittance schedules: the frequency each scheduled
-  // destination remits at, and whether last year's measured average sits in
-  // another band. Advisory like the vendors above: an unconfirmed frequency
-  // still dates the bill (the schedule default applies), but a large employer
-  // left on the default remits late all year, so the check names what
-  // applies and the advisory names what the history suggests.
+  // Destination remittance schedules: account-sourced frequencies are read
+  // from each filing account, while organization-sourced schedules use the
+  // pack's declared payroll setting. Last year's measured average remains an
+  // advisory against the frequency the bill will actually use.
   for (const country of installed) {
     for (const schedule of packRemittanceSchedules(country)) {
       const vendor = (blob as Record<string, unknown>)[schedule.vendorSettingsKey];
       if (typeof vendor !== "string" || !vendor) continue;
-      const stored = (blob as Record<string, unknown>)[schedule.frequencySettingsKey];
+      if (schedule.frequencySource === "filing_account") {
+        const accounts = await db.execute<{
+          id: string;
+          accountNumber: string;
+          name: string;
+          remitterType: PayrollFilingAccount["remitterType"];
+        }>(sql`
+          select id::text as id, account_number as "accountNumber", name,
+                 remitter_type as "remitterType"
+            from payroll_filing_accounts
+           where org_id = ${orgId} and country = ${country} and is_active
+           order by is_default desc, account_number
+        `);
+        if (accounts.rows.length === 0) {
+          checks.push({
+            severity: "warning", code: "setup.remittanceFrequency", ok: false,
+            detail: `${schedule.authority} remittance needs a filing account with its remitter type set in Payroll Setup → Filing accounts`,
+            href: `${setupHref}?tab=accounts`,
+          });
+          continue;
+        }
+        for (const account of accounts.rows) {
+          const filingAccount = {
+            id: account.id, name: account.name, remitterType: account.remitterType,
+          };
+          const { frequency } = scheduledRemittanceFrequency(
+            schedule, blob as Record<string, unknown>, filingAccount,
+          );
+          checks.push({
+            severity: "warning", code: "setup.remittanceFrequency", ok: true,
+            detail: `${schedule.authority} · ${account.accountNumber} · ${frequency.replaceAll("_", " ")}`,
+          });
+          const advisory = await scheduledFrequencyAdvisory(
+            orgId, schedule, vendor, blob as Record<string, unknown>,
+            Number(today.slice(0, 4)) - 1, filingAccount,
+          );
+          if (advisory) {
+            checks.push({
+              severity: "warning", code: "setup.remittanceFrequency",
+              ok: false, detail: `${account.accountNumber}: ${advisory}`,
+              href: `${setupHref}?tab=accounts`,
+            });
+          }
+        }
+        continue;
+      }
+      const frequencyKey = schedule.frequencySettingsKey;
+      if (!frequencyKey) {
+        throw new PayrollError(`${schedule.authority} organization-frequency schedule has no settings key`);
+      }
+      const stored = (blob as Record<string, unknown>)[frequencyKey];
       const declared = typeof stored === "string" && remittanceFrequencyBand(schedule, stored);
       if (!declared) {
         checks.push({

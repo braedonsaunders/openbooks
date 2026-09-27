@@ -43,11 +43,7 @@ import type { PayrollRegionCoverage } from "./packs.ts";
  * calculation path knows where a number came from, and no jurisdiction's shape
  * leaks into the generic layer.
  *
- * Behaviour for a single-account, single-region org is deliberately unchanged:
- * a pack may declare a `legacyRows` reader for its pre-scoping blob, which is
- * consulted only when no row exists. That fallback is READ-ONLY — writes always
- * land on rows, so there is never a second writable source of truth for one
- * statutory number.
+ * All resolved values come from effective-dated rows at the declared scope.
  */
 
 // ---------------------------------------------------------------------------
@@ -151,11 +147,8 @@ export interface PayrollStatutoryRateSlot {
    *     exemption makes zero legitimate, no consumer reads the slot, or the
    *     pack carries a published default). Compute when configured, zero (or
    *     the default) when not, never refuse.
-   *   - `legacy` — NOT YET REVIEWED: behave exactly as today (compute when
-   *     configured, zero when not, never refuse) until explicitly migrated to
-   *     `refuse` or `zero`. The safe default, and visibly so.
    */
-  whenUnconfigured: "refuse" | "zero" | "legacy";
+  whenUnconfigured: "refuse" | "zero";
   fields: readonly PayrollRateField[];
   /** The statute or publication the rate is assessed under. */
   citation: string;
@@ -163,23 +156,9 @@ export interface PayrollStatutoryRateSlot {
   variesBecause: string;
 }
 
-/** A value set recovered from a pack's pre-scoping org blob. */
-export interface LegacyRateRow {
-  slotKey: string;
-  region: string | null;
-  values: Record<string, string>;
-}
-
 export interface PayrollPackRates {
   country: string;
   slots: readonly PayrollStatutoryRateSlot[];
-  /**
-   * The pack's pre-scoping `orgs.settings.payroll` shape, read as a FALLBACK so
-   * a tenant configured before scoping existed calculates byte-identically.
-   * Declared by the pack that created the shape; the generic layer never parses
-   * a jurisdiction's blob.
-   */
-  legacyRows?: (blob: Record<string, unknown>) => readonly LegacyRateRow[];
 }
 
 // ---------------------------------------------------------------------------
@@ -761,7 +740,7 @@ export async function deleteStatutoryRate(
 // ---------------------------------------------------------------------------
 
 /** Where a resolved value came from — reportable, never guessed at. */
-export type StatutoryRateSource = "account" | "region" | "org" | "legacy";
+export type StatutoryRateSource = "account" | "region" | "org";
 
 export interface ResolvedStatutoryRate {
   slotKey: string;
@@ -769,13 +748,12 @@ export interface ResolvedStatutoryRate {
   region: string | null;
   subRegion: string | null;
   filingAccountId: string | null;
-  /** null when the values came from the pre-scoping blob (no year on it). */
-  taxYear: number | null;
+  taxYear: number;
   values: Record<string, string>;
   source: StatutoryRateSource;
   /**
    * When the values came from a superseded row (an as-of read of history),
-   * the date it stopped being current; null for a current row and for legacy.
+   * the date it stopped being current; null for a current row.
    */
   supersededOn: string | null;
 }
@@ -786,8 +764,6 @@ export interface StatutoryRateResolution {
   slots: readonly PayrollStatutoryRateSlot[];
   /** Every stored row for the year, for the setup surface. */
   rows: readonly StatutoryRateRow[];
-  /** Values from the pre-scoping blob, if the pack declares a reader. */
-  legacy: readonly LegacyRateRow[];
   /**
    * The values in force for a slot at a scope point, or null when the employer
    * has configured none — never a substituted default, because a made-up
@@ -812,8 +788,8 @@ export interface StatutoryRateResolution {
  *      registration, so it beats anything region-wide);
  *   2. the region-wide row (or the org-wide row for an `org`-scoped slot) —
  *      which is exactly the single-account employer's configuration;
- *   3. the pack's pre-scoping blob, read-only, so a tenant that never touched
- *      the new surface calculates byte-identically to before.
+ *   3. no fallback — a missing row stays missing so the pack's declared
+ *      refusal or zero treatment governs it.
  *
  * `asOf` (an ISO date, the run's pay date on the money path) turns the read
  * into history: the row IN FORCE on that date answers, so recalculating a
@@ -831,17 +807,13 @@ export async function resolveStatutoryRates(
   asOf: string | null = null,
 ): Promise<StatutoryRateResolution> {
   const country = pack.country;
-  const [rows, blobRes] = await Promise.all([
-    listStatutoryRates(
-      orgId,
-      asOf == null
-        ? { country, taxYear }
-        : { country, taxYear, includeSuperseded: true, asOf },
-    ),
-    db.execute<{ p: Record<string, unknown> | null }>(sql`select settings->'payroll' as p from orgs where id = ${orgId}`),
-  ]);
-  const legacy = pack.legacyRows?.(blobRes.rows[0]?.p ?? {}) ?? [];
-  return buildResolution({ country, taxYear, pack, rows, legacy, asOf });
+  const rows = await listStatutoryRates(
+    orgId,
+    asOf == null
+      ? { country, taxYear }
+      : { country, taxYear, includeSuperseded: true, asOf },
+  );
+  return buildResolution({ country, taxYear, pack, rows, asOf });
 }
 
 /** The pure half, so the specificity ladder is testable without a database. */
@@ -850,11 +822,10 @@ export function buildResolution(input: {
   taxYear: number;
   pack: PayrollPackRates;
   rows: readonly StatutoryRateRow[];
-  legacy: readonly LegacyRateRow[];
   /** ISO date the read is as-of; null picks among current rows only. */
   asOf?: string | null;
 }): StatutoryRateResolution {
-  const { country, taxYear, pack, rows, legacy, asOf } = input;
+  const { country, taxYear, pack, rows, asOf } = input;
   // One scope point's history is a linear chain — every save supersedes
   // exactly the open row — so among the rows in force on the as-of date the
   // one that stopped being current EARLIEST is the answer (null, still
@@ -904,19 +875,10 @@ export function buildResolution(input: {
         supersededOn: wide.supersededOn,
       };
     }
-    const fallback = legacy.find(
-      (row) => row.slotKey === slotKey && (row.region ?? null) === region,
-    );
-    if (fallback && subRegion == null) {
-      return {
-        slotKey, scope: slot.scope, region, subRegion: null, filingAccountId: null,
-        taxYear: null, values: fallback.values, source: "legacy", supersededOn: null,
-      };
-    }
     return null;
   };
   return {
-    country, taxYear, slots: pack.slots, rows, legacy,
+    country, taxYear, slots: pack.slots, rows,
     resolve,
     values: (slotKey, at) => resolve(slotKey, at)?.values ?? null,
   };
@@ -1011,8 +973,8 @@ export function unconfiguredStatutoryRates(
  * the money path is about to get wrong — does a rate resolve for THIS
  * employee, at THIS region, on THIS assigned filing account.
  *
- * Slots declaring `zero` or `legacy` keep today's behaviour — this function
- * never sees them. Slots that do not apply (`regions`) never reach the
+ * Slots declaring `zero` keep their declared behaviour — this function never
+ * sees them. Slots that do not apply (`regions`) never reach the
  * detector at all: inert means absent, not zero. `sub_region` slots are
  * skipped here for lack of a sub-region point and keep their pack-owned
  * channel (the US local withholding engines, the IT comunale), which already

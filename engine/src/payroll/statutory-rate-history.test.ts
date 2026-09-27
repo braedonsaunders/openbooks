@@ -55,7 +55,7 @@ test("as-of resolution answers the row in force on that date, not the current ro
     row({ id: "r2", values: { rate: "0.0090" }, supersededOn: "2026-06-01" }),
   ];
   const at = (asOf: string | null) => buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows, legacy: [], asOf,
+    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows, asOf,
   }).values("us_futa", { region: "MI" })?.rate;
   assert.equal(at("2026-02-01"), "0.0060");
   assert.equal(at("2026-04-15"), "0.0090");

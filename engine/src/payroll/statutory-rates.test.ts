@@ -107,7 +107,7 @@ test("the QC health services fund is declared per region, sector-classified, QC-
 });
 
 test("Canadian EHT must be explicitly configured in each province before payroll calculates", () => {
-  const missing = buildResolution({ country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [], legacy: [] });
+  const missing = buildResolution({ country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [] });
   for (const region of ["BC", "MB", "NL", "ON"]) {
     assert.throws(
       () => assertConfiguredStatutoryRates(missing, { region, filingAccountId: null }, "Alex Employee"),
@@ -127,7 +127,6 @@ test("Canadian EHT must be explicitly configured in each province before payroll
 
   const explicitlyNil = buildResolution({
     country: "CA", taxYear: 2026, pack: CA_PACK_RATES,
-    legacy: [],
     rows: [row({ rateKey: "ca_eht", region: "ON", values: { rate: "0", annualExemption: "0" } })],
   });
   assert.doesNotThrow(
@@ -265,7 +264,7 @@ test("an account-specific rate beats the region-wide one; the region-wide one is
   const ein1 = randomUUID();
   const ein2 = randomUUID();
   const resolution = buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES, legacy: [],
+    country: "US", taxYear: 2026, pack: US_PACK_RATES,
     rows: [
       row({ filingAccountId: null, values: { rate: "0.0270", wageBase: "9500.00" } }),
       row({ filingAccountId: ein1, values: { rate: "0.0106", wageBase: "9500.00" } }),
@@ -289,7 +288,7 @@ test("an account-specific rate beats the region-wide one; the region-wide one is
 
 test("FUTA resolves per state, so one payroll can carry two effective rates", () => {
   const resolution = buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES, legacy: [],
+    country: "US", taxYear: 2026, pack: US_PACK_RATES,
     rows: [
       row({ rateKey: "us_futa", region: "MI", values: { rate: "0.0090" } }),
       row({ rateKey: "us_futa", region: "TX", values: { rate: "0.0060" } }),
@@ -305,62 +304,18 @@ test("FUTA resolves per state, so one payroll can carry two effective rates", ()
   assert.equal(resolution.values("us_futa", { region: "OH" }), null);
 });
 
-test("REGRESSION: with no rate rows, the pre-scoping blob resolves byte-identically", () => {
-  // The single-account, single-region org is the regression guard. Its stored
-  // blob must produce exactly the numbers the engine read before scoping
-  // existed: the org-level FUTA rate for whatever state it pays in, the state
-  // SUI entry for whatever account the employee is assigned to, and Ontario's
-  // EHT at the org rate — same strings, no canonicalization, no rounding.
-  const blob = {
-    us: { futaRate: "0.006", sui: { MI: { rate: "0.027", wageBase: "9500" } } },
-    ca: { eht: { enabled: true, rate: "1.95", annualExemption: "1000000" } },
-  };
-  const us = buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows: [],
-    legacy: US_PACK_RATES.legacyRows!(blob),
-  });
-  const account = randomUUID();
-  assert.deepEqual(us.values("us_sui", { region: "MI", filingAccountId: account }), {
-    rate: "0.027", wageBase: "9500",
-  });
-  assert.equal(us.resolve("us_sui", { region: "MI", filingAccountId: account })!.source, "legacy");
-  // The org-level rate applied to every state, which IS the old behaviour —
-  // reproduced exactly rather than "improved" behind the operator's back.
-  assert.equal(us.values("us_futa", { region: "MI" })!.rate, "0.006");
-  assert.equal(us.values("us_futa", { region: "TX" })!.rate, "0.006");
-
-  const ca = buildResolution({
-    country: "CA", taxYear: 2026, pack: CA_PACK_RATES, rows: [],
-    legacy: CA_PACK_RATES.legacyRows!(blob),
-  });
-  assert.deepEqual(ca.values("ca_eht", { region: "ON" }), { rate: "1.95", annualExemption: "1000000" });
-  // Ontario only, exactly as before: the old code applied the org rate when
-  // province === "ON" and nowhere else.
-  assert.equal(ca.values("ca_eht", { region: "BC" }), null);
-});
-
-test("a stored blob with the levy switched OFF stays off", () => {
-  // An employer that entered a rate and then disabled EHT must not start
-  // accruing it because the storage moved.
-  const off = CA_PACK_RATES.legacyRows!({
-    ca: { eht: { enabled: false, rate: "1.95", annualExemption: "1000000" } },
-  });
-  assert.deepEqual(off, []);
-});
-
-test("a row supersedes the blob for the point it covers, and only that point", () => {
+test("missing scoped rows stay missing instead of reading organization settings", () => {
   const resolution = buildResolution({
     country: "US", taxYear: 2026, pack: US_PACK_RATES,
     rows: [row({ rateKey: "us_futa", region: "MI", values: { rate: "0.0090" } })],
-    legacy: US_PACK_RATES.legacyRows!({ us: { futaRate: "0.006" } }),
   });
   assert.equal(resolution.values("us_futa", { region: "MI" })!.rate, "0.0090");
-  assert.equal(resolution.values("us_futa", { region: "TX" })!.rate, "0.006");
+  assert.equal(resolution.values("us_futa", { region: "TX" }), null);
 });
 
 test("nothing configured is reported by name, never accrued as zero in silence", () => {
   const resolution = buildResolution({
-    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows: [], legacy: [],
+    country: "US", taxYear: 2026, pack: US_PACK_RATES, rows: [],
   });
   const account = randomUUID();
   const missing = unconfiguredStatutoryRates(resolution, [

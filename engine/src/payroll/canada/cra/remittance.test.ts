@@ -9,21 +9,14 @@ import {
   type PayrollRemittanceSchedule,
 } from "../../packs.ts";
 import {
-  remittanceDueDateExplained,
   scheduledRemittanceDueDateExplained,
 } from "../../remittance.ts";
 import { CRA_REMITTANCE_SCHEDULE } from "./remittance.ts";
 
 /**
- * The Canada Revenue Agency remittance schedule declared by the CA pack, and
- * the proof that the declared timetable IS the legacy per-account function.
- *
- * The goldens below pin every CRA remitter type's declared due date to the
- * hardcoded `remittanceDueDateExplained` timetable byte-for-byte, so the
- * declaration taking over a destination's dating changes nothing it dates:
- * the data is a transcription of the same CRA "When to remit (pay)" page the
- * function quotes, executed by the generic schedule machinery instead of a
- * bespoke branch.
+ * The Canada Revenue Agency remittance schedule declared by the CA pack.
+ * The filing account supplies the remitter type; the schedule owns the
+ * published due-date rules and calendar.
  *
  * 2026 weekday anchors (shared with the CRA due-date and RQ schedule tests):
  * New Year Thu Jan 1, Good Friday Apr 3, Easter Monday Apr 6, Victoria Day Mon
@@ -45,14 +38,13 @@ test("the CA pack declares the CRA schedule alongside Revenu Québec's", () => {
   assert.ok(CRA_REMITTANCE_SCHEDULE.sources.length > 0);
 });
 
-test("the CRA schedule keys its frequencies exactly like filing-account remitter types", () => {
-  // The future filing-account handoff feeds remitter_type straight into this
-  // schedule — any spelling drift between the two is a silent misdate.
+test("the CRA schedule reads its frequency from the filing account", () => {
   assert.deepEqual(
     CRA.frequencies.map((band) => band.frequency),
     ["quarterly", "regular", "accelerated_1", "accelerated_2"],
   );
-  assert.equal(CRA.frequencySettingsKey, "craRemittanceFrequency");
+  assert.equal(CRA.frequencySource, "filing_account");
+  assert.equal(CRA.frequencySettingsKey, undefined);
   assert.equal(CRA.defaultFrequency, "regular");
   for (const frequency of ["quarterly", "regular", "accelerated_1", "accelerated_2"]) {
     assert.ok(remittanceFrequencyBand(CRA, frequency), frequency);
@@ -85,7 +77,7 @@ test("the CRA schedule is in force for current periods", () => {
   assert.equal(remittanceScheduleInForce("craRemittancePartyId", "2023-12-31"), null);
 });
 
-test("each CRA remitter type dates from the declaration exactly as from the legacy function", () => {
+test("each CRA remitter type dates from the declared schedule", () => {
   const due = (frequency: string, periodTo: string): string =>
     scheduledRemittanceDueDateExplained(CRA, frequency, periodTo).dueDate;
   // Regular: the 15th of the following month; August 15 2026 is a Saturday.
@@ -108,41 +100,6 @@ test("each CRA remitter type dates from the declaration exactly as from the lega
   assert.equal(due("accelerated_2", "2026-03-31"), "2026-04-07");
   // December 31 2026 is a Thursday; New Year's Day 2027 is CRA-recognized.
   assert.equal(due("accelerated_2", "2026-12-31"), "2027-01-06");
-  for (const [frequency, periodTo, expected] of [
-    ["regular", "2026-07-31", "2026-08-17"],
-    ["quarterly", "2028-09-30", "2028-10-16"],
-    ["accelerated_1", "2026-01-15", "2026-01-26"],
-    ["accelerated_2", "2026-03-31", "2026-04-07"],
-  ] as const) {
-    assert.equal(
-      due(frequency, periodTo),
-      remittanceDueDateExplained(periodTo, frequency).dueDate,
-      `${frequency} ${periodTo}`,
-    );
-    assert.equal(remittanceDueDateExplained(periodTo, frequency).dueDate, expected);
-  }
-});
-
-test("the declared CRA timetable matches the legacy function across three years", () => {
-  // The byte-identity sweep: every remitter type, every month-end and every
-  // quarter-month cut across three years — declared and legacy agree exactly.
-  const types = ["regular", "quarterly", "accelerated_1", "accelerated_2"] as const;
-  for (const year of [2026, 2027, 2028]) {
-    for (let month = 1; month <= 12; month += 1) {
-      const end = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
-      const prefix = `${year}-${String(month).padStart(2, "0")}-`;
-      for (const day of ["07", "14", "21", end.slice(8, 10)]) {
-        for (const remitter of types) {
-          const periodTo = `${prefix}${day}`;
-          assert.equal(
-            scheduledRemittanceDueDateExplained(CRA, remitter, periodTo).dueDate,
-            remittanceDueDateExplained(periodTo, remitter).dueDate,
-            `${remitter} ${periodTo}`,
-          );
-        }
-      }
-    }
-  }
 });
 
 test("the Québec calendar variant counts on CA-CRA-QC from the same data", () => {
@@ -156,39 +113,27 @@ test("the Québec calendar variant counts on CA-CRA-QC from the same data", () =
   // and nowhere else: the 15th-to-21st period's third working day is the 24th
   // nationally and the 25th in Quebec.
   assert.equal(dueQc("accelerated_2", "2026-06-21"), "2026-06-25");
-  assert.equal(
-    dueQc("accelerated_2", "2026-06-21"),
-    remittanceDueDateExplained("2026-06-21", "accelerated_2", { regionalCalendar: "CA-CRA-QC" }).dueDate,
-  );
-  assert.equal(remittanceDueDateExplained("2026-06-21", "accelerated_2").dueDate, "2026-06-24");
   // The Civic Holiday, Monday August 3 2026, runs the other way: recognized
   // everywhere EXCEPT Quebec.
   assert.equal(dueQc("accelerated_2", "2026-07-31"), "2026-08-05");
-  assert.equal(
-    dueQc("accelerated_2", "2026-07-31"),
-    remittanceDueDateExplained("2026-07-31", "accelerated_2", { regionalCalendar: "CA-CRA-QC" }).dueDate,
-  );
-  assert.equal(remittanceDueDateExplained("2026-07-31", "accelerated_2").dueDate, "2026-08-06");
 });
 
-test("the fixed-date CRA rules travel byte-identical with the date", () => {
-  // The rule an operator reads on the bill is the same sentence the legacy
-  // function stamps — the declaration changed the channel, not the words.
+test("the CRA schedule carries each rule with the computed due date", () => {
   assert.equal(
     scheduledRemittanceDueDateExplained(CRA, "regular", "2026-08-31").rule,
-    remittanceDueDateExplained("2026-08-31", "regular").rule,
+    "regular remitter — the 15th of the month following the month of the pay date",
   );
   assert.equal(
     scheduledRemittanceDueDateExplained(CRA, "quarterly", "2026-06-30").rule,
-    remittanceDueDateExplained("2026-06-30", "quarterly").rule,
+    "quarterly remitter — the 15th of the month following the end of the quarter",
   );
   assert.equal(
     scheduledRemittanceDueDateExplained(CRA, "accelerated_1", "2026-01-15").rule,
-    remittanceDueDateExplained("2026-01-15", "accelerated_1").rule,
+    "accelerated threshold 1 — remuneration paid the 1st to the 15th, due the 25th of the same month",
   );
   assert.equal(
     scheduledRemittanceDueDateExplained(CRA, "accelerated_1", "2026-01-31").rule,
-    remittanceDueDateExplained("2026-01-31", "accelerated_1").rule,
+    "accelerated threshold 1 — remuneration paid the 16th to month end, due the 10th of the following month",
   );
   // Threshold 2's legacy rule names the quarter-month; the declared rule states
   // all four periods and the same 3rd-working-day sentence.

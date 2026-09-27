@@ -314,6 +314,25 @@ export async function PUT(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
+  const acceptedKeys = new Set<string>([
+    ...ACCOUNT_KEYS,
+    ...declaredRemittanceVendorSettingsKeys(),
+    ...declaredRemittanceFrequencySettingsKeys(),
+    'eftFallbackToCheque',
+    'wagesTo',
+    't4Transmitter',
+    'stubPassword',
+    'countries',
+    'statutoryHolidayPay',
+    'slotAccounts',
+  ])
+  const unknownKey = Object.keys(body).find((key) => !acceptedKeys.has(key))
+  if (unknownKey) {
+    const remedy = unknownKey === 'craRemittanceFrequency'
+      ? 'set the CRA remitter type on its filing account in Payroll Setup → Filing accounts'
+      : 'remove the unknown key or use a setting declared by the payroll setup'
+    return NextResponse.json({ error: `unknown payroll setting "${unknownKey}" — ${remedy}` }, { status: 422 })
+  }
 
   return withOrgTransaction(orgId, async () => {
   const settings: Record<string, unknown> = await currentPayrollBlob(orgId, true)
@@ -506,15 +525,10 @@ export async function PUT(req: Request) {
     settings.statutoryHolidayPay = body.statutoryHolidayPay
   }
 
-  // NOTE: the pre-scoping `us` / `ca` rate blobs are deliberately NOT writable
-  // here any more. A SUI rate is experience-rated per filing account, the FUTA
-  // credit reduction is published per state per year, and each province levies
-  // its own employer health tax — none of which an org-level blob can hold. They
-  // now live in payroll_statutory_rates at the scope the pack declares, written
-  // through /api/payroll/settings/rates. The stored blobs are still READ as a
-  // resolution fallback (engine/src/payroll/statutory-rates.ts), so an untouched
-  // tenant calculates byte-identically; accepting writes to both would be two
-  // sources of truth for one statutory number.
+  // NOTE: the pre-scoping `us` / `ca` rate blobs are not accepted here. A SUI
+  // rate is experience-rated per filing account, FUTA is scoped per state and
+  // year, and each province levies its own employer health tax. The upgrade
+  // moves existing values into payroll_statutory_rates at each declared scope.
 
   // Pack-declared statutory slots: { [country]: { [slotKey]: accountId|null } }.
   // Writes land on the mapped components' liability accounts, never in the blob.
