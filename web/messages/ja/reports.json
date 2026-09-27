@@ -897,6 +897,18 @@
       "deferred_revenue_runoff": {
         "label": "繰延収益の将来認識",
         "description": "未転記の将来認識額を、月・繰延勘定・帳簿・通貨別に表示します。"
+      },
+      "fund_ledger_lines": {
+        "label": "基金元帳明細",
+        "description": "基金コード、基金名、制限クラスを含む転記済み仕訳明細。"
+      },
+      "functional_ledger_lines": {
+        "label": "機能別元帳明細",
+        "description": "部門とプロジェクトの有効な機能を含む転記済み費用明細。"
+      },
+      "grant_pipeline": {
+        "label": "助成金パイプライン",
+        "description": "助成金、スポンサー、期間、状態、関連基金の分類。"
       }
     },
     "columns": {
@@ -2020,6 +2032,98 @@
         "schedule_status": "スケジュール状態",
         "obligation_status": "履行義務の状態",
         "journal_entry_id": "仕訳（ID）"
+      },
+      "fund_ledger_lines": {
+        "posting_date": "記帳日",
+        "entry_number": "仕訳番号",
+        "entry_status": "仕訳ステータス",
+        "origin": "発生元",
+        "account_number": "勘定番号",
+        "account_name": "勘定",
+        "account_type": "勘定種類",
+        "party_name": "取引先",
+        "department": "部門",
+        "project": "プロジェクト",
+        "location": "拠点",
+        "class": "クラス",
+        "memo": "摘要",
+        "amount": "金額（基軸通貨）",
+        "debit": "借方",
+        "credit": "貸方",
+        "currency": "通貨",
+        "txn_amount": "金額（取引通貨）",
+        "quantity": "数量",
+        "unit": "単位",
+        "due_date": "期日",
+        "is_open_item": "未消込項目",
+        "open_amount": "未消込金額（基軸通貨）",
+        "has_open_balance": "未消込残高あり",
+        "reconciled_at": "消込日時",
+        "entry_id": "仕訳（ID）",
+        "account_id": "勘定（ID）",
+        "party_id": "取引先（ID）",
+        "equipment": "設備",
+        "base_currency": "機能通貨",
+        "book": "会計帳簿",
+        "book_code": "帳簿コード",
+        "book_id": "帳簿ID",
+        "fund_id": "基金 (ID)",
+        "fund_code": "基金コード",
+        "fund_name": "基金",
+        "restriction_class": "制限クラス"
+      },
+      "functional_ledger_lines": {
+        "posting_date": "記帳日",
+        "entry_number": "仕訳番号",
+        "entry_status": "仕訳ステータス",
+        "origin": "発生元",
+        "account_number": "勘定番号",
+        "account_name": "勘定",
+        "account_type": "勘定種類",
+        "party_name": "取引先",
+        "department": "部門",
+        "project": "プロジェクト",
+        "location": "拠点",
+        "class": "クラス",
+        "memo": "摘要",
+        "amount": "金額（基軸通貨）",
+        "debit": "借方",
+        "credit": "貸方",
+        "currency": "通貨",
+        "txn_amount": "金額（取引通貨）",
+        "quantity": "数量",
+        "unit": "単位",
+        "due_date": "期日",
+        "is_open_item": "未消込項目",
+        "open_amount": "未消込金額（基軸通貨）",
+        "has_open_balance": "未消込残高あり",
+        "reconciled_at": "消込日時",
+        "entry_id": "仕訳（ID）",
+        "account_id": "勘定（ID）",
+        "party_id": "取引先（ID）",
+        "equipment": "設備",
+        "base_currency": "機能通貨",
+        "book": "会計帳簿",
+        "book_code": "帳簿コード",
+        "book_id": "帳簿ID",
+        "functional_category": "機能",
+        "program_key": "プログラム",
+        "mapping_status": "割当状態"
+      },
+      "grant_pipeline": {
+        "grant_code": "助成コード",
+        "grant_name": "助成金",
+        "sponsor_name": "スポンサー",
+        "sponsor_kind": "スポンサー種別",
+        "determination": "判定",
+        "award_amount": "助成額",
+        "period_from": "期間開始",
+        "period_to": "期間終了",
+        "status": "状態",
+        "fund_code": "基金コード",
+        "fund_name": "基金",
+        "restriction_class": "制限クラス",
+        "base_currency": "基準通貨"
       }
     },
     "enumValues": {
@@ -2305,6 +2409,26 @@
     "backorders": {
       "name": "受注残",
       "description": "未出荷の受注在庫明細 — 顧客・品目別の受注・出荷済み・取消・未出荷数量。"
+    },
+    "statement-of-financial-position": {
+      "name": "財政状態計算書",
+      "description": "勘定、基金、制限クラス別の転記済み残高。"
+    },
+    "statement-of-activities": {
+      "name": "活動計算書",
+      "description": "クラス別の転記済み収益、費用、総額の制限解除。"
+    },
+    "functional-expense-matrix": {
+      "name": "機能別費用マトリクス",
+      "description": "自然勘定と機能別の転記済み費用。"
+    },
+    "cash-flow-reconciliation": {
+      "name": "キャッシュフロー調整表",
+      "description": "純資産調整を伴う転記済み現金移動。"
+    },
+    "grant-pipeline": {
+      "name": "助成金パイプライン",
+      "description": "助成金、スポンサー、期間、状態、基金分類。"
     }
   },
   "generalLedger": {
@@ -2324,7 +2448,31 @@
     "empty": "この期間に記帳済みの仕訳はありません。",
     "truncated": "最初の4,000明細を表示中 — 期間を絞り込むとすべて表示されます。",
     "otherOrigin": "その他",
-    "origins": {"document": "書類", "manual": "手動", "payroll": "給与", "labor_burden": "労務負担", "depreciation": "減価償却", "disposal": "除却", "revaluation": "再評価", "revenue_recognition": "収益認識", "inventory": "在庫", "lease": "リース", "allocation": "配賦", "intercompany": "会社間", "fx_settlement": "為替決済", "fx_revaluation": "為替再評価", "translation": "通貨換算", "closing": "決算", "migration": "移行", "tax_provision": "税金引当", "pledge": "寄付誓約", "gift": "寄付", "grant": "助成金", "release": "使途制限の解除", "manufacturing": "製造"},
+    "origins": {
+      "document": "書類",
+      "manual": "手動",
+      "payroll": "給与",
+      "labor_burden": "労務負担",
+      "depreciation": "減価償却",
+      "disposal": "除却",
+      "revaluation": "再評価",
+      "revenue_recognition": "収益認識",
+      "inventory": "在庫",
+      "lease": "リース",
+      "allocation": "配賦",
+      "intercompany": "会社間",
+      "fx_settlement": "為替決済",
+      "fx_revaluation": "為替再評価",
+      "translation": "通貨換算",
+      "closing": "決算",
+      "migration": "移行",
+      "tax_provision": "税金引当",
+      "pledge": "寄付誓約",
+      "gift": "寄付",
+      "grant": "助成金",
+      "release": "使途制限の解除",
+      "manufacturing": "製造"
+    },
     "columns": {
       "detail": "取引先／摘要"
     }

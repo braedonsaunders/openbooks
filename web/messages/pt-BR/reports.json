@@ -897,6 +897,18 @@
       "deferred_revenue_runoff": {
         "label": "Projeção de reconhecimento de receita diferida",
         "description": "Reconhecimento futuro ainda não contabilizado por mês, conta diferida, livro e moeda."
+      },
+      "fund_ledger_lines": {
+        "label": "Linhas do razão de fundos",
+        "description": "Linhas de diário lançadas com código, nome e classe de restrição do fundo."
+      },
+      "functional_ledger_lines": {
+        "label": "Linhas funcionais do razão",
+        "description": "Despesas lançadas com as funções efetivas de departamentos e projetos."
+      },
+      "grant_pipeline": {
+        "label": "Pipeline de concessões",
+        "description": "Concessões, patrocinadores, períodos, status e classificação do fundo associado."
       }
     },
     "columns": {
@@ -2020,6 +2032,98 @@
         "schedule_status": "Status do cronograma",
         "obligation_status": "Status da obrigação",
         "journal_entry_id": "Lançamento contábil (id)"
+      },
+      "fund_ledger_lines": {
+        "posting_date": "Data de lançamento",
+        "entry_number": "Nº do lançamento",
+        "entry_status": "Status do lançamento",
+        "origin": "Origem",
+        "account_number": "Nº da conta",
+        "account_name": "Conta",
+        "account_type": "Tipo de conta",
+        "party_name": "Parte",
+        "department": "Departamento",
+        "project": "Projeto",
+        "location": "Local",
+        "class": "Classe",
+        "memo": "Memorando",
+        "amount": "Valor (base)",
+        "debit": "Débito",
+        "credit": "Crédito",
+        "currency": "Moeda",
+        "txn_amount": "Valor (transação)",
+        "quantity": "Quantidade",
+        "unit": "Unidade",
+        "due_date": "Data de vencimento",
+        "is_open_item": "Item em aberto",
+        "open_amount": "Valor em aberto (base)",
+        "has_open_balance": "Com saldo em aberto",
+        "reconciled_at": "Conciliado em",
+        "entry_id": "Lançamento (id)",
+        "account_id": "Conta (id)",
+        "party_id": "Parte (id)",
+        "equipment": "Equipamento",
+        "base_currency": "Moeda funcional",
+        "book": "Livro contábil",
+        "book_code": "Código do livro",
+        "book_id": "ID do livro",
+        "fund_id": "Fundo (id)",
+        "fund_code": "Código do fundo",
+        "fund_name": "Fundo",
+        "restriction_class": "Classe de restrição"
+      },
+      "functional_ledger_lines": {
+        "posting_date": "Data de lançamento",
+        "entry_number": "Nº do lançamento",
+        "entry_status": "Status do lançamento",
+        "origin": "Origem",
+        "account_number": "Nº da conta",
+        "account_name": "Conta",
+        "account_type": "Tipo de conta",
+        "party_name": "Parte",
+        "department": "Departamento",
+        "project": "Projeto",
+        "location": "Local",
+        "class": "Classe",
+        "memo": "Memorando",
+        "amount": "Valor (base)",
+        "debit": "Débito",
+        "credit": "Crédito",
+        "currency": "Moeda",
+        "txn_amount": "Valor (transação)",
+        "quantity": "Quantidade",
+        "unit": "Unidade",
+        "due_date": "Data de vencimento",
+        "is_open_item": "Item em aberto",
+        "open_amount": "Valor em aberto (base)",
+        "has_open_balance": "Com saldo em aberto",
+        "reconciled_at": "Conciliado em",
+        "entry_id": "Lançamento (id)",
+        "account_id": "Conta (id)",
+        "party_id": "Parte (id)",
+        "equipment": "Equipamento",
+        "base_currency": "Moeda funcional",
+        "book": "Livro contábil",
+        "book_code": "Código do livro",
+        "book_id": "ID do livro",
+        "functional_category": "Função",
+        "program_key": "Programa",
+        "mapping_status": "Status do mapeamento"
+      },
+      "grant_pipeline": {
+        "grant_code": "Código da concessão",
+        "grant_name": "Concessão",
+        "sponsor_name": "Patrocinador",
+        "sponsor_kind": "Tipo de patrocinador",
+        "determination": "Classificação",
+        "award_amount": "Valor concedido",
+        "period_from": "Período inicial",
+        "period_to": "Período final",
+        "status": "Status",
+        "fund_code": "Código do fundo",
+        "fund_name": "Fundo",
+        "restriction_class": "Classe de restrição",
+        "base_currency": "Moeda base"
       }
     },
     "enumValues": {
@@ -2305,6 +2409,26 @@
     "backorders": {
       "name": "Pedidos em atraso",
       "description": "Linhas de estoque de pedidos de venda ainda devidas — pedida, atendida, cancelada e em aberto por cliente e item."
+    },
+    "statement-of-financial-position": {
+      "name": "Demonstração da posição financeira",
+      "description": "Saldos lançados por conta, fundo e classe de restrição."
+    },
+    "statement-of-activities": {
+      "name": "Demonstração das atividades",
+      "description": "Receitas, despesas e liberações brutas lançadas por classe."
+    },
+    "functional-expense-matrix": {
+      "name": "Matriz de despesas funcionais",
+      "description": "Despesas lançadas por conta natural e função."
+    },
+    "cash-flow-reconciliation": {
+      "name": "Conciliação do fluxo de caixa",
+      "description": "Movimentos de caixa lançados com conciliação dos ativos líquidos."
+    },
+    "grant-pipeline": {
+      "name": "Pipeline de concessões",
+      "description": "Concessões, patrocinadores, períodos, status e classificação do fundo."
     }
   },
   "generalLedger": {
@@ -2324,7 +2448,31 @@
     "empty": "Nenhum lançamento lançado neste período.",
     "truncated": "Mostrando as primeiras 4.000 linhas — restrinja o período para ver tudo.",
     "otherOrigin": "Outro",
-    "origins": {"document": "Documento", "manual": "Manual", "payroll": "Folha de pagamento", "labor_burden": "Encargos trabalhistas", "depreciation": "Depreciação", "disposal": "Baixa", "revaluation": "Reavaliação", "revenue_recognition": "Reconhecimento de receita", "inventory": "Estoque", "lease": "Arrendamento", "allocation": "Alocação", "intercompany": "Entre empresas", "fx_settlement": "Liquidação cambial", "fx_revaluation": "Reavaliação cambial", "translation": "Conversão cambial", "closing": "Encerramento", "migration": "Migração", "tax_provision": "Provisão tributária", "pledge": "Promessa de doação", "gift": "Doação", "grant": "Subvenção", "release": "Liberação de restrições", "manufacturing": "Manufatura"},
+    "origins": {
+      "document": "Documento",
+      "manual": "Manual",
+      "payroll": "Folha de pagamento",
+      "labor_burden": "Encargos trabalhistas",
+      "depreciation": "Depreciação",
+      "disposal": "Baixa",
+      "revaluation": "Reavaliação",
+      "revenue_recognition": "Reconhecimento de receita",
+      "inventory": "Estoque",
+      "lease": "Arrendamento",
+      "allocation": "Alocação",
+      "intercompany": "Entre empresas",
+      "fx_settlement": "Liquidação cambial",
+      "fx_revaluation": "Reavaliação cambial",
+      "translation": "Conversão cambial",
+      "closing": "Encerramento",
+      "migration": "Migração",
+      "tax_provision": "Provisão tributária",
+      "pledge": "Promessa de doação",
+      "gift": "Doação",
+      "grant": "Subvenção",
+      "release": "Liberação de restrições",
+      "manufacturing": "Manufatura"
+    },
     "columns": {
       "detail": "Parte / memorando"
     }

@@ -897,6 +897,18 @@
       "deferred_revenue_runoff": {
         "label": "Deferred revenue runoff",
         "description": "Unposted future recognition by month, deferred account, book and currency."
+      },
+      "fund_ledger_lines": {
+        "label": "Fund ledger lines",
+        "description": "Posted journal lines with fund code, fund name, and restriction class."
+      },
+      "functional_ledger_lines": {
+        "label": "Functional ledger lines",
+        "description": "Posted expense lines with their effective department and project functions."
+      },
+      "grant_pipeline": {
+        "label": "Grant pipeline",
+        "description": "Grant awards, sponsors, periods, status, and associated fund classification."
       }
     },
     "columns": {
@@ -2020,6 +2032,98 @@
         "schedule_status": "Schedule status",
         "obligation_status": "Obligation status",
         "journal_entry_id": "Journal entry (id)"
+      },
+      "fund_ledger_lines": {
+        "posting_date": "Posting date",
+        "entry_number": "Entry #",
+        "entry_status": "Entry status",
+        "origin": "Origin",
+        "account_number": "Account #",
+        "account_name": "Account",
+        "account_type": "Account type",
+        "party_name": "Party",
+        "department": "Department",
+        "project": "Project",
+        "location": "Location",
+        "class": "Class",
+        "memo": "Memo",
+        "amount": "Amount (base)",
+        "debit": "Debit",
+        "credit": "Credit",
+        "currency": "Currency",
+        "txn_amount": "Amount (txn)",
+        "quantity": "Quantity",
+        "unit": "Unit",
+        "due_date": "Due date",
+        "is_open_item": "Open item",
+        "open_amount": "Open amount (base)",
+        "has_open_balance": "Has open balance",
+        "reconciled_at": "Reconciled at",
+        "entry_id": "Entry (id)",
+        "account_id": "Account (id)",
+        "party_id": "Party (id)",
+        "equipment": "Equipment",
+        "base_currency": "Functional currency",
+        "book": "Accounting book",
+        "book_code": "Book code",
+        "book_id": "Book ID",
+        "fund_id": "Fund (id)",
+        "fund_code": "Fund code",
+        "fund_name": "Fund",
+        "restriction_class": "Restriction class"
+      },
+      "functional_ledger_lines": {
+        "posting_date": "Posting date",
+        "entry_number": "Entry #",
+        "entry_status": "Entry status",
+        "origin": "Origin",
+        "account_number": "Account #",
+        "account_name": "Account",
+        "account_type": "Account type",
+        "party_name": "Party",
+        "department": "Department",
+        "project": "Project",
+        "location": "Location",
+        "class": "Class",
+        "memo": "Memo",
+        "amount": "Amount (base)",
+        "debit": "Debit",
+        "credit": "Credit",
+        "currency": "Currency",
+        "txn_amount": "Amount (txn)",
+        "quantity": "Quantity",
+        "unit": "Unit",
+        "due_date": "Due date",
+        "is_open_item": "Open item",
+        "open_amount": "Open amount (base)",
+        "has_open_balance": "Has open balance",
+        "reconciled_at": "Reconciled at",
+        "entry_id": "Entry (id)",
+        "account_id": "Account (id)",
+        "party_id": "Party (id)",
+        "equipment": "Equipment",
+        "base_currency": "Functional currency",
+        "book": "Accounting book",
+        "book_code": "Book code",
+        "book_id": "Book ID",
+        "functional_category": "Function",
+        "program_key": "Program",
+        "mapping_status": "Mapping status"
+      },
+      "grant_pipeline": {
+        "grant_code": "Grant code",
+        "grant_name": "Grant",
+        "sponsor_name": "Sponsor",
+        "sponsor_kind": "Sponsor type",
+        "determination": "Determination",
+        "award_amount": "Award amount",
+        "period_from": "Period from",
+        "period_to": "Period to",
+        "status": "Status",
+        "fund_code": "Fund code",
+        "fund_name": "Fund",
+        "restriction_class": "Restriction class",
+        "base_currency": "Base currency"
       }
     },
     "enumValues": {
@@ -2305,6 +2409,26 @@
     "backorders": {
       "name": "Backorders",
       "description": "Sales-order stock lines still owed — ordered, fulfilled, cancelled and open by customer and item."
+    },
+    "statement-of-financial-position": {
+      "name": "Statement of financial position",
+      "description": "Posted balances by account, fund, and restriction class."
+    },
+    "statement-of-activities": {
+      "name": "Statement of activities",
+      "description": "Posted revenue, expenses, and gross releases by class."
+    },
+    "functional-expense-matrix": {
+      "name": "Functional expense matrix",
+      "description": "Posted expenses by natural account and function."
+    },
+    "cash-flow-reconciliation": {
+      "name": "Cash flow reconciliation",
+      "description": "Posted cash movement with a net asset reconciliation."
+    },
+    "grant-pipeline": {
+      "name": "Grant pipeline",
+      "description": "Grant awards, sponsors, periods, status, and fund classification."
     }
   },
   "generalLedger": {
@@ -2324,7 +2448,31 @@
     "empty": "No posted entries in this period.",
     "truncated": "Showing the first 4,000 lines — narrow the period to see everything.",
     "otherOrigin": "Other",
-    "origins": {"document": "Document", "manual": "Manual", "payroll": "Payroll", "labor_burden": "Labor burden", "depreciation": "Depreciation", "disposal": "Disposal", "revaluation": "Revaluation", "revenue_recognition": "Revenue recognition", "inventory": "Inventory", "lease": "Lease", "allocation": "Allocation", "intercompany": "Intercompany", "fx_settlement": "Foreign-exchange settlement", "fx_revaluation": "Foreign-exchange revaluation", "translation": "Currency translation", "closing": "Closing", "migration": "Migration", "tax_provision": "Tax provision", "pledge": "Pledge", "gift": "Gift", "grant": "Grant", "release": "Restriction release", "manufacturing": "Manufacturing"},
+    "origins": {
+      "document": "Document",
+      "manual": "Manual",
+      "payroll": "Payroll",
+      "labor_burden": "Labor burden",
+      "depreciation": "Depreciation",
+      "disposal": "Disposal",
+      "revaluation": "Revaluation",
+      "revenue_recognition": "Revenue recognition",
+      "inventory": "Inventory",
+      "lease": "Lease",
+      "allocation": "Allocation",
+      "intercompany": "Intercompany",
+      "fx_settlement": "Foreign-exchange settlement",
+      "fx_revaluation": "Foreign-exchange revaluation",
+      "translation": "Currency translation",
+      "closing": "Closing",
+      "migration": "Migration",
+      "tax_provision": "Tax provision",
+      "pledge": "Pledge",
+      "gift": "Gift",
+      "grant": "Grant",
+      "release": "Restriction release",
+      "manufacturing": "Manufacturing"
+    },
     "columns": {
       "detail": "Party / memo"
     }

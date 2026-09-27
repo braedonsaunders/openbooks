@@ -339,6 +339,7 @@
     "nonprofit": {
       "description": "Fund accounting records, classifications, and interfund posting legs.",
       "dependsOn": [
+        "allocations",
         "flows",
         "journal",
         "money",
@@ -485,6 +486,7 @@
     "reports": {
       "description": "Report definition provisioning shared by seeders, workers and runtime callers.",
       "dependsOn": [
+        "organization",
         "platform"
       ]
     },

@@ -186,6 +186,7 @@ export const TENANT_TABLE_POLICIES = {
   "fund_pairs": "clone:catalog-uuid-rebase",
   "fund_releases": "clone:catalog-uuid-rebase",
   "funds": "clone:catalog-uuid-rebase",
+  "functional_mappings": "clone:catalog-uuid-rebase",
   "grant_drawdowns": "clone:catalog-uuid-rebase",
   "grant_reports": "clone:catalog-uuid-rebase",
   "grants": "clone:catalog-uuid-rebase",

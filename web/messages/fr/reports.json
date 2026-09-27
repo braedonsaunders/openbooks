@@ -897,6 +897,18 @@
       "deferred_revenue_runoff": {
         "label": "Échéancier du revenu différé",
         "description": "Reconnaissance future non comptabilisée par mois, compte de produits différés, livre et devise."
+      },
+      "fund_ledger_lines": {
+        "label": "Lignes du grand livre des fonds",
+        "description": "Lignes de journal comptabilisées avec code, nom et classe de restriction du fonds."
+      },
+      "functional_ledger_lines": {
+        "label": "Lignes fonctionnelles du grand livre",
+        "description": "Charges comptabilisées avec les fonctions en vigueur des services et projets."
+      },
+      "grant_pipeline": {
+        "label": "Portefeuille de subventions",
+        "description": "Subventions, sponsors, périodes, statuts et classification du fonds associé."
       }
     },
     "columns": {
@@ -2020,6 +2032,98 @@
         "schedule_status": "État du calendrier",
         "obligation_status": "État de l’obligation",
         "journal_entry_id": "Écriture comptable (id)"
+      },
+      "fund_ledger_lines": {
+        "posting_date": "Date de comptabilisation",
+        "entry_number": "N° d’écriture",
+        "entry_status": "Statut de l’écriture",
+        "origin": "Origine",
+        "account_number": "N° de compte",
+        "account_name": "Compte",
+        "account_type": "Type de compte",
+        "party_name": "Tiers",
+        "department": "Département",
+        "project": "Projet",
+        "location": "Emplacement",
+        "class": "Classe",
+        "memo": "Note",
+        "amount": "Montant (base)",
+        "debit": "Débit",
+        "credit": "Crédit",
+        "currency": "Devise",
+        "txn_amount": "Montant (transaction)",
+        "quantity": "Quantité",
+        "unit": "Unité",
+        "due_date": "Date d’échéance",
+        "is_open_item": "Poste ouvert",
+        "open_amount": "Montant ouvert (base)",
+        "has_open_balance": "Solde ouvert",
+        "reconciled_at": "Rapproché le",
+        "entry_id": "Écriture (id)",
+        "account_id": "Compte (id)",
+        "party_id": "Tiers (id)",
+        "equipment": "Équipement",
+        "base_currency": "Monnaie fonctionnelle",
+        "book": "Livre comptable",
+        "book_code": "Code du livre",
+        "book_id": "ID du livre",
+        "fund_id": "Fonds (id)",
+        "fund_code": "Code du fonds",
+        "fund_name": "Fonds",
+        "restriction_class": "Classe de restriction"
+      },
+      "functional_ledger_lines": {
+        "posting_date": "Date de comptabilisation",
+        "entry_number": "N° d’écriture",
+        "entry_status": "Statut de l’écriture",
+        "origin": "Origine",
+        "account_number": "N° de compte",
+        "account_name": "Compte",
+        "account_type": "Type de compte",
+        "party_name": "Tiers",
+        "department": "Département",
+        "project": "Projet",
+        "location": "Emplacement",
+        "class": "Classe",
+        "memo": "Note",
+        "amount": "Montant (base)",
+        "debit": "Débit",
+        "credit": "Crédit",
+        "currency": "Devise",
+        "txn_amount": "Montant (transaction)",
+        "quantity": "Quantité",
+        "unit": "Unité",
+        "due_date": "Date d’échéance",
+        "is_open_item": "Poste ouvert",
+        "open_amount": "Montant ouvert (base)",
+        "has_open_balance": "Solde ouvert",
+        "reconciled_at": "Rapproché le",
+        "entry_id": "Écriture (id)",
+        "account_id": "Compte (id)",
+        "party_id": "Tiers (id)",
+        "equipment": "Équipement",
+        "base_currency": "Monnaie fonctionnelle",
+        "book": "Livre comptable",
+        "book_code": "Code du livre",
+        "book_id": "ID du livre",
+        "functional_category": "Fonction",
+        "program_key": "Programme",
+        "mapping_status": "Statut d’affectation"
+      },
+      "grant_pipeline": {
+        "grant_code": "Code de subvention",
+        "grant_name": "Subvention",
+        "sponsor_name": "Organisme financeur",
+        "sponsor_kind": "Type d’organisme financeur",
+        "determination": "Qualification",
+        "award_amount": "Montant attribué",
+        "period_from": "Période du",
+        "period_to": "Période au",
+        "status": "Statut",
+        "fund_code": "Code du fonds",
+        "fund_name": "Fonds",
+        "restriction_class": "Classe de restriction",
+        "base_currency": "Devise de base"
       }
     },
     "enumValues": {
@@ -2285,6 +2389,26 @@
     "backorders": {
       "name": "Reliquats de commande",
       "description": "Lignes de stock des commandes client encore dues : commandée, livrée, annulée et restante par client et article."
+    },
+    "statement-of-financial-position": {
+      "name": "État de la situation financière",
+      "description": "Soldes comptabilisés par compte, fonds et classe de restriction."
+    },
+    "statement-of-activities": {
+      "name": "État des activités",
+      "description": "Produits, charges et libérations brutes comptabilisés par classe."
+    },
+    "functional-expense-matrix": {
+      "name": "Matrice des charges fonctionnelles",
+      "description": "Charges comptabilisées par compte naturel et fonction."
+    },
+    "cash-flow-reconciliation": {
+      "name": "Rapprochement des flux de trésorerie",
+      "description": "Mouvements de trésorerie comptabilisés avec rapprochement de l’actif net."
+    },
+    "grant-pipeline": {
+      "name": "Portefeuille de subventions",
+      "description": "Subventions, sponsors, périodes, statuts et classification du fonds."
     }
   },
   "generalLedger": {
@@ -2304,7 +2428,31 @@
     "empty": "Aucune écriture comptabilisée sur cette période.",
     "truncated": "Affichage des 4 000 premières lignes — réduisez la période pour tout voir.",
     "otherOrigin": "Autre",
-    "origins": {"document": "Document", "manual": "Manuel", "payroll": "Paie", "labor_burden": "Charges de main-d’œuvre", "depreciation": "Amortissement", "disposal": "Sortie d’actif", "revaluation": "Réévaluation", "revenue_recognition": "Constatation du revenu", "inventory": "Stock", "lease": "Contrat de location", "allocation": "Affectation", "intercompany": "Intercompagnie", "fx_settlement": "Règlement de change", "fx_revaluation": "Réévaluation de change", "translation": "Conversion de devises", "closing": "Clôture", "migration": "Migration", "tax_provision": "Provision fiscale", "pledge": "Promesse de don", "gift": "Don", "grant": "Subvention", "release": "Levée des restrictions", "manufacturing": "Fabrication"},
+    "origins": {
+      "document": "Document",
+      "manual": "Manuel",
+      "payroll": "Paie",
+      "labor_burden": "Charges de main-d’œuvre",
+      "depreciation": "Amortissement",
+      "disposal": "Sortie d’actif",
+      "revaluation": "Réévaluation",
+      "revenue_recognition": "Constatation du revenu",
+      "inventory": "Stock",
+      "lease": "Contrat de location",
+      "allocation": "Affectation",
+      "intercompany": "Intercompagnie",
+      "fx_settlement": "Règlement de change",
+      "fx_revaluation": "Réévaluation de change",
+      "translation": "Conversion de devises",
+      "closing": "Clôture",
+      "migration": "Migration",
+      "tax_provision": "Provision fiscale",
+      "pledge": "Promesse de don",
+      "gift": "Don",
+      "grant": "Subvention",
+      "release": "Levée des restrictions",
+      "manufacturing": "Fabrication"
+    },
     "columns": {
       "detail": "Tiers / mémo"
     }

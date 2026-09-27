@@ -203,6 +203,11 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     reason: "grant awards; sponsor counterparty. Finance remit.",
   },
   {
+    table: "functional_mappings",
+    reason:
+      "functional expense classification configuration; department and project mapping with actor attribution. Finance remit.",
+  },
+  {
     table: "property_leases",
     reason: "lease register; tenant link. Property remit.",
   },

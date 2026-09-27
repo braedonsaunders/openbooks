@@ -897,6 +897,18 @@
       "deferred_revenue_runoff": {
         "label": "递延收入未来摊销",
         "description": "按月份、递延科目、账簿和币种列示尚未过账的未来收入确认。"
+      },
+      "fund_ledger_lines": {
+        "label": "基金总账明细",
+        "description": "包含基金代码、基金名称和限制类别的已过账日记账明细。"
+      },
+      "functional_ledger_lines": {
+        "label": "功能总账明细",
+        "description": "包含部门和项目有效功能的已过账费用明细。"
+      },
+      "grant_pipeline": {
+        "label": "资助项目管线",
+        "description": "资助、赞助方、期间、状态和关联基金分类。"
       }
     },
     "columns": {
@@ -2020,6 +2032,98 @@
         "schedule_status": "摊销计划状态",
         "obligation_status": "履约义务状态",
         "journal_entry_id": "日记账分录（ID）"
+      },
+      "fund_ledger_lines": {
+        "posting_date": "过账日期",
+        "entry_number": "分录号",
+        "entry_status": "分录状态",
+        "origin": "来源",
+        "account_number": "科目编号",
+        "account_name": "科目",
+        "account_type": "科目类型",
+        "party_name": "往来方",
+        "department": "部门",
+        "project": "项目",
+        "location": "地点",
+        "class": "类别",
+        "memo": "备注",
+        "amount": "金额（本位币）",
+        "debit": "借方",
+        "credit": "贷方",
+        "currency": "货币",
+        "txn_amount": "金额（交易币）",
+        "quantity": "数量",
+        "unit": "单位",
+        "due_date": "到期日",
+        "is_open_item": "未清项目",
+        "open_amount": "未清金额（本位币）",
+        "has_open_balance": "有未清余额",
+        "reconciled_at": "对账时间",
+        "entry_id": "分录（ID）",
+        "account_id": "科目（ID）",
+        "party_id": "往来方（ID）",
+        "equipment": "设备",
+        "base_currency": "记账本位币",
+        "book": "会计账簿",
+        "book_code": "账簿代码",
+        "book_id": "账簿ID",
+        "fund_id": "基金（ID）",
+        "fund_code": "基金代码",
+        "fund_name": "基金",
+        "restriction_class": "限制类别"
+      },
+      "functional_ledger_lines": {
+        "posting_date": "过账日期",
+        "entry_number": "分录号",
+        "entry_status": "分录状态",
+        "origin": "来源",
+        "account_number": "科目编号",
+        "account_name": "科目",
+        "account_type": "科目类型",
+        "party_name": "往来方",
+        "department": "部门",
+        "project": "项目",
+        "location": "地点",
+        "class": "类别",
+        "memo": "备注",
+        "amount": "金额（本位币）",
+        "debit": "借方",
+        "credit": "贷方",
+        "currency": "货币",
+        "txn_amount": "金额（交易币）",
+        "quantity": "数量",
+        "unit": "单位",
+        "due_date": "到期日",
+        "is_open_item": "未清项目",
+        "open_amount": "未清金额（本位币）",
+        "has_open_balance": "有未清余额",
+        "reconciled_at": "对账时间",
+        "entry_id": "分录（ID）",
+        "account_id": "科目（ID）",
+        "party_id": "往来方（ID）",
+        "equipment": "设备",
+        "base_currency": "记账本位币",
+        "book": "会计账簿",
+        "book_code": "账簿代码",
+        "book_id": "账簿ID",
+        "functional_category": "功能",
+        "program_key": "项目",
+        "mapping_status": "映射状态"
+      },
+      "grant_pipeline": {
+        "grant_code": "资助代码",
+        "grant_name": "资助",
+        "sponsor_name": "赞助方",
+        "sponsor_kind": "赞助方类型",
+        "determination": "认定",
+        "award_amount": "资助金额",
+        "period_from": "期间开始",
+        "period_to": "期间结束",
+        "status": "状态",
+        "fund_code": "基金代码",
+        "fund_name": "基金",
+        "restriction_class": "限制类别",
+        "base_currency": "本位币"
       }
     },
     "enumValues": {
@@ -2305,6 +2409,26 @@
     "backorders": {
       "name": "欠交订单",
       "description": "仍欠交的销售订单库存行 — 按客户和物料列出订购、已履行、已取消和未交数量。"
+    },
+    "statement-of-financial-position": {
+      "name": "财务状况表",
+      "description": "按科目、基金和限制类别显示已过账余额。"
+    },
+    "statement-of-activities": {
+      "name": "活动报表",
+      "description": "按类别显示已过账收入、费用和总额限制解除。"
+    },
+    "functional-expense-matrix": {
+      "name": "功能费用矩阵",
+      "description": "按自然科目和功能显示已过账费用。"
+    },
+    "cash-flow-reconciliation": {
+      "name": "现金流调节表",
+      "description": "已过账现金变动及净资产调节。"
+    },
+    "grant-pipeline": {
+      "name": "资助项目管线",
+      "description": "资助、赞助方、期间、状态和基金分类。"
     }
   },
   "generalLedger": {
@@ -2324,7 +2448,31 @@
     "empty": "本期间内无已过账分录。",
     "truncated": "仅显示前 4,000 行——缩小期间范围以查看全部内容。",
     "otherOrigin": "其他",
-    "origins": {"document": "凭证", "manual": "手动", "payroll": "工资", "labor_burden": "劳务负担", "depreciation": "折旧", "disposal": "处置", "revaluation": "重估", "revenue_recognition": "收入确认", "inventory": "库存", "lease": "租赁", "allocation": "分摊", "intercompany": "公司间", "fx_settlement": "外汇结算", "fx_revaluation": "外汇重估", "translation": "货币折算", "closing": "结账", "migration": "迁移", "tax_provision": "税项准备", "pledge": "捐赠承诺", "gift": "捐赠", "grant": "资助", "release": "解除用途限制", "manufacturing": "生产制造"},
+    "origins": {
+      "document": "凭证",
+      "manual": "手动",
+      "payroll": "工资",
+      "labor_burden": "劳务负担",
+      "depreciation": "折旧",
+      "disposal": "处置",
+      "revaluation": "重估",
+      "revenue_recognition": "收入确认",
+      "inventory": "库存",
+      "lease": "租赁",
+      "allocation": "分摊",
+      "intercompany": "公司间",
+      "fx_settlement": "外汇结算",
+      "fx_revaluation": "外汇重估",
+      "translation": "货币折算",
+      "closing": "结账",
+      "migration": "迁移",
+      "tax_provision": "税项准备",
+      "pledge": "捐赠承诺",
+      "gift": "捐赠",
+      "grant": "资助",
+      "release": "解除用途限制",
+      "manufacturing": "生产制造"
+    },
     "columns": {
       "detail": "往来方 / 备注"
     }
