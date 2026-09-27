@@ -326,7 +326,7 @@ test('create rejects omitted or empty scopes before opening a transaction', asyn
 
     const response = await post(body)
 
-    assert.equal(response.status, 400)
+    assert.equal(response.status, 422)
     assert.match((await response.json()).error, /at least one scope is required/)
     assert.deepEqual(state.executed, [], 'invalid scope sets never reach storage')
   }
@@ -337,7 +337,7 @@ test('update rejects clearing a key to an empty scope set before opening a trans
 
   const response = await patchKey({ id: KEY_ID, scopes: [] })
 
-  assert.equal(response.status, 400)
+  assert.equal(response.status, 422)
   assert.match((await response.json()).error, /at least one scope is required/)
   assert.deepEqual(state.executed, [], 'invalid scope sets never reach storage')
 })
@@ -348,7 +348,7 @@ test('update rejects a non-boolean isActive before opening a transaction', async
 
     const response = await patchKey({ id: KEY_ID, isActive })
 
-    assert.equal(response.status, 400)
+    assert.equal(response.status, 422)
     assert.match((await response.json()).error, /isActive must be a boolean/)
     assert.deepEqual(state.executed, [], 'a type-confused flag never reaches storage')
   }
@@ -690,7 +690,7 @@ test('create rejects falsy non-null expiresAt impostors instead of minting a non
 
     const response = await post({ name: 'expiry-confused key', scopes: ['gl.read'], expiresAt })
 
-    assert.equal(response.status, 400, `expiresAt=${JSON.stringify(expiresAt)} must be refused`)
+    assert.equal(response.status, 422, `expiresAt=${JSON.stringify(expiresAt)} must be refused`)
     assert.deepEqual(committedWrites(), [], 'a type-confused expiry never reaches storage')
   }
 })
@@ -711,7 +711,7 @@ test('create accepts an explicit null expiry and a future date, and refuses past
   for (const expiresAt of ['not-a-date', '03/04/2027', '2027-03', new Date(Date.now() - 1000).toISOString()]) {
     reset()
     const response = await post({ name: 'bad expiry key', scopes: ['gl.read'], expiresAt })
-    assert.equal(response.status, 400, `expiresAt=${expiresAt} must be refused`)
+    assert.equal(response.status, 422, `expiresAt=${expiresAt} must be refused`)
     assert.match((await response.json()).error, /expiresAt must (?:be an ISO date-time with a timezone or null|be in the future)/)
     assert.deepEqual(committedWrites(), [], 'a bad expiry never reaches storage')
   }

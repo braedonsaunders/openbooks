@@ -81,7 +81,7 @@ test('malformed email setting types are refused before storage', async () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ expectedUpdatedAt: '1', [field]: value }),
     }))
-    assert.equal(response.status, 400, `${field} rejects a value of the wrong type or outside its enum`)
+    assert.equal(response.status, 422, `${field} rejects a value of the wrong type or outside its enum`)
     assert.ok((await response.json() as { issues: { path: string }[] }).issues.some((issue) => issue.path === field))
     assert.deepEqual(state.saves, [], `${field} never reaches the settings writer`)
   }

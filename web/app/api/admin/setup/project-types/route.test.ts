@@ -328,7 +328,7 @@ test("PATCH rejects an invalid financial date without publishing or auditing par
     const auditsBefore = structuredClone(routeState.audits);
     const response = await PATCH(patchRequest(patchBody({ financialEffectiveFrom: invalidDate })));
 
-    assert.equal(response.status, 400, `expected invalid date ${JSON.stringify(invalidDate)} to fail at the request boundary`);
+    assert.equal(response.status, 422, `expected invalid date ${JSON.stringify(invalidDate)} to fail at the request boundary`);
     assert.match(((await response.json()) as { error: string }).error, /financialEffectiveFrom.*YYYY-MM-DD/);
     assert.deepEqual(routeState.versions, versionsBefore);
     assert.deepEqual(routeState.audits, auditsBefore);

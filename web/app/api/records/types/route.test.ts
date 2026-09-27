@@ -324,7 +324,7 @@ test('type create validates name, key, and fields before inserting', async () =>
   const key = '00000000-0000-4000-8000-00000000b011'
 
   const unnamed = await post(key, { ...BODY, name: '   ' })
-  assert.equal(unnamed.status, 400)
+  assert.equal(unnamed.status, 422)
   const unnamedBody = await unnamed.json() as { error: string; issues: { path: string }[] }
   assert.match(unnamedBody.error, /Too small/)
   assert.ok(unnamedBody.issues.some((issue) => issue.path === 'name'))
@@ -338,7 +338,7 @@ test('type create validates name, key, and fields before inserting', async () =>
     ...BODY,
     fields: [{ id: 'x' }],
   })
-  assert.equal(badFields.status, 400)
+  assert.equal(badFields.status, 422)
   const badFieldsBody = (await badFields.json()) as { error: string; issues: { path: string }[] }
   assert.ok(badFieldsBody.issues.some((issue) => issue.path.startsWith('fields')))
   assert.equal(state.rows.size, 0, 'validation failures must not insert')

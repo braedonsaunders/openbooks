@@ -2,14 +2,9 @@ import assert from "node:assert/strict";
 import { stubModules } from "../../../../../testing/stub-modules";
 import test from "node:test";
 
-// PATCH /api/admin/setup/project-types shape-checks billingMethod, name, and
-// the invoicing profile, but financialEffectiveFrom rode
-// String(b.financialEffectiveFrom ?? today) straight into
-// publishProjectFinancialProfileInTransaction, whose DATE check is a bare
-// YYYY-MM-DD regex: an impossible date ('2026-02-30') reaches the version
-// queries, whose ::date casts throw a raw driver error surfaced as a 422
-// with a Postgres message instead of a 400 field error — the same boundary
-// already enforced on overhead publish/apply and labor-costing wage dates.
+// Project-type publication rejects impossible effective dates at the request
+// boundary so PostgreSQL never receives an invalid DATE and no version or
+// audit history is written.
 
 const stateKey = Symbol.for("openbooks.project-types-patch-date-test");
 interface RouteState {
@@ -128,7 +123,7 @@ function financialBody(overrides: Record<string, unknown> = {}): Record<string, 
 test("PATCH refuses an impossible financialEffectiveFrom before publishing", async () => {
   state.publishInputs = [];
   const response = await patch(financialBody({ financialEffectiveFrom: "2026-02-30" }));
-  assert.equal(response.status, 400);
+  assert.equal(response.status, 422);
   assert.match(String((await response.json()).error), /financialEffectiveFrom/);
   assert.deepEqual(state.publishInputs, [], "no version publish may run for an impossible date");
 });
