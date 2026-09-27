@@ -206,7 +206,7 @@ test(
         assert.equal(publishGone.status, 404, await publishGone.clone().text())
         const goneBody = (await publishGone.json()) as { error?: string; ok?: unknown }
         assert.equal(goneBody.ok, undefined)
-        assert.equal(goneBody.error, 'not found')
+        assert.equal(goneBody.error, 'not_found')
 
         const draftId = await withBypass(() => insertDraft(org.orgId, actorId))
         const archiveDraft = await lifecycle(draftId, 'archive')

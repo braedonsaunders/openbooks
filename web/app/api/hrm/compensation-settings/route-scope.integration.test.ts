@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
 
 /**
  * H-COMPSET: the compensation document is org-wide policy with no subsidiary
@@ -23,15 +23,18 @@ const virtual = (source: string) => ({
   url: "data:text/javascript," + encodeURIComponent(source),
 });
 const authzUrl = pathToFileURL(process.cwd() + "/web/lib/authz.ts").href;
-registerHooks({
+const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/navigation")
       return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers")
       return virtual("export function cookies() { throw new Error('no cookies in route test') }");
     if (
-      specifier.endsWith("/lib/authz") &&
-      context.parentURL?.includes("/api/hrm/compensation-settings/")
+      !specifier.startsWith("file:") &&
+      (specifier.endsWith("/lib/authz") ||
+        specifier.endsWith("/lib/authz.ts") ||
+        specifier === "./authz" ||
+        specifier === "./authz.ts")
     ) {
       // Only identity resolution is doubled; the scope guard is the real
       // one, re-exported — never a second implementation.
@@ -56,6 +59,7 @@ const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"
 );
 const { GET, PUT } = await import("./route.ts");
+after(() => hooks.deregister());
 
 
 async function fixture() {
@@ -63,6 +67,11 @@ async function fixture() {
   const actorId = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
   state.orgId = org.orgId;
   state.actorId = actorId;
+  const role = await withBypassContext(() => db.execute<{ id: string }>(sql`
+    update app_roles set permissions = '["hrm.compensation.manage"]'::jsonb
+     where org_id = ${org.orgId} and key = 'admin'
+     returning id`));
+  assert.equal(role.rows.length, 1, "the scratch admin role exists");
   await withBypassContext(() => db.execute(sql`
     update orgs
        set settings = jsonb_set(
