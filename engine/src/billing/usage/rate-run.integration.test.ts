@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { createSubscriptionInvoice } from "../subscription-billing.ts";
+import { cancelRevenueRecognitionForInvoice } from "../../ledger/revenue-recognition-cancellation.ts";
 import { postDocument } from "../../ledger/posting-document.ts";
 import { loadRequiredControlAccounts } from "../../records/control-accounts.ts";
 import { db, withBypassContext } from "../../platform/db.ts";
@@ -232,3 +233,20 @@ test("annual minimums true up only in the year-closing run and recognition rules
     );
   });
 });
+
+test("a voided prepaid source invoice funds no usage draw", DB, async () => await fixture(async (org, actor) => {
+    const usageMeter = await meter(org, actor);
+    const { link, subscriptionId } = await linkedPlan(org, actor, usageMeter.id);
+    const changed = await withBypassContext(() => db.execute(sql`update recognition_rules set method = 'usage' where org_id = ${org.orgId} and id = ${org.recognitionRuleId} returning id`));
+    assert.equal(changed.rows.length, 1);
+    const invoice = await createSubscriptionInvoice({ orgId: org.orgId, actorId: actor, customerId: org.customerId, subsidiaryId: org.subsidiaryId,
+      currency: "CAD", incomeAccountId: org.accounts.revenue, itemId: org.items.service, taxCodeId: null, description: "Prepaid usage", quantity: "1",
+      unitPrice: "10", memo: "Prepaid usage", invoiceDate: org.date, autoPost: true });
+    const source = (await db.execute<{ id: string }>(sql`select id from document_lines where org_id = ${org.orgId} and document_id = ${invoice.invoiceId}`)).rows[0]!; assert.ok(source);
+    const grant = await createPrepaidGrant(org.orgId, actor, { customerId: org.customerId, sourceDocumentLineId: source.id, amount: "3", currency: "CAD" });
+    const cancelled = await cancelRevenueRecognitionForInvoice({ documentId: invoice.invoiceId, orgId: org.orgId, actorId: actor, reason: "Prepaid source invoice cancelled", reversalDate: org.date, allowedSubsidiaryIds: null });
+    assert.equal(cancelled.status, "cancelled");
+    await record(org, actor, usageMeter.key, "3", org.date, subscriptionId); const run = await commitRateRun(org.orgId, actor, link.id, org.date, org.date);
+    assert.deepEqual([run.preview.prepaidDrawn, run.preview.totalRated, Boolean(run.invoiceId)], ["0.0000", "5.0000", true]);
+    const draws = await db.execute<{ count: number }>(sql`select count(*)::int as count from usage_prepaid_draws where org_id = ${org.orgId} and grant_id = ${grant.id}`); assert.equal(draws.rows[0]?.count, 0);
+}));
