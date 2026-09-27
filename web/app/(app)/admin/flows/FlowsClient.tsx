@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, SearchSelect, cn } from '@openbooks/ui'
-import { apiJson } from '../../../../lib/api-error'
+import { ApiResponseError, apiJson } from '../../../../lib/api-error'
 import { confirmDialog } from '../../../../lib/confirm'
 
 /**
@@ -58,7 +58,7 @@ export function NewFlowButton() {
       )
       router.push(`/admin/flows/${data.id}`)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('new.failed'))
+      toast.error(error instanceof ApiResponseError ? error.message : t('new.failed'))
     } finally {
       setBusy(false)
     }
@@ -151,7 +151,7 @@ export function FlowRowActions({
       setRevision(data.updatedAt)
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('actions.updateFailed'))
+      toast.error(error instanceof ApiResponseError ? error.message : t('actions.updateFailed'))
     } finally {
       saving.current = false
       setBusy(false)
@@ -182,7 +182,7 @@ export function FlowRowActions({
       toast.success(t('actions.deleted'))
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('actions.deleteFailed'))
+      toast.error(error instanceof ApiResponseError ? error.message : t('actions.deleteFailed'))
     } finally {
       saving.current = false
       setBusy(false)

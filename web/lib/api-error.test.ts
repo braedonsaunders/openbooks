@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  ApiResponseError,
   apiJson,
   chunkArray,
   readApiBulkFailures,
@@ -113,8 +114,24 @@ test('apiJson throws the named server refusal on error, never a SyntaxError', as
   try {
     await assert.rejects(
       apiJson<unknown>('/api/admin/flows', { method: 'POST' }, 'failed to save'),
-      /failed to save \(status 502\)/,
+      (error) =>
+        error instanceof ApiResponseError &&
+        error.status === 502 &&
+        error.message === 'failed to save (status 502)',
     )
+  } finally {
+    globalThis.fetch = prior
+  }
+})
+
+test('apiJson lets a network failure propagate untouched so callers show their own fallback', async () => {
+  const prior = globalThis.fetch
+  const offline = new TypeError('Failed to fetch')
+  globalThis.fetch = (async () => {
+    throw offline
+  }) as typeof fetch
+  try {
+    await assert.rejects(apiJson<unknown>('/api/admin/flows', undefined, 'failed'), (error) => error === offline)
   } finally {
     globalThis.fetch = prior
   }
