@@ -32,7 +32,7 @@ const selectionCriteriaSchema = z.object({
   captureDiscounts: z.boolean().optional(), applyCredits: z.boolean().optional(),
 })
 const requestBodySchema = z.object({
-  "action": z.enum(["create_draft", "submit_for_approval"]).optional(),
+  "action": z.enum(["create_draft", "submit_for_approval"], { error: 'action must be create_draft or submit_for_approval' }).optional(),
   "bankAccountId": z.string().uuid().optional(),
   "contentType": z.string().optional(),
   "country": countryPatchSchema,
@@ -54,7 +54,7 @@ const requestBodySchema = z.object({
   "requireFileApproval": z.boolean().optional(),
   "autoRemittance": z.boolean().optional(),
   "signedOn": datePatchSchema,
-  "status": z.enum(["pending", "active", "suspended", "revoked", "expired"]).optional(),
+  "status": z.enum(["pending", "active", "suspended", "revoked", "expired"], { error: 'status must be pending, active, suspended, revoked, or expired' }).optional(),
   "subsidiaryId": z.string().uuid().nullable().optional(),
   "timezone": z.string().optional(),
   "validFrom": datePatchSchema,
@@ -63,14 +63,6 @@ const requestBodySchema = z.object({
 
 
 export const runtime = 'nodejs'
-
-/** POST coerces mandate status into this domain; the text column has no CHECK. */
-const MANDATE_STATUSES = new Set(['pending', 'active', 'suspended', 'revoked', 'expired'])
-
-/** POST coerces schedule action into this domain; the text column has no CHECK. */
-const SCHEDULE_ACTIONS = new Set(['create_draft', 'submit_for_approval'])
-
-
 
 function optionalCountry(value: unknown): string | null | undefined {
   if (value == null || (typeof value === 'string' && value.trim() === '')) return null
@@ -102,20 +94,6 @@ export const PATCH = defineRoute({
     const unsupportedFields = Object.keys(body).filter((field) => !patchFieldsByResource[resource]?.includes(field))
     if (unsupportedFields.length > 0) {
       return NextResponse.json({ error: `Unsupported ${resource} settings: ${unsupportedFields.join(', ')}` }, { status: 400 })
-    }
-    // POST constrains mandate status and schedule action to fixed value domains
-    // while the text columns carry no CHECK constraint. PATCH must refuse what
-    // POST would never store: a mistyped status never equals the 'active' the
-    // direct-debit builder requires, silently dropping the mandate reference
-    // from payment files, and an unknown action leaves the scheduler's intent
-    // ambiguous.
-    if (resource === 'mandates' && body.status !== undefined
-      && (typeof body.status !== 'string' || !MANDATE_STATUSES.has(body.status))) {
-      return NextResponse.json({ error: 'status must be pending, active, suspended, revoked, or expired' }, { status: 400 })
-    }
-    if (resource === 'schedules' && body.action !== undefined
-      && (typeof body.action !== 'string' || !SCHEDULE_ACTIONS.has(body.action))) {
-      return NextResponse.json({ error: 'action must be create_draft or submit_for_approval' }, { status: 400 })
     }
     try {
       if (body.country !== undefined) {
