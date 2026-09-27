@@ -1,0 +1,123 @@
+{
+  "actionFailed": "无法完成该操作。",
+  "voidReasonPlaceholder": "作废原因是什么?",
+  "fields": {
+    "salesOrder": "销售订单",
+    "pickList": "拣货单",
+    "shipment": "发运单",
+    "salesFulfillment": "销售履约",
+    "salesOrderLine": "订单行",
+    "bin": "货位",
+    "lotSerial": "批次 / 序列号",
+    "carrier": "承运商",
+    "service": "服务",
+    "trackingNumber": "运单号",
+    "shipTo": "收货地址",
+    "carton": "箱号",
+    "stage": "阶段",
+    "open": "未交数量",
+    "held": "拣货单占用",
+    "pickable": "可拣数量"
+  },
+  "stage": {
+    "open": "未完成",
+    "done": "已完成"
+  },
+  "state": {
+    "draft": "草稿",
+    "pendingApproval": "待审批",
+    "released": "已下达",
+    "shipped": "已发运",
+    "completed": "已完成",
+    "voided": "已作废"
+  },
+  "lines": {
+    "orderLine": "第 {line} 行",
+    "lot": "批次 {lot}",
+    "serial": "序列号 {serial}",
+    "actionsFor": "第 {line} 行的操作",
+    "empty": "此单据没有明细行。"
+  },
+  "related": {
+    "tab": "相关单据",
+    "empty": "没有相关单据。"
+  },
+  "cartons": {
+    "set": "设置箱号…",
+    "clear": "清除箱号",
+    "all": "全部装入一个箱子…",
+    "setTitle": "第 {line} 行的箱号",
+    "allTitle": "将 {number} 的所有行装入一个箱子",
+    "placeholder": "例如 C1",
+    "saved": "箱号已保存。",
+    "failed": "无法保存箱号。"
+  },
+  "pick": {
+    "listTitle": "拣货单",
+    "listDescription": "从哪些货位为已下发的销售订单拣货。从已下发的销售订单创建拣货单,下达后占用其货位,然后发运。",
+    "createFromOrder": "创建拣货单",
+    "release": "下达",
+    "released": "{number} 已下达并占用其货位。",
+    "releasePending": "{number} 正在等待审批。",
+    "releaseFailed": "无法下达拣货单。",
+    "createShipment": "创建发运单",
+    "shipmentCreated": "已创建发运单 {number}。",
+    "shipFailed": "无法创建发运单。",
+    "openShipment": "打开发运单 {number}",
+    "voidTitle": "作废 {number}",
+    "voidMessage": "作废的拣货单不再占用其货位,并连同原因保留在记录中。",
+    "voided": "{number} 已作废。",
+    "voidFailed": "无法作废拣货单。",
+    "draftHint": "草稿不占用库存。下达后才会为拣货占用其货位。"
+  },
+  "create": {
+    "title": "为 {order} 新建拣货单",
+    "loading": "正在加载待拣货的行…",
+    "loadFailed": "无法加载待拣货的行。",
+    "empty": "此订单没有待拣货的未交库存行。",
+    "hint": "复制一行即可从两个货位拣货。数量留空则该行留待以后处理。",
+    "nothingPickable": "已在拣货单上",
+    "noStock": "没有货位存放此物料",
+    "otherWarehouse": "从 {warehouse} 发货",
+    "binOption": "{bin} · 现有 {onHand}",
+    "noLines": "请至少为一行输入拣货数量。",
+    "binRequired": "请为订单第 {line} 行选择货位。",
+    "created": "已创建拣货单 {number}。",
+    "failed": "无法创建拣货单。"
+  },
+  "shipment": {
+    "listTitle": "发运单",
+    "listDescription": "离开仓库的货物。填写承运商和运单号,装箱,然后完成发运以记录销售履约。",
+    "chooseCarrier": "选择承运商",
+    "noCarriers": "没有启用的承运商 — 请在“仓库 → 承运商”中添加",
+    "chooseService": "选择服务",
+    "carrierRequired": "请选择承运商。",
+    "serviceRequired": "请选择承运商的服务。",
+    "carrierHint": "完成此发运单前,请先填写承运商和服务。",
+    "saved": "{number} 已保存。",
+    "saveFailed": "无法保存发运单。",
+    "complete": "完成",
+    "completeTitle": "完成 {number}",
+    "completeMessage": "完成后将记录销售履约,从已拣货位出库,并结束拣货单的占用。此处无法撤销。",
+    "completeNeedsPost": "完成发运会移动库存,需要库存过账权限。",
+    "completed": "{number} 已完成;已记录 {fulfillment}。",
+    "completeFailed": "无法完成发运单。",
+    "voidTitle": "作废 {number}",
+    "voidMessage": "作废的发运单不会发运任何货物。其拣货单继续占用货位。",
+    "voided": "{number} 已作废。",
+    "voidFailed": "无法作废发运单。",
+    "openPickList": "打开拣货单 {number}"
+  },
+  "tracking": {
+    "action": "发送物流跟踪邮件…",
+    "title": "发送 {number} 的物流跟踪",
+    "recipient": "收件人",
+    "recipientPlaceholder": "电子邮件地址",
+    "message": "留言(可选)",
+    "messagePlaceholder": "为客户添加备注,或留空",
+    "confirm": "将承运商和跟踪链接发送给 {to}?",
+    "send": "发送",
+    "sent": "已将物流跟踪发送给 {to}。",
+    "failed": "无法发送物流跟踪邮件。"
+  }
+}

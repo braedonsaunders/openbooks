@@ -1,0 +1,123 @@
+{
+  "actionFailed": "No se pudo completar la acción.",
+  "voidReasonPlaceholder": "¿Por qué se anula?",
+  "fields": {
+    "salesOrder": "Orden de venta",
+    "pickList": "Lista de preparación",
+    "shipment": "Envío",
+    "salesFulfillment": "Cumplimiento de venta",
+    "salesOrderLine": "Línea de la orden",
+    "bin": "Ubicación",
+    "lotSerial": "Lote / número de serie",
+    "carrier": "Transportista",
+    "service": "Servicio",
+    "trackingNumber": "Número de seguimiento",
+    "shipTo": "Enviar a",
+    "carton": "Caja",
+    "stage": "Etapa",
+    "open": "Pendiente",
+    "held": "En listas de preparación",
+    "pickable": "Preparable"
+  },
+  "stage": {
+    "open": "Abierta",
+    "done": "Terminada"
+  },
+  "state": {
+    "draft": "Borrador",
+    "pendingApproval": "Pendiente de aprobación",
+    "released": "Liberada",
+    "shipped": "Enviada",
+    "completed": "Completado",
+    "voided": "Anulado"
+  },
+  "lines": {
+    "orderLine": "Línea {line}",
+    "lot": "Lote {lot}",
+    "serial": "Serie {serial}",
+    "actionsFor": "Acciones de la línea {line}",
+    "empty": "Este documento no tiene líneas."
+  },
+  "related": {
+    "tab": "Relacionados",
+    "empty": "No hay documentos relacionados."
+  },
+  "cartons": {
+    "set": "Asignar caja…",
+    "clear": "Quitar caja",
+    "all": "Empacar todo en una caja…",
+    "setTitle": "Caja de la línea {line}",
+    "allTitle": "Empacar todas las líneas de {number} en una caja",
+    "placeholder": "Por ejemplo C1",
+    "saved": "Cajas guardadas.",
+    "failed": "No se pudieron guardar las cajas."
+  },
+  "pick": {
+    "listTitle": "Listas de preparación",
+    "listDescription": "Ubicaciones desde las que se preparan las órdenes de venta emitidas. Cree una lista de preparación desde una orden de venta emitida, libérela para reservar sus ubicaciones y luego envíela.",
+    "createFromOrder": "Crear lista de preparación",
+    "release": "Liberar",
+    "released": "{number} está liberada y reserva sus ubicaciones.",
+    "releasePending": "{number} está pendiente de aprobación.",
+    "releaseFailed": "No se pudo liberar la lista de preparación.",
+    "createShipment": "Crear envío",
+    "shipmentCreated": "Envío {number} creado.",
+    "shipFailed": "No se pudo crear el envío.",
+    "openShipment": "Abrir envío {number}",
+    "voidTitle": "Anular {number}",
+    "voidMessage": "Una lista de preparación anulada deja de reservar sus ubicaciones. Queda registrada con el motivo.",
+    "voided": "{number} está anulada.",
+    "voidFailed": "No se pudo anular la lista de preparación.",
+    "draftHint": "Un borrador no reserva existencias. Libérelo para reservar sus ubicaciones para la preparación."
+  },
+  "create": {
+    "title": "Nueva lista de preparación para {order}",
+    "loading": "Cargando las líneas por preparar…",
+    "loadFailed": "No se pudieron cargar las líneas por preparar.",
+    "empty": "Esta orden no tiene líneas de existencias pendientes por preparar.",
+    "hint": "Duplique una línea para prepararla desde dos ubicaciones. Deje una cantidad en blanco para dejar esa línea para después.",
+    "nothingPickable": "Ya está en listas de preparación",
+    "noStock": "Ninguna ubicación tiene este artículo",
+    "otherWarehouse": "Se envía desde {warehouse}",
+    "binOption": "{bin} · {onHand} disponibles",
+    "noLines": "Introduzca una cantidad en al menos una línea para preparar.",
+    "binRequired": "Elija una ubicación para la línea {line} de la orden.",
+    "created": "Lista de preparación {number} creada.",
+    "failed": "No se pudo crear la lista de preparación."
+  },
+  "shipment": {
+    "listTitle": "Envíos",
+    "listDescription": "Mercancía que sale del almacén. Indique el transportista y el número de seguimiento, empaque las cajas y complete el envío para registrar el cumplimiento de venta.",
+    "chooseCarrier": "Elija un transportista",
+    "noCarriers": "No hay transportistas activos: agregue uno en Almacén → Transportistas",
+    "chooseService": "Elija un servicio",
+    "carrierRequired": "Elija un transportista.",
+    "serviceRequired": "Elija el servicio del transportista.",
+    "carrierHint": "Indique el transportista y el servicio antes de completar este envío.",
+    "saved": "{number} guardado.",
+    "saveFailed": "No se pudo guardar el envío.",
+    "complete": "Completar",
+    "completeTitle": "Completar {number}",
+    "completeMessage": "Al completar se registra el cumplimiento de venta, se retiran las existencias de las ubicaciones preparadas y termina la reserva de la lista de preparación. No se puede deshacer aquí.",
+    "completeNeedsPost": "Completar un envío mueve existencias y requiere permiso para contabilizar inventario.",
+    "completed": "{number} completado; se registró {fulfillment}.",
+    "completeFailed": "No se pudo completar el envío.",
+    "voidTitle": "Anular {number}",
+    "voidMessage": "Un envío anulado no envía nada. Su lista de preparación sigue reservando las ubicaciones.",
+    "voided": "{number} está anulado.",
+    "voidFailed": "No se pudo anular el envío.",
+    "openPickList": "Abrir lista de preparación {number}"
+  },
+  "tracking": {
+    "action": "Enviar seguimiento por correo…",
+    "title": "Enviar el seguimiento de {number}",
+    "recipient": "Destinatario",
+    "recipientPlaceholder": "Correo electrónico",
+    "message": "Mensaje (opcional)",
+    "messagePlaceholder": "Añada una nota para el cliente o déjelo en blanco",
+    "confirm": "¿Enviar el transportista y el enlace de seguimiento a {to}?",
+    "send": "Enviar",
+    "sent": "Seguimiento enviado a {to}.",
+    "failed": "No se pudo enviar el correo de seguimiento."
+  }
+}

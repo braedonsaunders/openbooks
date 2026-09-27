@@ -92,7 +92,8 @@
   },
   "setup": {
     "warehouses": "Dados do armazém",
-    "rules": "Regras de armazenagem"
+    "rules": "Regras de armazenagem",
+    "carriers": "Transportadoras"
   },
   "availability": {
     "title": "Disponibilidade",
@@ -170,5 +171,13 @@
     "noPoints": "Sem ponto de pedido",
     "onOrder": "Itens pedidos",
     "openReplenishment": "Abrir reabastecimento"
+  },
+  "fulfillment": {
+    "title": "Atendimento",
+    "hint": "Listas de separação e remessas ainda por concluir.",
+    "openPickLists": "Listas de separação abertas",
+    "openPickListsHint": "Ainda não enviadas nem anuladas",
+    "shipmentsToComplete": "Remessas a concluir",
+    "shipmentsToCompleteHint": "Rascunhos aguardando transportadora e conclusão"
   }
 }

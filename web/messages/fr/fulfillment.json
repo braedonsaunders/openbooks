@@ -1,0 +1,123 @@
+{
+  "actionFailed": "L’action n’a pas pu être effectuée.",
+  "voidReasonPlaceholder": "Pourquoi l’annuler ?",
+  "fields": {
+    "salesOrder": "Commande client",
+    "pickList": "Liste de prélèvement",
+    "shipment": "Expédition",
+    "salesFulfillment": "Exécution de commande",
+    "salesOrderLine": "Ligne de commande",
+    "bin": "Emplacement",
+    "lotSerial": "Lot ou numéro de série",
+    "carrier": "Transporteur",
+    "service": "Niveau de service",
+    "trackingNumber": "Numéro de suivi",
+    "shipTo": "Livrer à",
+    "carton": "Colis",
+    "stage": "Étape",
+    "open": "Restant",
+    "held": "Sur des listes de prélèvement",
+    "pickable": "Prélevable"
+  },
+  "stage": {
+    "open": "Ouverte",
+    "done": "Terminée"
+  },
+  "state": {
+    "draft": "Brouillon",
+    "pendingApproval": "En attente d’approbation",
+    "released": "Lancée",
+    "shipped": "Expédiée",
+    "completed": "Terminée",
+    "voided": "Annulée"
+  },
+  "lines": {
+    "orderLine": "Ligne {line}",
+    "lot": "N° de lot {lot}",
+    "serial": "N° de série {serial}",
+    "actionsFor": "Actions de la ligne {line}",
+    "empty": "Ce document n’a aucune ligne."
+  },
+  "related": {
+    "tab": "Documents liés",
+    "empty": "Aucun document lié."
+  },
+  "cartons": {
+    "set": "Définir le colis…",
+    "clear": "Retirer le colis",
+    "all": "Tout emballer dans un colis…",
+    "setTitle": "Colis de la ligne {line}",
+    "allTitle": "Emballer toutes les lignes de {number} dans un colis",
+    "placeholder": "Par exemple C1",
+    "saved": "Colis enregistrés.",
+    "failed": "Les colis n’ont pas pu être enregistrés."
+  },
+  "pick": {
+    "listTitle": "Listes de prélèvement",
+    "listDescription": "Emplacements où prélever les commandes clients émises. Créez une liste de prélèvement depuis une commande client émise, lancez-la pour réserver ses emplacements, puis expédiez-la.",
+    "createFromOrder": "Créer une liste de prélèvement",
+    "release": "Lancer",
+    "released": "{number} est lancée et réserve ses emplacements.",
+    "releasePending": "{number} attend une approbation.",
+    "releaseFailed": "La liste de prélèvement n’a pas pu être lancée.",
+    "createShipment": "Créer l’expédition",
+    "shipmentCreated": "Expédition {number} créée.",
+    "shipFailed": "L’expédition n’a pas pu être créée.",
+    "openShipment": "Ouvrir l’expédition {number}",
+    "voidTitle": "Annuler {number}",
+    "voidMessage": "Une liste de prélèvement annulée ne réserve plus ses emplacements. Elle reste consignée avec le motif.",
+    "voided": "{number} est annulée.",
+    "voidFailed": "La liste de prélèvement n’a pas pu être annulée.",
+    "draftHint": "Un brouillon ne réserve aucun stock. Lancez-le pour réserver ses emplacements pour le prélèvement."
+  },
+  "create": {
+    "title": "Nouvelle liste de prélèvement pour {order}",
+    "loading": "Chargement des lignes à prélever…",
+    "loadFailed": "Les lignes à prélever n’ont pas pu être chargées.",
+    "empty": "Cette commande n’a aucune ligne stockée restant à prélever.",
+    "hint": "Dupliquez une ligne pour la prélever depuis deux emplacements. Laissez une quantité vide pour garder cette ligne pour plus tard.",
+    "nothingPickable": "Déjà sur des listes de prélèvement",
+    "noStock": "Aucun emplacement ne contient cet article",
+    "otherWarehouse": "Expédiée depuis {warehouse}",
+    "binOption": "{bin} · {onHand} en stock",
+    "noLines": "Saisissez une quantité sur au moins une ligne à prélever.",
+    "binRequired": "Choisissez un emplacement pour la ligne de commande {line}.",
+    "created": "Liste de prélèvement {number} créée.",
+    "failed": "La liste de prélèvement n’a pas pu être créée."
+  },
+  "shipment": {
+    "listTitle": "Expéditions",
+    "listDescription": "Marchandises qui quittent l’entrepôt. Indiquez le transporteur et le numéro de suivi, emballez les colis, puis terminez l’expédition pour enregistrer l’exécution de commande.",
+    "chooseCarrier": "Choisir un transporteur",
+    "noCarriers": "Aucun transporteur actif : ajoutez-en un sous Entrepôt → Transporteurs",
+    "chooseService": "Choisir un niveau de service",
+    "carrierRequired": "Choisissez un transporteur.",
+    "serviceRequired": "Choisissez le niveau de service du transporteur.",
+    "carrierHint": "Indiquez le transporteur et le niveau de service avant de terminer cette expédition.",
+    "saved": "{number} enregistrée.",
+    "saveFailed": "L’expédition n’a pas pu être enregistrée.",
+    "complete": "Terminer",
+    "completeTitle": "Terminer {number}",
+    "completeMessage": "Terminer enregistre l’exécution de commande, sort le stock des emplacements prélevés et met fin à la réservation de la liste de prélèvement. Cette opération ne peut pas être annulée ici.",
+    "completeNeedsPost": "Terminer une expédition déplace du stock et nécessite l’autorisation de comptabiliser l’inventaire.",
+    "completed": "{number} terminée ; {fulfillment} enregistrée.",
+    "completeFailed": "L’expédition n’a pas pu être terminée.",
+    "voidTitle": "Annuler {number}",
+    "voidMessage": "Une expédition annulée n’expédie rien. Sa liste de prélèvement continue de réserver les emplacements.",
+    "voided": "{number} est annulée.",
+    "voidFailed": "L’expédition n’a pas pu être annulée.",
+    "openPickList": "Ouvrir la liste de prélèvement {number}"
+  },
+  "tracking": {
+    "action": "Envoyer le suivi par e-mail…",
+    "title": "Envoyer le suivi de {number}",
+    "recipient": "Destinataire",
+    "recipientPlaceholder": "Adresse e-mail",
+    "message": "Message facultatif",
+    "messagePlaceholder": "Ajoutez une note pour le client, ou laissez vide",
+    "confirm": "Envoyer le transporteur et le lien de suivi à {to} ?",
+    "send": "Envoyer",
+    "sent": "Suivi envoyé à {to}.",
+    "failed": "L’e-mail de suivi n’a pas pu être envoyé."
+  }
+}

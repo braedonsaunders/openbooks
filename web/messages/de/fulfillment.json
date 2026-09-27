@@ -1,0 +1,123 @@
+{
+  "actionFailed": "Die Aktion konnte nicht ausgeführt werden.",
+  "voidReasonPlaceholder": "Warum wird dies storniert?",
+  "fields": {
+    "salesOrder": "Kundenauftrag",
+    "pickList": "Kommissionierliste",
+    "shipment": "Sendung",
+    "salesFulfillment": "Auftragserfüllung",
+    "salesOrderLine": "Auftragszeile",
+    "bin": "Lagerplatz",
+    "lotSerial": "Charge / Seriennummer",
+    "carrier": "Versanddienstleister",
+    "service": "Versandart",
+    "trackingNumber": "Sendungsnummer",
+    "shipTo": "Lieferadresse",
+    "carton": "Karton",
+    "stage": "Phase",
+    "open": "Offen",
+    "held": "Auf Kommissionierlisten",
+    "pickable": "Kommissionierbar"
+  },
+  "stage": {
+    "open": "Offen",
+    "done": "Erledigt"
+  },
+  "state": {
+    "draft": "Entwurf",
+    "pendingApproval": "Genehmigung ausstehend",
+    "released": "Freigegeben",
+    "shipped": "Versendet",
+    "completed": "Abgeschlossen",
+    "voided": "Storniert"
+  },
+  "lines": {
+    "orderLine": "Zeile {line}",
+    "lot": "Charge {lot}",
+    "serial": "Seriennummer {serial}",
+    "actionsFor": "Aktionen für Zeile {line}",
+    "empty": "Dieser Beleg hat keine Zeilen."
+  },
+  "related": {
+    "tab": "Verknüpft",
+    "empty": "Keine verknüpften Belege."
+  },
+  "cartons": {
+    "set": "Karton festlegen…",
+    "clear": "Karton entfernen",
+    "all": "Alles in einen Karton packen…",
+    "setTitle": "Karton für Zeile {line}",
+    "allTitle": "Alle Zeilen von {number} in einen Karton packen",
+    "placeholder": "Zum Beispiel K1",
+    "saved": "Kartons gespeichert.",
+    "failed": "Die Kartons konnten nicht gespeichert werden."
+  },
+  "pick": {
+    "listTitle": "Kommissionierlisten",
+    "listDescription": "Lagerplätze, aus denen freigegebene Kundenaufträge kommissioniert werden. Erstellen Sie eine Kommissionierliste aus einem freigegebenen Kundenauftrag, geben Sie sie frei, um ihre Lagerplätze zu reservieren, und versenden Sie sie dann.",
+    "createFromOrder": "Kommissionierliste erstellen",
+    "release": "Freigeben",
+    "released": "{number} ist freigegeben und reserviert ihre Lagerplätze.",
+    "releasePending": "{number} wartet auf Genehmigung.",
+    "releaseFailed": "Die Kommissionierliste konnte nicht freigegeben werden.",
+    "createShipment": "Sendung erstellen",
+    "shipmentCreated": "Sendung {number} erstellt.",
+    "shipFailed": "Die Sendung konnte nicht erstellt werden.",
+    "openShipment": "Sendung {number} öffnen",
+    "voidTitle": "{number} stornieren",
+    "voidMessage": "Eine stornierte Kommissionierliste reserviert ihre Lagerplätze nicht mehr. Sie bleibt mit dem Grund erhalten.",
+    "voided": "{number} ist storniert.",
+    "voidFailed": "Die Kommissionierliste konnte nicht storniert werden.",
+    "draftHint": "Ein Entwurf reserviert keinen Bestand. Geben Sie ihn frei, um seine Lagerplätze für die Kommissionierung zu reservieren."
+  },
+  "create": {
+    "title": "Neue Kommissionierliste für {order}",
+    "loading": "Zu kommissionierende Zeilen werden geladen…",
+    "loadFailed": "Die zu kommissionierenden Zeilen konnten nicht geladen werden.",
+    "empty": "Dieser Auftrag hat keine offenen Lagerzeilen zum Kommissionieren.",
+    "hint": "Duplizieren Sie eine Zeile, um sie aus zwei Lagerplätzen zu kommissionieren. Lassen Sie eine Menge leer, um die Zeile für später zu lassen.",
+    "nothingPickable": "Bereits auf Kommissionierlisten",
+    "noStock": "Kein Lagerplatz führt diesen Artikel",
+    "otherWarehouse": "Versand aus {warehouse}",
+    "binOption": "{bin} · {onHand} vorrätig",
+    "noLines": "Geben Sie für mindestens eine Zeile eine Menge ein.",
+    "binRequired": "Wählen Sie einen Lagerplatz für Auftragszeile {line}.",
+    "created": "Kommissionierliste {number} erstellt.",
+    "failed": "Die Kommissionierliste konnte nicht erstellt werden."
+  },
+  "shipment": {
+    "listTitle": "Sendungen",
+    "listDescription": "Ware, die das Lager verlässt. Erfassen Sie Versanddienstleister und Sendungsnummer, packen Sie Kartons und schließen Sie die Sendung ab, um die Auftragserfüllung zu buchen.",
+    "chooseCarrier": "Versanddienstleister wählen",
+    "noCarriers": "Keine aktiven Versanddienstleister — legen Sie unter Lager → Versanddienstleister einen an",
+    "chooseService": "Versandart wählen",
+    "carrierRequired": "Wählen Sie einen Versanddienstleister.",
+    "serviceRequired": "Wählen Sie die Versandart des Versanddienstleisters.",
+    "carrierHint": "Erfassen Sie Versanddienstleister und Versandart, bevor Sie diese Sendung abschließen.",
+    "saved": "{number} gespeichert.",
+    "saveFailed": "Die Sendung konnte nicht gespeichert werden.",
+    "complete": "Abschließen",
+    "completeTitle": "{number} abschließen",
+    "completeMessage": "Der Abschluss bucht die Auftragserfüllung, bucht den Bestand aus den kommissionierten Lagerplätzen aus und beendet die Reservierung der Kommissionierliste. Er kann hier nicht rückgängig gemacht werden.",
+    "completeNeedsPost": "Der Abschluss einer Sendung bewegt Bestand und erfordert die Berechtigung, Lagerbewegungen zu buchen.",
+    "completed": "{number} abgeschlossen; {fulfillment} gebucht.",
+    "completeFailed": "Die Sendung konnte nicht abgeschlossen werden.",
+    "voidTitle": "{number} stornieren",
+    "voidMessage": "Eine stornierte Sendung versendet nichts. Ihre Kommissionierliste reserviert die Lagerplätze weiterhin.",
+    "voided": "{number} ist storniert.",
+    "voidFailed": "Die Sendung konnte nicht storniert werden.",
+    "openPickList": "Kommissionierliste {number} öffnen"
+  },
+  "tracking": {
+    "action": "Sendungsverfolgung senden…",
+    "title": "Sendungsverfolgung für {number} senden",
+    "recipient": "Empfänger",
+    "recipientPlaceholder": "E-Mail-Adresse",
+    "message": "Nachricht (optional)",
+    "messagePlaceholder": "Fügen Sie eine Notiz für den Kunden hinzu oder lassen Sie das Feld leer",
+    "confirm": "Versanddienstleister und Verfolgungslink an {to} senden?",
+    "send": "Senden",
+    "sent": "Sendungsverfolgung an {to} gesendet.",
+    "failed": "Die E-Mail zur Sendungsverfolgung konnte nicht gesendet werden."
+  }
+}

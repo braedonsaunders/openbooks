@@ -85,4 +85,42 @@ export const WAREHOUSE_ENTITIES: SetupEntity[] = [
       { key: 'capacityQuantity', kind: 'decimal', helpTextKey: 'fieldHelp.putawayCapacity' },
     ],
   },
+  {
+    // Carriers a shipment can name, with the service levels each offers and
+    // an optional tracking-link template. Shipments reference carriers, so a
+    // carrier is deactivated rather than deleted: an inactive carrier cannot
+    // be chosen on a shipment, and shipments that already name it keep it.
+    // Storage refuses an empty service list and a template without
+    // {tracking}; the write layer names both before they reach it.
+    key: 'carriers',
+    table: 'carriers',
+    singularTitleKey: 'entities.carriers.singular',
+    rehomed: true,
+    rehomedTo: '/warehouse',
+    actorCols: true,
+    groupKey: 'inventory',
+    featureKey: 'fulfillment',
+    docSlug: 'distribution-pick-ship',
+    iconKey: 'package',
+    orgScoped: true,
+    naturalKey: 'code',
+    hasActive: true,
+    allowDelete: false,
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'services', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      {
+        key: 'services', kind: 'stringArray', arrayStorage: 'text', required: true,
+        helpTextKey: 'fieldHelp.carrierServices',
+      },
+      { key: 'trackingUrlTemplate', kind: 'text', helpTextKey: 'fieldHelp.carrierTrackingUrlTemplate' },
+      { key: 'isActive', kind: 'boolean', defaultValue: true, helpTextKey: 'fieldHelp.carrierActive' },
+    ],
+  },
 ]

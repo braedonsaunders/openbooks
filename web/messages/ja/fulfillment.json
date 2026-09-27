@@ -1,0 +1,123 @@
+{
+  "actionFailed": "操作を完了できませんでした。",
+  "voidReasonPlaceholder": "無効にする理由を入力してください",
+  "fields": {
+    "salesOrder": "受注",
+    "pickList": "ピッキングリスト",
+    "shipment": "出荷",
+    "salesFulfillment": "受注出荷記録",
+    "salesOrderLine": "受注明細",
+    "bin": "ロケーション",
+    "lotSerial": "ロット / シリアル",
+    "carrier": "運送会社",
+    "service": "サービス",
+    "trackingNumber": "追跡番号",
+    "shipTo": "出荷先",
+    "carton": "梱包箱",
+    "stage": "段階",
+    "open": "未出荷",
+    "held": "ピッキングリスト上",
+    "pickable": "ピッキング可能"
+  },
+  "stage": {
+    "open": "未完了",
+    "done": "完了"
+  },
+  "state": {
+    "draft": "下書き",
+    "pendingApproval": "承認待ち",
+    "released": "リリース済み",
+    "shipped": "出荷済み",
+    "completed": "完了",
+    "voided": "無効"
+  },
+  "lines": {
+    "orderLine": "明細 {line}",
+    "lot": "ロット {lot}",
+    "serial": "シリアル {serial}",
+    "actionsFor": "明細 {line} の操作",
+    "empty": "この伝票には明細がありません。"
+  },
+  "related": {
+    "tab": "関連",
+    "empty": "関連する伝票はありません。"
+  },
+  "cartons": {
+    "set": "梱包箱を設定…",
+    "clear": "梱包箱をクリア",
+    "all": "すべてを1つの梱包箱に入れる…",
+    "setTitle": "明細 {line} の梱包箱",
+    "allTitle": "{number} のすべての明細を1つの梱包箱に入れる",
+    "placeholder": "例: C1",
+    "saved": "梱包箱を保存しました。",
+    "failed": "梱包箱を保存できませんでした。"
+  },
+  "pick": {
+    "listTitle": "ピッキングリスト",
+    "listDescription": "発行済みの受注をピッキングするロケーション。発行済みの受注からピッキングリストを作成し、リリースしてロケーションを確保してから出荷します。",
+    "createFromOrder": "ピッキングリストを作成",
+    "release": "リリース",
+    "released": "{number} をリリースし、ロケーションを確保しました。",
+    "releasePending": "{number} は承認待ちです。",
+    "releaseFailed": "ピッキングリストをリリースできませんでした。",
+    "createShipment": "出荷を作成",
+    "shipmentCreated": "出荷 {number} を作成しました。",
+    "shipFailed": "出荷を作成できませんでした。",
+    "openShipment": "出荷 {number} を開く",
+    "voidTitle": "{number} を無効にする",
+    "voidMessage": "無効にしたピッキングリストはロケーションを確保しなくなります。理由とともに記録に残ります。",
+    "voided": "{number} を無効にしました。",
+    "voidFailed": "ピッキングリストを無効にできませんでした。",
+    "draftHint": "下書きは在庫を確保しません。リリースするとピッキング用にロケーションを確保します。"
+  },
+  "create": {
+    "title": "{order} の新しいピッキングリスト",
+    "loading": "ピッキングする明細を読み込んでいます…",
+    "loadFailed": "ピッキングする明細を読み込めませんでした。",
+    "empty": "この受注にはピッキングする未出荷の在庫明細がありません。",
+    "hint": "明細を複製すると2つのロケーションからピッキングできます。数量を空欄にするとその明細は後回しになります。",
+    "nothingPickable": "既にピッキングリスト上にあります",
+    "noStock": "この品目を保管しているロケーションはありません",
+    "otherWarehouse": "{warehouse} から出荷",
+    "binOption": "{bin} · 在庫 {onHand}",
+    "noLines": "少なくとも1つの明細にピッキング数量を入力してください。",
+    "binRequired": "受注明細 {line} のロケーションを選択してください。",
+    "created": "ピッキングリスト {number} を作成しました。",
+    "failed": "ピッキングリストを作成できませんでした。"
+  },
+  "shipment": {
+    "listTitle": "出荷",
+    "listDescription": "倉庫から出ていく商品。運送会社と追跡番号を指定し、梱包箱に詰めてから出荷を完了すると受注出荷記録が計上されます。",
+    "chooseCarrier": "運送会社を選択",
+    "noCarriers": "有効な運送会社がありません。倉庫 → 運送会社で追加してください",
+    "chooseService": "サービスを選択",
+    "carrierRequired": "運送会社を選択してください。",
+    "serviceRequired": "運送会社のサービスを選択してください。",
+    "carrierHint": "この出荷を完了する前に運送会社とサービスを指定してください。",
+    "saved": "{number} を保存しました。",
+    "saveFailed": "出荷を保存できませんでした。",
+    "complete": "完了",
+    "completeTitle": "{number} を完了",
+    "completeMessage": "完了すると受注出荷記録が計上され、ピッキングしたロケーションから在庫が出庫され、ピッキングリストの確保が終了します。ここでは元に戻せません。",
+    "completeNeedsPost": "出荷の完了は在庫を移動するため、在庫を計上する権限が必要です。",
+    "completed": "{number} を完了し、{fulfillment} を計上しました。",
+    "completeFailed": "出荷を完了できませんでした。",
+    "voidTitle": "{number} を無効にする",
+    "voidMessage": "無効にした出荷は何も出荷しません。ピッキングリストは引き続きロケーションを確保します。",
+    "voided": "{number} を無効にしました。",
+    "voidFailed": "出荷を無効にできませんでした。",
+    "openPickList": "ピッキングリスト {number} を開く"
+  },
+  "tracking": {
+    "action": "追跡情報をメール送信…",
+    "title": "{number} の追跡情報をメール送信",
+    "recipient": "宛先",
+    "recipientPlaceholder": "メールアドレス",
+    "message": "メッセージ(任意)",
+    "messagePlaceholder": "顧客へのメモを追加するか、空欄のままにしてください",
+    "confirm": "運送会社と追跡リンクを {to} に送信しますか?",
+    "send": "送信",
+    "sent": "追跡情報を {to} に送信しました。",
+    "failed": "追跡メールを送信できませんでした。"
+  }
+}
