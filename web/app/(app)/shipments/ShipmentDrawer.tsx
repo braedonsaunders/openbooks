@@ -42,6 +42,7 @@ interface CompletedShipment {
  */
 export function ShipmentDrawer({ data, initialMode = 'view' }: { data: FulfillmentDrawerData; initialMode?: DrawerMode }) {
   const t = useTranslations('fulfillment')
+  const tPdf = useTranslations('pdfTemplates')
   const tCommon = useTranslations('common')
   const router = useRouter()
   const { busy, refusal, execute, refuse, clearRefusal } = useAppAction()
@@ -64,6 +65,7 @@ export function ShipmentDrawer({ data, initialMode = 'view' }: { data: Fulfillme
     return [...active, { ...shipment.carrier, services: shipment.carrierService ? [shipment.carrierService] : [] }]
   }, [data.carriers, shipment.carrier, shipment.carrierService])
   const services = carriers.find((carrier) => carrier.id === carrierId)?.services ?? []
+  const cartonCount = new Set(shipment.lines.map((line) => line.carton?.trim()).filter(Boolean)).size
 
   function resetCarrier() {
     setCarrierId(shipment.carrier?.id ?? '')
@@ -289,6 +291,18 @@ export function ShipmentDrawer({ data, initialMode = 'view' }: { data: Fulfillme
   ) : (
     <>
       <PdfButton recordType="shipment" recordId={shipment.id} />
+      <PdfButton
+        recordType="shipment_carton_label"
+        recordId={shipment.id}
+        label={tPdf('recordTypes.shipment_carton_label')}
+        disabled={busy || cartonCount === 0}
+      />
+      <PdfButton
+        recordType="shipment_shipping_label"
+        recordId={shipment.id}
+        label={tPdf('recordTypes.shipment_shipping_label')}
+        disabled={busy || !shipment.trackingNumber}
+      />
       {data.canManage && draft ? (
         <>
           <Button
