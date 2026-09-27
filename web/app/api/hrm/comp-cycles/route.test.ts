@@ -39,14 +39,13 @@ const mockSources = new Map<string, string>([
         }
         return state.gate
       }
-    `,
-  ],
-  [
-    "mock:features",
-    `
-      const state = globalThis[Symbol.for('openbooks.hrm-comp-cycles-route-test')]
-      export async function isFeatureEnabled(orgId, key) {
-        return state.features[key] === true
+      export async function getAuthz() { return 'status' in state.gate ? null : state.gate }
+      export async function isFeatureEnabled(orgId, key) { return state.features[key] === true }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
+      export async function guardFeaturePermission(permission, feature) {
+        const gate = await guardPermission(permission)
+        return 'status' in state.gate ? gate : state.features[feature] ? gate : globalThis.openbooksHrmCompCyclesRouteNextResponse.json({ error: 'not found' }, { status: 404 })
       }
     `,
   ],
@@ -135,12 +134,11 @@ const mockSources = new Map<string, string>([
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmCompCyclesRouteNextResponse = NextResponse;
 
 const mockUrls = new Map<string, string>([
-  ["../../../../lib/authz", "mock:authz"],
-  ["../../../../../lib/authz", "mock:authz"],
   ["../../../../../../../lib/authz", "mock:authz"],
-  ["../../../../lib/features", "mock:features"],
-  ["../../../../../lib/features", "mock:features"],
-  ["../../../../../../../lib/features", "mock:features"],
+  ["../../../../../lib/features", "mock:authz"],
+  ["../../../../../../../lib/features", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/feature-gates", "mock:authz"],
   ["@openbooks/engine/src/hrm/compensation/cycles.ts", "mock:cycles"],
 ]);
 
@@ -166,7 +164,7 @@ let lineRoute: typeof import("./[id]/lines/[lineId]/route.ts") | undefined;
   collectionRoute = (await import(collectionUrl)) as typeof import("./route.ts");
   itemRoute = (await import(itemUrl)) as typeof import("./[id]/route.ts");
   lineRoute = (await import(lineUrl)) as typeof import("./[id]/lines/[lineId]/route.ts");
-  hooks.deregister();
+  test.after(() => hooks.deregister());
 }
 
 const CYCLE_ID = "00000000-0000-4000-8000-000000000081";
