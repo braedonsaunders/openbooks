@@ -18,8 +18,9 @@ registerHooks({
   },
 });
 const { sql } = await import("drizzle-orm");
-const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { listScopedAccountOptions } = await import('./scoped-options');
 const { PATCH } = await import("../app/api/accounts/[id]/route");
 const { POST } = await import("../app/api/accounts/route");
 
@@ -213,6 +214,28 @@ const accountListCases = [
           } finally {
             await withBypass(() => dropScratchOrg(scratch.orgId))
           }
+        })
+  } },
+  { label: "account option subsidiary scope", register: async () => {
+        test('account option reader includes only accounts assigned to the caller subsidiaries', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+          await withBypassContext(async () => {
+            const org = await createScratchOrg()
+            try {
+              const other = randomUUID(), visible = randomUUID(), hidden = randomUUID(), shared = randomUUID()
+              await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+                values (${other},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`)
+              await db.execute(sql`insert into accounts(id,org_id,number,name,type,subsidiary_id,is_active,is_summary)
+                values (${visible},${org.orgId},'93001','Visible clearing','expense',${org.subsidiaryId},true,false),
+                       (${hidden},${org.orgId},'93002','Hidden clearing','expense',${other},true,false),
+                       (${shared},${org.orgId},'93003','Shared clearing','expense',null,true,false)`)
+              const scoped = await listScopedAccountOptions(org.orgId, new Set([org.subsidiaryId]), { activeOnly: true, postingOnly: true })
+              const all = await listScopedAccountOptions(org.orgId, null, { activeOnly: true, postingOnly: true })
+              assert.ok(scoped.some(account => account.id === visible))
+              assert.ok(!scoped.some(account => account.id === hidden))
+              assert.ok(scoped.some(account => account.id === shared), 'null subsidiary is shared master data')
+              assert.ok(all.some(account => account.id === hidden))
+            } finally { await dropScratchOrg(org.orgId) }
+          })
         })
   } },
 ] as const;

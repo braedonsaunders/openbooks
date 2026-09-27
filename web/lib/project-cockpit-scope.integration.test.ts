@@ -812,3 +812,37 @@ test('independent task editors do not upgrade their shared project locks', { ski
   }finally{go();await Promise.allSettled(edits);await dropScratchOrg(org.orgId);}
 });
 }}] as const; for (const row of taskRevisionCases) await row.register();
+
+const subcontractTransitionCases = [{ label: "subcontract transition validation", register: async () => {
+  const stateKey = Symbol.for("openbooks.subcontract-transition-route-test");
+  const state = { transitionCalls: 0 };
+  (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
+  const { registerHooks } = await import("node:module");
+  const mockSources = new Map<string, string>([
+    ["mock:authz", "export async function guardPermission(){return {user:{orgId:'org-1',id:'user-1'},permissions:new Set(['*']),allowedSubsidiaryIds:null}};export function guardSubsidiaryScope(){return null}"],
+    ["mock:subsidiaries", "export function subsidiaryVisibleFilter(){return ''}"],
+    ["mock:feature-gate", "export async function guardSubcontractsFeature(){return null}"],
+    ["mock:features", "export async function isFeatureEnabled(){return true}"],
+    ["mock:db", "export const db={async execute(){throw Error('database work should not run for invalid transitions')},async transaction(){throw Error('transaction work should not run for invalid transitions')}}"],
+    ["mock:subcontracts", `const state=globalThis[Symbol.for('openbooks.subcontract-transition-route-test')];export {parseSubcontractTransitionAction,SubcontractConflictError,SubcontractError} from ${JSON.stringify(new URL('../../engine/src/projects/subcontracts.ts',import.meta.url).href)};export async function transitionSubcontract(){state.transitionCalls++};export function addSubcontractSovLine(){};export function approveSubcontract(){};export function approveSubcontractChangeOrder(){};export function approveVendorPayApplication(){};export function createSubcontract(){};export function createSubcontractChangeOrder(){};export function createSubcontractPaymentControl(){};export function createVendorPayApplication(){};export function generateVendorPayApplicationBill(){};export function releaseSubcontractPaymentControl(){};export function releaseVendorRetainage(){};export function removeSubcontractSovLine(){};export function submitSubcontract(){};export function submitVendorPayApplication(){};export function updateDraftSubcontract(){};export function updateVendorPayApplicationLines(){};export function voidSubcontractChangeOrder(){};export function voidVendorPayApplication(){}`],
+  ]);
+  const mockUrls = new Map<string, string>([
+    ["../../../lib/authz", "mock:authz"], ["../../../lib/subcontracts-gate", "mock:feature-gate"], ["../../../lib/subsidiaries", "mock:subsidiaries"],
+    ["../../../lib/features", "mock:features"], ["@openbooks/engine/src/platform/db.ts", "mock:db"], ["@openbooks/engine/src/projects/subcontracts.ts", "mock:subcontracts"],
+  ]);
+  const hooks = registerHooks({
+    resolve(specifier, context, next) { const mock = mockUrls.get(specifier); return mock ? { url: mock, shortCircuit: true } : next(specifier, context) },
+    load(url, context, next) { const source = mockSources.get(url); return source === undefined ? next(url, context) : { format: "module", source, shortCircuit: true } },
+  });
+  const { POST } = await import("../app/api/subcontracts/route.ts?subcontract-transition-contract");
+  hooks.deregister();
+  test("subcontract API refuses an invalid transition before the engine call", async () => {
+    state.transitionCalls = 0;
+    const response = await POST(new Request("http://openbooks.test/api/subcontracts", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "transitionSubcontract", id: "subcontract-1", transition: "approve" }) }));
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "Invalid subcontract transition action" });
+    assert.equal(state.transitionCalls, 0, "invalid input must not reach the transition engine");
+  });
+}}] as const;
+for (const row of subcontractTransitionCases) await row.register();
