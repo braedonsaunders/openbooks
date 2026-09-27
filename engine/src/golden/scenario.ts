@@ -297,6 +297,58 @@ async function saasMetricsTieOut(orgId: string): Promise<Check> {
   };
 }
 
+async function overheadRecomputes(orgId: string): Promise<Check> {
+  const mismatches = await all<{ entry_id: string; line_number: number | null; expected: string | null; actual: string | null; reason: string }>(sql`
+    with expected as (
+      select te.org_id, te.id as time_entry_id, te.overhead_journal_entry_id as entry_id,
+             (select sum(round(te.hours * r.rate_percent, 4))::numeric(19,4)
+                from overhead_rates r
+               where r.org_id = te.org_id and r.rate_kind = 'per_hour'
+                 and (r.department_id is null or r.department_id = te.department_id)
+                 and r.effective_from <= te.worked_on
+                 and (r.effective_to is null or r.effective_to >= te.worked_on)
+                 and not exists (
+                   select 1 from overhead_rates specific_rate
+                    where specific_rate.org_id = te.org_id and specific_rate.rate_kind = r.rate_kind
+                      and specific_rate.department_id = te.department_id and r.department_id is null
+                      and specific_rate.effective_from <= te.worked_on
+                      and (specific_rate.effective_to is null or specific_rate.effective_to >= te.worked_on))) as amount
+        from time_entries te
+       where te.org_id = ${orgId} and te.overhead_journal_entry_id is not null
+    ), actual as (
+      select e.time_entry_id, l.entry_id, l.line_number, al.amount::text as amount,
+             l.amount::text as line_amount,
+             sum(e.amount) over (partition by l.id)::text as expected_line_amount,
+             count(*) over (partition by e.time_entry_id) as lineage_lines
+        from expected e
+        join allocation_lineage al on al.org_id = e.org_id and al.source_time_entry_id = e.time_entry_id
+          and al.journal_entry_id = e.entry_id
+        join journal_lines l on l.org_id = al.org_id and l.id = al.journal_line_id and l.entry_id = e.entry_id
+        join journal_entries je on je.org_id = l.org_id and je.id = l.entry_id
+       where je.origin = 'overhead_applied' and je.status = 'posted'
+    )
+    select e.entry_id, a.line_number, e.amount::text as expected, a.amount as actual,
+           case when e.amount is null then 'no effective per-hour rate'
+                when a.time_entry_id is null then 'missing allocation lineage'
+                when a.lineage_lines <> 1 then 'time entry has multiple allocation lines'
+                when a.amount::numeric <> e.amount then 'recomputed amount differs from allocation lineage'
+                when a.line_amount::numeric <> a.expected_line_amount::numeric then 'recomputed amount differs from journal line'
+                else 'recomputed amount differs' end as reason
+      from expected e left join actual a on a.time_entry_id = e.time_entry_id
+     where e.amount is null or a.time_entry_id is null or a.lineage_lines <> 1 or a.amount::numeric <> e.amount
+        or a.line_amount::numeric <> a.expected_line_amount::numeric
+     order by e.entry_id, a.line_number nulls first limit 5
+  `);
+  const first = mismatches[0];
+  return {
+    name: "overhead-recomputes",
+    ok: mismatches.length === 0,
+    detail: first
+      ? `${mismatches.length} overhead time-entry line mismatch(es); first entry ${first.entry_id}, line ${first.line_number ?? "missing"}: ${first.reason}, expected ${first.expected}, actual ${first.actual ?? "missing"}`
+      : "all posted overhead time-entry lines recompute from their effective per-hour rate",
+  };
+}
+
 /** Run the non-destructive fixture verification for one org. */
 /**
  * The runtime role the probe assumes when the harness login bypasses RLS.
@@ -736,6 +788,7 @@ export async function runScenario(
        where l.org_id = ${orgId} and e.origin = 'overhead_applied' and e.status in ('posted','reversed')
        group by l.account_id having abs(sum(l.amount)) >= 0.005) x`);
   checks.push({ name: "overhead-pair-zero", ok: Number(ovh.n) === 0, detail: `${ovh.n} accounts moved by overhead_applied entries (want 0 — pairs must net to zero)` });
+  checks.push(await overheadRecomputes(orgId));
 
   // Netting to zero is necessary but NOT sufficient: a pair can net to zero and
   // still be applied backwards, putting a CREDIT on every job. The P&L looks

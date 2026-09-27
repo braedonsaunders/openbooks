@@ -182,7 +182,11 @@ correct while job cost was understated by the entire overhead amount —
 invisible on a trial balance, visible only in job costing. So the direction is
 asserted too.
 
-*Checked by:* harness (`overhead-pair-zero`, `overhead-burdens-jobs`).
+*Checked by:* harness (`overhead-pair-zero`, `overhead-burdens-jobs`,
+`overhead-recomputes`). The recomputation check prices each carried time entry
+from its effective per-hour rate and compares the recorded allocation lineage
+to the posted project leg; a rate change cannot silently rewrite the amount
+that was posted.
 
 ### 10. The audit trail cannot be rewritten
 
