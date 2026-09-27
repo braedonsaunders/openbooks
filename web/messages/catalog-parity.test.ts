@@ -2248,8 +2248,23 @@ const COGNATES = new Set<string>([
   'fr:common.status.ok|OK',
   'fr:common.transactionTypes.journal|Journal',
   'fr:common.transactionTypes.projectChargeShort|Charge',
-  // RMA is the abbreviation French trade documents use for a return authorization.
+  // RMA is the abbreviation French and Spanish trade documents use for a return authorization.
   'fr:common.transactionTypes.returnAuthorizationShort|RMA',
+  'es:common.transactionTypes.returnAuthorizationShort|RMA',
+  // German, Brazilian Portuguese, Chinese and Japanese trade documents also write the RMA abbreviation.
+  'de:common.transactionTypes.returnAuthorizationShort|RMA',
+  'pt-BR:common.transactionTypes.returnAuthorizationShort|RMA',
+  'zh:common.transactionTypes.returnAuthorizationShort|RMA',
+  'ja:common.transactionTypes.returnAuthorizationShort|RMA',
+  // Aggregation, Maximum, Operation, Operator and Format are spelled identically in German.
+  'de:admin.setup.fields.aggregation|Aggregation',
+  'de:admin.setup.options.usageAggregation.max|Maximum',
+  'de:reports.custom.builder.formulaOperandOperation|Operation',
+  'de:reports.custom.builder.formulaOperator|Operator',
+  'de:reports.custom.builder.formulaFormat|Format',
+  // Zero and Status are spelled identically in Brazilian Portuguese.
+  'pt-BR:reports.custom.builder.formulaGuardZero|Zero',
+  'pt-BR:reports.catalog.columns.grant_pipeline.status|Status',
   'fr:nav.groups.pipeline|Pipeline',
   'fr:nav.modules.admin|Administration',
   'fr:nav.modules.admin-scripts|Scripts',
