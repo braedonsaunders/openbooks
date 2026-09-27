@@ -1,8 +1,1 @@
-[
-  {
-    "path": "web/app/api/recruiting/apply/_org.ts",
-    "fn": "applyViaPostingForOrg",
-    "calls": 1,
-    "finding": "resolves one public posting id without an organization credential; no listed bypass reason applies because the lookup is anonymous and keyed by an object id rather than a token."
-  }
-]
+[]
