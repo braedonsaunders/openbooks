@@ -299,7 +299,6 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'new-account': { props: ['currentParams', 'label'] },
   'new-api-key': { props: [] },
   'new-asset': { props: ['currentParams'] },
-  'new-asset-redirect': { props: [] },
   'new-automation': { props: ['label'] },
   'new-bank-rule': { props: [] },
   'new-budget': { props: ['currentParams'] },

@@ -102,7 +102,6 @@ const packsUrl = '../tax-depreciation-packs/route.ts?asset-tax-scope-test'
 const { POST: installPack } = (await import(packsUrl)) as typeof import('../tax-depreciation-packs/route.ts')
 const assignmentsUrl = './route.ts?asset-tax-scope-test'
 const { PATCH: assignCategory } = (await import(assignmentsUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(restricted: boolean): void {
   assetTaxState.restricted = restricted

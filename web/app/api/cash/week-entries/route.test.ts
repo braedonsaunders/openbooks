@@ -108,6 +108,7 @@ if (process.env.VITEST) {
 } else {
   const mockUrls = new Map<string, string>([
     ["../../../../lib/authz", "mock:authz"],
+    ["@/lib/authz", "mock:authz"],
     ["../../../../lib/features", "mock:authz"],
     ["../../../../lib/analytics/config", "mock:analytics-config"],
     ["../../../../lib/cash/core", "mock:cash-core"],
@@ -126,7 +127,7 @@ if (process.env.VITEST) {
     },
   });
   ({ GET } = (await import("./route.ts")) as typeof import("./route.ts"));
-  hooks.deregister();
+
 }
 
 function reset(allowedSubsidiaryIds: Set<string> | null): void {

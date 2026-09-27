@@ -24,7 +24,7 @@ const mockAuthz = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../lib/authz' || specifier === '../../../../lib/authz') return { shortCircuit: true, url: 'mock:file-authz' }
+    if ((specifier === '@/lib/authz' || specifier === '../../../lib/authz') || specifier === '../../../../lib/authz') return { shortCircuit: true, url: 'mock:file-authz' }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
@@ -35,7 +35,6 @@ const hooks = registerHooks({
 
 const routeSpecifier: string = './route.ts?file-upload-test'
 const { POST } = (await import(routeSpecifier)) as typeof import('./route.ts')
-hooks.deregister()
 
 test('file upload rolls back metadata when its audit append fails', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()

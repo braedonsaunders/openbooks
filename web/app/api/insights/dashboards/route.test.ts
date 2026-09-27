@@ -102,6 +102,14 @@ stubModules({
         return new Response(null, { status: 403 })
       }
     `,
+    "@/lib/authz": `
+      export async function guardPermission(permission) {
+        if (permission === 'insights.read' || permission === 'insights.create') {
+          return { user: { orgId: 'org-1', id: 'user-1' } }
+        }
+        return new Response(null, { status: 403 })
+      }
+    `,
     "../../_lib": `
       const state = globalThis[Symbol.for('openbooks.dashboard-route-test')]
       export async function loadDashboard() { return state.dashboard }

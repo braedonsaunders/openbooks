@@ -1,32 +1,47 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
-import { NextResponse } from 'next/server'
-import { installTaxDepreciationPack, taxDepreciationPacks } from '@openbooks/engine/src/tax-returns/depreciation-packs.ts'
-import { guardUnrestrictedScope } from '../../../../lib/authz'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import {
+  installTaxDepreciationPack,
+  taxDepreciationPacks,
+} from "@openbooks/engine/src/tax-returns/depreciation-packs.ts";
+import { guardUnrestrictedScope } from "../../../../lib/authz";
+const postBodySchema0 = z.strictObject({
+  code: z.string().trim().min(1, "code is required").max(100),
+});
 
-export const runtime = 'nodejs'
+export { runtime } from "@/lib/api/route";
 
-export async function GET() {
-  const gate = await guardFeaturePermission('assets.read', 'fixedAssets')
-  if (gate instanceof NextResponse) return gate
-  return NextResponse.json({ packs: taxDepreciationPacks() })
-}
+export const GET = defineRoute({
+  permission: "assets.read",
+  feature: "fixedAssets",
+  handler: async ({ authz: gate }) => {
+    return NextResponse.json({ packs: taxDepreciationPacks() });
+  },
+});
 
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('admin.setup.manage', 'fixedAssets')
-  if (gate instanceof NextResponse) return gate
-  // Tax depreciation packs install the org-wide regime every entity's
-  // assets depreciate under.
-  const unrestricted = guardUnrestrictedScope(gate)
-  if (unrestricted) return unrestricted
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { code?: string }
-  if (!body.code) return NextResponse.json({ error: 'code required' }, { status: 422 })
-  try {
-    return NextResponse.json(await installTaxDepreciationPack(gate.user.orgId, body.code, gate.user.id))
-  } catch (error) {
-    return apiErrorResponse(error, { safeStatus: 422 })
-  }
-}
+export const POST = defineRoute({
+  permission: "admin.setup.manage",
+  feature: "fixedAssets",
+  body: postBodySchema0,
+  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+    // Tax depreciation packs install the org-wide regime every entity's
+    // assets depreciate under.
+    const unrestricted = guardUnrestrictedScope(gate);
+    if (unrestricted) return unrestricted;
+
+    const body = routeBody as { code?: string };
+    try {
+      return NextResponse.json(
+        await installTaxDepreciationPack(
+          gate.user.orgId,
+          body.code,
+          gate.user.id,
+        ),
+      );
+    } catch (error) {
+      return apiErrorResponse(error, { safeStatus: 422 });
+    }
+  },
+});

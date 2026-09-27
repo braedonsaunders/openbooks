@@ -56,6 +56,7 @@ registerHooks({
     // No root tsconfig maps `@/` (only web/tsconfig does), so resolve the
     // app's alias the way PartyDrawer.test.tsx does: `@/lib/...` → web/lib.
     const parent = context.parentURL ?? ''
+    if (specifier === '@/lib/authz') return { shortCircuit: true, format: 'module', url: 'mock:authz-patch' }
     if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/list-views')) {
       // Late delegation: the route binds `db` at import time, before the
       // test installs its doubles, so the stub forwards on every call.

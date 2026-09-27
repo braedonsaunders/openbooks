@@ -1,22 +1,26 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
-import { NextResponse } from 'next/server'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
-import { isUuid } from '../../../../lib/list-params'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { approveSubmittedTimeEntries } from '../../../../lib/time-approval'
-import { isIsoDate, loadWeek, pinTimesheetEmployee, weekStart } from '../_lib'
+import { z } from "zod";
+import { isoDate } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import { isUuid } from "../../../../lib/list-params";
+import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { approveSubmittedTimeEntries } from "../../../../lib/time-approval";
+import { isIsoDate, loadWeek, pinTimesheetEmployee, weekStart } from "../_lib";
 import { notFound } from "@/lib/api/responses";
+const postBodySchema0 = z.strictObject({
+  employee: z.string().uuid("employee must be a valid id"),
+  week: isoDate("week must be a valid calendar date"),
+});
 
-
-export const runtime = 'nodejs'
+export { runtime } from "@/lib/api/route";
 
 function bad(error: string) {
-  return NextResponse.json({ error }, { status: 422 })
+  return NextResponse.json({ error }, { status: 422 });
 }
 
 interface Body {
-  employee?: string
-  week?: string
+  employee?: string;
+  week?: string;
 }
 
 /**
@@ -24,51 +28,69 @@ interface Body {
  * approved, stamped with the approver and timestamp. Draft entries are left
  * alone (submit them first) so approval is an explicit two-step gate.
  */
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('time.approve', 'timeTracking')
-  if (gate instanceof NextResponse) return gate
-  const { user } = gate
-  const orgId = user.orgId
+export const POST = defineRoute({
+  permission: "time.approve",
+  feature: "timeTracking",
+  body: postBodySchema0,
+  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+    const { user } = gate;
+    const orgId = user.orgId;
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Body
-  if (!body.employee || !isUuid(body.employee)) return bad('Invalid employee')
-  if (!body.week || !isIsoDate(body.week)) return bad('Invalid week')
-  const ownedEmployee = await pinTimesheetEmployee(orgId, body.employee, gate.allowedSubsidiaryIds)
-  if (!ownedEmployee) return bad('Employee not found')
-  const week = weekStart(body.week)
-
-  try {
-    await approveSubmittedTimeEntries({
+    const body = routeBody as Body;
+    if (!body.employee || !isUuid(body.employee))
+      return bad("Invalid employee");
+    if (!body.week || !isIsoDate(body.week)) return bad("Invalid week");
+    const ownedEmployee = await pinTimesheetEmployee(
       orgId,
-      actorId: user.id,
-      employeePartyId: ownedEmployee,
-      weekStart: week,
-      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-    })
-  } catch (error) {
-    if (error instanceof ScopeNotFoundError) return notFound("record")
-    const message = error instanceof Error ? error.message : String(error)
-    // Guard rejections carry their own sentence: nothing submitted (422), or
-    // the week's approval workflow still owns it (409). Anything else is a
-    // failed financial-effects unit, rolled back together.
-    if (/already approved/i.test(message)) {
-      return NextResponse.json({ error: message }, { status: 409 })
-    }
-    if (/no submitted entries|timesheet week not found/i.test(message)) {
-      return NextResponse.json({ error: message }, { status: 422 })
-    }
-    if (/pending approval workflow/i.test(message)) {
-      return NextResponse.json({ error: message }, { status: 409 })
-    }
-    console.error('[timesheets/approve] approval transaction rolled back:', error)
-    return NextResponse.json(
-      { error: 'Time approval could not complete its configured financial effects. No entries were approved.' },
-      { status: 409 },
-    )
-  }
+      body.employee,
+      gate.allowedSubsidiaryIds,
+    );
+    if (!ownedEmployee) return bad("Employee not found");
+    const week = weekStart(body.week);
 
-  const payload = await loadWeek(orgId, ownedEmployee, week, gate.allowedSubsidiaryIds)
-  return NextResponse.json(payload)
-}
+    try {
+      await approveSubmittedTimeEntries({
+        orgId,
+        actorId: user.id,
+        employeePartyId: ownedEmployee,
+        weekStart: week,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      });
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError)
+        return notFound("record");
+      const message = error instanceof Error ? error.message : String(error);
+      // Guard rejections carry their own sentence: nothing submitted (422), or
+      // the week's approval workflow still owns it (409). Anything else is a
+      // failed financial-effects unit, rolled back together.
+      if (/already approved/i.test(message)) {
+        return NextResponse.json({ error: message }, { status: 409 });
+      }
+      if (/no submitted entries|timesheet week not found/i.test(message)) {
+        return NextResponse.json({ error: message }, { status: 422 });
+      }
+      if (/pending approval workflow/i.test(message)) {
+        return NextResponse.json({ error: message }, { status: 409 });
+      }
+      console.error(
+        "[timesheets/approve] approval transaction rolled back:",
+        error,
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Time approval could not complete its configured financial effects. No entries were approved.",
+        },
+        { status: 409 },
+      );
+    }
+
+    const payload = await loadWeek(
+      orgId,
+      ownedEmployee,
+      week,
+      gate.allowedSubsidiaryIds,
+    );
+    return NextResponse.json(payload);
+  },
+});

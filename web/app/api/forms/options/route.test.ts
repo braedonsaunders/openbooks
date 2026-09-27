@@ -65,6 +65,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../../../lib/subsidiaries', 'mock:subsidiaries'],
   ['../../../../lib/projects-gate', 'mock:projects-gate'],
 ])
@@ -87,7 +88,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?form-options-permission-test'
 const { GET } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(permissions: string[] = [], scope: Set<string> | null = null): void {
   routeState.permissions = new Set(permissions)

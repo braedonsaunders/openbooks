@@ -115,6 +115,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../../../../../lib/setup/audit', 'mock:audit'],
   ['../../../_lib', 'mock:forms-lib'],
 ])
@@ -137,7 +138,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?form-template-publish-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   routeState.calls.length = 0

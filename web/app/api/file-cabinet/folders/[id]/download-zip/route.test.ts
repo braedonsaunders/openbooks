@@ -15,6 +15,9 @@ const mockSources = new Map<string, string>([
   [
     'mock:auth-lib',
     `
+      export async function getAuthz() {
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+      }
       export async function requireSession() {
         return { user: { orgId: 'org-1', id: 'user-1' } }
       }
@@ -61,6 +64,7 @@ const hooks = registerHooks({
       ['../../../../../../lib/file-cabinet', 'mock:cabinet'],
       ['../../../../../../lib/file-zip', 'mock:file-zip'],
       ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
+      ['@/lib/authz', 'mock:auth-lib'],
     ]).get(specifier)
     if (mocked) return { shortCircuit: true, format: 'module', url: mocked }
     return nextResolve(specifier, _context)
@@ -74,7 +78,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?folder-download-zip-route-test'
 const { GET } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   state.mode = 'ok'

@@ -75,7 +75,7 @@ const hooks = registerHooks({
   },
 });
 const route = await import("./route.ts");
-hooks.deregister();
+
 const id = "00000000-0000-4000-8000-000000000001";
 const context = { params: Promise.resolve({ id }) };
 const request = (body: unknown) =>

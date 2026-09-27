@@ -122,14 +122,23 @@ stubModules({
       export async function withBypass(work) { return work() }
       export async function withBypassContext(_opts, work) { return work() }
       export function registerRequestOrgResolver() {}
+      export function currentRequestOrgResolver() { return null }
     `,
     "../../../lib": `
+      export async function getAuthz() {
+        return { user: { orgId: '${ORG_ID}', id: '${ACTOR_ID}' }, allowedSubsidiaryIds: null }
+      }
       export async function requireSession() {
         return { user: { orgId: '${ORG_ID}', id: '${ACTOR_ID}' } }
       }
       export async function requireFolderAccess() { return null }
       export function fileViewer(gate) {
         return { userId: gate.user.id, isAdmin: false, baseline: 'manager', allowedSubsidiaryIds: null }
+      }
+    `,
+    "@/lib/authz": `
+      export async function getAuthz() {
+        return { user: { orgId: '${ORG_ID}', id: '${ACTOR_ID}' }, allowedSubsidiaryIds: null }
       }
     `,
   },

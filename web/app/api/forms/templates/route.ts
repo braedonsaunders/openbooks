@@ -1,24 +1,33 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
-import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { emptyFormSchema } from '@openbooks/forms-core'
-import { guardPermission } from '../../../../lib/authz'
-import { auditSetupChange } from '../../../../lib/setup/audit'
-import { pgErrorCode } from '../../../../lib/setup/coerce'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/src/platform/db.ts";
+import { emptyFormSchema } from "@openbooks/forms-core";
+import { auditSetupChange } from "../../../../lib/setup/audit";
+import { pgErrorCode } from "../../../../lib/setup/coerce";
 
-export const runtime = 'nodejs'
+export { runtime } from "@/lib/api/route";
 
-const KEY_RE = /^[a-z0-9][a-z0-9-]{1,63}$/
-const KINDS = new Set(['form', 'wizard', 'checklist', 'register'])
+const KEY_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
+const postBodySchema0 = z.strictObject({
+  key: z.string().trim().toLowerCase().regex(KEY_RE, "key must be 2–64 chars: lowercase letters, numbers, hyphens"),
+  name: z.string().trim().min(1, "name is required").max(200),
+  kind: z.enum(["form", "wizard", "checklist", "register"]).optional(),
+  category: z.string().trim().max(120).nullable().optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+});
 
 /** List templates with latest-version + response rollups. */
-export async function GET() {
-  const gate = await guardPermission('admin.customization.manage')
-  if (gate instanceof NextResponse) return gate
-  const { user } = gate
+export const GET = defineRoute({
+  permission: "admin.customization.manage",
+  feature: {
+    none: "This admin surface is governed by its permission and has no separate organization feature switch.",
+  },
+  handler: async ({ authz: gate }) => {
+    const { user } = gate;
 
-  const r = ((await db.execute(sql`
+    const r = await db.execute(sql`
     select t.id, t.key, t.name, t.category, t.description, t.status, t.kind,
            t.allowed_roles, t.updated_at,
            v.max_version, v.version_count, v.published_version,
@@ -36,98 +45,85 @@ export async function GET() {
       ) rc on true
      where t.org_id = ${user.orgId}
      order by t.status = 'archived', t.name
-  `)))
+  `);
 
-  return NextResponse.json({ templates: r.rows })
-}
+    return NextResponse.json({ templates: r.rows });
+  },
+});
 
 /** Create a template + its version-1 draft schema. */
-export async function POST(req: Request) {
-  const gate = await guardPermission('admin.customization.manage')
-  if (gate instanceof NextResponse) return gate
-  const { user } = gate
+export const POST = defineRoute({
+  permission: "admin.customization.manage",
+  feature: {
+    none: "This admin surface is governed by its permission and has no separate organization feature switch.",
+  },
+  body: postBodySchema0,
+  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+    const { user } = gate;
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    key?: unknown
-    name?: unknown
-    kind?: unknown
-    category?: unknown
-    description?: unknown
-  }
-  // The body is an open object: a numeric name/key/category would crash
-  // String.prototype calls with a 500. Refuse non-string scalars by name.
-  for (const field of ['name', 'key', 'category', 'description'] as const) {
-    const value = body[field]
-    if (value !== undefined && value !== null && typeof value !== 'string') {
-      return NextResponse.json({ error: `${field} must be a string` }, { status: 400 })
-    }
-  }
-  if (body.kind !== undefined && typeof body.kind !== 'string') {
-    return NextResponse.json({ error: 'kind must be a string' }, { status: 400 })
-  }
-  const name = (body.name as string | undefined)?.trim()
-  const key = (body.key as string | undefined)?.trim().toLowerCase()
-  if (!name || !key) {
-    return NextResponse.json({ error: 'name and key are required' }, { status: 400 })
-  }
-  if (!KEY_RE.test(key)) {
-    return NextResponse.json(
-      { error: 'key must be 2–64 chars: lowercase letters, numbers, hyphens' },
-      { status: 400 },
-    )
-  }
-  const kind = body.kind && KINDS.has(body.kind as string) ? (body.kind as string) : 'form'
-  const category = body.category as string | null | undefined
-  const description = body.description as string | null | undefined
+    const body = routeBody;
+    const name = body.name;
+    const key = body.key;
+    const kind = body.kind ?? "form";
+    const category = body.category;
+    const description = body.description;
 
-  // Parent + version 1 commit atomically: separate autocommitted statements
-  // strand an unusable template (key burned, no draft) when the version
-  // write fails, and concurrent creators can both pass the dupe check.
-  try {
-    const outcome = await db.transaction(async (tx) => {
-      const dupe = ((await tx.execute(sql`
+    // Parent + version 1 commit atomically: separate autocommitted statements
+    // strand an unusable template (key burned, no draft) when the version
+    // write fails, and concurrent creators can both pass the dupe check.
+    try {
+      const outcome = await db.transaction(async (tx) => {
+        const dupe = await tx.execute(sql`
         select 1 from form_templates where org_id = ${user.orgId} and key = ${key}
-      `)))
-      if (dupe.rows.length > 0) return { kind: 'dupe' as const }
+      `);
+        if (dupe.rows.length > 0) return { kind: "dupe" as const };
 
-      const inserted = (await tx.execute<{ id: string }>(sql`
+        const inserted = await tx.execute<{ id: string }>(sql`
         insert into form_templates (org_id, key, name, category, description, status, kind, created_by, updated_by)
         values (${user.orgId}, ${key}, ${name}, ${category?.trim() || null},
                 ${description?.trim() || null}, 'draft', ${kind}, ${user.id}, ${user.id})
         returning id
-      `))
-      const templateId = inserted.rows[0]!.id
+      `);
+        const templateId = inserted.rows[0]!.id;
 
-      await tx.execute(sql`
+        await tx.execute(sql`
         insert into form_template_versions (org_id, template_id, version, schema, created_by, updated_by)
         values (${user.orgId}, ${templateId}, 1,
                 ${JSON.stringify(emptyFormSchema(name))}::jsonb, ${user.id}, ${user.id})
-      `)
-      await auditSetupChange(
-        {
-          orgId: user.orgId,
-          table: 'form_templates',
-          rowId: templateId,
-          action: 'insert',
-          changes: { after: { key, name, kind } },
-          actorId: user.id,
-        },
-        tx,
-      )
-      return { kind: 'created' as const, templateId }
-    })
-    if (outcome.kind === 'dupe') {
-      return NextResponse.json({ error: `an app with key "${key}" already exists` }, { status: 409 })
+      `);
+        await auditSetupChange(
+          {
+            orgId: user.orgId,
+            table: "form_templates",
+            rowId: templateId,
+            action: "insert",
+            changes: { after: { key, name, kind } },
+            actorId: user.id,
+          },
+          tx,
+        );
+        return { kind: "created" as const, templateId };
+      });
+      if (outcome.kind === "dupe") {
+        return NextResponse.json(
+          { error: `an app with key "${key}" already exists` },
+          { status: 409 },
+        );
+      }
+      return NextResponse.json(
+        { id: outcome.templateId, key },
+        { status: 201 },
+      );
+    } catch (e) {
+      // The in-transaction dupe check loses to a concurrent creator; the
+      // unique index is the arbiter and its violation is the same 409.
+      if (pgErrorCode(e) === "23505") {
+        return NextResponse.json(
+          { error: `an app with key "${key}" already exists` },
+          { status: 409 },
+        );
+      }
+      throw e;
     }
-    return NextResponse.json({ id: outcome.templateId, key }, { status: 201 })
-  } catch (e) {
-    // The in-transaction dupe check loses to a concurrent creator; the
-    // unique index is the arbiter and its violation is the same 409.
-    if (pgErrorCode(e) === '23505') {
-      return NextResponse.json({ error: `an app with key "${key}" already exists` }, { status: 409 })
-    }
-    throw e
-  }
-}
+  },
+});

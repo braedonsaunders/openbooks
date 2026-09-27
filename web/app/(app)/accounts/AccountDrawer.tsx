@@ -177,8 +177,11 @@ export function AccountDrawer({
   // off. Otherwise single-currency orgs have no UI path to set reconcilable.
   const showCurrencyField = multiCurrency || form.reconcilable
 
-  function errorMessage(code: unknown) {
+  function errorMessage(code: unknown, remedy?: unknown) {
     const key = typeof code === 'string' ? code : 'save_failed'
+    if (key === 'idempotency-conflict' && typeof remedy === 'string' && remedy.trim()) {
+      return remedy
+    }
     const known = new Set([
       'name_required', 'invalid_type', 'type_has_transactions', 'invalid_parent', 'parent_must_be_summary',
       'parent_type_mismatch', 'parent_cycle', 'summary_reconcilable_conflict', 'reconcilable_currency_required', 'summary_has_transactions', 'summary_has_children',
@@ -236,13 +239,14 @@ export function AccountDrawer({
           ...(multiSubsidiary ? { eliminate } : {}),
         }),
       })
-      const data = await response.json().catch(() => ({}))
       if (!response.ok) {
-        const message = errorMessage(data.error)
+        const data = await response.json().catch(() => ({}))
+        const message = errorMessage(data.error, data.remedy)
         setFieldError(message)
         toast.error(message)
         return
       }
+      const data = await response.json()
       toast.success(t(createMode ? 'drawer.created' : 'drawer.saved'))
     // Typing hygiene is advisory: the save stands, and the server's warning
     // (e.g. a bank-typed account with no bank corroboration) surfaces as its

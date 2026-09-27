@@ -199,7 +199,9 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/organization/subsidiary-scope.ts", "mock:psp-settlement"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
   ["../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
   ["../../../../lib/feature-gates", "mock:feature-gates"],
+  ["@/lib/feature-gates", "mock:feature-gates"],
   ["../../../../lib/features", "mock:features"],
 ]);
 
@@ -220,7 +222,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?psp-permission-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
 
 function reset(permissions: string[]): void {
   routeState.permissions = new Set(permissions);
@@ -250,7 +251,7 @@ test("GET hides batches and provider configs from other subsidiaries", async () 
     { id: "batch-b", subsidiaryId: "sub-b", netAmount: "20.0000" },
   ];
 
-  const response = await GET();
+  const response = await GET(new Request("http://openbooks.test/api/psp/settlements"));
 
   assert.equal(response.status, 200);
   const payload = await response.json() as { batches: Array<{ id: string }>; configs: unknown[] };
@@ -268,7 +269,7 @@ test("GET lists in-scope subsidiaries for the import picker", async () => {
     { id: "sub-b", name: "Second Co", baseCurrency: "USD" },
   ];
 
-  const response = await GET();
+  const response = await GET(new Request("http://openbooks.test/api/psp/settlements"));
 
   assert.equal(response.status, 200);
   const payload = await response.json() as { subsidiaries: Array<{ id: string }> };
@@ -281,7 +282,7 @@ test("GET omits subsidiary options for single-entity orgs", async () => {
   routeState.subsidiaryRows = [{ id: "sub-a", name: "Main Co", baseCurrency: "USD" }];
   routeState.multiSubsidiary = false;
 
-  const response = await GET();
+  const response = await GET(new Request("http://openbooks.test/api/psp/settlements"));
 
   assert.equal(response.status, 200);
   const payload = await response.json() as { subsidiaries: unknown[] };
@@ -347,7 +348,7 @@ test("saveConfig rejects truthy text instead of enabling the provider", async ()
   });
 
   assert.equal(response.status, 400);
-  assert.deepEqual(await response.json(), { error: "isEnabled must be a boolean" });
+  assert.equal((await response.json() as { error: string }).error, "isEnabled must be a boolean");
   assert.deepEqual(routeState.domainCalls, []);
 });
 
@@ -391,7 +392,7 @@ const reconciliationActions: Array<{
       provider: "stripe",
       externalRef: "payout-1",
       settlementDate: "2026-08-24",
-      transactions: [],
+      transactions: [{ id: "transaction-1", type: "charge", amount: 100, currency: "USD" }],
     },
   },
   { action: "post", body: { action: "post", batchId: "00000000-0000-4000-8000-0000000000b1" } },
@@ -430,7 +431,7 @@ test("restricted import requires an in-scope subsidiary", async () => {
     provider: "stripe",
     externalRef: "payout-other",
     settlementDate: "2026-08-24",
-    transactions: [],
+    transactions: [{ id: "transaction-1", type: "charge", amount: 100, currency: "USD" }],
     subsidiaryId: "sub-b",
   });
 
@@ -447,7 +448,7 @@ test("restricted import dispatches an in-scope subsidiary", async () => {
     provider: "stripe",
     externalRef: "payout-own",
     settlementDate: "2026-08-24",
-    transactions: [],
+    transactions: [{ id: "transaction-1", type: "charge", amount: 100, currency: "USD" }],
     subsidiaryId: "sub-a",
   });
 
@@ -464,10 +465,10 @@ for (const action of ["post", "reverse"] as const) {
 
     const response = await post(
       action === "post"
-        ? { action, batchId: "batch-other" }
+        ? { action, batchId: "00000000-0000-4000-8000-0000000000b2" }
         : {
             action,
-            batchId: "batch-other",
+            batchId: "00000000-0000-4000-8000-0000000000b2",
             reversalDate: "2026-08-24",
             reason: "Provider recalled the payout",
           },

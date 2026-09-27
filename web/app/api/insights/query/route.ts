@@ -1,126 +1,168 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
-import { NextResponse } from 'next/server'
-import { getTranslations } from 'next-intl/server'
-import { REPORT_ENTITY_MAP } from '@openbooks/reports'
-import { isFeatureEnabled } from '@/lib/features'
-import { pool } from '@openbooks/engine/src/platform/db.ts'
-import { InsightDenominationError, runInsightQuery } from '@openbooks/analytics/server'
-import { InsightCompileError, InsightValidationError, sourcePermission } from '@openbooks/analytics'
-import { can, guardPermission } from '../../../../lib/authz'
-import { reportEntityCatalog } from '@/lib/custom-record-report-catalog'
-import { InsightBookScopeError, resolveInsightBookScope } from '@/lib/insight-books'
-import { insightCompileErrorMessage, insightLabelResolver } from '../../../../lib/insight-labels'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { fiscalStartMonth } from '@/lib/fiscal'
-import { normalizeQuery } from '../_lib'
+import { z } from "zod";
+import { validateInsightQuery } from "@openbooks/analytics";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { getTranslations } from "next-intl/server";
+import { REPORT_ENTITY_MAP } from "@openbooks/reports";
+import { isFeatureEnabled } from "@/lib/features";
+import { pool } from "@openbooks/engine/src/platform/db.ts";
+import {
+  InsightDenominationError,
+  runInsightQuery,
+} from "@openbooks/analytics/server";
+import {
+  InsightCompileError,
+  InsightValidationError,
+  sourcePermission,
+} from "@openbooks/analytics";
+import { can } from "../../../../lib/authz";
+import { reportEntityCatalog } from "@/lib/custom-record-report-catalog";
+import {
+  InsightBookScopeError,
+  resolveInsightBookScope,
+} from "@/lib/insight-books";
+import {
+  insightCompileErrorMessage,
+  insightLabelResolver,
+} from "../../../../lib/insight-labels";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { fiscalStartMonth } from "@/lib/fiscal";
+import { normalizeQuery } from "../_lib";
+const postBodySchema0 = z.strictObject({
+  query: z.json().refine((value) => {
+    try { validateInsightQuery(value); return true; } catch { return false; }
+  }, "query must follow the insight query schema"),
+});
 
-export const runtime = 'nodejs'
+export { runtime } from "@/lib/api/route";
 
 /**
  * Compile + execute an insight query and return the typed result — the card
  * studio's live preview and (server-side) card tiles both call this. Guarded by
  * insights.read; runs read-only with tenant RLS and subsidiary scope, 10k rows / 8s cap.
  */
-export async function POST(req: Request) {
-  const gate = await guardPermission('insights.read')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  permission: "insights.read",
+  feature: {
+    none: "This insights surface is governed by its permission and has no separate organization feature switch.",
+  },
+  body: postBodySchema0,
+  handler: async ({ request: req, authz: gate, body: routeBody }) => {
+    const body = routeBody;
 
-  let body: Record<string, unknown>
-  try {
-    const parsedBody = await parseJsonBody(req, jsonObject);
-    if (!parsedBody.ok) return parsedBody.response;
-    body = parsedBody.data
-  } catch {
-    return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
-  }
+    let query;
+    try {
+      query = normalizeQuery(body.query);
+    } catch (e) {
+      // Catalog-referencing validation failures carry a code — translate them;
+      // structural corruption stays technical detail verbatim.
+      if (e instanceof InsightValidationError && e.code) {
+        return NextResponse.json(
+          {
+            error: await insightCompileErrorMessage({
+              code: e.code,
+              subject: e.subject,
+            }),
+          },
+          { status: 422 },
+        );
+      }
+      const msg = e instanceof Error ? e.message : "invalid query";
+      return NextResponse.json({ error: msg }, { status: 422 });
+    }
 
-  let query
-  try {
-    query = normalizeQuery(body.query)
-  } catch (e) {
-    // Catalog-referencing validation failures carry a code — translate them;
-    // structural corruption stays technical detail verbatim.
-    if (e instanceof InsightValidationError && e.code) {
+    // Sources over sensitive data (payroll wages) carry their own permission in
+    // the shared catalog — insights.read alone never unlocks them, on a card the
+    // caller built or one someone else pinned to their dashboard.
+    const needed = sourcePermission(query.source);
+    if (needed && !can(gate, needed)) {
       return NextResponse.json(
-        { error: await insightCompileErrorMessage({ code: e.code, subject: e.subject }) },
-        { status: 422 },
-      )
+        { error: `missing permission: ${needed}` },
+        { status: 403 },
+      );
     }
-    const msg = e instanceof Error ? e.message : 'invalid query'
-    return NextResponse.json({ error: msg }, { status: 422 })
-  }
 
-  // Sources over sensitive data (payroll wages) carry their own permission in
-  // the shared catalog — insights.read alone never unlocks them, on a card the
-  // caller built or one someone else pinned to their dashboard.
-  const needed = sourcePermission(query.source)
-  if (needed && !can(gate, needed)) {
-    return NextResponse.json({ error: `missing permission: ${needed}` }, { status: 403 })
-  }
+    const feature = REPORT_ENTITY_MAP[query.source]?.featureKey;
+    if (feature && !(await isFeatureEnabled(gate.user.orgId, feature))) {
+      return NextResponse.json(
+        { error: `${feature} feature is disabled` },
+        { status: 403 },
+      );
+    }
 
-  const feature = REPORT_ENTITY_MAP[query.source]?.featureKey
-  if (feature && !(await isFeatureEnabled(gate.user.orgId, feature))) {
-    return NextResponse.json({ error: `${feature} feature is disabled` }, { status: 403 })
-  }
+    // The book basis resolves before execution: book-scoped entities default to
+    // the single active primary unless the card scopes or partitions by book.
+    // An ambiguous basis is a computed refusal — it names its remedy and must
+    // reach the operator verbatim, never as a generic failure.
+    let allowedBookIds: readonly string[] | null | undefined;
+    try {
+      allowedBookIds = await resolveInsightBookScope(gate.user.orgId, query);
+    } catch (e) {
+      if (e instanceof InsightBookScopeError) {
+        return apiErrorResponse(e, { safeStatus: 422 });
+      }
+      throw e;
+    }
 
-  // The book basis resolves before execution: book-scoped entities default to
-  // the single active primary unless the card scopes or partitions by book.
-  // An ambiguous basis is a computed refusal — it names its remedy and must
-  // reach the operator verbatim, never as a generic failure.
-  let allowedBookIds: readonly string[] | null | undefined
-  try {
-    allowedBookIds = await resolveInsightBookScope(gate.user.orgId, query)
-  } catch (e) {
-    if (e instanceof InsightBookScopeError) {
-      return apiErrorResponse(e, { safeStatus: 422 })
+    try {
+      // Column labels compile in the caller's locale (results are never persisted).
+      // Payroll confidentiality rides the reader's own entity catalog: a
+      // restricted reader's ledger sources arrive pre-collapsed per
+      // (entry, account, currency) before any caller filter, dimension, sort,
+      // or limit, so no card can isolate one employee's pay.
+      const result = await runInsightQuery(
+        pool,
+        query,
+        gate.user.orgId,
+        gate.allowedSubsidiaryIds === null
+          ? null
+          : [...gate.allowedSubsidiaryIds],
+        await insightLabelResolver(),
+        await businessToday(gate.user.orgId),
+        allowedBookIds,
+        await reportEntityCatalog(gate),
+        await fiscalStartMonth(gate.user.orgId),
+      );
+      return NextResponse.json(result);
+    } catch (e) {
+      if (e instanceof InsightDenominationError) {
+        // A computed money-basis refusal: it names its remedy (group by the
+        // denomination or filter to one) and must reach the operator verbatim,
+        // never as a generic failure.
+        return apiErrorResponse(e, { safeStatus: 422 });
+      }
+      if (e instanceof InsightCompileError) {
+        return NextResponse.json(
+          { error: await insightCompileErrorMessage(e) },
+          { status: 422 },
+        );
+      }
+      if (e instanceof InsightValidationError) {
+        // Catalog-referencing failures carry a compile-error code — translate
+        // those; pure structural corruption (the studio can't produce it) stays
+        // technical detail verbatim.
+        const error = e.code
+          ? await insightCompileErrorMessage({
+              code: e.code,
+              subject: e.subject,
+            })
+          : e.message;
+        return NextResponse.json({ error }, { status: 422 });
+      }
+      const msg = e instanceof Error ? e.message : "query failed";
+      // Postgres statement_timeout / cancel surfaces as a friendly 400.
+      if (/statement timeout|canceling statement/i.test(msg)) {
+        const t = await getTranslations("insights");
+        return NextResponse.json(
+          { error: t("compileErrors.timeout") },
+          { status: 400 },
+        );
+      }
+      // Full error stays in the server log only; the client gets a generic
+      // message so database internals never reach the browser.
+      console.error("[insights-query] execution failed", e);
+      return NextResponse.json({ error: "query failed" }, { status: 400 });
     }
-    throw e
-  }
-
-  try {
-    // Column labels compile in the caller's locale (results are never persisted).
-    // Payroll confidentiality rides the reader's own entity catalog: a
-    // restricted reader's ledger sources arrive pre-collapsed per
-    // (entry, account, currency) before any caller filter, dimension, sort,
-    // or limit, so no card can isolate one employee's pay.
-    const result = await runInsightQuery(
-      pool, query, gate.user.orgId,
-      gate.allowedSubsidiaryIds === null ? null : [...gate.allowedSubsidiaryIds],
-      await insightLabelResolver(), await businessToday(gate.user.orgId),
-      allowedBookIds,
-      await reportEntityCatalog(gate),
-      await fiscalStartMonth(gate.user.orgId),
-    )
-    return NextResponse.json(result)
-  } catch (e) {
-    if (e instanceof InsightDenominationError) {
-      // A computed money-basis refusal: it names its remedy (group by the
-      // denomination or filter to one) and must reach the operator verbatim,
-      // never as a generic failure.
-      return apiErrorResponse(e, { safeStatus: 422 })
-    }
-    if (e instanceof InsightCompileError) {
-      return NextResponse.json({ error: await insightCompileErrorMessage(e) }, { status: 422 })
-    }
-    if (e instanceof InsightValidationError) {
-      // Catalog-referencing failures carry a compile-error code — translate
-      // those; pure structural corruption (the studio can't produce it) stays
-      // technical detail verbatim.
-      const error = e.code
-        ? await insightCompileErrorMessage({ code: e.code, subject: e.subject })
-        : e.message
-      return NextResponse.json({ error }, { status: 422 })
-    }
-    const msg = e instanceof Error ? e.message : 'query failed'
-    // Postgres statement_timeout / cancel surfaces as a friendly 400.
-    if (/statement timeout|canceling statement/i.test(msg)) {
-      const t = await getTranslations('insights')
-      return NextResponse.json({ error: t('compileErrors.timeout') }, { status: 400 })
-    }
-    // Full error stays in the server log only; the client gets a generic
-    // message so database internals never reach the browser.
-    console.error('[insights-query] execution failed', e)
-    return NextResponse.json({ error: 'query failed' }, { status: 400 })
-  }
-}
+  },
+});

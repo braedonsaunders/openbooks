@@ -83,7 +83,6 @@ export interface AssetsData {
   canConfigure: boolean
   regimes: { code: string; name: string }[]
   defaultTaxYear: number
-  showNewRedirect: boolean
   drawer: (Record<string, unknown> & { remountKey: string }) | null
 }
 
@@ -127,7 +126,6 @@ export async function loadAssets(
     canConfigure: canSetupTaxDepreciation,
     regimes: [] as AssetsData['regimes'],
     defaultTaxYear: 0,
-    showNewRedirect: false,
     drawer: null as AssetsData['drawer'],
   }
 
@@ -158,7 +156,6 @@ export async function loadAssets(
     : allSubsidiaries
   const assetId = pickString(sp.asset)
 
-  const showNewRedirect = assetId === 'new' && canManage
   // Unsaved create: ?assetNew=1 opens the SAME tenant-customizable drawer on
   // an in-memory payload over no record — identical layout, custom fields,
   // and tax elections to edit. The loader performs only picker reads here:
@@ -348,7 +345,6 @@ export async function loadAssets(
       startsOn: row.starts_on,
       endsOn: row.ends_on,
     })),
-    showNewRedirect,
     drawer,
   }
 }
@@ -385,10 +381,7 @@ export function assetsSpec(data: AssetsData): PageSpec {
         ...widgetBlock('entity-list-view', {
           recordType: 'fixed_asset',
           sp: data.currentParams,
-          // Rendered in the native page's order: the create-redirect first,
-          // then the record flyout (which renders createMode for ?assetNew=1).
           drawer: [
-            data.showNewRedirect ? { widget: 'new-asset-redirect', props: {} } : null,
             data.drawer ? { widget: 'asset-drawer', props: { drawer: data.drawer } } : null,
           ].filter(Boolean),
           emptyAction: data.canManage ? newAsset : null,

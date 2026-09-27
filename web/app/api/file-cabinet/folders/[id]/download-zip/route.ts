@@ -1,55 +1,71 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { getFolder } from '../../../../../../lib/file-cabinet'
-import { buildZip, folderZipManifest, MAX_ZIP_FILES, ZipSizeLimitError } from '../../../../../../lib/file-zip'
-import { isUuid } from '../../../../../../lib/list-params'
-import { fileViewer, requireFolderAccess, requireSession } from '../../../lib'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { getFolder } from "../../../../../../lib/file-cabinet";
+import {
+  buildZip,
+  folderZipManifest,
+  MAX_ZIP_FILES,
+  ZipSizeLimitError,
+} from "../../../../../../lib/file-zip";
+import { isUuid } from "../../../../../../lib/list-params";
+import { fileViewer, requireFolderAccess } from "../../../lib";
 import { notFound } from "@/lib/api/responses";
 
-
-export const runtime = 'nodejs'
+export { runtime } from "@/lib/api/route";
 
 /** Download a folder (and its sub-folders) as a single .zip. Viewer+ required. */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireSession()
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const access = await requireFolderAccess(gate, id, 'viewer')
-  if (access) return access
+export const GET = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string() }),
+  handler: async ({ request: _req, authz: gate, params }) => {
+    const { id } = await params;
+    if (!isUuid(id))
+      return notFound("record");
+    const access = await requireFolderAccess(gate, id, "viewer");
+    if (access) return access;
 
-  const folder = await getFolder(gate.user.orgId, id)
-  if (!folder) return notFound("record")
+    const folder = await getFolder(gate.user.orgId, id);
+    if (!folder)
+      return notFound("record");
 
-  const viewer = fileViewer(gate)
-  const entries = await folderZipManifest(gate.user.orgId, id, viewer)
-  if (entries.length === 0) return NextResponse.json({ error: 'folder is empty' }, { status: 404 })
-  if (entries.length > MAX_ZIP_FILES) {
-    return NextResponse.json(
-      { error: `too many files to zip (limit ${MAX_ZIP_FILES})` },
-      { status: 413 },
-    )
-  }
-
-  let bytes: Buffer
-  try {
-    ;({ bytes } = await buildZip(gate.user.orgId, viewer, entries))
-  } catch (error) {
-    if (error instanceof ZipSizeLimitError) {
-      return apiErrorResponse(error, { safeStatus: 413 })
+    const viewer = fileViewer(gate);
+    const entries = await folderZipManifest(gate.user.orgId, id, viewer);
+    if (entries.length === 0)
+      return NextResponse.json({ error: "folder is empty" }, { status: 404 });
+    if (entries.length > MAX_ZIP_FILES) {
+      return NextResponse.json(
+        { error: `too many files to zip (limit ${MAX_ZIP_FILES})` },
+        { status: 413 },
+      );
     }
-    throw error
-  }
-  const stamp = await businessToday(gate.user.orgId)
-  const name = `${folder.name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\/]/g, '_').trim() || 'folder'}-${stamp}.zip`
-  return new NextResponse(new Uint8Array(bytes), {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/zip',
-      'Content-Length': String(bytes.byteLength),
-      'Content-Disposition': `attachment; filename="${name}"`,
-      'Cache-Control': 'private, no-store',
-    },
-  })
-}
+
+    let bytes: Buffer;
+    try {
+      ({ bytes } = await buildZip(gate.user.orgId, viewer, entries));
+    } catch (error) {
+      if (error instanceof ZipSizeLimitError) {
+        return apiErrorResponse(error, { safeStatus: 413 });
+      }
+      throw error;
+    }
+    const stamp = await businessToday(gate.user.orgId);
+    const name = `${
+      folder.name
+        .replace(/[^\x20-\x7e]/g, "_")
+        .replace(/["\\/]/g, "_")
+        .trim() || "folder"
+    }-${stamp}.zip`;
+    return new NextResponse(new Uint8Array(bytes), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Length": String(bytes.byteLength),
+        "Content-Disposition": `attachment; filename="${name}"`,
+        "Cache-Control": "private, no-store",
+      },
+    });
+  },
+});

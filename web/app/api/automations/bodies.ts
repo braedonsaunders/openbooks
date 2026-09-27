@@ -1,27 +1,36 @@
 import { z } from "zod";
+import {
+  automationActions,
+  automationConditions,
+  automationRules,
+  automationTrigger,
+} from "@openbooks/engine/src/automations/triggers.ts";
 
 const uuid = z.string().uuid("must be a valid id");
 
 export const createAutomationBody = z.object({
   name: z.string().trim().min(1).max(200),
   description: z.string().trim().max(2000).nullish(),
-  trigger: z.unknown(),
-  rules: z.unknown().nullish(),
-  conditions: z.unknown().nullish(),
-  actions: z.unknown(),
+  trigger: automationTrigger,
+  rules: automationRules.nullish(),
+  conditions: automationConditions.nullish(),
+  actions: automationActions,
   priority: z.number().int().min(0).max(1000).nullish(),
 });
 
 export const patchAutomationBody = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   description: z.string().trim().max(2000).nullish(),
-  trigger: z.unknown().optional(),
-  rules: z.unknown().optional(),
-  conditions: z.unknown().optional(),
-  actions: z.unknown().optional(),
+  trigger: automationTrigger.optional(),
+  rules: automationRules.nullish().optional(),
+  conditions: automationConditions.nullish().optional(),
+  actions: automationActions.optional(),
   priority: z.number().int().min(0).max(1000).optional(),
-  expectedVersion: z.number().int().min(1).optional(),
-});
+  expectedVersion: z.number().int().min(1),
+}).refine(
+  (body) => Object.keys(body).some((key) => key !== "expectedVersion"),
+  "provide at least one automation field to update",
+);
 
 export const automationStatusBody = z.object({
   status: z.enum(["enabled", "disabled"]),
@@ -41,7 +50,7 @@ export const simulateAutomationBody = z.object({
 export const approvalSettingsBody = z.object({
   subjectKind: z.string().min(1),
   exceptionOnly: z.boolean(),
-  thresholds: z.record(z.string(), z.unknown()).nullish(),
+  thresholds: z.record(z.string().min(1), z.json()).nullish(),
   autoApproveWhenNoRule: z.boolean().nullish(),
   delegateAfterDays: z.number().int().min(1).nullish(),
   excludeInitiator: z.boolean().nullish(),
@@ -61,6 +70,12 @@ export const rescindBody = z.object({
 
 export const correctBody = z.object({
   reason: z.string().trim().min(1, "reason required").max(2000),
-  correctedFields: z.record(z.string(), z.unknown()).nullish(),
-  prefillPayload: z.looseObject({ kind: z.string().trim().min(1) }).nullish(),
+  correctedFields: z.record(z.string().min(1), z.json()).nullish(),
+  prefillPayload: z
+    .record(z.string().min(1), z.json())
+    .refine(
+      (payload) => typeof payload.kind === "string" && payload.kind.trim().length > 0,
+      "prefillPayload.kind is required",
+    )
+    .nullish(),
 });

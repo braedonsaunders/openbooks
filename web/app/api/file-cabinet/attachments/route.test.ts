@@ -86,6 +86,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../../lib/authz', 'mock:authz'],
   ['../../../../lib/file-cabinet', 'mock:file-cabinet'],
   ['../../../lib/file-cabinet', 'mock:file-cabinet'],
@@ -109,7 +110,6 @@ const hooks = registerHooks({
 })
 
 const { GET, POST } = (await import('./route.ts')) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(input: {
   permissions: string[]

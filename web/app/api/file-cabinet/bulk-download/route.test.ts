@@ -74,7 +74,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?bulk-download-route-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 function reset(): void {
   state.mode = 'ok'

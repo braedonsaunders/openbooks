@@ -40,7 +40,7 @@ test('briefing cache is per-day-per-user; generation needs AI', async () => {
   try {
     await asUser(org.orgId, 'Reader', 'b06_brief_reader', READER);
     await withOrgContext(org.orgId, async () => {
-      const empty = await (await GET()).json();
+      const empty = await (await GET(new Request('https://x/api/agents/briefing'))).json();
       assert.equal(empty.ok, true);
       assert.equal(empty.briefing, null, 'no briefing cached yet');
       assert.equal(empty.aiEnabled, false, 'scratch org has no model configured');
@@ -63,13 +63,13 @@ test('briefing cache is per-day-per-user; generation needs AI', async () => {
         content: 'Cached briefing text.',
         data: { v: 1, kind: 'briefing', date: today, role: 'controller' },
       });
-      const hit = await (await GET()).json();
+      const hit = await (await GET(new Request('https://x/api/agents/briefing'))).json();
       assert.equal(hit.briefing?.text, 'Cached briefing text.');
     });
     // A second user in the same org sees none of the first user's cache.
     await asUser(org.orgId, 'Reader2', 'b06_brief_reader2', READER);
     await withOrgContext(org.orgId, async () => {
-      const other = await (await GET()).json();
+      const other = await (await GET(new Request('https://x/api/agents/briefing'))).json();
       assert.equal(other.briefing, null, 'briefing cache is per user');
     });
   } finally {

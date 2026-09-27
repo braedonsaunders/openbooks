@@ -68,8 +68,11 @@ const hooks = registerHooks({
     if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/form-layouts')) {
       return { shortCircuit: true, format: 'module', url: 'mock:form-empty-name-db' }
     }
+    if (specifier === '@/lib/authz') {
+      return { shortCircuit: true, format: 'module', url: 'mock:form-empty-name-authz' }
+    }
     if (
-      (specifier.endsWith('lib/authz') || specifier.endsWith('lib/customization/gates')) &&
+      (specifier === '@/lib/authz' || specifier.endsWith('lib/customization/gates') || (specifier.endsWith('lib/authz') && parent.includes('customization/form-layouts'))) &&
       parent.includes('customization/form-layouts')
     ) {
       return {
@@ -91,7 +94,6 @@ const hooks = registerHooks({
 const LAYOUT_ID = '22222222-2222-4222-8222-222222222222'
 const form_layout_empty_name_patchUrl = './route.ts?form-layout-empty-name-patch'
 const { PATCH } = (await import(form_layout_empty_name_patchUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 state.loadRow = {
   id: LAYOUT_ID,

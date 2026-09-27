@@ -71,8 +71,11 @@ const hooks = registerHooks({
     if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/list-views')) {
       return { shortCircuit: true, format: 'module', url: 'mock:list-empty-name-db' }
     }
+    if (specifier === '@/lib/authz') {
+      return { shortCircuit: true, format: 'module', url: 'mock:list-empty-name-authz' }
+    }
     if (
-      (specifier.endsWith('lib/authz') || specifier.endsWith('lib/customization/gates')) &&
+      (specifier === '@/lib/authz' || specifier.endsWith('lib/customization/gates') || (specifier.endsWith('lib/authz') && parent.includes('customization/list-views'))) &&
       parent.includes('customization/list-views')
     ) {
       return {
@@ -94,7 +97,6 @@ const hooks = registerHooks({
 const VIEW_ID = '11111111-1111-4111-8111-111111111111'
 const list_view_empty_name_patchUrl = './route.ts?list-view-empty-name-patch'
 const { PATCH } = (await import(list_view_empty_name_patchUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 state.loadRow = {
   id: VIEW_ID,

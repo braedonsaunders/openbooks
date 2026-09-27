@@ -38,6 +38,7 @@ const mockCustomization = `
 registerHooks({
   resolve(specifier, context, nextResolve) {
     const parent = context.parentURL ?? ''
+    if (specifier === '@/lib/authz') return { shortCircuit: true, format: 'module', url: 'mock:authz-form-inactive-default' }
     if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/form-layouts')) {
       return {
         shortCircuit: true,

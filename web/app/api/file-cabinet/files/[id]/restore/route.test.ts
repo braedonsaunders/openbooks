@@ -59,7 +59,6 @@ const hooks = registerHooks({
 const routeUrl = './route.ts?file-cabinet-restore'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 const { createFile, deleteFile } = await import('../../../../../../lib/file-cabinet')
-hooks.deregister()
 
 const { db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import(

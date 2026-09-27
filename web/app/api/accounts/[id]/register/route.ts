@@ -1,182 +1,235 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { getTranslations } from 'next-intl/server'
-import { resolvePdfPageSetup } from '@openbooks/pdf'
-import { withReportBookColumn } from '../../../../../lib/report-book-label'
-import { reportBookSelection } from '../../../../../lib/report-books'
-import { getAuthz, can } from '../../../../../lib/authz'
-import { isUuid } from '../../../../../lib/list-params'
-import { accountRegister } from '../../../../../lib/reports'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { getTranslations } from "next-intl/server";
+import { resolvePdfPageSetup } from "@openbooks/pdf";
+import { withReportBookColumn } from "../../../../../lib/report-book-label";
+import { reportBookSelection } from "../../../../../lib/report-books";
+import { can } from "../../../../../lib/authz";
+import { isUuid } from "../../../../../lib/list-params";
+import { accountRegister } from "../../../../../lib/reports";
 import {
   accountRegisterDocTypeLabel,
   accountRegisterExportData,
   type AccountRegisterExportLine,
   type AccountRegisterExportFormat,
-} from '../../../../../lib/account-register-export'
+} from "../../../../../lib/account-register-export";
 import {
   exportDataToCsv,
   exportDataToPdf,
   exportDataToXlsx,
   orgBranding,
   type Translator,
-} from '../../../../../lib/report-pdf'
-import { reportCsvOptions } from '../../../../../lib/report-labels'
-import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../lib/export'
-import { decimalCmp, decimalSum } from '../../../../../lib/statement-format'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+} from "../../../../../lib/report-pdf";
+import { reportCsvOptions } from "../../../../../lib/report-labels";
+import {
+  csvResponse,
+  pdfResponse,
+  safeName,
+  xlsxResponse,
+} from "../../../../../lib/export";
+import { decimalCmp, decimalSum } from "../../../../../lib/statement-format";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { notFound } from "@/lib/api/responses";
 
+export { runtime } from "@/lib/api/route";
 
-export const runtime = 'nodejs'
-
-const DATE = /^\d{4}-\d{2}-\d{2}$/
-const PER_PAGE = 100
-const MAX_EXPORT_LINES = 200_000
-const EXPORT_FORMATS = new Set<AccountRegisterExportFormat>(['pdf', 'xlsx', 'csv'])
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const PER_PAGE = 100;
+const MAX_EXPORT_LINES = 200_000;
+const EXPORT_FORMATS = new Set<AccountRegisterExportFormat>([
+  "pdf",
+  "xlsx",
+  "csv",
+]);
 
 /** Accept only real proleptic-Gregorian calendar days, not just date-shaped text. */
 function isIsoDate(value: string): boolean {
-  if (!DATE.test(value) || value.startsWith('0000-')) return false
-  const date = new Date(`${value}T00:00:00.000Z`)
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+  if (!DATE.test(value) || value.startsWith("0000-")) return false;
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return (
+    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+  );
 }
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await getAuthz()
-  if (!gate) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (!can(gate, 'gl.read') && !can(gate, 'reports.read')) {
-    return NextResponse.json({ error: 'missing permission: gl.read or reports.read' }, { status: 403 })
-  }
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-
-  const query = new URL(request.url).searchParams
-  const page = Math.max(1, Math.min(100_000, Number(query.get('page')) || 1))
-  const from = query.get('from')
-  const to = query.get('to')
-  const rawSearch = query.get('q')?.trim()
-  if (rawSearch && rawSearch.length > 200) {
-    return NextResponse.json({ error: 'search_too_long' }, { status: 400 })
-  }
-  const search = rawSearch || undefined
-  if ((from && !isIsoDate(from)) || (to && !isIsoDate(to))) {
-    return NextResponse.json({ error: 'invalid_period' }, { status: 400 })
-  }
-
-  let bookId: string | undefined
-  let bookName: string | undefined
-  if (query.has('book')) {
-    try {
-      const selection = await reportBookSelection(gate.user.orgId, query.get('book'))
-      bookId = selection.selectedBook.id
-      bookName = `${selection.selectedBook.code} · ${selection.selectedBook.name}`
-    } catch (error) {
-      return apiErrorResponse(error)
-    }
-  }
-  const requestedFormat = query.get('format')
-  if (requestedFormat) {
-    if (!EXPORT_FORMATS.has(requestedFormat as AccountRegisterExportFormat)) {
-      return NextResponse.json({ error: 'invalid_format' }, { status: 422 })
-    }
-    const period = from || to || search
-      ? { from: from || undefined, to: to || undefined, search }
-      : undefined
-    const result = await accountRegister(
-      gate.user.orgId,
-      id,
-      MAX_EXPORT_LINES + 1,
-      0,
-      period,
-      gate.allowedSubsidiaryIds,
-    bookId,
-      can(gate, 'payroll.read'),
-    )
-    if (!result.account) return notFound("record")
-    if (result.total > MAX_EXPORT_LINES) {
+export const GET = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string() }),
+  handler: async ({ request, authz: gate, params }) => {
+    if (!gate)
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    if (!can(gate, "gl.read") && !can(gate, "reports.read")) {
       return NextResponse.json(
-        { error: 'export_too_large', maximumLines: MAX_EXPORT_LINES, actualLines: result.total },
-        { status: 422 },
-      )
+        { error: "missing permission: gl.read or reports.read" },
+        { status: 403 },
+      );
     }
-    // Completeness is the raw-line total (every posted line was fetched: the
-    // limit exceeds it) plus the amount tie-out below — never the visible
-    // line count, which payroll confidentiality may collapse below the raw
-    // total for readers without payroll.read.
-    if (
-      decimalCmp(
-        decimalSum((result.lines as AccountRegisterExportLine[]).map((line) => line.amount)),
-        result.balance,
-      ) !== 0
-    ) {
-      return NextResponse.json({ error: 'export_incomplete' }, { status: 409 })
+    const { id } = await params;
+    if (!isUuid(id))
+      return notFound("record");
+
+    const query = new URL(request.url).searchParams;
+    const page = Math.max(1, Math.min(100_000, Number(query.get("page")) || 1));
+    const from = query.get("from");
+    const to = query.get("to");
+    const rawSearch = query.get("q")?.trim();
+    if (rawSearch && rawSearch.length > 200) {
+      return NextResponse.json({ error: "search_too_long" }, { status: 400 });
+    }
+    const search = rawSearch || undefined;
+    if ((from && !isIsoDate(from)) || (to && !isIsoDate(to))) {
+      return NextResponse.json({ error: "invalid_period" }, { status: 400 });
     }
 
-    const [accountsT, commonT] = await Promise.all([
-      getTranslations('accounts'),
-      getTranslations('common'),
-    ])
-    const periodLabel = from || to
-      ? accountsT('register.periodFilter', { label: `${from ?? ''} → ${to ?? ''}` })
-      : commonT('labels.all')
-    const dateRange = bookName ? `${bookName} · ${periodLabel}` : periodLabel
-    const data = accountRegisterExportData(result, {
-      register: accountsT('list.viewRegister'),
-      date: commonT('labels.date'),
-      type: commonT('labels.type'),
-      number: commonT('labels.number'),
-      party: commonT('labels.party'),
-      memo: commonT('labels.memo'),
-      debit: accountsT('register.columns.debit'),
-      credit: accountsT('register.columns.credit'),
-      balance: commonT('labels.balance'),
-      lines: commonT('labels.lines'),
-      dateRange,
-      docType: (kind) =>
-        accountRegisterDocTypeLabel(kind, commonT as unknown as Translator),
-    })
-    const stamp = await businessToday(gate.user.orgId)
-    const filename = safeName(
-      `${result.account.number ?? result.account.name}-register-${stamp}`,
-    )
-    const format = requestedFormat as AccountRegisterExportFormat
-    if (format === 'csv') {
-      const { sectionHeader } = await reportCsvOptions()
-      const csvData = bookName ? withReportBookColumn(data, { label: (await getTranslations('budgets'))('list.bookFilter'), value: bookName }) : data
-      return csvResponse(exportDataToCsv(csvData, { sectionHeader }), filename)
+    let bookId: string | undefined;
+    let bookName: string | undefined;
+    if (query.has("book")) {
+      try {
+        const selection = await reportBookSelection(
+          gate.user.orgId,
+          query.get("book"),
+        );
+        bookId = selection.selectedBook.id;
+        bookName = `${selection.selectedBook.code} · ${selection.selectedBook.name}`;
+      } catch (error) {
+        return apiErrorResponse(error);
+      }
     }
-    if (format === 'xlsx') {
-      return xlsxResponse(
-        await exportDataToXlsx(data, {
-          reportName: data.title,
-          dateRangeLabel: data.dateRangeLabel,
+    const requestedFormat = query.get("format");
+    if (requestedFormat) {
+      if (!EXPORT_FORMATS.has(requestedFormat as AccountRegisterExportFormat)) {
+        return NextResponse.json({ error: "invalid_format" }, { status: 422 });
+      }
+      const period =
+        from || to || search
+          ? { from: from || undefined, to: to || undefined, search }
+          : undefined;
+      const result = await accountRegister(
+        gate.user.orgId,
+        id,
+        MAX_EXPORT_LINES + 1,
+        0,
+        period,
+        gate.allowedSubsidiaryIds,
+        bookId,
+        can(gate, "payroll.read"),
+      );
+      if (!result.account)
+        return notFound("record");
+      if (result.total > MAX_EXPORT_LINES) {
+        return NextResponse.json(
+          {
+            error: "export_too_large",
+            maximumLines: MAX_EXPORT_LINES,
+            actualLines: result.total,
+          },
+          { status: 422 },
+        );
+      }
+      // Completeness is the raw-line total (every posted line was fetched: the
+      // limit exceeds it) plus the amount tie-out below — never the visible
+      // line count, which payroll confidentiality may collapse below the raw
+      // total for readers without payroll.read.
+      if (
+        decimalCmp(
+          decimalSum(
+            (result.lines as AccountRegisterExportLine[]).map(
+              (line) => line.amount,
+            ),
+          ),
+          result.balance,
+        ) !== 0
+      ) {
+        return NextResponse.json(
+          { error: "export_incomplete" },
+          { status: 409 },
+        );
+      }
+
+      const [accountsT, commonT] = await Promise.all([
+        getTranslations("accounts"),
+        getTranslations("common"),
+      ]);
+      const periodLabel =
+        from || to
+          ? accountsT("register.periodFilter", {
+              label: `${from ?? ""} → ${to ?? ""}`,
+            })
+          : commonT("labels.all");
+      const dateRange = bookName ? `${bookName} · ${periodLabel}` : periodLabel;
+      const data = accountRegisterExportData(result, {
+        register: accountsT("list.viewRegister"),
+        date: commonT("labels.date"),
+        type: commonT("labels.type"),
+        number: commonT("labels.number"),
+        party: commonT("labels.party"),
+        memo: commonT("labels.memo"),
+        debit: accountsT("register.columns.debit"),
+        credit: accountsT("register.columns.credit"),
+        balance: commonT("labels.balance"),
+        lines: commonT("labels.lines"),
+        dateRange,
+        docType: (kind) =>
+          accountRegisterDocTypeLabel(kind, commonT as unknown as Translator),
+      });
+      const stamp = await businessToday(gate.user.orgId);
+      const filename = safeName(
+        `${result.account.number ?? result.account.name}-register-${stamp}`,
+      );
+      const format = requestedFormat as AccountRegisterExportFormat;
+      if (format === "csv") {
+        const { sectionHeader } = await reportCsvOptions();
+        const csvData = bookName
+          ? withReportBookColumn(data, {
+              label: (await getTranslations("budgets"))("list.bookFilter"),
+              value: bookName,
+            })
+          : data;
+        return csvResponse(
+          exportDataToCsv(csvData, { sectionHeader }),
+          filename,
+        );
+      }
+      if (format === "xlsx") {
+        return xlsxResponse(
+          await exportDataToXlsx(data, {
+            reportName: data.title,
+            dateRangeLabel: data.dateRangeLabel,
+            generatedAt: new Date(`${stamp}T00:00:00Z`),
+          }),
+          filename,
+        );
+      }
+      const branding = await orgBranding(gate.user.orgId);
+      const page = resolvePdfPageSetup({
+        paperSize: "letter",
+        orientation: "landscape",
+        marginMm: 12,
+        density: "compact",
+      });
+      return pdfResponse(
+        await exportDataToPdf(data, branding, page, {
           generatedAt: new Date(`${stamp}T00:00:00Z`),
         }),
         filename,
-      )
+      );
     }
-    const branding = await orgBranding(gate.user.orgId)
-    const page = resolvePdfPageSetup({
-      paperSize: 'letter',
-      orientation: 'landscape',
-      marginMm: 12,
-      density: 'compact',
-    })
-    return pdfResponse(await exportDataToPdf(data, branding, page, {
-      generatedAt: new Date(`${stamp}T00:00:00Z`),
-    }), filename)
-  }
 
-  const result = await accountRegister(
-    gate.user.orgId,
-    id,
-    PER_PAGE,
-    (page - 1) * PER_PAGE,
-    from || to || search ? { from: from || undefined, to: to || undefined, search } : undefined,
-    gate.allowedSubsidiaryIds,
-    bookId,
-    can(gate, 'payroll.read'),
-  )
-  if (!result.account) return notFound("record")
-  return NextResponse.json({ ...result, page, perPage: PER_PAGE })
-}
+    const result = await accountRegister(
+      gate.user.orgId,
+      id,
+      PER_PAGE,
+      (page - 1) * PER_PAGE,
+      from || to || search
+        ? { from: from || undefined, to: to || undefined, search }
+        : undefined,
+      gate.allowedSubsidiaryIds,
+      bookId,
+      can(gate, "payroll.read"),
+    );
+    if (!result.account)
+      return notFound("record");
+    return NextResponse.json({ ...result, page, perPage: PER_PAGE });
+  },
+});
