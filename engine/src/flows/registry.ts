@@ -48,6 +48,11 @@ import {
   hrmLeaveRequestFlowAdapter,
   hrmLeaveRequestSubjectProfile,
 } from "./leave-requests-adapter.ts";
+import { RESOURCING_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/resourcing.ts";
+import {
+  resourcingRequestFlowAdapter,
+  resourcingRequestSubjectProfile,
+} from "./resourcing-requests-adapter.ts";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
 import {
   hrmCompCycleFlowAdapter,
@@ -88,6 +93,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === TIMESHEET_WEEK_SUBJECT_KIND) return timesheetWeeksFlowAdapter;
   if (subjectKind === HRM_CHANGE_REQUEST_SUBJECT_KIND) return hrmChangeRequestFlowAdapter;
   if (subjectKind === HRM_LEAVE_REQUEST_SUBJECT_KIND) return hrmLeaveRequestFlowAdapter;
+  if (subjectKind === RESOURCING_REQUEST_SUBJECT_KIND) return resourcingRequestFlowAdapter;
   // HR-12 begin: compensation cycles approve through Flows.
   if (subjectKind === HRM_COMP_CYCLE_SUBJECT_KIND) return hrmCompCycleFlowAdapter;
   // HR-12 end
@@ -136,6 +142,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     timesheetWeekSubjectProfile,
     hrmChangeRequestSubjectProfile,
     hrmLeaveRequestSubjectProfile,
+    resourcingRequestSubjectProfile,
     // HR-12 begin
     hrmCompCycleSubjectProfile,
     // HR-12 end

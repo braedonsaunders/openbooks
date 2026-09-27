@@ -118,6 +118,7 @@
         "payments",
         "platform",
         "records",
+        "resourcing",
         "scripting"
       ]
     },
@@ -481,6 +482,7 @@
     "resourcing": {
       "description": "Professional services capacity, availability and resource planning.",
       "dependsOn": [
+        "flows",
         "money",
         "organization",
         "payroll",

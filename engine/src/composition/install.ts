@@ -14,6 +14,7 @@ import { CLOSE_RUN_SUBJECT_KIND } from "../flows/close-runs-adapter.ts";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
+import { RESOURCING_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/resourcing.ts";
 import { releaseAllocationRunApproval } from "../allocations/flow-release.ts";
 import { releaseCloseRunApproval } from "../close/flow-release.ts";
 import { registerBalancingLegProvider } from "../journal/balancing-hooks.ts";
@@ -23,6 +24,7 @@ import {
   releaseHrmChangeRequestApproval,
   releaseLeaveRequestApproval,
 } from "../hrm/flow-releases.ts";
+import { releaseResourcingRequestApproval } from "../resourcing/flow-release.ts";
 
 /**
  * Composition root: the one place that wires engine
@@ -51,6 +53,7 @@ export function installEngineSeams(): void {
   registerFlowApprovalReleaseHandler(HRM_COMP_CYCLE_SUBJECT_KIND, releaseCompCycleApproval);
   registerFlowApprovalReleaseHandler(HRM_CHANGE_REQUEST_SUBJECT_KIND, releaseHrmChangeRequestApproval);
   registerFlowApprovalReleaseHandler(HRM_LEAVE_REQUEST_SUBJECT_KIND, releaseLeaveRequestApproval);
+  registerFlowApprovalReleaseHandler(RESOURCING_REQUEST_SUBJECT_KIND, releaseResourcingRequestApproval);
   // Document effects: post_document and before_void completion,
   // verbatim from flows/execute.ts and flows/documents-adapter.ts. Runs
   // inline in the caller's chain, so the ambient pinned org transaction
