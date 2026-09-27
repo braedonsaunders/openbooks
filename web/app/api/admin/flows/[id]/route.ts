@@ -212,7 +212,6 @@ export const DELETE = defineRoute({
     if (!isDocumentRevisionToken(expectedUpdatedAt)) return revisionConflict()
     const parsedBody = validateJsonBody(rawBody.data, requestBodySchema)
     if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data
 
     return db.transaction(async (tx) => {
       // Lock the parent before checking children. Run/gate inserts take a foreign-key
