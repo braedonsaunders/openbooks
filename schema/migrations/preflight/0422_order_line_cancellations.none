@@ -1,0 +1,1 @@
+Every existing document line satisfies the new check: quantity_cancelled is added with default 0, and the check admits any row whose cancelled quantity is zero, so no existing row is reinterpreted and nothing needs backfilling. order_line_cancellations is a new table with no rows.
