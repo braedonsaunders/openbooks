@@ -482,6 +482,7 @@
       "description": "Professional services capacity, availability and resource planning.",
       "dependsOn": [
         "money",
+        "organization",
         "payroll",
         "platform",
         "projects"
