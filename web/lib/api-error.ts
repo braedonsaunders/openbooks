@@ -16,16 +16,53 @@
  * fallback, so the caller can never toast `undefined` or an empty string.
  */
 export async function readApiErrorMessage(res: Response, fallback: string): Promise<string> {
-  let body: unknown = null
-  try {
-    body = await res.json()
-  } catch {
-    body = null
+  return messageFromBody(await readErrorBody(res), res.status, fallback)
+}
+
+/**
+ * A refusal the server actually answered: a non-ok status, or an ok status
+ * whose body could not be read. Callers branch on this class to tell a
+ * server refusal (show its message) from a network failure (fetch rejected
+ * or was aborted — show the caller's own translated copy, never the
+ * browser's raw "Failed to fetch"). `apiJson` and `throwApiErrorIfNotOk`
+ * throw it; a rejected fetch is never wrapped in it.
+ */
+export class ApiResponseError extends Error {
+  readonly status: number
+  readonly code: string | undefined
+  readonly body: unknown
+
+  constructor(message: string, status: number, body: unknown = null) {
+    super(message)
+    this.name = 'ApiResponseError'
+    this.status = status
+    this.body = body
+    const code =
+      body !== null && typeof body === 'object' && !Array.isArray(body)
+        ? (body as { code?: unknown }).code
+        : undefined
+    this.code = typeof code === 'string' && code.trim() !== '' ? code : undefined
   }
+}
+
+async function readErrorBody(res: Response): Promise<unknown> {
+  try {
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
+function messageFromBody(body: unknown, status: number, fallback: string): string {
   const named = readNamedRefusal(body)
   if (named) return named
   const safeFallback = fallback.trim() !== '' ? fallback : 'request failed'
-  return `${safeFallback} (status ${res.status})`
+  return `${safeFallback} (status ${status})`
+}
+
+async function responseError(res: Response, fallback: string): Promise<ApiResponseError> {
+  const body = await readErrorBody(res)
+  return new ApiResponseError(messageFromBody(body, res.status, fallback), res.status, body)
 }
 
 function readNamedRefusal(body: unknown): string | null {
@@ -126,7 +163,7 @@ export function readApiBulkFailures(body: unknown, itemFallback = 'failed'): Api
 
 /**
  * The ok-check-first client mutation guard. Call it immediately after fetch
- * and BEFORE `await res.json()`: on a refusal it throws `Error` carrying the
+ * and BEFORE `await res.json()`: on a refusal it throws `ApiResponseError` carrying the
  * server's named message (never `Error(undefined)`, never an empty string),
  * on success it returns so the caller parses the body knowing the status is
  * 2xx. Pair every call with `finally { setBusy(false) }` — a throw here must
@@ -134,7 +171,7 @@ export function readApiBulkFailures(body: unknown, itemFallback = 'failed'): Api
  */
 export async function throwApiErrorIfNotOk(res: Response, fallback: string): Promise<void> {
   if (res.ok) return
-  throw new Error(await readApiErrorMessage(res, fallback))
+  throw await responseError(res, fallback)
 }
 
 /**
@@ -144,15 +181,17 @@ export async function throwApiErrorIfNotOk(res: Response, fallback: string): Pro
  * 502 toasts the fallback, never a SyntaxError), then parses the success
  * body as `T`. A success body that is not JSON is a broken contract, so it
  * throws the fallback with the status rather than returning `undefined`
- * the caller would treat as an empty success.
+ * the caller would treat as an empty success. Both throws are
+ * `ApiResponseError`; a network failure propagates as fetch raised it, so
+ * callers show their translated fallback for it rather than the browser's
+ * untranslated text.
  */
 export async function apiJson<T>(url: string, init?: RequestInit, fallbackMessage = 'request failed'): Promise<T> {
   const res = await fetch(url, init)
-  if (!res.ok) throw new Error(await readApiErrorMessage(res, fallbackMessage))
+  if (!res.ok) throw await responseError(res, fallbackMessage)
   try {
     return (await res.json()) as T
   } catch {
-    const safeFallback = fallbackMessage.trim() !== '' ? fallbackMessage : 'request failed'
-    throw new Error(`${safeFallback} (status ${res.status})`)
+    throw new ApiResponseError(messageFromBody(null, res.status, fallbackMessage), res.status)
   }
 }

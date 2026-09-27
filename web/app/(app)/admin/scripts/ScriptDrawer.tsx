@@ -8,7 +8,7 @@ import { toast } from 'sonner'
 import { CodeEditor } from '@/components/code-editor'
 import { Badge, Button, Input, Label, Select, UrlDrawer, cn } from '@openbooks/ui'
 import { dateTime } from '../../../../lib/format'
-import { apiJson } from '@/lib/api-error'
+import { ApiResponseError, apiJson } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 import { BUILT_IN_SCRIPT_KINDS, customRecordKind } from '../../../../lib/script-kinds'
 import type { ScriptDetailRow, ScriptRunRow } from './view'
@@ -219,7 +219,7 @@ export function ScriptDrawer({
       router.push('/admin/scripts')
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('drawer.saveFailed'))
+      toast.error(error instanceof ApiResponseError ? error.message : t('drawer.saveFailed'))
       setBusy(false)
     }
   }
@@ -234,7 +234,7 @@ export function ScriptDrawer({
       router.push('/admin/scripts')
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('drawer.deleteFailed'))
+      toast.error(error instanceof ApiResponseError ? error.message : t('drawer.deleteFailed'))
       setBusy(false)
     }
   }
@@ -271,7 +271,7 @@ export function ScriptDrawer({
       setSelectedRun(0)
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('drawer.runFailed'))
+      toast.error(error instanceof ApiResponseError ? error.message : t('drawer.runFailed'))
     } finally {
       setRunning(false)
     }

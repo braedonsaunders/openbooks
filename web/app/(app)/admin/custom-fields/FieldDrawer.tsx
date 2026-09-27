@@ -10,7 +10,7 @@ import { CUSTOM_FIELD_TARGETS as TARGETS, CUSTOM_FIELD_REFERENCE_TABLES } from '
 import { CustomFieldInput } from '@/components/custom-field-input'
 import type { CustomFieldDefClient } from '@/components/custom-field-inputs'
 import { customFieldEditorConfig } from '@/lib/custom-field-editor-config'
-import { apiJson } from '@/lib/api-error'
+import { ApiResponseError, apiJson } from '@/lib/api-error'
 
 const DISPLAY_MODES = [
   { value: 'always', labelKey: 'drawer.displayNormal' },
@@ -147,7 +147,7 @@ export function FieldDrawer({
       router.push('/admin/custom-fields')
       router.refresh()
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('drawer.saveFailed'))
+      toast.error(error instanceof ApiResponseError ? error.message : t('drawer.saveFailed'))
     } finally {
       saving.current = false
       setBusy(false)
