@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { ReportEntity, ReportMeasure } from './types'
+import type { ReportEntity } from './entities'
+import type { ReportMeasure } from './types'
 import { compileCustomQuery } from './custom-query'
 import { evaluateFormulaMeasures } from './formula'
 import { shapeSummarizedRows, summarizeRows, type InMemoryReportMeasure } from './run'
 import { validateCustomQuery } from './validate'
-
 const entity: ReportEntity = {
   key: 'facts', label: 'Facts', category: 'test', description: 'Test facts', from: 'fact_rows f', orgColumn: 'f.org_id', timeKey: 'period',
   columns: [
@@ -22,7 +22,7 @@ const entity: ReportEntity = {
   ],
 }
 
-function formula(key: string, expr: ReportMeasure['expr'], format: ReportMeasure['format'] = 'ratio', extra: Partial<ReportMeasure> = {}): ReportMeasure {
+function formula(key: string, expr: ReportMeasure['expr'], format: ReportMeasure['format'] = 'ratio', extra: Partial<ReportMeasure> = {}): Omit<ReportMeasure, 'filter'> {
   return { fn: 'formula', key, label: key, expr, format, ...extra }
 }
 
