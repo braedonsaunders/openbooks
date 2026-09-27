@@ -10,8 +10,8 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "partyId": z.unknown().optional(),
+const requestBodySchema = z.strictObject({
+  partyId: z.string().uuid().nullable().optional(),
 })
 
 
@@ -26,8 +26,7 @@ export const POST = defineRoute({
     if (gate.allowedSubsidiaryIds?.size === 0) return notFound("record")
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data as { partyId?: string }
-    if (body.partyId && !isUuid(body.partyId)) return NextResponse.json({ error: 'invalid account' }, { status: 422 })
+    const body = parsedBody.data
     if (body.partyId) {
       const exists = (await db.execute(sql`select is_active from parties where id = ${body.partyId} and org_id = ${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)}`))
       if (!exists.rows[0]) return NextResponse.json({ error: 'account not found' }, { status: 404 })

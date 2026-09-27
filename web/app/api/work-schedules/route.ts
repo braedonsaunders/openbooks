@@ -11,27 +11,51 @@ import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { parseCycleDays } from '../../../lib/work-schedule-days'
+import { canonicalDecimal } from '../../../lib/exact-decimal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "action": z.unknown().optional(),
-  "cycleAnchor": z.unknown().optional(),
-  "cycleDays": z.unknown().optional(),
-  "days": z.unknown().optional(),
-  "departmentId": z.unknown().optional(),
-  "effectiveFrom": z.unknown().optional(),
-  "effectiveTo": z.unknown().optional(),
-  "employeePartyId": z.unknown().optional(),
-  "id": z.unknown().optional(),
-  "isActive": z.unknown().optional(),
-  "jobTitle": z.unknown().optional(),
-  "name": z.unknown().optional(),
-  "notes": z.unknown().optional(),
-  "pattern": z.unknown().optional(),
-  "subsidiaryId": z.unknown().optional(),
-  "tradeId": z.unknown().optional(),
+const MAX_CYCLE_DAYS = 366
+
+const cycleDaySchema = z.strictObject({
+  dayIndex: z.number().int().min(0).max(365),
+  hours: z.string().superRefine((value, ctx) => {
+    if (canonicalDecimal(value, 4) === null) ctx.addIssue({ code: 'custom', message: 'hours must be a readable decimal amount' })
+  }),
 })
+const scheduleScopeSchema = {
+  employeePartyId: z.string().uuid().nullable().optional(),
+  jobTitle: z.string().trim().max(120).nullable().optional(),
+  tradeId: z.string().uuid().nullable().optional(),
+  departmentId: z.string().uuid().nullable().optional(),
+  subsidiaryId: z.string().uuid().nullable().optional(),
+}
+const requestBodySchema = z.discriminatedUnion('action', [
+  z.strictObject({ action: z.literal('delete'), id: z.string().uuid() }),
+  z.strictObject({
+    action: z.literal('save'),
+    id: z.string().uuid().optional(),
+    ...scheduleScopeSchema,
+    name: z.string().trim().max(120).nullable().optional(),
+    notes: z.string().trim().max(2000).nullable().optional(),
+    isActive: z.boolean().optional(),
+    effectiveFrom: z.string().refine(isIsoCalendarDate, 'a start date must be a real calendar date (YYYY-MM-DD)'),
+    effectiveTo: z.string().refine(isIsoCalendarDate, 'the end date must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
+    pattern: z.enum(['cycle', 'varies']).default('cycle'),
+    cycleDays: z.number().int().min(1).max(MAX_CYCLE_DAYS).optional(),
+    cycleAnchor: z.string().refine(isIsoCalendarDate, 'the cycle anchor must be a real calendar date (YYYY-MM-DD)').optional(),
+    days: z.array(cycleDaySchema).max(MAX_CYCLE_DAYS).optional(),
+  }).superRefine((body, ctx) => {
+    if (body.effectiveTo && body.effectiveTo < body.effectiveFrom) {
+      ctx.addIssue({ code: 'custom', message: 'the end date cannot precede the start date', path: ['effectiveTo'] })
+    }
+    if (body.pattern === 'cycle') {
+      if (body.cycleDays === undefined) ctx.addIssue({ code: 'custom', message: 'the cycle length is required', path: ['cycleDays'] })
+      if (body.cycleAnchor === undefined) ctx.addIssue({ code: 'custom', message: 'the cycle needs a first day to count from', path: ['cycleAnchor'] })
+      if (body.days === undefined) ctx.addIssue({ code: 'custom', message: 'cycle day rows are required', path: ['days'] })
+    }
+  }),
+])
 
 
 
@@ -58,13 +82,17 @@ export const dynamic = 'force-dynamic'
  * they are gated on admin.setup.manage exactly as wages are.
  */
 
-const MAX_CYCLE_DAYS = 366
-
 const bad = (error: string) => NextResponse.json({ error }, { status: 422 })
 
 /** The one scope key a row may carry, or null for the organization default.
  *  Mirrors labor_cost_rates: zero or one, never two. */
-function readScope(body: Record<string, unknown>) {
+function readScope(body: {
+  employeePartyId?: string | null
+  jobTitle?: string | null
+  tradeId?: string | null
+  departmentId?: string | null
+  subsidiaryId?: string | null
+}) {
   const employeePartyId = isUuid(String(body.employeePartyId ?? '')) ? String(body.employeePartyId) : null
   const tradeId = isUuid(String(body.tradeId ?? '')) ? String(body.tradeId) : null
   const departmentId = isUuid(String(body.departmentId ?? '')) ? String(body.departmentId) : null
@@ -176,12 +204,11 @@ export const POST = defineRoute({
 
     const parsedBody = await parseJsonBody(request, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as Record<string, unknown>
-    const action = String(body.action ?? '')
+    const body = parsedBody.data
+    const action = body.action
 
     if (action === 'delete') {
-      if (!isUuid(String(body.id ?? ''))) return bad('a schedule id is required')
-      const id = String(body.id)
+      const id = body.id
       // Snapshot the pattern and its days first: they decide holiday pay, and a
       // bare delete leaves no trace of what an absent employee was owed. The
       // row is locked and its scope rechecked inside the transaction, so a
@@ -237,28 +264,25 @@ export const POST = defineRoute({
     // All three dates land in date columns and the save maps any failure to a
     // conflict message, so a shape-valid non-day would surface the raw driver
     // failure. Refuse anything that is not a real calendar day up front.
-    const effectiveFrom = String(body.effectiveFrom ?? '')
-    if (!isIsoCalendarDate(effectiveFrom)) return bad('a start date is required')
-    const effectiveToRaw = body.effectiveTo === undefined || body.effectiveTo === null || body.effectiveTo === '' ? null : String(body.effectiveTo)
-    if (effectiveToRaw !== null && !isIsoCalendarDate(effectiveToRaw)) return bad('the end date must be a real calendar date (YYYY-MM-DD)')
-    const effectiveTo = effectiveToRaw
+    const effectiveFrom = body.effectiveFrom
+    const effectiveTo = body.effectiveTo ?? null
     if (effectiveTo && effectiveTo < effectiveFrom) {
       return bad('the end date cannot precede the start date')
     }
 
-    const pattern = body.pattern === 'varies' ? 'varies' : 'cycle'
+    const pattern = body.pattern
     let cycleDays: number | null = null
     let cycleAnchor: string | null = null
     const days: { dayIndex: number; hours: string }[] = []
 
     if (pattern === 'cycle') {
-      cycleDays = Number(body.cycleDays)
+      cycleDays = body.cycleDays ?? Number.NaN
       if (!Number.isInteger(cycleDays) || cycleDays < 1 || cycleDays > MAX_CYCLE_DAYS) {
         return bad(`the cycle must be between 1 and ${MAX_CYCLE_DAYS} days long`)
       }
-      cycleAnchor = String(body.cycleAnchor ?? '')
+      cycleAnchor = body.cycleAnchor ?? ''
       if (!isIsoCalendarDate(cycleAnchor)) return bad('the cycle needs a first day to count from')
-      const supplied = Array.isArray(body.days) ? body.days : []
+      const supplied = body.days ?? []
       // A row the server cannot place refuses the save: silently dropping a
       // day would store a pattern nobody wrote, and it would go on paying
       // somebody.
@@ -274,11 +298,9 @@ export const POST = defineRoute({
       }
     }
 
-    const id = isUuid(String(body.id ?? '')) ? String(body.id) : null
-    const name = typeof body.name === 'string' && body.name.trim()
-      ? body.name.trim().slice(0, 120)
-      : null
-    const notes = typeof body.notes === 'string' ? body.notes.trim().slice(0, 2000) || null : null
+    const id = body.id ?? null
+    const name = body.name?.trim() || null
+    const notes = body.notes?.trim() || null
     const isActive = body.isActive !== false
 
     // Parent and days in ONE transaction: a schedule whose day rows half-applied

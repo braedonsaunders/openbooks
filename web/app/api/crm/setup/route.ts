@@ -16,41 +16,76 @@ import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal"
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "action": z.unknown().optional(),
-  "amount": z.unknown().optional(),
-  "currency": z.unknown().optional(),
-  "defaultForecastCategory": z.unknown().optional(),
-  "defaultOwnerUserId": z.unknown().optional(),
-  "description": z.unknown().optional(),
-  "filters": z.unknown().optional(),
-  "id": z.unknown().optional(),
-  "isActive": z.unknown().optional(),
-  "isClosed": z.unknown().optional(),
-  "isDefault": z.unknown().optional(),
-  "isQualified": z.unknown().optional(),
-  "isWon": z.unknown().optional(),
-  "key": z.unknown().optional(),
-  "lifecycleStage": z.unknown().optional(),
-  "managerUserId": z.unknown().optional(),
-  "matchMode": z.unknown().optional(),
-  "members": z.unknown().optional(),
-  "name": z.unknown().optional(),
-  "ownerUserId": z.unknown().optional(),
-  "periodEnd": z.unknown().optional(),
-  "periodStart": z.unknown().optional(),
-  "priority": z.unknown().optional(),
-  "probability": z.unknown().optional(),
-  "requiresLines": z.unknown().optional(),
-  "requiresPositiveAmount": z.unknown().optional(),
-  "requiresPrimaryContact": z.unknown().optional(),
-  "requiresWinLossReason": z.unknown().optional(),
-  "rules": z.unknown().optional(),
-  "salesTeamId": z.unknown().optional(),
-  "sequence": z.unknown().optional(),
+const baseSaveFields = {
+  id: z.string().uuid().optional(),
+  key: z.string().optional(),
+  name: z.string().trim().min(1),
+  description: z.string().nullable().optional(),
+  isActive: z.boolean().optional(),
+}
+const baseQuotaFields = {
+  id: z.string().uuid().optional(),
+  description: z.string().nullable().optional(),
+  isActive: z.boolean().optional(),
+}
+const optionalUserId = z.preprocess((value) => value === '' ? null : value, z.string().uuid().nullable()).optional()
+const territoryRuleSchema = z.object({
+  field: z.enum(['country', 'region', 'industry', 'lifecycleStage', 'leadSourceId', 'annualRevenue', 'employeeCount']),
+  operator: z.enum(['equals', 'in', 'contains', 'gte', 'lte']),
+  value: z.union([z.string(), z.array(z.string()), z.number()]),
+}).superRefine((rule, context) => {
+  if (rule.field === 'annualRevenue') {
+    const values = typeof rule.value === 'string' ? [rule.value] : Array.isArray(rule.value) ? rule.value : []
+    for (const value of values) {
+      if (canonicalDecimal(value, 4) === null) {
+        context.addIssue({ code: 'custom', path: ['value'], message: moneyRefusal('Territory annual revenue', value) })
+      }
+    }
+    if (typeof rule.value === 'number') {
+      context.addIssue({ code: 'custom', path: ['value'], message: moneyRefusal('Territory annual revenue', rule.value) })
+    }
+  }
+  if (rule.operator === 'in' && !Array.isArray(rule.value)) {
+    context.addIssue({ code: 'custom', path: ['value'], message: 'in comparisons require a list of values' })
+  }
+  if (rule.operator !== 'in' && Array.isArray(rule.value)) {
+    context.addIssue({ code: 'custom', path: ['value'], message: 'this comparison requires one value' })
+  }
 })
-
-
+const quotaSchema = z.object({
+  ...baseQuotaFields,
+  action: z.literal('save-quota'),
+  ownerUserId: optionalUserId,
+  salesTeamId: z.preprocess((value) => value === '' ? null : value, z.string().uuid().nullable()).optional(),
+  periodStart: z.string().refine(isIsoCalendarDate, 'periodStart must be a valid calendar date'),
+  periodEnd: z.string().refine(isIsoCalendarDate, 'periodEnd must be a valid calendar date'),
+  amount: z.string(),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  filters: z.record(z.string(), z.json()).optional(),
+}).superRefine((body, context) => {
+  if ((body.ownerUserId ? 1 : 0) + (body.salesTeamId ? 1 : 0) !== 1) {
+    context.addIssue({ code: 'custom', path: ['ownerUserId'], message: 'quota requires exactly one ownerUserId or salesTeamId' })
+  }
+  if (body.periodEnd < body.periodStart) {
+    context.addIssue({ code: 'custom', path: ['periodEnd'], message: 'periodEnd must not precede periodStart' })
+  }
+  const amount = canonicalDecimal(body.amount, 4)
+  if (amount === null) {
+    context.addIssue({ code: 'custom', path: ['amount'], message: moneyRefusal('Quota amount', body.amount) })
+  } else if (compareDecimal(amount, '0') < 0) {
+    context.addIssue({ code: 'custom', path: ['amount'], message: 'quota amount must be non-negative' })
+  } else if (amount.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
+    context.addIssue({ code: 'custom', path: ['amount'], message: 'quota amount must fit the ledger (at most 15 whole digits)' })
+  }
+})
+const requestBodySchema = z.discriminatedUnion('action', [
+  z.object({ ...baseSaveFields, action: z.literal('save-account-status'), lifecycleStage: z.enum(['lead', 'prospect', 'customer']), sequence: z.union([z.number(), z.string()]).optional(), isQualified: z.boolean().optional(), isClosed: z.boolean().optional(), isDefault: z.boolean().optional() }),
+  z.object({ ...baseSaveFields, action: z.literal('save-opportunity-status'), probability: z.union([z.number(), z.string()]), defaultForecastCategory: z.enum(['omitted', 'worst_case', 'most_likely', 'upside']), sequence: z.union([z.number(), z.string()]).optional(), isClosed: z.boolean().optional(), isWon: z.boolean().optional(), isDefault: z.boolean().optional(), requiresLines: z.boolean().optional(), requiresPrimaryContact: z.boolean().optional(), requiresPositiveAmount: z.boolean().optional(), requiresWinLossReason: z.boolean().optional() }),
+  z.object({ ...baseSaveFields, action: z.literal('save-lead-source') }),
+  z.object({ ...baseSaveFields, action: z.literal('save-territory'), rules: z.array(territoryRuleSchema), matchMode: z.enum(['all', 'any']).default('all'), priority: z.union([z.number(), z.string()]).optional(), managerUserId: optionalUserId, defaultOwnerUserId: optionalUserId }),
+  z.object({ ...baseSaveFields, action: z.literal('save-team'), members: z.array(z.object({ userId: z.string().uuid(), role: z.enum(['manager', 'member']).optional() })), managerUserId: optionalUserId }),
+  quotaSchema,
+])
 
 export const runtime = "nodejs";
 
@@ -141,10 +176,8 @@ export const POST = defineRoute({
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
     const body = ((parsedBody.data));
-    const action = String(body.action ?? "");
-    const recordId = body.id ? String(body.id) : null;
-    if (recordId && !isUuid(recordId))
-      return NextResponse.json({ error: "invalid record id" }, { status: 422 });
+    const action = body.action;
+    const recordId = body.id ?? null;
     return withOrgTransaction(user.orgId, async () => {
       // Defaults and the requested setup mutation are part of the same unit as
       // the audit append. If audit storage rejects, none of the setup writes

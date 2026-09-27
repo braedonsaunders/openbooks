@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
-import { parseJsonBody } from "@/lib/api/json"
+import { exactMoney, parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -15,9 +15,78 @@ import {
   validateReferences,
 } from "../../../../../lib/cash/category-references";
 
-const requestBodySchema = z.looseObject({
-  "categories": z.unknown().optional(),
-  "expectedRevision": z.unknown().optional(),
+const MANUAL_AMOUNT_MAX = "100000000.0000";
+
+const categoryBase = {
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(1, 'name is required').max(80),
+  direction: z.enum(['inflow', 'outflow'], { error: 'direction must be inflow or outflow' }),
+  expectedDay: z.number().int().min(0).max(6).optional(),
+  expectedWeek: z.number().int().min(1).max(4).optional(),
+  adjustmentPct: z.number().finite().min(-90).max(200).optional(),
+  subsidiaryIds: z.array(z.string().uuid()).max(50).optional(),
+}
+const positiveManualAmount = exactMoney('amount must be an exact decimal string with at most four decimal places')
+  .refine((value) => compareMoney(value, '0.0000') > 0, { error: 'amount must be greater than zero' })
+  .refine((value) => compareMoney(value, MANUAL_AMOUNT_MAX) <= 0, { error: `amount must not exceed ${MANUAL_AMOUNT_MAX}` })
+const forecastCategorySchema = z.discriminatedUnion('method', [
+  z.object({
+    ...categoryBase,
+    method: z.literal('gl_history_average'),
+    accountIds: z.array(z.string().uuid()).min(1).max(50),
+    historyWeeks: z.number().int().min(1).max(52).optional(),
+    useNetAmt: z.boolean().optional(),
+  }),
+  z.object({
+    ...categoryBase,
+    method: z.literal('vendor_payment_history'),
+    partyIds: z.array(z.string().uuid()).max(50).optional(),
+    partyId: z.string().uuid().optional(),
+    partyName: z.string().max(120).optional(),
+    historyMonths: z.number().int().min(1).max(36).optional(),
+  }).refine((value) => (value.partyIds?.length ?? 0) > 0 || value.partyId !== undefined, { error: 'partyIds or partyId must name at least one vendor' }),
+  z.object({
+    ...categoryBase,
+    method: z.literal('vendor_recurring_average'),
+    partyIds: z.array(z.string().uuid()).max(50).optional(),
+    partyId: z.string().uuid().optional(),
+    partyName: z.string().max(120).optional(),
+    historyMonths: z.number().int().min(1).max(36).optional(),
+  }).refine((value) => (value.partyIds?.length ?? 0) > 0 || value.partyId !== undefined, { error: 'partyIds or partyId must name at least one vendor' }),
+  z.object({
+    ...categoryBase,
+    method: z.literal('credit_card_cycle'),
+    cardAccountIds: z.array(z.string().uuid()).max(20).optional(),
+    accountIds: z.array(z.string().uuid()).max(20).optional(),
+    historyMonths: z.number().int().min(1).max(24).optional(),
+    significantPaymentThreshold: exactMoney('significantPaymentThreshold must be an exact decimal string').optional(),
+  }).refine((value) => (value.cardAccountIds?.length ?? 0) > 0 || (value.accountIds?.length ?? 0) > 0, { error: 'cardAccountIds or accountIds must name at least one card account' }),
+  z.object({
+    ...categoryBase,
+    method: z.literal('formula_expression'),
+    formula: z.string().trim().min(1, 'formula is required').max(500),
+  }),
+  z.object({
+    ...categoryBase,
+    method: z.literal('bank_register_history'),
+    bankAccountIds: z.array(z.string().uuid()).min(1).max(20),
+    historyWeeks: z.number().int().min(1).max(52).optional(),
+    memoKeywords: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+    includeTransfers: z.boolean().optional(),
+    includeChecks: z.boolean().optional(),
+    includeJournals: z.boolean().optional(),
+  }),
+  z.object({
+    ...categoryBase,
+    method: z.literal('manual_recurring'),
+    amount: positiveManualAmount,
+    anchorDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'anchorDate must be YYYY-MM-DD').optional(),
+    frequency: z.enum(['weekly', 'biweekly', 'bi_weekly', 'monthly']).optional(),
+  }),
+])
+const requestBodySchema = z.object({
+  categories: z.array(forecastCategorySchema).max(50, 'too many categories (max 50)'),
+  expectedRevision: z.number().int().nonnegative('expectedRevision must be a non-negative integer'),
 })
 
 
@@ -51,7 +120,6 @@ const clampNum = (v: unknown, min: number, max: number, dflt: number): number =>
 type CleanResult = { ok: true; category: ForecastCategory } | { ok: false; error: string };
 const GENERIC_CATEGORY_ERROR =
   "Each category must include a valid name, method, and method-specific configuration.";
-const MANUAL_AMOUNT_MAX = "100000000.0000";
 
 async function clean(
   raw: unknown,
@@ -258,18 +326,10 @@ export const PUT = defineRoute({
     if (scopeDenied) return scopeDenied;
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as { categories?: unknown[]; expectedRevision?: unknown } | null;
-    if (!body || !Array.isArray(body.categories)) return NextResponse.json({ error: "categories array required" }, { status: 400 });
-    if (body.categories.length > 50) return NextResponse.json({ error: "too many categories (max 50)" }, { status: 400 });
+    const body = parsedBody.data
     // Optimistic concurrency: the editor sends the revision it read, and a
     // stale writer gets 409 instead of silently discarding the other edit.
-    if (!Number.isInteger(body.expectedRevision)) {
-      return NextResponse.json(
-        { error: "expectedRevision required", message: "Send the revision returned by GET with every replacement." },
-        { status: 400 },
-      );
-    }
-    const expectedRevision = body.expectedRevision as number;
+    const expectedRevision = body.expectedRevision
 
     // Sequential: the first invalid index wins, and reference checks stay ordered.
     const cleaned: CleanResult[] = [];

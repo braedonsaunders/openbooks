@@ -31,18 +31,37 @@ import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { decimalNullRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "action": z.unknown().optional(),
-  "adjustmentId": z.unknown().optional(),
-  "bankAccountId": z.unknown().optional(),
-  "employeePartyId": z.unknown().optional(),
-  "employeePartyIds": z.unknown().optional(),
-  "holidayEligibility": z.unknown().optional(),
-  "rosterPartyIds": z.unknown().optional(),
-  "subsidiaryId": z.unknown().optional(),
+const payrollRunUuid = (field: string, subject: string, remedy: string) => z.string({
+  error: (issue) => `${field} must be ${subject} — got "${suppliedValue(issue.input)}"; ${remedy}`,
+}).uuid({
+  error: (issue) => `${field} "${suppliedValue(issue.input)}" is not ${subject} — ${remedy}`,
 })
-
-
+const payrollRunMoney = z.string().superRefine((value, context) => {
+  if (canonicalDecimal(value, 4) === null) {
+    context.addIssue({ code: 'custom', message: decimalNullRefusal('amount', 'an amount', value, 4) })
+  }
+})
+const holidayEligibilityBody = z.json().optional()
+const actionBody = <A extends string>(action: A) => ({ action: z.literal(action), holidayEligibility: holidayEligibilityBody })
+const employeeIds = z.array(payrollRunUuid('employeePartyIds entry', 'an employee id', 'fix the id and try again'))
+const requestBodySchema = z.discriminatedUnion('action', [
+  z.strictObject({ ...actionBody('calculate') }),
+  z.strictObject({ ...actionBody('dry-run') }),
+  z.strictObject({ ...actionBody('bulk-adjustment'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, employeePartyIds: employeeIds, note: z.string().nullable().optional(), replaceComponent: z.boolean().optional() }),
+  z.strictObject({ ...actionBody('preview-gl') }),
+  z.strictObject({ ...actionBody('add-adjustment'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, hours: z.string().nullable().optional(), note: z.string().nullable().optional(), replaceComponent: z.boolean().optional() }),
+  z.strictObject({ ...actionBody('delete-adjustment'), adjustmentId: payrollRunUuid('adjustmentId', 'a pay adjustment id', 'pass the adjustment to delete as an id') }),
+  z.strictObject({ ...actionBody('set-scope'), employeePartyIds: employeeIds, rosterPartyIds: z.array(payrollRunUuid('rosterPartyIds entry', 'an employee id', 'fix that entry and try again')) }),
+  z.strictObject({ ...actionBody('exclude-employee'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id') }),
+  z.strictObject({ ...actionBody('include-employee'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id') }),
+  z.strictObject({ ...actionBody('email-stubs') }),
+  z.strictObject({ ...actionBody('record-payment'), bankAccountId: payrollRunUuid('bankAccountId', 'a bank account id', 'choose a bank account') }),
+  z.strictObject({ ...actionBody('submit-approval') }),
+  z.strictObject({ ...actionBody('approval-state') }),
+  z.strictObject({ ...actionBody('acknowledge-refusals') }),
+  z.strictObject({ ...actionBody('attribute-entity'), subsidiaryId: payrollRunUuid('subsidiaryId', 'a subsidiary id', 'choose a subsidiary to attribute this run to') }),
+  z.strictObject({ ...actionBody('commit') }),
+])
 
 export const dynamic = 'force-dynamic'
 

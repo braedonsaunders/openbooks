@@ -6,6 +6,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { installedPayrollCountries } from "@openbooks/engine/src/payroll/readiness.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { employerFactsFor } from "@openbooks/engine/src/payroll/employer-facts.ts";
 import { listFilingAccounts } from "@openbooks/engine/src/payroll/filing.ts";
 import { listPayrollEmployerFacts, upsertPayrollEmployerFact } from "@openbooks/engine/src/payroll/employer-fact-store.ts";
@@ -15,15 +16,15 @@ import { guardRootSubsidiaryScope } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
 import { guardPayrollFilingAccounts } from "../../subsidiary-scope";
 
-const requestBodySchema = z.looseObject({
-  "changeReason": z.unknown().optional(),
-  "country": z.unknown().optional(),
-  "effectiveFrom": z.unknown().optional(),
-  "effectiveThrough": z.unknown().optional(),
-  "factKey": z.unknown().optional(),
-  "filingAccountId": z.unknown().optional(),
-  "subsidiaryId": z.unknown().optional(),
-  "value": z.unknown().optional(),
+const requestBodySchema = z.strictObject({
+  country: z.string().trim().min(2).max(3),
+  factKey: z.string().trim().min(1).max(120),
+  effectiveFrom: z.string().refine(isIsoCalendarDate, 'effectiveFrom must be a real calendar date (YYYY-MM-DD)'),
+  effectiveThrough: z.string().refine(isIsoCalendarDate, 'effectiveThrough must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
+  filingAccountId: z.string().uuid({ error: 'filingAccountId must be a valid payroll filing account id' }).nullable().optional(),
+  subsidiaryId: z.string().uuid({ error: 'subsidiaryId must be a valid legal entity id' }).nullable().optional(),
+  value: z.string().trim().min(1, 'value is required').max(500),
+  changeReason: z.string().trim().min(1, 'changeReason is required').max(2000),
 })
 
 
@@ -79,14 +80,14 @@ export const PUT = defineRoute({
     const parsed = await parseJsonBody(req, requestBodySchema);
     if (!parsed.ok) return parsed.response;
     const body = parsed.data;
-    const country = typeof body.country === "string" ? body.country : "";
-    const factKey = typeof body.factKey === "string" ? body.factKey : "";
-    const subsidiaryId = typeof body.subsidiaryId === "string" ? body.subsidiaryId : null;
-    const filingAccountId = typeof body.filingAccountId === "string" ? body.filingAccountId : null;
-    const effectiveFrom = typeof body.effectiveFrom === "string" ? body.effectiveFrom : "";
-    const effectiveThrough = typeof body.effectiveThrough === "string" ? body.effectiveThrough : null;
-    const value = typeof body.value === "string" ? body.value : "";
-    const changeReason = typeof body.changeReason === "string" ? body.changeReason : "";
+    const country = body.country;
+    const factKey = body.factKey;
+    const subsidiaryId = body.subsidiaryId ?? null;
+    const filingAccountId = body.filingAccountId ?? null;
+    const effectiveFrom = body.effectiveFrom;
+    const effectiveThrough = body.effectiveThrough ?? null;
+    const value = body.value;
+    const changeReason = body.changeReason;
     if (!country || !factKey || !effectiveFrom || !value || !changeReason) {
       return NextResponse.json({ error: "country, factKey, effectiveFrom, value, and changeReason are required" }, { status: 422 });
     }

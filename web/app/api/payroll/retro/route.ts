@@ -18,13 +18,16 @@ import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { guardPayrollEmployees } from '../subsidiary-scope'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "action": z.unknown().optional(),
-  "employeePartyIds": z.unknown().optional(),
-  "excludeSourcePayRunDocumentIds": z.unknown().optional(),
-  "payDate": z.unknown().optional(),
-  "payScheduleId": z.unknown().optional(),
+const retroInput = z.object({
+  payScheduleId: z.string().uuid(),
+  payDate: z.string().refine(isIsoCalendarDate, 'payDate must be a real calendar date (YYYY-MM-DD)'),
+  employeePartyIds: z.array(z.string().uuid()).optional(),
+  excludeSourcePayRunDocumentIds: z.array(z.string().uuid()).optional(),
 })
+const requestBodySchema = z.discriminatedUnion('action', [
+  retroInput.extend({ action: z.literal('propose') }),
+  retroInput.extend({ action: z.literal('create') }),
+])
 
 
 
@@ -48,21 +51,6 @@ export const runtime = 'nodejs'
  * how "exactly once" is enforced) lives in the engine. This route only
  * translates HTTP, so no second caller can reach a different answer.
  */
-
-interface Body {
-  action?: unknown
-  payScheduleId?: unknown
-  payDate?: unknown
-  employeePartyIds?: unknown
-  excludeSourcePayRunDocumentIds?: unknown
-}
-
-function uuidList(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined
-  if (value.some((entry) => typeof entry !== 'string' || !isUuid(entry))) return undefined
-  const ids = value.filter((entry): entry is string => typeof entry === 'string')
-  return ids.length > 0 ? ids : undefined
-}
 
 /**
  * Retro detection is employee-driven, so an omitted employee list must be
@@ -152,36 +140,16 @@ export const POST = defineRoute({
   feature: 'payroll',
   handler: async ({ request: req, authz: gate }) => {
 
-    let body: Body
-    try {
-      const parsedBody = await parseJsonBody(req, requestBodySchema);
-      if (!parsedBody.ok) return parsedBody.response;
-      body = (parsedBody.data) as Body
-    } catch {
-      return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
-    }
-    if (typeof body.payScheduleId !== 'string' || !isUuid(body.payScheduleId)) {
-      return NextResponse.json({ error: 'payScheduleId must be a pay schedule' }, { status: 422 })
-    }
-    if (!isIsoCalendarDate(body.payDate)) {
-      return NextResponse.json({ error: 'payDate must be a real calendar date (YYYY-MM-DD)' }, { status: 422 })
-    }
+    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.data
 
     // An explicitly empty list is the workspace's default state (no
     // exclusions checked, no employee filter applied) and means the same as
     // an absent key. uuidList already folds [] to undefined; the checks below
     // must not mistake that fold for a malformed value, or every UI propose
     // that excludes nothing is refused with 422.
-    const employeeIdsInput =
-      Array.isArray(body.employeePartyIds) && body.employeePartyIds.length === 0
-        ? undefined
-        : body.employeePartyIds;
-    const requestedEmployees = employeeIdsInput === undefined
-      ? undefined
-      : uuidList(employeeIdsInput)
-    if (employeeIdsInput !== undefined && !requestedEmployees) {
-      return NextResponse.json({ error: 'employeePartyIds must be UUIDs' }, { status: 422 })
-    }
+    const requestedEmployees = body.employeePartyIds?.length ? body.employeePartyIds : undefined
     const employeePartyIds = await scopedRetroEmployees(
       gate,
       body.payScheduleId,
@@ -189,14 +157,9 @@ export const POST = defineRoute({
     )
     if (employeePartyIds instanceof NextResponse) return employeePartyIds
 
-    const exclusionsInput =
-      Array.isArray(body.excludeSourcePayRunDocumentIds) && body.excludeSourcePayRunDocumentIds.length === 0
-        ? undefined
-        : body.excludeSourcePayRunDocumentIds;
-    const excludedSourcePayRunDocumentIds = exclusionsInput === undefined ? undefined : uuidList(exclusionsInput)
-    if (exclusionsInput !== undefined && !excludedSourcePayRunDocumentIds) {
-      return NextResponse.json({ error: 'excludeSourcePayRunDocumentIds must be UUIDs' }, { status: 422 })
-    }
+    const excludedSourcePayRunDocumentIds = body.excludeSourcePayRunDocumentIds?.length
+      ? body.excludeSourcePayRunDocumentIds
+      : undefined
     const deniedExcluded = await guardExcludedSourceRuns(
       gate,
       body.payScheduleId,

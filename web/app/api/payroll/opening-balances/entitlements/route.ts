@@ -18,10 +18,21 @@ import { scopedEntitlementOpenings } from '../../../../../lib/payroll-scoped-vie
 import { guardPayrollEmployees } from '../../subsidiary-scope'
 import { isUuid } from '../../../../../lib/list-params'
 
-const requestBodySchema = z.looseObject({
-  "movementDate": z.unknown().optional(),
-  "note": z.unknown().optional(),
-  "rows": z.unknown().optional(),
+const entitlementAmount = z.string().superRefine((value, ctx) => {
+  if (value.trim() === '') return
+  if (canonicalDecimal(value, 4) === null) {
+    ctx.addIssue({ code: 'custom', message: moneyRefusal('Entitlement amount', value) })
+  }
+})
+const requestBodySchema = z.strictObject({
+  movementDate: z.string().refine((value) => {
+    try { assertMovementDate(value); return true } catch { return false }
+  }, 'movementDate must be a real calendar date (YYYY-MM-DD)'),
+  note: z.string().trim().max(2000).nullable().optional(),
+  rows: z.array(z.strictObject({
+    employeePartyId: z.string().uuid(),
+    amounts: z.record(z.string(), entitlementAmount).optional(),
+  })),
 })
 
 
@@ -45,12 +56,6 @@ export const GET = defineRoute({
 
   },
 })
-
-interface SaveBody {
-  movementDate?: unknown
-  note?: unknown
-  rows?: unknown
-}
 
 /** Exact numeric(19,4) money string, empty when omitted, or 'invalid'. */
 function persistMoney(value: unknown): string | '' | 'invalid' {
@@ -82,27 +87,12 @@ export const POST = defineRoute({
   feature: 'payroll',
   handler: async ({ request: req, authz: gate }) => {
 
-    let body: SaveBody
-    try {
-      const parsedBody = await parseJsonBody(req, requestBodySchema);
-      if (!parsedBody.ok) return parsedBody.response;
-      body = (parsedBody.data) as SaveBody
-    } catch {
-      return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
-    }
-    if (!Array.isArray(body.rows)) {
-      return NextResponse.json({ error: 'rows must be an array' }, { status: 422 })
-    }
+    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.data
 
     const rows: EntitlementOpeningWrite[] = []
-    for (const raw of body.rows) {
-      const row = raw as { employeePartyId?: unknown; amounts?: unknown }
-      if (typeof row?.employeePartyId !== 'string' || !isUuid(row.employeePartyId)) {
-        return NextResponse.json({ error: 'each row needs a valid employeePartyId' }, { status: 422 })
-      }
-      if (row.amounts != null && (typeof row.amounts !== 'object' || Array.isArray(row.amounts))) {
-        return NextResponse.json({ error: 'amounts must be an object' }, { status: 422 })
-      }
+    for (const row of body.rows) {
       const amounts = persistMoneyMap((row.amounts ?? {}) as Record<string, unknown>)
       if (!amounts.ok) {
         return NextResponse.json({ error: moneyRefusal(`Entitlement amount for "${amounts.key}"`, amounts.value) }, { status: 422 })
@@ -126,7 +116,7 @@ export const POST = defineRoute({
         movementDate: assertMovementDate(body.movementDate),
         rows,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : null,
+        note: body.note?.trim() || null,
       })
       return NextResponse.json(result)
     } catch (error) {

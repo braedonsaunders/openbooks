@@ -15,15 +15,28 @@ import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "currency": z.unknown().optional(),
-  "note": z.unknown().optional(),
-  "overrideAmount": z.unknown().optional(),
-  "ownerUserId": z.unknown().optional(),
-  "periodEnd": z.unknown().optional(),
-  "periodStart": z.unknown().optional(),
-  "salesTeamId": z.unknown().optional(),
-  "snapshotKind": z.unknown().optional(),
+const forecastAmount = z.string().superRefine((value, ctx) => {
+  const parsed = canonicalDecimal(value, 4)
+  if (parsed === null) ctx.addIssue({ code: 'custom', message: moneyRefusal('Override amount', value) })
+  else if (compareDecimal(parsed, '0') < 0) ctx.addIssue({ code: 'custom', message: 'Override amount must be non-negative' })
+  else if (parsed.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
+    ctx.addIssue({ code: 'custom', message: 'Override amount is out of range; at most 15 whole digits fit the ledger' })
+  }
+})
+
+const requestBodySchema = z.strictObject({
+  periodStart: z.string().refine(isIsoCalendarDate, 'periodStart must be a real calendar date (YYYY-MM-DD)'),
+  periodEnd: z.string().refine(isIsoCalendarDate, 'periodEnd must be a real calendar date (YYYY-MM-DD)'),
+  ownerUserId: z.string().uuid().nullable().optional(),
+  salesTeamId: z.string().uuid().nullable().optional(),
+  overrideAmount: forecastAmount.nullable().optional(),
+  snapshotKind: z.enum(['calculated', 'rep_override', 'manager_override']).optional(),
+  currency: z.string().trim().regex(/^[A-Za-z]{3}$/).transform((value) => value.toUpperCase()).nullable().optional(),
+  note: z.string().max(2000).nullable().optional(),
+}).refine((body) => body.periodEnd >= body.periodStart, {
+  message: 'periodEnd must be on or after periodStart', path: ['periodEnd'],
+}).refine((body) => !(body.ownerUserId && body.salesTeamId), {
+  message: 'choose at most one owner or team', path: ['salesTeamId'],
 })
 
 
@@ -85,10 +98,8 @@ export const POST = defineRoute({
     const { user } = gate
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data)
-    const periodStart = String(body.periodStart ?? '')
-    const periodEnd = String(body.periodEnd ?? '')
-    if (!isIsoCalendarDate(periodStart) || !isIsoCalendarDate(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })
+    const body = parsedBody.data
+    const { periodStart, periodEnd } = body
     // An explicit null means the caller is targeting a team (or, with both
     // null, the whole organization). When the owner key is absent we retain the
     // convenient personal-snapshot default. Each target must be a UUID or an
@@ -96,44 +107,23 @@ export const POST = defineRoute({
     // format check, sail through the forecast as unscoped, then die in
     // Postgres on the uuid columns as a generic 500.
     const t = await getTranslations('crm')
-    const rawOwnerUserId = Object.prototype.hasOwnProperty.call(body, 'ownerUserId') ? body.ownerUserId : user.id
-    if (rawOwnerUserId !== null && (typeof rawOwnerUserId !== 'string' || !isUuid(rawOwnerUserId))) {
-      return NextResponse.json({ error: t('forecasts.invalidOwnerTarget') }, { status: 422 })
-    }
-    const rawSalesTeamId = Object.prototype.hasOwnProperty.call(body, 'salesTeamId') ? body.salesTeamId : null
-    if (rawSalesTeamId !== null && (typeof rawSalesTeamId !== 'string' || !isUuid(rawSalesTeamId))) {
-      return NextResponse.json({ error: t('forecasts.invalidTeamTarget') }, { status: 422 })
-    }
+    const rawOwnerUserId = body.ownerUserId === undefined ? user.id : body.ownerUserId
+    const rawSalesTeamId = body.salesTeamId ?? null
     const ownerUserId = rawOwnerUserId
     const salesTeamId = rawSalesTeamId
-    if ((ownerUserId ? 1 : 0) + (salesTeamId ? 1 : 0) > 1) {
-      return NextResponse.json({ error: 'choose at most one owner or team' }, { status: 422 })
-    }
     const overrideRaw = body.overrideAmount == null || body.overrideAmount === ''
       ? null
       : canonicalDecimal(body.overrideAmount, 4)
-    if (body.overrideAmount != null && body.overrideAmount !== '' && overrideRaw === null) {
-      return NextResponse.json({ error: moneyRefusal('Override amount', body.overrideAmount) }, { status: 422 })
-    }
-    if (body.overrideAmount != null && body.overrideAmount !== '' && overrideRaw !== null && compareDecimal(overrideRaw, '0') < 0) {
-      return NextResponse.json({ error: 'override must be a non-negative amount' }, { status: 422 })
-    }
     // override_amount is numeric(19,4): a wider figure would die in Postgres as
     // a raw storage failure (HTTP 500 — this verb has no catch), so refuse it
     // here with a named 422 and nothing written.
-    if (overrideRaw !== null && overrideRaw.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
-      return NextResponse.json({ error: 'override is out of range — at most 15 whole digits fit the ledger' }, { status: 422 })
-    }
     const overrideAmount = overrideRaw === null ? null : normalizeMoney(overrideRaw)
     const kind = body.snapshotKind ?? (overrideAmount === null ? 'calculated' : 'rep_override')
     if (typeof kind !== 'string' || !['calculated', 'rep_override', 'manager_override'].includes(kind)) return NextResponse.json({ error: 'invalid snapshot kind' }, { status: 422 })
     if ((kind === 'calculated') !== (overrideAmount === null)) {
       return NextResponse.json({ error: 'snapshot kind must match the presence of an override amount' }, { status: 422 })
     }
-    const requestedCurrency = typeof body.currency === 'string' ? body.currency.trim().toUpperCase() : null
-    if (body.currency != null && (!requestedCurrency || !/^[A-Z]{3}$/.test(requestedCurrency))) {
-      return NextResponse.json({ error: 'invalid forecast currency' }, { status: 422 })
-    }
+    const requestedCurrency = body.currency ?? null
     if (kind === 'manager_override' || (ownerUserId !== user.id && overrideAmount !== null)) {
       const overrideGate = await guardPermission('crm.forecasts.override')
       if (overrideGate instanceof NextResponse) return overrideGate

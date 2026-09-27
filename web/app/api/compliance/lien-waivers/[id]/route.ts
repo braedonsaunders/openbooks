@@ -20,18 +20,42 @@ import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "action": z.unknown().optional(),
-  "amount": z.unknown().optional(),
-  "jurisdiction": z.unknown().optional(),
-  "notarized": z.unknown().optional(),
-  "notes": z.unknown().optional(),
-  "reason": z.unknown().optional(),
-  "signedAt": z.unknown().optional(),
-  "signedByName": z.unknown().optional(),
-  "signedByTitle": z.unknown().optional(),
-  "throughDate": z.unknown().optional(),
-})
+const requestAmount = z.union([
+  z.string().superRefine((value, ctx) => {
+    const exact = canonicalDecimal(value, 4)
+    if (exact === null || wholeDigits(exact) > 15) ctx.addIssue({ code: 'custom', message: moneyRefusal('Amount', value) })
+  }),
+  z.literal(''),
+  z.null(),
+]).optional()
+const updateFields = {
+  throughDate: z.string().refine(isIsoCalendarDate, 'throughDate must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
+  amount: requestAmount,
+  jurisdiction: z.string().trim().max(20).nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+}
+const requestBodySchema = z.preprocess(
+  (value) => value && typeof value === 'object' && !Array.isArray(value) && !('action' in value)
+    ? { ...value, action: 'update' }
+    : value,
+  z.discriminatedUnion('action', [
+    z.strictObject({ action: z.literal('request') }),
+    z.strictObject({ action: z.literal('receive') }),
+    z.strictObject({
+      action: z.literal('sign'),
+      signedByName: z.string().trim().min(1, 'signedByName is required to record a signature').max(200),
+      signedByTitle: z.string().trim().max(200).nullable().optional(),
+      signedAt: z.string().refine(isIsoCalendarDate, 'signedAt must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
+      notarized: z.boolean().nullable().optional(),
+    }),
+    z.strictObject({ action: z.literal('reject'), reason: z.string().trim().min(1, 'reason is required to reject a waiver').max(2000) }),
+    z.strictObject({ action: z.literal('void'), reason: z.string().trim().min(1, 'reason is required to void a waiver').max(2000) }),
+    z.strictObject({ action: z.literal('update'), ...updateFields })
+      .refine((body) => Object.keys(updateFields).some((field) => body[field as keyof typeof body] !== undefined), {
+        error: 'provide at least one lien waiver field to update',
+      }),
+  ], { error: 'action must be request, receive, sign, reject, void, or update' }),
+)
 
 
 
@@ -78,19 +102,8 @@ export const PATCH = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema)
     if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data as {
-      action?: Action
-      signedByName?: string
-      signedByTitle?: string | null
-      signedAt?: string
-      notarized?: boolean
-      reason?: string
-      throughDate?: string
-      amount?: string
-      jurisdiction?: string | null
-      notes?: string | null
-    }
-    const action: Action = body.action ?? 'update'
+    const body = parsedBody.data
+    const action: Action = body.action
     if (!Object.hasOwn(ALLOWED_FROM, action)) {
       return NextResponse.json({ error: 'unknown lien waiver action' }, { status: 400 })
     }
@@ -123,17 +136,17 @@ export const PATCH = defineRoute({
           )
         }
 
-        if (action === 'request') {
+        if (body.action === 'request') {
           await db.execute(sql`
             update lien_waivers
                set status = 'requested', requested_at = now(), requested_by = ${actorId},
                    updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id = ${id}`)
-        } else if (action === 'receive') {
+        } else if (body.action === 'receive') {
           await db.execute(sql`
             update lien_waivers set status = 'received', updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id = ${id}`)
-        } else if (action === 'sign') {
+        } else if (body.action === 'sign') {
           const name = (body.signedByName ?? '').trim()
           if (!name) {
             return NextResponse.json({ error: 'the name of the person who signed is required' }, { status: 400 })
@@ -181,7 +194,7 @@ export const PATCH = defineRoute({
                set executed_snapshot = ${JSON.stringify(snapshot)}::jsonb,
                    updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id = ${id}`)
-        } else if (action === 'reject') {
+        } else if (body.action === 'reject') {
           const reason = (body.reason ?? '').trim()
           if (!reason) return NextResponse.json({ error: 'a rejection needs a reason' }, { status: 400 })
           await db.execute(sql`
@@ -189,7 +202,7 @@ export const PATCH = defineRoute({
                set status = 'rejected', rejected_reason = ${reason},
                    updated_at = now(), updated_by = ${actorId}
              where org_id = ${orgId} and id = ${id}`)
-        } else if (action === 'void') {
+        } else if (body.action === 'void') {
           const reason = (body.reason ?? '').trim()
           if (!reason) return NextResponse.json({ error: 'voiding needs a reason' }, { status: 400 })
           await db.execute(sql`

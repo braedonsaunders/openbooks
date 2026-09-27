@@ -14,11 +14,10 @@ import type { Authz } from '../../../../../lib/authz'
 import { guardPayrollRoeEmployees, guardPayrollFilingData } from '../../subsidiary-scope'
 
 const requestBodySchema = z.looseObject({
-  "country": z.unknown().optional(),
-  "filing": z.unknown().optional(),
-  "params": z.unknown().optional(),
-  "year": z.unknown().optional(),
-})
+  country: z.string().trim().min(2).max(3),
+  filing: z.string().trim().min(1).max(120),
+  year: z.union([z.number().int(), z.string().regex(/^\d{4}$/, 'year must be a four-digit year')]),
+}).catchall(z.string({ error: 'each filing parameter must be text' }).max(2000))
 
 
 export const dynamic = 'force-dynamic'

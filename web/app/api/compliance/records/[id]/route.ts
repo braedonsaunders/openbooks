@@ -14,21 +14,44 @@ import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "action": z.unknown().optional(),
-  "additionalInsured": z.unknown().optional(),
-  "aggregateAmount": z.unknown().optional(),
-  "coverageAmount": z.unknown().optional(),
-  "coverageCurrency": z.unknown().optional(),
-  "effectiveFrom": z.unknown().optional(),
-  "expiresOn": z.unknown().optional(),
-  "issuerName": z.unknown().optional(),
-  "notes": z.unknown().optional(),
-  "policyNumber": z.unknown().optional(),
-  "primaryNoncontributory": z.unknown().optional(),
-  "reason": z.unknown().optional(),
-  "waiverOfSubrogation": z.unknown().optional(),
-})
+const requestMoney = (field: string) => z.union([
+  z.string().superRefine((value, ctx) => {
+    const exact = canonicalDecimal(value, 4)
+    if (exact === null || wholeDigits(exact) > 15) {
+      ctx.addIssue({ code: 'custom', message: moneyRefusal(field, value) })
+    }
+  }),
+  z.literal(''),
+  z.null(),
+])
+const revisionField = z.number().int().safe().min(1, 'revision must be a positive certificate revision')
+const updateRecordFields = {
+  issuerName: z.string().trim().max(200).nullable().optional(),
+  policyNumber: z.string().trim().max(200).nullable().optional(),
+  effectiveFrom: z.string().refine(isIsoCalendarDate, 'effectiveFrom must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
+  expiresOn: z.string().refine(isIsoCalendarDate, 'expiresOn must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
+  coverageAmount: requestMoney('Coverage amount').optional(),
+  aggregateAmount: requestMoney('Aggregate amount').optional(),
+  coverageCurrency: z.string().regex(/^[A-Z]{3}$/, 'coverageCurrency must be a three-letter ISO currency code').nullable().optional(),
+  additionalInsured: z.boolean().nullable().optional(),
+  waiverOfSubrogation: z.boolean().nullable().optional(),
+  primaryNoncontributory: z.boolean().nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+}
+const requestBodySchema = z.preprocess(
+  (value) => value && typeof value === 'object' && !Array.isArray(value) && !('action' in value)
+    ? { ...value, action: 'update' }
+    : value,
+  z.discriminatedUnion('action', [
+    z.strictObject({ action: z.literal('verify'), revision: revisionField }),
+    z.strictObject({ action: z.literal('reject'), revision: revisionField, reason: z.string().trim().min(1, 'reason is required to reject a certificate').max(2000) }),
+    z.strictObject({ action: z.literal('reopen'), revision: revisionField }),
+    z.strictObject({ action: z.literal('update'), revision: revisionField, ...updateRecordFields })
+      .refine((body) => Object.keys(updateRecordFields).some((field) => body[field as keyof typeof body] !== undefined), {
+        error: 'provide at least one certificate field to update',
+      }),
+  ], { error: 'action must be verify, reject, reopen, or update' }),
+)
 
 
 
@@ -73,22 +96,8 @@ export const PATCH = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as {
-      action?: Action
-      reason?: string | null
-      issuerName?: string | null
-      policyNumber?: string | null
-      effectiveFrom?: string
-      expiresOn?: string | null
-      coverageAmount?: string | null
-      aggregateAmount?: string | null
-      coverageCurrency?: string | null
-      additionalInsured?: boolean
-      waiverOfSubrogation?: boolean
-      primaryNoncontributory?: boolean
-      notes?: string | null
-    }
-    const action: Action = body.action ?? 'update'
+    const body = parsedBody.data
+    const action: Action = body.action
     if (!['verify', 'reject', 'reopen', 'update'].includes(action)) {
       return NextResponse.json({ error: 'unknown certificate action' }, { status: 400 })
     }
@@ -100,44 +109,38 @@ export const PATCH = defineRoute({
     // fence: the caller echoes the revision it read, compared under the row
     // lock inside the write transaction. A save without it never reaches the
     // row, so a stale writer is refused instead of overwriting the winner.
-    const expectedRevision = (body as { revision?: unknown }).revision
-    if (typeof expectedRevision !== 'number' || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
-      return NextResponse.json(
-        { error: 'a current certificate revision is required; reload the certificate and try again' },
-        { status: 400 },
-      )
-    }
+    const expectedRevision = body.revision
 
     let rejectionReason = ''
     let coverageAmount: string | null | undefined
     let aggregateAmount: string | null | undefined
     try {
-      if (action === 'reject') {
+      if (body.action === 'reject') {
         rejectionReason = (body.reason ?? '').trim()
         if (!rejectionReason) {
           return NextResponse.json({ error: 'a rejection needs a reason' }, { status: 400 })
         }
       }
 
-      coverageAmount = action === 'update' && body.coverageAmount !== undefined
+      coverageAmount = body.action === 'update' && body.coverageAmount !== undefined
         ? optionalCoverageMoney(body.coverageAmount)
         : undefined
-      aggregateAmount = action === 'update' && body.aggregateAmount !== undefined
+      aggregateAmount = body.action === 'update' && body.aggregateAmount !== undefined
         ? optionalCoverageMoney(body.aggregateAmount)
         : undefined
       if (coverageAmount === 'invalid') {
-        return NextResponse.json({ error: moneyRefusal('Coverage amount', body.coverageAmount) }, { status: 422 })
+        return NextResponse.json({ error: moneyRefusal('Coverage amount', body.action === 'update' ? body.coverageAmount : undefined) }, { status: 422 })
       }
       if (aggregateAmount === 'invalid') {
-        return NextResponse.json({ error: moneyRefusal('Aggregate amount', body.aggregateAmount) }, { status: 422 })
+        return NextResponse.json({ error: moneyRefusal('Aggregate amount', body.action === 'update' ? body.aggregateAmount : undefined) }, { status: 422 })
       }
       // The update casts these straight to date: shape alone admits impossible
       // days ('2026-09-31') that Postgres then refuses with a raw driver
       // failure, so require real calendar dates before any write.
-      if (action === 'update' && body.effectiveFrom !== undefined && body.effectiveFrom !== null && !isIsoCalendarDate(body.effectiveFrom)) {
+      if (body.action === 'update' && body.effectiveFrom !== undefined && body.effectiveFrom !== null && !isIsoCalendarDate(body.effectiveFrom)) {
         return NextResponse.json({ error: 'effective date must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
       }
-      if (action === 'update' && body.expiresOn !== undefined && body.expiresOn !== null && !isIsoCalendarDate(body.expiresOn)) {
+      if (body.action === 'update' && body.expiresOn !== undefined && body.expiresOn !== null && !isIsoCalendarDate(body.expiresOn)) {
         return NextResponse.json({ error: 'expiry date must be a real calendar date (YYYY-MM-DD)' }, { status: 400 })
       }
 
@@ -185,7 +188,7 @@ export const PATCH = defineRoute({
             { status: 409 },
           )
         }
-        if (action === 'verify' && record.created_by === actorId) {
+        if (body.action === 'verify' && record.created_by === actorId) {
           // Whoever produced the record cannot also attest to it. Administrators are
           // no exception: a single-person control is not a control.
           return NextResponse.json(
@@ -206,7 +209,7 @@ export const PATCH = defineRoute({
           }
           return null
         }
-        if (action === 'verify') {
+        if (body.action === 'verify') {
           // Verification retires the predecessor the renewal pointed at: the
           // supersession happens here, not at upload, so the prior certificate
           // stays in force while its replacement is still unattested. The
@@ -239,7 +242,7 @@ export const PATCH = defineRoute({
              where org_id = ${orgId} and id = ${id} and revision = ${expectedRevision}
             returning id`)
           if (refused) return refused
-        } else if (action === 'reject') {
+        } else if (body.action === 'reject') {
           const refused = await fenced(sql`
             update compliance_records
                set status = 'rejected', rejected_reason = ${rejectionReason},
@@ -249,7 +252,7 @@ export const PATCH = defineRoute({
              where org_id = ${orgId} and id = ${id} and revision = ${expectedRevision}
             returning id`)
           if (refused) return refused
-        } else if (action === 'reopen') {
+        } else if (body.action === 'reopen') {
           const refused = await fenced(sql`
             update compliance_records
                set status = 'pending_review', rejected_reason = null,

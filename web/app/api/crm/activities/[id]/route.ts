@@ -12,32 +12,44 @@ import { isIsoTimestamp } from '../../../../../lib/crm-dates'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "assignedUserId": z.unknown().optional(),
-  "body": z.unknown().optional(),
-  "dueAt": z.unknown().optional(),
-  "durationMinutes": z.unknown().optional(),
-  "endsAt": z.unknown().optional(),
-  "expectedUpdatedAt": z.unknown().optional(),
-  "isPrivate": z.unknown().optional(),
-  "kind": z.unknown().optional(),
-  "links": z.unknown().optional(),
-  "ownerUserId": z.unknown().optional(),
-  "participants": z.unknown().optional(),
-  "priority": z.unknown().optional(),
-  "reminderAt": z.unknown().optional(),
-  "startsAt": z.unknown().optional(),
-  "status": z.unknown().optional(),
-  "subject": z.unknown().optional(),
+const KINDS = ['task', 'call', 'event', 'email', 'note'] as const
+const STATUSES = ['planned', 'in_progress', 'completed', 'cancelled'] as const
+const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
+const activityTimestamp = z.string().refine((value) => value === '' || isIsoTimestamp(value), 'expected an ISO date or date-time').nullable().optional()
+const activityParticipant = z.strictObject({
+  userId: z.string().uuid().optional(),
+  contactId: z.string().uuid().optional(),
+  email: z.string().trim().email().optional(),
+  response: z.enum(['none', 'accepted', 'declined', 'tentative']).optional(),
+}).refine((person) => [person.userId, person.contactId, person.email].filter(Boolean).length === 1, {
+  message: 'each participant must have exactly one target',
+})
+const requestBodySchema = z.strictObject({
+  expectedUpdatedAt: z.string().refine(isDocumentRevisionToken, 'A current activity revision is required; reload the activity and try again'),
+  assignedUserId: z.string().uuid().nullable().optional(),
+  body: z.string().nullable().optional(),
+  dueAt: activityTimestamp,
+  durationMinutes: z.union([
+    z.number().int().min(0).max(2147483647),
+    z.string().regex(/^\d+$/).transform(Number).pipe(z.number().int().max(2147483647)),
+    z.literal('').transform(() => null),
+  ]).nullable().optional(),
+  endsAt: activityTimestamp,
+  isPrivate: z.boolean().optional(),
+  kind: z.enum(KINDS).optional(),
+  links: z.array(z.strictObject({ subjectKind: z.string().trim().min(1), subjectId: z.string().uuid() })).optional(),
+  ownerUserId: z.string().uuid().nullable().optional(),
+  participants: z.array(activityParticipant).optional(),
+  priority: z.enum(PRIORITIES).optional(),
+  reminderAt: activityTimestamp,
+  startsAt: activityTimestamp,
+  status: z.enum(STATUSES).optional(),
+  subject: z.string().trim().min(1).max(500).optional(),
 })
 
 
 
 export const runtime = 'nodejs'
-
-const KINDS = ['task', 'call', 'event', 'email', 'note']
-const STATUSES = ['planned', 'in_progress', 'completed', 'cancelled']
-const PRIORITIES = ['low', 'normal', 'high', 'urgent']
 
 function textOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -96,7 +108,7 @@ export const PATCH = defineRoute({
     if (!current.rows[0]) return notFound("record")
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as typeof parsedBody.data & { expectedUpdatedAt?: unknown }
+    const body = parsedBody.data
     // Mandatory optimistic-concurrency evidence (same contract as document,
     // opportunity, payment, prebill-line, capture, and custom-record edits):
     // two tabs must 409 instead of silently replacing each other. Checked
@@ -105,14 +117,9 @@ export const PATCH = defineRoute({
     if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
       return NextResponse.json({ error: 'A current activity revision is required; reload the activity and try again' }, { status: 409 })
     }
-    if (body.kind !== undefined && (typeof body.kind !== 'string' || !KINDS.includes(body.kind))) return NextResponse.json({ error: 'invalid activity kind' }, { status: 422 })
-    if (body.status !== undefined && (typeof body.status !== 'string' || !STATUSES.includes(body.status))) return NextResponse.json({ error: 'invalid activity status' }, { status: 422 })
-    if (body.priority !== undefined && (typeof body.priority !== 'string' || !PRIORITIES.includes(body.priority))) return NextResponse.json({ error: 'invalid priority' }, { status: 422 })
-    if (body.subject !== undefined && !textOrNull(body.subject)) return NextResponse.json({ error: 'subject is required' }, { status: 422 })
-    if (body.isPrivate !== undefined && typeof body.isPrivate !== 'boolean') return NextResponse.json({ error: 'isPrivate must be a boolean' }, { status: 422 })
     for (const key of ['ownerUserId', 'assignedUserId'] as const) {
       const value = body[key]
-      if (value !== undefined && value !== null && (typeof value !== 'string' || !isUuid(value) || !((await db.execute(sql`select 1 from users where id = ${value} and org_id = ${user.orgId}`))).rows[0])) {
+      if (value !== undefined && value !== null && !((await db.execute(sql`select 1 from users where id = ${value} and org_id = ${user.orgId}`))).rows[0]) {
         return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
       }
     }
@@ -120,9 +127,6 @@ export const PATCH = defineRoute({
     // never escapes the write as a 500. Blank/null clears the value.
     for (const key of ['startsAt', 'endsAt', 'dueAt', 'reminderAt'] as const) {
       const value = body[key]
-      if (value != null && value !== '' && !isIsoTimestamp(value)) {
-        return NextResponse.json({ error: `invalid ${key}: expected an ISO date or date-time` }, { status: 422 })
-      }
     }
     // The effective pair (request value, else the stored row) is refused here
     // instead of tripping crm_activity_dates inside the transaction. Re-checked
@@ -130,24 +134,19 @@ export const PATCH = defineRoute({
     const startsAt = body.startsAt !== undefined ? textOrNull(body.startsAt) : storedTimestampText(current.rows[0].starts_at)
     const endsAt = body.endsAt !== undefined ? textOrNull(body.endsAt) : storedTimestampText(current.rows[0].ends_at)
     if (await endsPrecedeStarts(db, startsAt, endsAt)) return NextResponse.json({ error: 'end must not precede start' }, { status: 422 })
-    const duration = body.durationMinutes === undefined || body.durationMinutes === null || body.durationMinutes === '' ? null : Number(body.durationMinutes)
+    const duration = body.durationMinutes === undefined || body.durationMinutes === null ? null : Number(body.durationMinutes)
     // duration_minutes is integer: a value the column cannot hold would die in
     // Postgres as a raw failure (HTTP 500 with the full UPDATE — this verb has
     // no catch), so refuse it here with a named 422 and nothing written.
     if (duration !== null && (!Number.isInteger(duration) || duration < 0 || duration > 2147483647)) return NextResponse.json({ error: 'duration must be non-negative whole minutes the activity can store' }, { status: 422 })
-    const links = body.links as Array<{ subjectKind: string; subjectId: string }> | undefined
+    const links = body.links
     if (links) {
-      if (!Array.isArray(links)) return NextResponse.json({ error: 'links must be an array' }, { status: 422 })
-      for (const link of links) if (!link || typeof link !== 'object' || !await subjectExists(user.orgId, link.subjectKind, link.subjectId, gate.allowedSubsidiaryIds)) return NextResponse.json({ error: 'invalid related record' }, { status: 422 })
+      for (const link of links) if (!await subjectExists(user.orgId, link.subjectKind, link.subjectId, gate.allowedSubsidiaryIds)) return NextResponse.json({ error: 'invalid related record' }, { status: 422 })
     }
-    const participants = body.participants as Array<{ userId?: string; contactId?: string; email?: string; response?: string }> | undefined
-    if (participants && !Array.isArray(participants)) return NextResponse.json({ error: 'participants must be an array' }, { status: 422 })
+    const participants = body.participants
     if (participants) for (const participant of participants) {
-      if (!participant || typeof participant !== 'object') return NextResponse.json({ error: 'invalid participant' }, { status: 422 })
-      const targets = [participant.userId, participant.contactId, textOrNull(participant.email)].filter(Boolean)
-      if (targets.length !== 1) return NextResponse.json({ error: 'each participant must have exactly one target' }, { status: 422 })
-      if (participant.userId && (!isUuid(participant.userId) || !((await db.execute(sql`select 1 from users where id = ${participant.userId} and org_id = ${user.orgId}`))).rows[0])) return NextResponse.json({ error: 'invalid participant user' }, { status: 422 })
-      if (participant.contactId && (!isUuid(participant.contactId) || !((await db.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`'contact'`,sql`${participant.contactId}`,gate.allowedSubsidiaryIds)}`))).rows[0])) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
+      if (participant.userId && !((await db.execute(sql`select 1 from users where id = ${participant.userId} and org_id = ${user.orgId}`))).rows[0]) return NextResponse.json({ error: 'invalid participant user' }, { status: 422 })
+      if (participant.contactId && !((await db.execute(sql`select 1 where ${crmSubjectVisible(sql`${user.orgId}`,sql`'contact'`,sql`${participant.contactId}`,gate.allowedSubsidiaryIds)}`))).rows[0]) return NextResponse.json({ error: 'invalid participant contact' }, { status: 422 })
     }
 
       const denied = await db.transaction(async (tx) => {

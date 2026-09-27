@@ -11,11 +11,12 @@ import { guardPermission } from '../../../../lib/authz'
 import { parseBulkActionIds } from '../../../../lib/api/bulk-ids'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 
-const requestBodySchema = z.looseObject({
-  "action": z.unknown().optional(),
-  "confirmDiscardCorrections": z.unknown().optional(),
-  "ids": z.unknown().optional(),
-})
+const captureIds = z.array(z.string().uuid()).min(1).max(50)
+const requestBodySchema = z.discriminatedUnion('action', [
+  z.strictObject({ action: z.literal('reject'), ids: captureIds }),
+  z.strictObject({ action: z.literal('materialize'), ids: captureIds }),
+  z.strictObject({ action: z.literal('reprocess'), ids: captureIds, confirmDiscardCorrections: z.boolean().optional() }),
+])
 
 
 export const runtime = 'nodejs'
@@ -76,12 +77,12 @@ export const POST = defineRoute({
     if (!parsed.ok) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.error === 'not_found' ? 404 : 400 })
     }
-    const body = { action: parsed.action }
+    const action = parsed.action
     const ids = parsed.ids
     const results: Array<{ id: string; ok: boolean; error?: string; errorCode?: string; corrections?: number; documentId?: string; rulesActivated?: ActivatedCaptureRule[] }> = []
     for (const id of ids) {
       try {
-        if (body.action === 'reject') {
+        if (action === 'reject') {
           await db.transaction(async (tx) => {
             if (!await lockApCaptureScope(tx, gate.user.orgId, id, gate.allowedSubsidiaryIds)) {
               throw new Error('not_rejectable')
@@ -99,13 +100,14 @@ export const POST = defineRoute({
             `)
           })
           results.push({ id, ok: true })
-        } else if (body.action === 'reprocess') {
+        } else if (action === 'reprocess') {
           // Reprocessing re-extracts from the provider and overwrites
           // normalized, so the operator's review corrections recorded in
           // ap_capture_corrections would be silently discarded. A corrected
           // capture requires an explicit confirmDiscardCorrections flag; the
           // confirmed queue records how many corrections it discarded.
-          const confirmDiscard = (parsedBody.data as { confirmDiscardCorrections?: unknown }).confirmDiscardCorrections === true
+          const confirmDiscard = parsedBody.data.action === 'reprocess'
+            && parsedBody.data.confirmDiscardCorrections === true
           const queued = await db.transaction(async (tx) => {
             if (!await lockApCaptureScope(tx, gate.user.orgId, id, gate.allowedSubsidiaryIds)) {
               throw new Error('not_reprocessable')

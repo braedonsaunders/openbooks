@@ -1,6 +1,6 @@
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
-import { parseJsonBody } from "@/lib/api/json"
+import { exactMoney, parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -14,22 +14,22 @@ import { loadEquipment, loadEquipmentInWrite } from '../_lib'
 import { ScopeNotFoundError, lockScopeRows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "acquiredOn": z.unknown().optional(),
-  "capacityQuantity": z.unknown().optional(),
-  "capacityUnit": z.unknown().optional(),
-  "chargeItemId": z.unknown().optional(),
-  "description": z.unknown().optional(),
-  "fixedAssetId": z.unknown().optional(),
-  "inServiceOn": z.unknown().optional(),
-  "name": z.unknown().optional(),
-  "purchasePrice": z.unknown().optional(),
-  "rateBookId": z.unknown().optional(),
-  "serialNumber": z.unknown().optional(),
-  "status": z.unknown().optional(),
-  "subsidiaryId": z.unknown().optional(),
-  "unitNumber": z.unknown().optional(),
-})
+const requestBodySchema = z.object({
+  acquiredOn: z.string().refine(isIsoCalendarDate, 'acquiredOn must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
+  capacityQuantity: z.string().max(80).nullable().optional(),
+  capacityUnit: z.string().trim().max(80).nullable().optional(),
+  chargeItemId: z.string().uuid({ error: 'chargeItemId must be a valid charge item id' }).nullable().optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  fixedAssetId: z.string().uuid({ error: 'fixedAssetId must be a valid fixed asset id' }).nullable().optional(),
+  inServiceOn: z.string().refine(isIsoCalendarDate, 'inServiceOn must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
+  name: z.string().trim().max(200).nullable().optional(),
+  purchasePrice: exactMoney('purchasePrice must be an exact decimal string with at most four decimal places').optional(),
+  rateBookId: z.string().uuid({ error: 'rateBookId must be a valid rate book id' }).nullable().optional(),
+  serialNumber: z.string().trim().max(200).nullable().optional(),
+  status: z.enum(['draft', 'active', 'inactive', 'retired'], { error: 'status must be draft, active, inactive, or retired' }).optional(),
+  subsidiaryId: z.string().uuid({ error: 'subsidiaryId must be a valid legal entity id' }).nullable().optional(),
+  unitNumber: z.string().trim().max(100).nullable().optional(),
+}).refine((body) => Object.keys(body).length > 0, { error: 'provide at least one equipment field to update' })
 
 
 

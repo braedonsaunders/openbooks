@@ -20,9 +20,9 @@ import { isUuid } from '../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "payRunDocumentId": z.unknown().optional(),
-  "registerId": z.unknown().optional(),
+const requestBodySchema = z.strictObject({
+  registerId: z.string().uuid(),
+  payRunDocumentId: z.string().uuid(),
 })
 
 
@@ -163,30 +163,14 @@ export const GET = defineRoute({
   },
 })
 
-interface RunBody {
-  registerId?: unknown
-  payRunDocumentId?: unknown
-}
-
 export const POST = defineRoute({
   permission: 'payroll.manage',
   feature: 'payroll',
   handler: async ({ request: req, authz: gate }) => {
 
-    let body: RunBody
-    try {
-      const parsedBody = await parseJsonBody(req, requestBodySchema);
-      if (!parsedBody.ok) return parsedBody.response;
-      body = (parsedBody.data) as RunBody
-    } catch {
-      return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
-    }
-    if (typeof body.registerId !== 'string' || !isUuid(body.registerId)) {
-      return NextResponse.json({ error: 'registerId must be a prior register' }, { status: 422 })
-    }
-    if (typeof body.payRunDocumentId !== 'string' || !isUuid(body.payRunDocumentId)) {
-      return NextResponse.json({ error: 'payRunDocumentId must be a pay run' }, { status: 422 })
-    }
+    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.data
 
     const denied = await assertComparisonInputsInScope(
       gate.user.orgId,

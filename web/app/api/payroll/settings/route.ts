@@ -27,17 +27,56 @@ import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { isUuid } from '../../../../lib/list-params'
 import { suppliedValue } from '../../../../lib/payroll-decimal-refusal'
 
-const requestBodySchema = z.looseObject({
-  "action": z.unknown().optional(),
-  "countries": z.unknown().optional(),
-  "country": z.unknown().optional(),
-  "eftFallbackToCheque": z.unknown().optional(),
-  "slotAccounts": z.unknown().optional(),
-  "statutoryHolidayPay": z.unknown().optional(),
-  "stubPassword": z.unknown().optional(),
-  "t4Transmitter": z.unknown().optional(),
-  "wagesTo": z.unknown().optional(),
+const remittanceVendorFields = Object.fromEntries(
+  declaredRemittanceVendorSettingsKeys().map((key) => [key, z.string().uuid().nullable().optional()]),
+)
+const remittanceFrequencyFields = Object.fromEntries(
+  declaredRemittanceFrequencySettingsKeys().map((key) => [
+    key,
+    z.string().nullable().optional().superRefine((value, ctx) => {
+      if (value == null) return
+      const schedule = remittanceScheduleForFrequencyKey(key)
+      if (!schedule || !remittanceFrequencyBand(schedule, value)) {
+        const valid = schedule?.frequencies.map((band) => band.frequency).join(', ') ?? 'none declared'
+        ctx.addIssue({ code: 'custom', message: `${key} must be one of ${valid}` })
+      }
+    }),
+  ]),
+)
+const payrollSettingsSchema = z.looseObject({
+  wageExpenseAccountId: z.string().uuid().nullable().optional(),
+  burdenExpenseAccountId: z.string().uuid().nullable().optional(),
+  netPayAccountId: z.string().uuid().nullable().optional(),
+  cppPayableAccountId: z.string().uuid().nullable().optional(),
+  eiPayableAccountId: z.string().uuid().nullable().optional(),
+  taxPayableAccountId: z.string().uuid().nullable().optional(),
+  vacationPayableAccountId: z.string().uuid().nullable().optional(),
+  ...remittanceVendorFields,
+  ...remittanceFrequencyFields,
+  eftFallbackToCheque: z.boolean().optional(),
+  wagesTo: z.enum(['expense', 'labor_clearing']).optional(),
+  t4Transmitter: z.strictObject({
+    bn: z.string().nullable().optional(),
+    transmitterNumber: z.string().nullable().optional(),
+    name: z.string().nullable().optional(),
+    contactName: z.string().nullable().optional(),
+    contactEmail: z.string().nullable().optional(),
+    contactPhone: z.string().nullable().optional(),
+  }).optional(),
+  stubPassword: z.strictObject({ enabled: z.boolean(), expression: z.string() }).optional(),
+  countries: z.array(z.string().refine((country) => Object.hasOwn(PAYROLL_COUNTRY_PACKS, country), 'country must be a declared payroll pack')).optional(),
+  statutoryHolidayPay: z.boolean().optional(),
+  slotAccounts: z.record(
+    z.string().refine((country) => Object.hasOwn(PAYROLL_COUNTRY_PACKS, country), 'country must be a declared payroll pack'),
+    z.record(z.string(), z.string().uuid().nullable()),
+  ).optional(),
 })
+const installableCountry = z.string().refine((country) => installableCountries().includes(country), 'country must name an installable payroll pack')
+const packActionSchema = z.discriminatedUnion('action', [
+  z.strictObject({ action: z.literal('seed-components'), country: installableCountry }),
+  z.strictObject({ action: z.literal('install-pack'), country: installableCountry }),
+  z.strictObject({ action: z.literal('uninstall-pack'), country: z.string().refine((code) => Object.hasOwn(PAYROLL_COUNTRY_PACKS, code), 'country must name an installed payroll pack') }),
+])
 
 
 export const dynamic = 'force-dynamic'
@@ -330,7 +369,7 @@ export const PUT = defineRoute({
     const scopeDenied = await guardRootSubsidiaryScope(gate)
     if (scopeDenied) return scopeDenied
     const orgId = gate.user.orgId
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    const parsedBody = await parseJsonBody(req, payrollSettingsSchema);
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
     const acceptedKeys = new Set<string>([
@@ -618,7 +657,7 @@ export const POST = defineRoute({
   handler: async ({ request: req, authz: gate }) => {
     const scopeDenied = await guardRootSubsidiaryScope(gate)
     if (scopeDenied) return scopeDenied
-    const parsedBody2 = await parseJsonBody(req, requestBodySchema);
+    const parsedBody2 = await parseJsonBody(req, packActionSchema);
     if (!parsedBody2.ok) return parsedBody2.response;
     const body = parsedBody2.data
     if (body.action === 'seed-components') {

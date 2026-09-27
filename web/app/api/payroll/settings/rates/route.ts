@@ -28,14 +28,14 @@ import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { decimalNullRefusal, moneyRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  country: z.unknown().optional(),
-  rateKey: z.unknown().optional(),
-  region: z.unknown().optional(),
-  subRegion: z.unknown().optional(),
-  filingAccountId: z.unknown().optional(),
-  taxYear: z.unknown().optional(),
-  values: z.unknown().optional(),
+const requestBodySchema = z.strictObject({
+  country: z.string().trim().min(2).max(3),
+  rateKey: z.string().trim().min(1).max(120),
+  region: z.string().trim().max(80).nullable().optional(),
+  subRegion: z.string().trim().max(120).nullable().optional(),
+  filingAccountId: z.union([z.string().uuid(), z.literal(''), z.null()]).optional(),
+  taxYear: z.union([z.number().int(), z.string().regex(/^\d{4}$/, 'taxYear must be a four-digit year')]),
+  values: z.record(z.string(), z.union([z.string(), z.boolean()])),
 })
 
 

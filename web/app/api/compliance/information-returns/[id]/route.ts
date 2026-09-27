@@ -18,12 +18,19 @@ import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "action": z.unknown().optional(),
-  "channel": z.unknown().optional(),
-  "reason": z.unknown().optional(),
-  "reference": z.unknown().optional(),
-})
+const requestBodySchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('compute') }),
+  z.object({ action: z.literal('finalize') }),
+  z.object({
+    action: z.literal('file'),
+    channel: z.enum(['iris', 'fire', 'paper', 'provider', 'other'], { error: 'channel must name a filing channel' }),
+    reference: z.string().trim().max(200).nullable().optional(),
+  }),
+  z.object({
+    action: z.literal('void'),
+    reason: z.string().trim().min(1, 'reason is required to void a filing').max(2000),
+  }),
+], { error: 'action must be compute, finalize, file, or void' })
 
 
 
@@ -53,12 +60,7 @@ export const POST = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as {
-      action?: Action
-      channel?: string
-      reference?: string | null
-      reason?: string
-    }
+    const body = parsedBody.data
     const action = body.action
     if (!action) return NextResponse.json({ error: 'action is required' }, { status: 400 })
     const needed = action === 'compute' ? 'compliance.manage' : 'compliance.file'
