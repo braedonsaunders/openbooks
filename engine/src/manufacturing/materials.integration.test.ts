@@ -4,6 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import type { SqlExecutor } from "../platform/db.ts";
+import { withSimClock } from "../platform/clock.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { ensureLot } from "../inventory/tracking.ts";
 import { receiveInventory } from "../inventory/movements.ts";
@@ -13,6 +14,7 @@ import { activateRouting, createRouting, createRoutingOperation } from "./routin
 import { createWorkCenter } from "./work-centers.ts";
 import { createWorkOrder, holdWorkOrder, releaseWorkOrder, startWorkOrderOperation } from "./work-orders.ts";
 import { completeWorkOrderOperation, issueMaterials } from "./materials.ts";
+import { createSandbox } from "../sandbox/lifecycle.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 type Fixture = { org: ScratchOrg; actorId: string; wipId: string };
@@ -69,6 +71,7 @@ async function prepare(f: Fixture, input: {
   await run((tx) => releaseWorkOrder(tx, f.org.orgId, f.actorId, draft.id));
   return withBypassContext(async () => ({
     id: draft.id,
+    number: draft.number,
     materialId: (await db.execute<{ id: string }>(sql`select id from mfg_wo_materials where org_id=${f.org.orgId} and work_order_id=${draft.id}`)).rows[0]!.id,
     operationId: (await db.execute<{ id: string }>(sql`select id from mfg_wo_operations where org_id=${f.org.orgId} and work_order_id=${draft.id}`)).rows[0]!.id,
   }));
@@ -83,6 +86,22 @@ async function stock(f: Fixture, quantity: string, unitCost: string, lotName?: s
   return lotId;
 }
 
+async function withVancouverDate(f: Fixture, work: () => Promise<void>) {
+  const result = await withBypassContext(() => db.execute<{ zone_count: number; period_count: number }>(sql`
+    with zone as (update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{timeZone}','"America/Vancouver"'::jsonb,true) where id=${f.org.orgId} returning id),
+    added as (insert into accounting_periods (id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
+      select ${randomUUID()},${f.org.orgId},2026,10,'2026-10','2026-10-01','2026-10-31',false,source.fiscal_calendar_id
+      from accounting_periods source cross join zone where source.id=${f.org.periodId} and not exists
+        (select 1 from accounting_periods where org_id=${f.org.orgId} and date '2026-10-31' between starts_on and ends_on and not is_adjustment) returning id)
+    select (select count(*)::int from zone) as zone_count,
+      (select count(*)::int from added)+(select count(*)::int from accounting_periods where org_id=${f.org.orgId}
+        and date '2026-10-31' between starts_on and ends_on and not is_adjustment) as period_count`));
+  assert.deepEqual(result.rows, [{ zone_count: 1, period_count: 1 }]);
+  await withSimClock("2026-10-31T23:30:00-07:00", work);
+}
+async function orderPostingDate(f: Fixture, number: string) {
+  return withBypassContext(async () => (await db.execute<{ date: string }>(sql`select posting_date::text as date from journal_entries where org_id=${f.org.orgId} and origin='manufacturing' and custom->>'work_order_number'=${number} order by id desc limit 1`)).rows[0]?.date);
+}
 async function issue(f: Fixture, orderId: string, materialId: string, quantity = "1", lotId?: string | null, serialId?: string | null) {
   return run((tx) => issueMaterials(tx, f.org.orgId, f.actorId, orderId, [{ materialId, quantity, lotId, serialId }]));
 }
@@ -94,7 +113,42 @@ async function refuses(work: Promise<unknown>, code: string, text: string, remed
     && error.message.includes(text) && Boolean(error.remedy?.trim()) && (remedy === undefined || error.remedy === remedy));
 }
 
+async function withSandboxClone(f: Fixture, work: (orgId: string) => Promise<void>) {
+  const name = `Manufacturing ${randomUUID()}`;
+  const clone = await withBypassContext(() => createSandbox({ productionOrgId: f.org.orgId, name, tier: "full", masked: false }));
+  try {
+    await work(clone.sandboxOrgId);
+  } finally {
+    const renamed = await withBypassContext(() => db.execute(sql`update orgs set name=${`Scratch ${name}`} where id=${clone.sandboxOrgId} and env_kind='sandbox' returning id`));
+    assert.equal(renamed.rows.length, 1);
+    await dropScratchOrg(clone.sandboxOrgId);
+  }
+}
+
 const cases: Case[] = [
+  { name: "material issue uses the organization's business date", run: async (f) => {
+    const order = await prepare(f); await stock(f, "4", "2");
+    await withVancouverDate(f, async () => {
+      const posted = await issue(f, order.id, order.materialId);
+      const date = await withBypassContext(async () => (await db.execute<{ date: string }>(sql`select posting_date::text date from journal_entries where org_id=${f.org.orgId} and id=${posted.entryId}`)).rows[0]?.date);
+      assert.equal(date, "2026-10-31");
+    });
+  } },
+  { name: "start backflush uses the organization's business date", run: async (f) => {
+    const order = await prepare(f, { backflushAt: "start", operationSeq: 10 }); await stock(f, "4", "2");
+    await withVancouverDate(f, async () => {
+      await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
+      assert.equal(await orderPostingDate(f, order.number), "2026-10-31");
+    });
+  } },
+  { name: "operation completion backflush uses the organization's business date", run: async (f) => {
+    const order = await prepare(f, { backflushAt: "finish", operationSeq: 10 }); await stock(f, "4", "2");
+    await withVancouverDate(f, async () => {
+      await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
+      await run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId, { doneQty: "1" }));
+      assert.equal(await orderPostingDate(f, order.number), "2026-10-31");
+    });
+  } },
   { name: "explicit issue posts balanced WIP at layer cost and links movement", run: async (f) => {
     const order = await prepare(f, { operationSeq: 10 }); await stock(f, "5", "3"); const result = await issue(f, order.id, order.materialId, "2");
     const rows = await withBypassContext(async () => {
@@ -112,11 +166,15 @@ const cases: Case[] = [
     const order = await prepare(f, { tracking: "lot" }); await stock(f, "2", "3", "LOT-A");
     await assert.rejects(issue(f, order.id, order.materialId, "1"), /lot-tracked item requires a lot/);
   } },
-  { name: "start backflush uses planned quantity and scrap", run: async (f) => {
-    const order = await prepare(f, { backflushAt: "start", operationSeq: 10, quantityPer: "2", scrapPct: "10", orderQty: "2" });
-    await stock(f, "5", "2"); await run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, order.id, order.operationId));
-    const row = await withBypassContext(async () => db.execute<{ quantity: string }>(sql`select quantity::text from inventory_movements where org_id=${f.org.orgId} and kind='assembly_consume'`));
-    assert.equal(row.rows[0]?.quantity, "-4.4000");
+  { name: "released measure and scrap snapshots survive sandbox cloning without audit rows", run: async (f) => {
+    const order = await prepare(f, { backflushAt: "start", qualityGate: "measure", operationSeq: 10, quantityPer: "2", scrapPct: "10", orderQty: "2" });
+    await stock(f, "5", "2");
+    await withSandboxClone(f, async (orgId) => {
+      const clone = await withBypassContext(async () => (await db.execute<{ id: string; operation_id: string }>(sql`select wo.id,operation.id as operation_id from mfg_work_orders wo join mfg_wo_operations operation on operation.org_id=wo.org_id and operation.work_order_id=wo.id where wo.org_id=${orgId} and wo.number=${order.number}`)).rows[0]!);
+      await run((tx) => startWorkOrderOperation(tx, orgId, f.actorId, clone.id, clone.operation_id));
+      assert.equal((await withBypassContext(async () => db.execute<{ quantity: string }>(sql`select quantity::text from inventory_movements where org_id=${orgId} and kind='assembly_consume'`))).rows[0]?.quantity, "-4.4000");
+      await refuses(run((tx) => completeWorkOrderOperation(tx, orgId, f.actorId, clone.id, clone.operation_id, { doneQty: "1" })), "measured_quantity_required", "measured quantity");
+    });
   } },
   { name: "finish backflush uses reported quantity and scrap", run: async (f) => {
     const order = await prepare(f, { backflushAt: "finish", operationSeq: 10, quantityPer: "2", scrapPct: "10", orderQty: "2" });

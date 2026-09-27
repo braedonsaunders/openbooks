@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { isUuid } from "../platform/uuid.ts";
+import { businessToday } from "../platform/business-date.ts";
 import { add, cmp, fromUnits, isZero, neg, roundDiv, sum, toUnits } from "../money/money.ts";
 import { assertItemsActive } from "../inventory/item-active.ts";
 import { assertStockLocationAdmitsSubsidiary, resolveProfile } from "../inventory/profile-policy.ts";
@@ -12,13 +12,12 @@ import { ensureLot, ensureSerial, validateTrackingSelection } from "../inventory
 import { assertInventoryDate, lockInventoryPosition, periodForDate, primaryBookId, subsidiaryCurrency } from "../inventory/position.ts";
 import { extendCost, unitCostPerQuantity } from "../inventory/costing.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
-import { CONTROL_ACCOUNT_TYPE_POLICY } from "../records/control-accounts.ts";
 import { assertManufacturingFeature } from "./gate.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, decimalValue } from "./master-support.ts";
 import { getManufacturingPolicies } from "./policies.ts";
 import { bomRequiredQuantity } from "../inventory/bom-scrap.ts";
-import { postManufacturingEntry } from "./journal.ts";
+import { manufacturingControlAccount, postManufacturingEntry } from "./journal.ts";
 import { restoreIssueLayers, reverseInventoryJournal, type ReverseInventoryInput, type ReverseInventoryResult, type ReversibleMovement } from "../inventory/reversal.ts";
 
 type Order = {
@@ -31,7 +30,7 @@ type Order = {
 type Material = {
   id: string; component_item_id: string; component_code: string | null; component_name: string; required_qty: string;
   issued_qty: string; backflush_qty: string; operation_seq: number | null; waived_at: Date | null;
-  quantity_per: string | null; scrap_pct: string | null;
+  quantity_per: string; scrap_pct: string;
 };
 type ReceiptSelection = { itemId?: string; quantity: string; lotNumber?: string; expiresOn?: string | null; serialNumber?: string };
 export interface CompleteWorkOrderInput {
@@ -78,28 +77,6 @@ function refuseIfHeld(order: Order): void {
     refuse("Work order " + order.number + " is on hold for " + (order.hold_reason?.trim() || "no reason recorded") + ".", "work_order_on_hold", "Resume the work order before posting completion.", 409);
   }
 }
-async function controlAccount(tx: SqlExecutor, orgId: string, role: "mfgWip" | "mfgMaterialUsageVariance"): Promise<string> {
-  const mapped = (await tx.execute<{ account_id: string | null }>(sql`
-    select settings->'controlAccounts'->>${role} as account_id from orgs where id=${orgId} for share`)).rows[0];
-  const remedy = role === "mfgWip"
-    ? "Map Manufacturing WIP in Setup → Control accounts."
-    : "Map Material Usage Variance in Setup → Control accounts.";
-  if (!mapped) throw new ManufacturingNotFoundError();
-  if (!mapped.account_id) {
-    const name = role === "mfgWip" ? "WIP" : "Material Usage Variance";
-    refuse("The Manufacturing " + name + " control account role " + role + " is not mapped.", role + "_account_missing", remedy);
-  }
-  if (!isUuid(mapped.account_id)) {
-    refuse("The Manufacturing control account role " + role + " does not identify an account.", role + "_account_invalid", remedy);
-  }
-  const account = (await tx.execute<{ id: string; type: string; is_active: boolean; is_summary: boolean }>(sql`
-    select id, type, is_active, is_summary from accounts where org_id=${orgId} and id=${mapped.account_id} for share`)).rows[0];
-  const allowed: readonly string[] = CONTROL_ACCOUNT_TYPE_POLICY[role];
-  if (!account || !account.is_active || account.is_summary || !allowed.includes(account.type)) {
-    refuse("The Manufacturing control account role " + role + " is not mapped to an active posting account.", role + "_account_invalid", remedy);
-  }
-  return account.id;
-}
 async function wipBalance(tx: SqlExecutor, orgId: string, order: Order, accountId: string): Promise<string> {
   const row = (await tx.execute<{ balance: string }>(sql`
     select coalesce(sum(line.amount), 0)::text as balance
@@ -109,11 +86,6 @@ async function wipBalance(tx: SqlExecutor, orgId: string, order: Order, accountI
        and entry.origin='manufacturing' and entry.custom->>'work_order_number'=${order.number}
        and entry.status in ('posted','reversed')`)).rows[0];
   return row?.balance ?? "0.0000";
-}
-async function postingDate(tx: SqlExecutor): Promise<string> {
-  const row = (await tx.execute<{ date: string }>(sql`select current_date::text as date`)).rows[0];
-  if (!row) throw new ManufacturingError("The posting date could not be resolved.", { code: "posting_date_missing", remedy: "Retry after the accounting date is available." });
-  return row.date;
 }
 function ratioAmount(value: string, numerator: bigint, denominator: bigint): string {
   if (denominator <= 0n) throw new Error("positive remaining work-order quantity required");
@@ -135,28 +107,20 @@ async function loadMaterials(tx: SqlExecutor, orgId: string, orderId: string, lo
     select material.id, material.component_item_id, item.name as component_name,
            item.code as component_code, material.required_qty::text, material.issued_qty::text, material.backflush_qty::text,
            material.operation_seq, material.waived_at,
-           snapshot.changes->'after'->>'quantityPer' as quantity_per,
-           snapshot.changes->'after'->>'scrapPct' as scrap_pct
+           material.quantity_per::text as quantity_per,
+           material.scrap_pct::text as scrap_pct
       from mfg_wo_materials material join items item
         on item.org_id=material.org_id and item.id=material.component_item_id
-      left join lateral (
-        select changes from audit_log where org_id=material.org_id
-          and table_name='mfg_wo_materials' and row_id=material.id and action='insert'
-         order by at, id limit 1
-      ) snapshot on true
      where material.org_id=${orgId} and material.work_order_id=${orderId}
      order by material.id ${lock ? sql`for update of material` : sql``}`)).rows;
 }
 async function loadByproducts(tx: SqlExecutor, orgId: string, order: Order): Promise<Byproduct[]> {
   return (await tx.execute<Byproduct>(sql`
-    select item.id as item_id, item.code, item.name, bom.quantity_per::text, item.default_rate::text
-      from bom_components bom join items item
-        on item.org_id=bom.org_id and item.id=bom.component_item_id
-     where bom.org_id=${orgId} and bom.assembly_item_id=${order.produced_item_id}
-       and bom.is_byproduct
-       and (bom.effective_from is null or bom.effective_from <= coalesce(${order.planned_start}::date, current_date))
-       and (bom.effective_to is null or bom.effective_to > coalesce(${order.planned_start}::date, current_date))
-     order by bom.sort_order, bom.id`)).rows;
+    select item.id as item_id, item.code, item.name, byproduct.quantity_per::text, item.default_rate::text
+      from mfg_wo_byproducts byproduct join items item
+        on item.org_id=byproduct.org_id and item.id=byproduct.item_id
+     where byproduct.org_id=${orgId} and byproduct.work_order_id=${order.id}
+     order by byproduct.item_id`)).rows;
 }
 async function materialUsageVariance(
   tx: SqlExecutor, orgId: string, order: Order, materials: Material[], completedQuantity: string,
@@ -196,9 +160,6 @@ async function materialUsageVariance(
     if (!unitCost) continue;
     let allowed = "0.0000";
     for (const material of materials.filter((line) => line.component_item_id === componentId)) {
-      if (!material.quantity_per) {
-        refuse("Component " + material.component_name + " has no released quantity-per snapshot.", "material_snapshot_missing", "Create a new work order from the approved BOM and routing version.", 409);
-      }
       allowed = add(allowed, bomRequiredQuantity(completedQuantity, material.quantity_per, material.scrap_pct).quantity);
     }
     const cumulative = add(extendCost(issue.quantity, unitCost), neg(extendCost(allowed, unitCost)));
@@ -321,12 +282,14 @@ export async function completeWorkOrder(
   const itemLabels = await loadItemLabels(tx, orgId, itemIds);
   const producedProfile = await resolveProfile(orgId, order.produced_item_id, tx as Runner, true);
   const materials = await loadMaterials(tx, orgId, order.id, true);
-  const wipId = await controlAccount(tx, orgId, "mfgWip");
+  const wipId = await manufacturingControlAccount(tx, orgId, order.subsidiary_id, "mfgWip");
   const usage = producedProfile.costingMethod === "standard"
     ? await materialUsageVariance(tx, orgId, order, materials, completed)
     : { cumulative: "0.0000", delta: "0.0000", byComponent: [] };
   const hasUsageVariance = usage.byComponent.some((component) => !isZero(component.delta));
-  const usageVarianceId = hasUsageVariance ? await controlAccount(tx, orgId, "mfgMaterialUsageVariance") : null;
+  const usageVarianceId = hasUsageVariance
+    ? await manufacturingControlAccount(tx, orgId, order.subsidiary_id, "mfgMaterialUsageVariance")
+    : null;
   const balance = await wipBalance(tx, orgId, order, wipId);
   if (cmp(balance, "0") < 0) {
     refuse("Work order " + order.number + " has a credit balance in Manufacturing WIP.", "negative_work_order_wip", "Review the work order's manufacturing journal entries before completing it.");
@@ -335,7 +298,7 @@ export async function completeWorkOrder(
   const relievedWip = cmp(completed, order.quantity_ordered) >= 0
     ? balance : ratioAmount(balance, toUnits(q), toUnits(remainingQuantity));
   const selections = input.lots ?? [];
-  const date = await postingDate(tx);
+  const date = await businessToday(orgId);
   const bookId = await primaryBookId(orgId, tx as Runner);
   const periodId = await periodForDate(orgId, date, tx as Runner);
   if (!periodId) throw new ManufacturingError("No accounting period covers " + date + ".", { code: "posting_period_missing", remedy: "Open an accounting period for the completion date." });
@@ -504,10 +467,8 @@ export async function markWorkOrderDone(
   }
   const operations = (await tx.execute<{ sequence: number }>(sql`
     select operation.sequence from mfg_wo_operations operation
-      left join lateral (select changes from audit_log where org_id=operation.org_id
-        and table_name='mfg_wo_operations' and row_id=operation.id and action='insert' order by at,id limit 1) snapshot on true
      where operation.org_id=${orgId} and operation.work_order_id=${order.id}
-       and snapshot.changes->'after'->>'qualityGate'='measure' and operation.measured_qty is null
+       and operation.quality_gate='measure' and operation.measured_qty is null
      order by operation.sequence`)).rows;
   if (operations.length) {
     refuse("Work order " + order.number + " has measure operation " + operations.map((row) => row.sequence).join(", ") + " without a measured quantity.", "measure_quantity_missing", "Record the measured quantity for each named operation.");
@@ -529,7 +490,7 @@ export async function markWorkOrderDone(
   if (openChildren.length) {
     refuse("Work order " + order.number + " has child work orders not done: " + openChildren.map((row) => row.number).join(", ") + ".", "child_work_order_open", "Complete each named child work order before marking the parent done.");
   }
-  const wipId = await controlAccount(tx, orgId, "mfgWip");
+  const wipId = await manufacturingControlAccount(tx, orgId, order.subsidiary_id, "mfgWip");
   const residual = await wipBalance(tx, orgId, order, wipId);
   if (cmp(residual, "0") < 0) {
     refuse("Work order " + order.number + " has a credit balance in Manufacturing WIP.", "negative_work_order_wip", "Review the work order's manufacturing journal entries before marking it done.");
@@ -540,7 +501,7 @@ export async function markWorkOrderDone(
       const itemLabels = await loadItemLabels(tx, orgId, [order.produced_item_id]);
       refuse("Finished good " + itemLabels.get(order.produced_item_id)! + " has short-close WIP but no variance account.", "short_close_variance_account_missing", "Configure the produced item's variance account in inventory costing setup.");
     }
-    const date = await postingDate(tx);
+    const date = await businessToday(orgId);
     const bookId = await primaryBookId(orgId, tx as Runner);
     const periodId = await periodForDate(orgId, date, tx as Runner);
     if (!periodId) throw new ManufacturingError("No accounting period covers " + date + ".", { code: "posting_period_missing", remedy: "Open an accounting period for the completion date." });

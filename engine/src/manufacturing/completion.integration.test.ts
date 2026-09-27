@@ -4,6 +4,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import type { SqlExecutor } from "../platform/db.ts";
+import { withSimClock } from "../platform/clock.ts";
+import { businessToday } from "../platform/business-date.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { getOnHand } from "../inventory/position.ts";
@@ -42,7 +44,7 @@ async function setup(): Promise<Fixture> {
         assert.equal(period.rows.length, 1, "current accounting period must be created for posting tests");
       }
     });
-    const postingDate = await withBypassContext(async () => (await db.execute<{ date: string }>(sql`select current_date::text date`)).rows[0]!.date);
+    const postingDate = await withBypassContext(() => businessToday(org.orgId));
     return { org, actorId, wipId, usageId, postingDate };
   } catch (error) { await withBypassContext(() => dropScratchOrg(org.orgId)); throw error; }
 }
@@ -95,6 +97,19 @@ async function refuse(work: Promise<unknown>, code: string, text: string, remedy
   await assert.rejects(work, (error: unknown) => error instanceof ManufacturingError && error.code === code
     && error.message.includes(text) && Boolean(error.remedy?.trim()) && (remedy === undefined || error.remedy?.includes(remedy) === true), code + " must name a remedy");
 }
+async function withVancouverDate(f: Fixture, work: () => Promise<void>) {
+  const result = await withBypassContext(() => db.execute<{ zone_count: number; period_count: number }>(sql`
+    with zone as (update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{timeZone}','"America/Vancouver"'::jsonb,true) where id=${f.org.orgId} returning id),
+    added as (insert into accounting_periods (id,org_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment,fiscal_calendar_id)
+      select ${randomUUID()},${f.org.orgId},2026,10,'2026-10','2026-10-01','2026-10-31',false,source.fiscal_calendar_id
+      from accounting_periods source cross join zone where source.id=${f.org.periodId} and not exists
+        (select 1 from accounting_periods where org_id=${f.org.orgId} and date '2026-10-31' between starts_on and ends_on and not is_adjustment) returning id)
+    select (select count(*)::int from zone) as zone_count,
+      (select count(*)::int from added)+(select count(*)::int from accounting_periods where org_id=${f.org.orgId}
+        and date '2026-10-31' between starts_on and ends_on and not is_adjustment) as period_count`));
+  assert.deepEqual(result.rows, [{ zone_count: 1, period_count: 1 }]);
+  await withSimClock("2026-10-31T23:30:00-07:00", work);
+}
 async function wip(f: Fixture, number: string) {
   return withBypassContext(async () => (await db.execute<{ value: string }>(sql`select coalesce(sum(line.amount),0)::text value
     from journal_lines line join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
@@ -109,6 +124,15 @@ async function counts(f: Fixture) {
   }));
 }
 const cases: Case[] = [
+  { name: "completion uses the organization's business date", run: async (f) => {
+    const wo = await prepare(f); await stock(f, f.org.items.component, "4", "3");
+    await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]);
+    await withVancouverDate(f, async () => {
+      const result = await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "1" }));
+      const date = await withBypassContext(async () => (await db.execute<{ date: string }>(sql`select posting_date::text date from journal_entries where org_id=${f.org.orgId} and id=${result.entryId}`)).rows[0]?.date);
+      assert.equal(date, "2026-10-31");
+    });
+  } },
   { name: "actual partial then final completion clears WIP and ties finished layers", run: async (f) => {
     const wo = await prepare(f, { quantity: "2" }); await stock(f, f.org.items.component, "8", "3");
     await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "4" }]);
@@ -145,13 +169,15 @@ const cases: Case[] = [
     assert.deepEqual(componentVariances, ["-1.0000", "3.0000"], "favorable usage credits and adverse usage debits remain visible by component");
   } },
   { name: "by-products use item NRV and reasoned manual NRV", run: async (f) => {
-    const wo = await prepare(f);
     await withBypassContext(async () => {
       await db.execute(sql`update items set default_rate='1.5' where org_id=${f.org.orgId} and id=${f.org.items.standard} returning id`);
       await db.execute(sql`insert into bom_components (org_id,assembly_item_id,component_item_id,quantity_per,sort_order,is_byproduct)
         values (${f.org.orgId},${f.org.items.assembly},${f.org.items.standard},'1',10,true),
                (${f.org.orgId},${f.org.items.assembly},${f.org.items.fifo},'1',11,true) returning id`);
     });
+    const wo = await prepare(f);
+    await withBypassContext(() => db.execute(sql`update bom_components set quantity_per='8'
+      where org_id=${f.org.orgId} and assembly_item_id=${f.org.items.assembly} and is_byproduct returning id`));
     await stock(f, f.org.items.component, "4", "3"); await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]);
     const result = await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "1",
       byproductValues: [{ itemId: f.org.items.fifo, nrvUnit: "2", reason: "Observed resale value" }] }));
@@ -174,7 +200,8 @@ const cases: Case[] = [
     await withBypassContext(() => db.execute(sql`update orgs set settings=settings#-'{controlAccounts,mfgMaterialUsageVariance}' where id=${f.org.orgId} returning id`));
     const before = await counts(f);
     await assert.rejects(run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "1" })),
-      (error: unknown) => error instanceof ManufacturingError && error.message.includes("mfgMaterialUsageVariance") && error.remedy?.includes("Setup → Control accounts"));
+      (error: unknown) => error instanceof ManufacturingError && error.message.includes("mfgMaterialUsageVariance")
+        && error.remedy?.includes("under Setup → Company & Accounting → Control accounts."));
     assert.deepEqual(await counts(f), before);
   } },
   { name: "done requires waiver for under-issued explicit material", run: async (f) => {
@@ -201,7 +228,13 @@ const cases: Case[] = [
     const wo = await prepare(f); await stock(f, f.org.items.component, "4", "3"); await issue(f, wo.id, [{ materialId: wo.materials[0]!.id, quantity: "2" }]);
     await run((tx) => completeWorkOrder(tx, f.org.orgId, f.actorId, wo.id, { quantity: "0.995" }));
     await refuse(run((tx) => markWorkOrderDone(tx, f.org.orgId, f.actorId, wo.id)), "short_close_reason_required", "below its ordered quantity", "short-close reason");
-    await run((tx) => markWorkOrderDone(tx, f.org.orgId, f.actorId, wo.id, { shortCloseReason: "Customer order reduced" }));
+    await withVancouverDate(f, async () => {
+      await run((tx) => markWorkOrderDone(tx, f.org.orgId, f.actorId, wo.id, { shortCloseReason: "Customer order reduced" }));
+      const date = await withBypassContext(async () => (await db.execute<{ date: string }>(sql`select posting_date::text date from journal_entries
+        where org_id=${f.org.orgId} and entry_number like 'MFG-SHORT-2026-10-31-%'
+          and custom->>'work_order_number'=${wo.number}`)).rows[0]?.date);
+      assert.equal(date, "2026-10-31");
+    });
     assert.equal(await wip(f, wo.number), "0.0000");
   } },
   { name: "issue reversal restores layers, counters, and WIP before cancel", run: async (f) => {

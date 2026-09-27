@@ -14,12 +14,23 @@ import { createWorkCenter } from "./work-centers.ts";
 import { activateRouting, createNextRoutingVersion, createRouting, createRoutingOperation, updateRouting } from "./routings.ts";
 import { updateManufacturingPolicies } from "./policies.ts";
 import { upsertItemPolicy } from "./item-policies.ts";
+import { createSandbox } from "../sandbox/lifecycle.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 type Fixture = { org: ScratchOrg; actorId: string };
 type Case = { name: string; run: (fixture: Fixture) => Promise<void> };
 const itemPolicy = { supplyMethod: "buy" as const, leadTimeDays: null, safetyStockQty: "0", minimumQty: "0", orderMultipleQty: "0", scrapPctPlanned: "0" };
 function run<T>(work: (tx: SqlExecutor) => Promise<T>): Promise<T> { return withBypassContext(() => db.transaction(work)); }
+
+async function withSandboxClone(f: Fixture, work: (orgId: string) => Promise<void>) {
+  const clone = await withBypassContext(() => createSandbox({ productionOrgId: f.org.orgId, name: `Manufacturing ${randomUUID()}`, tier: "full", masked: false }));
+  try {
+    await work(clone.sandboxOrgId);
+  } finally {
+    assert.equal((await withBypassContext(() => db.execute(sql`update orgs set name='Scratch Manufacturing clone' where id=${clone.sandboxOrgId} and env_kind='sandbox' returning id`))).rows.length, 1);
+    await dropScratchOrg(clone.sandboxOrgId);
+  }
+}
 
 async function setup(): Promise<Fixture> {
   const org = await withBypassContext(() => createScratchOrg());
@@ -121,6 +132,10 @@ const cases: Case[] = [
     await refuse(run((tx) => startWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id)), "work_order_on_hold", "Quality review");
     await refuse(run((tx) => pauseWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id, "Tool change")), "work_order_on_hold", "Quality review");
     await refuse(run((tx) => resumeWorkOrderOperation(tx, f.org.orgId, f.actorId, draft.id, operation.id)), "work_order_on_hold", "Quality review");
+    await withSandboxClone(f, async (orgId) => {
+      const cloneOrder = await withBypassContext(async () => (await db.execute<{ id: string }>(sql`select id from mfg_work_orders where org_id=${orgId} and number=${draft.number}`)).rows[0]!.id);
+      assert.equal((await run((tx) => resumeWorkOrder(tx, orgId, f.actorId, cloneOrder))).status, "released");
+    });
     assert.equal((await run((tx) => resumeWorkOrder(tx, f.org.orgId, f.actorId, draft.id))).status, "released");
     await run((tx) => holdWorkOrder(tx, f.org.orgId, f.actorId, draft.id, "End of run"));
     await refuse(run((tx) => cancelWorkOrder(tx, f.org.orgId, f.actorId, draft.id)), "cancel_reason_required", "requires a reason");
