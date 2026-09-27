@@ -2463,7 +2463,7 @@
     },
     "statement-of-financial-position": {
       "name": "财务状况表",
-      "description": "按科目、基金和限制类别显示已过账余额。"
+      "description": "按科目、基金、本位币和限制类别显示已过账余额。"
     },
     "statement-of-activities": {
       "name": "活动报表",
