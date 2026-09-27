@@ -7,15 +7,11 @@ import { env } from "@openbooks/engine/src/platform/db.ts";
 // boundary receives the full React API (the react-server export omits
 // createContext). The production modules still import server-only as a
 // marker; replace that marker only inside this trusted integration process.
-const serverOnlyLoader = `data:text/javascript,${encodeURIComponent(`
-`)}`;
-
 function runIntegrationSource(source: string): void {
   const result = spawnSync(
     process.execPath,
     [
-      "--import",
-      serverOnlyLoader,
+      "--conditions=react-server",
       "--import",
       "tsx",
       "--import",
