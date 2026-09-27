@@ -17,13 +17,16 @@ import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "employeePartyIds": z.unknown().optional(),
-  "payDate": z.unknown().optional(),
-  "payScheduleId": z.unknown().optional(),
-  "periodEnd": z.unknown().optional(),
-  "periodStart": z.unknown().optional(),
-  "runType": z.unknown().optional(),
+const optionalCalendarDate = z.string().refine(isIsoCalendarDate, 'must be a real calendar date (YYYY-MM-DD)').optional()
+const requestBodySchema = z.strictObject({
+  payScheduleId: z.string().uuid(),
+  periodStart: optionalCalendarDate,
+  periodEnd: optionalCalendarDate,
+  payDate: optionalCalendarDate,
+  runType: z.enum(['regular', 'bonus', 'termination']).default('regular'),
+  employeePartyIds: z.array(z.string().uuid()).default([]),
+}).refine((body) => body.runType !== 'termination' || body.employeePartyIds.length > 0, {
+  message: 'a final pay run must name the employees it pays', path: ['employeePartyIds'],
 })
 
 
@@ -71,38 +74,15 @@ export const POST = defineRoute({
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
-    const payScheduleId = typeof body?.payScheduleId === 'string' ? body.payScheduleId : ''
-    if (!isUuid(payScheduleId)) return NextResponse.json({ error: 'payScheduleId required' }, { status: 422 })
-    for (const key of ['periodStart', 'periodEnd', 'payDate'] as const) {
-      if (body?.[key] != null && !isIsoCalendarDate(body[key])) {
-        return NextResponse.json({ error: `invalid ${key} (YYYY-MM-DD)` }, { status: 422 })
-      }
-    }
-    const requestedRunType = body?.runType ?? 'regular'
-    if (typeof requestedRunType !== 'string' || !['regular', 'bonus', 'termination'].includes(requestedRunType)) {
-      return NextResponse.json({ error: 'invalid runType' }, { status: 422 })
-    }
+    const payScheduleId = body.payScheduleId
+    const requestedRunType = body.runType
     const runType: PayRunType = requestedRunType === 'bonus' || requestedRunType === 'termination' ? requestedRunType : 'regular'
-    const periodStart = typeof body?.periodStart === 'string' ? body.periodStart : undefined
-    const periodEnd = typeof body?.periodEnd === 'string' ? body.periodEnd : undefined
-    const payDate = typeof body?.payDate === 'string' ? body.payDate : undefined
+    const periodStart = body.periodStart
+    const periodEnd = body.periodEnd
+    const payDate = body.payDate
     // A final pay run pays out and clears every accrued bank, so it must name
     // the employees it pays; the engine refuses an unscoped one outright.
-    if (body.employeePartyIds != null && !Array.isArray(body.employeePartyIds)) {
-      return NextResponse.json({ error: 'invalid employeePartyIds' }, { status: 422 })
-    }
-    const employeePartyIds: string[] = Array.isArray(body.employeePartyIds)
-      ? body.employeePartyIds.map((id: unknown) => String(id))
-      : []
-    if (employeePartyIds.some((id) => !isUuid(id))) {
-      return NextResponse.json({ error: 'invalid employeePartyIds' }, { status: 422 })
-    }
-    if (runType === 'termination' && employeePartyIds.length === 0) {
-      return NextResponse.json(
-        { error: 'a final pay run must name the employees it pays' },
-        { status: 422 },
-      )
-    }
+    const employeePartyIds = body.employeePartyIds
     // A run belongs to the schedule's legal entity. Resolve that entity before
     // entering createPayRun so a restricted caller cannot mint another
     // subsidiary's run (a termination run can clear every accrued bank). An

@@ -50,9 +50,12 @@ async function dashboardFeatureRefusal(orgId: string, dashboard: string) {
 }
 
 const dashboardParams = z.object({ dashboard: z.string() })
-const dashboardBody = z.looseObject({
-  expectedRevision: z.unknown().optional(),
-  values: z.unknown().optional(),
+const dashboardBody = z.strictObject({
+  expectedRevision: z.union([
+    z.number().int().nonnegative(),
+    z.string().regex(/^\d+$/, 'expectedRevision must be a non-negative integer').transform(Number),
+  ]).pipe(z.number().int().safe().nonnegative()),
+  values: z.record(z.string(), z.union([z.number().finite(), z.string(), z.boolean()])),
 })
 
 /** Sibling OCC token for a dashboard's overrides (never inside the blob). */

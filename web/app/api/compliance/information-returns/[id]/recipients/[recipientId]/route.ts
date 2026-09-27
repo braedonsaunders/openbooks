@@ -11,14 +11,24 @@ import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
+import { canonicalDecimal } from '@/lib/exact-decimal'
+import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "adjustmentReason": z.unknown().optional(),
-  "adjustments": z.unknown().optional(),
-  "exclusionReason": z.unknown().optional(),
-  "status": z.unknown().optional(),
+const adjustmentAmount = z.string().superRefine((value, context) => {
+  if (canonicalDecimal(value, 4) === null) {
+    context.addIssue({ code: 'custom', message: moneyRefusal('Recipient adjustment', value) })
+  }
 })
+const requestBodySchema = z.object({
+  adjustmentReason: z.string().trim().max(2000).nullable().optional(),
+  adjustments: z.record(z.string(), adjustmentAmount).optional(),
+  exclusionReason: z.string().trim().max(2000).nullable().optional(),
+  status: z.enum(['included', 'excluded']).optional(),
+}).refine(
+  (body) => body.status !== undefined || body.adjustments !== undefined || body.adjustmentReason !== undefined || body.exclusionReason !== undefined,
+  { error: 'provide a status, adjustment, or reason to update the recipient' },
+)
 
 
 
@@ -55,12 +65,7 @@ export const PATCH = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as {
-      adjustments?: Record<string, string>
-      adjustmentReason?: string | null
-      status?: 'included' | 'excluded'
-      exclusionReason?: string | null
-    }
+    const body = parsedBody.data
 
     try {
       await updateFilingRecipient({

@@ -23,9 +23,9 @@ import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "paymentBankProfileId": z.unknown().optional(),
-  "supersedeReason": z.unknown().optional(),
+const requestBodySchema = z.strictObject({
+  paymentBankProfileId: z.string().uuid(),
+  supersedeReason: z.string().trim().max(500).nullable().optional(),
 })
 
 
@@ -131,13 +131,7 @@ export const POST = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as {
-      paymentBankProfileId?: unknown
-      supersedeReason?: unknown
-    }
-    if (typeof body.paymentBankProfileId !== 'string' || !isUuid(body.paymentBankProfileId)) {
-      return NextResponse.json({ error: 'paymentBankProfileId is required' }, { status: 422 })
-    }
+    const body = parsedBody.data
 
     try {
       const artifact = await generatePayRunBankFile({
@@ -145,7 +139,7 @@ export const POST = defineRoute({
         documentId: id,
         actorId: gate.user.id,
         paymentBankProfileId: body.paymentBankProfileId,
-        supersedeReason: typeof body.supersedeReason === 'string' ? body.supersedeReason : null,
+        supersedeReason: body.supersedeReason?.trim() || null,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
       return NextResponse.json({ artifact }, { headers: { 'Cache-Control': 'no-store' } })

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json"
+import { exactMoney, parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -20,11 +20,14 @@ import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "formType": z.unknown().optional(),
-  "subsidiaryId": z.unknown().optional(),
-  "taxYear": z.unknown().optional(),
-  "threshold": z.unknown().optional(),
+const requestBodySchema = z.object({
+  formType: z.enum(FORM_TYPES, { error: 'formType must name an installed information return form' }),
+  subsidiaryId: z.string().uuid({ error: 'subsidiaryId must be a valid UUID' }).nullable().optional(),
+  taxYear: z.union([
+    z.number().int(),
+    z.string().regex(/^\d{4}$/, { error: 'taxYear must be a four-digit year' }).transform(Number),
+  ]).pipe(z.number().int().min(1990).max(2200)),
+  threshold: exactMoney('threshold must be a decimal string with at most four decimal places; enter the amount as text').optional(),
 })
 
 
@@ -58,12 +61,7 @@ export const POST = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as {
-      taxYear?: number
-      formType?: string
-      subsidiaryId?: string | null
-      threshold?: string
-    }
+    const body = parsedBody.data
     const taxYear = Number(body.taxYear)
     if (!Number.isInteger(taxYear) || taxYear < 1990 || taxYear > 2200) {
       return NextResponse.json({ error: 'a four-digit tax year is required' }, { status: 400 })

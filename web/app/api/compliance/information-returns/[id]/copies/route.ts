@@ -20,8 +20,7 @@ import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.looseObject({
-  "byteLength": z.unknown().optional(),
-  "recipientId": z.unknown().optional(),
+  recipientId: z.string().uuid({ error: 'recipientId must be a valid recipient id' }).nullable().optional(),
 })
 
 
@@ -194,7 +193,7 @@ export const POST = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema)
     if (!parsedBody.ok) return parsedBody.response
-    const rawRecipientId = (parsedBody.data as { recipientId?: unknown }).recipientId ?? null
+    const rawRecipientId = parsedBody.data.recipientId ?? null
     let recipientId: string | null = null
     if (rawRecipientId !== null) {
       if (typeof rawRecipientId !== 'string' || !isUuid(rawRecipientId)) {

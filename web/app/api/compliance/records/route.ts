@@ -15,22 +15,32 @@ import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "additionalInsured": z.unknown().optional(),
-  "aggregateAmount": z.unknown().optional(),
-  "coverageAmount": z.unknown().optional(),
-  "coverageCurrency": z.unknown().optional(),
-  "effectiveFrom": z.unknown().optional(),
-  "expiresOn": z.unknown().optional(),
-  "issuerName": z.unknown().optional(),
-  "notes": z.unknown().optional(),
-  "partyId": z.unknown().optional(),
-  "policyNumber": z.unknown().optional(),
-  "primaryNoncontributory": z.unknown().optional(),
-  "projectId": z.unknown().optional(),
-  "requirementId": z.unknown().optional(),
-  "supersedesId": z.unknown().optional(),
-  "waiverOfSubrogation": z.unknown().optional(),
+const requestMoney = (field: string) => z.union([
+  z.string().superRefine((value, ctx) => {
+    const exact = canonicalDecimal(value, 4)
+    if (exact === null || wholeDigits(exact) > 15) {
+      ctx.addIssue({ code: 'custom', message: moneyRefusal(field, value) })
+    }
+  }),
+  z.literal(''),
+  z.null(),
+])
+const requestBodySchema = z.object({
+  partyId: z.string().uuid({ error: 'partyId must be a valid vendor id' }),
+  requirementId: z.string().uuid({ error: 'requirementId must be a valid compliance requirement id' }),
+  projectId: z.string().uuid({ error: 'projectId must be a valid project id' }).nullable().optional(),
+  issuerName: z.string().trim().max(200).nullable().optional(),
+  policyNumber: z.string().trim().max(200).nullable().optional(),
+  effectiveFrom: z.string().refine(isIsoCalendarDate, 'effectiveFrom must be a real calendar date (YYYY-MM-DD)'),
+  expiresOn: z.string().refine(isIsoCalendarDate, 'expiresOn must be a real calendar date (YYYY-MM-DD)').nullable().optional(),
+  coverageAmount: requestMoney('Coverage amount').optional(),
+  aggregateAmount: requestMoney('Aggregate amount').optional(),
+  coverageCurrency: z.string().regex(/^[A-Z]{3}$/, 'coverageCurrency must be a three-letter ISO currency code').nullable().optional(),
+  additionalInsured: z.boolean().optional(),
+  waiverOfSubrogation: z.boolean().optional(),
+  primaryNoncontributory: z.boolean().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+  supersedesId: z.string().uuid({ error: 'supersedesId must be a valid certificate id' }).nullable().optional(),
 })
 
 
@@ -67,24 +77,7 @@ export const POST = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as {
-      partyId?: string
-      requirementId?: string
-      projectId?: string | null
-      issuerName?: string | null
-      policyNumber?: string | null
-      effectiveFrom?: string
-      expiresOn?: string | null
-      coverageAmount?: string | null
-      aggregateAmount?: string | null
-      coverageCurrency?: string | null
-      additionalInsured?: boolean
-      waiverOfSubrogation?: boolean
-      primaryNoncontributory?: boolean
-      notes?: string | null
-      /** Supersede this earlier certificate (a renewal). */
-      supersedesId?: string | null
-    }
+    const body = parsedBody.data
     const partyId = body.partyId
     if (!partyId || !isUuid(partyId)) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
     const requirementId = body.requirementId

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { parseJsonBody } from "@/lib/api/json"
+import { exactMoney, parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
@@ -16,9 +16,17 @@ import {
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardUnrestrictedScope } from '../../../../../lib/authz'
 
-const requestBodySchema = z.looseObject({
-  "rows": z.unknown().optional(),
-  "taxYear": z.unknown().optional(),
+const requestBodySchema = z.strictObject({
+  taxYear: z.union([
+    z.number().int(),
+    z.string().regex(/^\d{4}$/, 'taxYear must be a four-digit year').transform(Number),
+  ]).pipe(z.number().int()),
+  rows: z.array(z.strictObject({
+    country: z.string().trim().min(2).max(3),
+    levyKey: z.string().trim().min(1).max(120),
+    region: z.string().trim().max(80).nullable().optional(),
+    baseYtd: exactMoney('baseYtd must be an exact decimal string with at most four decimal places'),
+  })).max(500),
 })
 
 
@@ -68,11 +76,6 @@ export const GET = defineRoute({
   },
 })
 
-interface SaveBody {
-  taxYear?: unknown
-  rows?: unknown
-}
-
 export const POST = defineRoute({
   permission: 'payroll.manage',
   feature: 'payroll',
@@ -80,31 +83,17 @@ export const POST = defineRoute({
     const scopeDenied = guardUnrestrictedScope(gate)
     if (scopeDenied) return scopeDenied
 
-    let body: SaveBody
+    let body: z.output<typeof requestBodySchema>
     try {
       const parsedBody = await parseJsonBody(req, requestBodySchema);
       if (!parsedBody.ok) return parsedBody.response;
-      body = (parsedBody.data) as SaveBody
+      body = parsedBody.data
     } catch {
       return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
     }
-    if (!Array.isArray(body.rows)) {
-      return NextResponse.json({ error: 'rows must be an array' }, { status: 422 })
-    }
     const rows: EmployerLevyOpeningWrite[] = []
-    for (const raw of body.rows) {
-      const row = raw as { country?: unknown; levyKey?: unknown; region?: unknown; baseYtd?: unknown }
-      if (typeof row?.country !== 'string' || row.country.trim() === '') {
-        return NextResponse.json({ error: 'each row needs a country pack code' }, { status: 422 })
-      }
-      if (typeof row?.levyKey !== 'string' || row.levyKey.trim() === '') {
-        return NextResponse.json({ error: 'each row needs a levy key' }, { status: 422 })
-      }
-      if (row.baseYtd == null || (typeof row.baseYtd !== 'string' && typeof row.baseYtd !== 'number')) {
-        return NextResponse.json({ error: 'each row needs a base year-to-date amount' }, { status: 422 })
-      }
-      const region = row.region == null || String(row.region).trim() === '' ? null : String(row.region).trim()
-      rows.push({ country: row.country.trim(), levyKey: row.levyKey.trim(), region, baseYtd: row.baseYtd })
+    for (const row of body.rows) {
+      rows.push({ country: row.country.trim(), levyKey: row.levyKey.trim(), region: row.region?.trim() || null, baseYtd: row.baseYtd })
     }
 
     try {

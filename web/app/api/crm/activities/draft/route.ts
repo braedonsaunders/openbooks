@@ -9,11 +9,14 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "kind": z.unknown().optional(),
-  "subjectId": z.unknown().optional(),
-  "subjectKind": z.unknown().optional(),
-})
+const requestBodySchema = z.strictObject({
+  kind: z.enum(['task', 'call', 'event', 'email', 'note']).optional(),
+  subjectId: z.string().uuid().optional(),
+  subjectKind: z.enum(['account', 'contact', 'opportunity', 'document', 'project']).optional(),
+}).refine(
+  (body) => (body.subjectKind === undefined) === (body.subjectId === undefined),
+  { message: 'subjectKind and subjectId must be supplied together', path: ['subjectId'] },
+)
 
 
 
@@ -27,11 +30,8 @@ export const POST = defineRoute({
     if (gate.allowedSubsidiaryIds?.size === 0) return notFound("record")
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data as { subjectKind?: string; subjectId?: string; kind?: string }
-    const kind = ['task', 'call', 'event', 'email', 'note'].includes(body.kind ?? '') ? body.kind! : 'task'
-    if ((body.subjectKind || body.subjectId) && (!body.subjectKind || !body.subjectId || !isUuid(body.subjectId))) {
-      return NextResponse.json({ error: 'subjectKind and a valid subjectId are required together' }, { status: 422 })
-    }
+    const body = parsedBody.data
+    const kind = body.kind ?? 'task'
     const activity = await db.transaction(async (tx) => {
       if (body.subjectKind && body.subjectId) {
         // Lock the subject before checking visibility: the check must see the

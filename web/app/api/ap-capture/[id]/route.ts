@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { withScopeSnapshot } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { getDocumentCaptureSettings } from '@openbooks/engine/src/payables/ap-capture-config.ts'
-import type { CaptureLine, NormalizedCapture } from '@openbooks/engine/src/payables/ap-capture.ts'
+import type { NormalizedCapture } from '@openbooks/engine/src/payables/ap-capture.ts'
 import { resolveAndValidateCapture } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
@@ -16,13 +16,53 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { notFound } from "@/lib/api/responses";
 import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 
-const requestBodySchema = z.looseObject({
-  "documentKind": z.unknown().optional(),
-  "expectedUpdatedAt": z.unknown().optional(),
-  "normalized": z.unknown().optional(),
-  "purchaseOrderId": z.unknown().optional(),
-  "vendorId": z.unknown().optional(),
+const normalizedText = (max: number) => z.preprocess(
+  (value) => typeof value === 'string' && value.trim() === '' ? null : value,
+  z.string().trim().max(max).nullable(),
+)
+const normalizedDate = z.preprocess(
+  (value) => value === '' ? null : value,
+  z.string().refine(isIsoCalendarDate, 'invoice dates must be real calendar dates (YYYY-MM-DD)').nullable(),
+)
+const captureMoney = exactMoney('invalid_capture_amount')
+const normalizedLineSchema = z.strictObject({
+  description: z.string().trim().max(1000),
+  productCode: normalizedText(200),
+  quantity: captureMoney,
+  unit: normalizedText(50),
+  unitPrice: captureMoney,
+  amount: captureMoney,
+  taxAmount: captureMoney,
+  accountId: z.string().uuid().nullable().optional(),
+  itemId: z.string().uuid().nullable().optional(),
+  purchaseOrderLineId: z.string().uuid().nullable().optional(),
+  confidence: captureMoney.nullable(),
+})
+const normalizedCaptureSchema = z.strictObject({
+  vendorName: normalizedText(500),
+  vendorTaxId: normalizedText(200),
+  invoiceNumber: normalizedText(200),
+  invoiceDate: normalizedDate,
+  dueDate: normalizedDate,
+  purchaseOrderNumber: normalizedText(200),
+  currency: z.preprocess(
+    (value) => typeof value === 'string' && value.trim() === '' ? null : value,
+    z.string().trim().max(3).transform((value) => value.toUpperCase()).nullable(),
+  ),
+  subtotal: captureMoney.nullable(),
+  taxTotal: captureMoney.nullable(),
+  total: captureMoney.nullable(),
+  memo: normalizedText(2000),
+  lines: z.array(normalizedLineSchema).max(500),
+})
+const requestBodySchema = z.strictObject({
+  documentKind: z.enum(['vendor_bill', 'vendor_credit']).optional(),
+  expectedUpdatedAt: z.string().optional(),
+  normalized: normalizedCaptureSchema,
+  purchaseOrderId: z.string().uuid().nullable().optional(),
+  vendorId: z.string().uuid().nullable().optional(),
 })
 
 
@@ -71,83 +111,6 @@ function resolvedAssociationsInScope(
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
-function optionalText(value: unknown, max = 500): string | null {
-  const text = String(value ?? '').trim()
-  return text ? text.slice(0, max) : null
-}
-
-/**
- * Machine-code input refusals for capture patch parsing: the code is the
- * client contract (form validation matches on it), so it travels as the
- * refusal message through the sanitizer instead of a raw caught message.
- */
-class CapturePatchRefusal extends Error {
-  constructor(readonly code: string, readonly status = 422) {
-    super(code)
-    this.name = 'CapturePatchRefusal'
-  }
-}
-
-function optionalUuid(value: unknown): string | null {
-  if (value == null || value === '') return null
-  if (typeof value !== 'string') throw new CapturePatchRefusal('invalid_capture_reference')
-  const text = value.trim()
-  if (!text) return null
-  if (!isUuid(text)) throw new CapturePatchRefusal('invalid_capture_reference')
-  return text
-}
-
-const reviewMoney = exactMoney('invalid_capture_amount')
-
-// OCR heuristics belong to provider extraction. A human correction must not
-// strip characters or substitute zero for an invalid amount.
-function money(value: unknown, fallback: string | null = null): string | null {
-  if (value == null || value === '') return fallback
-  const parsed = reviewMoney.safeParse(value)
-  if (!parsed.success) throw new CapturePatchRefusal('invalid_capture_amount')
-  return parsed.data
-}
-
-function parseNormalized(raw: unknown): NormalizedCapture {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new CapturePatchRefusal('invalid_capture')
-  const row = raw as Record<string, unknown>
-  if (!Array.isArray(row.lines)) throw new CapturePatchRefusal('invalid_lines')
-  const sourceLines = row.lines
-  if (sourceLines.length > 500) throw new CapturePatchRefusal('too_many_lines')
-  const lines: CaptureLine[] = sourceLines.map((value) => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new CapturePatchRefusal('invalid_line')
-    const line = value as Record<string, unknown>
-    const amount = money(line.amount, '0.0000')!
-    return {
-      description: String(line.description ?? '').trim().slice(0, 1_000),
-      productCode: optionalText(line.productCode, 200),
-      quantity: money(line.quantity, '1.0000')!,
-      unit: optionalText(line.unit, 50),
-      unitPrice: money(line.unitPrice, amount)!,
-      amount,
-      taxAmount: money(line.taxAmount, '0.0000')!,
-      accountId: optionalUuid(line.accountId),
-      itemId: optionalUuid(line.itemId),
-      purchaseOrderLineId: optionalUuid(line.purchaseOrderLineId),
-      confidence: money(line.confidence),
-    }
-  })
-  return {
-    vendorName: optionalText(row.vendorName),
-    vendorTaxId: optionalText(row.vendorTaxId, 200),
-    invoiceNumber: optionalText(row.invoiceNumber, 200),
-    invoiceDate: optionalText(row.invoiceDate, 10),
-    dueDate: optionalText(row.dueDate, 10),
-    purchaseOrderNumber: optionalText(row.purchaseOrderNumber, 200),
-    currency: optionalText(row.currency, 3)?.toUpperCase() ?? null,
-    subtotal: money(row.subtotal),
-    taxTotal: money(row.taxTotal),
-    total: money(row.total),
-    memo: optionalText(row.memo, 2_000),
-    lines,
-  }
-}
-
 export const GET = defineRoute({
   permission: 'ap.read',
   feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
@@ -195,7 +158,7 @@ export const PATCH = defineRoute({
     if (!isUuid(id)) return notFound("record")
     const parsedBody = await parseJsonBody(request, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as Record<string, unknown>
+    const body = parsedBody.data
     // Mandatory optimistic-concurrency evidence (same contract as document,
     // payment, and prebill-line edits): a stale review tab autosaves over a
     // newer correction otherwise. Checked after the gates so a missing token
@@ -203,20 +166,10 @@ export const PATCH = defineRoute({
     if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
       return NextResponse.json({ error: 'A current capture revision is required; reload the capture and try again' }, { status: 409 })
     }
-    const expectedRevision = body.expectedUpdatedAt as string
-    let normalized: NormalizedCapture
-    let nextVendorId: string | null | undefined
-    let nextPurchaseOrderId: string | null | undefined
-    try {
-      normalized = parseNormalized(body.normalized)
-      if (body.documentKind !== undefined && body.documentKind !== 'vendor_bill' && body.documentKind !== 'vendor_credit') {
-        throw new CapturePatchRefusal('invalid_document_kind')
-      }
-      nextVendorId = body.vendorId === undefined ? undefined : optionalUuid(body.vendorId)
-      nextPurchaseOrderId = body.purchaseOrderId === undefined ? undefined : optionalUuid(body.purchaseOrderId)
-    } catch (error) {
-      return apiErrorResponse(error)
-    }
+    const expectedRevision = body.expectedUpdatedAt
+    const normalized: NormalizedCapture = body.normalized
+    const nextVendorId = body.vendorId
+    const nextPurchaseOrderId = body.purchaseOrderId
     const current = (await db.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null }>(sql`
       select ci.normalized, ci.status, ci.document_kind, ci.vendor_candidate_id, ci.purchase_order_id
         from ap_capture_items ci
@@ -293,7 +246,7 @@ export const PATCH = defineRoute({
         // loudly instead of reverting that save's corrections.
         if (live.revision !== expectedRevision) throw new Error('capture_revision_conflict')
         const kind = body.documentKind === undefined ? live.document_kind : body.documentKind
-        if (kind !== 'vendor_bill' && kind !== 'vendor_credit') throw new CapturePatchRefusal('invalid_document_kind')
+        if (kind !== 'vendor_bill' && kind !== 'vendor_credit') throw new Error('invalid_document_kind')
         // Resolve against the kind being saved, using the same locked snapshot as
         // the correction audit. Omission preserves a selected vendor credit.
         const resolved = await resolveAndValidateCapture({

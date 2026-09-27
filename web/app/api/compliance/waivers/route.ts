@@ -12,13 +12,13 @@ import { loadApplicableRequirement } from '@openbooks/engine/src/compliance/comp
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "effectiveFrom": z.unknown().optional(),
-  "expiresOn": z.unknown().optional(),
-  "partyId": z.unknown().optional(),
-  "projectId": z.unknown().optional(),
-  "reason": z.unknown().optional(),
-  "requirementId": z.unknown().optional(),
+const requestBodySchema = z.object({
+  partyId: z.string().uuid({ error: 'partyId must be a valid vendor id' }),
+  requirementId: z.string().uuid({ error: 'requirementId must be a valid compliance requirement id' }),
+  projectId: z.string().uuid({ error: 'projectId must be a valid project id' }).nullable().optional(),
+  reason: z.string().trim().min(10, 'reason must contain at least 10 characters').max(2000),
+  effectiveFrom: z.string().refine(isIsoCalendarDate, 'effectiveFrom must be a real calendar date (YYYY-MM-DD)').optional(),
+  expiresOn: z.string().refine(isIsoCalendarDate, 'expiresOn must be a real calendar date (YYYY-MM-DD)'),
 })
 
 
@@ -49,14 +49,7 @@ export const POST = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as {
-      partyId?: string
-      requirementId?: string
-      projectId?: string | null
-      reason?: string
-      effectiveFrom?: string
-      expiresOn?: string
-    }
+    const body = parsedBody.data
     const partyId = body.partyId
     if (!partyId || !isUuid(partyId)) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
     const requirementId = body.requirementId

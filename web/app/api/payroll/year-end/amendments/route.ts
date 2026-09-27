@@ -20,17 +20,24 @@ import {
   guardPayrollFilingRowIds,
 } from '../../subsidiary-scope'
 
-const requestBodySchema = z.looseObject({
-  "confirmedAmendment": z.unknown().optional(),
-  "confirmedCancellation": z.unknown().optional(),
-  "country": z.unknown().optional(),
-  "filing": z.unknown().optional(),
-  "note": z.unknown().optional(),
-  "reason": z.unknown().optional(),
-  "revision": z.unknown().optional(),
-  "rowIds": z.unknown().optional(),
-  "year": z.unknown().optional(),
+const filingIssueInput = z.object({
+  country: z.string().regex(/^[A-Z]{2}$/),
+  filing: z.string().trim().min(1),
+  year: z.union([z.number().int(), z.string().regex(/^\d{4}$/).transform(Number)]).superRefine((year, ctx) => {
+    const refusal = payrollYearRefusal(year)
+    if (refusal !== null) ctx.addIssue({ code: 'custom', message: refusal })
+  }),
+  note: z.string().trim().max(2000).optional(),
 })
+const correctionRows = z.array(z.string().uuid()).min(1)
+const requestBodySchema = z.discriminatedUnion('revision', [
+  filingIssueInput.extend({ revision: z.literal('original'), rowIds: z.array(z.string().uuid()).optional() }),
+  filingIssueInput.extend({ revision: z.literal('amended'), confirmedAmendment: z.literal(true), rowIds: correctionRows }),
+  filingIssueInput.extend({
+    revision: z.literal('cancelled'), confirmedCancellation: z.literal(true), rowIds: correctionRows,
+    reason: z.string().trim().min(1, 'a nonblank cancellation reason is required').max(2000),
+  }),
+])
 
 
 export const dynamic = 'force-dynamic'
@@ -138,61 +145,19 @@ export const POST = defineRoute({
   permission: 'payroll.run',
   feature: 'payroll',
   handler: async ({ request: req, authz: gate }) => {
-    const parsedBody = await parseJsonBody(req, requestBodySchema);
-    if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as {
-      country?: string
-      filing?: string
-      year?: number
-      revision?: string
-      rowIds?: string[]
-      note?: string
-      reason?: string
-      confirmedAmendment?: boolean
-      confirmedCancellation?: boolean
-    } | null
-    if (!body) return NextResponse.json({ error: 'a JSON body is required' }, { status: 422 })
-    const yearRefusal = payrollYearRefusal(body.year)
-    if (yearRefusal !== null) {
-      return NextResponse.json({ error: yearRefusal }, { status: 422 })
-    }
-    const year = Number(body.year)
-    const revision = body.revision ?? ''
-    if (revision !== 'original' && revision !== 'amended' && revision !== 'cancelled') {
-      return NextResponse.json(
-        { error: 'revision must be original, amended or cancelled' },
-        { status: 422 },
-      )
-    }
-    if (revision === 'amended' && body.confirmedAmendment !== true) {
-      return NextResponse.json(
-        { error: 'amendment must be explicitly confirmed after reviewing its preview' },
-        { status: 422 },
-      )
-    }
-    if (revision === 'cancelled') {
-      if (body.confirmedCancellation !== true) {
-        return NextResponse.json(
-          { error: 'cancellation must be explicitly confirmed' },
-          { status: 422 },
-        )
-      }
-      if (typeof body.reason !== 'string' || body.reason.trim() === '') {
-        return NextResponse.json(
-          { error: 'a nonblank cancellation reason is required' },
-          { status: 422 },
-        )
-      }
-    }
-    const country = body.country ?? ''
-    const filing = body.filing ?? ''
+    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.data
+    const year = body.year
+    const revision = body.revision
+    const { country, filing } = body
     // An original covers the WHOLE population by definition — the service
     // ignores rowIds for it — so a caller-supplied list (empty, partial, or
     // anything else) can never narrow this guard. Guarding only the list while
     // persisting the population let a restricted actor issue the org-wide
     // filing by passing []. A correction persists exactly its named rows, so
     // the list IS its population and is guarded as such.
-    if (revision === 'original' || !Array.isArray(body.rowIds)) {
+    if (revision === 'original') {
       const section = (await orgYearEndFilings(gate.user.orgId, year))
         .find((candidate) => candidate.country === country && candidate.key === filing)
       if (section) {
@@ -200,7 +165,7 @@ export const POST = defineRoute({
         if (denied) return denied
       }
     } else {
-      const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds.map(String), year)
+      const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds, year)
       if (denied) return denied
     }
     // The in-service authorization: the issue authorizes the ids it actually
@@ -218,15 +183,15 @@ export const POST = defineRoute({
         country,
         filingKey: filing,
         taxYear: year,
-        revision: revision as 'original' | 'amended' | 'cancelled',
-        rowIds: Array.isArray(body.rowIds) ? body.rowIds.map(String) : undefined,
+        revision,
+        rowIds: body.revision === 'original' ? body.rowIds : body.rowIds,
         scope: gate.allowedSubsidiaryIds ?? undefined,
         authorizeRowIds,
         // A cancellation's explanation is its audit evidence. Keep it in the
         // existing filing note column so history readers show the same reason
         // that was confirmed at the destructive boundary.
-        note: revision === 'cancelled' ? body.reason!.trim() : body.note?.trim() || null,
-        ...(revision === 'cancelled' ? { reason: body.reason!.trim() } : {}),
+        note: revision === 'cancelled' ? body.reason : body.note?.trim() || null,
+        ...(revision === 'cancelled' ? { reason: body.reason } : {}),
       }
       const result = await recordFilingIssue(issueInput)
       return NextResponse.json({

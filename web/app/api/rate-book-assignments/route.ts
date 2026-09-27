@@ -16,25 +16,40 @@ import { isUuid } from '../../../lib/list-params'
 export const runtime = 'nodejs'
 
 type AssignmentInput = {
-  id?: unknown
-  rateBookId?: unknown
-  customerId?: unknown
-  projectId?: unknown
-  effectiveFrom?: unknown
-  effectiveTo?: unknown
-  dateBasis?: unknown
-  isActive?: unknown
+  id?: string
+  rateBookId?: string
+  customerId?: string | null
+  projectId?: string | null
+  effectiveFrom?: string | null
+  effectiveTo?: string | null
+  dateBasis?: 'usage_date' | 'project_start'
+  isActive?: boolean
 }
 
-const assignmentBody = z.looseObject({
-  id: z.unknown().optional(),
-  rateBookId: z.unknown().optional(),
-  customerId: z.unknown().optional(),
-  projectId: z.unknown().optional(),
-  effectiveFrom: z.unknown().optional(),
-  effectiveTo: z.unknown().optional(),
-  dateBasis: z.unknown().optional(),
-  isActive: z.unknown().optional(),
+const assignmentDate = z.union([
+  z.string().refine((value) => value === '' || isIsoCalendarDate(value), 'date must be a real calendar date (YYYY-MM-DD)'),
+  z.null(),
+])
+const assignmentCreateBody = z.strictObject({
+  rateBookId: z.string().uuid(),
+  customerId: z.string().uuid().nullable().optional(),
+  projectId: z.string().uuid().nullable().optional(),
+  effectiveFrom: assignmentDate,
+  effectiveTo: assignmentDate,
+  dateBasis: z.enum(['usage_date', 'project_start']).default('usage_date'),
+  isActive: z.boolean().default(true),
+}).refine((body) => Boolean(body.customerId) !== Boolean(body.projectId), {
+  message: 'choose exactly one customer or project', path: ['customerId'],
+})
+const assignmentPatchBody = z.strictObject({
+  id: z.string().uuid(),
+  rateBookId: z.string().uuid().optional(),
+  customerId: z.string().uuid().nullable().optional(),
+  projectId: z.string().uuid().nullable().optional(),
+  effectiveFrom: assignmentDate.optional(),
+  effectiveTo: assignmentDate.optional(),
+  dateBasis: z.enum(['usage_date', 'project_start']).optional(),
+  isActive: z.boolean().optional(),
 })
 
 function dateValue(value: unknown): string | null | undefined {
@@ -217,7 +232,7 @@ async function normalizedInput(
   const unrestricted = allowed === null
   let values = body
   if (rowId) {
-    const current = ((await tx.execute(sql`
+    const current = ((await tx.execute<AssignmentInput>(sql`
       select rate_book_id as "rateBookId", customer_id as "customerId", project_id as "projectId",
              effective_from as "effectiveFrom", effective_to as "effectiveTo", date_basis as "dateBasis",
              is_active as "isActive"
@@ -288,9 +303,9 @@ async function normalizedInput(
 export const POST = defineRoute({
   permission: 'projects.manage',
   feature: 'projects',
-  body: assignmentBody,
+  body: assignmentCreateBody,
   handler: async ({ authz: gate, body }) => {
-  const input = body as AssignmentInput
+  const input: AssignmentInput = body
   try {
     const outcome = await db.transaction(async (tx) => {
       const parsed = await normalizedInput(input, gate.user.orgId, gate, gate.allowedSubsidiaryIds, undefined, tx)
@@ -326,11 +341,10 @@ export const POST = defineRoute({
 export const PATCH = defineRoute({
   permission: 'projects.manage',
   feature: 'projects',
-  body: assignmentBody,
+  body: assignmentPatchBody,
   handler: async ({ authz: gate, body }) => {
-  const input = body as AssignmentInput
-  const id = String(input.id ?? '')
-  if (!isUuid(id)) return NextResponse.json({ errorCode: 'save' }, { status: 404 })
+  const input: AssignmentInput = body
+  const id = input.id!
   try {
     const outcome = await db.transaction(async (tx) => {
       const parsed = await normalizedInput(input, gate.user.orgId, gate, gate.allowedSubsidiaryIds, id, tx)

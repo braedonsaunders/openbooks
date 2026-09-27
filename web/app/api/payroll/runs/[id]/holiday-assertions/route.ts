@@ -24,16 +24,33 @@ import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 
-const requestBodySchema = z.looseObject({
-  "absentWithoutConsent": z.unknown().optional(),
-  "employeePartyId": z.unknown().optional(),
-  "entitlementEvidenceComplete": z.unknown().optional(),
-  "holidayDate": z.unknown().optional(),
-  "holidayKey": z.unknown().optional(),
-  "occupationClass": z.unknown().optional(),
-  "paidOnCommission": z.unknown().optional(),
+const assertionTarget = {
+  employeePartyId: z.string().uuid(),
+  holidayKey: z.string().trim().min(1).optional(),
+  holidayDate: z.string().refine(isIsoCalendarDate, 'holidayDate must be a real calendar date (YYYY-MM-DD)').optional(),
+}
+const entitlementAssertion = z.strictObject({
+  ...assertionTarget,
+  holidayKey: z.string().trim().min(1),
+  holidayDate: z.string().refine(isIsoCalendarDate, 'holidayDate must be a real calendar date (YYYY-MM-DD)'),
+  entitlementEvidenceComplete: z.literal(true),
 })
+const requestBodySchema = z.union([
+  z.strictObject({ ...assertionTarget, paidOnCommission: z.boolean() }),
+  z.strictObject({ ...assertionTarget, occupationClass: z.string().trim().min(1) }),
+  z.strictObject({ ...assertionTarget, absentWithoutConsent: z.boolean() }),
+  entitlementAssertion,
+]).transform((body) => ({
+  employeePartyId: body.employeePartyId,
+  holidayKey: body.holidayKey,
+  holidayDate: body.holidayDate,
+  paidOnCommission: 'paidOnCommission' in body ? body.paidOnCommission : undefined,
+  occupationClass: 'occupationClass' in body ? body.occupationClass : undefined,
+  absentWithoutConsent: 'absentWithoutConsent' in body ? body.absentWithoutConsent : undefined,
+  entitlementEvidenceComplete: 'entitlementEvidenceComplete' in body ? body.entitlementEvidenceComplete : undefined,
+}))
 
 
 
@@ -219,37 +236,18 @@ export const POST = defineRoute({
     // route whose validation nobody can audit centrally.
     const parsedBody = await parseJsonBody(req, requestBodySchema)
     if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data as {
-      employeePartyId?: unknown; paidOnCommission?: unknown; occupationClass?: unknown;
-      holidayKey?: unknown; holidayDate?: unknown; absentWithoutConsent?: unknown;
-      entitlementEvidenceComplete?: unknown;
-    }
+    const body = parsedBody.data
     const { employeePartyId, paidOnCommission, occupationClass } = body
-    if (typeof employeePartyId !== 'string' || !isUuid(employeePartyId)) {
-      return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
-    }
     const answersCommission = paidOnCommission !== undefined
-    if (answersCommission && typeof paidOnCommission !== 'boolean') {
-      return NextResponse.json({ error: 'invalid commission-pay status' }, { status: 422 })
-    }
     // The standing occupation-class answer, filed on the profile like the
     // commission status. The shape is checked here; the pack vocabulary is
     // checked against the employee's own country once the roster identifies
     // them below — storing a key no rule reads would answer nothing and the
     // engine would keep refusing.
     const answersOccupationClass = occupationClass !== undefined
-    if (answersOccupationClass && typeof occupationClass !== 'string') {
-      return NextResponse.json({ error: 'invalid occupation class' }, { status: 422 })
-    }
     const { holidayKey, holidayDate, absentWithoutConsent } = body
     const answersAbsence = absentWithoutConsent !== undefined
-    if (answersAbsence && typeof absentWithoutConsent !== 'boolean') {
-      return NextResponse.json({ error: 'invalid absence assertion' }, { status: 422 })
-    }
     const answersEntitlement = body.entitlementEvidenceComplete !== undefined
-    if (answersEntitlement && body.entitlementEvidenceComplete !== true) {
-      return NextResponse.json({ error: 'entitlement evidence must be explicitly confirmed complete' }, { status: 422 })
-    }
     if (answersEntitlement && (answersCommission || answersAbsence || answersOccupationClass)) {
       return NextResponse.json({ error: 'file the entitlement-day assessment separately for its holiday' }, { status: 422 })
     }
@@ -258,12 +256,6 @@ export const POST = defineRoute({
     }
     // An explicit holiday identity must be well-formed; an omitted one is
     // resolved below, and only when the run leaves no room for doubt.
-    if (holidayKey !== undefined && (typeof holidayKey !== 'string' || holidayKey.trim().length === 0)) {
-      return NextResponse.json({ error: 'invalid holiday' }, { status: 422 })
-    }
-    if (holidayDate !== undefined && (typeof holidayDate !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(holidayDate))) {
-      return NextResponse.json({ error: 'invalid holiday' }, { status: 422 })
-    }
 
     try {
       return await withOrgTransaction(gate.user.orgId, async () => {

@@ -26,32 +26,66 @@ import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "competitorNotes": z.unknown().optional(),
-  "currency": z.unknown().optional(),
-  "description": z.unknown().optional(),
-  "expectedCloseDate": z.unknown().optional(),
-  "expectedUpdatedAt": z.unknown().optional(),
-  "forecastCategory": z.unknown().optional(),
-  "isActive": z.unknown().optional(),
-  "leadSourceId": z.unknown().optional(),
-  "lines": z.unknown().optional(),
-  "nextStep": z.unknown().optional(),
-  "ownerUserId": z.unknown().optional(),
-  "partyId": z.unknown().optional(),
-  "primaryContactId": z.unknown().optional(),
-  "probability": z.unknown().optional(),
-  "rangeHigh": z.unknown().optional(),
-  "rangeLow": z.unknown().optional(),
-  "salesTeamId": z.unknown().optional(),
-  "stageReason": z.unknown().optional(),
-  "statusId": z.unknown().optional(),
-  "team": z.unknown().optional(),
-  "title": z.unknown().optional(),
-  "winLossReason": z.unknown().optional(),
+const nullableUuid = z.preprocess((value) => value === '' ? null : value, z.string().uuid().nullable())
+const decimalText = (field: string, nullable = false) => {
+  const schema = z.string().superRefine((value, context) => {
+    const exact = canonicalDecimal(value, 4)
+    if (exact === null) {
+      context.addIssue({ code: 'custom', message: moneyRefusal(field, value, field.toLowerCase().includes('quantity') ? 'a quantity' : 'an amount') })
+    } else if (exact.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
+      context.addIssue({ code: 'custom', message: `${field} must fit the ledger (at most 15 whole digits)` })
+    }
+  })
+  return nullable ? schema.nullable() : schema
+}
+const opportunityLineSchema = z.strictObject({
+  itemId: z.string().uuid(),
+  description: z.string(),
+  quantity: decimalText('Line quantity'),
+  unit: z.string(),
+  unitPrice: decimalText('Line unit price'),
+  unitCost: z.union([decimalText('Line unit cost'), z.literal('')]).nullable().optional(),
+  probability: z.number().int().min(0).max(100).nullable().optional(),
 })
-
-
+const contributionSchema = z.strictObject({
+  userId: z.string().uuid(),
+  contributionPercent: decimalText('Sales-team contribution'),
+  isPrimary: z.boolean().optional(),
+})
+const optionalRangeMoney = (field: string) => z.preprocess(
+  (value) => value === '' ? null : value,
+  decimalText(field, true),
+).optional()
+const requestBodySchema = z.strictObject({
+  competitorNotes: z.string().nullable().optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  description: z.string().nullable(),
+  expectedCloseDate: z.preprocess((value) => value === '' ? null : value, z.string().refine(isIsoCalendarDate, 'expectedCloseDate must be a valid calendar date').nullable()),
+  expectedUpdatedAt: z.string().min(1),
+  forecastCategory: z.enum(['omitted', 'worst_case', 'most_likely', 'upside']),
+  isActive: z.boolean().optional(),
+  leadSourceId: nullableUuid,
+  lines: z.array(opportunityLineSchema),
+  nextStep: z.string().nullable(),
+  ownerUserId: nullableUuid,
+  partyId: nullableUuid,
+  primaryContactId: nullableUuid,
+  probability: z.number().int().min(0).max(100),
+  rangeHigh: optionalRangeMoney('Range high'),
+  rangeLow: optionalRangeMoney('Range low'),
+  salesTeamId: nullableUuid,
+  stageReason: z.string().nullable().optional(),
+  statusId: z.string().uuid(),
+  team: z.array(contributionSchema).optional(),
+  title: z.string().trim().min(1),
+  winLossReason: z.string().nullable(),
+}).superRefine((body, context) => {
+  for (const [field, value] of [['rangeLow', body.rangeLow], ['rangeHigh', body.rangeHigh]] as const) {
+    if (value != null && value !== '' && canonicalDecimal(value, 4) !== null && compareDecimal(value, '0') < 0) {
+      context.addIssue({ code: 'custom', path: [field], message: `${field} must be a non-negative amount` })
+    }
+  }
+})
 
 export const runtime = 'nodejs'
 
@@ -220,7 +254,7 @@ export const PATCH = defineRoute({
     if (!current) return notFound("record")
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data as typeof parsedBody.data & { expectedUpdatedAt?: unknown }
+    const body = parsedBody.data
     // Mandatory optimistic-concurrency evidence (same contract as document,
     // payment, prebill-line, capture, and custom-record edits): the drawer
     // always saves a full-replace payload (header scalars + lines + team), so
@@ -365,7 +399,7 @@ export const PATCH = defineRoute({
         : null
       if (refusal) return NextResponse.json({ error: STAGE_REFUSAL_MESSAGES[refusal], code: refusal }, { status: 422 })
     }
-    const team = body.team as Array<{ userId: string; contributionPercent: string; isPrimary?: boolean }> | undefined
+    const team = body.team
     const teamRows: Array<{ userId: string; contributionPercent: string; isPrimary?: boolean }> = []
     if (team) {
       if (!Array.isArray(team)) return NextResponse.json({ error: 'team must be an array' }, { status: 422 })

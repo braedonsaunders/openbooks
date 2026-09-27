@@ -12,16 +12,22 @@ import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "backupWithholding": z.unknown().optional(),
-  "complianceClassId": z.unknown().optional(),
-  "informationReturnBox": z.unknown().optional(),
-  "informationReturnForm": z.unknown().optional(),
-  "reason": z.unknown().optional(),
-  "reportable": z.unknown().optional(),
-  "taxClassification": z.unknown().optional(),
-  "tin": z.unknown().optional(),
-  "tinType": z.unknown().optional(),
+const requestBodySchema = z.object({
+  complianceClassId: z.string().uuid({ error: 'complianceClassId must be a valid compliance class id' }).nullable().optional(),
+  informationReturnForm: z.string().refine(
+    (value) => value === 'none' || FORM_TYPES.includes(value as FormType),
+    'informationReturnForm must be an installed information return form or none',
+  ).nullable().optional(),
+  informationReturnBox: z.string().trim().max(40).nullable().optional(),
+  taxClassification: z.string().refine((value) => TAX_CLASSIFICATIONS.has(value), 'taxClassification must be an installed tax classification').nullable().optional(),
+  tin: z.string().max(100).refine(
+    (value) => value.trim() === '' || /^\d{9}$/.test(value.replace(/[\s-]/g, '')),
+    'tin must contain exactly 9 digits; remove other characters and correct the number',
+  ).nullable().optional(),
+  tinType: z.string().refine((value) => TIN_TYPES.has(value), 'tinType must be an installed TIN type').nullable().optional(),
+  backupWithholding: z.boolean().nullable().optional(),
+  reportable: z.boolean().nullable().optional(),
+  reason: z.string().trim().min(1, 'reason is required for a vendor compliance change').max(2000).optional(),
 })
 
 
@@ -99,18 +105,7 @@ export const PATCH = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as {
-      complianceClassId?: string | null
-      informationReturnForm?: string | null
-      informationReturnBox?: string | null
-      taxClassification?: string | null
-      /** Full TIN — sealed here and never returned. Omit to leave unchanged. */
-      tin?: string | null
-      tinType?: string | null
-      backupWithholding?: boolean
-      reportable?: boolean
-      reason?: string
-    }
+    const body = parsedBody.data
 
     if (body.complianceClassId && !isUuid(body.complianceClassId)) {
       return NextResponse.json({ error: 'invalid compliance class' }, { status: 400 })

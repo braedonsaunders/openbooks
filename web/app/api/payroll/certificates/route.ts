@@ -40,13 +40,13 @@ export const dynamic = 'force-dynamic'
  */
 
 const certificateBodySchema = z.looseObject({
-  employeePartyId: z.string(),
-  country: z.string(),
-  certificateKey: z.string(),
+  employeePartyId: z.string().uuid(),
+  country: z.string().min(1),
+  certificateKey: z.string().trim().min(1),
   region: z.string().nullable().optional(),
   subRegion: z.string().nullable().optional(),
-  answers: z.record(z.string(), z.unknown()),
-  effectiveFrom: z.string().nullable().optional(),
+  answers: z.record(z.string().min(1), z.string()),
+  effectiveFrom: z.string().refine((date) => date === '' || isIsoCalendarDate(date), 'effectiveFrom must be a real ISO calendar date (YYYY-MM-DD)').nullable().optional(),
 })
 
 // A type alias, not an interface: db.execute constrains its row generic to
@@ -116,7 +116,6 @@ export const POST = defineRoute({
     if (!parsedBody.ok) return parsedBody.response;
     const body = parsedBody.data
 
-    if (!isUuid(body.employeePartyId)) return NextResponse.json({ error: 'employeePartyId required' }, { status: 422 })
     const subsidiaryId = await employeeSubsidiaryId(orgId, body.employeePartyId)
     if (subsidiaryId === undefined) {
       return NextResponse.json(
@@ -128,13 +127,13 @@ export const POST = defineRoute({
     if (denied) return denied
 
     // The pack registry is the only validator for the country and the form.
-    const country = String(body.country ?? '')
+    const country = body.country
     if (!(country in PAYROLL_COUNTRY_PACKS)) {
       return NextResponse.json({ error: 'unknown payroll country pack' }, { status: 422 })
     }
     let certificate
     try {
-      certificate = payrollCertificate(country, String(body.certificateKey ?? ''))
+      certificate = payrollCertificate(country, body.certificateKey)
     } catch {
       return NextResponse.json({ error: `unknown certificate "${String(body.certificateKey ?? '')}" for ${country}` }, { status: 422 })
     }
@@ -168,20 +167,14 @@ export const POST = defineRoute({
       return NextResponse.json({ error: `certificate "${certificate.key}" is filed for "${certificate.scope.region ?? ''}/${certificate.scope.subRegion ?? ''}"` }, { status: 422 })
     }
 
-    const effectiveFrom = body.effectiveFrom == null || body.effectiveFrom === ''
-      ? null : String(body.effectiveFrom)
-    if (effectiveFrom !== null && !isIsoCalendarDate(effectiveFrom)) {
-      return NextResponse.json({ error: 'effectiveFrom must be a real ISO calendar date (YYYY-MM-DD)' }, { status: 422 })
-    }
+    const effectiveFrom = body.effectiveFrom || null
 
     // Canonicalize before validating: empty answers are "unanswered" (the
     // reader falls back to the declared default), so they are dropped rather
     // than stored as empty strings beside real answers.
-    const raw = body.answers ?? {}
     const answers: Record<string, string> = {}
-    for (const [key, value] of Object.entries(raw)) {
-      if (value === null || value === undefined) continue
-      const text = String(value).trim()
+    for (const [key, value] of Object.entries(body.answers)) {
+      const text = value.trim()
       if (text === '') continue
       answers[key] = text
     }

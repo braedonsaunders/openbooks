@@ -16,18 +16,25 @@ import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 
-const requestBodySchema = z.looseObject({
-  "amount": z.unknown().optional(),
-  "billDocumentId": z.unknown().optional(),
-  "currency": z.unknown().optional(),
-  "direction": z.unknown().optional(),
-  "jurisdiction": z.unknown().optional(),
-  "notes": z.unknown().optional(),
-  "partyId": z.unknown().optional(),
-  "payApplicationId": z.unknown().optional(),
-  "projectId": z.unknown().optional(),
-  "throughDate": z.unknown().optional(),
-  "waiverType": z.unknown().optional(),
+const requestBodySchema = z.object({
+  amount: z.union([
+    z.string().superRefine((value, ctx) => {
+      const exact = canonicalDecimal(value, 4)
+      if (exact === null || wholeDigits(exact) > 15) ctx.addIssue({ code: 'custom', message: moneyRefusal('Amount', value) })
+    }),
+    z.literal(''),
+    z.null(),
+  ]).optional(),
+  billDocumentId: z.string().uuid({ error: 'billDocumentId must be a valid bill id' }).nullable().optional(),
+  currency: z.string().regex(/^[A-Z]{3}$/, 'currency must be a three-letter ISO 4217 code').refine(isIso4217CurrencyCode, 'currency must be an installed ISO 4217 code').optional(),
+  direction: z.enum(['received', 'issued']).optional(),
+  jurisdiction: z.string().trim().max(20).nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
+  partyId: z.string().uuid({ error: 'partyId must be a valid vendor id' }),
+  payApplicationId: z.string().uuid({ error: 'payApplicationId must be a valid application id' }).nullable().optional(),
+  projectId: z.string().uuid({ error: 'projectId must be a valid project id' }),
+  throughDate: z.string().refine(isIsoCalendarDate, 'throughDate must be a real calendar date (YYYY-MM-DD)'),
+  waiverType: z.enum(['conditional_progress', 'unconditional_progress', 'conditional_final', 'unconditional_final']).optional(),
 })
 
 
@@ -84,19 +91,7 @@ export const POST = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema)
     if (!parsedBody.ok) return parsedBody.response
-    const body = parsedBody.data as {
-      direction?: 'received' | 'issued'
-      partyId?: string
-      projectId?: string
-      waiverType?: string
-      throughDate?: string
-      amount?: string
-      currency?: string
-      jurisdiction?: string | null
-      billDocumentId?: string | null
-      payApplicationId?: string | null
-      notes?: string | null
-    }
+    const body = parsedBody.data
     if (body.direction !== undefined && body.direction !== 'received' && body.direction !== 'issued') {
       return NextResponse.json({ error: 'direction must be "received" or "issued"' }, { status: 400 })
     }

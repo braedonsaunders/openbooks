@@ -9,13 +9,110 @@ import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
+import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { DEFAULT_PROFILE, type TrueCostConfig, type TrueCostProfile, type CustomCategory } from "../../../../../lib/analytics/true-cost-data";
 import { ALLOCATION_BASES, ALLOCATION_METHODS, RATE_FORMATS, COMPOSITE_METHODS, type AllocationBase, type AllocationMethod, type RateFormat, type CompositeMethod } from "../../../../../lib/analytics/true-cost-engine";
 
-const requestBodySchema = z.looseObject({
-  "activeProfileId": z.unknown().optional(),
-  "expectedRevision": z.unknown().optional(),
-  "profiles": z.unknown().optional(),
+const BASE_KEYS = new Set(Object.keys(ALLOCATION_BASES));
+const METHOD_KEYS = new Set(Object.keys(ALLOCATION_METHODS));
+const FORMAT_KEYS = new Set(Object.keys(RATE_FORMATS));
+const COMPOSITE_KEYS = new Set(Object.keys(COMPOSITE_METHODS));
+const CUSTOM_TYPES = new Set(["manual", "derived", "formula"]);
+const enumKeys = (keys: Set<string>, field: string) => z.string().refine((value) => keys.has(value), `${field} must be an installed value`)
+const exactAmount = (field: string) => z.string().superRefine((value, ctx) => {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) {
+    ctx.addIssue({ code: 'custom', message: moneyRefusal(field, value) })
+    return
+  }
+  try {
+    normalizeMoney(exact)
+  } catch {
+    ctx.addIssue({ code: 'custom', message: moneyRefusal(field, value) })
+    return
+  }
+  if (compareDecimal(exact, '0') < 0) ctx.addIssue({ code: 'custom', message: `${field} must be zero or greater` })
+})
+const decimalRateRefusal = (field: string, value: string) => moneyRefusal(field, value, 'a decimal rate')
+const boundedRate = (field: string, max: string) => z.string().superRefine((value, ctx) => {
+  const exact = canonicalDecimal(value, 4)
+  if (exact === null) {
+    ctx.addIssue({ code: 'custom', message: decimalRateRefusal(field, value) })
+    return
+  }
+  if (compareDecimal(exact, '0') < 0 || compareDecimal(exact, max) > 0) {
+    ctx.addIssue({ code: 'custom', message: `${field} must be between 0 and ${max}` })
+  }
+})
+const allocationBaseSchema = enumKeys(BASE_KEYS, 'allocationBase')
+const allocationMethodSchema = enumKeys(METHOD_KEYS, 'allocationMethod')
+const rateFormatSchema = enumKeys(FORMAT_KEYS, 'rateFormat')
+const moneyMapSchema = z.record(z.string(), exactAmount('byDeptAmounts amount'))
+const manualConfigSchema = z.discriminatedUnion('entryMode', [
+  z.strictObject({ entryMode: z.literal('fixed_total'), fixedTotal: exactAmount('fixedTotal') }),
+  z.strictObject({ entryMode: z.literal('by_dept'), byDeptAmounts: moneyMapSchema }),
+  z.strictObject({ entryMode: z.literal('per_unit'), unitType: allocationBaseSchema, perUnitRate: exactAmount('perUnitRate') }),
+])
+const customCategorySchema = z.discriminatedUnion('type', [
+  z.strictObject({
+    id: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(80), color: z.string().max(40).nullable().optional(),
+    type: z.literal('manual'), allocationBase: allocationBaseSchema, rateFormat: rateFormatSchema,
+    includeInComposite: z.boolean(), manualConfig: manualConfigSchema,
+  }),
+  z.strictObject({
+    id: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(80), color: z.string().max(40).nullable().optional(),
+    type: z.literal('derived'), allocationBase: allocationBaseSchema, rateFormat: rateFormatSchema,
+    includeInComposite: z.boolean(),
+    derivedConfig: z.strictObject({
+      sourceCategory: z.string().trim().min(1).max(120),
+      percentage: boundedRate('percentage', '100'),
+      allocationBase: z.union([z.literal('same'), allocationBaseSchema]),
+    }),
+  }),
+  z.strictObject({
+    id: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(80), color: z.string().max(40).nullable().optional(),
+    type: z.literal('formula'), allocationBase: allocationBaseSchema, rateFormat: rateFormatSchema,
+    includeInComposite: z.boolean(), formulaConfig: z.strictObject({ formula: z.string().trim().min(1).max(500) }),
+  }),
+])
+const categorySettingSchema = z.strictObject({
+  allocationBase: allocationBaseSchema.optional(),
+  allocationMethod: allocationMethodSchema.optional(),
+  rateFormat: rateFormatSchema.optional(),
+  includeInComposite: z.boolean().optional(),
+  allocationWeights: z.record(z.string(), z.number().finite().nonnegative()).optional(),
+  allocationTiers: z.array(z.strictObject({
+    min: z.number().finite().nonnegative(),
+    max: z.number().finite().nonnegative().optional(),
+    rate: exactAmount('allocation tier rate').optional(),
+  }).refine((tier) => tier.max === undefined || tier.max >= tier.min, { error: 'allocation tier maximum must not be below its minimum' })).max(10).optional(),
+})
+const profileSchema = z.strictObject({
+  id: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(60),
+  color: z.string().max(40).nullable().optional(),
+  compositeMethod: enumKeys(COMPOSITE_KEYS, 'compositeMethod'),
+  baseLaborRate: exactAmount('baseLaborRate'),
+  fringeRate: boundedRate('fringeRate', '1'),
+  categorySettings: z.record(z.string(), categorySettingSchema),
+  customCategories: z.array(customCategorySchema).max(30),
+  baseOverrides: z.strictObject({
+    squareFeet: z.record(z.string(), z.number().finite().nonnegative()).optional(),
+    units: z.record(z.string(), z.number().finite().nonnegative()).optional(),
+    custom: z.record(z.string(), z.number().finite().nonnegative()).optional(),
+  }).optional(),
+})
+const requestBodySchema = z.strictObject({
+  activeProfileId: z.string().trim().min(1).max(80),
+  expectedRevision: z.union([
+    z.number().int().nonnegative(),
+    z.string().regex(/^\d+$/, 'expectedRevision must be a non-negative integer').transform(Number),
+  ]).pipe(z.number().int().safe().nonnegative()),
+  profiles: z.array(profileSchema).min(1).max(20),
+}).superRefine((body, ctx) => {
+  if (!body.profiles.some((profile) => profile.id === body.activeProfileId)) {
+    ctx.addIssue({ code: 'custom', path: ['activeProfileId'], message: 'activeProfileId must identify one of the submitted profiles' })
+  }
 })
 
 
@@ -32,11 +129,6 @@ export const runtime = "nodejs";
  * concurrent administrator's change. The revision check and replacement happen
  * in one UPDATE statement, which PostgreSQL serializes on the org row.
  */
-const BASE_KEYS = new Set(Object.keys(ALLOCATION_BASES));
-const METHOD_KEYS = new Set(Object.keys(ALLOCATION_METHODS));
-const FORMAT_KEYS = new Set(Object.keys(RATE_FORMATS));
-const COMPOSITE_KEYS = new Set(Object.keys(COMPOSITE_METHODS));
-const CUSTOM_TYPES = new Set(["manual", "derived", "formula"]);
 const INITIAL_REVISION = 0;
 
 type PersistedTrueCostConfig = Partial<TrueCostConfig> & { revision?: unknown };
@@ -239,9 +331,7 @@ export const PUT = defineRoute({
     if (scopeDenied) return scopeDenied
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as { expectedRevision?: unknown; activeProfileId?: string; profiles?: unknown[] } | null;
-    if (!body || !Array.isArray(body.profiles)) return NextResponse.json({ error: "profiles array required" }, { status: 400 });
-    if (body.profiles.length > 20) return NextResponse.json({ error: "too many profiles (max 20)" }, { status: 400 });
+    const body = parsedBody.data
 
     const expectedRevision = parseRevision(body.expectedRevision);
     if (expectedRevision === null) {
@@ -263,8 +353,7 @@ export const PUT = defineRoute({
       }
       throw error;
     }
-    if (!profiles.length) return NextResponse.json({ error: "at least one valid profile required" }, { status: 400 });
-    const activeProfileId = body.activeProfileId && profiles.some((p) => p.id === body.activeProfileId) ? body.activeProfileId : profiles[0]!.id;
+    const activeProfileId = body.activeProfileId
     const revision = expectedRevision + 1;
     const config = { revision, activeProfileId, profiles };
 

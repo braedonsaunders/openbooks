@@ -17,27 +17,37 @@ import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "annualRevenue": z.unknown().optional(),
-  "assignmentReason": z.unknown().optional(),
-  "category": z.unknown().optional(),
-  "employeeCount": z.unknown().optional(),
-  "expectedUpdatedAt": z.unknown().optional(),
-  "industry": z.unknown().optional(),
-  "isActive": z.unknown().optional(),
-  "leadSourceId": z.unknown().optional(),
-  "lifecycleStage": z.unknown().optional(),
-  "nextActionAt": z.unknown().optional(),
-  "ownerUserId": z.unknown().optional(),
-  "qualification": z.unknown().optional(),
-  "qualificationScore": z.unknown().optional(),
-  "route": z.unknown().optional(),
-  "stageReason": z.unknown().optional(),
-  "statusId": z.unknown().optional(),
-  "territoryId": z.unknown().optional(),
+const nullableUuid = z.preprocess((value) => value === '' ? null : value, z.string().uuid().nullable())
+const optionalCount = z.union([z.number(), z.string()]).nullable().optional()
+const requestBodySchema = z.strictObject({
+  annualRevenue: z.string().nullable().optional(),
+  assignmentReason: z.string().nullable().optional(),
+  category: z.string().nullable().optional(),
+  employeeCount: optionalCount,
+  expectedUpdatedAt: z.string().min(1),
+  industry: z.string().nullable().optional(),
+  isActive: z.boolean().optional(),
+  leadSourceId: nullableUuid.optional(),
+  lifecycleStage: z.enum(['lead', 'prospect', 'customer']).optional(),
+  nextActionAt: z.string().refine((value) => value === '' || isIsoTimestamp(value), 'nextActionAt must be an ISO date or date-time').nullable().optional(),
+  ownerUserId: nullableUuid.optional(),
+  qualification: z.record(z.string(), z.json()).nullable().optional(),
+  qualificationScore: optionalCount,
+  route: z.boolean().optional(),
+  stageReason: z.string().nullable().optional(),
+  statusId: nullableUuid.optional(),
+  territoryId: nullableUuid.optional(),
+}).superRefine((body, context) => {
+  if (body.annualRevenue == null || body.annualRevenue === '') return
+  const amount = canonicalDecimal(body.annualRevenue, 4)
+  if (amount === null) {
+    context.addIssue({ code: 'custom', path: ['annualRevenue'], message: moneyRefusal('Annual revenue', body.annualRevenue) })
+  } else if (compareDecimal(amount, '0') < 0) {
+    context.addIssue({ code: 'custom', path: ['annualRevenue'], message: 'annual revenue must be a non-negative amount' })
+  } else if (amount.replace(/^[+-]/, '').split('.')[0]!.replace(/^0+/, '').length > 15) {
+    context.addIssue({ code: 'custom', path: ['annualRevenue'], message: 'annual revenue must fit the ledger (at most 15 whole digits)' })
+  }
 })
-
-
 
 export const runtime = 'nodejs'
 
@@ -168,7 +178,7 @@ export const PATCH = defineRoute({
     if (!isUuid(id)) return notFound("record")
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = parsedBody.data as Record<string, unknown>
+    const body = parsedBody.data
     const current = (await db.execute<{ id: string; lifecycle_stage: string; owner_user_id: string | null; territory_id: string | null; revision: string }>(sql`
       select cp.*, ${documentRevisionSql(sql`cp.updated_at`)} as revision, p.display_name, p.is_active as party_active
         from crm_account_profiles cp join parties p on p.id = cp.party_id and p.org_id = cp.org_id

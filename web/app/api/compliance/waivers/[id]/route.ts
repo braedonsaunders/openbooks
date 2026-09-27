@@ -9,9 +9,9 @@ import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "action": z.unknown().optional(),
-  "reason": z.unknown().optional(),
+const requestBodySchema = z.object({
+  action: z.literal('approve').optional(),
+  reason: z.string().trim().min(1, 'reason is required to revoke an exception').max(2000).optional(),
 })
 
 
@@ -42,7 +42,7 @@ export const PATCH = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as { action?: string }
+    const body = parsedBody.data
     if ((body.action ?? 'approve') !== 'approve') {
       return NextResponse.json({ error: 'unknown exception action' }, { status: 400 })
     }
@@ -129,7 +129,7 @@ export const DELETE = defineRoute({
 
     const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    const body = (parsedBody.data) as { reason?: string }
+    const body = parsedBody.data
     const reason = (body.reason ?? '').trim()
     if (!reason) return NextResponse.json({ error: 'a revocation needs a reason' }, { status: 400 })
 

@@ -15,11 +15,15 @@ import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 
-const requestBodySchema = z.looseObject({
-  "kind": z.unknown().optional(),
-  "reason": z.unknown().optional(),
-  "slot": z.unknown().optional(),
-  "tolerance": z.unknown().optional(),
+const toleranceAmount = z.string().superRefine((value, ctx) => {
+  const parsed = canonicalDecimal(value, 4)
+  if (parsed === null) ctx.addIssue({ code: 'custom', message: moneyRefusal('Tolerance', value) })
+})
+const requestBodySchema = z.strictObject({
+  kind: z.enum(['earning', 'deduction', 'employer_contribution', 'credit', 'total']),
+  slot: z.string().trim().min(1),
+  tolerance: toleranceAmount,
+  reason: z.string().trim().min(1),
 })
 
 
@@ -59,13 +63,6 @@ export const GET = defineRoute({
   },
 })
 
-interface ToleranceBody {
-  kind?: unknown
-  slot?: unknown
-  tolerance?: unknown
-  reason?: unknown
-}
-
 export const POST = defineRoute({
   permission: 'payroll.manage',
   feature: 'payroll',
@@ -73,28 +70,11 @@ export const POST = defineRoute({
     const denied = guardToleranceScope(gate)
     if (denied) return denied
 
-    let body: ToleranceBody
-    try {
-      const parsedBody = await parseJsonBody(req, requestBodySchema);
-      if (!parsedBody.ok) return parsedBody.response;
-      body = (parsedBody.data) as ToleranceBody
-    } catch {
-      return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
-    }
-    if (typeof body.kind !== 'string' || !KINDS.has(body.kind)) {
-      return NextResponse.json({ error: 'kind must be a component kind or "total"' }, { status: 422 })
-    }
-    if (typeof body.slot !== 'string' || !body.slot.trim()) {
-      return NextResponse.json({ error: 'slot is required' }, { status: 422 })
-    }
-    if (typeof body.reason !== 'string' || !body.reason.trim()) {
-      return NextResponse.json({ error: 'reason must be a nonblank string' }, { status: 422 })
-    }
+    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.data
 
-    const toleranceRaw = canonicalDecimal(body.tolerance ?? '0', 4)
-    if (toleranceRaw === null) {
-      return NextResponse.json({ error: moneyRefusal('Tolerance', body.tolerance ?? '0') }, { status: 422 })
-    }
+    const toleranceRaw = canonicalDecimal(body.tolerance, 4)!
     let tolerance: string
     try {
       tolerance = normalizeMoney(toleranceRaw)

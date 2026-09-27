@@ -28,9 +28,30 @@ import {
 } from '@openbooks/engine/src/payroll/it/saldo-carryins.ts'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.looseObject({
-  "rows": z.unknown().optional(),
-  "taxYear": z.unknown().optional(),
+const openingAmount = z.string().superRefine((value, ctx) => {
+  if (value.trim() === '') return
+  if (canonicalDecimal(value, 4) === null) {
+    ctx.addIssue({ code: 'custom', message: moneyRefusal('Opening-balance amount', value) })
+  }
+})
+const openingAmountMap = z.record(z.string(), openingAmount)
+const openingBalanceRowSchema = z.strictObject({
+  employeePartyId: z.string().uuid(),
+  amounts: openingAmountMap.optional(),
+  components: openingAmountMap.optional(),
+  programs: openingAmountMap.optional(),
+  suiStates: openingAmountMap.optional(),
+  accountBases: z.array(z.strictObject({
+    programKey: z.string().min(1),
+    filingAccountId: z.string().uuid(),
+    region: z.string().nullable(),
+    insurableYtd: openingAmount,
+  })).optional(),
+  updatedAt: z.string().nullable().optional(),
+})
+const requestBodySchema = z.strictObject({
+  taxYear: z.union([z.number().int(), z.string().regex(/^\d{4}$/).transform(Number)]),
+  rows: z.array(openingBalanceRowSchema),
 })
 
 
@@ -118,11 +139,6 @@ export const GET = defineRoute({
   },
 })
 
-interface SaveBody {
-  taxYear?: unknown
-  rows?: unknown
-}
-
 /** Exact numeric(19,4) money string, empty when omitted, or 'invalid'. */
 function persistMoney(value: unknown): string | '' | 'invalid' {
   if (value == null || value === '' || (typeof value === 'string' && value.trim() === '')) return ''
@@ -160,33 +176,13 @@ export const POST = defineRoute({
   feature: 'payroll',
   handler: async ({ request: req, authz: gate }) => {
 
-    let body: SaveBody
-    try {
-      const parsedBody = await parseJsonBody(req, requestBodySchema);
-      if (!parsedBody.ok) return parsedBody.response;
-      body = (parsedBody.data) as SaveBody
-    } catch {
-      return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
-    }
-    if (!Array.isArray(body.rows)) {
-      return NextResponse.json({ error: 'rows must be an array' }, { status: 422 })
-    }
+    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.data
 
     const rows: OpeningBalanceWrite[] = []
     const saldoRows: { employeePartyId: string; regionaleSaldo: unknown; comunaleSaldo: unknown }[] = []
-    for (const raw of body.rows) {
-      const row = raw as {
-        employeePartyId?: unknown
-        amounts?: unknown
-        components?: unknown
-        programs?: unknown
-        suiStates?: unknown
-        accountBases?: unknown
-        updatedAt?: unknown
-      }
-      if (typeof row?.employeePartyId !== 'string' || !isUuid(row.employeePartyId)) {
-        return NextResponse.json({ error: 'each row needs a valid employeePartyId' }, { status: 422 })
-      }
+    for (const row of body.rows) {
       // The row's loader-served version for the lost-update guard. Absent
       // means the caller does not speak versions (the file importer) and the
       // row saves unguarded, as before — never a silent default.
@@ -195,12 +191,6 @@ export const POST = defineRoute({
       else if (typeof row.updatedAt === 'string') updatedAt = row.updatedAt
       else {
         return NextResponse.json({ error: 'updatedAt must be the row version string or null' }, { status: 422 })
-      }
-      if (row.amounts != null && (typeof row.amounts !== 'object' || Array.isArray(row.amounts))) {
-        return NextResponse.json({ error: 'amounts must be an object' }, { status: 422 })
-      }
-      if (row.components != null && (typeof row.components !== 'object' || Array.isArray(row.components))) {
-        return NextResponse.json({ error: 'components must be an object' }, { status: 422 })
       }
       const amounts = persistMoneyMap((row.amounts ?? {}) as Record<string, unknown>)
       if (!amounts.ok) {
@@ -214,9 +204,6 @@ export const POST = defineRoute({
           return NextResponse.json({ error: moneyRefusal(`Component amount for "${persisted.key}"`, persisted.value) }, { status: 422 })
         }
         components = persisted.map
-      }
-      if (row.programs != null && (typeof row.programs !== 'object' || Array.isArray(row.programs))) {
-        return NextResponse.json({ error: 'programs must be an object' }, { status: 422 })
       }
       let programs: Record<string, unknown> | undefined
       if (row.programs !== undefined) {
@@ -244,9 +231,6 @@ export const POST = defineRoute({
           comunaleSaldo: saldoRaw.comunaleSaldo,
         })
       }
-      if (row.suiStates != null && (typeof row.suiStates !== 'object' || Array.isArray(row.suiStates))) {
-        return NextResponse.json({ error: 'suiStates must be an object' }, { status: 422 })
-      }
       let suiStates: Record<string, unknown> | undefined
       if (row.suiStates !== undefined) {
         const persisted = persistMoneyMap(row.suiStates as Record<string, unknown>)
@@ -257,19 +241,9 @@ export const POST = defineRoute({
       }
       let accountBases: Record<string, unknown>[] | undefined
       if (row.accountBases !== undefined) {
-        if (!Array.isArray(row.accountBases)) {
-          return NextResponse.json({ error: 'accountBases must be an array' }, { status: 422 })
-        }
         accountBases = []
         for (const rawBase of row.accountBases) {
-          if (rawBase == null || typeof rawBase !== 'object' || Array.isArray(rawBase)) {
-            return NextResponse.json({ error: 'each account base must be an object' }, { status: 422 })
-          }
-          const base = rawBase as Record<string, unknown>
-          if (typeof base.programKey !== 'string' || typeof base.filingAccountId !== 'string'
-            || !(base.region === null || typeof base.region === 'string')) {
-            return NextResponse.json({ error: 'each account base needs a programKey, filingAccountId, and region' }, { status: 422 })
-          }
+          const base = rawBase
           const amount = persistMoney(base.insurableYtd)
           if (amount === 'invalid') {
             return NextResponse.json({ error: moneyRefusal(`Account wage-base opening for "${base.programKey}"`, base.insurableYtd, 'an amount', 4) }, { status: 422 })
