@@ -54,7 +54,7 @@ test("a retainer with an outstanding balance cannot close", () => {
       return true;
     },
   );
-  assert.equal(balanceOf({ totalAmount: "10.0000" }, [{ amount: "10.0000" }]), "0.0000");
+  assert.deepEqual(balanceOf({ totalAmount: "10.0000", currency: "CAD" }, [{ amount: "10.0000" }]), { amount: "0.0000", currency: "CAD" });
 });
 
 test("active retainers exhaust at zero and expire after their end date", () => {

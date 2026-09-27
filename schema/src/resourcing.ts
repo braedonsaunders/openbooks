@@ -11,7 +11,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { auditColumns, id, money, orgRef } from "./helpers";
+import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
 export const RESOURCING_REQUEST_SUBJECT_KIND = "resourcing_request";
 
@@ -150,6 +150,7 @@ export const resRetainers = pgTable(
     customerPartyId: uuid("customer_party_id").notNull(),
     kind: text("kind", { enum: RES_RETAINER_KIND_VALUES }).notNull(),
     totalAmount: money("total_amount").notNull(),
+    currency: currencyCode("currency").notNull(),
     totalHours: money("total_hours"),
     unitRate: money("unit_rate"),
     startsOn: date("starts_on").notNull(),

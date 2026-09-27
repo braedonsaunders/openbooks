@@ -11,6 +11,7 @@ const Body = z.object({
   projectId: z.string().uuid(),
   customerPartyId: z.string().uuid(),
   kind: z.enum(["hours", "fees"]),
+  currency: z.string().length(3).transform((value) => value.toUpperCase()).optional(),
   totalAmount: z.string().optional(),
   totalHours: z.string().optional(),
   unitRate: z.string().optional(),
