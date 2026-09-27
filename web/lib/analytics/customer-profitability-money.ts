@@ -9,6 +9,6 @@ export function exactProfit(revenue: string, costs: string): string {
 export function exactMarginPercent(profit: string, revenue: string): number {
   if (cmp(revenue, "0") <= 0) return 0;
   const value = evaluateAnalyticsRatio(profit, revenue, "percent", 18);
-  if (value === null) throw new Error("Customer margin is undefined for positive revenue.");
+  if (value === null) throw new Error("CUSTOMER_MARGIN_RATIO_UNDEFINED");
   return Number(value);
 }

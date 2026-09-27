@@ -1190,7 +1190,7 @@ export async function customerData(
     const shareText = totalRevenue > 0
       ? evaluateAnalyticsRatio(String(e.c.revenue), totalRevenueExact, "percent", 2)
       : "0.00";
-    if (shareText === null) throw new Error("Customer revenue share is undefined for a positive total revenue.");
+    if (shareText === null) throw new Error("CUSTOMER_REVENUE_SHARE_UNDEFINED");
     const sharePct = Number(shareText);
     const shareComparison = cmp(shareText, "25") >= 0 ? "critical"
       : cmp(shareText, "15") >= 0 ? "high"
@@ -1211,7 +1211,7 @@ export async function customerData(
       0,
     )
     : "0";
-  if (top10ShareText === null) throw new Error("Top-customer revenue share is undefined for a positive total revenue.");
+  if (top10ShareText === null) throw new Error("TOP_CUSTOMER_REVENUE_SHARE_UNDEFINED");
   const top10Share = Number(top10ShareText);
 
   /* ---- health scores + recommendations () ---- */
