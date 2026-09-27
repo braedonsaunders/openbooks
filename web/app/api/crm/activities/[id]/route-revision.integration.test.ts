@@ -19,7 +19,7 @@ registerHooks({
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
     `)
-    if (specifier === '../../../../../lib/feature-gates') return virtual(`
+    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__activityRevisionState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
@@ -124,6 +124,29 @@ test('PATCH with the fresh revision token saves and rotates the token', async ()
     assert.equal(result.status, 200, JSON.stringify(result.json))
     assert.equal(result.json?.activity?.subject, 'Fresh save')
     assert.notEqual(result.json?.activity?.updated_at, token)
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('PATCH stores custom values only after validating them against the activity definitions', async () => {
+  const { org, activityId } = await fixture()
+  try {
+    await withBypassContext(() => db.execute(sql`
+      insert into custom_field_defs (org_id, target_table, key, label, field_type, config)
+      values (${org.orgId}, 'crm_activities', 'channel', 'Channel', 'select', '{"options":["phone","email"]}'::jsonb)`))
+    const stored = async () => (await withBypassContext(() => db.execute<{ custom: unknown }>(sql`
+      select custom from crm_activities where id = ${activityId}`))).rows[0]!.custom
+    for (const [custom, status, refusal] of [
+      [{ channel: 'email' }, 200, null],
+      [{ channel: 'fax' }, 422, /Channel: invalid option/],
+      [{ region: 'west' }, 422, /unknown custom field: region/],
+    ] as const) {
+      const result = await patch(activityId, { custom, expectedUpdatedAt: await revisionToken(activityId) })
+      assert.equal(result.status, status, JSON.stringify(result.json))
+      if (refusal) assert.match(String(result.json?.error ?? ''), refusal)
+      assert.deepEqual(await stored(), { channel: 'email' })
+    }
   } finally {
     await dropScratchOrg(org.orgId)
   }

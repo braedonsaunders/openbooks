@@ -165,6 +165,18 @@ export function validateCustomValues(
   return { ok: Object.keys(errors).length === 0, errors, cleaned }
 }
 
+/**
+ * The first submitted key that names no active definition. validateCustomValues
+ * strips such keys, so a writer that must not drop a submitted value silently
+ * refuses it by name instead.
+ */
+export function unknownCustomFieldKey(
+  defs: CustomFieldDef[],
+  values: Record<string, unknown>,
+): string | null {
+  return Object.keys(values).find((key) => !defs.some((def) => def.key === key)) ?? null
+}
+
 const REFERENCE_OWNER_TABLES: ReadonlySet<string> = new Set(
   CUSTOM_FIELD_REFERENCE_TABLES as readonly string[],
 )

@@ -19,7 +19,7 @@ registerHooks({
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
       }
     `)
-    if (specifier === '../../../../../lib/feature-gates') return virtual(`
+    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
       export async function guardFeaturePermission() {
         const s = globalThis.__opportunityRevisionState;
         return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
@@ -127,6 +127,34 @@ test('a stale opportunity revision refuses instead of replacing a newer save', a
     const tokenless = await patch(oppId, { statusId, title: 'Sneaky' })
     assert.equal(tokenless.status, 409)
     assert.equal((await read(oppId)).opportunity.title, 'Tab A title')
+  } finally {
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('PATCH stores custom values only after validating them against the opportunity definitions', async () => {
+  const { org, statusId, oppId } = await fixture()
+  try {
+    await withBypassContext(() => db.execute(sql`
+      insert into custom_field_defs (org_id, target_table, key, label, field_type, config)
+      values (${org.orgId}, 'crm_opportunities', 'segment', 'Segment', 'select', '{"options":["smb","enterprise"]}'::jsonb)`))
+    const stored = async () => (await withBypassContext(() => db.execute<{ custom: unknown }>(sql`
+      select custom from crm_opportunities where id = ${oppId}`))).rows[0]!.custom
+    const header = {
+      description: null, expectedCloseDate: null, forecastCategory: 'most_likely', leadSourceId: null, lines: [],
+      nextStep: null, ownerUserId: null, partyId: null, primaryContactId: null, probability: 10, salesTeamId: null,
+      statusId, title: 'Revision Opp', winLossReason: null,
+    }
+    for (const [custom, status, refusal] of [
+      [{ segment: 'enterprise' }, 200, null],
+      [{ segment: 'consumer' }, 422, /Segment: invalid option/],
+      [{ region: 'west' }, 422, /unknown custom field: region/],
+    ] as const) {
+      const result = await patch(oppId, { ...header, custom, expectedUpdatedAt: (await read(oppId)).opportunity.updated_at })
+      assert.equal(result.status, status, JSON.stringify(result.json))
+      if (refusal) assert.match(String((result.json as { error?: unknown } | null)?.error ?? ''), refusal)
+      assert.deepEqual(await stored(), { segment: 'enterprise' })
+    }
   } finally {
     await dropScratchOrg(org.orgId)
   }
