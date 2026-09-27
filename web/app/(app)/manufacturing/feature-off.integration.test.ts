@@ -21,6 +21,7 @@ const routeState: { gate: { user: { id: string; orgId: string }; permissions: Se
 Object.assign(globalThis, { __manufacturingFeatureOff: routeState });
 const authzStub = `export async function guardPermission(){return globalThis.__manufacturingFeatureOff.gate}
 export async function requirePermission(){return globalThis.__manufacturingFeatureOff.gate}
+export function can(authz, permission){return authz?.permissions.has(permission) ?? false}
 export function guardSubsidiaryScope(){return null}
 export async function guardRootSubsidiaryScope(){return false}
 export function guardUnrestrictedScope(){return null}
@@ -37,6 +38,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { POST: setupPost } = await import("../../api/admin/setup/[entity]/route");
 const { POST: manufacturingPost } = await import("../../api/manufacturing/work-centers/route");
 const { POST: workOrderPost } = await import("../../api/manufacturing/work-orders/route");
+const { POST: issueWorkOrderPost } = await import("../../api/manufacturing/work-orders/[id]/issue/route");
 const { loadManufacturingSetup } = await import("../admin/setup/manufacturing/view");
 
 async function features(orgId: string, state: Record<string, boolean>) {
@@ -62,6 +64,12 @@ function workOrderWrite() {
     method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": randomUUID() }, body: JSON.stringify({}),
   }), { params: Promise.resolve({}) });
 }
+function issueWorkOrderWrite(id: string) {
+  return issueWorkOrderPost(new Request(`http://audit.local/api/manufacturing/work-orders/${id}/issue`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ lines: [{ materialId: randomUUID(), quantity: "1" }] }),
+  }), { params: Promise.resolve({ id }) });
+}
 
 test("manufacturing is off by default, parent-fenced, and preserves posted history", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
@@ -73,7 +81,7 @@ test("manufacturing is off by default, parent-fenced, and preserves posted histo
     const refusedCount = await withBypassContext(async () => (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`)).rows[0]!.n);
     assert.equal(refusedCount, 0);
     await features(org.orgId, { manufacturing: true, inventory: true });
-    routeState.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["admin.setup.manage"]), allowedSubsidiaryIds: null };
+    routeState.gate = { user: { orgId: org.orgId, id: actorId }, permissions: new Set(["admin.setup.manage", "items.post", "manufacturing.manage"]), allowedSubsidiaryIds: null };
     const scrap = await setupWrite("mfg-scrap-reasons", { code: "NORMAL", name: "Normal trim loss", classification: "normal", isActive: true });
     assert.equal(scrap.status, 200, await scrap.clone().text());
     const scrapId = String((await scrap.json()).id);
@@ -100,6 +108,9 @@ test("manufacturing is off by default, parent-fenced, and preserves posted histo
         values (${workOrderId}, ${org.orgId}, ${`WO-OFF-${workOrderId.slice(0, 8)}`}, ${org.items.assembly}, '1', 'ea', 'draft', 'manual', ${org.subsidiaryId}, ${actorId}, ${actorId}) returning id`);
       assert.equal(seeded.rows.length, 1);
     });
+    const fencedIssue = await issueWorkOrderWrite(workOrderId);
+    assert.equal(fencedIssue.status, 404);
+    assert.doesNotMatch(await fencedIssue.clone().text(), /manufacturing/i);
     const offFlow = await withOrgTransaction(org.orgId, () => runRecordFlows(
       { kind: "on_submit" }, "work_order", workOrderId, { orgId: org.orgId, userId: actorId },
     ));
