@@ -20,6 +20,7 @@ import {
   lockAndCheckOrgFeature,
   orgFeatureEnabled,
 } from "../../organization/org-feature-lock.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
 import { db, withOrg } from "../../platform/db.ts";
 import { recordRecognitionEvent } from "../../revenue/recognition-events.ts";
 import { recordPrepaidDraw, reversePrepaidDraw, prepaidBalance } from "./prepaid.ts";
@@ -49,6 +50,7 @@ export type UsageRatingVocabularyAssertions = {
 };
 
 export type UsageRatingRun = typeof usageRatingRuns.$inferSelect;
+export type UsageSubsidiaryScope = ReadonlySet<string> | null;
 
 export interface RatedUsageLine extends RateLine {
   meterId: string;
@@ -234,7 +236,7 @@ async function requireUsageBilling(orgId: string, lock: boolean): Promise<void> 
   }
 }
 
-async function loadContext(orgId: string, linkId: string): Promise<RateRunContext> {
+async function loadContext(orgId: string, linkId: string, allowedSubsidiaryIds: UsageSubsidiaryScope = null): Promise<RateRunContext> {
   const link = (await db.execute<LinkContext>(sql`
     select l.id, l.org_id as "orgId", l.subscription_id as "subscriptionId",
            l.customer_id as "customerId", l.plan_version_id as "planVersionId",
@@ -248,10 +250,10 @@ async function loadContext(orgId: string, linkId: string): Promise<RateRunContex
       from subscription_usage_links l
       join usage_rating_plan_versions v on v.org_id = l.org_id and v.id = l.plan_version_id
       join usage_rating_plans p on p.org_id = v.org_id and p.id = v.plan_id
-     where l.org_id = ${orgId} and l.id = ${linkId}`)).rows[0];
-  if (!link) {
-    refuse("usage_rate_run_link_not_found", "The subscription usage link does not exist in this organization.", "Choose a usage link from this organization.", "link_id");
-  }
+      join parties link_customer on link_customer.org_id = l.org_id and link_customer.id = l.customer_id
+     where l.org_id = ${orgId} and l.id = ${linkId}
+       ${subsidiaryVisibleFilter(sql`link_customer.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
+  if (!link) throw new ScopeNotFoundError();
   if (link.versionStatus !== "published" || !link.specHash) {
     refuse("usage_rate_run_plan_unpublished", "The usage link does not point to a published rating plan version.", "Publish a rating plan version and link the subscription to it.", "plan_version_id");
   }
@@ -269,10 +271,13 @@ async function loadContext(orgId: string, linkId: string): Promise<RateRunContex
       join parties c on c.org_id = s.org_id and c.id = s.customer_id
       left join subscription_lifecycles l on l.org_id = s.org_id and l.subscription_id = s.id
       left join subscription_plan_versions v on v.org_id = l.org_id and v.id = l.plan_version_id
-     where s.org_id = ${orgId} and s.id = ${link.subscriptionId}`)).rows[0];
+     where s.org_id = ${orgId} and s.id = ${link.subscriptionId}
+       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
   if (!subscription || subscription.customerId !== link.customerId) {
+    if (!subscription) throw new ScopeNotFoundError();
     refuse("usage_rate_run_subscription_mismatch", "The usage link's subscription no longer belongs to its recorded customer.", "Correct the subscription usage link so its customer matches the subscription.", "link_id");
   }
+  if (!subsidiaryScopeAllows(allowedSubsidiaryIds, subscription.customerSubsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
   if (subscription.subscriptionCurrency !== link.currency) {
     refuse("usage_rate_run_currency_mismatch", `The usage plan currency ${link.currency} does not match the linked subscription currency ${subscription.subscriptionCurrency ?? "(missing)"}.`, "Create or link a usage plan in the subscription's currency.", "plan_version_id");
   }
@@ -343,6 +348,7 @@ async function rateWindow(
   context: RateRunContext,
   periodStart: string,
   periodEnd: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<WindowRates> {
   const lines: RatedUsageLine[] = [];
   const recordFacts: unknown[] = [];
@@ -353,6 +359,7 @@ async function rateWindow(
       context.link.customerId,
       periodStart,
       periodEnd,
+      allowedSubsidiaryIds,
     );
     const wrongSubscription = records.find(
       (record) => record.subscriptionId !== null && record.subscriptionId !== context.link.subscriptionId,
@@ -394,6 +401,7 @@ async function loadGrants(
   context: RateRunContext,
   periodEnd: string,
   addBackRunId: string | null,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<GrantContext[]> {
   const rows = (await db.execute<{
     id: string;
@@ -434,7 +442,7 @@ async function loadGrants(
     if (!row.obligationId) {
       refuse("usage_prepaid_obligation_missing", `Prepaid grant ${row.id} has no live recognition obligation.`, "Restore the source invoice's usage obligation through the revenue recognition workflow before drawing the grant.", "grant_id");
     }
-    const balance = parseMoney(await prepaidBalance(orgId, row.id, periodEnd));
+    const balance = parseMoney(await prepaidBalance(orgId, row.id, periodEnd, allowedSubsidiaryIds));
     grants.push({
       id: row.id,
       obligationId: row.obligationId,
@@ -494,13 +502,14 @@ async function buildPreview(
   periodStartValue: string,
   periodEndValue: string,
   addBackRunId: string | null,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<{ context: RateRunContext; preview: RateRunPreview }> {
   const periodStart = requireDate(periodStartValue, "period_start");
   const periodEnd = requireDate(periodEndValue, "period_end");
   if (periodStart > periodEnd) {
     refuse("usage_rate_run_window_invalid", "The rating window starts after it ends.", "Choose period_start on or before period_end.", "period_start");
   }
-  const context = await loadContext(orgId, linkId);
+  const context = await loadContext(orgId, linkId, allowedSubsidiaryIds);
   if (context.link.customerId.length === 0 || context.link.meterIds.length === 0) {
     refuse("usage_rate_run_link_incomplete", "The usage link has no customer or meters to rate.", "Update the subscription usage link with its customer and at least one meter.", "link_id");
   }
@@ -511,8 +520,8 @@ async function buildPreview(
     refuse("usage_rate_run_plan_not_effective", `The linked plan version is not effective until ${context.link.versionEffectiveFrom}.`, "Link a plan version effective on or before the rating window.", "plan_version_id");
   }
 
-  const rated = await rateWindow(orgId, context, periodStart, periodEnd);
-  const grants = await loadGrants(orgId, context, periodEnd, addBackRunId);
+  const rated = await rateWindow(orgId, context, periodStart, periodEnd, allowedSubsidiaryIds);
+  const grants = await loadGrants(orgId, context, periodEnd, addBackRunId, allowedSubsidiaryIds);
   const allocation = allocatePrepaid(rated.lines, grants, context.link.allowOverage);
   const commitWindow = commitWindowForRun(periodStart, periodEnd, context.link.commitPeriod as UsageCommitPeriod | null);
   let shortfall = parseMoney("0");
@@ -520,7 +529,7 @@ async function buildPreview(
   let commitRecordsHash = rated.recordsHash;
   if (commitWindow !== null && context.link.commitAmount !== null) {
     if (context.link.commitPeriod === "annual") {
-      const annual = await rateWindow(orgId, context, commitWindow.start, commitWindow.end);
+      const annual = await rateWindow(orgId, context, commitWindow.start, commitWindow.end, allowedSubsidiaryIds);
       commitRatedTotal = annual.total;
       commitRecordsHash = annual.recordsHash;
     }
@@ -614,13 +623,14 @@ export async function previewRateRun(
   linkId: string,
   periodStart: string,
   periodEnd: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<RateRunPreview> {
   return withOrg(orgId, async () => {
     await requireUsageBilling(orgId, false);
     const periodStartDate = requireDate(periodStart, "period_start");
     const periodEndDate = requireDate(periodEnd, "period_end");
-    const existing = await activeRun(orgId, linkId, periodStartDate, periodEndDate);
-    return (await buildPreview(orgId, linkId, periodStartDate, periodEndDate, existing?.id ?? null)).preview;
+    const existing = await activeRun(orgId, linkId, periodStartDate, periodEndDate, allowedSubsidiaryIds);
+    return (await buildPreview(orgId, linkId, periodStartDate, periodEndDate, existing?.id ?? null, allowedSubsidiaryIds)).preview;
   });
 }
 
@@ -669,13 +679,71 @@ async function activeRun(
   linkId: string,
   periodStart: string,
   periodEnd: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<UsageRatingRun | null> {
   return (await db.execute<UsageRatingRun>(sql`
     select ${RUN_COLUMNS} from usage_rating_runs
      where org_id = ${orgId} and link_id = ${linkId}
+       and exists (select 1 from subscription_usage_links l join parties c on c.org_id = l.org_id and c.id = l.customer_id
+         where l.org_id = usage_rating_runs.org_id and l.id = usage_rating_runs.link_id
+         ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})
        and period_start = ${periodStart} and period_end = ${periodEnd}
        and status = 'active'
      for update`)).rows[0] ?? null;
+}
+
+export async function getRateRun(orgId: string, runId: string, allowedSubsidiaryIds: UsageSubsidiaryScope = null): Promise<UsageRatingRun> {
+  return withOrg(orgId, async () => {
+    await requireUsageBilling(orgId, false);
+    const row = (await db.execute<UsageRatingRun>(sql`
+      select ${RUN_COLUMNS} from usage_rating_runs
+       where org_id = ${orgId} and id = ${runId}
+         and exists (select 1 from subscription_usage_links l join parties c on c.org_id = l.org_id and c.id = l.customer_id
+           where l.org_id = usage_rating_runs.org_id and l.id = usage_rating_runs.link_id
+           ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})`)).rows[0];
+    if (!row) throw new ScopeNotFoundError();
+    return row;
+  });
+}
+
+export async function listRateRuns(orgId: string, filters: {
+  customerId?: string;
+  linkId?: string;
+  limit?: number;
+  offset?: number;
+}, allowedSubsidiaryIds: UsageSubsidiaryScope = null): Promise<UsageRatingRun[]> {
+  return withOrg(orgId, async () => {
+    await requireUsageBilling(orgId, false);
+    const customerId = filters.customerId ?? null;
+    if (customerId !== null) {
+      const customer = (await db.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId" from parties
+         where org_id = ${orgId} and id = ${customerId}
+           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
+      if (!customer || !subsidiaryScopeAllows(allowedSubsidiaryIds, customer.subsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
+    }
+    const linkId = filters.linkId ?? null;
+    if (linkId !== null) {
+      const link = (await db.execute<{ id: string }>(sql`
+        select l.id from subscription_usage_links l
+        join parties c on c.org_id = l.org_id and c.id = l.customer_id
+        where l.org_id = ${orgId} and l.id = ${linkId}
+          ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
+      if (!link) throw new ScopeNotFoundError();
+    }
+    const limit = Math.min(Math.max(filters.limit ?? 100, 1), 500);
+    const offset = Math.max(filters.offset ?? 0, 0);
+    return (await db.execute<UsageRatingRun>(sql`
+      select ${RUN_COLUMNS} from usage_rating_runs
+       where org_id = ${orgId} and (${linkId}::uuid is null or link_id = ${linkId})
+         and (${customerId}::uuid is null or exists (
+           select 1 from subscription_usage_links l where l.org_id = usage_rating_runs.org_id
+             and l.id = usage_rating_runs.link_id and l.customer_id = ${customerId}))
+         and exists (select 1 from subscription_usage_links l join parties c on c.org_id = l.org_id and c.id = l.customer_id
+           where l.org_id = usage_rating_runs.org_id and l.id = usage_rating_runs.link_id
+           ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})
+       order by created_at desc, id limit ${limit} offset ${offset}`)).rows;
+  });
 }
 
 async function pendingVoidRequestId(orgId: string, invoiceId: string): Promise<string | null> {
@@ -813,6 +881,7 @@ async function persistPrepaidDraws(
   actorId: string | null,
   runId: string,
   preview: RateRunPreview,
+  allowedSubsidiaryIds: UsageSubsidiaryScope,
 ): Promise<void> {
   const periodMonth = firstOfMonth(preview.periodEnd);
   for (const draw of preview.draws) {
@@ -821,7 +890,7 @@ async function persistPrepaidDraws(
       runId,
       periodMonth,
       amount: draw.amount,
-    });
+    }, allowedSubsidiaryIds);
     await recordRecognitionEvent({
       obligationId: draw.obligationId,
       orgId,
@@ -839,6 +908,7 @@ async function reverseRunPrepaidDraws(
   actorId: string | null,
   runId: string,
   draws: readonly { id: string; grantId: string; amount: string; periodMonth: string; obligationId: string | null }[],
+  allowedSubsidiaryIds: UsageSubsidiaryScope,
 ): Promise<void> {
   for (const draw of draws) {
     if (!draw.obligationId) {
@@ -849,7 +919,7 @@ async function reverseRunPrepaidDraws(
         "grant_id",
       );
     }
-    await reversePrepaidDraw(orgId, draw.id);
+    await reversePrepaidDraw(orgId, draw.id, allowedSubsidiaryIds);
     await recordRecognitionEvent({
       obligationId: draw.obligationId,
       orgId,
@@ -869,15 +939,16 @@ async function commitRateRunInTransaction(
   periodStartValue: string,
   periodEndValue: string,
   supersedesRunId: string | null,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<RateRunResult> {
   const periodStart = requireDate(periodStartValue, "period_start");
   const periodEnd = requireDate(periodEndValue, "period_end");
   const key = `${orgId}:${linkId}:${periodStart}:${periodEnd}`;
   await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
-  const existing = await activeRun(orgId, linkId, periodStart, periodEnd);
+  const existing = await activeRun(orgId, linkId, periodStart, periodEnd, allowedSubsidiaryIds);
   if (existing) await refusePendingOrVoidedRun(orgId, existing);
 
-  const built = await buildPreview(orgId, linkId, periodStart, periodEnd, existing?.id ?? null);
+  const built = await buildPreview(orgId, linkId, periodStart, periodEnd, existing?.id ?? null, allowedSubsidiaryIds);
   if (existing) {
     if (existing.inputHash === built.preview.inputHash && existing.outputHash === built.preview.outputHash) {
       const documentNumber = existing.invoiceId === null ? null : (await db.execute<{ documentNumber: string }>(sql`
@@ -906,7 +977,7 @@ async function commitRateRunInTransaction(
     invoice?.invoiceId ?? null,
     supersedesRunId,
   );
-  await persistPrepaidDraws(orgId, actorId, runId, built.preview);
+  await persistPrepaidDraws(orgId, actorId, runId, built.preview, allowedSubsidiaryIds);
   return {
     run,
     invoiceId: invoice?.invoiceId ?? null,
@@ -921,10 +992,11 @@ export async function commitRateRun(
   linkId: string,
   periodStart: string,
   periodEnd: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<RateRunResult> {
   return withOrg(orgId, async () => {
     await requireUsageBilling(orgId, true);
-    return commitRateRunInTransaction(orgId, actorId, linkId, periodStart, periodEnd, null);
+    return commitRateRunInTransaction(orgId, actorId, linkId, periodStart, periodEnd, null, allowedSubsidiaryIds);
   });
 }
 
@@ -933,15 +1005,20 @@ export async function voidAndRebillRateRun(
   actorId: string | null,
   runId: string,
   reason = "Usage rating inputs changed",
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<RateRunResult | PendingVoidResult> {
   return withOrg(orgId, async () => {
     await requireUsageBilling(orgId, true);
     const oldRun = (await db.execute<UsageRatingRun>(sql`
       select ${RUN_COLUMNS} from usage_rating_runs
-       where org_id = ${orgId} and id = ${runId} and status = 'active'
+       where org_id = ${orgId} and id = ${runId}
+         and exists (select 1 from subscription_usage_links l join parties c on c.org_id = l.org_id and c.id = l.customer_id
+           where l.org_id = usage_rating_runs.org_id and l.id = usage_rating_runs.link_id
+           ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})
        for update`)).rows[0];
-    if (!oldRun) {
-      refuse("usage_rate_run_not_active", "The rating run is missing or already superseded.", "Choose the active rating run for this usage link and period.", "run_id", 409);
+    if (!oldRun) throw new ScopeNotFoundError();
+    if (oldRun.status !== "active") {
+      refuse("usage_rate_run_not_active", "The rating run is already superseded.", "Choose the active rating run for this usage link and period.", "run_id", 409);
     }
     const oldDraws = (await db.execute<{
       id: string;
@@ -1016,7 +1093,7 @@ export async function voidAndRebillRateRun(
         refuse("usage_rate_run_supersede_conflict", `Rating run ${oldRun.id} changed before it could be superseded.`, "Reload the active run and retry voidAndRebillRateRun.", "run_id", 409);
       }
       await deleteDocument(oldRun.invoiceId, actorId, orgId, {
-        allowedSubsidiaryIds: null,
+        allowedSubsidiaryIds,
         source: "usage_rate_run",
         reason,
       });
@@ -1062,7 +1139,7 @@ export async function voidAndRebillRateRun(
       }
     }
 
-    await reverseRunPrepaidDraws(orgId, actorId, oldRun.id, oldDraws);
+    await reverseRunPrepaidDraws(orgId, actorId, oldRun.id, oldDraws, allowedSubsidiaryIds);
 
     const replaced = await commitRateRunInTransaction(
       orgId,
@@ -1071,6 +1148,7 @@ export async function voidAndRebillRateRun(
       oldRun.periodStart,
       oldRun.periodEnd,
       oldRun.id,
+      allowedSubsidiaryIds,
     );
     return { ...replaced, documentNumber: replaced.documentNumber ?? documentNumber };
   });

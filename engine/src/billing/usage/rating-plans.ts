@@ -17,6 +17,7 @@ import {
   lockAndCheckOrgFeature,
   orgFeatureEnabled,
 } from "../../organization/org-feature-lock.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
 import { db, withOrg } from "../../platform/db.ts";
 import { UsageBillingError } from "./errors.ts";
 
@@ -27,6 +28,7 @@ export type SubscriptionUsageLink = typeof subscriptionUsageLinks.$inferSelect;
 export type UsageBandKind = (typeof USAGE_BAND_KINDS)[number];
 export type UsagePackageRounding = (typeof USAGE_PACKAGE_ROUNDINGS)[number];
 export type UsageCommitPeriod = (typeof USAGE_COMMIT_PERIODS)[number];
+export type UsageSubsidiaryScope = ReadonlySet<string> | null;
 
 const FEATURE_REMEDY = "Enable Usage Billing in Company Settings → Features.";
 const PLAN_VERSION_REMEDY = "Publish a new version. Subscription links pin published versions and preserve historical pricing.";
@@ -228,6 +230,33 @@ export async function createUsageRatingPlan(
       }
       throw error;
     }
+  });
+}
+
+export async function listUsageRatingPlans(orgId: string): Promise<UsageRatingPlan[]> {
+  return withOrg(orgId, async () => {
+    await requireUsageBillingRead(orgId);
+    return (await db.execute<UsageRatingPlan>(sql`
+      select ${PLAN_COLUMNS} from usage_rating_plans where org_id = ${orgId} order by name, id`)).rows;
+  });
+}
+
+export async function getUsageRatingPlanVersionWithBands(orgId: string, versionId: string): Promise<{
+  version: UsageRatingPlanVersion;
+  bands: UsageRatingBand[];
+}> {
+  return withOrg(orgId, async () => {
+    await requireUsageBillingRead(orgId);
+    const safeVersionId = uuidText(versionId, "plan_version_id");
+    const version = (await db.execute<UsageRatingPlanVersion>(sql`
+      select ${VERSION_COLUMNS} from usage_rating_plan_versions
+       where org_id = ${orgId} and id = ${safeVersionId}`)).rows[0];
+    if (!version) throw new ScopeNotFoundError();
+    const bands = (await db.execute<UsageRatingBand>(sql`
+      select ${BAND_COLUMNS} from usage_rating_bands
+       where org_id = ${orgId} and plan_version_id = ${safeVersionId}
+       order by meter_id, seq`)).rows;
+    return { version, bands };
   });
 }
 
@@ -501,6 +530,7 @@ export async function createSubscriptionUsageLink(
   orgId: string,
   actor: string,
   input: CreateSubscriptionUsageLinkInput,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<SubscriptionUsageLink> {
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
@@ -533,15 +563,20 @@ export async function createSubscriptionUsageLink(
     const subscription = (await db.execute<{
       customerId: string;
       planCurrency: string | null;
+      customerSubsidiaryId: string | null;
     }>(sql`
-      select s.customer_id as "customerId", sp.currency_code as "planCurrency"
+      select s.customer_id as "customerId", sp.currency_code as "planCurrency",
+             customer.subsidiary_id as "customerSubsidiaryId"
         from subscriptions s
         join subscription_plans sp on sp.org_id = s.org_id and sp.id = s.plan_id
+        join parties customer on customer.org_id = s.org_id and customer.id = s.customer_id
        where s.org_id = ${orgId} and s.id = ${subscriptionId}
-       for update of s`)).rows[0];
+         ${subsidiaryVisibleFilter(sql`customer.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+       for update of s, customer`)).rows[0];
     if (!subscription) {
-      refuse("usage_link_subscription_not_found", "The subscription does not exist in this organization.", "Choose a subscription from this organization.", "subscription_id");
+      throw new ScopeNotFoundError();
     }
+    if (!subsidiaryScopeAllows(allowedSubsidiaryIds, subscription.customerSubsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
     if (subscription.customerId !== customerId) {
       refuse("usage_link_customer_mismatch", "The link customer does not match the subscription's customer.", "Link the subscription's own customer to this usage plan.", "customer_id");
     }
@@ -664,16 +699,20 @@ export async function closeSubscriptionUsageLink(
   actor: string,
   linkId: string,
   effectiveToInput: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<SubscriptionUsageLink> {
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
     const safeLinkId = uuidText(linkId, "link_id");
     const effectiveTo = dateText(effectiveToInput, "effective_to");
-    const link = (await db.execute<{ subscriptionId: string; effectiveFrom: string; effectiveTo: string | null }>(sql`
-      select subscription_id as "subscriptionId", effective_from::text as "effectiveFrom",
-             effective_to::text as "effectiveTo"
-        from subscription_usage_links where org_id = ${orgId} and id = ${safeLinkId}`)).rows[0];
-    if (!link) refuse("usage_link_not_found", "The subscription usage link does not exist in this organization.", "Choose a usage link from this organization.", "link_id");
+    const link = (await db.execute<{ subscriptionId: string; effectiveFrom: string; effectiveTo: string | null; customerSubsidiaryId: string | null }>(sql`
+      select l.subscription_id as "subscriptionId", l.effective_from::text as "effectiveFrom",
+             l.effective_to::text as "effectiveTo", c.subsidiary_id as "customerSubsidiaryId"
+        from subscription_usage_links l join parties c on c.org_id = l.org_id and c.id = l.customer_id
+       where l.org_id = ${orgId} and l.id = ${safeLinkId}
+         ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+       for update of l, c`)).rows[0];
+    if (!link || !subsidiaryScopeAllows(allowedSubsidiaryIds, link.customerSubsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
   if (link.effectiveTo !== null) {
     refuse("usage_link_already_closed", "The subscription usage link already has an effective_to date.", "Open a new usage link for a later pricing window.", "link_id", 409);
   }
@@ -713,13 +752,47 @@ export async function closeSubscriptionUsageLink(
   });
 }
 
-export async function getSubscriptionUsageLinks(orgId: string, subscriptionId: string): Promise<SubscriptionUsageLink[]> {
+export async function listSubscriptionUsageLinks(orgId: string, filters: {
+  subscriptionId?: string;
+  customerId?: string;
+}, allowedSubsidiaryIds: UsageSubsidiaryScope = null): Promise<SubscriptionUsageLink[]> {
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
-    const safeSubscriptionId = uuidText(subscriptionId, "subscription_id");
+    if ((filters.subscriptionId === undefined) === (filters.customerId === undefined)) {
+      refuse("usage_link_filter_required", "Choose one subscription or customer to list usage links.", "Supply exactly one subscription_id or customer_id filter.");
+    }
+    const subscriptionId = filters.subscriptionId === undefined ? null : uuidText(filters.subscriptionId, "subscription_id");
+    const customerId = filters.customerId === undefined ? null : uuidText(filters.customerId, "customer_id");
+    if (customerId !== null) {
+      const customer = (await db.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId" from parties
+         where org_id = ${orgId} and id = ${customerId}
+           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
+      if (!customer || !subsidiaryScopeAllows(allowedSubsidiaryIds, customer.subsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
+    }
+    if (subscriptionId !== null) {
+      const subscription = (await db.execute<{ id: string }>(sql`
+        select s.id from subscriptions s
+        join parties c on c.org_id = s.org_id and c.id = s.customer_id
+        where s.org_id = ${orgId} and s.id = ${subscriptionId}
+          ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
+      if (!subscription) throw new ScopeNotFoundError();
+    }
     return (await db.execute<SubscriptionUsageLink>(sql`
       select ${LINK_COLUMNS} from subscription_usage_links
-       where org_id = ${orgId} and subscription_id = ${safeSubscriptionId}
+       where org_id = ${orgId} and (${subscriptionId}::uuid is null or subscription_id = ${subscriptionId})
+         and (${customerId}::uuid is null or customer_id = ${customerId})
+         and exists (select 1 from parties c where c.org_id = subscription_usage_links.org_id
+           and c.id = subscription_usage_links.customer_id
+           ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})
        order by effective_from, id`)).rows;
   });
+}
+
+export async function getSubscriptionUsageLinks(
+  orgId: string,
+  subscriptionId: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
+): Promise<SubscriptionUsageLink[]> {
+  return listSubscriptionUsageLinks(orgId, { subscriptionId }, allowedSubsidiaryIds);
 }

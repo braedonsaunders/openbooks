@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
+import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
@@ -20,6 +22,15 @@ import { REPORT_ENTITIES, BUILT_IN_REPORT_DEFINITION_MAP } from '@openbooks/repo
 import { availableReportEntities } from './report-builder-catalog.ts'
 import type { Authz } from './authz.ts'
 
+const routeState: { authz: Authz | null } = { authz: null }
+Object.assign(globalThis, { __saasFeatureRouteState: routeState, __saasFeatureNextResponse: NextResponse })
+const realAuthz = new URL('./authz.ts', import.meta.url).href
+const authzStub = { shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(`import { can } from '${realAuthz}'; export * from '${realAuthz}'; export async function getAuthz(){return globalThis.__saasFeatureRouteState.authz} export async function guardPermission(p){const a=globalThis.__saasFeatureRouteState.authz;if(!a)return globalThis.__saasFeatureNextResponse.json({error:'unauthorized'},{status:401});if(!can(a,p))return globalThis.__saasFeatureNextResponse.json({error:'missing permission: '+p},{status:403});return a;}`) }
+registerHooks({ resolve(s, c, n) { return s === '@/lib/authz' || (s === './authz' && c.parentURL?.includes('/web/lib/feature-gates')) ? authzStub : n(s) } })
+const { GET: getUsageMeters } = await import('../app/api/usage/meters/route.ts')
+const { GET: getMetricsMonths } = await import('../app/api/metrics/months/route.ts')
+const { PUT: setContractPricing } = await import('../app/api/revenue/contracts/[id]/pricing/route.ts')
+
 const DB = { skip: !process.env.OPENBOOKS_DB_URL }
 const SAAS_METRIC_REPORTS = [
   'mrr-movements', 'arr-summary', 'revenue-churn', 'nrr-grr', 'cohort-retention',
@@ -27,7 +38,7 @@ const SAAS_METRIC_REPORTS = [
 ] as const
 
 async function setFeatures(orgId: string, features: Record<string, boolean>): Promise<void> {
-  await withBypassContext(async () => {
+  await withOrgContext(orgId, async () => {
     const changed = await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{features}',
         coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(features)}::jsonb, true)
@@ -36,12 +47,17 @@ async function setFeatures(orgId: string, features: Record<string, boolean>): Pr
   })
 }
 
+async function assertRouteHidden(response: Response): Promise<void> {
+  assert.equal(response.status, 404)
+  assert.deepEqual(await response.json(), { error: 'not_found' })
+}
+
 async function createUsageSetup(org: Awaited<ReturnType<typeof createScratchOrg>>, actorId: string) {
   const suffix = randomUUID().slice(0, 8)
   const itemId = randomUUID()
   const subscriptionPlanId = randomUUID()
   const subscriptionId = randomUUID()
-  await withBypassContext(async () => {
+  await withOrgContext(org.orgId, async () => {
     const item = await db.execute(sql`
       insert into items (id, org_id, kind, name, income_account_id, is_active, custom)
       values (${itemId}, ${org.orgId}, 'service', ${`Usage item ${suffix}`}, ${org.accounts.revenue}, true, '{}'::jsonb)
@@ -104,8 +120,8 @@ function resultRows(result: { groups: { columns: string[]; rows: unknown[][] }[]
 }
 
 test('SaaS usage and metrics preserve evidence across feature gates', DB, async () => {
-  const org = await createScratchOrg()
-  const actorId = await createScratchUser(org.orgId, 'Usage billing controller', 'admin')
+  const org = await withBypassContext(() => createScratchOrg())
+  const actorId = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, 'Usage billing controller', 'admin'))
   try {
     await setFeatures(org.orgId, { subscriptionBilling: true, usageBilling: true, saasMetrics: true })
     const usage = await createUsageSetup(org, actorId)
@@ -123,6 +139,10 @@ test('SaaS usage and metrics preserve evidence across feature gates', DB, async 
         envKind: 'production', productionOrgId: org.orgId, homeUserId: actorId, homeOrgId: org.orgId, isSuperAdmin: false },
       permissions: new Set(['reports.read', 'usage.read']), allowedSubsidiaryIds: null,
     } as Authz
+    routeState.authz = {
+      ...authz,
+      permissions: new Set(['usage.read', 'usage.manage', 'usage.bill', 'ar.post']),
+    }
     const { executeReport } = await import('./custom-reports.ts')
     const { withReportAuthz } = await import('./report-execution-context.ts')
     const { canSeeReportDefinition, hiddenReportEntityKeys } = await import('./report-authz.ts')
@@ -193,7 +213,15 @@ test('SaaS usage and metrics preserve evidence across feature gates', DB, async 
     await recomputeSaasMetrics(org.orgId, '2026-07-01')
     for (const [slug, figures] of metricFigures) assert.equal(resultRows(await runReport(slug)), figures)
     assert.equal(resultRows(await runReport('usage-billing-detail')), usageFigures)
+
+    await setFeatures(org.orgId, { subscriptionBilling: true, usageBilling: false, saasMetrics: true, revenueRecognition: true })
+    await assertRouteHidden(await withOrgContext(org.orgId, () => getUsageMeters(new Request('http://openbooks.test/api/usage/meters'))))
+    await setFeatures(org.orgId, { usageBilling: true, saasMetrics: false })
+    await assertRouteHidden(await withOrgContext(org.orgId, () => getMetricsMonths(new Request('http://openbooks.test/api/metrics/months'))))
+    await setFeatures(org.orgId, { saasMetrics: true, revenueRecognition: false })
+    await assertRouteHidden(await withOrgContext(org.orgId, () => setContractPricing(new Request('http://openbooks.test/api/revenue/contracts/00000000-0000-4000-8000-000000000001/pricing', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: '{}' }), { params: Promise.resolve({ id: '00000000-0000-4000-8000-000000000001' }) })))
   } finally {
+    routeState.authz = null
     await dropScratchOrg(org.orgId)
   }
 })
