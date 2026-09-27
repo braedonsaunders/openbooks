@@ -5280,6 +5280,10 @@
       "title": "Fertigung",
       "description": "Stücklisten, Arbeitspläne und Fertigungsaufträge, die Fertigerzeugnisse aus Komponenten herstellen."
     },
+    "manufacturingMrp": {
+      "title": "Fertigungsbedarfsplanung (MRP)",
+      "description": "Zeitlich aufgelöste Materialbedarfe, geplante Aufträge und unverbindliche Kapazitätsprüfung."
+    },
     "orders": {
       "description": "Kostenvoranschläge, Kunden- und Bestellaufträge mit Überleitung in Rechnungen und Eingangsrechnungen.",
       "title": "Angebote & Aufträge"

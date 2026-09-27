@@ -5280,6 +5280,10 @@
       "title": "製造",
       "description": "部品表・工程表・製造指図により、部品から完成品を製造します。"
     },
+    "manufacturingMrp": {
+      "title": "所要量計画（MRP）",
+      "description": "期間別の資材所要量、計画オーダー、参考用の能力確認。"
+    },
     "orders": {
       "description": "請求書・仕入請求書への転換付きの見積・受注・発注です。",
       "title": "見積・受発注"

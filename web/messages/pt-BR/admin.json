@@ -5148,6 +5148,10 @@
       "title": "Manufatura",
       "description": "Listas de materiais, roteiros e ordens de produção que fabricam produtos acabados a partir de componentes."
     },
+    "manufacturingMrp": {
+      "title": "Planejamento de necessidades de materiais (MRP)",
+      "description": "Necessidades de materiais ao longo do tempo, ordens planejadas e verificação consultiva de capacidade."
+    },
     "equipment": {
       "title": "Equipamentos e locações",
       "description": "Unidades de equipamento, escadas de taxas e cobranças de uso nas obras."

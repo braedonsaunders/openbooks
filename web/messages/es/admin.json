@@ -5140,6 +5140,10 @@
       "title": "Fabricación",
       "description": "Listas de materiales, rutas y órdenes de trabajo que fabrican productos terminados a partir de componentes."
     },
+    "manufacturingMrp": {
+      "title": "Planificación de necesidades de material (MRP)",
+      "description": "Necesidades de material escalonadas en el tiempo, órdenes planificadas y análisis orientativo de capacidad."
+    },
     "equipment": {
       "title": "Equipos y alquileres",
       "description": "Unidades de equipo, tarifas escalonadas y cargos de uso a obras."
