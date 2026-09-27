@@ -21,7 +21,6 @@ import { postPermission } from '../../../lib/document-kinds'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { isFeatureEnabled } from '../../../lib/features'
-import { guardProjectsFeature } from '../../../lib/projects-gate'
 import { notFound } from "@/lib/api/responses";
 
 
