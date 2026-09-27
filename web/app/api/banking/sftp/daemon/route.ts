@@ -13,8 +13,7 @@ export const runtime = 'nodejs'
 export const GET = defineRoute({
   permission: 'admin.setup.manage',
   feature: 'bankFeeds',
-  handler: async ({ request: req, authz: routeAuthz }) => {
-    const gate = routeAuthz;
+  handler: async ({ request: req }) => {
     const cfg = await loadDaemonConfig()
     const reqHost = new URL(req.url).hostname
     return NextResponse.json({

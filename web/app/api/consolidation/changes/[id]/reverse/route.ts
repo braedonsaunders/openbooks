@@ -8,9 +8,8 @@ import { proposeLossOfControlReversal } from "@openbooks/engine/src/consolidatio
 export const POST = defineRoute({
   permission: 'close.run',
   feature: 'multiSubsidiary',
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams }) => {
+  handler: async ({ request: req, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
-    const capability = routeAuthz;
     const { id } = await params,
         gate = await authorizeChange(id);
     if (gate instanceof NextResponse) return gate;
