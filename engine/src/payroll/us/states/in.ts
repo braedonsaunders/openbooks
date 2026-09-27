@@ -48,12 +48,12 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  refuseUntranscribedYear,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/in.ts";
 
 export interface InYearRates {
@@ -221,12 +221,7 @@ export const IN_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function inRatesForPayDate(payDate: string): InYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = IN_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(IN_WITHHOLDING, year);
-  }
-  return rates;
+  return IN_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /**
@@ -246,10 +241,7 @@ export function inApplicableCounty(
   residenceCounty: string | null | undefined,
   workCounty: string | null | undefined,
 ): InCounty | null {
-  const year = Number(payDate.slice(0, 4));
-  if (!IN_COUNTIES_BY_YEAR[year]) {
-    refuseUntranscribedYear(IN_WITHHOLDING, year);
-  }
+  const year = inRatesForPayDate(payDate).year;
   const residence = normalizeCountyAnswer(residenceCounty);
   if (residence) return inCounty(year, residence);
   const work = normalizeCountyAnswer(workCounty);
@@ -258,12 +250,13 @@ export function inApplicableCounty(
 }
 
 export function inCounty(year: number, code: string): InCounty {
-  const list = IN_COUNTIES_BY_YEAR[year];
+  const resolvedYear = inRatesForPayDate(`${year}-01-01`).year;
+  const list = IN_COUNTIES_BY_YEAR[resolvedYear];
   if (!list) {
-    refuseUntranscribedYear(IN_WITHHOLDING, year);
+    throw new PayrollError(`Indiana county rates are not transcribed for ${resolvedYear} — ${RATES_MODULE}`);
   }
   const county = IN_COUNTY_BY_CODE.get(code) ?? IN_COUNTY_BY_CODE.get(code.padStart(2, "0"));
-  if (!county || year !== 2026) {
+  if (!county) {
     throw new PayrollError(
       `"${code}" is not an Indiana county code published in Departmental Notice #1 for ${year} `
       + `(${RATES_MODULE}). The notice lists all 92 counties by two-digit code (01–92); an `
@@ -304,10 +297,7 @@ export function inPeriodTaxable(input: {
   exemptions: InExemptionCounts;
 }): { taxable: bigint; periodExemption: bigint; factors: Record<string, string> } {
   const rates = inRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Indiana withholding: ${P}`);
-  }
+  const P = IN_STATE_ENGINE.requirePeriodsPerYear(input.periodsPerYear);
   const factors: Record<string, string> = {};
   const annualExemption =
     U(rates.personalExemption) * BigInt(Math.max(input.exemptions.personal, 0))
@@ -371,15 +361,15 @@ export function inCountyWithholding(input: {
   return { tax: D(total), factors };
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = inRatesForPayDate(input.payDate);
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: InYearRates,
+  context: StateEngineContext<InYearRates>,
+): UsStateWithholdingResult {
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("IN_EXEMPT", 1n);
-    return { state: "IN", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "IN_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   const exemptions = exemptionsFromCertificate(input.certificate);
   const { taxable, factors: taxableFactors } = inPeriodTaxable({
@@ -431,6 +421,12 @@ export const IN_FACTOR_LABELS: Readonly<Record<string, string>> = {
   IN_WITHHELD: "Indiana tax withheld this period",
 };
 
+const IN_STATE_ENGINE = defineStateEngine({
+  state: { state: "IN", label: "Indiana income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(IN_EDITIONS_BY_YEAR), IN_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const IN_WITHHOLDING: UsStateWithholdingEngine = {
   state: "IN",
   label: "Indiana income tax",
@@ -439,7 +435,7 @@ export const IN_WITHHOLDING: UsStateWithholdingEngine = {
   editions: IN_TAX_YEAR_EDITIONS,
   // The notice's tables are the annual exemption ÷ P, so any frequency computes.
   printedPeriods: null,
-  compute,
+  compute: IN_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

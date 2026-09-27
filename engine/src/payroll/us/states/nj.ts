@@ -69,15 +69,13 @@ import {
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/nj.ts";
 
 /** The five schedules Form NJ-W4 selects between. */
@@ -562,18 +560,11 @@ export const NJ_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function njRatesForPayDate(payDate: string): NjYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = NJ_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(NJ_WITHHOLDING, year);
-  }
-  return rates;
+  return NJ_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 function njPeriodFor(periodsPerYear: number): NjPeriod {
-  const period = payPeriodFor(periodsPerYear);
-  if (period == null) refuseUnprintedPeriod(NJ_WITHHOLDING, periodsPerYear);
-  return period as NjPeriod;
+  return NJ_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, NJ_PERIODS) as NjPeriod;
 }
 
 /**
@@ -623,17 +614,18 @@ function rowFor(table: NjPeriodTable, taxable: bigint): NjRow | null {
   return null;
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = njRatesForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: NjYearRates,
+  context: StateEngineContext<NjYearRates>,
+): UsStateWithholdingResult {
   const period = njPeriodFor(input.periodsPerYear);
-  const factors: Record<string, string> = {};
+  const { factors } = context;
 
   // NJ-W4 line 6: "You do not need to withhold if the employee writes EXEMPT on
   // line 6 of Form NJ-W4" (NJ-WT p. 11).
-  if (certificateFlag(input.certificate, "exempt")) {
-    factors.NJ_EXEMPT = "1";
-    return { state: "NJ", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "NJ_EXEMPT" });
+  if (exempt) return exempt;
 
   const table = njRateTableFor({
     selectedTable: certificateChoice(input.certificate, "rate_table"),
@@ -701,6 +693,12 @@ export const NJ_FACTOR_LABELS: Readonly<Record<string, string>> = {
   NJ_TAX: "New Jersey tax",
 };
 
+const NJ_STATE_ENGINE = defineStateEngine({
+  state: { state: "NJ", label: "New Jersey gross income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(NJ_EDITIONS_BY_YEAR), NJ_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const NJ_WITHHOLDING: UsStateWithholdingEngine = {
   state: "NJ",
   label: "New Jersey gross income tax",
@@ -710,5 +708,5 @@ export const NJ_WITHHOLDING: UsStateWithholdingEngine = {
   // New Jersey prints all eight — including quarterly, semiannual and annual,
   // which most states do not — so any standard frequency has a real table.
   printedPeriods: NJ_PERIODS,
-  compute,
+  compute: NJ_STATE_ENGINE.compute,
 };

@@ -24,15 +24,13 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/vt.ts";
 
 export type VtPeriod =
@@ -213,12 +211,7 @@ export const VT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function vtRatesForPayDate(payDate: string): VtYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = VT_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(VT_WITHHOLDING, year);
-  }
-  return rates;
+  return VT_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 export function vtPeriodTax(taxable: bigint, period: VtPeriod, married: boolean): bigint {
@@ -232,20 +225,17 @@ export function vtPeriodTax(taxable: bigint, period: VtPeriod, married: boolean)
   return U(chosen.base) + mulRateCents(taxable - U(chosen.over), chosen.rate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = vtRatesForPayDate(input.payDate);
-  const period = payPeriodFor(input.periodsPerYear);
-  if (!period || !VT_PERIODS.includes(period) || (period === "daily" && input.periodsPerYear !== 260)) {
-    refuseUnprintedPeriod(VT_WITHHOLDING, input.periodsPerYear);
-  }
+function compute(
+  input: UsStateWithholdingInput,
+  rates: VtYearRates,
+  context: StateEngineContext<VtYearRates>,
+): UsStateWithholdingResult {
+  const period = context.requirePrintedPeriod(input.periodsPerYear, VT_PERIODS, 260);
   const published = period as VtPeriod;
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("VT_EXEMPT", 1n);
-    return { state: "VT", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "VT_EXEMPT", factorFormat: "decimal", statutoryTax: true, additionalWithholding: true });
+  if (exempt) return exempt;
 
   const status = (certificateChoice(input.certificate, "filing_status") ?? "single") as VtFilingStatus;
   const married = status === "married";
@@ -290,6 +280,12 @@ export const VT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   VT_WITHHELD: "Vermont tax withheld this period",
 };
 
+const VT_STATE_ENGINE = defineStateEngine({
+  state: { state: "VT", label: "Vermont income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(VT_EDITIONS_BY_YEAR), VT_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const VT_WITHHOLDING: UsStateWithholdingEngine = {
   state: "VT",
   label: "Vermont income tax",
@@ -297,7 +293,7 @@ export const VT_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: VT_TAX_YEAR_EDITIONS,
   printedPeriods: VT_PERIODS,
-  compute,
+  compute: VT_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

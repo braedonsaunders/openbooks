@@ -33,12 +33,12 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  refuseUntranscribedYear,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/me.ts";
 const DOLLAR = 10_000n;
 
@@ -100,12 +100,7 @@ export const ME_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function meRatesForPayDate(payDate: string): MeYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = ME_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(ME_WITHHOLDING, year);
-  }
-  return rates;
+  return ME_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 export function meRoundToDollar(units: bigint): bigint {
@@ -145,19 +140,16 @@ export function meAnnualTax(taxable: bigint, married: boolean): bigint {
   return U("8237") + mulRateCents(taxable - U("129750"), pctToRate("7.15"));
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = meRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Maine withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: MeYearRates,
+  context: StateEngineContext<MeYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("ME_EXEMPT", 1n);
-    return { state: "ME", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "ME_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   // Invalid / missing W-4ME: "withhold as if the employee or payee were
   // single and claiming no allowances."
@@ -216,6 +208,12 @@ export const ME_FACTOR_LABELS: Readonly<Record<string, string>> = {
   ME_WITHHELD: "Maine tax withheld this period",
 };
 
+const ME_STATE_ENGINE = defineStateEngine({
+  state: { state: "ME", label: "Maine income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(ME_EDITIONS_BY_YEAR), ME_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const ME_WITHHOLDING: UsStateWithholdingEngine = {
   state: "ME",
   label: "Maine income tax",
@@ -223,7 +221,7 @@ export const ME_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: ME_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute,
+  compute: ME_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

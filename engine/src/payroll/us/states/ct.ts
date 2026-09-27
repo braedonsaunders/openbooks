@@ -46,7 +46,6 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   evaluateUsNonresidentThreshold,
-  refuseUntranscribedYear,
   requireUsWageAllocation,
   type UsNonresidentThresholdRule,
   type UsStateWithholdingEngine,
@@ -54,6 +53,7 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ct.ts";
 
 /**
@@ -115,12 +115,7 @@ export const CT_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function ctRatesForPayDate(payDate: string): CtYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = CT_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(CT_WITHHOLDING, year);
-  }
-  return rates;
+  return CT_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 const THOUSAND = U("1000");
@@ -508,14 +503,13 @@ export function ctPersonalCredit(code: CtWithholdingCode, annualSalary: bigint):
   return "0.00";
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = ctRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Connecticut withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: CtYearRates,
+  context: StateEngineContext<CtYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
   const codeRaw = certificateChoice(input.certificate, "withholding_code");
   if (codeRaw === "E") {
@@ -681,6 +675,12 @@ export const CT_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CT_WITHHELD: "Connecticut tax withheld this period",
 };
 
+const CT_STATE_ENGINE = defineStateEngine({
+  state: { state: "CT", label: "Connecticut income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(CT_EDITIONS_BY_YEAR), CT_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const CT_WITHHOLDING: UsStateWithholdingEngine = {
   state: "CT",
   label: "Connecticut income tax",
@@ -689,7 +689,7 @@ export const CT_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: CT_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute,
+  compute: CT_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

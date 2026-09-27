@@ -34,9 +34,6 @@ import { pctToRate } from "./transcription.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
   evaluateUsNonresidentThreshold,
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   requireUsWageAllocation,
   type UsNonresidentThresholdRule,
   type UsStatePayPeriod,
@@ -45,6 +42,7 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/nd.ts";
 const DOLLAR = 10_000n;
 
@@ -129,12 +127,7 @@ export const ND_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function ndRatesForPayDate(payDate: string): NdYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = ND_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(ND_WITHHOLDING, year);
-  }
-  return rates;
+  return ND_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 export function ndRoundToDollar(units: bigint): bigint {
@@ -158,15 +151,14 @@ export function ndAnnualTax(taxable: bigint, status: NdFilingStatus, rates: NdYe
   return U(chosen.base) + mulRateCents(taxable - U(chosen.over), chosen.rate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = ndRatesForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: NdYearRates,
+  context: StateEngineContext<NdYearRates>,
+): UsStateWithholdingResult {
   const P = input.periodsPerYear;
-  const period = payPeriodFor(P);
-  if (!period || !ND_PERIODS.includes(period) || (period === "daily" && P !== 260)) {
-    refuseUnprintedPeriod(ND_WITHHOLDING, P);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const period = context.requirePrintedPeriod(P, ND_PERIODS, 260);
+  const { factors, trace } = context;
 
   const militarySpouseCertificate = input.supportingCertificates?.us_nd_ndwm;
   if (militarySpouseCertificate?.onFile) {
@@ -181,10 +173,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     return { state: "ND", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("ND_EXEMPT", 1n);
-    return { state: "ND", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "ND_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   // Guideline p. 2 reservation exception: wages paid to an enrolled tribal
   // member who lives on a reservation are exempt ONLY for services performed
@@ -406,6 +396,12 @@ const ND_TRIBAL_FACTS: readonly { key: string; description: string }[] = [
   },
 ];
 
+const ND_STATE_ENGINE = defineStateEngine({
+  state: { state: "ND", label: "North Dakota income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(ND_EDITIONS_BY_YEAR), ND_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const ND_WITHHOLDING: UsStateWithholdingEngine = {
   state: "ND",
   label: "North Dakota income tax",
@@ -417,7 +413,7 @@ export const ND_WITHHOLDING: UsStateWithholdingEngine = {
   taxableWageBases: {
     income: "state:US:ND:income", nonPeriodic: "state:US:ND:nonPeriodic",
   },
-  compute,
+  compute: ND_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

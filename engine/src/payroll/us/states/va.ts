@@ -46,13 +46,13 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
-  refuseUntranscribedYear,
   requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/va.ts";
 
 /** One band of the p. 21 formula: W = base + rate × (T − over), T not over `upTo`. */
@@ -119,12 +119,7 @@ export const VA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function vaRatesForPayDate(payDate: string): VaYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = VA_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(VA_WITHHOLDING, year);
-  }
-  return rates;
+  return VA_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /**
@@ -164,14 +159,13 @@ export function vaSupplementalFlat(payDate: string, supplemental: string): strin
   return D(mulRateCents(max0(U(supplemental)), rates.supplementalRate));
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = vaRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Virginia withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: VaYearRates,
+  context: StateEngineContext<VaYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
   const militarySpouseExempt = certificateFlag(input.certificate, "military_spouse_exempt");
   if (militarySpouseExempt) {
@@ -183,13 +177,11 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     ]);
   }
 
-  if (
-    certificateFlag(input.certificate, "exempt")
-    || militarySpouseExempt
-  ) {
-    trace("VA_EXEMPT", 1n);
-    return { state: "VA", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({
+    flagKeys: ["exempt", "military_spouse_exempt"], factorKey: "VA_EXEMPT",
+    factorFormat: "decimal", statutoryTax: true, additionalWithholding: true,
+  });
+  if (exempt) return exempt;
 
   // p. 19: add supplemental paid with regular wages and withhold on the total.
   // Daily payrolls annualize with the conversion table's 300, not the
@@ -255,6 +247,12 @@ export const VA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   VA_WITHHELD: "Virginia tax withheld this period",
 };
 
+const VA_STATE_ENGINE = defineStateEngine({
+  state: { state: "VA", label: "Virginia income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(VA_EDITIONS_BY_YEAR), VA_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const VA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "VA",
   label: "Virginia income tax",
@@ -265,7 +263,7 @@ export const VA_WITHHOLDING: UsStateWithholdingEngine = {
   // prints Daily = 300 (not 365); a caller using a 365-day daily payroll is
   // applying a P the formula accepts and the printed daily table does not use.
   printedPeriods: null,
-  compute,
+  compute: VA_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

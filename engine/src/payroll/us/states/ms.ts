@@ -29,10 +29,7 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
-  payPeriodFor,
   roundUsFinalWithholding,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   requireUsSourceWages,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
@@ -40,6 +37,7 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ms.ts";
 const DOLLAR = 10_000n;
 
@@ -88,12 +86,7 @@ export const MS_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function msRatesForPayDate(payDate: string): MsYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = MS_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(MS_WITHHOLDING, year);
-  }
-  return rates;
+  return MS_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 export function msRoundToDollar(units: bigint): bigint {
@@ -106,15 +99,14 @@ export function msAnnualTax(taxable: bigint, rates: MsYearRates): bigint {
   return mulRateCents(excess, rates.rate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = msRatesForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: MsYearRates,
+  context: StateEngineContext<MsYearRates>,
+): UsStateWithholdingResult {
   const P = input.periodsPerYear;
-  const period = payPeriodFor(P);
-  if (!period || !MS_PERIODS.includes(period) || (period === "daily" && P !== 260)) {
-    refuseUnprintedPeriod(MS_WITHHOLDING, P);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const period = context.requirePrintedPeriod(P, MS_PERIODS, 260);
+  const { factors, trace } = context;
 
   if (certificateFlag(input.certificate, "exempt")) {
     requireMilitarySpouseEligibility(input.certificate, "Mississippi", [
@@ -124,8 +116,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
       { key: "servicemember_dd2058_on_file", description: "a copy of the servicemember's federal Form DD-2058 is attached" },
       { key: "military_spouse_id_on_file", description: "a copy of the employee's Military Spouse ID card is attached" },
     ]);
-    trace("MS_EXEMPT", 1n);
-    return { state: "MS", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    const exempt = context.exemptResult({ factorKey: "MS_EXEMPT", factorFormat: "decimal" });
+    if (exempt) return exempt;
   }
 
   // No 89-350: Pub. 89-700 withholds from Tables A at zero exemption — Single,
@@ -180,6 +172,12 @@ export const MS_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MS_WITHHELD: "Mississippi tax withheld this period",
 };
 
+const MS_STATE_ENGINE = defineStateEngine({
+  state: { state: "MS", label: "Mississippi income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(MS_EDITIONS_BY_YEAR), MS_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const MS_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MS",
   label: "Mississippi income tax",
@@ -188,7 +186,7 @@ export const MS_WITHHOLDING: UsStateWithholdingEngine = {
   editions: MS_TAX_YEAR_EDITIONS,
   printedPeriods: MS_PERIODS,
   finalRounding: "nearest_dollar",
-  compute,
+  compute: MS_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

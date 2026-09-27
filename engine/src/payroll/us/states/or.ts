@@ -48,8 +48,8 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import { mulRatio, roundDiv } from "../../../money/money.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 import {
-  refuseUntranscribedYear,
   requireUsWageAllocation,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -207,12 +207,7 @@ export const OR_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function orRatesForPayDate(payDate: string): OrYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = OR_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(OR_WITHHOLDING, year);
-  }
-  return rates;
+  return OR_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 const DOLLAR = 10_000n;
@@ -394,12 +389,12 @@ export function orTransitWithholding(input: {
   return D(mulRateCents(max0(U(input.wages)), input.rate));
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = orRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Oregon withholding: ${P}`);
-  }
+function compute(
+  input: UsStateWithholdingInput,
+  rates: OrYearRates,
+  context: StateEngineContext<OrYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
 
   const gross = U(input.wages) + U(input.supplemental ?? "0");
   const regionalAllocations = (input.wageAllocations ?? []).filter((allocation) =>
@@ -432,15 +427,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     };
   }
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    return {
-      state: "OR",
-      year: rates.year,
-      tax: D(0n),
-      taxSupplemental: D(0n),
-      factors: { OR_METHOD: "exempt", OR_EXEMPT: "1" },
-    };
-  }
+  const exempt = context.exemptResult({ factorKey: "OR_EXEMPT", extraFactors: { OR_METHOD: "exempt" } });
+  if (exempt) return exempt;
 
   const status = (certificateChoice(input.certificate, "marital_status")
     ?? "single") as OrMaritalStatus;
@@ -514,6 +502,12 @@ export const OR_FACTOR_LABELS: Readonly<Record<string, string>> = {
   OR_WITHHELD: "Oregon tax withheld this period",
 };
 
+const OR_STATE_ENGINE = defineStateEngine({
+  state: { state: "OR", label: "Oregon income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(OR_EDITIONS_BY_YEAR), OR_TAX_YEAR_EDITIONS),
+  compute,
+});
+
 export const OR_WITHHOLDING: UsStateWithholdingEngine = {
   state: "OR",
   label: "Oregon income tax",
@@ -524,7 +518,7 @@ export const OR_WITHHOLDING: UsStateWithholdingEngine = {
   // 26; daily is 260. Any positive P computes — a scaled wage-bracket table
   // is not what this publication is.
   printedPeriods: null,
-  compute,
+  compute: OR_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

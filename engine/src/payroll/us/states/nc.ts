@@ -37,10 +37,8 @@ import { certificateAmount, certificateChoice, certificateCount, certificateFlag
   from "../../certificates.ts";
 import { roundDiv } from "../../../money/money.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -125,20 +123,11 @@ export const NC_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function ncRatesForPayDate(payDate: string): NcYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = NC_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(NC_WITHHOLDING, year);
-  }
-  return rates;
+  return NC_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 function ncPeriodFor(periodsPerYear: number): NcPeriod {
-  const period = payPeriodFor(periodsPerYear);
-  if (period == null || !NC_PERIODS.includes(period)) {
-    refuseUnprintedPeriod(NC_WITHHOLDING, periodsPerYear);
-  }
-  return period as NcPeriod;
+  return NC_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, NC_PERIODS) as NcPeriod;
 }
 
 /**
@@ -248,24 +237,23 @@ export function ncSupplementalFlat(payDate: string, supplemental: string): strin
   return D(ncRoundToDollar(mulRateCents(U(supplemental), rates.withholdingRate)));
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = ncRatesForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: NcYearRates,
+  context: StateEngineContext<NcYearRates>,
+): UsStateWithholdingResult {
   const isNonresidentAlien = certificateFlag(input.certificate, "nonresident_alien");
 
   // NC-4 EZ line 3 / NC-4 NRA: the employee certifies no liability, or claims
   // the Servicemembers Civil Relief Act military-spouse exemption.
-  if (certificateFlag(input.certificate, "exempt")) {
-    if (isNonresidentAlien) {
-      throw new PayrollError(
-        "North Carolina Form NC-4 NRA does not permit an exempt claim; file the applicable "
-        + "NC-4 NRA withholding entries instead",
-      );
-    }
-    return {
-      state: "NC", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
-      factors: { NC_EXEMPT: "1" },
-    };
+  if (certificateFlag(input.certificate, "exempt") && isNonresidentAlien) {
+    throw new PayrollError(
+      "North Carolina Form NC-4 NRA does not permit an exempt claim; file the applicable "
+      + "NC-4 NRA withholding entries instead",
+    );
   }
+  const exempt = context.exemptResult({ factorKey: "NC_EXEMPT" });
+  if (exempt) return exempt;
 
   const schedule = isNonresidentAlien
     ? "single_married_surviving"
@@ -279,7 +267,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // A frequency with no percentage table is calculated with the state's
   // annualized method, never refused and never scaled. Printed frequencies
   // stay on the percentage method (see above): no silent election.
-  const period = payPeriodFor(input.periodsPerYear);
+  const period = context.printedPeriod(input.periodsPerYear, NC_PERIODS);
   let tax: bigint;
   let factors: Record<string, string>;
   if (period != null && NC_PERIODS.includes(period)) {
@@ -373,6 +361,12 @@ export const NC_FACTOR_LABELS: Readonly<Record<string, string>> = {
   NC_NRA_INDIA_ZERO_ADJUSTMENT: "NC-4 NRA India student/apprentice zero adjustment",
 };
 
+const NC_STATE_ENGINE = defineStateEngine({
+  state: { state: "NC", label: "North Carolina income tax", printedPeriods: NC_PERIODS },
+  editions: pairStateRateEditions(Object.values(NC_EDITIONS_BY_YEAR), NC_TAX_YEAR_EDITIONS),
+  compute,
+});
+
 export const NC_WITHHOLDING: UsStateWithholdingEngine = {
   state: "NC",
   label: "North Carolina income tax",
@@ -386,5 +380,5 @@ export const NC_WITHHOLDING: UsStateWithholdingEngine = {
   taxableWageBases: {
     income: "state:US:NC:income", nonPeriodic: "state:US:NC:nonPeriodic",
   },
-  compute,
+  compute: NC_STATE_ENGINE.compute,
 };

@@ -31,15 +31,13 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
   requireUsWageAllocation,
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ks.ts";
 const KS_K4C_KEY = "us_ks_k4c";
 
@@ -213,12 +211,7 @@ export const KS_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function ksRatesForPayDate(payDate: string): KsYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = KS_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(KS_WITHHOLDING, year);
-  }
-  return rates;
+  return KS_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /**
@@ -249,19 +242,16 @@ export function ksPeriodTax(taxable: bigint, period: KsPeriod, married: boolean)
   return U(chosen.base) + mulRateCents(taxable - U(chosen.over), chosen.rate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = ksRatesForPayDate(input.payDate);
-  const period = payPeriodFor(input.periodsPerYear);
-  if (!period || !KS_PERIODS.includes(period) || (period === "daily" && input.periodsPerYear !== 260)) {
-    refuseUnprintedPeriod(KS_WITHHOLDING, input.periodsPerYear);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: KsYearRates,
+  context: StateEngineContext<KsYearRates>,
+): UsStateWithholdingResult {
+  const period = context.requirePrintedPeriod(input.periodsPerYear, KS_PERIODS, 260);
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("KS_EXEMPT", 1n);
-    return { state: "KS", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "KS_EXEMPT", factorFormat: "decimal", statutoryTax: true, additionalWithholding: true });
+  if (exempt) return exempt;
 
   // Missing K-4: "the employer must withhold wages at the single rate with no
   // allowances."
@@ -328,6 +318,12 @@ export const KS_FACTOR_LABELS: Readonly<Record<string, string>> = {
   KS_NONRESIDENT_TAX: "Kansas withholding apportioned to Kansas services",
 };
 
+const KS_STATE_ENGINE = defineStateEngine({
+  state: { state: "KS", label: "Kansas income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(KS_EDITIONS_BY_YEAR), KS_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const KS_WITHHOLDING: UsStateWithholdingEngine = {
   state: "KS",
   label: "Kansas income tax",
@@ -336,7 +332,7 @@ export const KS_WITHHOLDING: UsStateWithholdingEngine = {
   editions: KS_TAX_YEAR_EDITIONS,
   printedPeriods: KS_PERIODS,
   supportingCertificateKeys: [KS_K4C_KEY],
-  compute,
+  compute: KS_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

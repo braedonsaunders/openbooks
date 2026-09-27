@@ -57,15 +57,13 @@ import {
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ca.ts";
 
 /**
@@ -385,12 +383,7 @@ export const CA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function caRatesForPayDate(payDate: string): CaYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = CA_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(CA_WITHHOLDING, year);
-  }
-  return rates;
+  return CA_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 // ---------------------------------------------------------------------------
@@ -461,13 +454,18 @@ function indexed(table: readonly string[], count: number): bigint {
 // The calculation
 // ---------------------------------------------------------------------------
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = caRatesForPayDate(input.payDate);
-  const period = payPeriodFor(input.periodsPerYear);
-  if (period == null) refuseUnprintedPeriod(CA_WITHHOLDING, input.periodsPerYear);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: CaYearRates,
+  context: StateEngineContext<CaYearRates>,
+): UsStateWithholdingResult {
+  const period = context.requirePrintedPeriod(
+    input.periodsPerYear,
+    Object.keys(rates.rateTables) as UsStatePayPeriod[],
+    [260, 365],
+  );
 
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  const { factors, trace } = context;
 
   // DE 4: an employee who has filed no certificate is withheld at "Single with
   // Zero withholding allowance" — a statutory default, declared on the
@@ -495,10 +493,8 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
     return { state: "CA", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
   }
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("CA_EXEMPT", 1n);
-    return { state: "CA", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "CA_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   const column = columnFor(status, total);
   const schedule = scheduleFor(status);
@@ -656,6 +652,12 @@ export function caEttWithholding(
   ));
 }
 
+const CA_STATE_ENGINE = defineStateEngine({
+  state: { state: "CA", label: "California PIT", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(CA_EDITIONS_BY_YEAR), CA_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const CA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "CA",
   label: "California PIT",
@@ -666,5 +668,5 @@ export const CA_WITHHOLDING: UsStateWithholdingEngine = {
     "weekly", "biweekly", "semimonthly", "monthly",
     "quarterly", "semiannual", "annual", "daily",
   ],
-  compute,
+  compute: CA_STATE_ENGINE.compute,
 };

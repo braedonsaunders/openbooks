@@ -48,13 +48,13 @@ import {
   evaluateUsNonresidentThreshold,
   requireUsWageAllocation,
   requireUsSourceWages,
-  refuseUntranscribedYear,
   type UsNonresidentThresholdRule,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/az.ts";
 
 const AZ_NONRESIDENT_SERVICE_DAY_RULE: UsNonresidentThresholdRule = {
@@ -104,21 +104,19 @@ export const AZ_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function azRatesForPayDate(payDate: string): AzYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = AZ_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(AZ_WITHHOLDING, year);
-  }
-  return rates;
+  return AZ_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 export function azRateForPrintedPercent(printed: string): string {
   return pctToRate(printed);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = azRatesForPayDate(input.payDate);
-  const factors: Record<string, string> = {};
+function compute(
+  input: UsStateWithholdingInput,
+  rates: AzYearRates,
+  context: StateEngineContext<AzYearRates>,
+): UsStateWithholdingResult {
+  const { factors } = context;
 
   // Form A-4 line 2: "I elect an Arizona withholding percentage of zero, and I
   // certify that I expect to have no Arizona tax liability for the current
@@ -207,6 +205,12 @@ export const AZ_FACTOR_LABELS: Readonly<Record<string, string>> = {
   AZ_CATCHUP_TAX: "Arizona nonresident prior-period catch-up tax",
 };
 
+const AZ_STATE_ENGINE = defineStateEngine({
+  state: { state: "AZ", label: "Arizona income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(AZ_EDITIONS_BY_YEAR), AZ_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const AZ_WITHHOLDING: UsStateWithholdingEngine = {
   state: "AZ",
   label: "Arizona income tax",
@@ -215,7 +219,7 @@ export const AZ_WITHHOLDING: UsStateWithholdingEngine = {
   editions: AZ_TAX_YEAR_EDITIONS,
   // A percent of this period's wages. Any pay frequency computes.
   printedPeriods: null,
-  compute,
+  compute: AZ_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

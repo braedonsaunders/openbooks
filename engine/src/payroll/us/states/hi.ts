@@ -25,13 +25,13 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  refuseUntranscribedYear,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/hi.ts";
 
 export type HiFilingStatus =
@@ -101,12 +101,7 @@ export const HI_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function hiRatesForPayDate(payDate: string): HiYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = HI_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(HI_WITHHOLDING, year);
-  }
-  return rates;
+  return HI_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 export function hiAnnualTax(taxable: bigint, married: boolean, rates: HiYearRates): bigint {
@@ -119,14 +114,13 @@ export function hiAnnualTax(taxable: bigint, married: boolean, rates: HiYearRate
   return U(chosen.base) + mulRateCents(taxable - U(chosen.over), chosen.rate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = hiRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Hawaii withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: HiYearRates,
+  context: StateEngineContext<HiYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
   // No HW-4: "withhold tax as if the employee was single and had claimed
   // no withholding allowance." Head of household is treated as single.
@@ -201,6 +195,12 @@ export const HI_FACTOR_LABELS: Readonly<Record<string, string>> = {
   HI_WITHHELD: "Hawaii tax withheld this period",
 };
 
+const HI_STATE_ENGINE = defineStateEngine({
+  state: { state: "HI", label: "Hawaii income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(HI_EDITIONS_BY_YEAR), HI_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const HI_WITHHOLDING: UsStateWithholdingEngine = {
   state: "HI",
   label: "Hawaii income tax",
@@ -208,7 +208,7 @@ export const HI_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: HI_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute,
+  compute: HI_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

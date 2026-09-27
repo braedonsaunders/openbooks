@@ -59,12 +59,12 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
-  refuseUntranscribedYear,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/md.ts";
 
 export type MdSchedule = "single" | "joint";
@@ -257,12 +257,7 @@ export const MD_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function mdRatesForPayDate(payDate: string): MdYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = MD_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(MD_WITHHOLDING, year);
-  }
-  return rates;
+  return MD_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /**
@@ -464,10 +459,10 @@ const MD_DELAWARE_BY_YEAR: Record<number, MdDelawareSchedule> = {
 };
 
 export function mdDelawareRatesForPayDate(payDate: string): MdDelawareSchedule {
-  const year = Number(payDate.slice(0, 4));
+  const year = mdRatesForPayDate(payDate).year;
   const schedule = MD_DELAWARE_BY_YEAR[year];
   if (!schedule) {
-    refuseUntranscribedYear(MD_WITHHOLDING, year);
+    throw new PayrollError(`Maryland Delaware withholding schedule is not transcribed for ${year} — ${RATES_MODULE}`);
   }
   return schedule;
 }
@@ -522,13 +517,10 @@ export function mdDelawareResidentTax(input: {
   certificate: UsStateWithholdingInput["certificate"];
   supportingCertificates?: UsStateWithholdingInput["supportingCertificates"];
 }): UsStateWithholdingResult {
-  const scheduleBands = mdDelawareRatesForPayDate(input.payDate);
   const rates = mdRatesForPayDate(input.payDate);
+  const scheduleBands = mdDelawareRatesForPayDate(input.payDate);
   const rateYear = rates.year;
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Maryland withholding: ${P}`);
-  }
+  const P = MD_STATE_ENGINE.requirePeriodsPerYear(input.periodsPerYear);
   const factors: Record<string, string> = {};
   const trace = (key: string, value: bigint) => { factors[key] = D(value); };
   const zeroed = (key: string): UsStateWithholdingResult => {
@@ -650,14 +642,14 @@ export function mdLumpSumBonus(input: {
   return D(mulRateCents(max0(U(input.amount)), combined));
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = mdRatesForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: MdYearRates,
+  context: StateEngineContext<MdYearRates>,
+): UsStateWithholdingResult {
   const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Maryland withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+  context.requirePeriodsPerYear(P);
+  const { factors, trace } = context;
 
   if (certificateFlag(input.certificate, "military_spouse_exempt")) {
     const militarySpouseCertificate = input.supportingCertificates?.us_md_mw507m;
@@ -668,27 +660,32 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
       { key: "employee_in_md_only_to_be_with_spouse", description: "the employee resides and works in Maryland only to be with the servicemember spouse" },
       { key: "spousal_military_id_on_file", description: "a copy of the military ID card is attached" },
     ]);
-    trace("MD_MILITARY_SPOUSE_EXEMPT", 1n);
-    return { state: "MD", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
+    const militarySpouseExempt = context.exemptResult({
+      flagKey: "military_spouse_exempt", factorKey: "MD_MILITARY_SPOUSE_EXEMPT",
+      factorFormat: "decimal", statutoryTax: true, additionalWithholding: true,
+    });
+    if (militarySpouseExempt) return militarySpouseExempt;
   }
 
-  if (
-    certificateFlag(input.certificate, "exempt")
-    || certificateFlag(input.certificate, "reciprocal_exempt")
-  ) {
-    trace("MD_EXEMPT", 1n);
-    return { state: "MD", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({
+    factorKey: "MD_EXEMPT",
+    flagKeys: ["exempt", "reciprocal_exempt"],
+    factorFormat: "decimal",
+    statutoryTax: true,
+    additionalWithholding: true,
+  });
+  if (exempt) return exempt;
 
   // MW507 lines 6–7: a Pennsylvania resident also exempt from the LOCAL tax.
   // Line 5 alone (state-only) is handled below after taxable is known.
-  if (
-    certificateFlag(input.certificate, "pa_york_adams_local_exempt")
-    || certificateFlag(input.certificate, "pa_other_local_exempt")
-  ) {
-    trace("MD_PA_LOCAL_EXEMPT", 1n);
-    return { state: "MD", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const paLocalExempt = context.exemptResult({
+    factorKey: "MD_PA_LOCAL_EXEMPT",
+    flagKeys: ["pa_york_adams_local_exempt", "pa_other_local_exempt"],
+    factorFormat: "decimal",
+    statutoryTax: true,
+    additionalWithholding: true,
+  });
+  if (paLocalExempt) return paLocalExempt;
 
   const schedule = mdScheduleFor(certificateChoice(input.certificate, "filing_status"));
   factors.MD_SCHEDULE = schedule;
@@ -703,7 +700,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // `mdLumpSumBonus` rather than pricing a zero local rate.
   const supplementalAmount = U(input.supplemental ?? "0");
   if (input.supplementalPaymentTiming === "separate" && supplementalAmount > 0n) {
-    const regular = compute({ ...input, supplemental: "0", supplementalPaymentTiming: undefined });
+    const regular = MD_STATE_ENGINE.compute({ ...input, supplemental: "0", supplementalPaymentTiming: undefined });
     const lumpSum = U(mdLumpSumBonus({
       payDate: input.payDate,
       amount: input.supplemental!,
@@ -876,6 +873,12 @@ export const MD_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MD_WITHHELD: "Maryland tax withheld this period",
 };
 
+const MD_STATE_ENGINE = defineStateEngine({
+  state: { state: "MD", label: "Maryland income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(MD_EDITIONS_BY_YEAR), MD_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const MD_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MD",
   label: "Maryland income tax",
@@ -889,7 +892,7 @@ export const MD_WITHHOLDING: UsStateWithholdingEngine = {
   // payroll still annualizes rather than borrowing the 365-day box.
   printedPeriods: null,
   supportingCertificateKeys: ["us_md_mw507m"],
-  compute,
+  compute: MD_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

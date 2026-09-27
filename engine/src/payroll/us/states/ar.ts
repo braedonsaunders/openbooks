@@ -29,8 +29,8 @@ import {
 import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 import {
-  refuseUntranscribedYear,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
@@ -75,12 +75,7 @@ export const AR_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function arRatesForPayDate(payDate: string): ArYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = AR_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(AR_WITHHOLDING, year);
-  }
-  return rates;
+  return AR_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /** Round half-up to the nearest whole dollar — Step 3 "round that result". */
@@ -162,19 +157,16 @@ function arLowIncomeCredit(annualWages: bigint, status: string, exemptions: numb
   return max0(creditCents);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = arRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Arkansas withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: ArYearRates,
+  context: StateEngineContext<ArYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("AR_EXEMPT", 1n);
-    return { state: "AR", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "AR_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   const exemptions = certificateCount(input.certificate, "exemptions") ?? 0;
   const wages = U(input.wages) + U(input.supplemental ?? "0");
@@ -238,6 +230,12 @@ export const AR_FACTOR_LABELS: Readonly<Record<string, string>> = {
   AR_WITHHELD: "Arkansas tax withheld this period",
 };
 
+const AR_STATE_ENGINE = defineStateEngine({
+  state: { state: "AR", label: "Arkansas income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(AR_EDITIONS_BY_YEAR), AR_TAX_YEAR_EDITIONS),
+  compute,
+});
+
 export const AR_WITHHOLDING: UsStateWithholdingEngine = {
   state: "AR",
   label: "Arkansas income tax",
@@ -245,7 +243,7 @@ export const AR_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: AR_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute,
+  compute: AR_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

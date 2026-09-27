@@ -28,9 +28,6 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   requireUsSourceWages,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
@@ -38,6 +35,7 @@ import {
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ok.ts";
 const DOLLAR = 10_000n;
 
@@ -152,12 +150,7 @@ export const OK_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function okRatesForPayDate(payDate: string): OkYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = OK_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(OK_WITHHOLDING, year);
-  }
-  return rates;
+  return OK_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 export function okRoundToDollar(units: bigint): bigint {
@@ -176,14 +169,13 @@ export function okPeriodTax(taxable: bigint, period: OkPeriod, married: boolean,
   return U(chosen.base) + mulRateCents(taxable - U(chosen.over), chosen.rate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = okRatesForPayDate(input.payDate);
-  const period = payPeriodFor(input.periodsPerYear);
-  if (!period || !OK_PERIODS.includes(period) || (period === "daily" && input.periodsPerYear !== 260)) {
-    refuseUnprintedPeriod(OK_WITHHOLDING, input.periodsPerYear);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: OkYearRates,
+  context: StateEngineContext<OkYearRates>,
+): UsStateWithholdingResult {
+  const period = context.requirePrintedPeriod(input.periodsPerYear, OK_PERIODS, 260);
+  const { factors, trace } = context;
 
   if (certificateFlag(input.certificate, "military_spouse_exempt")) {
     const militarySpouseCertificate = input.supportingCertificates?.us_ok_ow9mse;
@@ -196,14 +188,15 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
       { key: "latest_spouse_les_on_file", description: "the latest servicemember Leave and Earnings Statement is on file and confirms the Oklahoma assignment" },
       { key: "current_military_id_on_file", description: "the employee's current military spouse ID is on file" },
     ]);
-    trace("OK_MILITARY_SPOUSE_EXEMPT", 1n);
-    return { state: "OK", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
+    const exempt = context.exemptResult({
+      flagKey: "military_spouse_exempt", factorKey: "OK_MILITARY_SPOUSE_EXEMPT",
+      factorFormat: "decimal",
+    });
+    if (exempt) return exempt;
   }
 
-  if (certificateFlag(input.certificate, "exempt")) {
-    trace("OK_EXEMPT", 1n);
-    return { state: "OK", year: rates.year, tax: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const exempt = context.exemptResult({ factorKey: "OK_EXEMPT", factorFormat: "decimal" });
+  if (exempt) return exempt;
 
   // 68 O.S. §2385.1 employment exclusions: the employer attests the service
   // class and the attested accumulations each period (farm pay at $900 or
@@ -332,6 +325,12 @@ export const OK_FACTOR_LABELS: Readonly<Record<string, string>> = {
   OK_WITHHELD: "Oklahoma tax withheld this period",
 };
 
+const OK_STATE_ENGINE = defineStateEngine({
+  state: { state: "OK", label: "Oklahoma income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(OK_EDITIONS_BY_YEAR), OK_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const OK_WITHHOLDING: UsStateWithholdingEngine = {
   state: "OK",
   label: "Oklahoma income tax",
@@ -340,7 +339,7 @@ export const OK_WITHHOLDING: UsStateWithholdingEngine = {
   editions: OK_TAX_YEAR_EDITIONS,
   printedPeriods: OK_PERIODS,
   supportingCertificateKeys: ["us_ok_ow9mse", "us_ok_service_class"],
-  compute,
+  compute: OK_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

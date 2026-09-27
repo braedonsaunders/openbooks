@@ -22,12 +22,12 @@ import type { PayrollRegionWithholding } from "../../withholding-jurisdictions.t
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  refuseUntranscribedYear,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/la.ts";
 
 export type LaDeductionClaim = "0" | "1" | "2";
@@ -65,12 +65,7 @@ export const LA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function laRatesForPayDate(payDate: string): LaYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = LA_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(LA_WITHHOLDING, year);
-  }
-  return rates;
+  return LA_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /**
@@ -99,14 +94,13 @@ export function laPeriodTax(
   return mulRateCents(taxable, rates.rate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = laRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Louisiana withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: LaYearRates,
+  context: StateEngineContext<LaYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
   // Missing L-4: "the employer must withhold Louisiana income tax from the
   // employee's wages without any standard deduction."
@@ -150,6 +144,12 @@ export const LA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   LA_WITHHELD: "Louisiana tax withheld this period",
 };
 
+const LA_STATE_ENGINE = defineStateEngine({
+  state: { state: "LA", label: "Louisiana income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(LA_EDITIONS_BY_YEAR), LA_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const LA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "LA",
   label: "Louisiana income tax",
@@ -157,7 +157,7 @@ export const LA_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: LA_TAX_YEAR_EDITIONS,
   printedPeriods: null,
-  compute,
+  compute: LA_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

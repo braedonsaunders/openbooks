@@ -40,12 +40,12 @@ import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import { pctToRate } from "./transcription.ts";
 import {
-  refuseUntranscribedYear,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
   type UsStateWithholdingResult,
 } from "./types.ts";
 
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 const RATES_MODULE = "engine/src/payroll/us/states/ia.ts";
 
 type IaPeriod = "daily" | "weekly" | "biweekly" | "semimonthly" | "monthly" | "annual";
@@ -120,12 +120,7 @@ export const IA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function iaRatesForPayDate(payDate: string): IaYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = IA_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(IA_WITHHOLDING, year);
-  }
-  return rates;
+  return IA_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /**
@@ -149,14 +144,13 @@ export function iaColumn2024(
   return "A";
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = iaRatesForPayDate(input.payDate);
-  const P = input.periodsPerYear;
-  if (!Number.isInteger(P) || P < 1 || P > 2000) {
-    throw new PayrollError(`invalid pay periods per year for Iowa withholding: ${P}`);
-  }
-  const factors: Record<string, string> = {};
-  const trace = (key: string, value: bigint) => { factors[key] = D(value); };
+function compute(
+  input: UsStateWithholdingInput,
+  rates: IaYearRates,
+  context: StateEngineContext<IaYearRates>,
+): UsStateWithholdingResult {
+  const P = context.requirePeriodsPerYear();
+  const { factors, trace } = context;
 
   if (certificateFlag(input.certificate, "military_spouse_exempt")) {
     requireMilitarySpouseEligibility(input.certificate, "Iowa", [
@@ -165,19 +159,16 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
       { key: "spouse_domiciled_outside_ia", description: "the employee maintains or has elected a tax domicile outside Iowa" },
       { key: "spousal_military_id_on_file", description: "a copy of the spousal military identification card is attached" },
     ]);
-    return {
-      state: "IA", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
-      factors: { IA_MILITARY_SPOUSE_EXEMPT: "1" },
-    };
+    const exempt = context.exemptResult({
+      flagKey: "military_spouse_exempt", factorKey: "IA_MILITARY_SPOUSE_EXEMPT",
+    });
+    if (exempt) return exempt;
   }
 
-  if (certificateFlag(input.certificate, "exempt") && input.basis !== "nonresident") {
-    return {
-      state: "IA", year: rates.year, tax: D(0n), taxSupplemental: D(0n),
-      factors: { IA_EXEMPT: "1" },
-    };
-  }
-  if (certificateFlag(input.certificate, "exempt")) {
+  if (input.basis !== "nonresident") {
+    const exempt = context.exemptResult({ factorKey: "IA_EXEMPT" });
+    if (exempt) return exempt;
+  } else if (certificateFlag(input.certificate, "exempt")) {
     // The 2026 IA W-4 bars nonresidents from claiming exemption from
     // withholding, so the flag is disregarded and normal withholding applies.
     trace("IA_EXEMPT_DISREGARDED_NONRESIDENT", 1n);
@@ -267,6 +258,12 @@ export const IA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   IA_WITHHELD: "Iowa tax withheld this period",
 };
 
+const IA_STATE_ENGINE = defineStateEngine({
+  state: { state: "IA", label: "Iowa income tax", printedPeriods: null },
+  editions: pairStateRateEditions(Object.values(IA_EDITIONS_BY_YEAR), IA_TAX_YEAR_EDITIONS),
+  compute: compute,
+});
+
 export const IA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "IA",
   label: "Iowa income tax",
@@ -276,7 +273,7 @@ export const IA_WITHHOLDING: UsStateWithholdingEngine = {
   // The booklet publishes a formula for unlisted frequencies (annualize, then
   // divide), so any P computes.
   printedPeriods: null,
-  compute,
+  compute: IA_STATE_ENGINE.compute,
 };
 
 // ===========================================================================

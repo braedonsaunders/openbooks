@@ -51,10 +51,8 @@ import { D, max0, mulRateCents, U } from "../../../money/payroll-decimal.ts";
 import { certificateAmount, certificateChoice, certificateCount, certificateFlag }
   from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext, US_STATE_PAY_PERIODS } from "./state-engine.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -153,8 +151,6 @@ export const GA_EDITIONS: readonly GaEdition[] = [
   },
 ];
 
-const GA_LOADED_YEARS = new Set([2026]);
-
 export const GA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   year: 2026,
   label: "Georgia Employer's Withholding Tax Guide 2026 (December 2025 and June 2026 revisions)",
@@ -164,10 +160,17 @@ export const GA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "GA",
 }];
 
+interface GaYearRates {
+  year: number;
+  status: "published" | "draft";
+  editions: readonly GaEdition[];
+}
+
+const GA_RATES: GaYearRates = { year: 2026, status: "published", editions: GA_EDITIONS };
+
 export function gaEditionForPayDate(payDate: string): GaEdition {
-  const year = Number(payDate.slice(0, 4));
-  if (!GA_LOADED_YEARS.has(year)) refuseUntranscribedYear(GA_WITHHOLDING, year);
-  const edition = GA_EDITIONS.find((candidate) =>
+  const rates = GA_STATE_ENGINE.ratesForPayDate(payDate);
+  const edition = rates.editions.find((candidate) =>
     payDate >= candidate.effectiveFrom
     && (candidate.effectiveTo == null || payDate < candidate.effectiveTo));
   if (!edition) {
@@ -179,14 +182,10 @@ export function gaEditionForPayDate(payDate: string): GaEdition {
 }
 
 function gaPeriodFor(periodsPerYear: number): GaPeriod {
-  const period = payPeriodFor(periodsPerYear);
   // Georgia's printed daily figures are annual amounts divided by 365. The
   // shared period mapping also calls a 260-period payroll "daily", but using
   // that alias would apply 365-day deductions to a 260-day filer.
-  if (period == null || (period === "daily" && periodsPerYear !== 365)) {
-    refuseUnprintedPeriod(GA_WITHHOLDING, periodsPerYear);
-  }
-  return period as GaPeriod;
+  return GA_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, US_STATE_PAY_PERIODS, 365) as GaPeriod;
 }
 
 /**
@@ -211,23 +210,28 @@ export function gaStandardDeduction(row: GaTableRow, status: string | null): str
   }
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const edition = gaEditionForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: GaYearRates,
+  context: StateEngineContext<GaYearRates>,
+): UsStateWithholdingResult {
+  const edition = rates.editions.find((candidate) =>
+    input.payDate >= candidate.effectiveFrom
+    && (candidate.effectiveTo == null || input.payDate < candidate.effectiveTo));
+  if (!edition) {
+    throw new PayrollError(
+      `no Georgia withholding edition is loaded for a pay date of ${input.payDate} — ${RATES_MODULE}`,
+    );
+  }
   const period = gaPeriodFor(input.periodsPerYear);
-  const factors: Record<string, string> = {
-    GA_EDITION: edition.effectiveFrom,
-    GA_RATE: edition.rate,
-  };
+  const { factors } = context;
+  factors.GA_EDITION = edition.effectiveFrom;
+  factors.GA_RATE = edition.rate;
 
   // G-4 line 8 — exempt because there was no Georgia liability last year and
   // none is expected this year, or under the Servicemembers Civil Relief Act.
-  if (certificateFlag(input.certificate, "exempt")) {
-    factors.GA_EXEMPT = "1";
-    return {
-      state: "GA", year: Number(input.payDate.slice(0, 4)),
-      tax: D(0n), taxSupplemental: D(0n), factors,
-    };
-  }
+  const exempt = context.exemptResult({ factorKey: "GA_EXEMPT" });
+  if (exempt) return exempt;
 
   const row = edition.tableE[period];
   const status = certificateChoice(input.certificate, "marital_status");
@@ -261,7 +265,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
   return {
     state: "GA",
-    year: Number(input.payDate.slice(0, 4)),
+    year: rates.year,
     tax: D(tax + extra),
     taxSupplemental: D(0n),
     factors,
@@ -284,6 +288,12 @@ export const GA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   GA_TAX: "Georgia tax",
 };
 
+const GA_STATE_ENGINE = defineStateEngine({
+  state: { state: "GA", label: "Georgia income tax", printedPeriods: GA_PERIODS },
+  editions: pairStateRateEditions([GA_RATES], GA_TAX_YEAR_EDITIONS),
+  compute,
+});
+
 export const GA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "GA",
   label: "Georgia income tax",
@@ -291,5 +301,5 @@ export const GA_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: GA_TAX_YEAR_EDITIONS,
   printedPeriods: GA_PERIODS,
-  compute,
+  compute: GA_STATE_ENGINE.compute,
 };

@@ -39,10 +39,9 @@ import { bmin, D, divIntCents, max0, mulRateCents, U } from "../../../money/payr
 import { certificateAmount, certificateChoice, certificateCount, certificateFlag } from "../../certificates.ts";
 import { PayrollError } from "../../error.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 import { requireMilitarySpouseEligibility } from "./military-spouse.ts";
 import {
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
   type UsStateWithholdingInput,
@@ -140,12 +139,7 @@ export const MA_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function maRatesForPayDate(payDate: string): MaYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = MA_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(MA_WITHHOLDING, year);
-  }
-  return rates;
+  return MA_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 /**
@@ -156,17 +150,9 @@ export function maRatesForPayDate(payDate: string): MaYearRates {
  * be refused as an unprinted frequency.
  */
 function maPeriodFor(periodsPerYear: number): MaPeriod {
-  switch (periodsPerYear) {
-    case 52: return "weekly";
-    case 26:
-    case 27: return "biweekly";
-    case 24: return "semimonthly";
-    case 12: return "monthly";
-    case 260:
-    case 365: return "daily";
-    case 1: return "annual";
-    default: refuseUnprintedPeriod(MA_WITHHOLDING, periodsPerYear);
-  }
+  return MA_STATE_ENGINE.requirePrintedPeriod(
+    periodsPerYear, MA_PERIODS, [260, 365], { 27: "biweekly" },
+  ) as MaPeriod;
 }
 
 /** Step 2 — the dollar value of the employee's exemptions for the period. */
@@ -184,10 +170,14 @@ export function maAnnualTax(rates: MaYearRates, annualWages: bigint): bigint {
     + mulRateCents(threshold, rates.baseRate);
 }
 
-function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = maRatesForPayDate(input.payDate);
+function compute(
+  input: UsStateWithholdingInput,
+  rates: MaYearRates,
+  context: StateEngineContext<MaYearRates>,
+): UsStateWithholdingResult {
   const period = maPeriodFor(input.periodsPerYear);
-  const factors: Record<string, string> = { MA_PERIOD: period };
+  const { factors } = context;
+  factors.MA_PERIOD = period;
 
   const militarySpouseCertificate = input.supportingCertificates?.us_ma_m4_ms;
   if (militarySpouseCertificate?.onFile) {
@@ -216,10 +206,11 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // M-4 box D: a full-time student in seasonal, part-time or temporary work
   // whose annual income will not exceed $8,000. "Employer: Do not withhold if D
   // is filled in."
-  if (certificateFlag(input.certificate, "student_exempt")) {
-    factors.MA_STUDENT_EXEMPT = "1";
-    return { state: "MA", year: rates.year, tax: D(0n), statutoryTax: D(0n), additionalWithholding: D(0n), taxSupplemental: D(0n), factors };
-  }
+  const studentExempt = context.exemptResult({
+    flagKey: "student_exempt", factorKey: "MA_STUDENT_EXEMPT",
+    statutoryTax: true, additionalWithholding: true,
+  });
+  if (studentExempt) return studentExempt;
 
   const claimed = certificateCount(input.certificate, "total_exemptions") ?? 0;
   const wages = U(input.wages);
@@ -388,6 +379,12 @@ export const MA_FACTOR_LABELS: Readonly<Record<string, string>> = {
   MA_SUPP_TAX: "Massachusetts supplemental tax",
 };
 
+const MA_STATE_ENGINE = defineStateEngine({
+  state: { state: "MA", label: "Massachusetts income tax", printedPeriods: MA_PERIODS },
+  editions: pairStateRateEditions(Object.values(MA_EDITIONS_BY_YEAR), MA_TAX_YEAR_EDITIONS),
+  compute,
+});
+
 export const MA_WITHHOLDING: UsStateWithholdingEngine = {
   state: "MA",
   label: "Massachusetts income tax",
@@ -396,5 +393,5 @@ export const MA_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: MA_TAX_YEAR_EDITIONS,
   printedPeriods: MA_PERIODS,
-  compute,
+  compute: MA_STATE_ENGINE.compute,
 };

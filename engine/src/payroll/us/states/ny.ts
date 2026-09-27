@@ -64,10 +64,8 @@ import {
 } from "../../certificates.ts";
 import type { PayrollTaxYearEdition } from "../../tax-years.ts";
 import { pctToRate } from "./transcription.ts";
+import { defineStateEngine, pairStateRateEditions, type StateEngineContext } from "./state-engine.ts";
 import {
-  payPeriodFor,
-  refuseUnprintedPeriod,
-  refuseUntranscribedYear,
   requireUsWageAllocation,
   type UsStatePayPeriod,
   type UsStateWithholdingEngine,
@@ -581,12 +579,7 @@ export const NY_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
 }];
 
 export function nyRatesForPayDate(payDate: string): NyYearRates {
-  const year = Number(payDate.slice(0, 4));
-  const rates = NY_EDITIONS_BY_YEAR[year];
-  if (!rates || rates.status !== "published") {
-    refuseUntranscribedYear(NY_WITHHOLDING, year);
-  }
-  return rates;
+  return NY_STATE_ENGINE.ratesForPayDate(payDate);
 }
 
 // ---------------------------------------------------------------------------
@@ -594,20 +587,10 @@ export function nyRatesForPayDate(payDate: string): NyYearRates {
 // ---------------------------------------------------------------------------
 
 function nyPeriodFor(periodsPerYear: number): NyPeriod {
-  const period = payPeriodFor(periodsPerYear);
   // The daily tables are 260-calibrated ($33 = $8,500 ÷ 260), so a 365-day
   // daily payroll has no printed table — refused like the KS/MO daily guards
   // refuse theirs.
-  if (period == null || !NY_PERIODS.includes(period) || (period === "daily" && periodsPerYear !== 260)) {
-    // NYS-50-T-NYS p. 23 prints a "Conversion of Tables" procedure for
-    // quarterly and 10-day payrolls, which converts to a printed period and
-    // scales the RESULT. It is deliberately not implemented: it is an
-    // employer's election with its own rounding, and silently applying it would
-    // make the engine's output disagree with the state's own instructions
-    // without saying so.
-    refuseUnprintedPeriod(NY_WITHHOLDING, periodsPerYear);
-  }
-  return period as NyPeriod;
+  return NY_STATE_ENGINE.requirePrintedPeriod(periodsPerYear, NY_PERIODS, 260) as NyPeriod;
 }
 
 /**
@@ -668,25 +651,26 @@ export function nysWithholding(input: {
   wages: string;
   marital: NyMarital;
   exemptions: number;
-}): { tax: bigint; factors: Record<string, string> } {
-  const rates = nyRatesForPayDate(input.payDate);
+}, ratesOverride?: NyYearRates, context?: StateEngineContext<NyYearRates>): { tax: bigint; factors: Record<string, string> } {
+  const rates = ratesOverride ?? nyRatesForPayDate(input.payDate);
   const period = nyPeriodFor(input.periodsPerYear);
-  const factors: Record<string, string> = {};
+  const factors = context?.factors ?? {};
+  const trace = context?.trace ?? ((key: string, value: bigint) => { factors[key] = D(value); });
 
   const allowance = allowanceAmount(
     rates.nys.allowances, period, input.marital, input.exemptions,
   );
-  factors.NYS_ALLOWANCE = D(allowance);
+  trace("NYS_ALLOWANCE", allowance);
 
   // Step 1 — net wages. Floored at zero: an allowance larger than the wages
   // withholds nothing, and a negative net would run backwards through step 3.
   const net = max0(U(input.wages) - allowance);
-  factors.NYS_NET = D(net);
+  trace("NYS_NET", net);
 
   // Method III trigger: annualized net wages at or above the threshold, or at
   // the selected period table's printed rounded terminal handoff.
   const annualizedNet = net * BigInt(input.periodsPerYear);
-  factors.NYS_ANNUALIZED_NET = D(annualizedNet);
+  trace("NYS_ANNUALIZED_NET", annualizedNet);
   const threshold = U(rates.nys.methodIIIThreshold[input.marital]);
   const table = rates.nys.tables[period][input.marital];
   const terminalMethodII = table[table.length - 1]!;
@@ -714,7 +698,7 @@ export function nysWithholding(input: {
     const tax = divIntCents(annualTax, input.periodsPerYear);
     factors.NYS_METHOD = "3";
     factors.NYS_METHOD3_RATE = band.rate;
-    factors.NYS_TAX = D(tax);
+    trace("NYS_TAX", tax);
     return { tax, factors };
   }
 
@@ -730,7 +714,7 @@ export function nysWithholding(input: {
     );
   }
   const tax = applyRow(row, net);
-  factors.NYS_TAX = D(tax);
+  trace("NYS_TAX", tax);
   return { tax, factors };
 }
 
@@ -764,8 +748,11 @@ function nyNonresidentShare(
   return requireUsWageAllocation(input.wageAllocations, region, subRegion).workShare;
 }
 
-function computeNys(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = nyRatesForPayDate(input.payDate);
+function computeNys(
+  input: UsStateWithholdingInput,
+  rates: NyYearRates,
+  context: StateEngineContext<NyYearRates>,
+): UsStateWithholdingResult {
   const marital = maritalFor(certificateChoice(input.certificate, "filing_status"));
   const exemptions = certificateCount(input.certificate, "nys_allowances") ?? 0;
   const reportedWages = U(input.wages) + U(input.supplemental ?? "0");
@@ -790,7 +777,7 @@ function computeNys(input: UsStateWithholdingInput): UsStateWithholdingResult {
     wages: D(wages),
     marital,
     exemptions,
-  });
+  }, rates, context);
   const factors = { ...allocationFactors, ...tableFactors };
 
   const extra = U(certificateAmount(input.certificate, "nys_additional") ?? "0");
@@ -833,6 +820,12 @@ export const NY_FACTOR_LABELS: Readonly<Record<string, string>> = {
   YONKERS_NONRESIDENT_WAGES: "Yonkers-source wages for a nonresident",
 };
 
+const NY_STATE_ENGINE = defineStateEngine({
+  state: { state: "NY", label: "New York State income tax", printedPeriods: NY_PERIODS },
+  editions: pairStateRateEditions(Object.values(NY_EDITIONS_BY_YEAR), NY_TAX_YEAR_EDITIONS),
+  compute: computeNys,
+});
+
 export const NY_WITHHOLDING: UsStateWithholdingEngine = {
   state: "NY",
   label: "New York State income tax",
@@ -841,7 +834,7 @@ export const NY_WITHHOLDING: UsStateWithholdingEngine = {
   editions: NY_TAX_YEAR_EDITIONS,
   printedPeriods: NY_PERIODS,
   supportingCertificateKeys: [NY_IT2104_1_KEY],
-  compute: computeNys,
+  compute: NY_STATE_ENGINE.compute,
 };
 
 // ---------------------------------------------------------------------------
@@ -863,12 +856,15 @@ export const NY_WITHHOLDING: UsStateWithholdingEngine = {
  * The city's allowance count is its OWN number: IT-2104 line 2, distinct from
  * the line 1 count that serves the state and Yonkers.
  */
-function computeNyc(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = nyRatesForPayDate(input.payDate);
+function computeNyc(
+  input: UsStateWithholdingInput,
+  rates: NyYearRates,
+  context: StateEngineContext<NyYearRates>,
+): UsStateWithholdingResult {
   const period = nyPeriodFor(input.periodsPerYear);
   const marital = maritalFor(certificateChoice(input.certificate, "filing_status"));
   const exemptions = certificateCount(input.certificate, "nyc_allowances") ?? 0;
-  const factors: Record<string, string> = {};
+  const { factors } = context;
 
   const wages = U(input.wages) + U(input.supplemental ?? "0");
   const allowance = allowanceAmount(rates.nyc.allowances, period, marital, exemptions);
@@ -896,6 +892,12 @@ function computeNyc(input: UsStateWithholdingInput): UsStateWithholdingResult {
   };
 }
 
+const NYC_STATE_ENGINE = defineStateEngine({
+  state: { state: "NY-NYC", label: "New York City resident income tax", printedPeriods: NY_PERIODS },
+  editions: pairStateRateEditions(Object.values(NY_EDITIONS_BY_YEAR), NY_TAX_YEAR_EDITIONS),
+  compute: computeNyc,
+});
+
 export const NYC_WITHHOLDING: UsStateWithholdingEngine = {
   state: "NY-NYC",
   label: "New York City resident income tax",
@@ -903,7 +905,7 @@ export const NYC_WITHHOLDING: UsStateWithholdingEngine = {
   ratesModule: RATES_MODULE,
   editions: NY_TAX_YEAR_EDITIONS,
   printedPeriods: NY_PERIODS,
-  compute: computeNyc,
+  compute: NYC_STATE_ENGINE.compute,
 };
 
 // ---------------------------------------------------------------------------
@@ -925,10 +927,13 @@ export const NYC_WITHHOLDING: UsStateWithholdingEngine = {
  * The resident branch needs `regionTax`, which the resolution order guarantees
  * by computing the region before its sub-regions.
  */
-function computeYonkers(input: UsStateWithholdingInput): UsStateWithholdingResult {
-  const rates = nyRatesForPayDate(input.payDate);
+function computeYonkers(
+  input: UsStateWithholdingInput,
+  rates: NyYearRates,
+  context: StateEngineContext<NyYearRates>,
+): UsStateWithholdingResult {
   const period = nyPeriodFor(input.periodsPerYear);
-  const factors: Record<string, string> = {};
+  const { factors } = context;
   const wages = U(input.wages) + U(input.supplemental ?? "0");
   const extra = U(certificateAmount(input.certificate, "yonkers_additional") ?? "0");
 
@@ -990,6 +995,12 @@ function computeYonkers(input: UsStateWithholdingInput): UsStateWithholdingResul
   };
 }
 
+const YONKERS_STATE_ENGINE = defineStateEngine({
+  state: { state: "NY-YONKERS", label: "Yonkers income tax", printedPeriods: NY_PERIODS },
+  editions: pairStateRateEditions(Object.values(NY_EDITIONS_BY_YEAR), NY_TAX_YEAR_EDITIONS),
+  compute: computeYonkers,
+});
+
 export const YONKERS_WITHHOLDING: UsStateWithholdingEngine = {
   state: "NY-YONKERS",
   label: "Yonkers income tax",
@@ -998,7 +1009,7 @@ export const YONKERS_WITHHOLDING: UsStateWithholdingEngine = {
   editions: NY_TAX_YEAR_EDITIONS,
   printedPeriods: NY_PERIODS,
   supportingCertificateKeys: [NY_IT2104_1_KEY],
-  compute: computeYonkers,
+  compute: YONKERS_STATE_ENGINE.compute,
 };
 
 /**
