@@ -35,7 +35,8 @@ export type DocumentVoidCode =
   | "invalid"
   | "stale-revision"
   | "reversal-period-uncovered"
-  | "reversal-period-closed";
+  | "reversal-period-closed"
+  | "retainer-drawdowns-posted";
 
 export class DocumentVoidError extends Error {
   constructor(
@@ -860,6 +861,25 @@ export async function completeRequestedDocumentVoid(
       const entryId = doc.posted_entry_id ? String(doc.posted_entry_id) : null;
 
       if (entryId) {
+        const linkedRetainer = (await tx.execute<{ id: string }>(sql`
+          select id from res_retainers
+           where org_id = ${orgId} and invoice_document_id = ${documentId}
+           for update
+        `)).rows[0];
+        if (linkedRetainer) {
+          const postedDrawdown = (await tx.execute<{ id: string }>(sql`
+            select id from res_retainer_drawdowns
+             where org_id = ${orgId} and retainer_id = ${linkedRetainer.id} and state = 'posted'
+             limit 1
+          `)).rows[0];
+          if (postedDrawdown) {
+            throw new DocumentVoidError(
+              "this retainer invoice has posted drawdowns and cannot be voided without orphaning their recognition history — keep the invoice posted and correct the issue with an adjusting journal entry",
+              409,
+              "retainer-drawdowns-posted",
+            );
+          }
+        }
         // lockApplicationEvidence already holds the source, all related
         // application documents and entries, and every active endpoint line
         // in the canonical order. Keep those locks through the checks below
