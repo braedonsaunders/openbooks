@@ -30,18 +30,13 @@ const mockSources = new Map<string, string>([
         if (state.denied) return NextResponse.json({ error: 'denied' }, { status: 403 })
         return { user: { id: 'user-1', orgId: 'org-1' } }
       }
+      export async function getAuthz() { return state.gate && 'status' in state.gate && state.gate.status === 401 ? null : state.gate }
+      export function guardRootSubsidiaryScope() { return null } export function guardUnrestrictedScope() { return null }
+      export async function isFeatureEnabled(orgId, key) { if (key !== 'hrmRecruiting') throw new Error('unexpected feature ' + key); return state.featureOn }
+      export async function guardFeaturePermission(permission, feature) { const gate = await guardPermission(permission); if (gate instanceof globalThis.openbooksHrmRecruitingAttachmentsNextResponse) return gate; return await isFeatureEnabled(gate.user.orgId, feature) ? gate : globalThis.openbooksHrmRecruitingAttachmentsNextResponse.json({ error: 'not found' }, { status: 404 }) }
     `,
   ],
-  [
-    "mock:features",
-    `
-      const state = globalThis[Symbol.for('openbooks.hrm-recruiting-attachments-route-test')]
-      export async function isFeatureEnabled(orgId, key) {
-        if (key !== 'hrmRecruiting') throw new Error('unexpected feature ' + key)
-        return state.featureOn
-      }
-    `,
-  ],
+
   [
     "mock:service",
     `
@@ -60,8 +55,10 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
-  ["../../../../../lib/features", "mock:features"],
+  ["../../../../../lib/features", "mock:authz"],
   ["@openbooks/engine/src/hrm/recruiting/applications.ts", "mock:service"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/feature-gates", "mock:authz"],
 ]);
 
 let attachRoute: typeof import("./route.ts") | undefined;
@@ -80,7 +77,7 @@ let attachRoute: typeof import("./route.ts") | undefined;
   });
   const attachUrl = "./route.ts?hrm-recruiting-attachments";
   attachRoute = (await import(attachUrl)) as typeof import("./route.ts");
-  hooks.deregister();
+  test.after(() => hooks.deregister());
 }
 
 const REQUISITION_ID = "00000000-0000-4000-8000-000000000041";

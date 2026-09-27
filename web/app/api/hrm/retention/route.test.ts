@@ -38,18 +38,13 @@ const mockSources = new Map<string, string>([
         }
         return state.gate
       }
+      export async function getAuthz() { return state.gate && 'status' in state.gate && state.gate.status === 401 ? null : state.gate }
+      export function guardRootSubsidiaryScope() { return null } export function guardUnrestrictedScope() { return null }
+      export async function isFeatureEnabled(orgId, key) { if (key !== 'hrm') throw new Error('unexpected feature ' + key); return state.featureOn }
+      export async function guardFeaturePermission(permission, feature) { const gate = await guardPermission(permission); if (gate instanceof globalThis.openbooksHrmRetentionRouteNextResponse) return gate; return await isFeatureEnabled(gate.user.orgId, feature) ? gate : globalThis.openbooksHrmRetentionRouteNextResponse.json({ error: 'not found' }, { status: 404 }) }
     `,
   ],
-  [
-    "mock:features",
-    `
-      const state = globalThis[Symbol.for('openbooks.hrm-retention-route-test')]
-      export async function isFeatureEnabled(orgId, key) {
-        if (key !== 'hrm') throw new Error('unexpected feature ' + key)
-        return state.featureOn
-      }
-    `,
-  ],
+
   [
     "mock:date",
     `
@@ -92,10 +87,12 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
-  ["../../../../lib/features", "mock:features"],
+  ["../../../../lib/features", "mock:authz"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:date"],
   ["@openbooks/engine/src/hrm/performance/performance-read.ts", "mock:read"],
   ["../review-cycles/_lib", "mock:lib"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/feature-gates", "mock:authz"],
 ]);
 
   const hooks = registerHooks({
@@ -112,7 +109,7 @@ const mockUrls = new Map<string, string>([
   });
   const routeUrl = "./route.ts?hrm-retention";
   const retentionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  hooks.deregister();
+  test.after(() => hooks.deregister());
 
 
 function reset(): void {

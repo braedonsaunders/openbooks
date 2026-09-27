@@ -53,18 +53,13 @@ const mockSources = new Map<string, string>([
         }
         return state.gate
       }
+      export async function getAuthz() { return state.gate && 'status' in state.gate && state.gate.status === 401 ? null : state.gate }
+      export function guardRootSubsidiaryScope() { return null } export function guardUnrestrictedScope() { return null }
+      export async function isFeatureEnabled(orgId, key) { if (key !== 'hrm') throw new Error('unexpected feature ' + key); return state.featureOn }
+      export async function guardFeaturePermission(permission, feature) { const gate = await guardPermission(permission); if (gate instanceof globalThis.openbooksHrmLeaveRouteNextResponse) return gate; return await isFeatureEnabled(gate.user.orgId, feature) ? gate : globalThis.openbooksHrmLeaveRouteNextResponse.json({ error: 'not found' }, { status: 404 }) }
     `,
   ],
-  [
-    "mock:features",
-    `
-      const state = globalThis[Symbol.for('openbooks.hrm-leave-route-test')]
-      export async function isFeatureEnabled(orgId, key) {
-        if (key !== 'hrm') throw new Error('unexpected feature ' + key)
-        return state.featureOn
-      }
-    `,
-  ],
+
   [
     "mock:service",
     `
@@ -92,9 +87,11 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
-  ["../../../../lib/features", "mock:features"],
+  ["../../../../lib/features", "mock:authz"],
   ["@openbooks/engine/src/hrm/leave.ts", "mock:service"],
   ["@openbooks/engine/src/hrm/leave-read.ts", "mock:service"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/feature-gates", "mock:authz"],
 ]);
 
   const hooks = registerHooks({
@@ -111,7 +108,7 @@ const mockUrls = new Map<string, string>([
   });
   const routeUrl = "./route.ts?hrm-leave-collection";
   const collectionRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  hooks.deregister();
+  test.after(() => hooks.deregister());
 
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
