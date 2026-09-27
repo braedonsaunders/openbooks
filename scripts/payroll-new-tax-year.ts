@@ -15,12 +15,14 @@
  * This generator writes that path FROM THE PACK'S OWN DECLARATION
  * (`PayrollTaxYearSupport.scaffold` in engine/src/payroll/{us,canada}/rates.ts):
  *
- *   1. a year module per publication the year needs, every figure set to the
- *      UNFILLED sentinel — so it type-checks, `ratesForPayDate` refuses it as a
- *      DRAFT by name, and nothing can withhold from it;
- *   2. a conformance stub per publication that FAILS until every placeholder is
- *      gone and real published goldens are pasted in;
- *   3. the generated editions barrel, rewritten from the year modules on disk,
+ *   1. each year module the pack declares, with untranscribed figures set to
+ *      the UNFILLED sentinel — so it type-checks, resolves as a DRAFT by name,
+ *      and nothing can withhold from it;
+ *   2. any additional files the pack declares, such as a year-specific
+ *      conformance stub; packs with a shared conformance runner instead print
+ *      citation-backed GOLDENS and REFUSALS row shapes and the runner path in
+ *      their rollover steps;
+ *   3. each generated editions barrel, rewritten from the year modules on disk,
  *      so the new year is wired without editing a hand-maintained list.
  *
  * The generator knows no jurisdiction: it substitutes {year} and {priorYear} into
@@ -272,7 +274,7 @@ function main(): void {
   });
   console.log(
     `\nUntil then the ${year} edition is a DRAFT: every statutory engine refuses it by name, the `
-    + `pay-run pre-flight blocks a ${year} run, and the generated conformance stubs fail.`,
+    + `pay-run pre-flight blocks a ${year} run; complete the pack's conformance steps above before publishing it.`,
   );
 }
 
