@@ -101,6 +101,8 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["projects", "foreman_id"],
   ["projects", "manager_id"],
   ["property_leases", "tenant_id"],
+  ["res_requests", "employee_party_id"],
+  ["res_retainers", "customer_party_id"],
   ["revenue_contracts", "customer_id"],
   ["subcontract_payment_controls", "joint_payee_party_id"],
   ["subcontracts", "vendor_id"],
@@ -349,6 +351,15 @@ const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
     conflict:
       "s.org_id = d.org_id and s.status in ('draft', 'confirmed')" +
       " and d.status in ('draft', 'confirmed')",
+  },
+  {
+    // Assignment identity is project, week, and the named employee. Preserve
+    // an absorbed row when its target already holds that booking key.
+    table: "res_assignments",
+    column: "employee_party_id",
+    conflict:
+      "s.org_id = d.org_id and s.project_id = d.project_id and s.week_start = d.week_start" +
+      " and s.employee_party_id is not null and d.employee_party_id is not null",
   },
   {
     table: "work_schedules",
