@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import { stubModules } from '../testing/stub-modules.ts'
 
@@ -11,7 +10,6 @@ import { stubModules } from '../testing/stub-modules.ts'
 // snapshot) in the same transaction, the owner always retains access, and
 // mistyped fields refuse naming the field.
 
-const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __viewsAuditState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

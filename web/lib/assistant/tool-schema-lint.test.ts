@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 import { z } from "zod";
 
 // The tool catalogs are server-only, but this wiring test runs with Node's
@@ -10,7 +8,6 @@ import { z } from "zod";
 // web/lib/application/tool-catalog.test.ts) plus the `@/` alias the
 // transitively imported app modules use (same precedent as
 // tools-banking-scope.integration.test.ts).
-const root = pathToFileURL(process.cwd() + "/").href;
 const { ASSISTANT_TOOLS } = await import("./registry.ts");
 const { APPLICATION_TOOLS } = await import("../application/tool-catalog.ts");
 const sharedAtoms = await import("./tools-shared.ts");

@@ -1,15 +1,12 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from '../auth';
 import { stubModules } from '../../testing/stub-modules.ts'
 
 // Finding-context handoff proofs (b06): scoped evidence section for a
 // readable finding, null for unknown ids and unreadable packs.
-const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __b06FindingContext: state });
 stubModules({ navigation: false, authz: false, features: false });

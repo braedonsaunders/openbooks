@@ -7,7 +7,6 @@ import type { SessionUser } from './auth'
 // Rate-card commercial adjustments, priced through invoice generation:
 // the card assignment selects WHICH adjustments apply, and each
 // adjustment's own targets select WHICH lines they measure.
-const root = pathToFileURL(process.cwd() + '/').href
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __billingRateAdjustmentSession: session })
 const lrcState: {

@@ -36,7 +36,6 @@ const mockAuthz = `
   export function can(authz, perm) { return authz.permissions.has(perm) }
 `;
 
-const webRoot = new URL("../../", import.meta.url);
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/data/import/")) {

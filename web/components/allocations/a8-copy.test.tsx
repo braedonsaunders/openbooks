@@ -3,11 +3,9 @@ import test from 'node:test'
 import { bootJsdomEnvironment } from '../../testing/jsdom-env.ts'
 
 const { registerHooks } = await import('node:module')
-const { existsSync } = await import('node:fs')
 const { join } = await import('node:path')
 const { pathToFileURL } = await import('node:url')
 const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
-const webRoot = join(process.cwd(), 'web')
 await bootJsdomEnvironment({ url: "http://localhost:4800/admin/setup/allocations", matchMediaMatches: false });
 
 registerHooks({

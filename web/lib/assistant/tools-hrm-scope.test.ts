@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 
 // Same module-graph shim as tool-schema-lint: the tool module is
 // server-only and transitively imports the `@/` alias; the engine imports
 // resolve through tsx with TSX_TSCONFIG_PATH=web/tsconfig.json (as the
 // suite runner sets it).
-const root = pathToFileURL(process.cwd() + "/").href;
 const { HRM_TOOLS, hrmRefusal } = await import("./tools-hrm.ts");
 const { EmploymentReadError } = await import("@openbooks/engine/src/hrm/employment-read.ts");
 const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");

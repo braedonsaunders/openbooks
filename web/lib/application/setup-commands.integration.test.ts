@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-import { pathToFileURL } from 'node:url'
 import { sql } from 'drizzle-orm'
 import { BUILT_IN_ROLES } from '@openbooks/engine/src/organization/permissions.ts'
 import { db, env, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
@@ -18,7 +17,6 @@ import type { SessionUser } from '../auth'
 // Same seam as web/lib/setup-feature-fence.integration.test.ts: shim the
 // RSC `server-only` marker and forward Next's `@/*` alias to `web/*` from
 // the repo root (this file runs from the root, one file per process).
-const root = pathToFileURL(process.cwd() + '/').href
 const { applicationTool, executeApplicationTool } = await import('./tool-catalog.ts')
 const { applicationContextFromSession } = await import('./context.ts')
 

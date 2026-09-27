@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import { pathToFileURL } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import type { SessionUser } from "./auth";
 
-const root = pathToFileURL(process.cwd() + "/").href;
 const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __scriptWriteSession: session });
 registerHooks({ resolve(specifier, context, next) {

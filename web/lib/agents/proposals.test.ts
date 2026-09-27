@@ -1,13 +1,10 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 // Proposal resolution (b06): a finding's carried { tool, input, label } must
 // resolve to the chat's governed card shape with a viewer-bound token, and
 // anything unresolvable must fail closed to null.
 process.env.SESSION_SECRET ??= "b06-proposal-test-secret-must-be-32+chars!!";
-const root = pathToFileURL(process.cwd() + "/").href;
 const { carriedProposal, findingProposalCommand } = await import("./proposals");
 const { verifyApplicationCommand } = await import("../assistant/application-proposals");
 const { applicationTool } = await import("../application/tool-catalog");

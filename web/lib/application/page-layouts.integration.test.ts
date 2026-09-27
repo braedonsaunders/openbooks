@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 /**
@@ -12,7 +11,6 @@ import test from 'node:test'
  * behind for the audit trail rather than destroying it.
  */
 
-const root = pathToFileURL(process.cwd() + '/web/').href
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
 import { db } from '@openbooks/engine/src/platform/db.ts';
@@ -10,7 +9,6 @@ import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } fro
 
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
 Object.assign(globalThis, { __depreciationBookHistory: state });
-const root = pathToFileURL(process.cwd() + '/').href;
 registerHooks({ resolve(specifier, context, next) {
   if (specifier.endsWith('/lib/authz') && context.parentURL?.includes('/api/admin/setup/')) {
     return { shortCircuit: true, url: 'data:text/javascript,export async function guardPermission(){return globalThis.__depreciationBookHistory.gate}' };

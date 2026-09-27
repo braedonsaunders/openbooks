@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 
 // Briefing roles (b06): the narrative's focus follows the caller's grants —
 // clerks get their lane, stewards and owners get everything.
-const root = pathToFileURL(process.cwd() + "/").href;
 const { briefingRole, briefingReadAuthz, BRIEFING_SCOPE, BRIEFING_MAX_STEPS } = await import("./briefing");
 import type { Authz } from "../authz";
 

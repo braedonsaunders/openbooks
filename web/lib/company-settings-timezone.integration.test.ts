@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 /**
@@ -9,7 +8,6 @@ import test from 'node:test'
  * (US/Eastern) store canonical and keep working; unknown zones refuse by
  * name instead of accruing UTC days.
  */
-const root = pathToFileURL(process.cwd() + '/').href
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')

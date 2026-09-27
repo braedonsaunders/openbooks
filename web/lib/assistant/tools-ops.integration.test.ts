@@ -1,13 +1,10 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { existsSync } from 'node:fs'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import type { Authz } from '../authz'
 import type { SessionUser } from '../auth'
 import { stubModules } from '../../testing/stub-modules.ts'
 
-const root = pathToFileURL(process.cwd() + '/').href
 stubModules({ navigation: false, authz: false, features: false });
 
 const { sql } = await import('drizzle-orm')

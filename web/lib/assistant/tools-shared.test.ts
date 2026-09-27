@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync } from "node:fs";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 
 // tools-shared.ts is server-only; run its pure helpers under Node with the
 // same marker shim the other assistant tests use.
-const root = pathToFileURL(process.cwd() + "/").href;
 const { compactRows, assistantListPage, capList, num, decimalText, MAX_LIST_ROWS, MAX_ROW_STRING } = await import("./tools-shared.ts");
 
 test("num rounds to cents and normalizes negative zero", () => {

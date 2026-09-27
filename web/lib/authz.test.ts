@@ -71,7 +71,6 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-const webRoot = new URL("../", import.meta.url);
 stubModules({ navigation: false, intl: false, authz: false, features: false, extra: {
     '../../../lib/authz': '\n      const state = globalThis[Symbol.for("openbooks.authz-route-contract-test")];\n      export async function guardPermission(permission) {\n        state.gateCalls.push(permission);\n        return state.gate;\n      }\n      // Faithful to web/lib/authz.ts: only an unrestricted caller passes.\n      export function guardUnrestrictedScope(authz) {\n        if (authz?.allowedSubsidiaryIds == null) return null;\n        return new Response(JSON.stringify({ error: "requires unrestricted subsidiary access" }), {\n          status: 403,\n          headers: { "content-type": "application/json" },\n        });\n      }\n    ',
   } });

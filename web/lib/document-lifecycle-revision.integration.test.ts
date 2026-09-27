@@ -1,10 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import type { SessionUser } from './auth';
 import { stubModules } from '../testing/stub-modules.ts'
-const root = pathToFileURL(process.cwd() + "/").href;
 const session: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __emailRevisionSession: session });
 stubModules({ navigation: false, authz: false, features: false });

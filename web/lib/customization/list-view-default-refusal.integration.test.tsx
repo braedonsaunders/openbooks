@@ -2,10 +2,8 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import { stubModules } from '../../testing/stub-modules.ts'
 
-const root = pathToFileURL(process.cwd() + '/').href
 stubModules({ navigation: false, authz: false, features: false, extra: {
     '../../../lib/authz': 'export async function requirePermission(){return globalThis.__listDefaultAuthz}export function can(){return true}',
   } });

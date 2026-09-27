@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { renderToStaticMarkup } from "react-dom/server";
-import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { stubModules } from '../../testing/stub-modules.ts'
 
@@ -11,7 +10,6 @@ import { stubModules } from '../../testing/stub-modules.ts'
 // types (key as value, name as label) so cells and the dropdown resolve
 // them; built-ins keep their static translated options. Needs a fixture
 // database.
-const root = pathToFileURL(process.cwd() + '/').href;
 stubModules({ navigation: { pathname: '/projects' }, authz: false, features: false, extra: {
     'next-intl': 'export function useTranslations(){const t=(key)=>key;t.rich=(key)=>key;return t}export function useLocale(){return \'en\'}export function useTimeZone(){return \'UTC\'}',
   } });

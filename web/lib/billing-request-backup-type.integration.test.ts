@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // An explicit backup type names one of the configured packet recipes. A
 // misspelled type must refuse — silently persisting the default (or none)
 // would issue the customer a packet nobody asked for, or no packet where
 // the approver required one.
-const root = pathToFileURL(process.cwd() + '/').href
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')

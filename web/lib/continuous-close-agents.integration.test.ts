@@ -1,8 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
-import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import type { SessionUser } from './auth';
 import { stubModules } from '../testing/stub-modules.ts'
@@ -13,7 +11,6 @@ import { stubModules } from '../testing/stub-modules.ts'
 // NOTE: only accounting|finance rows are seeded — the ai_work_items storage
 // CHECK still rejects newer pack keys until the widening migration lands, so
 // new-pack visibility is pinned by continuous-close-agents.test.ts until then.
-const root = pathToFileURL(process.cwd() + '/').href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __b06AgentsScope: state });
 stubModules({ navigation: false, authz: false, features: false });

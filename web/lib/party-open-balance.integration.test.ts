@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { pathToFileURL } from 'node:url';
-const root = pathToFileURL(process.cwd() + "/").href;
 const { sql } = await import('drizzle-orm');
 const { randomUUID } = await import('node:crypto');
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
