@@ -22,7 +22,7 @@
  * Schedule 15 are transcribed-or-named refusals (see AU_REFUSED_2027).
  *
  * Money discipline: figures are decimal STRINGS, never floats. The engine
- * consumes them with the repo's bigint-unit helpers (see canada/decimal.ts).
+ * consumes them with the shared payroll bigint-unit helpers.
  */
 
 import { PayrollPackError } from "../payroll-error.ts";

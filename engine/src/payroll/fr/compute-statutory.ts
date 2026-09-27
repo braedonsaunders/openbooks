@@ -50,11 +50,13 @@
  * hits the brut (CGI art. 204 A et s., BOI-IR-PAS-20-10-10 I-A §10).
  *
  * Money: bigint units (1e4) throughout via the repo's money.ts, halves away
- * from zero (roundDiv) — the same discipline as canada/decimal.ts. The
+ * from zero (roundDiv) — the same discipline as the shared payroll decimal
+ * helpers. The
  * final PAS is exact to the centime; pushed at 4dp like every statutory
  * line. Never floating point.
  */
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
+import { rate6 } from "../../money/payroll-decimal.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
 import {
@@ -76,15 +78,6 @@ const D = (u: bigint): string => fromUnits(u);
 
 const RATE6 = 1_000_000n;
 const CENT_UNITS = 100n;
-
-/** Exact 1e6-scale rate from a decimal fraction string ("0.029"). */
-function rate6(value: string): bigint {
-  if (!/^\d+(\.\d{1,6})?$/.test(value)) {
-    throw new PayrollPackError(`FR PAS rate is not a plain decimal: "${value}"`);
-  }
-  const [whole = "0", fraction = ""] = value.split(".");
-  return BigInt(whole) * RATE6 + BigInt((fraction + "000000").slice(0, 6));
-}
 
 /** Exact 1e6-scale rate from a PERCENT string ("2.9" means 2.9 %). */
 function percent6(value: string): bigint {

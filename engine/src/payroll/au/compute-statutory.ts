@@ -40,9 +40,11 @@
  * (WLA) machinery, and every other schedule — see AU_REFUSED_2027.
  *
  * Money: bigint units (1e4) throughout via the repo's money.ts — the same
- * discipline as canada/decimal.ts. Coefficients stay decimal strings.
+ * discipline as the shared payroll decimal helpers. Coefficients stay decimal
+ * strings.
  */
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
+import { rate6 } from "../../money/payroll-decimal.ts";
 import type { Money } from "../../money/brands.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";
@@ -67,14 +69,6 @@ const D = (u: bigint): string => fromUnits(u);
 const RATE6 = 1_000_000n;
 const CENT = 100n;
 const DOLLAR = 10_000n;
-
-function rate6(value: string): bigint {
-  const [whole = "0", fraction = ""] = value.split(".");
-  const negative = whole.startsWith("-");
-  const digits = (negative ? whole.slice(1) : whole) + (fraction + "000000").slice(0, 6);
-  const magnitude = BigInt(digits === "" ? "0" : digits);
-  return negative ? -magnitude : magnitude;
-}
 
 /** amount × rate, exact in units (rates carry ≤4dp, units carry 4dp). */
 function mulRate(u: bigint, rate: string): bigint {

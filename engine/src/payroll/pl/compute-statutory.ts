@@ -73,6 +73,7 @@
  * FR precedent). Never floating point.
  */
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";
+import { rate6 } from "../../money/payroll-decimal.ts";
 import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 // Side effect: registers PL_EMPLOYEE_FACTS, so every read below resolves
 // through the declaration in every import graph — never via a transitive
@@ -265,15 +266,6 @@ const D = (u: bigint): string => fromUnits(u);
 const RATE6 = 1_000_000n;
 const GROSZ_UNITS = 100n;
 const ZLOTY_UNITS = 10_000n;
-
-/** Exact 1e6-scale rate from a table fraction string ("0.0976"). */
-function rate6(value: string): bigint {
-  if (!/^\d+(\.\d{1,6})?$/.test(value)) {
-    throw new PayrollPackError(`PL rate is not a plain decimal: "${value}"`);
-  }
-  const [whole = "0", fraction = ""] = value.split(".");
-  return BigInt(whole) * RATE6 + BigInt((fraction + "000000").slice(0, 6));
-}
 
 /** Round units half-up to the grosz. */
 function rGrosz(u: bigint): bigint {

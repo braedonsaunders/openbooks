@@ -49,9 +49,10 @@
  *
  * Money: bigint units (1e4) throughout via the repo's money.ts, halves
  * away from zero (roundDiv) — the same discipline as ./compute-statutory.ts
- * and canada/decimal.ts. Never floating point.
+ * and the shared payroll decimal helpers. Never floating point.
  */
 import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../../money/money.ts";
+import { rate6 } from "../../money/payroll-decimal.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import {
   FR_AGS_ER_2026,
@@ -85,15 +86,6 @@ const D = (u: bigint): string => fromUnits(u);
 
 const RATE6 = 1_000_000n;
 const CENT_UNITS = 100n;
-
-/** Exact 1e6-scale rate from a table fraction string ("0.0855"). */
-function rate6(value: string): bigint {
-  if (!/^\d+(\.\d{1,6})?$/.test(value)) {
-    throw new PayrollPackError(`FR cotisation rate is not a plain decimal: "${value}"`);
-  }
-  const [whole = "0", fraction = ""] = value.split(".");
-  return BigInt(whole) * RATE6 + BigInt((fraction + "000000").slice(0, 6));
-}
 
 /** Exact 1e6-scale rate from a tenant PERCENT string ("1.1" means 1.1 %). */
 function percent6(value: string, what: string): bigint {

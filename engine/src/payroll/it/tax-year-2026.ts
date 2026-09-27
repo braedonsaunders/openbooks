@@ -63,7 +63,7 @@
  *   freshly quoted.
  *
  * Money discipline: figures are decimal STRINGS, never floats. The engine
- * consumes them with the repo's bigint-unit helpers (see canada/decimal.ts).
+ * consumes them with the shared payroll bigint-unit helpers.
  * Ratios in the detrazione formula are TRUNCATED to 4 decimals per the
  * authority (730/2026 TABELLA 6 note 2, carried), and every pushed line is
  * rounded half-up to the cent per the CU 2026 istruzioni (quoted below,

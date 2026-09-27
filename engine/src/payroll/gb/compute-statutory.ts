@@ -32,7 +32,7 @@
 
 import { sql } from "drizzle-orm";
 import { mulPercent, sum } from "../../money/money.ts";
-import { D, max0, U } from "../canada/decimal.ts";
+import { D, max0, U } from "../../money/payroll-decimal.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import { empFact, resolveEmployeeFact } from "../employee-facts.ts";
 import type { PayrollStatutoryComputeContext } from "../statutory-context.ts";

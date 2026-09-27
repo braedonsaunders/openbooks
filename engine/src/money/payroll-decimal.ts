@@ -1,11 +1,10 @@
 /**
- * Exact-decimal helpers for the T4127 engine, built on money.ts bigint units
- * (1e4 scale). T4127 rounds "as each parenthesis is resolved", so every
- * multiplication here rounds half-up straight to the cent in one step —
- * never round-to-4dp-then-round-to-2dp, which double-rounds at the edge.
+ * Exact-decimal helpers shared by payroll calculations. Amounts use bigint
+ * units at 1e4 scale and rates use an exact 1e6 scale; no floating-point
+ * arithmetic is used.
  */
-import { PayrollError } from "../error.ts";
-import { fromUnits, roundDiv, toUnits } from "../../money/money";
+import { PayrollError } from "./payroll-error.ts";
+import { fromUnits, roundDiv, toUnits } from "./money.ts";
 
 /** Money string → bigint units (1e4 scale). */
 export const U = (s: string | number): bigint => toUnits(s);
@@ -15,15 +14,23 @@ export const D = (u: bigint): string => fromUnits(u);
 const RATE6 = 1_000_000n;
 const CENT = 100n; // cents quantum inside 1e4 units
 
-/** Parse a statutory rate (≤6 decimal places) to an exact 1e6-scaled bigint. */
+/** Parse a decimal rate exactly, refusing malformed values and precision loss beyond six places. */
 export function rate6(value: string | number): bigint {
   const raw = String(value).trim();
-  if (!/^[-+]?(\d+(\.\d*)?|\.\d+)$/.test(raw)) throw new PayrollError(`not a decimal rate: "${value}"`);
+  if (!/^[-+]?(\d+(\.\d*)?|\.\d+)$/.test(raw)) {
+    throw new PayrollError(
+      `not a decimal rate: "${value}" — enter a plain decimal without grouping separators or `
+      + "exponent notation",
+    );
+  }
   const negative = raw.startsWith("-");
   const unsigned = raw.replace(/^[-+]/, "");
   const [whole = "0", fraction = ""] = unsigned.split(".");
   if (fraction.length > 6 && /[1-9]/.test(fraction.slice(6))) {
-    throw new PayrollError(`rate loses precision beyond 6 decimal places: "${value}"`);
+    throw new PayrollError(
+      `rate loses precision beyond 6 decimal places: "${value}" — check the transcribed rate; `
+      + "this parser accepts exact rates through six decimal places and never rounds",
+    );
   }
   const units = BigInt(whole || "0") * RATE6 + BigInt((fraction + "000000").slice(0, 6));
   return negative ? -units : units;
@@ -57,7 +64,7 @@ export function divIntCents(u: bigint, n: number): bigint {
   return roundDiv(u, BigInt(n) * CENT) * CENT;
 }
 
-/** Truncate (drop, never round) to the cent — CPP per-period exemption rule. */
+/** Truncate (drop, never round) sub-cent precision. */
 export function truncCents(u: bigint): bigint {
   if (u < 0n) throw new PayrollError("truncCents expects a non-negative amount");
   return (u / CENT) * CENT;

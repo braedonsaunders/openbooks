@@ -58,7 +58,8 @@
  * construction.
  *
  * Money: bigint units (1e4) throughout, halves away from zero, via the
- * repo's money.ts — the same discipline as canada/decimal.ts. Ratios are
+ * repo's money.ts — the same discipline as the shared payroll decimal helpers.
+ * Ratios are
  * TRUNCATED to 4 decimals per 730/2026 TABELLA 6 note (2) (carried for 2026).
  */
 import { fromUnits, roundDiv, toUnits } from "../../money/money.ts";

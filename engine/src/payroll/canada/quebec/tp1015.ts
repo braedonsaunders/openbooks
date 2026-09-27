@@ -57,7 +57,7 @@ import { PayrollError } from "../../error.ts";
 import type { Money } from "../../../money/brands.ts";
 import {
   bmin, D, divIntCents, max0, mulInt, mulRateCents, mulRatioCents, rate6, U,
-} from "../decimal.ts";
+} from "../../../money/payroll-decimal.ts";
 import { roundDiv } from "../../../money/money.ts";
 import { qcRatesForPayDate, type QcEditionRates, type QcTaxBracket } from "./rates.ts";
 

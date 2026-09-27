@@ -19,7 +19,7 @@ import { PayrollError } from "../error.ts";
 import type { Money } from "../../money/brands.ts";
 import {
   bmax, bmin, D, divIntCents, max0, mulInt, mulRatioCents, mulRateCents, r2, rate6, truncCents, U,
-} from "./decimal";
+} from "../../money/payroll-decimal.ts";
 import {
   claimCodeAmount, CPP_EXEMPTION_BY_P, EditionRates, PensionPlanRates, Province, ratesForPayDate,
 } from "./rates";

@@ -21,7 +21,7 @@
  * additional amounts, and Form W-4P pension withholding.
  */
 import { PayrollError } from "../error.ts";
-import { bmin, D, divIntCents, max0, mulInt, mulRateCents, U } from "../canada/decimal";
+import { bmin, D, divIntCents, max0, mulInt, mulRateCents, U } from "../../money/payroll-decimal.ts";
 import { type FilingStatus, ratesForPayDate, type WithholdingRow, type YearRates, US_STATES } from "./rates";
 
 export interface Pub15TYtd {
