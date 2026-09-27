@@ -24,7 +24,8 @@
       "status": "Statut",
       "value": "Valeur en stock",
       "actions": "Opérations"
-    }
+    },
+    "availabilityFor": "Disponibilité dans {code}"
   },
   "tieOut": {
     "title": "Stock par entrepôt",
@@ -92,5 +93,82 @@
   "setup": {
     "warehouses": "Détails de l’entrepôt",
     "rules": "Règles de rangement"
+  },
+  "availability": {
+    "title": "Disponibilité",
+    "description": "Stock disponible, quantité engagée sur les commandes clients émises et quantité promettable, par article.",
+    "hubDescription": "Stock, engagé, disponible et demande non affectée par article, par entrepôt et entité juridique.",
+    "note": "Les quantités sont exprimées dans l'unité de base de chaque article. L'engagé est la quantité restante des lignes de commandes clients émises à ces emplacements ; le non affecté est la demande restante sur des lignes sans emplacement de stock, qu'aucun emplacement ne peut couvrir.",
+    "search": "Rechercher des articles",
+    "warehouse": "Entrepôt",
+    "allLocations": "Tous les emplacements",
+    "empty": "Aucun article stocké n'a de stock ni de demande restante ici.",
+    "columns": {
+      "item": "Article",
+      "unit": "Unité",
+      "onHand": "En stock",
+      "committed": "Engagé",
+      "available": "Disponible",
+      "unallocated": "Non affecté"
+    },
+    "releasable": {
+      "title": "Reliquats libérables",
+      "note": "Le stock de chaque entrepôt est attribué à ses lignes ouvertes par date de commande, puis par numéro de document. Il s'agit d'une proposition : rien n'est affecté ni réservé.",
+      "empty": "Aucune ligne de commande ouverte ne peut être couverte par le stock.",
+      "orderLine": "{number} ligne {line}",
+      "columns": {
+        "order": "Ligne de commande",
+        "date": "Date de commande",
+        "customer": "Client",
+        "open": "Restant",
+        "releasable": "Libérable"
+      }
+    }
+  },
+  "replenishment": {
+    "title": "Réapprovisionnement",
+    "description": "Approvisionnement prévu par rapport au seuil de commande de chaque article, et la quantité qui rétablit son niveau de stock souhaité.",
+    "hubDescription": "Propositions de commande à partir du stock, de la demande engagée et des quantités commandées, avec les justificatifs de chaque ligne.",
+    "note": "L'approvisionnement prévu est le stock moins la demande engagée et non affectée, plus la quantité restante des bons de commande émis. Les articles sans les deux seuils sont listés mais jamais proposés. La création de bons de commande produit des brouillons à vérifier ; rien n'est commandé automatiquement.",
+    "search": "Rechercher des articles",
+    "empty": "Aucun article stocké actif.",
+    "selected": "{count, plural, =0 {Aucune ligne sélectionnée} one {# ligne sélectionnée} other {# lignes sélectionnées}}",
+    "createOrders": "Créer les bons de commande",
+    "memo": "Proposition de réapprovisionnement",
+    "noVendor": "Aucun fournisseur auprès de qui commander pour : {items}. Désélectionnez-les et créez leurs bons de commande dans Bons de commande.",
+    "refused": "Le bon de commande pour {vendor} a été refusé : {reason} {created, plural, =0 {Aucun bon n'a été créé.} one {# bon a été créé avant lui ; recréer avec la même sélection ne crée que les suivants.} other {# bons ont été créés avant lui ; recréer avec la même sélection ne crée que les suivants.}}",
+    "failed": "Les bons de commande n'ont pas pu être créés.",
+    "created": "{count, plural, one {# brouillon de bon de commande créé.} other {# brouillons de bons de commande créés.}}",
+    "columns": {
+      "item": "Article",
+      "unit": "Unité",
+      "onHand": "En stock",
+      "committed": "Engagé",
+      "unallocated": "Non affecté",
+      "onOrder": "En commande",
+      "projected": "Prévu",
+      "reorderPoint": "Seuil de commande",
+      "preferred": "Niveau souhaité",
+      "proposed": "Proposé",
+      "vendor": "Dernier fournisseur",
+      "status": "État"
+    },
+    "status": {
+      "reorder": "À commander",
+      "covered": "Couvert",
+      "no_reorder_point": "Sans seuil de commande",
+      "points_inverted": "Niveau souhaité inférieur au seuil"
+    }
+  },
+  "supply": {
+    "hint": "Situation du stock de {entity}.",
+    "stocked": "Articles en stock",
+    "short": "En rupture",
+    "releasable": "Lignes libérables",
+    "openAvailability": "Ouvrir la disponibilité",
+    "toReorder": "À commander",
+    "noPoints": "Sans seuil",
+    "onOrder": "Articles en commande",
+    "openReplenishment": "Ouvrir le réapprovisionnement"
   }
 }

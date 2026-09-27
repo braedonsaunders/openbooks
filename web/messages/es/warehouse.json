@@ -24,7 +24,8 @@
       "status": "Estado",
       "value": "Valor en existencia",
       "actions": "Acciones"
-    }
+    },
+    "availabilityFor": "Disponibilidad en {code}"
   },
   "tieOut": {
     "title": "Existencias por almacén",
@@ -92,5 +93,82 @@
   "setup": {
     "warehouses": "Datos del almacén",
     "rules": "Reglas de ubicación"
+  },
+  "availability": {
+    "title": "Disponibilidad",
+    "description": "Existencias, cantidad comprometida con pedidos de venta emitidos y cantidad disponible para prometer, por artículo.",
+    "hubDescription": "Existencias, comprometido, disponible y demanda sin asignar por artículo, por almacén y entidad legal.",
+    "note": "Las cantidades están en la unidad base de cada artículo. Comprometido es la cantidad pendiente de las líneas de pedidos de venta emitidos en estas ubicaciones; sin asignar es la demanda pendiente en líneas sin ubicación de existencias, que ninguna ubicación puede compensar.",
+    "search": "Buscar artículos",
+    "warehouse": "Almacén",
+    "allLocations": "Todas las ubicaciones",
+    "empty": "Ningún artículo inventariable tiene existencias ni demanda pendiente aquí.",
+    "columns": {
+      "item": "Artículo",
+      "unit": "Unidad",
+      "onHand": "Existencias",
+      "committed": "Comprometido",
+      "available": "Disponible",
+      "unallocated": "Sin asignar"
+    },
+    "releasable": {
+      "title": "Pedidos pendientes liberables",
+      "note": "Las existencias de cada almacén se asignan a sus líneas pendientes por fecha de pedido y luego por número de documento. Es solo una propuesta: no se asigna ni se reserva nada.",
+      "empty": "Ninguna línea de pedido pendiente puede cubrirse con las existencias.",
+      "orderLine": "{number} línea {line}",
+      "columns": {
+        "order": "Línea de pedido",
+        "date": "Fecha del pedido",
+        "customer": "Cliente",
+        "open": "Pendiente",
+        "releasable": "Liberable"
+      }
+    }
+  },
+  "replenishment": {
+    "title": "Reabastecimiento",
+    "description": "Suministro previsto frente al punto de pedido de cada artículo y la cantidad que restablece su nivel de existencias preferido.",
+    "hubDescription": "Propuestas de pedido a partir de existencias, demanda comprometida y cantidades pedidas, con la evidencia de cada línea.",
+    "note": "El suministro previsto son las existencias menos la demanda comprometida y sin asignar, más la cantidad pendiente de las órdenes de compra emitidas. Los artículos sin ambos niveles se muestran pero nunca se proponen. Crear órdenes de compra genera borradores para revisar; nada se pide automáticamente.",
+    "search": "Buscar artículos",
+    "empty": "No hay artículos inventariables activos.",
+    "selected": "{count, plural, =0 {Ninguna línea seleccionada} one {# línea seleccionada} other {# líneas seleccionadas}}",
+    "createOrders": "Crear órdenes de compra",
+    "memo": "Propuesta de reabastecimiento",
+    "noVendor": "No hay proveedor al que pedir para: {items}. Anule su selección y cree sus órdenes de compra en Órdenes de compra.",
+    "refused": "Se rechazó la orden de compra para {vendor}: {reason} {created, plural, =0 {No se creó ninguna orden.} one {Se creó # orden antes; volver a crear con la misma selección crea solo las restantes.} other {Se crearon # órdenes antes; volver a crear con la misma selección crea solo las restantes.}}",
+    "failed": "No se pudieron crear las órdenes de compra.",
+    "created": "{count, plural, one {Se creó # borrador de orden de compra.} other {Se crearon # borradores de órdenes de compra.}}",
+    "columns": {
+      "item": "Artículo",
+      "unit": "Unidad",
+      "onHand": "Existencias",
+      "committed": "Comprometido",
+      "unallocated": "Sin asignar",
+      "onOrder": "Pedido",
+      "projected": "Previsto",
+      "reorderPoint": "Punto de pedido",
+      "preferred": "Nivel preferido",
+      "proposed": "Propuesto",
+      "vendor": "Último proveedor",
+      "status": "Estado"
+    },
+    "status": {
+      "reorder": "Volver a pedir",
+      "covered": "Cubierto",
+      "no_reorder_point": "Sin punto de pedido",
+      "points_inverted": "Nivel preferido inferior al punto de pedido"
+    }
+  },
+  "supply": {
+    "hint": "Posición de existencias de {entity}.",
+    "stocked": "Artículos con existencias",
+    "short": "Faltantes",
+    "releasable": "Líneas liberables",
+    "openAvailability": "Abrir disponibilidad",
+    "toReorder": "Por pedir",
+    "noPoints": "Sin punto de pedido",
+    "onOrder": "Artículos pedidos",
+    "openReplenishment": "Abrir reabastecimiento"
   }
 }

@@ -14,24 +14,31 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { isZero } from '@openbooks/engine/src/money/money.ts'
+import { cmp, isZero } from '@openbooks/engine/src/money/money.ts'
+import { AvailabilityRefusal, releasableBackorders } from '@openbooks/engine/src/inventory/availability.ts'
 import { listStagedStock } from '@openbooks/engine/src/inventory/putaway.ts'
+import { replenishmentProposals } from '@openbooks/engine/src/inventory/replenishment.ts'
 import { warehouseStockTieOut } from '@openbooks/engine/src/inventory/warehouses.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../lib/features'
+import { availabilityEntityScope, availabilityRefusalText } from '../../../lib/availability-report'
 import { pickString } from '../../../lib/list-params'
 import { getMoneyFormatter } from '@/lib/money-server'
 import type { ReportDrillTarget } from '@/lib/report-drill'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import type { StagedStockRowView } from './PutawayQueue'
 import type { WarehouseTieOutRowView } from './WarehousesPanel'
+import type { AttentionItem } from '../purchasing/sections'
 
 /**
  * The warehouse cockpit, split into a loader and a spec like the purchasing
  * home. The hero ties on-hand value by warehouse out against the inventory
  * control accounts; beside it sit the stock awaiting putaway and the
- * warehouse and putaway-rule setup sections re-homed from Setup.
+ * warehouse and putaway-rule setup sections re-homed from Setup. Below them,
+ * the availability and replenishment sections summarise the reader's default
+ * legal entity and drill into the two reports.
  *
  * Every figure is read through the engine for the caller's visible legal
  * entities, so a subsidiary-restricted reader sees their own stock and the
@@ -67,10 +74,28 @@ export interface WarehouseData {
   queueTitle: string
   queueHint: string
   staged: StagedStockRowView[]
+  supplyHint: string
+  availabilityTitle: string
+  availabilityPulse: SupplyPulse
+  replenishmentTitle: string
+  replenishmentPulse: SupplyPulse
+  supplyReady: boolean
+  supplyRefusal: AttentionItem[]
+  showSupplyRefusal: boolean
   setupTitle: string
   rulesTitle: string
   newDrawer: { locations: { id: string; name: string }[]; closeHref: string } | null
   showNewDrawer: boolean
+}
+
+/** The purchasing cockpit's three-figure pulse with its report link. */
+type SupplyPulse = {
+  outstanding: string
+  overdue: string
+  dueNext7: string
+  overdueIsNegative: boolean
+  labels: { open: string; overdue: string; due7: string; cta: string }
+  href: string
 }
 
 export async function loadWarehouse(
@@ -95,6 +120,32 @@ export async function loadWarehouse(
 
   const warehouses = tieOut.rows.filter((row) => row.warehouseId !== null)
   const today = await businessToday(orgId)
+
+  // Supply figures for the reader's default legal entity. A refusal (an order
+  // line in a unit the item cannot convert) is shown in place of the figures,
+  // naming its remedy, and links to the report that refuses the same way.
+  const entity = await availabilityEntityScope(authz, undefined)
+  const fulfillmentOn = await isFeatureEnabled(orgId, 'fulfillment')
+  let supply: { stocked: number; short: number; releasable: number | null; reorder: number; unset: number; onOrder: number } | null = null
+  let supplyRefusal: string | null = null
+  if (entity.selectedId) {
+    try {
+      const lines = await replenishmentProposals(db, orgId, { subsidiaryId: entity.selectedId })
+      const releasable = fulfillmentOn ? await releasableBackorders(db, orgId, { subsidiaryId: entity.selectedId }) : null
+      supply = {
+        stocked: lines.filter((line) => !isZero(line.onHand)).length,
+        short: lines.filter((line) => cmp(line.onHand, line.committed) < 0).length,
+        releasable: releasable ? new Set(releasable.map((line) => line.lineId)).size : null,
+        reorder: lines.filter((line) => line.status === 'reorder').length,
+        unset: lines.filter((line) => line.status === 'no_reorder_point' || line.status === 'points_inverted').length,
+        onOrder: lines.filter((line) => !isZero(line.onOrder)).length,
+      }
+    } catch (error) {
+      if (!(error instanceof AvailabilityRefusal)) throw error
+      supplyRefusal = availabilityRefusalText(error)
+    }
+  }
+  const entityLabel = entity.picker.find((option) => option.id === entity.selectedId)?.label ?? ''
   return {
     title: t('home.title'),
     description: t('home.description'),
@@ -130,6 +181,38 @@ export async function loadWarehouse(
     queueTitle: t('putaway.title'),
     queueHint: t('putaway.hint'),
     staged,
+    supplyHint: t('supply.hint', { entity: entityLabel }),
+    availabilityTitle: t('availability.title'),
+    availabilityPulse: {
+      outstanding: String(supply?.stocked ?? 0),
+      overdue: String(supply?.short ?? 0),
+      dueNext7: supply?.releasable === null || supply === null ? '—' : String(supply.releasable),
+      overdueIsNegative: (supply?.short ?? 0) > 0,
+      labels: {
+        open: t('supply.stocked'),
+        overdue: t('supply.short'),
+        due7: t('supply.releasable'),
+        cta: t('supply.openAvailability'),
+      },
+      href: '/reports/availability',
+    },
+    replenishmentTitle: t('replenishment.title'),
+    replenishmentPulse: {
+      outstanding: String(supply?.reorder ?? 0),
+      overdue: String(supply?.unset ?? 0),
+      dueNext7: String(supply?.onOrder ?? 0),
+      overdueIsNegative: (supply?.unset ?? 0) > 0,
+      labels: {
+        open: t('supply.toReorder'),
+        overdue: t('supply.noPoints'),
+        due7: t('supply.onOrder'),
+        cta: t('supply.openReplenishment'),
+      },
+      href: '/reports/replenishment',
+    },
+    supplyReady: supply !== null,
+    supplyRefusal: supplyRefusal ? [{ tone: 'negative', text: supplyRefusal, href: '/reports/availability' }] : [],
+    showSupplyRefusal: supplyRefusal !== null,
     setupTitle: t('setup.warehouses'),
     rulesTitle: t('setup.rules'),
     newDrawer: showNew ? { locations, closeHref: '/warehouse' } : null,
@@ -186,6 +269,32 @@ export function warehouseSpec(data: WarehouseData): PageSpec {
             hint: f('queueHint'),
             className: 'self-start',
             blocks: [widgetBlock('putaway-queue', { rows: data.staged, canPost: data.canPost })],
+          }),
+        ]),
+        grid('grid grid-cols-1 gap-5 lg:grid-cols-2', [
+          panel({
+            title: f('availabilityTitle'),
+            iconKey: 'package',
+            hint: f('supplyHint'),
+            className: 'self-start',
+            when: f('supplyReady'),
+            blocks: [widgetBlock('ap-pulse', data.availabilityPulse)],
+          }),
+          panel({
+            title: f('replenishmentTitle'),
+            iconKey: 'clipboard',
+            hint: f('supplyHint'),
+            className: 'self-start',
+            when: f('supplyReady'),
+            blocks: [widgetBlock('ap-pulse', data.replenishmentPulse)],
+          }),
+          panel({
+            title: f('availabilityTitle'),
+            iconKey: 'triangle-alert',
+            hint: f('supplyHint'),
+            className: 'self-start lg:col-span-2',
+            when: f('showSupplyRefusal'),
+            blocks: [widgetBlock('attention-list', { items: data.supplyRefusal, allClear: '' })],
           }),
         ]),
         panel({

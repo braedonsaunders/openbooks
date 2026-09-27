@@ -24,7 +24,8 @@
       "status": "Status",
       "value": "On-hand value",
       "actions": "Actions"
-    }
+    },
+    "availabilityFor": "Availability in {code}"
   },
   "tieOut": {
     "title": "Stock by warehouse",
@@ -92,5 +93,82 @@
   "setup": {
     "warehouses": "Warehouse details",
     "rules": "Putaway rules"
+  },
+  "availability": {
+    "title": "Availability",
+    "description": "Stock on hand, committed to issued sales orders, and available to promise, per item.",
+    "hubDescription": "On hand, committed, available and unallocated demand per item, by warehouse and legal entity.",
+    "note": "Quantities are in each item's base unit. Committed is the open quantity of issued sales-order lines at these locations; unallocated is open demand on lines with no stock location, which no location can net.",
+    "search": "Search items",
+    "warehouse": "Warehouse",
+    "allLocations": "All locations",
+    "empty": "No stocked item has stock or open demand here.",
+    "columns": {
+      "item": "Item",
+      "unit": "Unit",
+      "onHand": "On hand",
+      "committed": "Committed",
+      "available": "Available",
+      "unallocated": "Unallocated"
+    },
+    "releasable": {
+      "title": "Releasable backorders",
+      "note": "Stock on hand in each warehouse goes to its open lines by order date, then document number. This is a proposal only: nothing is allocated or reserved.",
+      "empty": "No open order line can be covered from stock on hand.",
+      "orderLine": "{number} line {line}",
+      "columns": {
+        "order": "Order line",
+        "date": "Order date",
+        "customer": "Customer",
+        "open": "Open",
+        "releasable": "Releasable"
+      }
+    }
+  },
+  "replenishment": {
+    "title": "Replenishment",
+    "description": "Projected supply against each item's reorder point, and the quantity that restores its preferred stock level.",
+    "hubDescription": "Reorder proposals from on hand, committed demand and stock on order, with the evidence for every line.",
+    "note": "Projected supply is on hand less committed and unallocated demand, plus the open quantity of issued purchase orders. Items without both points are listed but never proposed. Creating purchase orders makes drafts for review; nothing is ordered automatically.",
+    "search": "Search items",
+    "empty": "No active stocked items.",
+    "selected": "{count, plural, =0 {No lines selected} one {# line selected} other {# lines selected}}",
+    "createOrders": "Create purchase orders",
+    "memo": "Replenishment proposal",
+    "noVendor": "No vendor to order from for: {items}. Deselect them and create their purchase orders on Purchase orders.",
+    "refused": "The purchase order for {vendor} was refused: {reason} {created, plural, =0 {No orders were created.} one {# order was created before it; creating again with the same selection creates only the rest.} other {# orders were created before it; creating again with the same selection creates only the rest.}}",
+    "failed": "The purchase orders could not be created.",
+    "created": "{count, plural, one {# draft purchase order created.} other {# draft purchase orders created.}}",
+    "columns": {
+      "item": "Item",
+      "unit": "Unit",
+      "onHand": "On hand",
+      "committed": "Committed",
+      "unallocated": "Unallocated",
+      "onOrder": "On order",
+      "projected": "Projected",
+      "reorderPoint": "Reorder point",
+      "preferred": "Preferred level",
+      "proposed": "Proposed",
+      "vendor": "Last vendor",
+      "status": "Status"
+    },
+    "status": {
+      "reorder": "Reorder",
+      "covered": "Covered",
+      "no_reorder_point": "No reorder point",
+      "points_inverted": "Preferred below reorder point"
+    }
+  },
+  "supply": {
+    "hint": "Stock position of {entity}.",
+    "stocked": "Items in stock",
+    "short": "Short",
+    "releasable": "Releasable lines",
+    "openAvailability": "Open availability",
+    "toReorder": "To reorder",
+    "noPoints": "No reorder point",
+    "onOrder": "Items on order",
+    "openReplenishment": "Open replenishment"
   }
 }

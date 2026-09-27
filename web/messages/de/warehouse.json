@@ -24,7 +24,8 @@
       "status": "Zustand",
       "value": "Bestandswert",
       "actions": "Aktionen"
-    }
+    },
+    "availabilityFor": "Verfügbarkeit in {code}"
   },
   "tieOut": {
     "title": "Bestand nach Lager",
@@ -92,5 +93,82 @@
   "setup": {
     "warehouses": "Lagerdetails",
     "rules": "Einlagerungsregeln"
+  },
+  "availability": {
+    "title": "Verfügbarkeit",
+    "description": "Lagerbestand, für freigegebene Kundenaufträge reservierte Menge und zusagbare Menge je Artikel.",
+    "hubDescription": "Bestand, gebundene Menge, verfügbare Menge und nicht zugeordneter Bedarf je Artikel, nach Lager und Gesellschaft.",
+    "note": "Mengen sind in der Basiseinheit des Artikels angegeben. Gebunden ist die offene Menge freigegebener Kundenauftragszeilen an diesen Lagerorten; nicht zugeordnet ist offener Bedarf auf Zeilen ohne Lagerort, den kein Lagerort decken kann.",
+    "search": "Artikel suchen",
+    "warehouse": "Lager",
+    "allLocations": "Alle Lagerorte",
+    "empty": "Hier hat kein Lagerartikel Bestand oder offenen Bedarf.",
+    "columns": {
+      "item": "Artikel",
+      "unit": "Einheit",
+      "onHand": "Bestand",
+      "committed": "Gebunden",
+      "available": "Verfügbar",
+      "unallocated": "Nicht zugeordnet"
+    },
+    "releasable": {
+      "title": "Freigebbare Rückstände",
+      "note": "Der Bestand jedes Lagers wird seinen offenen Zeilen nach Auftragsdatum, dann Belegnummer zugeteilt. Dies ist nur ein Vorschlag: Es wird nichts zugeteilt oder reserviert.",
+      "empty": "Keine offene Auftragszeile kann aus dem Bestand gedeckt werden.",
+      "orderLine": "{number} Zeile {line}",
+      "columns": {
+        "order": "Auftragszeile",
+        "date": "Auftragsdatum",
+        "customer": "Kunde",
+        "open": "Offen",
+        "releasable": "Freigebbar"
+      }
+    }
+  },
+  "replenishment": {
+    "title": "Nachschub",
+    "description": "Erwarteter Bestand im Vergleich zum Meldebestand jedes Artikels und die Menge, die seinen Sollbestand wiederherstellt.",
+    "hubDescription": "Bestellvorschläge aus Bestand, gebundenem Bedarf und bestellter Menge, mit den Nachweisen zu jeder Zeile.",
+    "note": "Der erwartete Bestand ist der Bestand abzüglich gebundenem und nicht zugeordnetem Bedarf, zuzüglich der offenen Menge freigegebener Bestellungen. Artikel ohne beide Werte werden aufgeführt, aber nie vorgeschlagen. Beim Anlegen von Bestellungen entstehen Entwürfe zur Prüfung; nichts wird automatisch bestellt.",
+    "search": "Artikel suchen",
+    "empty": "Keine aktiven Lagerartikel.",
+    "selected": "{count, plural, =0 {Keine Zeilen ausgewählt} one {# Zeile ausgewählt} other {# Zeilen ausgewählt}}",
+    "createOrders": "Bestellungen anlegen",
+    "memo": "Nachschubvorschlag",
+    "noVendor": "Kein Lieferant zum Bestellen für: {items}. Heben Sie die Auswahl auf und legen Sie ihre Bestellungen unter Bestellungen an.",
+    "refused": "Die Bestellung für {vendor} wurde abgelehnt: {reason} {created, plural, =0 {Es wurden keine Bestellungen angelegt.} one {# Bestellung wurde davor angelegt; erneutes Anlegen mit derselben Auswahl legt nur die übrigen an.} other {# Bestellungen wurden davor angelegt; erneutes Anlegen mit derselben Auswahl legt nur die übrigen an.}}",
+    "failed": "Die Bestellungen konnten nicht angelegt werden.",
+    "created": "{count, plural, one {# Bestellentwurf angelegt.} other {# Bestellentwürfe angelegt.}}",
+    "columns": {
+      "item": "Artikel",
+      "unit": "Einheit",
+      "onHand": "Bestand",
+      "committed": "Gebunden",
+      "unallocated": "Nicht zugeordnet",
+      "onOrder": "Bestellt",
+      "projected": "Erwartet",
+      "reorderPoint": "Meldebestand",
+      "preferred": "Sollbestand",
+      "proposed": "Vorgeschlagen",
+      "vendor": "Letzter Lieferant",
+      "status": "Stand"
+    },
+    "status": {
+      "reorder": "Nachbestellen",
+      "covered": "Gedeckt",
+      "no_reorder_point": "Kein Meldebestand",
+      "points_inverted": "Sollbestand unter Meldebestand"
+    }
+  },
+  "supply": {
+    "hint": "Bestandslage von {entity}.",
+    "stocked": "Artikel mit Bestand",
+    "short": "Unterdeckt",
+    "releasable": "Freigebbare Zeilen",
+    "openAvailability": "Verfügbarkeit öffnen",
+    "toReorder": "Nachzubestellen",
+    "noPoints": "Ohne Meldebestand",
+    "onOrder": "Artikel in Bestellung",
+    "openReplenishment": "Nachschub öffnen"
   }
 }

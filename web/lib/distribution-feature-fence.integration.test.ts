@@ -29,11 +29,19 @@ export function guardUnrestrictedScope() { return null }
 export async function guardRootSubsidiaryScope() { return null }
 export function guardSubsidiaryScope() { return null }
 `)}`
+// Report loaders read their copy through next-intl; outside a Next request the
+// key stands in for the translation.
+const INTL_DOUBLE = `data:text/javascript,${encodeURIComponent(`
+export async function getTranslations() { return (key) => key }
+export async function getLocale() { return 'en' }
+`)}`
 registerHooks({ resolve(specifier, context, next) {
   const parent = context.parentURL ?? ''
   const authzImport = specifier === './authz' || specifier.endsWith('/lib/authz')
-  const fenced = ['/lib/api/route', '/lib/feature-gates', '/warehouse/view', '/api/admin/setup/'].some((path) => parent.includes(path))
+  const fenced = ['/lib/api/route', '/lib/feature-gates', '/warehouse/view', '/api/admin/setup/', '/reports/', '/api/reports/statement/'].some((path) => parent.includes(path))
   if (authzImport && fenced) return { shortCircuit: true, url: AUTHZ_DOUBLE }
+  const reportCopy = ['/reports/', '/lib/availability-report'].some((path) => parent.includes(path))
+  if (specifier === 'next-intl/server' && reportCopy) return { shortCircuit: true, url: INTL_DOUBLE }
   return next(specifier, context)
 } })
 
@@ -50,6 +58,12 @@ const { WAREHOUSE_TOOLS } = await import('./assistant/tools-warehouses')
 const { receiveInventory } = await import('@openbooks/engine/src/inventory/movements.ts')
 const { resolvePutawayLocation } = await import('@openbooks/engine/src/inventory/putaway.ts')
 const warehouses = await import('@openbooks/engine/src/inventory/warehouses.ts')
+const availability = await import('@openbooks/engine/src/inventory/availability.ts')
+const { replenishmentProposals } = await import('@openbooks/engine/src/inventory/replenishment.ts')
+const { loadAvailability } = await import('../app/(app)/reports/availability/view')
+const { loadReplenishment } = await import('../app/(app)/reports/replenishment/view')
+const { loadReportsHub } = await import('../app/(app)/reports/view')
+const statementExport = await import('../app/api/reports/statement/[kind]/export/route')
 
 const FEATURES_REMEDY = /turn on Warehousing in Company Settings → Features/
 
@@ -177,5 +191,49 @@ test('warehousing off hides every surface, preserves its rows, and keeps a suspe
 
     await setFeature(org.orgId, 'warehousing', true)
     assert.deepEqual(await evidence(org.orgId), before, 'off and on again changes no warehouse, rule, status or audit row')
+  })
+})
+
+// ---- Availability and replenishment -----------------------------------------
+
+const STOCK_REPORTS = ['/reports/availability', '/reports/replenishment']
+
+async function hubHrefs(): Promise<string[]> {
+  return (await loadReportsHub()).groups.flatMap((group) => group.cards.map((card) => card.href))
+}
+
+test('availability and replenishment vanish with warehousing, and releasable backorders with fulfillment', { skip: !DB }, async () => {
+  await withFencedOrg(async (org) => {
+    const toolNamed = (name: string) => WAREHOUSE_TOOLS.find((tool) => tool.name === name)!
+    const itemTool = toolNamed('get_item_availability')
+    const replenishmentTool = toolNamed('list_replenishment_proposals')
+    const query = { subsidiaryId: org.subsidiaryId }
+
+    await setFeature(org.orgId, 'warehousing', true)
+    await setFeature(org.orgId, 'fulfillment', true)
+    assert.deepEqual((await hubHrefs()).filter((href) => STOCK_REPORTS.includes(href)), STOCK_REPORTS, 'both hub cards show while Warehousing is on')
+    assert.equal((await loadAvailability({})).showReleasable, true)
+
+    await setFeature(org.orgId, 'fulfillment', false)
+    const withoutFulfillment = await loadAvailability({})
+    assert.deepEqual([withoutFulfillment.showReleasable, withoutFulfillment.releasable], [false, []], 'the releasable section is absent')
+    await assert.rejects(withBypassContext(() => availability.releasableBackorders(db, org.orgId, query)), (error: unknown) =>
+      error instanceof availability.AvailabilityRefusal && error.code === 'fulfillment_disabled'
+        && error.remedy === 'turn on Fulfillment in Company Settings → Features')
+
+    await setFeature(org.orgId, 'warehousing', false)
+    for (const load of [loadAvailability, loadReplenishment]) {
+      await assert.rejects(load({}), (error: unknown) =>
+        String((error as { digest?: string }).digest).includes('/feature-required?feature=warehousing'))
+    }
+    assert.deepEqual((await hubHrefs()).filter((href) => STOCK_REPORTS.includes(href)), [], 'the hub cards disappear')
+    for (const kind of ['availability', 'replenishment']) {
+      const response = await statementExport.GET(json('GET', `/api/reports/statement/${kind}/export?format=csv`), { params: Promise.resolve({ kind }) })
+      assert.equal(response.status, 404, `${kind} export answers a bare 404`)
+    }
+    await engineRefusal(() => availability.getAvailableToPromise(db, org.orgId, { ...query, itemId: org.items.fifo }))
+    await engineRefusal(() => replenishmentProposals(db, org.orgId, query))
+    await engineRefusal(() => itemTool.execute({ itemId: org.items.fifo }, state.authz as never))
+    await engineRefusal(() => replenishmentTool.execute({}, state.authz as never))
   })
 })
