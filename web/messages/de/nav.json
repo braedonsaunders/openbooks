@@ -105,7 +105,8 @@
     "tax-provisions": "Ertragsteuern",
     "timesheets": "Zeiterfassung",
     "vendors": "Lieferanten",
-    "wip-billing": "Unfertige Leistungen und Vorauszahlungen"
+    "wip-billing": "Unfertige Leistungen und Vorauszahlungen",
+    "returns": "Rückgaben"
   },
   "groups": {
     "my-work": "Meine Arbeit",
@@ -138,8 +139,7 @@
     "automate": "Automatisieren",
     "extend": "Erweitern",
     "records": "Datensätze",
-    "compliance": "Compliance",
-    "returns": "Rückgaben"
+    "compliance": "Compliance"
   },
   "modulesShort": {
     "ap": "Kreditoren",

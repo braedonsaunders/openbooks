@@ -105,7 +105,8 @@
     "tax-provisions": "法人税等",
     "timesheets": "タイムシート",
     "vendors": "仕入先",
-    "wip-billing": "仕掛品と前請求"
+    "wip-billing": "仕掛品と前請求",
+    "returns": "返品"
   },
   "groups": {
     "my-work": "マイワーク",
@@ -138,8 +139,7 @@
     "automate": "自動化",
     "extend": "拡張",
     "records": "レコード",
-    "compliance": "コンプライアンス",
-    "returns": "返品"
+    "compliance": "コンプライアンス"
   },
   "modulesShort": {
     "ap": "買掛金",

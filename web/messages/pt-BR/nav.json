@@ -105,7 +105,8 @@
     "tax-provisions": "Imposto de renda",
     "timesheets": "Quadros de Horas",
     "vendors": "Fornecedores",
-    "wip-billing": "Trabalhos em curso e pré-faturamento"
+    "wip-billing": "Trabalhos em curso e pré-faturamento",
+    "returns": "Devoluções"
   },
   "groups": {
     "my-work": "Meu Trabalho",
@@ -138,8 +139,7 @@
     "automate": "Automatizar",
     "extend": "Estender",
     "records": "Registros",
-    "compliance": "Conformidade",
-    "returns": "Devoluções"
+    "compliance": "Conformidade"
   },
   "modulesShort": {
     "ap": "Contas a pagar",

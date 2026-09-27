@@ -2246,6 +2246,8 @@ const COGNATES = new Set<string>([
   'fr:common.status.ok|OK',
   'fr:common.transactionTypes.journal|Journal',
   'fr:common.transactionTypes.projectChargeShort|Charge',
+  // RMA is the abbreviation French trade documents use for a return authorization.
+  'fr:common.transactionTypes.returnAuthorizationShort|RMA',
   'fr:nav.groups.pipeline|Pipeline',
   'fr:nav.modules.admin|Administration',
   'fr:nav.modules.admin-scripts|Scripts',
