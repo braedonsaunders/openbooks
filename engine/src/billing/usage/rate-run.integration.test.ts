@@ -6,7 +6,7 @@ import { createSubscriptionInvoice } from "../subscription-billing.ts";
 import { cancelRevenueRecognitionForInvoice } from "../../ledger/revenue-recognition-cancellation.ts";
 import { postDocument } from "../../ledger/posting-document.ts";
 import { loadRequiredControlAccounts } from "../../records/control-accounts.ts";
-import { db, withBypassContext } from "../../platform/db.ts";
+import { db, withOrgContext } from "../../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../../testing/fixtures.ts";
 import { createPrepaidGrant, prepaidState } from "./prepaid.ts";
 import { createUsageMeter, ingestUsageRecords, reverseUsageRecord } from "./records.ts";
@@ -19,8 +19,8 @@ const DB = { skip: !process.env.OPENBOOKS_DB_URL };
 async function fixture(run: (org: ScratchOrg, actor: string) => Promise<void>): Promise<void> {
   const org = await createScratchOrg();
   try {
-    const actor = await createScratchUser(org.orgId, "Usage rating controller", "admin");
-    await withBypassContext(async () => {
+    const actor = await withOrgContext(org.orgId, () => createScratchUser(org.orgId, "Usage rating controller", "admin"));
+    await withOrgContext(org.orgId, async () => {
       const enabled = await db.execute(sql`
         update orgs set settings = jsonb_set(settings, '{features}',
           coalesce(settings->'features', '{}'::jsonb)
@@ -28,7 +28,7 @@ async function fixture(run: (org: ScratchOrg, actor: string) => Promise<void>): 
          where id = ${org.orgId}`);
       assert.equal(enabled.rowCount, 1);
     });
-    await run(org, actor);
+    await withOrgContext(org.orgId, () => run(org, actor));
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -38,7 +38,7 @@ async function meter(org: ScratchOrg, actor: string, recognitionRule = false) {
   let itemId = org.items.service;
   if (!recognitionRule) {
     itemId = randomUUID();
-    await withBypassContext(async () => {
+    await withOrgContext(org.orgId, async () => {
       const item = await db.execute(sql`insert into items (id, org_id, kind, name, income_account_id, is_active, custom)
         values (${itemId}, ${org.orgId}, 'service', ${`Meter item ${itemId.slice(0, 8)}`}, ${org.accounts.revenue}, true, '{}'::jsonb) returning id`);
       assert.equal(item.rows.length, 1);
@@ -51,7 +51,7 @@ async function linkedPlan(org: ScratchOrg, actor: string, meterId: string, optio
   const subscriptionId = randomUUID();
   const planId = randomUUID();
   const subscriptionName = `Usage subscription ${planId.slice(0, 8)}`;
-  await withBypassContext(async () => {
+  await withOrgContext(org.orgId, async () => {
     await db.execute(sql`insert into subscription_plans (id, org_id, name, amount, currency_code, "interval", interval_count)
       values (${planId}, ${org.orgId}, ${subscriptionName}, 0, 'CAD', 'monthly', 1)`);
     const row = await db.execute(sql`insert into subscriptions (id, org_id, customer_id, plan_id, quantity, status, start_on, next_bill_on)
@@ -78,7 +78,7 @@ async function record(org: ScratchOrg, actor: string, meterKey: string, quantity
 }
 
 async function postInvoice(org: ScratchOrg, actor: string, invoiceId: string): Promise<void> {
-  await withBypassContext(async () => {
+  await withOrgContext(org.orgId, async () => {
     const approved = await db.execute(sql`update documents set status = 'approved' where org_id = ${org.orgId} and id = ${invoiceId} and status = 'draft' returning id`);
     assert.equal(approved.rows.length, 1);
   });
@@ -134,7 +134,7 @@ test("prepaid usage rerating reverses the prior draw and recognition before draw
   await fixture(async (org, actor) => {
     const usageMeter = await meter(org, actor);
     const { link, subscriptionId } = await linkedPlan(org, actor, usageMeter.id);
-    await withBypassContext(async () => {
+    await withOrgContext(org.orgId, async () => {
       const changed = await db.execute(sql`update recognition_rules set method = 'usage'
         where org_id = ${org.orgId} and id = ${org.recognitionRuleId} returning id`);
       assert.equal(changed.rows.length, 1);
@@ -163,6 +163,8 @@ test("prepaid usage rerating reverses the prior draw and recognition before draw
     const first = await commitRateRun(org.orgId, actor, link.id, org.date, org.date);
     assert.equal(first.preview.prepaidDrawn, "3.0000");
     assert.ok(first.invoiceId, "the partial prepaid draw leaves a draft invoice to replace");
+    const committedPreview = await previewRateRun(org.orgId, link.id, org.date, org.date);
+    assert.deepEqual([committedPreview.inputHash, committedPreview.outputHash], [first.run.inputHash, first.run.outputHash]);
     assert.deepEqual(await prepaidState(org.orgId, grant.id, org.date), { state: "depleted", balance: "0.0000" });
 
     await reverseUsageRecord(org.orgId, actor, correctedRecord[0]!.id, "Correct reported usage", org.date);
@@ -214,7 +216,7 @@ test("annual minimums true up only in the year-closing run and recognition rules
     const july = await commitRateRun(org.orgId, actor, link.id, "2026-07-01", "2026-07-31");
     assert.deepEqual([july.preview.commitShortfall, july.preview.totalRated], ["0.0000", "5.0000"]);
     assert.ok(!july.preview.invoiceLines.some((line) => line.kind === "commit_shortfall"));
-    await withBypassContext(async () => {
+    await withOrgContext(org.orgId, async () => {
       const calendar = await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where org_id = ${org.orgId} and id = ${org.periodId}`);
       const period = await db.execute(sql`insert into accounting_periods
         (org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)
@@ -237,7 +239,7 @@ test("annual minimums true up only in the year-closing run and recognition rules
 test("a voided prepaid source invoice funds no usage draw", DB, async () => await fixture(async (org, actor) => {
     const usageMeter = await meter(org, actor);
     const { link, subscriptionId } = await linkedPlan(org, actor, usageMeter.id);
-    const changed = await withBypassContext(() => db.execute(sql`update recognition_rules set method = 'usage' where org_id = ${org.orgId} and id = ${org.recognitionRuleId} returning id`));
+    const changed = await withOrgContext(org.orgId, async () => db.execute(sql`update recognition_rules set method = 'usage' where org_id = ${org.orgId} and id = ${org.recognitionRuleId} returning id`));
     assert.equal(changed.rows.length, 1);
     const invoice = await createSubscriptionInvoice({ orgId: org.orgId, actorId: actor, customerId: org.customerId, subsidiaryId: org.subsidiaryId,
       currency: "CAD", incomeAccountId: org.accounts.revenue, itemId: org.items.service, taxCodeId: null, description: "Prepaid usage", quantity: "1",

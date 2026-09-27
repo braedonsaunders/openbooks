@@ -617,7 +617,10 @@ export async function previewRateRun(
 ): Promise<RateRunPreview> {
   return withOrg(orgId, async () => {
     await requireUsageBilling(orgId, false);
-    return (await buildPreview(orgId, linkId, periodStart, periodEnd, null)).preview;
+    const periodStartDate = requireDate(periodStart, "period_start");
+    const periodEndDate = requireDate(periodEnd, "period_end");
+    const existing = await activeRun(orgId, linkId, periodStartDate, periodEndDate);
+    return (await buildPreview(orgId, linkId, periodStartDate, periodEndDate, existing?.id ?? null)).preview;
   });
 }
 
