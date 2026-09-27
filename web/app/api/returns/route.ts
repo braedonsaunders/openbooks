@@ -24,7 +24,7 @@ const lineSchema = z.object({
   locationId: uuidId.nullable().optional(),
   classId: uuidId.nullable().optional(),
   extraDims: z.record(z.string(), z.string().nullable()).optional(),
-  custom: z.record(z.string(), z.unknown()).optional(),
+  custom: z.record(z.string(), z.json()).optional(),
 }).passthrough()
 
 const createBody = z.object({
@@ -35,7 +35,7 @@ const createBody = z.object({
     referenceNumber: z.string().nullable().optional(),
     memo: z.string().nullable().optional(),
     currency: z.string().length(3).optional(),
-    custom: z.record(z.string(), z.unknown()).optional(),
+    custom: z.record(z.string(), z.json()).optional(),
     lines: z.array(lineSchema).min(1).max(500),
   }).passthrough(),
   sourceSelections: z.array(z.object({
