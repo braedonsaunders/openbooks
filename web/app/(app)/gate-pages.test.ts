@@ -47,10 +47,6 @@ const INTL_MOCK = `
     return globalThis.__i18nBundles;
   }
 `;
-const NAV_MOCK = `
-  export function redirect(url) { throw new Error('REDIRECT:' + url) }
-  export function notFound() { throw new Error('NOT_FOUND') }
-`;
 const LINK_MOCK = `
   export default function Link(p) { return globalThis.React.createElement('a', { href: p.href }, p.children) }
 `;
@@ -68,7 +64,7 @@ const FEATURES_MOCK = `
 
 const { stubModules } = await import("../../testing/stub-modules");
 stubModules({
-  navigation: NAV_MOCK,
+  navigation: true,
   intl: INTL_MOCK,
   authz: AUTHZ_MOCK,
   features: FEATURES_MOCK,

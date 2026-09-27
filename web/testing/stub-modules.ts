@@ -35,6 +35,8 @@ import { registerHooks } from "node:module";
 export interface NavigationStubOptions {
   /** Value returned by the `usePathname` stub. Defaults to "/". */
   pathname?: string;
+  /** Full replacement for the `useRouter` export. */
+  routerSource?: string;
   /** Full replacement module source. Defaults to the shared mock below. */
   source?: string;
 }
@@ -74,10 +76,10 @@ export interface StubModulesOptions {
 
 const NAVIGATION_DEFAULT_PATH = "/";
 
-function navigationSource(pathname: string): string {
+function navigationSource(pathname: string, routerSource?: string): string {
   const safe = pathname.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
   return (
-    `export function useRouter(){return{push(){},refresh(){},replace(){},back(){},forward(){}}}` +
+    (routerSource ?? `export function useRouter(){return{push(){},refresh(){},replace(){},back(){},forward(){}}}`) +
     `export function usePathname(){return '${safe}'}` +
     `export function useSearchParams(){return new URLSearchParams()}` +
     `export function redirect(url){throw new Error('REDIRECT:'+url)}` +
@@ -130,6 +132,20 @@ function virtual(source: string): { shortCircuit: boolean; url: string } {
   };
 }
 
+/** Add the transaction helpers shared by platform database test doubles. */
+export function withPlatformDbTestSurface(source: string): string {
+  const hasExport = (name: string): boolean =>
+    new RegExp(`\\bexport\\s+(?:(?:async)\\s+)?(?:function|const|let|var|class)\\s+${name}\\b`).test(source);
+  const sharedExports: Array<[string, string]> = [
+    ["inExecutorTransaction", `export async function inExecutorTransaction(executor, fn) { return fn(executor) }`],
+    ["withBypassContext", `export async function withBypassContext(fn) { return fn() }`],
+  ];
+  const additions = sharedExports
+    .filter(([name]) => !hasExport(name))
+    .map(([, declaration]) => declaration);
+  return additions.length === 0 ? source : `${source}\n${additions.join("\n")}`;
+}
+
 function isAuthzSpecifier(specifier: string): boolean {
   // Mirrors the conditions the suite's own hooks used: the house alias or a
   // path ending in /lib/authz. Bare relative spellings (`../authz`) and
@@ -170,6 +186,7 @@ export function stubModules(options: StubModulesOptions = {}): void {
     } else {
       navigation = navigationSource(
         options.navigation.pathname ?? NAVIGATION_DEFAULT_PATH,
+        options.navigation.routerSource,
       );
     }
   }

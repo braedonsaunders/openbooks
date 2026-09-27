@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { stubModules } from '../../../../../testing/stub-modules'
+import { stubModules, withPlatformDbTestSurface } from '../../../../../testing/stub-modules'
 import test from 'node:test'
 
 /**
@@ -39,17 +39,20 @@ const state: RouteState = { deleteAttempts: [], deleteResult: 'retired', upsertA
 // hand double cannot produce (a passthrough canonicalDecimal accepts every
 // amount, so no over-precision refusal could ever fire here).
 
+const featureGateStub = `
+  export async function guardFeaturePermission() {
+    return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
+  }
+`
+
 stubModules({
   navigation: false,
   intl: false,
   authz: false,
   features: false,
   extra: {
-    "../../../../../lib/feature-gates": `
-      export async function guardFeaturePermission() {
-        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
-      }
-    `,
+    "../../../../../lib/feature-gates": featureGateStub,
+    "@/lib/feature-gates": featureGateStub,
     "../../../../../lib/authz": `
       export async function guardRootSubsidiaryScope() { return null }
     `,
@@ -90,9 +93,9 @@ stubModules({
         return { id: 'rate-1', values: {} }
       }
     `,
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/src/platform/db.ts": withPlatformDbTestSurface(`
       export const db = { execute: async () => ({ rows: [] }) }
-    `,
+    `),
     "drizzle-orm": `
       export function sql() { return {} }
     `,
@@ -156,7 +159,7 @@ test('a row that does not exist is still a 404, not a success', async () => {
   const response = await del(ROW_ID)
 
   assert.equal(response.status, 404)
-  assert.equal((await response.json()).error, 'not found')
+  assert.equal((await response.json()).error, 'not_found')
 })
 
 test('a malformed id is refused before the engine is reached', async () => {

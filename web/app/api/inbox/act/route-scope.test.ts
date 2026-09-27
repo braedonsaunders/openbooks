@@ -86,6 +86,12 @@ const mockUrls = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (
+      specifier === "@/lib/authz" &&
+      context.parentURL?.endsWith("/web/lib/api/route.ts")
+    ) {
+      return { url: "mock:authz", shortCircuit: true };
+    }
     // The real context builder reaches authz through a sibling-relative
     // specifier; keep it on the same mock as the route's own import.
     if (
@@ -112,7 +118,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?inbox-act-scope-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister());
 
 function act(body: Record<string, unknown>): Promise<Response> {
   return POST(

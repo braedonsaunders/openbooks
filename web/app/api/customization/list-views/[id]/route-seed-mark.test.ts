@@ -230,7 +230,7 @@ test('PATCH of a vanished view is a named zero-row failure', async () => {
   })
   assert.notEqual(res.status, 200, 'a zero-row update must not report success')
   assert.equal(res.status, 404)
-  assert.equal((await res.json()).error, 'not found')
+  assert.equal((await res.json()).error, 'not_found')
 })
 
 test('PATCH refuses overlapping personal defaults by name', async () => {
