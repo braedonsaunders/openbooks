@@ -238,7 +238,7 @@ function amountRatio(numerator: string, denominator: string): number {
   const exact = evaluateAnalyticsRatio(numerator, denominator, "ratio", 6);
   if (exact === null) {
     if (isZero(denominator)) return 0;
-    throw new Error("An analytics amount ratio could not be evaluated.");
+    throw new Error("ANALYTICS_AMOUNT_RATIO_UNDEFINED");
   }
   return Number(exact);
 }
@@ -835,7 +835,7 @@ export function budgetLineStatus(
 export function exactBudgetVariance(budget: string, actual: string): { variance: string; variancePct: number | null } {
   const variance = add(actual, neg(budget));
   const variancePct = isZero(budget) ? null : evaluateAnalyticsRatio(variance, abs(budget), "ratio", 12);
-  if (!isZero(budget) && variancePct === null) throw new Error("Budget variance ratio is undefined for a nonzero budget.");
+  if (!isZero(budget) && variancePct === null) throw new Error("BUDGET_VARIANCE_RATIO_UNDEFINED");
   return {
     variance,
     variancePct: variancePct === null ? null : Number(variancePct),
