@@ -32,7 +32,6 @@ export const GET = defineRoute({
     if (!(await gated(authz.user.orgId))) {
       return notFound("record");
     }
-    void req;
     try {
       const requests = await listOpenRequestsForParty({
         orgId: authz.user.orgId,
