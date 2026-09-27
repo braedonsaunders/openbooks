@@ -443,6 +443,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'resourcing-assignment-drawer': { props: ['canManage', 'drawer'] },
   'resourcing-board': { props: [], open: true },
   'resourcing-demand-rail': { props: [], open: true },
+  'resourcing-request-drawer': { props: ['drawer'] },
   'result-view': { props: ['company', 'description', 'drillTarget', 'result', 'title'] },
   'retro-workspace': { props: ['canRun', 'schedules'] },
   'review-template-builder': { props: [], open: true },
