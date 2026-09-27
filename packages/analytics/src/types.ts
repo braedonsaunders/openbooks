@@ -10,7 +10,7 @@
 // identifier is derived. Values ALWAYS bind as parameters. Pure types — no
 // runtime — safe to import from client bundles.
 
-import type { ReportBreakout, ReportMeasure } from '@openbooks/reports'
+import type { ReportAggFn, ReportBreakout, ReportFormulaFormat, ReportMeasure, ReportRuleGroup } from '@openbooks/reports'
 
 // --- semantic vocabulary -----------------------------------------------------
 
@@ -19,7 +19,7 @@ import type { ReportBreakout, ReportMeasure } from '@openbooks/reports'
 export type SemanticType = 'date' | 'number' | 'currency' | 'category'
 
 /** Aggregation a measure applies. `count` is COUNT(*) and needs no field. */
-export type AggFn = 'sum' | 'count' | 'avg' | 'min' | 'max'
+export type AggFn = ReportAggFn
 
 /** Date bucketing applied to a temporal dimension. */
 export type DateBin = 'day' | 'week' | 'month' | 'quarter' | 'year'
@@ -49,13 +49,18 @@ export type FilterOp = (typeof FILTER_OPS)[number]
 
 // --- query shape -------------------------------------------------------------
 
-export type QueryMeasure = {
+export type QueryMeasure = Partial<ReportMeasure> & {
   /** Catalog measure key. Omitted only for `agg: 'count'` (COUNT(*)). */
   field?: string
-  agg: AggFn
+  agg?: AggFn
   /** Output column key; unique within the query; whitelist-safe slug. Defaults
    *  are derived by the compiler when absent. */
   alias?: string
+  /** Formula or measure output alias also serves as its stable reference key. */
+  key?: string
+  fn?: ReportAggFn
+  filter?: ReportRuleGroup
+  format?: ReportFormulaFormat
 }
 
 export type QueryDimension = {
@@ -130,6 +135,10 @@ export type ResultColumn = {
   /** Fixed value vocabulary the renderer localizes — set when the source field
    *  emits a boolean, printed as the locale's yes/no. */
   valueKind?: 'boolean'
+  /** Formula display format, retained for table and chart renderers. */
+  format?: ReportFormulaFormat
+  /** Display precision for an explicitly formatted formula. */
+  scale?: number
   /** The temporal bucket this dimension was binned into, when it was. The
    *  renderer needs it to label a bucket as the PERIOD it represents ("Sep
    *  2026") rather than the instant it starts on ("2026-09-01"), and to know
@@ -141,6 +150,8 @@ export type ResultColumn = {
 export type QueryResult = {
   columns: ResultColumn[]
   rows: Record<string, unknown>[]
+  /** Undefined formula labels by output alias for each row. */
+  undefinedLabels?: Record<string, string>[]
   rowCount: number
   truncated: boolean
   durationMs: number
@@ -172,6 +183,8 @@ export type CompiledQuery = {
   sql: string
   params: unknown[]
   columns: ResultColumn[]
+  /** SQL output aliases by authored measure index, including hidden formula inputs. */
+  measureColumnKeys?: string[]
   /** The effective row cap applied to the SQL. */
   limit: number
   /** The denomination basis for the executor to enforce. */

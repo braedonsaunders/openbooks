@@ -103,7 +103,7 @@ export function CardStudio({
   const [sourceKey, setSourceKey] = useState(initialQuery.source ?? 'ledger_lines')
 
   const [measures, setMeasures] = useState<MeasureState[]>(
-    (initialQuery.measures ?? []).map((m) => ({ field: m.field ?? '', agg: m.agg })),
+    (initialQuery.measures ?? []).map((m) => ({ field: m.field ?? '', agg: m.agg ?? 'count' })),
   )
   const [dimensions, setDimensions] = useState<DimensionState[]>(
     (initialQuery.dimensions ?? []).map((d) => ({ field: d.field, bin: (d.bin as DateBin) ?? '' })),

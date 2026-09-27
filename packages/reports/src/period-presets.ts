@@ -24,7 +24,7 @@ import {
   type FiscalPeriod,
   utcCivilDate,
 } from './fiscal-calendar'
-import type { ReportCustomQuery, ReportRule, ReportRuleGroup } from './types'
+import type { ReportCustomQuery, ReportMeasure, ReportRule, ReportRuleGroup } from './types'
 
 /**
  * The org's fiscal position "as of today", with exact inclusive boundaries.
@@ -183,7 +183,7 @@ export async function resolvePeriodPresetLeaves(
   query: ReportCustomQuery,
   resolveRange: (presetId: string) => Promise<Pick<DateRange, 'from' | 'to'>>,
 ): Promise<ReportCustomQuery> {
-  if (!query.filters) return query
+  if (!query.filters && !(query.measures ?? []).some((measure) => measure.filter)) return query
   let touched = false
 
   const walk = async (node: ReportRuleGroup): Promise<ReportRuleGroup> => {
@@ -212,8 +212,12 @@ export async function resolvePeriodPresetLeaves(
     return { ...node, rules }
   }
 
-  const filters = await walk(query.filters)
-  return touched ? { ...query, filters } : query
+  const filters = query.filters ? await walk(query.filters) : null
+  const measures: ReportMeasure[] = []
+  for (const measure of query.measures ?? []) {
+    measures.push(measure.filter ? { ...measure, filter: await walk(measure.filter) } : measure)
+  }
+  return touched ? { ...query, filters, measures } : query
 }
 
 /** Convert a current (fiscalYear, quarter 1-4) into another by shifting `n`

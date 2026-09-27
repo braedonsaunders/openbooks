@@ -2034,7 +2034,16 @@
     "avg": "Moyenne",
     "min": "Min",
     "max": "Max",
-    "latest": "Dernier"
+    "latest": "Dernier",
+    "opening": "Ouverture",
+    "closing": "Clôture",
+    "formula": "Formule"
+  },
+  "formats": {
+    "ratio": "Ratio",
+    "percent": "Pourcentage",
+    "money": "Montant",
+    "number": "Nombre"
   },
   "run": {
     "results": "Résultats",
@@ -2046,6 +2055,8 @@
     "summaryGroups": "Groupes",
     "summarySource": "Source",
     "summaryTotal": "Total {measure}",
+    "undefinedFormula": "Indéfini — division par zéro",
+    "notTotalled": "Non totalisé",
     "none": "(aucune)",
     "yes": "oui",
     "no": "non",

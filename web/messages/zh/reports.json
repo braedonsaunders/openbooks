@@ -2034,7 +2034,16 @@
     "avg": "平均值",
     "min": "最小值",
     "max": "最大值",
-    "latest": "最新"
+    "latest": "最新",
+    "opening": "期初",
+    "closing": "期末",
+    "formula": "公式"
+  },
+  "formats": {
+    "ratio": "比率",
+    "percent": "百分比",
+    "money": "金额",
+    "number": "数字"
   },
   "run": {
     "results": "结果",
@@ -2046,6 +2055,8 @@
     "summaryGroups": "分组",
     "summarySource": "数据源",
     "summaryTotal": "{measure}合计",
+    "undefinedFormula": "未定义 — 除数为零",
+    "notTotalled": "未汇总",
     "none": "（无）",
     "yes": "是",
     "no": "否",

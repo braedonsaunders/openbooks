@@ -2034,7 +2034,16 @@
     "avg": "平均",
     "min": "最小",
     "max": "最大",
-    "latest": "最新"
+    "latest": "最新",
+    "opening": "期首",
+    "closing": "期末",
+    "formula": "数式"
+  },
+  "formats": {
+    "ratio": "比率",
+    "percent": "パーセント",
+    "money": "金額",
+    "number": "数値"
   },
   "run": {
     "results": "結果",
@@ -2046,6 +2055,8 @@
     "summaryGroups": "グループ",
     "summarySource": "データソース",
     "summaryTotal": "{measure}合計",
+    "undefinedFormula": "未定義 — ゼロ除算",
+    "notTotalled": "合計対象外",
     "none": "（なし）",
     "yes": "はい",
     "no": "いいえ",

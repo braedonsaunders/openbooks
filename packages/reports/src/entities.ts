@@ -177,6 +177,9 @@ export type ReportEntity = {
    *  makes the 'latest' aggregate exact for this entity. Without it, 'latest'
    *  measures are rejected at compile time. */
   latestOrderExpr?: string
+  /** Catalog key used to select the first and last rows for semi-additive
+   *  opening and closing measures. */
+  timeKey?: string
 }
 
 import { REPORT_AS_OF } from './report-as-of'
@@ -319,6 +322,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'party_id', label: 'Party (id)', kind: 'uuid', expr: 'd.party_id' },
     ],
     defaultSort: { column: 'document_date', direction: 'desc' },
+    timeKey: 'posting_date',
   },
   {
     key: 'transaction_lines',

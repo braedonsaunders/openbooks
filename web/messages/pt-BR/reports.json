@@ -2034,7 +2034,16 @@
     "avg": "Média",
     "min": "Mín.",
     "max": "Máx.",
-    "latest": "Mais recente"
+    "latest": "Mais recente",
+    "opening": "Abertura",
+    "closing": "Fechamento",
+    "formula": "Fórmula"
+  },
+  "formats": {
+    "ratio": "Razão",
+    "percent": "Porcentagem",
+    "money": "Valor monetário",
+    "number": "Número"
   },
   "run": {
     "results": "Resultados",
@@ -2046,6 +2055,8 @@
     "summaryGroups": "Grupos",
     "summarySource": "Origem",
     "summaryTotal": "Total de {measure}",
+    "undefinedFormula": "Indefinido — divisão por zero",
+    "notTotalled": "Não totalizado",
     "none": "(nenhum)",
     "yes": "sim",
     "no": "não",

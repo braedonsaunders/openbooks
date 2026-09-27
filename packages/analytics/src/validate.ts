@@ -4,6 +4,7 @@
 // keeps the persisted shape honest. Pure — safe on client or server.
 
 import { getSource } from './catalog'
+import { REPORT_AGG_FNS, REPORT_ENTITY_MAP, ReportQueryValidationError, validateCustomQuery } from '@openbooks/reports'
 import { migrateLegacyQuery } from './legacy'
 import { sourceField } from './semantic'
 import { FILTER_OPS } from './types'
@@ -25,7 +26,7 @@ export class InsightValidationError extends Error {
   }
 }
 
-const AGG_FNS: AggFn[] = ['sum', 'count', 'avg', 'min', 'max']
+const AGG_FNS: AggFn[] = [...REPORT_AGG_FNS]
 const DATE_BINS: DateBin[] = ['day', 'week', 'month', 'quarter', 'year']
 const AGG_FN_SET = new Set<string>(AGG_FNS)
 const DATE_BIN_SET = new Set<string>(DATE_BINS)
@@ -53,18 +54,51 @@ export function validateInsightQuery(input: unknown): InsightQuery {
   const dimensions = Array.isArray(q.dimensions) ? q.dimensions : []
   const filters = Array.isArray(q.filters) ? q.filters : []
   const sort = Array.isArray(q.sort) ? q.sort : []
+  let normalizedMeasures: InsightQuery['measures'] = measures as InsightQuery['measures']
 
   for (const m of measures) {
     if (!m || typeof m !== 'object') fail('each measure must be an object')
     const measure = m as Record<string, unknown>
-    const agg = measure.agg
+    const agg = measure.fn ?? measure.agg
     if (typeof agg !== 'string' || !AGG_FN_SET.has(agg)) fail(`invalid aggregation "${agg}"`, 'unknown_aggregation', String(agg))
-    if (agg !== 'count') {
-      const fieldKey = measure.field
+    if (agg !== 'count' && agg !== 'formula') {
+      const fieldKey = measure.column ?? measure.field
       if (typeof fieldKey !== 'string') fail('measure.field must be a string')
       const field = sourceField(source, fieldKey)
       if (!field) fail(`unknown measure field "${fieldKey}"`, 'unknown_field', fieldKey)
       if (!field.canMeasure) fail(`"${field.key}" is not a numeric measure`, 'not_a_measure', field.key)
+    }
+  }
+
+  if (measures.length) {
+    try {
+      const reportMeasures = measures.map((raw) => {
+        const measure = raw as Record<string, unknown>
+        const fn = String(measure.fn ?? measure.agg)
+        return {
+          ...measure,
+          fn,
+          ...(fn === 'count' || fn === 'formula' ? {} : { column: measure.column ?? measure.field }),
+        }
+      })
+      const validated = validateCustomQuery({ entity: q.source, mode: 'summarize', columns: [], measures: reportMeasures }, REPORT_ENTITY_MAP)
+      normalizedMeasures = measures.map((original, index) => {
+        const parsed = validated.measures?.[index]
+        if (!parsed) return original as NonNullable<InsightQuery['measures']>[number]
+        const sourceMeasure = original as Record<string, unknown>
+        if (sourceMeasure.agg && !sourceMeasure.fn) {
+          return {
+            ...(original as object),
+            ...(parsed.key ? { key: parsed.key } : {}),
+            ...(parsed.filter ? { filter: parsed.filter } : {}),
+            ...(parsed.label ? { label: parsed.label } : {}),
+          } as NonNullable<InsightQuery['measures']>[number]
+        }
+        return { ...(original as object), ...parsed } as NonNullable<InsightQuery['measures']>[number]
+      })
+    } catch (error) {
+      if (error instanceof ReportQueryValidationError) fail(error.message)
+      throw error
     }
   }
 
@@ -106,7 +140,7 @@ export function validateInsightQuery(input: unknown): InsightQuery {
 
   return {
     source: q.source,
-    measures: measures as InsightQuery['measures'],
+    measures: normalizedMeasures,
     dimensions: dimensions as InsightQuery['dimensions'],
     filters: filters as InsightQuery['filters'],
     sort: sort as InsightQuery['sort'],

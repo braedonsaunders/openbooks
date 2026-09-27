@@ -62,8 +62,21 @@ export type ReportRuleGroup = {
 // 'latest' = the value on the chronologically last underlying row (entity must
 // declare latestOrderExpr) — running totals like payroll YTD end exactly, where
 // max() would overstate after a net-negative period.
-export const REPORT_AGG_FNS = ['count', 'count_distinct', 'sum', 'avg', 'min', 'max', 'latest'] as const
+export const REPORT_AGG_FNS = ['count', 'count_distinct', 'sum', 'avg', 'min', 'max', 'latest', 'opening', 'closing', 'formula'] as const
 export type ReportAggFn = (typeof REPORT_AGG_FNS)[number]
+
+export type ReportFormulaExpr =
+  | { ref: string }
+  | { const: string }
+  | { op: '+' | '-' | '*' | '/'; left: ReportFormulaExpr; right: ReportFormulaExpr }
+
+export type ReportFormulaFormat = 'ratio' | 'percent' | 'money' | 'number'
+
+export type ReportFormulaGuard = {
+  measure: string
+  when: 'zero' | 'null'
+  label: string
+}
 
 /** Temporal buckets for a Summarize-mode breakout on a date/timestamp column.
  *  The `fiscal_*` bins bucket by the org's fiscal calendar (start month passed
@@ -91,6 +104,22 @@ export type ReportBreakout = {
 export type ReportMeasure = {
   fn: ReportAggFn
   column?: string
+  /** Stable reference used by formula measures. */
+  key?: string
+  /** A measure-local filter, applied before this aggregate is calculated. */
+  filter?: ReportRuleGroup
+  /** Formula-only typed expression. */
+  expr?: ReportFormulaExpr
+  /** Formula-only output format. */
+  format?: ReportFormulaFormat
+  /** Formula-only decimal places. Defaults by format. */
+  scale?: number
+  /** Formula-only explanation used when the result is undefined. */
+  undefinedLabel?: string
+  /** Formula-only conditions that make the result undefined. */
+  guards?: ReportFormulaGuard[]
+  /** Keep a component selected for formula evaluation but omit its result column. */
+  hidden?: boolean
   /** Optional display label; defaults to a humanised "<fn> of <column>". */
   label?: string
 }
@@ -197,6 +226,9 @@ export type ReportGroup = {
   columns: string[]
   /** Rows aligned to `columns`. Cell values are coerced to string. */
   rows: (string | number | null | undefined)[][]
+  /** Explanations for undefined formula cells, aligned to `rows`; renderers
+   *  may expose them as muted, accessible labels while exports retain text. */
+  undefinedCells?: (string | null)[][]
   /** Per-column: format as currency in viewers (money-kind columns/measures). */
   money?: boolean[]
   /** Per-column alignment (text left, numeric/money right). Viewers fall back

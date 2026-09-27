@@ -26,6 +26,43 @@ test('compileInsightQuery honors a sort ref naming a binned dimension field', ()
   assert.match(compiled.sql, /order by 1 asc nulls last/)
 })
 
+test('formula cards share report compilation and keep component measures hidden', () => {
+  const compiled = compileInsightQuery(
+    {
+      source: 'documents',
+      measures: [
+        {
+          fn: 'sum', key: 'collected', field: 'total', hidden: true,
+          filter: { combinator: 'and', rules: [{ field: 'kind', op: 'eq', value: 'customer_payment' }] },
+        },
+        {
+          fn: 'sum', key: 'billed', field: 'total', hidden: true,
+          filter: { combinator: 'and', rules: [{ field: 'kind', op: 'eq', value: 'customer_invoice' }] },
+        },
+        {
+          fn: 'formula', key: 'collection_rate', label: 'Collection rate', format: 'percent', scale: 2,
+          expr: { op: '/', left: { ref: 'collected' }, right: { ref: 'billed' } },
+        },
+      ],
+      dimensions: [{ field: 'posting_date', bin: 'month' }],
+      filters: [
+        { field: 'currency', op: 'eq', value: 'CAD' },
+        { field: 'posting_date', op: 'this_quarter' },
+        { field: 'total', op: 'gt', value: 0 },
+      ],
+      sort: [{ ref: 'collection_rate', dir: 'desc' }],
+    },
+    'org-1', {}, '2026-09-18', null,
+  )
+  assert.deepEqual(compiled.columns.map((column) => column.key), ['posting_date_month', 'collection_rate'])
+  assert.deepEqual(compiled.measureColumnKeys, ['__formula_measure_0', '__formula_measure_1', 'collection_rate'])
+  assert.match(compiled.sql, /FILTER \(WHERE .*d\.kind = \$\d+\)/)
+  assert.match(compiled.sql, /NULLIF\(/)
+  assert.match(compiled.sql, /d\.posting_date >= \$\d+ AND d\.posting_date <= \$\d+/i)
+  assert.match(compiled.sql, /NOT \(d\.total <= \$\d+\)/i)
+  assert.match(compiled.sql, /ORDER BY "__report"\."__formula_sort" DESC NULLS LAST, "posting_date_month" ASC\nlimit 1000$/i)
+})
+
 test('compileInsightQuery still prefers an explicit output alias for sorts', () => {
   // Widening sort refs to field keys must not steal refs that already name
   // an output alias: the alias keeps winning.

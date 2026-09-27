@@ -8,7 +8,7 @@
 // SERVER ONLY — imports node-postgres. Never import from a client bundle; the
 // client renderer takes a QueryResult, not the pool.
 
-import { REPORT_ENTITY_MAP, parseDenominationCounts, resolveDenominations, type ReportEntity } from '@openbooks/reports'
+import { REPORT_ENTITY_MAP, evaluateFormulaMeasures, parseDenominationCounts, resolveDenominations, type ReportEntity, type ReportMeasure } from '@openbooks/reports'
 import { compileInsightQuery, INSIGHT_MAX_ROWS, type InsightLabelResolver } from './compile'
 import { validateInsightQuery } from './validate'
 import type { InsightDenominationBasis, InsightQuery, QueryResult } from './types'
@@ -138,6 +138,41 @@ export async function runInsightQuery(
 
     const truncated = res.rows.length > capped
     const rows = truncated ? res.rows.slice(0, capped) : res.rows
+    const queryMeasures = validatedQuery.measures ?? []
+    const reportMeasures: ReportMeasure[] = queryMeasures.map((measure) => {
+      const fn = measure.fn ?? measure.agg ?? 'count'
+      return {
+        ...measure,
+        fn,
+        ...(fn === 'count' || fn === 'formula' ? {} : { column: measure.column ?? measure.field }),
+      } as ReportMeasure
+    })
+    const measureColumns = compiled.columns.filter((column) => column.role === 'measure')
+    const measureColumnKeys = compiled.measureColumnKeys
+      ?? measureColumns.map((column) => column.key)
+    const undefinedLabels = rows.map((row) => {
+      const values = reportMeasures.map((_, index) => row[measureColumnKeys[index] ?? ''])
+      const formulaValues = evaluateFormulaMeasures(reportMeasures, values, new Set(), {
+        undefined: labels?.undefinedFormula?.(),
+        notTotalled: labels?.notTotalled?.(),
+      })
+      const rowLabels: Record<string, string> = {}
+      formulaValues.forEach((value, index) => {
+        if (reportMeasures[index]?.fn !== 'formula' || reportMeasures[index]?.hidden) return
+        const key = measureColumnKeys[index]
+        if (!key) return
+        if (value.undefinedLabel) {
+          row[key] = value.undefinedLabel
+          rowLabels[key] = value.undefinedLabel
+        } else {
+          row[key] = value.value
+        }
+      })
+      for (const key of Object.keys(row)) {
+        if (key.startsWith('__formula_measure_')) delete row[key]
+      }
+      return rowLabels
+    })
     if (compiled.denomination.hasDenominationCensus) {
       // The inline census travels in `__`-prefixed columns no catalog field
       // may use; strip it before the result leaves the executor so API
@@ -151,6 +186,7 @@ export async function runInsightQuery(
     return {
       columns: compiled.columns,
       rows,
+      ...(undefinedLabels.some((labelsForRow) => Object.keys(labelsForRow).length) ? { undefinedLabels } : {}),
       rowCount: rows.length,
       truncated,
       durationMs: Date.now() - started,
