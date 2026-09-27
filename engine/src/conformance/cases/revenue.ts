@@ -8,7 +8,7 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "../../platform/db.ts";
+import { db, withOrgContext } from "../../platform/db.ts";
 import { add, fromUnits, toUnits } from "../../money/money.ts";
 import { parseMoney, parseQuantity, parseRate } from "../../money/brands.ts";
 import { postDocument } from "../../ledger/posting-document.ts";
@@ -107,13 +107,13 @@ async function createUsageCorpusFixture(
   const itemId = randomUUID();
   const subscriptionPlanId = randomUUID();
   const subscriptionId = randomUUID();
-  const enabled = await withBypassContext(() => db.execute(sql`
+  const enabled = await withOrgContext(ledger.orgId, () => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}',
       coalesce(settings->'features', '{}'::jsonb)
         || '{"subscriptionBilling":true,"usageBilling":true}'::jsonb, true)
      where id = ${ledger.orgId} returning id`));
   if (enabled.rows.length !== 1) throw new Error("usage conformance organization was not updated");
-  await withBypassContext(async () => {
+  await withOrgContext(ledger.orgId, async () => {
     const item = await db.execute(sql`
       insert into items (id, org_id, kind, name, income_account_id, is_active, custom)
       values (${itemId}, ${ledger.orgId}, 'service', ${`Usage item ${suffix}`}, ${ctx.roles.revenue}, true, '{}'::jsonb)
@@ -832,11 +832,11 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
     run: async (ctx) => {
       const ledger = ctx.ledger!;
       const fixture = await createUsageCorpusFixture(ctx);
-      const rule = await withBypassContext(() => db.execute<{ id: string }>(sql`
+      const rule = await withOrgContext(ledger.orgId, () => db.execute<{ id: string }>(sql`
         select recognition_rule_id as id from items where org_id = ${ledger.orgId} and id = ${ledger.items.service}`));
       const ruleId = rule.rows[0]?.id;
       if (!ruleId) throw new Error("prepaid service item has no recognition rule");
-      const changed = await withBypassContext(() => db.execute(sql`
+      const changed = await withOrgContext(ledger.orgId, () => db.execute(sql`
         update recognition_rules set method = 'usage'
          where org_id = ${ledger.orgId} and id = ${ruleId} returning id`));
       if (changed.rows.length !== 1) throw new Error("prepaid recognition rule was not updated");
