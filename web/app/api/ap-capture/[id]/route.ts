@@ -1,5 +1,7 @@
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { exactMoney, jsonObject, parseJsonBody } from "@/lib/api/json";
+import { exactMoney, parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -14,6 +16,16 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { notFound } from "@/lib/api/responses";
 import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+
+const requestBodySchema = z.looseObject({
+  "documentKind": z.unknown().optional(),
+  "expectedUpdatedAt": z.unknown().optional(),
+  "normalized": z.unknown().optional(),
+  "purchaseOrderId": z.unknown().optional(),
+  "vendorId": z.unknown().optional(),
+})
+
+
 
 export const runtime = 'nodejs'
 
@@ -136,268 +148,278 @@ function parseNormalized(raw: unknown): NormalizedCapture {
   }
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('ap.read')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  // A malformed id names nothing: same answer as an unknown one, never a
-  // PostgreSQL uuid cast error escaping as a 500.
-  if (!isUuid(id)) return notFound("record")
-  return withScopeSnapshot(gate.user.orgId, async () => {
-  const result = (await db.execute<Record<string, unknown>>(sql`
-    select ci.*, f.content_type, f.size_bytes
-      from ap_capture_items ci join files f on f.id = ci.file_id and f.org_id = ci.org_id
-      left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
-      left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
-     where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
-     ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
-  `))
-  if (!result.rows[0]) return notFound("record")
-  const [fields, events] = await Promise.all([
-    db.execute(sql`
-      select af.* from ap_capture_fields af join ap_capture_runs ar on ar.id = af.run_id and ar.org_id = af.org_id
-       where af.org_id = ${gate.user.orgId} and ar.capture_item_id = ${id}
-       order by ar.attempt desc, af.field_key, af.line_index nulls first
-    `),
-    db.execute(sql`
-      select * from ap_capture_events where org_id = ${gate.user.orgId} and capture_item_id = ${id}
-       order by at desc
-    `),
-  ])
-  return NextResponse.json({ item: result.rows[0], fields: ((fields)).rows, events: ((events)).rows })
-  })
-}
-
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('ap.create')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const parsedBody = await parseJsonBody(request, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Record<string, unknown>
-  // Mandatory optimistic-concurrency evidence (same contract as document,
-  // payment, and prebill-line edits): a stale review tab autosaves over a
-  // newer correction otherwise. Checked after the gates so a missing token
-  // never leaks capture existence to an unauthorized caller.
-  if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
-    return NextResponse.json({ error: 'A current capture revision is required; reload the capture and try again' }, { status: 409 })
-  }
-  const expectedRevision = body.expectedUpdatedAt as string
-  let normalized: NormalizedCapture
-  let nextVendorId: string | null | undefined
-  let nextPurchaseOrderId: string | null | undefined
-  try {
-    normalized = parseNormalized(body.normalized)
-    if (body.documentKind !== undefined && body.documentKind !== 'vendor_bill' && body.documentKind !== 'vendor_credit') {
-      throw new CapturePatchRefusal('invalid_document_kind')
-    }
-    nextVendorId = body.vendorId === undefined ? undefined : optionalUuid(body.vendorId)
-    nextPurchaseOrderId = body.purchaseOrderId === undefined ? undefined : optionalUuid(body.purchaseOrderId)
-  } catch (error) {
-    return apiErrorResponse(error)
-  }
-  const current = (await db.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null }>(sql`
-    select ci.normalized, ci.status, ci.document_kind, ci.vendor_candidate_id, ci.purchase_order_id
-      from ap_capture_items ci
-      left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
-      left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
-     where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
-     ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
-  `))
-  if (!current.rows[0]) return notFound("record")
-  if (['materialized', 'rejected', 'extracting', 'queued'].includes(current.rows[0].status)) {
-    return NextResponse.json({ error: 'not_editable' }, { status: 409 })
-  }
-  // Stored captures stay when itemId is omitted. Re-sending the stored item
-  // is allowed. A new inventory / assembly / kit item is Inventory configuration.
-  if (!(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
-    const storedIds = new Set(
-      (current.rows[0].normalized.lines ?? [])
-        .map((line) => line.itemId)
-        .filter((itemId): itemId is string => Boolean(itemId)),
-    )
-    for (const line of normalized.lines) {
-      if (!line.itemId || storedIds.has(line.itemId)) continue
-      const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
-      if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-        return notFound("record")
-      }
-    }
-  }
-  // Stored equipment_charge lines stay. Turning Equipment off must
-  // 404 a write that would persist a new one of those kinds.
-  if (!(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
-    const storedIds = new Set(
-      (current.rows[0].normalized.lines ?? [])
-        .map((line) => line.itemId)
-        .filter((itemId): itemId is string => Boolean(itemId)),
-    )
-    for (const line of normalized.lines) {
-      if (!line.itemId || storedIds.has(line.itemId)) continue
-      const item = (await db.execute<{ kind: string }>(sql`
-        select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
-      if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
-        return notFound("record")
-      }
-    }
-  }
-  if (
-    nextPurchaseOrderId
-    && nextPurchaseOrderId !== current.rows[0].purchase_order_id
-    && !(await isDocKindEnabled(gate.user.orgId, 'purchase_order'))
-  ) {
-    return notFound("record")
-  }
-  const settings = await getDocumentCaptureSettings(gate.user.orgId)
-  let saved: { resolved: Awaited<ReturnType<typeof resolveAndValidateCapture>>; kind: 'vendor_bill' | 'vendor_credit' }
-  try {
-    saved = await withOrgTransaction(gate.user.orgId, async () => {
-      const tx = db
-      const locked = (await tx.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null; revision: string }>(sql`
-        select ci.normalized, ci.status, ci.document_kind, ci.vendor_candidate_id, ci.purchase_order_id,
-               ${documentRevisionCounterSql(sql`ci.revision_seq`)} as revision
-          from ap_capture_items ci
-          left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
-          left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
-         where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
-         ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
-         for update of ci
-      `))
-      const live = locked.rows[0]
-      if (!live) throw new Error('capture_not_found')
-      if (['materialized', 'rejected', 'extracting', 'queued'].includes(live.status)) throw new Error('capture_not_editable')
-      // The row lock above serializes concurrent saves; the token decides the
-      // winner. A tab that read before a sibling's save committed refuses
-      // loudly instead of reverting that save's corrections.
-      if (live.revision !== expectedRevision) throw new Error('capture_revision_conflict')
-      const kind = body.documentKind === undefined ? live.document_kind : body.documentKind
-      if (kind !== 'vendor_bill' && kind !== 'vendor_credit') throw new CapturePatchRefusal('invalid_document_kind')
-      // Resolve against the kind being saved, using the same locked snapshot as
-      // the correction audit. Omission preserves a selected vendor credit.
-      const resolved = await resolveAndValidateCapture({
-        orgId: gate.user.orgId, captureItemId: id, normalized,
-        confidenceThreshold: settings.confidenceThreshold,
-        vendorId: nextVendorId, purchaseOrderId: nextPurchaseOrderId, documentKind: kind,
-    })
-    // Omitted vendorId/purchaseOrderId lets resolveAndValidateCapture pick
-    // org-wide. Lock those target rows before the gate so a concurrent
-    // subsidiary reassignment cannot change the answer under the UPDATE.
-    if (resolved.vendorId) {
-      const vendor = (await tx.execute<{ subsidiaryId: string | null }>(sql`
-        select subsidiary_id as "subsidiaryId" from parties
-         where org_id = ${gate.user.orgId} and id = ${resolved.vendorId}
-         for update
-      `)).rows[0]
-      if (!vendor || guardSubsidiaryScope(gate, vendor.subsidiaryId, { orgWideNull: true })) {
-        throw new Error('capture_not_found')
-      }
-    }
-    if (resolved.purchaseOrderId) {
-      const purchaseOrder = (await tx.execute<{ subsidiaryId: string | null }>(sql`
-        select subsidiary_id as "subsidiaryId" from documents
-         where org_id = ${gate.user.orgId} and id = ${resolved.purchaseOrderId}
-         for update
-      `)).rows[0]
-      if (!purchaseOrder || guardSubsidiaryScope(gate, purchaseOrder.subsidiaryId, { orgWideNull: true })) {
-        throw new Error('capture_not_found')
-      }
-    }
-    const before = live.normalized
-    const headerKeys = ['vendorName', 'vendorTaxId', 'invoiceNumber', 'invoiceDate', 'dueDate', 'purchaseOrderNumber', 'currency', 'subtotal', 'taxTotal', 'total', 'memo'] as const
-    for (const key of headerKeys) {
-      if (JSON.stringify(before[key]) !== JSON.stringify(resolved.normalized[key])) {
-        await tx.execute(sql`
-          insert into ap_capture_corrections (org_id, capture_item_id, field_key, before_value, after_value, corrected_by)
-          values (${gate.user.orgId}, ${id}, ${key}, ${JSON.stringify(before[key])}::jsonb,
-                  ${JSON.stringify(resolved.normalized[key])}::jsonb, ${gate.user.id})
-        `)
-      }
-    }
-    const maxLines = Math.max(before.lines.length, resolved.normalized.lines.length)
-    for (let lineIndex = 0; lineIndex < maxLines; lineIndex += 1) {
-      if (JSON.stringify(before.lines[lineIndex] ?? null) !== JSON.stringify(resolved.normalized.lines[lineIndex] ?? null)) {
-        await tx.execute(sql`
-          insert into ap_capture_corrections (org_id, capture_item_id, field_key, line_index, before_value, after_value, corrected_by)
-          values (${gate.user.orgId}, ${id}, 'line', ${lineIndex},
-                  ${JSON.stringify(before.lines[lineIndex] ?? null)}::jsonb,
-                  ${JSON.stringify(resolved.normalized.lines[lineIndex] ?? null)}::jsonb, ${gate.user.id})
-        `)
-      }
-    }
-    const selections: Array<[string, unknown, unknown]> = [
-      ['documentKind', live.document_kind, kind],
-      ['vendorCandidateId', live.vendor_candidate_id, resolved.vendorId],
-      ['purchaseOrderId', live.purchase_order_id, resolved.purchaseOrderId],
-    ]
-    for (const [fieldKey, beforeValue, afterValue] of selections) {
-      if (JSON.stringify(beforeValue) === JSON.stringify(afterValue)) continue
-      await tx.execute(sql`
-        insert into ap_capture_corrections (org_id, capture_item_id, field_key, before_value, after_value, corrected_by)
-        values (${gate.user.orgId}, ${id}, ${fieldKey}, ${JSON.stringify(beforeValue)}::jsonb,
-                ${JSON.stringify(afterValue)}::jsonb, ${gate.user.id})
-      `)
-    }
-    const status = resolved.duplicate ? 'duplicate' : resolved.issues.length ? 'needs_review' : 'ready'
-    // Monotonic revision writer (same discipline as document revisions): every
-    // committed save advances the token, so equal tokens always mean equal
-    // content and a stale tab can never accidentally match.
-    const savedRow = (await tx.execute<{ id: string }>(sql`
-      update ap_capture_items set normalized = ${JSON.stringify(resolved.normalized)}::jsonb,
-             validation_issues = ${JSON.stringify(resolved.issues)}::jsonb, status = ${status},
-             document_kind = ${kind}, vendor_candidate_id = ${resolved.vendorId},
-             purchase_order_id = ${resolved.purchaseOrderId}, assigned_to = ${gate.user.id},
-             updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
-             updated_by = ${gate.user.id}
-       where org_id = ${gate.user.orgId} and id = ${id}
-         and exists (
-           select 1 from ap_capture_items ci
-           left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
-           left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
-           where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
-           ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
-         )
-         and ${resolvedAssociationsInScope(gate.user.orgId, gate.allowedSubsidiaryIds, resolved.vendorId, resolved.purchaseOrderId)}
-       returning id
+export const GET = defineRoute({
+  permission: 'ap.read',
+  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: _request, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const { id } = await params
+    // A malformed id names nothing: same answer as an unknown one, never a
+    // PostgreSQL uuid cast error escaping as a 500.
+    if (!isUuid(id)) return notFound("record")
+    return withScopeSnapshot(gate.user.orgId, async () => {
+    const result = (await db.execute<Record<string, unknown>>(sql`
+      select ci.*, f.content_type, f.size_bytes
+        from ap_capture_items ci join files f on f.id = ci.file_id and f.org_id = ci.org_id
+        left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+        left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+       where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
+       ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
     `))
-    if (!savedRow.rows[0]) throw new Error('capture_not_found')
-    await tx.execute(sql`
-      insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
-      values (${gate.user.orgId}, ${id}, 'review_saved',
-              ${JSON.stringify({ status, issueCount: resolved.issues.length })}::jsonb, ${gate.user.id})
-    `)
-    return { resolved, kind }
+    if (!result.rows[0]) return notFound("record")
+    const [fields, events] = await Promise.all([
+      db.execute(sql`
+        select af.* from ap_capture_fields af join ap_capture_runs ar on ar.id = af.run_id and ar.org_id = af.org_id
+         where af.org_id = ${gate.user.orgId} and ar.capture_item_id = ${id}
+         order by ar.attempt desc, af.field_key, af.line_index nulls first
+      `),
+      db.execute(sql`
+        select * from ap_capture_events where org_id = ${gate.user.orgId} and capture_item_id = ${id}
+         order by at desc
+      `),
+    ])
+    return NextResponse.json({ item: result.rows[0], fields: ((fields)).rows, events: ((events)).rows })
     })
-  } catch (error) {
-    if (error instanceof Error && error.message === 'invalid_document_kind') {
-      return apiErrorResponse(error, { safeStatus: 422 })
+
+  },
+})
+
+export const PATCH = defineRoute({
+  permission: 'ap.create',
+  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: request, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    const parsedBody = await parseJsonBody(request, requestBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = (parsedBody.data) as Record<string, unknown>
+    // Mandatory optimistic-concurrency evidence (same contract as document,
+    // payment, and prebill-line edits): a stale review tab autosaves over a
+    // newer correction otherwise. Checked after the gates so a missing token
+    // never leaks capture existence to an unauthorized caller.
+    if (!isDocumentRevisionToken(body.expectedUpdatedAt)) {
+      return NextResponse.json({ error: 'A current capture revision is required; reload the capture and try again' }, { status: 409 })
     }
-    if (error instanceof Error && error.message === 'capture_not_found') {
-      return notFound("record")
+    const expectedRevision = body.expectedUpdatedAt as string
+    let normalized: NormalizedCapture
+    let nextVendorId: string | null | undefined
+    let nextPurchaseOrderId: string | null | undefined
+    try {
+      normalized = parseNormalized(body.normalized)
+      if (body.documentKind !== undefined && body.documentKind !== 'vendor_bill' && body.documentKind !== 'vendor_credit') {
+        throw new CapturePatchRefusal('invalid_document_kind')
+      }
+      nextVendorId = body.vendorId === undefined ? undefined : optionalUuid(body.vendorId)
+      nextPurchaseOrderId = body.purchaseOrderId === undefined ? undefined : optionalUuid(body.purchaseOrderId)
+    } catch (error) {
+      return apiErrorResponse(error)
     }
-    if (error instanceof Error && error.message === 'capture_not_editable') {
+    const current = (await db.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null }>(sql`
+      select ci.normalized, ci.status, ci.document_kind, ci.vendor_candidate_id, ci.purchase_order_id
+        from ap_capture_items ci
+        left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+        left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+       where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
+       ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
+    `))
+    if (!current.rows[0]) return notFound("record")
+    if (['materialized', 'rejected', 'extracting', 'queued'].includes(current.rows[0].status)) {
       return NextResponse.json({ error: 'not_editable' }, { status: 409 })
     }
-    if (error instanceof Error && error.message === 'capture_revision_conflict') {
-      return NextResponse.json({ error: 'This capture changed after you opened it; reload and reapply your corrections' }, { status: 409 })
+    // Stored captures stay when itemId is omitted. Re-sending the stored item
+    // is allowed. A new inventory / assembly / kit item is Inventory configuration.
+    if (!(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
+      const storedIds = new Set(
+        (current.rows[0].normalized.lines ?? [])
+          .map((line) => line.itemId)
+          .filter((itemId): itemId is string => Boolean(itemId)),
+      )
+      for (const line of normalized.lines) {
+        if (!line.itemId || storedIds.has(line.itemId)) continue
+        const item = (await db.execute<{ kind: string }>(sql`
+          select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
+        if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
+          return notFound("record")
+        }
+      }
     }
-    throw error
-  }
-  const { resolved, kind } = saved
-  // Fresh token for the next save: the drawer holds no revision otherwise and
-  // every follow-up keystroke would 409 against its own just-committed write.
-  const fresh = (await db.execute<{ updatedAt: string }>(sql`
-    select ${documentRevisionCounterSql(sql`revision_seq`)} as "updatedAt"
-      from ap_capture_items where org_id = ${gate.user.orgId} and id = ${id}
-  `)).rows[0]?.updatedAt ?? expectedRevision
-  return NextResponse.json({
-    normalized: resolved.normalized,
-    validationIssues: resolved.issues,
-    vendorId: resolved.vendorId,
-    purchaseOrderId: resolved.purchaseOrderId,
-    status: resolved.duplicate ? 'duplicate' : resolved.issues.length ? 'needs_review' : 'ready',
-    documentKind: kind,
-    updatedAt: fresh,
-  })
-}
+    // Stored equipment_charge lines stay. Turning Equipment off must
+    // 404 a write that would persist a new one of those kinds.
+    if (!(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
+      const storedIds = new Set(
+        (current.rows[0].normalized.lines ?? [])
+          .map((line) => line.itemId)
+          .filter((itemId): itemId is string => Boolean(itemId)),
+      )
+      for (const line of normalized.lines) {
+        if (!line.itemId || storedIds.has(line.itemId)) continue
+        const item = (await db.execute<{ kind: string }>(sql`
+          select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
+        if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
+          return notFound("record")
+        }
+      }
+    }
+    if (
+      nextPurchaseOrderId
+      && nextPurchaseOrderId !== current.rows[0].purchase_order_id
+      && !(await isDocKindEnabled(gate.user.orgId, 'purchase_order'))
+    ) {
+      return notFound("record")
+    }
+    const settings = await getDocumentCaptureSettings(gate.user.orgId)
+    let saved: { resolved: Awaited<ReturnType<typeof resolveAndValidateCapture>>; kind: 'vendor_bill' | 'vendor_credit' }
+    try {
+      saved = await withOrgTransaction(gate.user.orgId, async () => {
+        const tx = db
+        const locked = (await tx.execute<{ normalized: NormalizedCapture; status: string; document_kind: string; vendor_candidate_id: string | null; purchase_order_id: string | null; revision: string }>(sql`
+          select ci.normalized, ci.status, ci.document_kind, ci.vendor_candidate_id, ci.purchase_order_id,
+                 ${documentRevisionCounterSql(sql`ci.revision_seq`)} as revision
+            from ap_capture_items ci
+            left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+            left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+           where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
+           ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
+           for update of ci
+        `))
+        const live = locked.rows[0]
+        if (!live) throw new Error('capture_not_found')
+        if (['materialized', 'rejected', 'extracting', 'queued'].includes(live.status)) throw new Error('capture_not_editable')
+        // The row lock above serializes concurrent saves; the token decides the
+        // winner. A tab that read before a sibling's save committed refuses
+        // loudly instead of reverting that save's corrections.
+        if (live.revision !== expectedRevision) throw new Error('capture_revision_conflict')
+        const kind = body.documentKind === undefined ? live.document_kind : body.documentKind
+        if (kind !== 'vendor_bill' && kind !== 'vendor_credit') throw new CapturePatchRefusal('invalid_document_kind')
+        // Resolve against the kind being saved, using the same locked snapshot as
+        // the correction audit. Omission preserves a selected vendor credit.
+        const resolved = await resolveAndValidateCapture({
+          orgId: gate.user.orgId, captureItemId: id, normalized,
+          confidenceThreshold: settings.confidenceThreshold,
+          vendorId: nextVendorId, purchaseOrderId: nextPurchaseOrderId, documentKind: kind,
+      })
+      // Omitted vendorId/purchaseOrderId lets resolveAndValidateCapture pick
+      // org-wide. Lock those target rows before the gate so a concurrent
+      // subsidiary reassignment cannot change the answer under the UPDATE.
+      if (resolved.vendorId) {
+        const vendor = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+          select subsidiary_id as "subsidiaryId" from parties
+           where org_id = ${gate.user.orgId} and id = ${resolved.vendorId}
+           for update
+        `)).rows[0]
+        if (!vendor || guardSubsidiaryScope(gate, vendor.subsidiaryId, { orgWideNull: true })) {
+          throw new Error('capture_not_found')
+        }
+      }
+      if (resolved.purchaseOrderId) {
+        const purchaseOrder = (await tx.execute<{ subsidiaryId: string | null }>(sql`
+          select subsidiary_id as "subsidiaryId" from documents
+           where org_id = ${gate.user.orgId} and id = ${resolved.purchaseOrderId}
+           for update
+        `)).rows[0]
+        if (!purchaseOrder || guardSubsidiaryScope(gate, purchaseOrder.subsidiaryId, { orgWideNull: true })) {
+          throw new Error('capture_not_found')
+        }
+      }
+      const before = live.normalized
+      const headerKeys = ['vendorName', 'vendorTaxId', 'invoiceNumber', 'invoiceDate', 'dueDate', 'purchaseOrderNumber', 'currency', 'subtotal', 'taxTotal', 'total', 'memo'] as const
+      for (const key of headerKeys) {
+        if (JSON.stringify(before[key]) !== JSON.stringify(resolved.normalized[key])) {
+          await tx.execute(sql`
+            insert into ap_capture_corrections (org_id, capture_item_id, field_key, before_value, after_value, corrected_by)
+            values (${gate.user.orgId}, ${id}, ${key}, ${JSON.stringify(before[key])}::jsonb,
+                    ${JSON.stringify(resolved.normalized[key])}::jsonb, ${gate.user.id})
+          `)
+        }
+      }
+      const maxLines = Math.max(before.lines.length, resolved.normalized.lines.length)
+      for (let lineIndex = 0; lineIndex < maxLines; lineIndex += 1) {
+        if (JSON.stringify(before.lines[lineIndex] ?? null) !== JSON.stringify(resolved.normalized.lines[lineIndex] ?? null)) {
+          await tx.execute(sql`
+            insert into ap_capture_corrections (org_id, capture_item_id, field_key, line_index, before_value, after_value, corrected_by)
+            values (${gate.user.orgId}, ${id}, 'line', ${lineIndex},
+                    ${JSON.stringify(before.lines[lineIndex] ?? null)}::jsonb,
+                    ${JSON.stringify(resolved.normalized.lines[lineIndex] ?? null)}::jsonb, ${gate.user.id})
+          `)
+        }
+      }
+      const selections: Array<[string, unknown, unknown]> = [
+        ['documentKind', live.document_kind, kind],
+        ['vendorCandidateId', live.vendor_candidate_id, resolved.vendorId],
+        ['purchaseOrderId', live.purchase_order_id, resolved.purchaseOrderId],
+      ]
+      for (const [fieldKey, beforeValue, afterValue] of selections) {
+        if (JSON.stringify(beforeValue) === JSON.stringify(afterValue)) continue
+        await tx.execute(sql`
+          insert into ap_capture_corrections (org_id, capture_item_id, field_key, before_value, after_value, corrected_by)
+          values (${gate.user.orgId}, ${id}, ${fieldKey}, ${JSON.stringify(beforeValue)}::jsonb,
+                  ${JSON.stringify(afterValue)}::jsonb, ${gate.user.id})
+        `)
+      }
+      const status = resolved.duplicate ? 'duplicate' : resolved.issues.length ? 'needs_review' : 'ready'
+      // Monotonic revision writer (same discipline as document revisions): every
+      // committed save advances the token, so equal tokens always mean equal
+      // content and a stale tab can never accidentally match.
+      const savedRow = (await tx.execute<{ id: string }>(sql`
+        update ap_capture_items set normalized = ${JSON.stringify(resolved.normalized)}::jsonb,
+               validation_issues = ${JSON.stringify(resolved.issues)}::jsonb, status = ${status},
+               document_kind = ${kind}, vendor_candidate_id = ${resolved.vendorId},
+               purchase_order_id = ${resolved.purchaseOrderId}, assigned_to = ${gate.user.id},
+               updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'),
+               updated_by = ${gate.user.id}
+         where org_id = ${gate.user.orgId} and id = ${id}
+           and exists (
+             select 1 from ap_capture_items ci
+             left join parties vendor on vendor.id = ci.vendor_candidate_id and vendor.org_id = ci.org_id
+             left join documents po on po.id = ci.purchase_order_id and po.org_id = ci.org_id
+             where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
+             ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
+           )
+           and ${resolvedAssociationsInScope(gate.user.orgId, gate.allowedSubsidiaryIds, resolved.vendorId, resolved.purchaseOrderId)}
+         returning id
+      `))
+      if (!savedRow.rows[0]) throw new Error('capture_not_found')
+      await tx.execute(sql`
+        insert into ap_capture_events (org_id, capture_item_id, event_kind, detail, actor_id)
+        values (${gate.user.orgId}, ${id}, 'review_saved',
+                ${JSON.stringify({ status, issueCount: resolved.issues.length })}::jsonb, ${gate.user.id})
+      `)
+      return { resolved, kind }
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === 'invalid_document_kind') {
+        return apiErrorResponse(error, { safeStatus: 422 })
+      }
+      if (error instanceof Error && error.message === 'capture_not_found') {
+        return notFound("record")
+      }
+      if (error instanceof Error && error.message === 'capture_not_editable') {
+        return NextResponse.json({ error: 'not_editable' }, { status: 409 })
+      }
+      if (error instanceof Error && error.message === 'capture_revision_conflict') {
+        return NextResponse.json({ error: 'This capture changed after you opened it; reload and reapply your corrections' }, { status: 409 })
+      }
+      throw error
+    }
+    const { resolved, kind } = saved
+    // Fresh token for the next save: the drawer holds no revision otherwise and
+    // every follow-up keystroke would 409 against its own just-committed write.
+    const fresh = (await db.execute<{ updatedAt: string }>(sql`
+      select ${documentRevisionCounterSql(sql`revision_seq`)} as "updatedAt"
+        from ap_capture_items where org_id = ${gate.user.orgId} and id = ${id}
+    `)).rows[0]?.updatedAt ?? expectedRevision
+    return NextResponse.json({
+      normalized: resolved.normalized,
+      validationIssues: resolved.issues,
+      vendorId: resolved.vendorId,
+      purchaseOrderId: resolved.purchaseOrderId,
+      status: resolved.duplicate ? 'duplicate' : resolved.issues.length ? 'needs_review' : 'ready',
+      documentKind: kind,
+      updatedAt: fresh,
+    })
+
+  },
+})

@@ -1,15 +1,14 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { canonicalJson } from "@openbooks/engine/src/platform/canonical-json.ts";
 import { cmp, normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { guardFeaturePermission } from "../../../lib/feature-gates";
 import { isFeatureEnabled } from "../../../lib/features";
 import { isUuid } from "../../../lib/list-params";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
+import { resolveIdempotentReplay } from '../../../lib/api/idempotency'
 
 export const runtime = "nodejs";
 
@@ -32,6 +31,18 @@ const createEquipmentSchema = z.looseObject({
   capacityUnit: z.string().optional().nullable(),
   status: z.string().optional(),
 });
+
+class EquipmentIdempotencyConflict extends Error {
+  readonly status = 409 as const
+  readonly code = 'idempotency_key_conflict' as const
+  readonly remedy = 'Close and reopen the equipment drawer to retry with a fresh request key.'
+
+  constructor(reason: 'changed-payload' | 'foreign-key') {
+    super(reason === 'foreign-key'
+      ? 'This request key is already in use by another organization. Close and reopen the equipment drawer to retry with a fresh request key.'
+      : 'This request key was already saved with different details. Close and reopen the equipment drawer to retry with a fresh request key.')
+  }
+}
 
 function bad(error: string, field?: string, status = 422) {
   return NextResponse.json(
@@ -65,165 +76,164 @@ function wholeDigits(canonical: string): number {
  * still demands a name plus a charge item through PATCH
  * /api/equipment/[id], so lifecycle semantics after creation are unchanged.
  */
-export async function POST(request: Request) {
-  const gate = await guardFeaturePermission("assets.manage", "equipment");
-  if (gate instanceof NextResponse) return gate;
-  const user = gate.user;
+export const POST = defineRoute({
+  permission: "assets.manage",
+  feature: "equipment",
+  body: createEquipmentSchema,
+  handler: async ({ request, authz: gate, body: requestBody }) => {
+    const user = gate.user;
 
-  const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
-  if (!isUuid(requestId)) return bad("invalid_idempotency_key", undefined, 400);
+    const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
+    if (!isUuid(requestId)) return bad("invalid_idempotency_key", undefined, 400);
 
-  const parsedBody = await parseJsonBody(request, createEquipmentSchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
+    const body = requestBody;
 
-  if (body.status !== undefined && body.status !== "draft") {
-    return bad("unsupported_status_transition", "status");
-  }
+    if (body.status !== undefined && body.status !== "draft") {
+      return bad("unsupported_status_transition", "status");
+    }
 
-  const name = body.name?.trim() ?? "";
-  if (!name) return bad("name_required", "name");
+    const name = body.name?.trim() ?? "";
+    if (!name) return bad("name_required", "name");
 
-  const suppliedSubsidiaryId = textOrNull(body.subsidiaryId)?.toLowerCase() ?? null;
-  if (
-    suppliedSubsidiaryId &&
-    (!isUuid(suppliedSubsidiaryId) ||
-      (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(suppliedSubsidiaryId)))
-  ) {
-    return bad("invalid_subsidiary", "subsidiaryId");
-  }
-  const subsidiaries = await db.execute<{ id: string }>(sql`
-    select id from subsidiaries
-     where org_id = ${user.orgId} and is_active and not is_elimination
-       ${gate.allowedSubsidiaryIds ? sql`and id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
-     order by (parent_id is null) desc, name
-  `);
-  const subsidiaryId = suppliedSubsidiaryId
-    ? (subsidiaries.rows.some((row) => String(row.id).toLowerCase() === suppliedSubsidiaryId)
-        ? suppliedSubsidiaryId
-        : null)
-    : (subsidiaries.rows[0] ? String(subsidiaries.rows[0].id) : null);
-  if (suppliedSubsidiaryId && !subsidiaryId) {
-    return bad("invalid_subsidiary", "subsidiaryId");
-  }
-  if (!subsidiaryId) {
-    return NextResponse.json(
-      { error: "no_available_subsidiary", code: "no_available_subsidiary" },
-      { status: 409 },
-    );
-  }
-
-  const chargeItemId = textOrNull(body.chargeItemId)?.toLowerCase() ?? null;
-  if (chargeItemId) {
-    if (!isUuid(chargeItemId)) return bad("charge_item_not_found", "chargeItemId");
-    const item = await db.execute(sql`
-      select 1 from items
-       where id = ${chargeItemId} and org_id = ${user.orgId}
-         and kind = 'equipment_charge' and is_active
+    const suppliedSubsidiaryId = textOrNull(body.subsidiaryId)?.toLowerCase() ?? null;
+    if (
+      suppliedSubsidiaryId &&
+      (!isUuid(suppliedSubsidiaryId) ||
+        (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(suppliedSubsidiaryId)))
+    ) {
+      return bad("invalid_subsidiary", "subsidiaryId");
+    }
+    const subsidiaries = await db.execute<{ id: string }>(sql`
+      select id from subsidiaries
+       where org_id = ${user.orgId} and is_active and not is_elimination
+         ${gate.allowedSubsidiaryIds ? sql`and id = any(${`{${[...gate.allowedSubsidiaryIds].join(",")}}`}::uuid[])` : sql``}
+       order by (parent_id is null) desc, name
     `);
-    if (!item.rows[0]) return bad("charge_item_not_found", "chargeItemId");
-  }
-
-  const fixedAssetId = textOrNull(body.fixedAssetId)?.toLowerCase() ?? null;
-  if (fixedAssetId) {
-    if (!(await isFeatureEnabled(user.orgId, "fixedAssets"))) {
-      return NextResponse.json({ error: "not_found", code: "not_found" }, { status: 404 });
+    const subsidiaryId = suppliedSubsidiaryId
+      ? (subsidiaries.rows.some((row) => String(row.id).toLowerCase() === suppliedSubsidiaryId)
+          ? suppliedSubsidiaryId
+          : null)
+      : (subsidiaries.rows[0] ? String(subsidiaries.rows[0].id) : null);
+    if (suppliedSubsidiaryId && !subsidiaryId) {
+      return bad("invalid_subsidiary", "subsidiaryId");
     }
-    if (!isUuid(fixedAssetId)) return bad("invalid_fixed_asset", "fixedAssetId");
-    const found = await db.execute<{ subsidiary_id: string }>(sql`
-      select subsidiary_id from fixed_assets
-       where id = ${fixedAssetId} and org_id = ${user.orgId}
-    `);
-    if (!found.rows[0]) return bad("fixed_asset_not_found", "fixedAssetId");
-    if (String(found.rows[0].subsidiary_id) !== String(subsidiaryId)) {
-      return bad("subsidiary_mismatch", "fixedAssetId");
+    if (!subsidiaryId) {
+      return NextResponse.json(
+        { error: "no_available_subsidiary", code: "no_available_subsidiary" },
+        { status: 409 },
+      );
     }
-  }
 
-  const rateBookId = textOrNull(body.rateBookId)?.toLowerCase() ?? null;
-  if (rateBookId) {
-    if (!(await isFeatureEnabled(user.orgId, "projects"))) {
-      return NextResponse.json({ error: "not_found", code: "not_found" }, { status: 404 });
+    const chargeItemId = textOrNull(body.chargeItemId)?.toLowerCase() ?? null;
+    if (chargeItemId) {
+      if (!isUuid(chargeItemId)) return bad("charge_item_not_found", "chargeItemId");
+      const item = await db.execute(sql`
+        select 1 from items
+         where id = ${chargeItemId} and org_id = ${user.orgId}
+           and kind = 'equipment_charge' and is_active
+      `);
+      if (!item.rows[0]) return bad("charge_item_not_found", "chargeItemId");
     }
-    if (!isUuid(rateBookId)) return bad("invalid_rate_book", "rateBookId");
-    const found = await db.execute(sql`
-      select 1 from item_rate_books
-       where id = ${rateBookId} and org_id = ${user.orgId} and is_active
-    `);
-    if (!found.rows[0]) return bad("rate_book_not_found", "rateBookId");
-  }
 
-  const priceRaw = body.purchasePrice ?? "0";
-  const priceExact =
-    priceRaw === null || priceRaw === "" ? "0.0000" : canonicalDecimal(priceRaw, 4);
-  if (priceExact === null || wholeDigits(priceExact) > 15) {
-    return bad("purchase_price_invalid", "purchasePrice");
-  }
-  let purchasePrice = priceExact;
-  try {
-    purchasePrice = normalizeMoney(priceExact);
-  } catch {
-    return bad("purchase_price_invalid", "purchasePrice");
-  }
-  if (cmp(purchasePrice, "0") < 0) return bad("purchase_price_negative", "purchasePrice");
-
-  const acquiredOn = textOrNull(body.acquiredOn);
-  if (acquiredOn !== null && !isIsoCalendarDate(acquiredOn)) {
-    return bad("acquired_on_invalid", "acquiredOn");
-  }
-  const inServiceOn = textOrNull(body.inServiceOn);
-  if (inServiceOn !== null && !isIsoCalendarDate(inServiceOn)) {
-    return bad("in_service_on_invalid", "inServiceOn");
-  }
-  if (acquiredOn && inServiceOn && inServiceOn < acquiredOn) {
-    return bad("in_service_before_acquisition", "inServiceOn");
-  }
-
-  const capacityInput = textOrNull(body.capacityQuantity);
-  let capacityQuantity: string | null = null;
-  if (capacityInput !== null) {
-    const capacityRaw = canonicalDecimal(capacityInput, 4);
-    if (capacityRaw === null || wholeDigits(capacityRaw) > 15) {
-      return bad("capacity_invalid", "capacityQuantity");
+    const fixedAssetId = textOrNull(body.fixedAssetId)?.toLowerCase() ?? null;
+    if (fixedAssetId) {
+      if (!(await isFeatureEnabled(user.orgId, "fixedAssets"))) {
+        return NextResponse.json({ error: "not_found", code: "not_found" }, { status: 404 });
+      }
+      if (!isUuid(fixedAssetId)) return bad("invalid_fixed_asset", "fixedAssetId");
+      const found = await db.execute<{ subsidiary_id: string }>(sql`
+        select subsidiary_id from fixed_assets
+         where id = ${fixedAssetId} and org_id = ${user.orgId}
+      `);
+      if (!found.rows[0]) return bad("fixed_asset_not_found", "fixedAssetId");
+      if (String(found.rows[0].subsidiary_id) !== String(subsidiaryId)) {
+        return bad("subsidiary_mismatch", "fixedAssetId");
+      }
     }
+
+    const rateBookId = textOrNull(body.rateBookId)?.toLowerCase() ?? null;
+    if (rateBookId) {
+      if (!(await isFeatureEnabled(user.orgId, "projects"))) {
+        return NextResponse.json({ error: "not_found", code: "not_found" }, { status: 404 });
+      }
+      if (!isUuid(rateBookId)) return bad("invalid_rate_book", "rateBookId");
+      const found = await db.execute(sql`
+        select 1 from item_rate_books
+         where id = ${rateBookId} and org_id = ${user.orgId} and is_active
+      `);
+      if (!found.rows[0]) return bad("rate_book_not_found", "rateBookId");
+    }
+
+    const priceRaw = body.purchasePrice ?? "0";
+    const priceExact =
+      priceRaw === null || priceRaw === "" ? "0.0000" : canonicalDecimal(priceRaw, 4);
+    if (priceExact === null || wholeDigits(priceExact) > 15) {
+      return bad("purchase_price_invalid", "purchasePrice");
+    }
+    let purchasePrice = priceExact;
     try {
-      capacityQuantity = normalizeMoney(capacityRaw);
+      purchasePrice = normalizeMoney(priceExact);
     } catch {
-      return bad("capacity_invalid", "capacityQuantity");
+      return bad("purchase_price_invalid", "purchasePrice");
     }
-    if (cmp(capacityQuantity, "0") <= 0) return bad("capacity_not_positive", "capacityQuantity");
-  }
+    if (cmp(purchasePrice, "0") < 0) return bad("purchase_price_negative", "purchasePrice");
 
-  const description = textOrNull(body.description);
-  const serialNumber = textOrNull(body.serialNumber);
-  const capacityUnit = textOrNull(body.capacityUnit);
-  const suppliedNumber = textOrNull(body.unitNumber);
+    const acquiredOn = textOrNull(body.acquiredOn);
+    if (acquiredOn !== null && !isIsoCalendarDate(acquiredOn)) {
+      return bad("acquired_on_invalid", "acquiredOn");
+    }
+    const inServiceOn = textOrNull(body.inServiceOn);
+    if (inServiceOn !== null && !isIsoCalendarDate(inServiceOn)) {
+      return bad("in_service_on_invalid", "inServiceOn");
+    }
+    if (acquiredOn && inServiceOn && inServiceOn < acquiredOn) {
+      return bad("in_service_before_acquisition", "inServiceOn");
+    }
 
-  // The idempotency snapshot pins the request, not the allocator: an
-  // auto-assigned EQ-#### is recomputed per attempt, so a legitimate retry
-  // after an allocator race still matches. A supplied number IS the request.
-  const snapshot = {
-    id: requestId,
-    org_id: user.orgId,
-    subsidiary_id: subsidiaryId,
-    unit_number: suppliedNumber,
-    name,
-    description,
-    charge_item_id: chargeItemId,
-    fixed_asset_id: fixedAssetId,
-    rate_book_id: rateBookId,
-    purchase_price: purchasePrice,
-    acquired_on: acquiredOn,
-    in_service_on: inServiceOn,
-    serial_number: serialNumber,
-    capacity_quantity: capacityQuantity,
-    capacity_unit: capacityUnit,
-    status: "draft",
-  };
+    const capacityInput = textOrNull(body.capacityQuantity);
+    let capacityQuantity: string | null = null;
+    if (capacityInput !== null) {
+      const capacityRaw = canonicalDecimal(capacityInput, 4);
+      if (capacityRaw === null || wholeDigits(capacityRaw) > 15) {
+        return bad("capacity_invalid", "capacityQuantity");
+      }
+      try {
+        capacityQuantity = normalizeMoney(capacityRaw);
+      } catch {
+        return bad("capacity_invalid", "capacityQuantity");
+      }
+      if (cmp(capacityQuantity, "0") <= 0) return bad("capacity_not_positive", "capacityQuantity");
+    }
 
-  let createdId: string | null = null;
-  let replayed = false;
-  try {
+    const description = textOrNull(body.description);
+    const serialNumber = textOrNull(body.serialNumber);
+    const capacityUnit = textOrNull(body.capacityUnit);
+    const suppliedNumber = textOrNull(body.unitNumber);
+
+    // The idempotency snapshot pins the request, not the allocator: an
+    // auto-assigned EQ-#### is recomputed per attempt, so a legitimate retry
+    // after an allocator race still matches. A supplied number IS the request.
+    const snapshot = {
+      id: requestId,
+      org_id: user.orgId,
+      subsidiary_id: subsidiaryId,
+      unit_number: suppliedNumber,
+      name,
+      description,
+      charge_item_id: chargeItemId,
+      fixed_asset_id: fixedAssetId,
+      rate_book_id: rateBookId,
+      purchase_price: purchasePrice,
+      acquired_on: acquiredOn,
+      in_service_on: inServiceOn,
+      serial_number: serialNumber,
+      capacity_quantity: capacityQuantity,
+      capacity_unit: capacityUnit,
+      status: "draft",
+    };
+
+    let createdId: string | null = null;
+    let replayed = false;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const outcome = await db.transaction(async (tx) => {
@@ -257,22 +267,14 @@ export async function POST(request: Request) {
               select id from equipment_units
                where id = ${requestId} and org_id = ${user.orgId}
             `);
-            if (!prior.rows[0]) throw new Error("idempotency_key_conflict");
-            const original = (
-              await tx.execute<{ after: unknown }>(sql`
-                select changes->'after' as after
-                  from audit_log
-                 where org_id = ${user.orgId}
-                   and table_name = 'equipment_units'
-                   and row_id = ${requestId}
-                   and action = 'insert'
-                   and request_id = ${requestId}
-                 order by at asc
-                 limit 1
-              `)
-            ).rows[0]?.after;
-            if (!original || canonicalJson(original) !== canonicalJson(snapshot)) {
-              throw new Error("idempotency_key_conflict");
+            const replay = await resolveIdempotentReplay(tx, {
+              orgId: user.orgId,
+              table: 'equipment_units',
+              key: requestId,
+              match: snapshot,
+            })
+            if (replay === 'conflict') {
+              throw new EquipmentIdempotencyConflict(prior.rows[0] ? 'changed-payload' : 'foreign-key')
             }
             return { id: requestId, replayed: true };
           }
@@ -290,8 +292,8 @@ export async function POST(request: Request) {
         replayed = outcome.replayed;
         break;
       } catch (error) {
+        if (error instanceof EquipmentIdempotencyConflict) throw error;
         const message = error instanceof Error ? error.message : String(error);
-        if (message.includes("idempotency_key_conflict")) throw error;
         const numberConflict = message.includes("equipment_units_org_number");
         if (!numberConflict) throw error;
         // A supplied number names its remedy; an auto number recomputes
@@ -300,14 +302,10 @@ export async function POST(request: Request) {
         if (attempt >= 2) return bad("unit_number_in_use", "unitNumber");
       }
     }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (message.includes("idempotency_key_conflict")) {
-      return bad("invalid_idempotency_key", undefined, 409);
-    }
-    throw error;
-  }
 
-  if (!createdId) return bad("save_failed", undefined, 500);
-  return NextResponse.json({ id: createdId }, { status: replayed ? 200 : 201 });
-}
+
+    if (!createdId) return bad("save_failed", undefined, 500);
+    return NextResponse.json({ id: createdId }, { status: replayed ? 200 : 201 });
+
+  },
+})

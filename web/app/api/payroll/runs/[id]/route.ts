@@ -1,6 +1,8 @@
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { lockAndCheckPayrollRunPopulation } from "@openbooks/engine/src/payroll/scope.ts";
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -28,6 +30,18 @@ import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { decimalNullRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.looseObject({
+  "action": z.unknown().optional(),
+  "adjustmentId": z.unknown().optional(),
+  "bankAccountId": z.unknown().optional(),
+  "employeePartyId": z.unknown().optional(),
+  "employeePartyIds": z.unknown().optional(),
+  "holidayEligibility": z.unknown().optional(),
+  "rosterPartyIds": z.unknown().optional(),
+  "subsidiaryId": z.unknown().optional(),
+})
+
 
 
 export const dynamic = 'force-dynamic'
@@ -103,573 +117,583 @@ function parseHolidayEligibility(
  *         is outstanding; posting is already gated by the document lifecycle.
  */
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('payroll.read', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const orgId = gate.user.orgId
+export const GET = defineRoute({
+  permission: 'payroll.read',
+  feature: 'payroll',
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    const orgId = gate.user.orgId
 
-  return db.transaction(async (tx) => {
-    const runs = (await tx.execute<Record<string, unknown>>(sql`
-      select r.document_id, d.document_number, d.status as document_status, d.currency,
-             d.subsidiary_id as "subsidiaryId",
-             r.pay_schedule_id, s.name as schedule_name,
-             r.period_start::text as period_start, r.period_end::text as period_end,
-             r.pay_date::text as pay_date, r.tax_year, r.run_status,
-             r.gross_total, r.net_total, r.employer_cost_total, r.employee_count,
-             r.calculation_errors, r.refusal_acknowledgement
+    return db.transaction(async (tx) => {
+      const runs = (await tx.execute<Record<string, unknown>>(sql`
+        select r.document_id, d.document_number, d.status as document_status, d.currency,
+               d.subsidiary_id as "subsidiaryId",
+               r.pay_schedule_id, s.name as schedule_name,
+               r.period_start::text as period_start, r.period_end::text as period_end,
+               r.pay_date::text as pay_date, r.tax_year, r.run_status,
+               r.gross_total, r.net_total, r.employer_cost_total, r.employee_count,
+               r.calculation_errors, r.refusal_acknowledgement
+          from pay_runs r
+          join documents d on d.id = r.document_id and d.org_id = r.org_id
+          left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
+         where r.org_id = ${orgId} and r.document_id = ${id}
+           for share of r,d`))
+      const run = runs.rows[0]
+      if (!run) return notFound("record")
+      const denied = guardSubsidiaryScope(gate, run.subsidiaryId as string | null | undefined)
+      if (denied) return denied
+
+      try {
+        await lockAndCheckPayrollRunPopulation(tx, orgId, id, gate.allowedSubsidiaryIds)
+      } catch (error) {
+        if (error instanceof PayrollError) return notFound("record")
+        throw error
+      }
+
+      // Sequential reads: this transaction holds one pg client, so reading
+      // both result sets at once queues concurrent queries on it.
+      const stubs = await tx.execute<Record<string, unknown>>(sql`
+          select st.id, st.employee_party_id, p.display_name as employee_name, st.province,
+                 st.gross, st.pensionable_earnings, st.insurable_earnings, st.net_pay,
+                 st.employer_cost, st.vacation_accrued, st.federal_claim, st.provincial_claim,
+                 st.factors
+            from pay_stubs st
+            join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
+           where st.org_id = ${orgId} and st.pay_run_document_id = ${id}
+           order by p.display_name`)
+      const lines = await tx.execute<Record<string, unknown>>(sql`
+          select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence,
+                 c.code as component_code, pr.name as project_name, dep.name as department_name
+            from pay_stub_lines l
+            join pay_stubs st on st.id = l.stub_id and st.org_id = l.org_id
+            left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+            left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
+            left join departments dep on dep.id = l.department_id and dep.org_id = l.org_id
+           where l.org_id = ${orgId} and st.pay_run_document_id = ${id}
+           order by l.stub_id, l.sequence`)
+
+      const linesByStub = new Map<string, Record<string, unknown>[]>()
+      for (const line of lines.rows) {
+        const stubId = String(line.stub_id)
+        const list = linesByStub.get(stubId)
+        if (list) list.push(line)
+        else linesByStub.set(stubId, [line])
+      }
+      const adjustments = await tx.execute<Record<string, unknown>>(sql`
+          select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount, a.hours,
+                 a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
+            from pay_run_adjustments a
+            join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
+            left join pay_components c on c.id = a.component_id and c.org_id = a.org_id
+           where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
+           order by p.display_name, a.created_at`)
+      const adjustableComponents = await tx.execute<Record<string, unknown>>(sql`
+          select id, code, name, kind from pay_components
+           where org_id = ${orgId} and is_active
+             and (system_key is null or system_key in ('base_pay','overtime','allowance','bonus','vacation_payout'))
+           order by sequence, code`)
+
+      return NextResponse.json({
+        run,
+        stubs: stubs.rows.map((stub) => ({ ...stub, lines: linesByStub.get(String(stub.id)) ?? [] })),
+        adjustments: adjustments.rows,
+        adjustableComponents: adjustableComponents.rows,
+      })
+    })
+
+  },
+})
+
+export const POST = defineRoute({
+  permission: 'payroll.run',
+  feature: 'payroll',
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: req, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    // Resolve and gate the owning document before parsing or dispatching any
+    // action. Every mutation below eventually reaches a shared engine service;
+    // keeping this check ahead of that dispatch prevents an out-of-scope run
+    // from being calculated, edited, approved, committed, or paid by id.
+    const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select d.subsidiary_id as "subsidiaryId"
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
-        left join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
-       where r.org_id = ${orgId} and r.document_id = ${id}
-         for share of r,d`))
-    const run = runs.rows[0]
-    if (!run) return notFound("record")
-    const denied = guardSubsidiaryScope(gate, run.subsidiaryId as string | null | undefined)
+       where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
+    if (!owned) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
     if (denied) return denied
-
+    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data
+    // Employer attestations for statutory-holiday rules that read them (the
+    // last-and-first-shift absence assertion, commission-pay status). The
+    // engine fails closed when a declaring rule's fact is missing, and neither
+    // the wizard nor this route could supply it — so any run spanning a paid
+    // holiday in a declaring jurisdiction was incalculable. Keys are employee
+    // ids; unknown ids are refused rather than silently unattested.
+    const parsedEligibility = parseHolidayEligibility(body.holidayEligibility)
+    if (!parsedEligibility.ok) {
+      return NextResponse.json({ error: parsedEligibility.refusal }, { status: 422 })
+    }
+    const holidayEligibility = parsedEligibility.map
     try {
-      await lockAndCheckPayrollRunPopulation(tx, orgId, id, gate.allowedSubsidiaryIds)
-    } catch (error) {
-      if (error instanceof PayrollError) return notFound("record")
-      throw error
-    }
-
-    // Sequential reads: this transaction holds one pg client, so reading
-    // both result sets at once queues concurrent queries on it.
-    const stubs = await tx.execute<Record<string, unknown>>(sql`
-        select st.id, st.employee_party_id, p.display_name as employee_name, st.province,
-               st.gross, st.pensionable_earnings, st.insurable_earnings, st.net_pay,
-               st.employer_cost, st.vacation_accrued, st.federal_claim, st.provincial_claim,
-               st.factors
-          from pay_stubs st
-          join parties p on p.id = st.employee_party_id and p.org_id = st.org_id
-         where st.org_id = ${orgId} and st.pay_run_document_id = ${id}
-         order by p.display_name`)
-    const lines = await tx.execute<Record<string, unknown>>(sql`
-        select l.stub_id, l.kind, l.description, l.hours, l.rate, l.amount, l.sequence,
-               c.code as component_code, pr.name as project_name, dep.name as department_name
-          from pay_stub_lines l
-          join pay_stubs st on st.id = l.stub_id and st.org_id = l.org_id
-          left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
-          left join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
-          left join departments dep on dep.id = l.department_id and dep.org_id = l.org_id
-         where l.org_id = ${orgId} and st.pay_run_document_id = ${id}
-         order by l.stub_id, l.sequence`)
-
-    const linesByStub = new Map<string, Record<string, unknown>[]>()
-    for (const line of lines.rows) {
-      const stubId = String(line.stub_id)
-      const list = linesByStub.get(stubId)
-      if (list) list.push(line)
-      else linesByStub.set(stubId, [line])
-    }
-    const adjustments = await tx.execute<Record<string, unknown>>(sql`
-        select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount, a.hours,
-               a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
-          from pay_run_adjustments a
-          join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
-          left join pay_components c on c.id = a.component_id and c.org_id = a.org_id
-         where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
-         order by p.display_name, a.created_at`)
-    const adjustableComponents = await tx.execute<Record<string, unknown>>(sql`
-        select id, code, name, kind from pay_components
-         where org_id = ${orgId} and is_active
-           and (system_key is null or system_key in ('base_pay','overtime','allowance','bonus','vacation_payout'))
-         order by sequence, code`)
-
-    return NextResponse.json({
-      run,
-      stubs: stubs.rows.map((stub) => ({ ...stub, lines: linesByStub.get(String(stub.id)) ?? [] })),
-      adjustments: adjustments.rows,
-      adjustableComponents: adjustableComponents.rows,
-    })
-  })
-}
-
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('payroll.run', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  // Resolve and gate the owning document before parsing or dispatching any
-  // action. Every mutation below eventually reaches a shared engine service;
-  // keeping this check ahead of that dispatch prevents an out-of-scope run
-  // from being calculated, edited, approved, committed, or paid by id.
-  const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select d.subsidiary_id as "subsidiaryId"
-      from pay_runs r
-      join documents d on d.id = r.document_id and d.org_id = r.org_id
-     where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
-  if (!owned) return notFound("record")
-  const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
-  if (denied) return denied
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data
-  // Employer attestations for statutory-holiday rules that read them (the
-  // last-and-first-shift absence assertion, commission-pay status). The
-  // engine fails closed when a declaring rule's fact is missing, and neither
-  // the wizard nor this route could supply it — so any run spanning a paid
-  // holiday in a declaring jurisdiction was incalculable. Keys are employee
-  // ids; unknown ids are refused rather than silently unattested.
-  const parsedEligibility = parseHolidayEligibility(body.holidayEligibility)
-  if (!parsedEligibility.ok) {
-    return NextResponse.json({ error: parsedEligibility.refusal }, { status: 422 })
-  }
-  const holidayEligibility = parsedEligibility.map
-  try {
-    if (body.action === 'calculate' || body.action === 'dry-run') {
-      // Stored attestation facts merge UNDER the per-request map: what the
-      // operator filed on the run (absence assertions) and on the employee
-      // (commission status) fills what this request omits. The request wins
-      // everywhere it answers, and an answer missing from both stays missing
-      // — the engine fails closed on it by name.
-      const mergedEligibility = await storedHolidayEligibilityForRun(db, {
-        orgId: gate.user.orgId, documentId: id,
-        perRequest: holidayEligibility,
-      })
-      const result = await calculatePayRun({
-        orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
-        dryRun: body.action === 'dry-run',
-        holidayEligibility: mergedEligibility,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      })
-      return NextResponse.json({ ok: true, ...result })
-    }
-    // Apply one component amount across many employees in one pass — the
-    // review step's bulk edit. Each employee still gets its own audited
-    // adjustment row through the same helper as a single edit, and the whole
-    // batch shares one transaction: a mid-loop failure rolls back every
-    // adjustment instead of committing a partial set.
-    if (body.action === 'bulk-adjustment') {
-      const { componentId, amount, note, replaceComponent } = body
-      // Every malformed shape refuses by name. One collapsed 'invalid
-      // adjustment' over nine predicates meant a single bad id among two
-      // thousand employees was undiagnosable — the refusal below names the
-      // offending value AND its index. Same accept/refuse sets, split causes.
-      if (typeof componentId !== 'string') {
-        return NextResponse.json({ error: `componentId must be a pay component id — got "${suppliedValue(componentId)}"; choose one from this run's adjustableComponents` }, { status: 422 })
+      if (body.action === 'calculate' || body.action === 'dry-run') {
+        // Stored attestation facts merge UNDER the per-request map: what the
+        // operator filed on the run (absence assertions) and on the employee
+        // (commission status) fills what this request omits. The request wins
+        // everywhere it answers, and an answer missing from both stays missing
+        // — the engine fails closed on it by name.
+        const mergedEligibility = await storedHolidayEligibilityForRun(db, {
+          orgId: gate.user.orgId, documentId: id,
+          perRequest: holidayEligibility,
+        })
+        const result = await calculatePayRun({
+          orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
+          dryRun: body.action === 'dry-run',
+          holidayEligibility: mergedEligibility,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        })
+        return NextResponse.json({ ok: true, ...result })
       }
-      if (!isUuid(componentId)) {
-        return NextResponse.json({ error: `componentId "${componentId}" is not a pay component id — choose one from this run's adjustableComponents` }, { status: 422 })
-      }
-      if (!Array.isArray(body.employeePartyIds)) {
-        return NextResponse.json({ error: `employeePartyIds must be a list of employee ids — got "${suppliedValue(body.employeePartyIds)}"; pass the employees to adjust as a list` }, { status: 422 })
-      }
-      const employees = body.employeePartyIds
-      if (employees.length === 0) {
-        return NextResponse.json({ error: 'bulk-adjustment needs at least one employee — employeePartyIds is empty; pass the employees to adjust as a list' }, { status: 422 })
-      }
-      if (employees.length > 2000) {
-        return NextResponse.json({ error: `bulk-adjustment accepts at most 2000 employees at once — got ${employees.length}; split the batch and try again` }, { status: 422 })
-      }
-      const badIndex = employees.findIndex((v: unknown) => typeof v !== 'string' || !isUuid(v))
-      if (badIndex !== -1) {
-        return NextResponse.json({ error: `employeePartyIds[${badIndex}] "${suppliedValue(employees[badIndex])}" is not an employee id — fix that entry and try again` }, { status: 422 })
-      }
-      const amountRaw = canonicalDecimal(amount, 4)
-      if (amountRaw === null) {
-        return NextResponse.json({ error: decimalNullRefusal('amount', 'an amount', amount, 4) }, { status: 422 })
-      }
-      if (note != null && typeof note !== 'string') {
-        return NextResponse.json({ error: `note must be text — got "${suppliedValue(note)}"; pass the note as text or omit it` }, { status: 422 })
-      }
-      if (typeof note === 'string' && note.length > 500) {
-        return NextResponse.json({ error: `note is limited to 500 characters — got ${note.length}; shorten it and try again` }, { status: 422 })
-      }
-      if (replaceComponent != null && typeof replaceComponent !== 'boolean') {
-        return NextResponse.json({ error: `replaceComponent must be true or false — got "${suppliedValue(replaceComponent)}"; pass a boolean or omit it` }, { status: 422 })
-      }
-      // A replayed batch (double-clicked Apply, retried request) addresses
-      // the same rows: each row id derives deterministically from the batch
-      // key, so the engine replays instead of inserting twice. Same contract
-      // as document creates — the key becomes the row id.
-      const bulkKey = req.headers.get('Idempotency-Key')?.trim() ?? ''
-      if (bulkKey !== '' && !isUuid(bulkKey)) {
-        return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
-      }
-      const canonicalAmount = normalizeMoney(amountRaw)
-      const requestIds = bulkKey === ''
-        ? null
-        : (employees as string[]).map((employeePartyId) => payRunBulkAdjustmentId(bulkKey, employeePartyId))
-      if (requestIds) {
-        // Batch-level replay gate: a committed batch is all-or-nothing, so a
-        // partial match means the key was reused for a different batch —
-        // refuse rather than top it up.
-        const existing = (await db.execute<{
-          id: string; employee_party_id: string; component_id: string | null;
-          amount: string | null; hours: string | null; replace_component: boolean; note: string | null;
-        }>(sql`
-          select id::text as id, employee_party_id::text as employee_party_id,
-                 component_id::text as component_id, amount::text as amount,
-                 hours::text as hours, replace_component, note
-            from pay_run_adjustments
-           where org_id = ${gate.user.orgId} and pay_run_document_id = ${id}
-             and adjustment_type = 'line'
-             and id = any(${`{${requestIds.join(',')}}`}::uuid[])
-        `)).rows
-        if (existing.length > 0) {
-          const byId = new Map(existing.map((row) => [row.id, row]))
-          const replay = existing.length === requestIds.length
-            && (employees as string[]).every((employeePartyId, index) => {
-              const row = byId.get(requestIds[index]!)
-              return row !== undefined
-                && row.employee_party_id === employeePartyId
-                && row.component_id === componentId
-                && normalizeMoney(row.amount ?? '0') === canonicalAmount
-                && row.hours == null
-                && row.replace_component === (replaceComponent ?? false)
-                && (row.note ?? null) === (note ?? null)
-            })
-          if (!replay) return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
-          return NextResponse.json({ ok: true, applied: employees.length })
+      // Apply one component amount across many employees in one pass — the
+      // review step's bulk edit. Each employee still gets its own audited
+      // adjustment row through the same helper as a single edit, and the whole
+      // batch shares one transaction: a mid-loop failure rolls back every
+      // adjustment instead of committing a partial set.
+      if (body.action === 'bulk-adjustment') {
+        const { componentId, amount, note, replaceComponent } = body
+        // Every malformed shape refuses by name. One collapsed 'invalid
+        // adjustment' over nine predicates meant a single bad id among two
+        // thousand employees was undiagnosable — the refusal below names the
+        // offending value AND its index. Same accept/refuse sets, split causes.
+        if (typeof componentId !== 'string') {
+          return NextResponse.json({ error: `componentId must be a pay component id — got "${suppliedValue(componentId)}"; choose one from this run's adjustableComponents` }, { status: 422 })
         }
+        if (!isUuid(componentId)) {
+          return NextResponse.json({ error: `componentId "${componentId}" is not a pay component id — choose one from this run's adjustableComponents` }, { status: 422 })
+        }
+        if (!Array.isArray(body.employeePartyIds)) {
+          return NextResponse.json({ error: `employeePartyIds must be a list of employee ids — got "${suppliedValue(body.employeePartyIds)}"; pass the employees to adjust as a list` }, { status: 422 })
+        }
+        const employees = body.employeePartyIds
+        if (employees.length === 0) {
+          return NextResponse.json({ error: 'bulk-adjustment needs at least one employee — employeePartyIds is empty; pass the employees to adjust as a list' }, { status: 422 })
+        }
+        if (employees.length > 2000) {
+          return NextResponse.json({ error: `bulk-adjustment accepts at most 2000 employees at once — got ${employees.length}; split the batch and try again` }, { status: 422 })
+        }
+        const badIndex = employees.findIndex((v: unknown) => typeof v !== 'string' || !isUuid(v))
+        if (badIndex !== -1) {
+          return NextResponse.json({ error: `employeePartyIds[${badIndex}] "${suppliedValue(employees[badIndex])}" is not an employee id — fix that entry and try again` }, { status: 422 })
+        }
+        const amountRaw = canonicalDecimal(amount, 4)
+        if (amountRaw === null) {
+          return NextResponse.json({ error: decimalNullRefusal('amount', 'an amount', amount, 4) }, { status: 422 })
+        }
+        if (note != null && typeof note !== 'string') {
+          return NextResponse.json({ error: `note must be text — got "${suppliedValue(note)}"; pass the note as text or omit it` }, { status: 422 })
+        }
+        if (typeof note === 'string' && note.length > 500) {
+          return NextResponse.json({ error: `note is limited to 500 characters — got ${note.length}; shorten it and try again` }, { status: 422 })
+        }
+        if (replaceComponent != null && typeof replaceComponent !== 'boolean') {
+          return NextResponse.json({ error: `replaceComponent must be true or false — got "${suppliedValue(replaceComponent)}"; pass a boolean or omit it` }, { status: 422 })
+        }
+        // A replayed batch (double-clicked Apply, retried request) addresses
+        // the same rows: each row id derives deterministically from the batch
+        // key, so the engine replays instead of inserting twice. Same contract
+        // as document creates — the key becomes the row id.
+        const bulkKey = req.headers.get('Idempotency-Key')?.trim() ?? ''
+        if (bulkKey !== '' && !isUuid(bulkKey)) {
+          return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
+        }
+        const canonicalAmount = normalizeMoney(amountRaw)
+        const requestIds = bulkKey === ''
+          ? null
+          : (employees as string[]).map((employeePartyId) => payRunBulkAdjustmentId(bulkKey, employeePartyId))
+        if (requestIds) {
+          // Batch-level replay gate: a committed batch is all-or-nothing, so a
+          // partial match means the key was reused for a different batch —
+          // refuse rather than top it up.
+          const existing = (await db.execute<{
+            id: string; employee_party_id: string; component_id: string | null;
+            amount: string | null; hours: string | null; replace_component: boolean; note: string | null;
+          }>(sql`
+            select id::text as id, employee_party_id::text as employee_party_id,
+                   component_id::text as component_id, amount::text as amount,
+                   hours::text as hours, replace_component, note
+              from pay_run_adjustments
+             where org_id = ${gate.user.orgId} and pay_run_document_id = ${id}
+               and adjustment_type = 'line'
+               and id = any(${`{${requestIds.join(',')}}`}::uuid[])
+          `)).rows
+          if (existing.length > 0) {
+            const byId = new Map(existing.map((row) => [row.id, row]))
+            const replay = existing.length === requestIds.length
+              && (employees as string[]).every((employeePartyId, index) => {
+                const row = byId.get(requestIds[index]!)
+                return row !== undefined
+                  && row.employee_party_id === employeePartyId
+                  && row.component_id === componentId
+                  && normalizeMoney(row.amount ?? '0') === canonicalAmount
+                  && row.hours == null
+                  && row.replace_component === (replaceComponent ?? false)
+                  && (row.note ?? null) === (note ?? null)
+              })
+            if (!replay) return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+            return NextResponse.json({ ok: true, applied: employees.length })
+          }
+        }
+        try {
+          await withOrgTransaction(gate.user.orgId, async () => {
+            for (const [index, employeePartyId] of (employees as string[]).entries()) {
+              await mutatePayRunAdjustment({
+                orgId: gate.user.orgId,
+                documentId: id,
+                actorId: gate.user.id,
+                allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+                mutation: {
+                  action: 'add', employeePartyId, componentId, amount: canonicalAmount,
+                  replaceComponent: replaceComponent ?? undefined, note,
+                  ...(requestIds ? { idempotencyKey: requestIds[index]! } : {}),
+                },
+              })
+            }
+          })
+        } catch (e) {
+          if (e instanceof PayRunAdjustmentIdempotencyConflict) {
+            return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+          }
+          throw e
+        }
+        return NextResponse.json({ ok: true, applied: employees.length })
       }
-      try {
+      if (body.action === 'preview-gl') {
+        // Read-only: the exact legs commit would write, for the wizard's review
+        // step. payroll.read suffices conceptually, but the wizard drives it and
+        // the route is already gated payroll.run.
+        const result = await previewPayRunGl(gate.user.orgId, id, gate.allowedSubsidiaryIds)
+        return NextResponse.json({ ok: true, ...result })
+      }
+      if (body.action === 'add-adjustment') {
+        const { employeePartyId, componentId, amount, hours, note, replaceComponent } = body
+        const amountRaw = canonicalDecimal(amount, 4)
+        // Hours persist into numeric(12,2): canonicalize at that scale, never
+        // through the 4dp money normalizer (its padding fails the engine gate
+        // for every hours value). The engine re-validates before persisting.
+        // Every malformed shape refuses by name below — same accept/refuse set
+        // as the old collapsed 'invalid
+        // adjustment', split causes.
+        let hoursRaw: string | null = null
+        if (hours != null && hours !== '') {
+          hoursRaw = canonicalAdjustmentHours(hours)
+          if (hoursRaw === null) {
+            const hoursExact = canonicalDecimal(hours, 2)
+            if (hoursExact !== null && hoursExact.startsWith('-')) {
+              return NextResponse.json({ error: `hours must not be negative — got "${suppliedValue(hours)}"; pass zero or more hours, or omit hours` }, { status: 422 })
+            }
+            if (hoursExact !== null && hoursExact.replace(/^[+]/, '').split('.')[0]!.replace(/^0+/, '').length > 10) {
+              return NextResponse.json({ error: `hours is out of range — at most 10 whole digits fit; got "${suppliedValue(hours)}"; enter fewer hours and try again` }, { status: 422 })
+            }
+            return NextResponse.json({ error: decimalNullRefusal('hours', 'a number of hours', hours, 2) }, { status: 422 })
+          }
+        }
+        if (typeof employeePartyId !== 'string') {
+          return NextResponse.json({ error: `employeePartyId must be an employee id — got "${suppliedValue(employeePartyId)}"; pass the employee as an employee id` }, { status: 422 })
+        }
+        if (!isUuid(employeePartyId)) {
+          return NextResponse.json({ error: `employeePartyId "${employeePartyId}" is not an employee id — fix the id and try again` }, { status: 422 })
+        }
+        if (typeof componentId !== 'string') {
+          return NextResponse.json({ error: `componentId must be a pay component id — got "${suppliedValue(componentId)}"; choose one from this run's adjustableComponents` }, { status: 422 })
+        }
+        if (!isUuid(componentId)) {
+          return NextResponse.json({ error: `componentId "${componentId}" is not a pay component id — choose one from this run's adjustableComponents` }, { status: 422 })
+        }
+        if (amountRaw === null) {
+          return NextResponse.json({ error: decimalNullRefusal('amount', 'an amount', amount, 4) }, { status: 422 })
+        }
+        if (note != null && typeof note !== 'string') {
+          return NextResponse.json({ error: `note must be text — got "${suppliedValue(note)}"; pass the note as text or omit it` }, { status: 422 })
+        }
+        if (typeof note === 'string' && note.length > 500) {
+          return NextResponse.json({ error: `note is limited to 500 characters — got ${note.length}; shorten it and try again` }, { status: 422 })
+        }
+        if (replaceComponent != null && typeof replaceComponent !== 'boolean') {
+          return NextResponse.json({ error: `replaceComponent must be true or false — got "${suppliedValue(replaceComponent)}"; pass a boolean or omit it` }, { status: 422 })
+        }
+        // A replayed add (double-clicked Save, retried request) carries the
+        // form session's key, which becomes the adjustment row id — the same
+        // contract as document creates — so the replay returns the original
+        // result instead of a second adjustment.
+        const adjustmentKey = req.headers.get('Idempotency-Key')?.trim() ?? ''
+        if (adjustmentKey !== '' && !isUuid(adjustmentKey)) {
+          return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
+        }
+        try {
+          await mutatePayRunAdjustment({
+            orgId: gate.user.orgId,
+            documentId: id,
+            actorId: gate.user.id,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+            mutation: {
+              action: 'add', employeePartyId, componentId, amount: normalizeMoney(amountRaw),
+              hours: hoursRaw, replaceComponent: replaceComponent ?? undefined, note,
+              ...(adjustmentKey === '' ? {} : { idempotencyKey: adjustmentKey }),
+            },
+          })
+        } catch (e) {
+          if (e instanceof PayRunAdjustmentIdempotencyConflict) {
+            return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+          }
+          throw e
+        }
+        return NextResponse.json({ ok: true })
+      }
+      if (body.action === 'delete-adjustment') {
+        if (typeof body.adjustmentId !== 'string') {
+          return NextResponse.json({ error: `adjustmentId must be a pay adjustment id — got "${suppliedValue(body.adjustmentId)}"; pass the adjustment to delete as an id` }, { status: 422 })
+        }
+        if (!isUuid(body.adjustmentId)) {
+          return NextResponse.json({ error: `adjustmentId "${body.adjustmentId}" is not a pay adjustment id — fix the id and try again` }, { status: 422 })
+        }
+        await mutatePayRunAdjustment({
+          orgId: gate.user.orgId,
+          documentId: id,
+          actorId: gate.user.id,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+          mutation: { action: 'delete', adjustmentId: body.adjustmentId },
+        })
+        return NextResponse.json({ ok: true })
+      }
+      // Bulk scope: set the run's included employees in one call. Everyone on
+      // the roster who is NOT in `employeePartyIds` gets an exclusion row; those
+      // in it have theirs removed. Changed members go through the same audited
+      // helper one at a time — no second write path — and the whole diff is one
+      // transaction, so a partial scope can never be committed.
+      if (body.action === 'set-scope') {
+        // Every malformed shape refuses by name. One collapsed 'invalid
+        // scope' over two lists, a limit and two entry checks meant a single bad id on
+        // a 2000-employee roster was undiagnosable — the refusal below names
+        // the offending value AND its index. Same accept/refuse set, split
+        // causes: an empty included list still excludes everyone, and an empty
+        // roster is still a no-op.
+        if (!Array.isArray(body.employeePartyIds)) {
+          return NextResponse.json({ error: `employeePartyIds must be a list of employee ids — got "${suppliedValue(body.employeePartyIds)}"; pass the employees to include as a list` }, { status: 422 })
+        }
+        if (!Array.isArray(body.rosterPartyIds)) {
+          return NextResponse.json({ error: `rosterPartyIds must be a list of employee ids — got "${suppliedValue(body.rosterPartyIds)}"; pass the run roster as a list` }, { status: 422 })
+        }
+        const included = body.employeePartyIds
+        const roster = body.rosterPartyIds
+        if (roster.length > 2000) {
+          return NextResponse.json({ error: `set-scope accepts at most 2000 roster employees at once — got ${roster.length}; split the roster and try again` }, { status: 422 })
+        }
+        const badIncluded = included.findIndex((v: unknown) => typeof v !== 'string' || !isUuid(v))
+        if (badIncluded !== -1) {
+          return NextResponse.json({ error: `employeePartyIds[${badIncluded}] "${suppliedValue(included[badIncluded])}" is not an employee id — fix that entry and try again` }, { status: 422 })
+        }
+        const badRoster = roster.findIndex((v: unknown) => typeof v !== 'string' || !isUuid(v))
+        if (badRoster !== -1) {
+          return NextResponse.json({ error: `rosterPartyIds[${badRoster}] "${suppliedValue(roster[badRoster])}" is not an employee id — fix that entry and try again` }, { status: 422 })
+        }
+        const keep = new Set(included as string[])
+        const rosterSet = new Set(roster as string[])
+        // A keep id that is not on the roster would be silently ignored by the
+        // loop below (and used to be COUNTED as included). That is either a
+        // stale client roster or a mistyped id on a 2000-employee list — refuse
+        // naming it rather than answering counts that describe nothing.
+        const offRoster = (included as string[]).find((id) => !rosterSet.has(id))
+        if (offRoster !== undefined) {
+          return NextResponse.json({ error: `employeePartyIds "${offRoster}" is not on this run's roster — pass only roster members to include, and refresh the roster first` }, { status: 422 })
+        }
+        // True deltas, not input echoes: members already where they belong are
+        // skipped below, so the counts report the memberships that actually
+        // changed.
+        let includedDelta = 0
+        let excludedDelta = 0
         await withOrgTransaction(gate.user.orgId, async () => {
-          for (const [index, employeePartyId] of (employees as string[]).entries()) {
-            await mutatePayRunAdjustment({
+          // DIFF against the current scope, never replay the roster. Every
+          // mutatePayRunAdjustment call re-validates its member, so looping the
+          // whole roster re-checks people whose scope is not changing — and one
+          // of them (a deactivated employee, an edited profile) rolls back the
+          // entire transaction. A member already in scope and staying, or
+          // already out and staying out, is not being changed and is skipped;
+          // only actual additions and removals are validated. That closes this
+          // trap for every predicate, not just the active-member one.
+          const excludedRows = (await db.execute<{ employee_party_id: string }>(sql`
+            select employee_party_id from pay_run_adjustments
+             where org_id = ${gate.user.orgId} and pay_run_document_id = ${id}
+               and adjustment_type = 'exclude'
+          `))
+          const excluded = new Set(excludedRows.rows.map((row) => row.employee_party_id))
+          for (const employeePartyId of roster as string[]) {
+            const wanted = keep.has(employeePartyId) ? 'include' : 'exclude'
+            const current = excluded.has(employeePartyId) ? 'exclude' : 'include'
+            if (wanted === current) continue
+            const outcome = await mutatePayRunAdjustment({
               orgId: gate.user.orgId,
               documentId: id,
               actorId: gate.user.id,
               allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-              mutation: {
-                action: 'add', employeePartyId, componentId, amount: canonicalAmount,
-                replaceComponent: replaceComponent ?? undefined, note,
-                ...(requestIds ? { idempotencyKey: requestIds[index]! } : {}),
-              },
+              mutation: { action: wanted, employeePartyId },
             })
+            // The write's own receipt: count the membership only when the
+            // mutation reports it changed, never because the input named it.
+            if (outcome.changed) {
+              if (wanted === 'include') includedDelta++
+              else excludedDelta++
+            }
           }
         })
-      } catch (e) {
-        if (e instanceof PayRunAdjustmentIdempotencyConflict) {
-          return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+        return NextResponse.json({ ok: true, included: includedDelta, excluded: excludedDelta })
+      }
+      if (body.action === 'exclude-employee' || body.action === 'include-employee') {
+        if (typeof body.employeePartyId !== 'string') {
+          return NextResponse.json({ error: `employeePartyId must be an employee id — got "${suppliedValue(body.employeePartyId)}"; pass the employee as an employee id` }, { status: 422 })
         }
-        throw e
-      }
-      return NextResponse.json({ ok: true, applied: employees.length })
-    }
-    if (body.action === 'preview-gl') {
-      // Read-only: the exact legs commit would write, for the wizard's review
-      // step. payroll.read suffices conceptually, but the wizard drives it and
-      // the route is already gated payroll.run.
-      const result = await previewPayRunGl(gate.user.orgId, id, gate.allowedSubsidiaryIds)
-      return NextResponse.json({ ok: true, ...result })
-    }
-    if (body.action === 'add-adjustment') {
-      const { employeePartyId, componentId, amount, hours, note, replaceComponent } = body
-      const amountRaw = canonicalDecimal(amount, 4)
-      // Hours persist into numeric(12,2): canonicalize at that scale, never
-      // through the 4dp money normalizer (its padding fails the engine gate
-      // for every hours value). The engine re-validates before persisting.
-      // Every malformed shape refuses by name below — same accept/refuse set
-      // as the old collapsed 'invalid
-      // adjustment', split causes.
-      let hoursRaw: string | null = null
-      if (hours != null && hours !== '') {
-        hoursRaw = canonicalAdjustmentHours(hours)
-        if (hoursRaw === null) {
-          const hoursExact = canonicalDecimal(hours, 2)
-          if (hoursExact !== null && hoursExact.startsWith('-')) {
-            return NextResponse.json({ error: `hours must not be negative — got "${suppliedValue(hours)}"; pass zero or more hours, or omit hours` }, { status: 422 })
-          }
-          if (hoursExact !== null && hoursExact.replace(/^[+]/, '').split('.')[0]!.replace(/^0+/, '').length > 10) {
-            return NextResponse.json({ error: `hours is out of range — at most 10 whole digits fit; got "${suppliedValue(hours)}"; enter fewer hours and try again` }, { status: 422 })
-          }
-          return NextResponse.json({ error: decimalNullRefusal('hours', 'a number of hours', hours, 2) }, { status: 422 })
+        if (!isUuid(body.employeePartyId)) {
+          return NextResponse.json({ error: `employeePartyId "${body.employeePartyId}" is not an employee id — fix the id and try again` }, { status: 422 })
         }
-      }
-      if (typeof employeePartyId !== 'string') {
-        return NextResponse.json({ error: `employeePartyId must be an employee id — got "${suppliedValue(employeePartyId)}"; pass the employee as an employee id` }, { status: 422 })
-      }
-      if (!isUuid(employeePartyId)) {
-        return NextResponse.json({ error: `employeePartyId "${employeePartyId}" is not an employee id — fix the id and try again` }, { status: 422 })
-      }
-      if (typeof componentId !== 'string') {
-        return NextResponse.json({ error: `componentId must be a pay component id — got "${suppliedValue(componentId)}"; choose one from this run's adjustableComponents` }, { status: 422 })
-      }
-      if (!isUuid(componentId)) {
-        return NextResponse.json({ error: `componentId "${componentId}" is not a pay component id — choose one from this run's adjustableComponents` }, { status: 422 })
-      }
-      if (amountRaw === null) {
-        return NextResponse.json({ error: decimalNullRefusal('amount', 'an amount', amount, 4) }, { status: 422 })
-      }
-      if (note != null && typeof note !== 'string') {
-        return NextResponse.json({ error: `note must be text — got "${suppliedValue(note)}"; pass the note as text or omit it` }, { status: 422 })
-      }
-      if (typeof note === 'string' && note.length > 500) {
-        return NextResponse.json({ error: `note is limited to 500 characters — got ${note.length}; shorten it and try again` }, { status: 422 })
-      }
-      if (replaceComponent != null && typeof replaceComponent !== 'boolean') {
-        return NextResponse.json({ error: `replaceComponent must be true or false — got "${suppliedValue(replaceComponent)}"; pass a boolean or omit it` }, { status: 422 })
-      }
-      // A replayed add (double-clicked Save, retried request) carries the
-      // form session's key, which becomes the adjustment row id — the same
-      // contract as document creates — so the replay returns the original
-      // result instead of a second adjustment.
-      const adjustmentKey = req.headers.get('Idempotency-Key')?.trim() ?? ''
-      if (adjustmentKey !== '' && !isUuid(adjustmentKey)) {
-        return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 })
-      }
-      try {
         await mutatePayRunAdjustment({
           orgId: gate.user.orgId,
           documentId: id,
           actorId: gate.user.id,
           allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
           mutation: {
-            action: 'add', employeePartyId, componentId, amount: normalizeMoney(amountRaw),
-            hours: hoursRaw, replaceComponent: replaceComponent ?? undefined, note,
-            ...(adjustmentKey === '' ? {} : { idempotencyKey: adjustmentKey }),
+            action: body.action === 'exclude-employee' ? 'exclude' : 'include',
+            employeePartyId: body.employeePartyId,
           },
         })
-      } catch (e) {
-        if (e instanceof PayRunAdjustmentIdempotencyConflict) {
-          return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+        return NextResponse.json({ ok: true })
+      }
+      if (body.action === 'email-stubs') {
+        const result = await emailRunStubs(gate.user.orgId, id, gate.allowedSubsidiaryIds)
+        // Total renderer outage across the batch: every per-item entry carries
+        // the named refusal but the UI lists only names, so answer the 503
+        // here rather than ok:true with N hidden causes. Tenant refusals
+        // (opaque run, policy) throw before any render and keep their status.
+        if (result.sent === 0 && result.rendererOutage) {
+          const rendererRefusal = rendererStatusResponse()
+          if (rendererRefusal) return rendererRefusal
         }
-        throw e
+        return NextResponse.json({ ok: true, ...result })
       }
-      return NextResponse.json({ ok: true })
-    }
-    if (body.action === 'delete-adjustment') {
-      if (typeof body.adjustmentId !== 'string') {
-        return NextResponse.json({ error: `adjustmentId must be a pay adjustment id — got "${suppliedValue(body.adjustmentId)}"; pass the adjustment to delete as an id` }, { status: 422 })
+      if (body.action === 'record-payment') {
+        if (typeof body.bankAccountId !== 'string' || !isUuid(body.bankAccountId)) return NextResponse.json({ error: 'choose a bank account' }, { status: 422 })
+        const result = await recordPayRunPayment({
+          orgId: gate.user.orgId, actorId: gate.user.id, documentId: id,
+          bankAccountId: body.bankAccountId,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        })
+        return NextResponse.json({ ok: true, ...result })
       }
-      if (!isUuid(body.adjustmentId)) {
-        return NextResponse.json({ error: `adjustmentId "${body.adjustmentId}" is not a pay adjustment id — fix the id and try again` }, { status: 422 })
+      // Submit for approval: assemble the evidence package (payroll journal +
+      // register + GL preview) onto the run, then route it through Flows. A
+      // tenant with no pay_run flow gets `gated: false` and nothing is parked.
+      if (body.action === 'submit-approval') {
+        // Population opacity precedes freshness: the staleness gate answers
+        // from the caller's visible inputs, so an opaque run would leak its
+        // activity as a stale-calculation refusal instead of the opaque
+        // 'pay run not found'. Assemble enforces the same check; this probe
+        // only orders it first (no-op for unrestricted callers).
+        await lockAndCheckPayrollRunPopulation(db, gate.user.orgId, id, gate.allowedSubsidiaryIds)
+        // A tab left open across an edit must not route superseded figures to
+        // approvers: re-check calculation freshness here, immediately before
+        // evidence assembly, exactly as the commit branch does. A stale run is
+        // refused with the named stale-calculation error instead of parking
+        // evidence the commit gate would later reject.
+        await assertPayRunNotStale(gate.user.orgId, id, db, gate.allowedSubsidiaryIds)
+        const evidence = await assemblePayRunEvidence(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds)
+        const submission = await submitForApproval('pay_run', id, gate.user.id)
+        if (submission.flowError) {
+          return NextResponse.json({ error: submission.flowError }, { status: 422 })
+        }
+        return NextResponse.json({ ok: true, evidence, gated: submission.gated })
       }
-      await mutatePayRunAdjustment({
-        orgId: gate.user.orgId,
-        documentId: id,
-        actorId: gate.user.id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        mutation: { action: 'delete', adjustmentId: body.adjustmentId },
-      })
-      return NextResponse.json({ ok: true })
-    }
-    // Bulk scope: set the run's included employees in one call. Everyone on
-    // the roster who is NOT in `employeePartyIds` gets an exclusion row; those
-    // in it have theirs removed. Changed members go through the same audited
-    // helper one at a time — no second write path — and the whole diff is one
-    // transaction, so a partial scope can never be committed.
-    if (body.action === 'set-scope') {
-      // Every malformed shape refuses by name. One collapsed 'invalid
-      // scope' over two lists, a limit and two entry checks meant a single bad id on
-      // a 2000-employee roster was undiagnosable — the refusal below names
-      // the offending value AND its index. Same accept/refuse set, split
-      // causes: an empty included list still excludes everyone, and an empty
-      // roster is still a no-op.
-      if (!Array.isArray(body.employeePartyIds)) {
-        return NextResponse.json({ error: `employeePartyIds must be a list of employee ids — got "${suppliedValue(body.employeePartyIds)}"; pass the employees to include as a list` }, { status: 422 })
+      if (body.action === 'approval-state') {
+        return NextResponse.json({ ok: true, ...(await payRunApprovalState(gate.user.orgId, id)) })
       }
-      if (!Array.isArray(body.rosterPartyIds)) {
-        return NextResponse.json({ error: `rosterPartyIds must be a list of employee ids — got "${suppliedValue(body.rosterPartyIds)}"; pass the run roster as a list` }, { status: 422 })
+      // Record an explicit decision to commit while in-scope employees are
+      // refused. Taken against the run's CURRENT stored refusal set server-side
+      // — never a caller-supplied list — so the acknowledgement necessarily
+      // names exactly who is being left out, with the refusal text verbatim.
+      if (body.action === 'acknowledge-refusals') {
+        const acknowledgement = await acknowledgePayRunRefusals({
+          orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
+          allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        })
+        return NextResponse.json({ ok: true, acknowledgement })
       }
-      const included = body.employeePartyIds
-      const roster = body.rosterPartyIds
-      if (roster.length > 2000) {
-        return NextResponse.json({ error: `set-scope accepts at most 2000 roster employees at once — got ${roster.length}; split the roster and try again` }, { status: 422 })
+      // Attribute a committed run that was committed with no subsidiary
+      // (legacy): the boundary lives in the engine (`attributePayRunEntity`) —
+      // the header aligns null → target, posted books are never rewritten
+      // (anything naming another entity refuses), with an audited trail.
+      // Scoped roles cannot see an unattributed run at all, so attribution
+      // stays an org-wide act: the guard below 404s them exactly like a
+      // missing run, and the engine re-checks target scope.
+      if (body.action === 'attribute-entity') {
+        if (typeof body.subsidiaryId !== 'string' || !isUuid(body.subsidiaryId)) {
+          return NextResponse.json({ error: 'choose a subsidiary to attribute this run to' }, { status: 422 })
+        }
+        const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+          select d.subsidiary_id as "subsidiaryId"
+            from pay_runs r
+            join documents d on d.id = r.document_id and d.org_id = r.org_id
+           where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
+        if (!owned) return notFound("record")
+        const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
+        if (denied) return denied
+        const result = await attributePayRunEntity({
+          orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
+          subsidiaryId: body.subsidiaryId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+        })
+        return NextResponse.json({ ok: true, ...result })
       }
-      const badIncluded = included.findIndex((v: unknown) => typeof v !== 'string' || !isUuid(v))
-      if (badIncluded !== -1) {
-        return NextResponse.json({ error: `employeePartyIds[${badIncluded}] "${suppliedValue(included[badIncluded])}" is not an employee id — fix that entry and try again` }, { status: 422 })
-      }
-      const badRoster = roster.findIndex((v: unknown) => typeof v !== 'string' || !isUuid(v))
-      if (badRoster !== -1) {
-        return NextResponse.json({ error: `rosterPartyIds[${badRoster}] "${suppliedValue(roster[badRoster])}" is not an employee id — fix that entry and try again` }, { status: 422 })
-      }
-      const keep = new Set(included as string[])
-      const rosterSet = new Set(roster as string[])
-      // A keep id that is not on the roster would be silently ignored by the
-      // loop below (and used to be COUNTED as included). That is either a
-      // stale client roster or a mistyped id on a 2000-employee list — refuse
-      // naming it rather than answering counts that describe nothing.
-      const offRoster = (included as string[]).find((id) => !rosterSet.has(id))
-      if (offRoster !== undefined) {
-        return NextResponse.json({ error: `employeePartyIds "${offRoster}" is not on this run's roster — pass only roster members to include, and refresh the roster first` }, { status: 422 })
-      }
-      // True deltas, not input echoes: members already where they belong are
-      // skipped below, so the counts report the memberships that actually
-      // changed.
-      let includedDelta = 0
-      let excludedDelta = 0
-      await withOrgTransaction(gate.user.orgId, async () => {
-        // DIFF against the current scope, never replay the roster. Every
-        // mutatePayRunAdjustment call re-validates its member, so looping the
-        // whole roster re-checks people whose scope is not changing — and one
-        // of them (a deactivated employee, an edited profile) rolls back the
-        // entire transaction. A member already in scope and staying, or
-        // already out and staying out, is not being changed and is skipped;
-        // only actual additions and removals are validated. That closes this
-        // trap for every predicate, not just the active-member one.
-        const excludedRows = (await db.execute<{ employee_party_id: string }>(sql`
-          select employee_party_id from pay_run_adjustments
-           where org_id = ${gate.user.orgId} and pay_run_document_id = ${id}
-             and adjustment_type = 'exclude'
-        `))
-        const excluded = new Set(excludedRows.rows.map((row) => row.employee_party_id))
-        for (const employeePartyId of roster as string[]) {
-          const wanted = keep.has(employeePartyId) ? 'include' : 'exclude'
-          const current = excluded.has(employeePartyId) ? 'exclude' : 'include'
-          if (wanted === current) continue
-          const outcome = await mutatePayRunAdjustment({
-            orgId: gate.user.orgId,
-            documentId: id,
-            actorId: gate.user.id,
-            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-            mutation: { action: wanted, employeePartyId },
-          })
-          // The write's own receipt: count the membership only when the
-          // mutation reports it changed, never because the input named it.
-          if (outcome.changed) {
-            if (wanted === 'include') includedDelta++
-            else excludedDelta++
+      if (body.action === 'commit') {
+        // Money must not move before approval: commit materializes the GL
+        // projection and claims the period's time entries. Nor may it move on
+        // figures the operator edited past: the wizard's stale banner is only
+        // the rendering of the engine check — this boundary enforces it, so a
+        // stale tab or a scripted call cannot commit a calculation its inputs
+        // outlived. (The wizard reads the same `payRunStaleness`; one source of
+        // truth, two consumers — render and refuse.)
+        await assertPayRunNotStale(gate.user.orgId, id, db, gate.allowedSubsidiaryIds)
+        await assertPayRunApprovalReleased(gate.user.orgId, id)
+        // Open block-severity anomaly flags refuse the finalize while
+        // the hrmPayrollAnomalies capability is on. Skipped entirely while
+        // the capability is off (the hook is not registered); the engine
+        // commit below stays the untouched source of truth —
+        // this boundary only refuses before calling it, never re-implements it.
+        if (await isFeatureEnabled(gate.user.orgId, 'hrmPayrollAnomalies')) {
+          const period = (await db.execute<{ periodStart: string; periodEnd: string }>(sql`
+            select period_start::text as "periodStart", period_end::text as "periodEnd"
+              from pay_runs where org_id = ${gate.user.orgId} and document_id = ${id}`)).rows[0]
+          if (period) {
+            const { checkPayrollFinalizeAllowed } = await import('@openbooks/engine/src/hrm/ai/anomalies.ts')
+            try {
+              await checkPayrollFinalizeAllowed(db, { orgId: gate.user.orgId, periodFrom: period.periodStart, periodTo: period.periodEnd })
+            } catch (e) {
+              return aiRailsErrorResponse(e)
+            }
           }
         }
-      })
-      return NextResponse.json({ ok: true, included: includedDelta, excluded: excludedDelta })
-    }
-    if (body.action === 'exclude-employee' || body.action === 'include-employee') {
-      if (typeof body.employeePartyId !== 'string') {
-        return NextResponse.json({ error: `employeePartyId must be an employee id — got "${suppliedValue(body.employeePartyId)}"; pass the employee as an employee id` }, { status: 422 })
+        const result = await commitPayRun({ orgId: gate.user.orgId, documentId: id, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
+        return NextResponse.json({ ok: true, ...result })
       }
-      if (!isUuid(body.employeePartyId)) {
-        return NextResponse.json({ error: `employeePartyId "${body.employeePartyId}" is not an employee id — fix the id and try again` }, { status: 422 })
-      }
-      await mutatePayRunAdjustment({
-        orgId: gate.user.orgId,
-        documentId: id,
-        actorId: gate.user.id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-        mutation: {
-          action: body.action === 'exclude-employee' ? 'exclude' : 'include',
-          employeePartyId: body.employeePartyId,
-        },
-      })
-      return NextResponse.json({ ok: true })
+    } catch (e) {
+      if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
+      throw e
     }
-    if (body.action === 'email-stubs') {
-      const result = await emailRunStubs(gate.user.orgId, id, gate.allowedSubsidiaryIds)
-      // Total renderer outage across the batch: every per-item entry carries
-      // the named refusal but the UI lists only names, so answer the 503
-      // here rather than ok:true with N hidden causes. Tenant refusals
-      // (opaque run, policy) throw before any render and keep their status.
-      if (result.sent === 0 && result.rendererOutage) {
-        const rendererRefusal = rendererStatusResponse()
-        if (rendererRefusal) return rendererRefusal
-      }
-      return NextResponse.json({ ok: true, ...result })
-    }
-    if (body.action === 'record-payment') {
-      if (typeof body.bankAccountId !== 'string' || !isUuid(body.bankAccountId)) return NextResponse.json({ error: 'choose a bank account' }, { status: 422 })
-      const result = await recordPayRunPayment({
-        orgId: gate.user.orgId, actorId: gate.user.id, documentId: id,
-        bankAccountId: body.bankAccountId,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      })
-      return NextResponse.json({ ok: true, ...result })
-    }
-    // Submit for approval: assemble the evidence package (payroll journal +
-    // register + GL preview) onto the run, then route it through Flows. A
-    // tenant with no pay_run flow gets `gated: false` and nothing is parked.
-    if (body.action === 'submit-approval') {
-      // Population opacity precedes freshness: the staleness gate answers
-      // from the caller's visible inputs, so an opaque run would leak its
-      // activity as a stale-calculation refusal instead of the opaque
-      // 'pay run not found'. Assemble enforces the same check; this probe
-      // only orders it first (no-op for unrestricted callers).
-      await lockAndCheckPayrollRunPopulation(db, gate.user.orgId, id, gate.allowedSubsidiaryIds)
-      // A tab left open across an edit must not route superseded figures to
-      // approvers: re-check calculation freshness here, immediately before
-      // evidence assembly, exactly as the commit branch does. A stale run is
-      // refused with the named stale-calculation error instead of parking
-      // evidence the commit gate would later reject.
-      await assertPayRunNotStale(gate.user.orgId, id, db, gate.allowedSubsidiaryIds)
-      const evidence = await assemblePayRunEvidence(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds)
-      const submission = await submitForApproval('pay_run', id, gate.user.id)
-      if (submission.flowError) {
-        return NextResponse.json({ error: submission.flowError }, { status: 422 })
-      }
-      return NextResponse.json({ ok: true, evidence, gated: submission.gated })
-    }
-    if (body.action === 'approval-state') {
-      return NextResponse.json({ ok: true, ...(await payRunApprovalState(gate.user.orgId, id)) })
-    }
-    // Record an explicit decision to commit while in-scope employees are
-    // refused. Taken against the run's CURRENT stored refusal set server-side
-    // — never a caller-supplied list — so the acknowledgement necessarily
-    // names exactly who is being left out, with the refusal text verbatim.
-    if (body.action === 'acknowledge-refusals') {
-      const acknowledgement = await acknowledgePayRunRefusals({
-        orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
-        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      })
-      return NextResponse.json({ ok: true, acknowledgement })
-    }
-    // Attribute a committed run that was committed with no subsidiary
-    // (legacy): the boundary lives in the engine (`attributePayRunEntity`) —
-    // the header aligns null → target, posted books are never rewritten
-    // (anything naming another entity refuses), with an audited trail.
-    // Scoped roles cannot see an unattributed run at all, so attribution
-    // stays an org-wide act: the guard below 404s them exactly like a
-    // missing run, and the engine re-checks target scope.
-    if (body.action === 'attribute-entity') {
-      if (typeof body.subsidiaryId !== 'string' || !isUuid(body.subsidiaryId)) {
-        return NextResponse.json({ error: 'choose a subsidiary to attribute this run to' }, { status: 422 })
-      }
-      const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
-        select d.subsidiary_id as "subsidiaryId"
-          from pay_runs r
-          join documents d on d.id = r.document_id and d.org_id = r.org_id
-         where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
-      if (!owned) return notFound("record")
-      const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
-      if (denied) return denied
-      const result = await attributePayRunEntity({
-        orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
-        subsidiaryId: body.subsidiaryId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-      })
-      return NextResponse.json({ ok: true, ...result })
-    }
-    if (body.action === 'commit') {
-      // Money must not move before approval: commit materializes the GL
-      // projection and claims the period's time entries. Nor may it move on
-      // figures the operator edited past: the wizard's stale banner is only
-      // the rendering of the engine check — this boundary enforces it, so a
-      // stale tab or a scripted call cannot commit a calculation its inputs
-      // outlived. (The wizard reads the same `payRunStaleness`; one source of
-      // truth, two consumers — render and refuse.)
-      await assertPayRunNotStale(gate.user.orgId, id, db, gate.allowedSubsidiaryIds)
-      await assertPayRunApprovalReleased(gate.user.orgId, id)
-      // Open block-severity anomaly flags refuse the finalize while
-      // the hrmPayrollAnomalies capability is on. Skipped entirely while
-      // the capability is off (the hook is not registered); the engine
-      // commit below stays the untouched source of truth —
-      // this boundary only refuses before calling it, never re-implements it.
-      if (await isFeatureEnabled(gate.user.orgId, 'hrmPayrollAnomalies')) {
-        const period = (await db.execute<{ periodStart: string; periodEnd: string }>(sql`
-          select period_start::text as "periodStart", period_end::text as "periodEnd"
-            from pay_runs where org_id = ${gate.user.orgId} and document_id = ${id}`)).rows[0]
-        if (period) {
-          const { checkPayrollFinalizeAllowed } = await import('@openbooks/engine/src/hrm/ai/anomalies.ts')
-          try {
-            await checkPayrollFinalizeAllowed(db, { orgId: gate.user.orgId, periodFrom: period.periodStart, periodTo: period.periodEnd })
-          } catch (e) {
-            return aiRailsErrorResponse(e)
-          }
-        }
-      }
-      const result = await commitPayRun({ orgId: gate.user.orgId, documentId: id, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
-      return NextResponse.json({ ok: true, ...result })
-    }
-  } catch (e) {
-    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
-    throw e
-  }
-  return NextResponse.json({ error: 'unknown action' }, { status: 400 })
-}
+    return NextResponse.json({ error: 'unknown action' }, { status: 400 })
+
+  },
+})
 
 /**
  * Discard a draft pay run.
@@ -679,32 +703,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
  * or posted run is refused there with the void remedy — discarding is not a
  * quiet void. Missing and out-of-scope runs answer the same 404.
  */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('payroll.run', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select d.subsidiary_id as "subsidiaryId"
-      from pay_runs r
-      join documents d on d.id = r.document_id and d.org_id = r.org_id
-     where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
-  if (!owned) return notFound("record")
-  const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
-  if (denied) return denied
-  try {
-    const result = await discardPayRun({
-      orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
-      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-    })
-    return NextResponse.json({ ok: true, ...result })
-  } catch (e) {
-    if (e instanceof PayrollError) {
-      // A missing run reads 404; every other payroll refusal stays 422.
-      // The engine raises both as PayrollError, so the route keeps the
-      // historical message match to select the status.
-      return apiErrorResponse(e, e.message === 'pay run not found' ? { safeStatus: 404 } : { safeStatus: 422 })
+export const DELETE = defineRoute({
+  permission: 'payroll.run',
+  feature: 'payroll',
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select d.subsidiary_id as "subsidiaryId"
+        from pay_runs r
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+       where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
+    if (!owned) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
+    if (denied) return denied
+    try {
+      const result = await discardPayRun({
+        orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
+        allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
+      return NextResponse.json({ ok: true, ...result })
+    } catch (e) {
+      if (e instanceof PayrollError) {
+        // A missing run reads 404; every other payroll refusal stays 422.
+        // The engine raises both as PayrollError, so the route keeps the
+        // historical message match to select the status.
+        return apiErrorResponse(e, e.message === 'pay run not found' ? { safeStatus: 404 } : { safeStatus: 422 })
+      }
+      throw e
     }
-    throw e
-  }
-}
+
+  },
+})

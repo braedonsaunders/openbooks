@@ -1,5 +1,7 @@
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { createRemittanceBill, payrollRemittanceSummary } from '@openbooks/engine/src/payroll/remittance.ts'
@@ -12,6 +14,13 @@ import {
   guardPayrollVendor,
   guardRemittancePeriod,
 } from '../subsidiary-scope'
+
+const requestBodySchema = z.looseObject({
+  "action": z.unknown().optional(),
+  "filingAccountId": z.unknown().optional(),
+  "subsidiaryId": z.unknown().optional(),
+})
+
 
 export const dynamic = 'force-dynamic'
 
@@ -26,88 +35,94 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/
  * entity's share. The bill is a normal draft vendor_bill debiting the
  * liability accounts; AP review/post/pay finishes the job.
  */
-export async function GET(req: Request) {
-  const gate = await guardFeaturePermission('payroll.read', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const url = new URL(req.url)
-  const from = url.searchParams.get('from') ?? ''
-  const to = url.searchParams.get('to') ?? ''
-  if (!DATE.test(from) || !DATE.test(to) || from > to) {
-    return NextResponse.json({ error: 'invalid period' }, { status: 422 })
-  }
-  // Shape alone admits impossible dates ('2026-02-30', month 13) that the
-  // summary would otherwise hand to PostgreSQL as a driver error: refuse by
-  // name before any row is read.
-  if (!isIsoCalendarDate(from) || !isIsoCalendarDate(to)) {
-    return NextResponse.json({ error: `invalid period "${from}" – "${to}": pass real YYYY-MM-DD calendar dates` }, { status: 422 })
-  }
-  const denied = await guardRemittancePeriod(gate, from, to)
-  if (denied) return denied
-  try {
-    const groups = await payrollRemittanceSummary(gate.user.orgId, { from, to }, gate.allowedSubsidiaryIds)
-    return NextResponse.json({ groups })
-  } catch (error) {
-    if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 })
-    throw error
-  }
-}
+export const GET = defineRoute({
+  permission: 'payroll.read',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const url = new URL(req.url)
+    const from = url.searchParams.get('from') ?? ''
+    const to = url.searchParams.get('to') ?? ''
+    if (!DATE.test(from) || !DATE.test(to) || from > to) {
+      return NextResponse.json({ error: 'invalid period' }, { status: 422 })
+    }
+    // Shape alone admits impossible dates ('2026-02-30', month 13) that the
+    // summary would otherwise hand to PostgreSQL as a driver error: refuse by
+    // name before any row is read.
+    if (!isIsoCalendarDate(from) || !isIsoCalendarDate(to)) {
+      return NextResponse.json({ error: `invalid period "${from}" – "${to}": pass real YYYY-MM-DD calendar dates` }, { status: 422 })
+    }
+    const denied = await guardRemittancePeriod(gate, from, to)
+    if (denied) return denied
+    try {
+      const groups = await payrollRemittanceSummary(gate.user.orgId, { from, to }, gate.allowedSubsidiaryIds)
+      return NextResponse.json({ groups })
+    } catch (error) {
+      if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 })
+      throw error
+    }
 
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('payroll.run', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data
-  if (body.action !== 'create-bill') return NextResponse.json({ error: 'unknown action' }, { status: 400 })
-  const { partyId, from, to } = body
-  const filingAccountId = body.filingAccountId ?? null
-  const subsidiaryId = body.subsidiaryId ?? null
-  // Every malformed shape refuses by name: one collapsed 'invalid request'
-  // over eight predicates across five fields. Same accept/refuse sets, split
-  // causes — every input refused above is still refused below with status 422.
-  if (typeof partyId !== 'string') {
-    return NextResponse.json({ error: `partyId must be a vendor id — got "${suppliedValue(partyId)}"; choose the payee from the remittance summary` }, { status: 422 })
-  }
-  if (!isUuid(partyId)) {
-    return NextResponse.json({ error: `partyId "${partyId}" is not a vendor id — choose the payee from the remittance summary` }, { status: 422 })
-  }
-  if (typeof from !== 'string' || !DATE.test(from)) {
-    return NextResponse.json({ error: `from must be a date "YYYY-MM-DD" — got "${suppliedValue(from)}"; pass the period start as a date` }, { status: 422 })
-  }
-  if (typeof to !== 'string' || !DATE.test(to)) {
-    return NextResponse.json({ error: `to must be a date "YYYY-MM-DD" — got "${suppliedValue(to)}"; pass the period end as a date` }, { status: 422 })
-  }
-  // Shape alone admits impossible dates ('2026-02-30', month 13) that the
-  // engine would otherwise hand to PostgreSQL as a driver error: refuse each
-  // by name before the bill path reads a row.
-  if (!isIsoCalendarDate(from)) {
-    return NextResponse.json({ error: `from "${from}" is not a real calendar date — pass the period start as a date that exists` }, { status: 422 })
-  }
-  if (!isIsoCalendarDate(to)) {
-    return NextResponse.json({ error: `to "${to}" is not a real calendar date — pass the period end as a date that exists` }, { status: 422 })
-  }
-  if (from > to) {
-    return NextResponse.json({ error: `from "${from}" is after to "${to}" — the period must start on or before it ends` }, { status: 422 })
-  }
-  if (filingAccountId !== null && (typeof filingAccountId !== 'string' || !isUuid(filingAccountId))) {
-    return NextResponse.json({ error: `filingAccountId "${suppliedValue(filingAccountId)}" is not a filing account id — choose one from the payroll filing accounts, or omit it` }, { status: 422 })
-  }
-  if (subsidiaryId !== null && (typeof subsidiaryId !== 'string' || !isUuid(subsidiaryId))) {
-    return NextResponse.json({ error: `subsidiaryId "${suppliedValue(subsidiaryId)}" is not a subsidiary id — pass the subsidiary whose share to bill, or omit it` }, { status: 422 })
-  }
-  const vendorDenied = await guardPayrollVendor(gate, partyId)
-  if (vendorDenied) return vendorDenied
-  const accountDenied = await guardPayrollFilingAccounts(gate, [filingAccountId])
-  if (accountDenied) return accountDenied
-  const periodDenied = await guardRemittancePeriod(gate, String(from), String(to))
-  if (periodDenied) return periodDenied
-  try {
-    const bill = await createRemittanceBill(gate.user.orgId, gate.user.id, {
-      partyId, from, to, filingAccountId, subsidiaryId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-    })
-    return NextResponse.json({ ok: true, ...bill })
-  } catch (e) {
-    if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
-    throw e
-  }
-}
+  },
+})
+
+export const POST = defineRoute({
+  permission: 'payroll.run',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data
+    if (body.action !== 'create-bill') return NextResponse.json({ error: 'unknown action' }, { status: 400 })
+    const { partyId, from, to } = body
+    const filingAccountId = body.filingAccountId ?? null
+    const subsidiaryId = body.subsidiaryId ?? null
+    // Every malformed shape refuses by name: one collapsed 'invalid request'
+    // over eight predicates across five fields. Same accept/refuse sets, split
+    // causes — every input refused above is still refused below with status 422.
+    if (typeof partyId !== 'string') {
+      return NextResponse.json({ error: `partyId must be a vendor id — got "${suppliedValue(partyId)}"; choose the payee from the remittance summary` }, { status: 422 })
+    }
+    if (!isUuid(partyId)) {
+      return NextResponse.json({ error: `partyId "${partyId}" is not a vendor id — choose the payee from the remittance summary` }, { status: 422 })
+    }
+    if (typeof from !== 'string' || !DATE.test(from)) {
+      return NextResponse.json({ error: `from must be a date "YYYY-MM-DD" — got "${suppliedValue(from)}"; pass the period start as a date` }, { status: 422 })
+    }
+    if (typeof to !== 'string' || !DATE.test(to)) {
+      return NextResponse.json({ error: `to must be a date "YYYY-MM-DD" — got "${suppliedValue(to)}"; pass the period end as a date` }, { status: 422 })
+    }
+    // Shape alone admits impossible dates ('2026-02-30', month 13) that the
+    // engine would otherwise hand to PostgreSQL as a driver error: refuse each
+    // by name before the bill path reads a row.
+    if (!isIsoCalendarDate(from)) {
+      return NextResponse.json({ error: `from "${from}" is not a real calendar date — pass the period start as a date that exists` }, { status: 422 })
+    }
+    if (!isIsoCalendarDate(to)) {
+      return NextResponse.json({ error: `to "${to}" is not a real calendar date — pass the period end as a date that exists` }, { status: 422 })
+    }
+    if (from > to) {
+      return NextResponse.json({ error: `from "${from}" is after to "${to}" — the period must start on or before it ends` }, { status: 422 })
+    }
+    if (filingAccountId !== null && (typeof filingAccountId !== 'string' || !isUuid(filingAccountId))) {
+      return NextResponse.json({ error: `filingAccountId "${suppliedValue(filingAccountId)}" is not a filing account id — choose one from the payroll filing accounts, or omit it` }, { status: 422 })
+    }
+    if (subsidiaryId !== null && (typeof subsidiaryId !== 'string' || !isUuid(subsidiaryId))) {
+      return NextResponse.json({ error: `subsidiaryId "${suppliedValue(subsidiaryId)}" is not a subsidiary id — pass the subsidiary whose share to bill, or omit it` }, { status: 422 })
+    }
+    const vendorDenied = await guardPayrollVendor(gate, partyId)
+    if (vendorDenied) return vendorDenied
+    const accountDenied = await guardPayrollFilingAccounts(gate, [filingAccountId])
+    if (accountDenied) return accountDenied
+    const periodDenied = await guardRemittancePeriod(gate, String(from), String(to))
+    if (periodDenied) return periodDenied
+    try {
+      const bill = await createRemittanceBill(gate.user.orgId, gate.user.id, {
+        partyId, from, to, filingAccountId, subsidiaryId, allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+      })
+      return NextResponse.json({ ok: true, ...bill })
+    } catch (e) {
+      if (e instanceof PayrollError) return apiErrorResponse(e, { safeStatus: 422 })
+      throw e
+    }
+
+  },
+})

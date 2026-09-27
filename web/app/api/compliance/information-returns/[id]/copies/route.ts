@@ -1,5 +1,7 @@
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import { parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -16,6 +18,12 @@ import { maskTin, type RecipientFormData } from '@/lib/information-return-form'
 import { renderInformationReturnBatchPdf, renderInformationReturnPdf } from '@/lib/information-return-pdf'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.looseObject({
+  "byteLength": z.unknown().optional(),
+  "recipientId": z.unknown().optional(),
+})
+
 
 
 export const runtime = 'nodejs'
@@ -41,123 +49,128 @@ function addressLines(address: Record<string, string | null> | null): string | n
  * Only an included recipient gets a copy — an excluded one is deliberately not
  * being reported, and printing them a form would say otherwise.
  */
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('compliance.read')
-  if (gate instanceof NextResponse) return gate
-  const blocked = await guardComplianceFeature(gate.user.orgId)
-  if (blocked) return blocked
-  const { orgId } = gate.user
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const recipientId = new URL(req.url).searchParams.get('recipientId')
-  if (recipientId && !isUuid(recipientId)) return notFound("record")
-  // Entity isolation before any filing detail is read (same 404 as a missing filing).
-  const filingScope = await loadInformationReturnFilingScope(orgId, id)
-  if (!filingScope) return notFound("record")
-  const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
-  if (scopeDenied) return scopeDenied
+export const GET = defineRoute({
+  permission: 'compliance.read',
+  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: req, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const blocked = await guardComplianceFeature(gate.user.orgId)
+    if (blocked) return blocked
+    const { orgId } = gate.user
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    const recipientId = new URL(req.url).searchParams.get('recipientId')
+    if (recipientId && !isUuid(recipientId)) return notFound("record")
+    // Entity isolation before any filing detail is read (same 404 as a missing filing).
+    const filingScope = await loadInformationReturnFilingScope(orgId, id)
+    if (!filingScope) return notFound("record")
+    const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
+    if (scopeDenied) return scopeDenied
 
-  const filings = (await db.execute<{
-      tax_year: number
-      form_type: string
-      currency: string
-      status: string
-      payer_snapshot: { taxIds?: Record<string, string> } | null
-      payer_name: string
-    }>(sql`
-    select f.tax_year, f.form_type, f.currency, f.status, f.payer_snapshot,
-           coalesce(f.payer_snapshot->>'name', s.name, o.name) as payer_name
-      from information_return_filings f
-      join orgs o on o.id = f.org_id
-      left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
-     where f.org_id = ${orgId} and f.id = ${id}
-  `))
-  const filing = filings.rows[0]
-  if (!filing) return notFound("record")
-  if (!canFurnishRecipientCopies(filing.status)) {
-    return NextResponse.json(
-      { error: `a ${filing.status} filing is not frozen — finalize it before furnishing recipient copies` },
-      { status: 422 },
-    )
-  }
+    const filings = (await db.execute<{
+        tax_year: number
+        form_type: string
+        currency: string
+        status: string
+        payer_snapshot: { taxIds?: Record<string, string> } | null
+        payer_name: string
+      }>(sql`
+      select f.tax_year, f.form_type, f.currency, f.status, f.payer_snapshot,
+             coalesce(f.payer_snapshot->>'name', s.name, o.name) as payer_name
+        from information_return_filings f
+        join orgs o on o.id = f.org_id
+        left join subsidiaries s on s.id = f.subsidiary_id and s.org_id = f.org_id
+       where f.org_id = ${orgId} and f.id = ${id}
+    `))
+    const filing = filings.rows[0]
+    if (!filing) return notFound("record")
+    if (!canFurnishRecipientCopies(filing.status)) {
+      return NextResponse.json(
+        { error: `a ${filing.status} filing is not frozen — finalize it before furnishing recipient copies` },
+        { status: 422 },
+      )
+    }
 
-  const recipients = (await db.execute<{
-      id: string
-      status: string
-      tin_last4: string | null
-      tin_type: string | null
-      computed_amounts: Record<string, string>
-      adjustments: Record<string, string>
-      corrected_from_id: string | null
-      name: string
-      address: Record<string, string | null> | null
-    }>(sql`
-    select r.id, r.status, r.tin_last4, r.tin_type, r.computed_amounts, r.adjustments,
-           r.corrected_from_id,
-           coalesce(r.recipient_snapshot->>'legalName', p.display_name) as name,
-           r.recipient_snapshot->'address' as address
-      from information_return_recipients r
-      join parties p on p.id = r.party_id and p.org_id = r.org_id
-     where r.org_id = ${orgId} and r.filing_id = ${id} and r.status = 'included'
-       and (${recipientId ?? null}::uuid is null or r.id = ${recipientId ?? null}::uuid)
-     order by name
-  `))
-  if (recipients.rows.length === 0) {
-    return NextResponse.json({ error: 'no included recipients to print' }, { status: 422 })
-  }
+    const recipients = (await db.execute<{
+        id: string
+        status: string
+        tin_last4: string | null
+        tin_type: string | null
+        computed_amounts: Record<string, string>
+        adjustments: Record<string, string>
+        corrected_from_id: string | null
+        name: string
+        address: Record<string, string | null> | null
+      }>(sql`
+      select r.id, r.status, r.tin_last4, r.tin_type, r.computed_amounts, r.adjustments,
+             r.corrected_from_id,
+             coalesce(r.recipient_snapshot->>'legalName', p.display_name) as name,
+             r.recipient_snapshot->'address' as address
+        from information_return_recipients r
+        join parties p on p.id = r.party_id and p.org_id = r.org_id
+       where r.org_id = ${orgId} and r.filing_id = ${id} and r.status = 'included'
+         and (${recipientId ?? null}::uuid is null or r.id = ${recipientId ?? null}::uuid)
+       order by name
+    `))
+    if (recipients.rows.length === 0) {
+      return NextResponse.json({ error: 'no included recipients to print' }, { status: 422 })
+    }
 
-  // The payer TIN comes from the frozen snapshot once finalized, so a reprint of
-  // a filed return reproduces exactly what was furnished.
-  // The filing is frozen above, so only its payer snapshot is authoritative.
-  // Never put a live org tax ID on a stamped copy: changing org settings after
-  // finalization must not alter the evidence furnished to the recipient.
-  const taxIds = filing.payer_snapshot?.taxIds ?? {}
-  const payerTin = taxIds.ein ?? taxIds.federal ?? taxIds.bn ?? Object.values(taxIds)[0] ?? null
+    // The payer TIN comes from the frozen snapshot once finalized, so a reprint of
+    // a filed return reproduces exactly what was furnished.
+    // The filing is frozen above, so only its payer snapshot is authoritative.
+    // Never put a live org tax ID on a stamped copy: changing org settings after
+    // finalization must not alter the evidence furnished to the recipient.
+    const taxIds = filing.payer_snapshot?.taxIds ?? {}
+    const payerTin = taxIds.ein ?? taxIds.federal ?? taxIds.bn ?? Object.values(taxIds)[0] ?? null
 
-  const forms: RecipientFormData[] = recipients.rows.map((r) => ({
-    formType: filing.form_type,
-    taxYear: filing.tax_year,
-    payerName: filing.payer_name,
-    payerTin,
-    recipientName: r.name,
-    recipientAddress: addressLines(r.address),
-    recipientTinMasked: maskTin(r.tin_last4, r.tin_type),
-    computedAmounts: r.computed_amounts,
-    adjustments: r.adjustments,
-    corrected: r.corrected_from_id !== null,
-    void: false,
-    currency: filing.currency,
-  }))
+    const forms: RecipientFormData[] = recipients.rows.map((r) => ({
+      formType: filing.form_type,
+      taxYear: filing.tax_year,
+      payerName: filing.payer_name,
+      payerTin,
+      recipientName: r.name,
+      recipientAddress: addressLines(r.address),
+      recipientTinMasked: maskTin(r.tin_last4, r.tin_type),
+      computedAmounts: r.computed_amounts,
+      adjustments: r.adjustments,
+      corrected: r.corrected_from_id !== null,
+      void: false,
+      currency: filing.currency,
+    }))
 
-  let pdf: Buffer
-  try {
-    pdf =
+    let pdf: Buffer
+    try {
+      pdf =
+        forms.length === 1
+          ? await renderInformationReturnPdf(forms[0]!)
+          : await renderInformationReturnBatchPdf(forms)
+    } catch (e) {
+      const rendererRefusal = rendererUnavailableResponse(e)
+      if (rendererRefusal) return rendererRefusal
+      throw e
+    }
+
+    const stamp = await businessToday(orgId)
+    const filename =
       forms.length === 1
-        ? await renderInformationReturnPdf(forms[0]!)
-        : await renderInformationReturnBatchPdf(forms)
-  } catch (e) {
-    const rendererRefusal = rendererUnavailableResponse(e)
-    if (rendererRefusal) return rendererRefusal
-    throw e
-  }
+        ? `${filing.form_type}-${filing.tax_year}-${forms[0]!.recipientName.replace(/[^\w-]+/g, '_')}-${stamp}.pdf`
+        : `${filing.form_type}-${filing.tax_year}-recipient-copies-${stamp}.pdf`
+    const body = new Uint8Array(pdf)
+    return new NextResponse(body, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Length': String(body.byteLength),
+        'Content-Disposition': `inline; filename="${filename}"`,
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'private, no-store',
+      },
+    })
 
-  const stamp = await businessToday(orgId)
-  const filename =
-    forms.length === 1
-      ? `${filing.form_type}-${filing.tax_year}-${forms[0]!.recipientName.replace(/[^\w-]+/g, '_')}-${stamp}.pdf`
-      : `${filing.form_type}-${filing.tax_year}-recipient-copies-${stamp}.pdf`
-  const body = new Uint8Array(pdf)
-  return new NextResponse(body, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Length': String(body.byteLength),
-      'Content-Disposition': `inline; filename="${filename}"`,
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': 'private, no-store',
-    },
-  })
-}
+  },
+})
 
 /**
  * Mark recipient copies furnished: all included recipients, or one via
@@ -167,38 +180,43 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
  * above renders under. A recipient id that names no included recipient of
  * this filing answers exactly like not-found.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('compliance.manage')
-  if (gate instanceof NextResponse) return gate
-  const blocked = await guardComplianceFeature(gate.user.orgId)
-  if (blocked) return blocked
-  const { orgId, id: actorId } = gate.user
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
+export const POST = defineRoute({
+  permission: 'compliance.manage',
+  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: req, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const blocked = await guardComplianceFeature(gate.user.orgId)
+    if (blocked) return blocked
+    const { orgId, id: actorId } = gate.user
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
 
-  const parsedBody = await parseJsonBody(req, jsonObject)
-  if (!parsedBody.ok) return parsedBody.response
-  const rawRecipientId = (parsedBody.data as { recipientId?: unknown }).recipientId ?? null
-  let recipientId: string | null = null
-  if (rawRecipientId !== null) {
-    if (typeof rawRecipientId !== 'string' || !isUuid(rawRecipientId)) {
-      return notFound("record")
+    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
+    const rawRecipientId = (parsedBody.data as { recipientId?: unknown }).recipientId ?? null
+    let recipientId: string | null = null
+    if (rawRecipientId !== null) {
+      if (typeof rawRecipientId !== 'string' || !isUuid(rawRecipientId)) {
+        return notFound("record")
+      }
+      recipientId = rawRecipientId
     }
-    recipientId = rawRecipientId
-  }
-  // Entity isolation before any filing detail is read (same 404 as a missing filing).
-  const filingScope = await loadInformationReturnFilingScope(orgId, id)
-  if (!filingScope) return notFound("record")
-  const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
-  if (scopeDenied) return scopeDenied
+    // Entity isolation before any filing detail is read (same 404 as a missing filing).
+    const filingScope = await loadInformationReturnFilingScope(orgId, id)
+    if (!filingScope) return notFound("record")
+    const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
+    if (scopeDenied) return scopeDenied
 
-  try {
-    const furnished = await stampRecipientCopiesPrinted({ orgId, filingId: id, recipientId, actorId })
-    return NextResponse.json({ furnished })
-  } catch (error) {
-    if (error instanceof InformationReturnError) {
-      return apiErrorResponse(error)
+    try {
+      const furnished = await stampRecipientCopiesPrinted({ orgId, filingId: id, recipientId, actorId })
+      return NextResponse.json({ furnished })
+    } catch (error) {
+      if (error instanceof InformationReturnError) {
+        return apiErrorResponse(error)
+      }
+      throw error
     }
-    throw error
-  }
-}
+
+  },
+})

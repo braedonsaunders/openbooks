@@ -1,3 +1,5 @@
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
@@ -29,77 +31,82 @@ export const runtime = 'nodejs'
  * A present-but-corrupt image fails closed instead of silently falling back
  * to live rows.
  */
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('compliance.read')
-  if (gate instanceof NextResponse) return gate
-  const blocked = await guardLienWaiverFeature(gate.user.orgId)
-  if (blocked) return blocked
-  const { orgId } = gate.user
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
+export const GET = defineRoute({
+  permission: 'compliance.read',
+  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: req, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const blocked = await guardLienWaiverFeature(gate.user.orgId)
+    if (blocked) return blocked
+    const { orgId } = gate.user
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
 
-  const w = await loadLienWaiverPrintSource(orgId, id)
-  if (!w) return notFound("record")
-  const denied = guardSubsidiaryScope(gate, w.projectSubsidiaryId)
-  if (denied) return denied
+    const w = await loadLienWaiverPrintSource(orgId, id)
+    if (!w) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, w.projectSubsidiaryId)
+    if (denied) return denied
 
-  let data: ReturnType<typeof lienWaiverPrintData>['data']
-  let orgName: string
-  let filename: string
-  let legacyAsOf: string | null = null
-  if (w.executedSnapshot !== null && w.executedSnapshot !== undefined) {
-    if (!isLienWaiverExecutedSnapshot(w.executedSnapshot)) {
-      return NextResponse.json({ error: 'the executed print image is corrupt — void and reissue this waiver' }, { status: 500 })
-    }
-    data = w.executedSnapshot.data
-    orgName = w.executedSnapshot.orgName
-    filename = data.waiverNumber
-  } else {
-    const live = lienWaiverPrintData(w)
-    data = live.data
-    orgName = live.orgName
-    // A legacy executed waiver has no frozen image to serve. Refusing to
-    // print would strand the operator, and printing the live rows bare would
-    // present them AS the executed release — so print them bannered as
-    // current records, under a filename no one files as the release.
-    if (
-      await isLienWaiverLegacyUnverified(orgId, {
-        id,
-        status: w.status,
-        signedAt: w.signedAt,
-        hasExecutedSnapshot: false,
-      })
-    ) {
-      legacyAsOf = await businessToday(orgId)
-      filename = legacyLienWaiverFilename(w.waiverNumber)
+    let data: ReturnType<typeof lienWaiverPrintData>['data']
+    let orgName: string
+    let filename: string
+    let legacyAsOf: string | null = null
+    if (w.executedSnapshot !== null && w.executedSnapshot !== undefined) {
+      if (!isLienWaiverExecutedSnapshot(w.executedSnapshot)) {
+        return NextResponse.json({ error: 'the executed print image is corrupt — void and reissue this waiver' }, { status: 500 })
+      }
+      data = w.executedSnapshot.data
+      orgName = w.executedSnapshot.orgName
+      filename = data.waiverNumber
     } else {
-      filename = w.waiverNumber
+      const live = lienWaiverPrintData(w)
+      data = live.data
+      orgName = live.orgName
+      // A legacy executed waiver has no frozen image to serve. Refusing to
+      // print would strand the operator, and printing the live rows bare would
+      // present them AS the executed release — so print them bannered as
+      // current records, under a filename no one files as the release.
+      if (
+        await isLienWaiverLegacyUnverified(orgId, {
+          id,
+          status: w.status,
+          signedAt: w.signedAt,
+          hasExecutedSnapshot: false,
+        })
+      ) {
+        legacyAsOf = await businessToday(orgId)
+        filename = legacyLienWaiverFilename(w.waiverNumber)
+      } else {
+        filename = w.waiverNumber
+      }
     }
-  }
 
-  let pdf: Buffer
-  try {
-    pdf = await renderLienWaiverPdf(
-      data,
-      orgName,
-      legacyAsOf ? { legacyUnverifiedAsOf: legacyAsOf } : undefined,
-    )
-  } catch (e) {
-    const rendererRefusal = rendererUnavailableResponse(e)
-    if (rendererRefusal) return rendererRefusal
-    throw e
-  }
+    let pdf: Buffer
+    try {
+      pdf = await renderLienWaiverPdf(
+        data,
+        orgName,
+        legacyAsOf ? { legacyUnverifiedAsOf: legacyAsOf } : undefined,
+      )
+    } catch (e) {
+      const rendererRefusal = rendererUnavailableResponse(e)
+      if (rendererRefusal) return rendererRefusal
+      throw e
+    }
 
-  const body = new Uint8Array(pdf)
-  return new NextResponse(body, {
-    status: 200,
-    headers: {
-      'Content-Type': 'application/pdf',
-      'Content-Length': String(body.byteLength),
-      'Content-Disposition': `inline; filename="${filename}.pdf"`,
-      'X-Content-Type-Options': 'nosniff',
-      'Cache-Control': 'private, no-store',
-      ...(legacyAsOf ? { 'X-Lien-Waiver-Evidence': 'legacy-unverified' } : {}),
-    },
-  })
-}
+    const body = new Uint8Array(pdf)
+    return new NextResponse(body, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/pdf',
+        'Content-Length': String(body.byteLength),
+        'Content-Disposition': `inline; filename="${filename}.pdf"`,
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'private, no-store',
+        ...(legacyAsOf ? { 'X-Lien-Waiver-Evidence': 'legacy-unverified' } : {}),
+      },
+    })
+
+  },
+})

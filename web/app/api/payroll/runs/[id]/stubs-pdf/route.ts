@@ -1,3 +1,5 @@
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -21,36 +23,41 @@ export const dynamic = 'force-dynamic'
  * is print or both, which is what actually goes to the printer once the
  * emailed stubs have gone out.
  */
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('payroll.read', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select d.subsidiary_id as "subsidiaryId"
-      from pay_runs r
-      join documents d on d.id = r.document_id and d.org_id = r.org_id
-     where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
-  if (!owned) return notFound("record")
-  const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
-  if (denied) return denied
-  const set = new URL(req.url).searchParams.get('set') === 'print' ? 'print' : 'all'
-  try {
-    const merged = await mergedRunStubsPdf(gate.user.orgId, id, { set, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
-    if (!merged) return NextResponse.json({ error: 'no stubs to print' }, { status: 404 })
-    const stamp = await businessToday(gate.user.orgId)
-    return pdfResponse(
-      Buffer.from(merged.pdf),
-      safeName(`Pay-stubs${set === 'print' ? '-print-set' : ''}-${id.slice(0, 8)}-${stamp}`),
-    )
-  } catch (error) {
-    // An opaque run fails closed exactly like a missing one: no stub bytes
-    // for a caller who does not own the complete population.
-    if (error instanceof PayrollError) {
-      return notFound("record")
+export const GET = defineRoute({
+  permission: 'payroll.read',
+  feature: 'payroll',
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: req, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select d.subsidiary_id as "subsidiaryId"
+        from pay_runs r
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+       where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
+    if (!owned) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
+    if (denied) return denied
+    const set = new URL(req.url).searchParams.get('set') === 'print' ? 'print' : 'all'
+    try {
+      const merged = await mergedRunStubsPdf(gate.user.orgId, id, { set, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
+      if (!merged) return NextResponse.json({ error: 'no stubs to print' }, { status: 404 })
+      const stamp = await businessToday(gate.user.orgId)
+      return pdfResponse(
+        Buffer.from(merged.pdf),
+        safeName(`Pay-stubs${set === 'print' ? '-print-set' : ''}-${id.slice(0, 8)}-${stamp}`),
+      )
+    } catch (error) {
+      // An opaque run fails closed exactly like a missing one: no stub bytes
+      // for a caller who does not own the complete population.
+      if (error instanceof PayrollError) {
+        return notFound("record")
+      }
+      const rendererRefusal = rendererUnavailableResponse(error)
+      if (rendererRefusal) return rendererRefusal
+      throw error
     }
-    const rendererRefusal = rendererUnavailableResponse(error)
-    if (rendererRefusal) return rendererRefusal
-    throw error
-  }
-}
+
+  },
+})

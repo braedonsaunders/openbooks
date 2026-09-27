@@ -1,5 +1,7 @@
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from '@/lib/api/json'
+import { parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { yearEndFiling } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { PayrollPackError } from '@openbooks/engine/src/payroll/packs.ts'
@@ -10,6 +12,14 @@ import { payrollYearRefusal } from '../../../../../lib/payroll-year'
 import { isUuid } from '../../../../../lib/list-params'
 import type { Authz } from '../../../../../lib/authz'
 import { guardPayrollRoeEmployees, guardPayrollFilingData } from '../../subsidiary-scope'
+
+const requestBodySchema = z.looseObject({
+  "country": z.unknown().optional(),
+  "filing": z.unknown().optional(),
+  "params": z.unknown().optional(),
+  "year": z.unknown().optional(),
+})
+
 
 export const dynamic = 'force-dynamic'
 
@@ -135,21 +145,24 @@ async function serveFile(gate: Authz, input: FileInput, method: 'GET' | 'POST' =
  * transmitter configuration, a filing whose pack declares no electronic
  * file. An unknown country/filing pair is a 404 that names what IS declared.
  */
-export async function GET(req: Request) {
-  const gate = await guardFeaturePermission('payroll.run', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const url = new URL(req.url)
-  const params = Object.fromEntries(url.searchParams)
-  const yearRefusal = payrollYearRefusal(params.year)
-  if (yearRefusal !== null) return NextResponse.json({ error: yearRefusal }, { status: 422 })
-  const year = Number(params.year)
-  return serveFile(gate, {
-    country: params.country ?? '',
-    filing: params.filing ?? '',
-    year,
-    params,
-  }, 'GET')
-}
+export const GET = defineRoute({
+  permission: 'payroll.run',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const url = new URL(req.url)
+    const params = Object.fromEntries(url.searchParams)
+    const yearRefusal = payrollYearRefusal(params.year)
+    if (yearRefusal !== null) return NextResponse.json({ error: yearRefusal }, { status: 422 })
+    const year = Number(params.year)
+    return serveFile(gate, {
+      country: params.country ?? '',
+      filing: params.filing ?? '',
+      year,
+      params,
+    }, 'GET')
+
+  },
+})
 
 /**
  * POST { country, filing, year, …filing parameters } — the electronic file
@@ -158,12 +171,15 @@ export async function GET(req: Request) {
  * proxy URL limits while the filing's own parser enforces its row/comment
  * limits.
  */
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('payroll.run', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const parsedBody = await parseJsonBody(req, jsonObject)
-  if (!parsedBody.ok) return parsedBody.response
-  const input = parseBody(parsedBody.data)
-  if (input instanceof NextResponse) return input
-  return serveFile(gate, input)
-}
+export const POST = defineRoute({
+  permission: 'payroll.run',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const parsedBody = await parseJsonBody(req, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
+    const input = parseBody(parsedBody.data)
+    if (input instanceof NextResponse) return input
+    return serveFile(gate, input)
+
+  },
+})

@@ -1,3 +1,4 @@
+import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -68,242 +69,248 @@ async function employeeSubsidiaryId(orgId: string, employee: string) {
   return rows.length === 1 ? rows[0]!.subsidiaryId : undefined
 }
 
-export async function GET(req: Request) {
-  const gate = await guardFeaturePermission('payroll.manage', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const employee = new URL(req.url).searchParams.get('employee')
-  if (!employee || !isUuid(employee)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
-  const subsidiaryId = await employeeSubsidiaryId(gate.user.orgId, employee)
-  if (subsidiaryId === undefined) return notFound("record")
-  const denied = guardSubsidiaryScope(gate, subsidiaryId)
-  if (denied) return denied
+export const GET = defineRoute({
+  permission: 'payroll.manage',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const employee = new URL(req.url).searchParams.get('employee')
+    if (!employee || !isUuid(employee)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
+    const subsidiaryId = await employeeSubsidiaryId(gate.user.orgId, employee)
+    if (subsidiaryId === undefined) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, subsidiaryId)
+    if (denied) return denied
 
-  // Row-backed declarations per pack: the forms this surface may store
-  // answers for. Column-backed certificates stay on the profile editor.
-  const declarations: Record<string, ReturnType<typeof packCertificates>> = {}
-  for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
-    const declared = packCertificates(country)
-    declarations[country] = {
-      country: declared.country,
-      certificates: declared.certificates.filter((certificate) => certificate.storage === 'certificate_rows'),
+    // Row-backed declarations per pack: the forms this surface may store
+    // answers for. Column-backed certificates stay on the profile editor.
+    const declarations: Record<string, ReturnType<typeof packCertificates>> = {}
+    for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
+      const declared = packCertificates(country)
+      declarations[country] = {
+        country: declared.country,
+        certificates: declared.certificates.filter((certificate) => certificate.storage === 'certificate_rows'),
+      }
     }
-  }
-  const stored = (await db.execute<StoredRow>(sql`
-    select certificate_key, country, region, sub_region, answers,
-           effective_from::text as effective_from, superseded_on::text as superseded_on
-      from employee_tax_certificates
-     where org_id = ${gate.user.orgId} and employee_party_id = ${employee}
-     order by certificate_key, coalesce(region, ''), coalesce(sub_region, ''),
-              effective_from nulls first`)).rows
-  return NextResponse.json({
-    countries: Object.keys(PAYROLL_COUNTRY_PACKS),
-    declarations,
-    stored,
-  })
-}
+    const stored = (await db.execute<StoredRow>(sql`
+      select certificate_key, country, region, sub_region, answers,
+             effective_from::text as effective_from, superseded_on::text as superseded_on
+        from employee_tax_certificates
+       where org_id = ${gate.user.orgId} and employee_party_id = ${employee}
+       order by certificate_key, coalesce(region, ''), coalesce(sub_region, ''),
+                effective_from nulls first`)).rows
+    return NextResponse.json({
+      countries: Object.keys(PAYROLL_COUNTRY_PACKS),
+      declarations,
+      stored,
+    })
 
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('payroll.manage', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const orgId = gate.user.orgId
-  const userId = gate.user.id
-  const parsedBody = await parseJsonBody(req, certificateBodySchema);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data
+  },
+})
 
-  if (!isUuid(body.employeePartyId)) return NextResponse.json({ error: 'employeePartyId required' }, { status: 422 })
-  const subsidiaryId = await employeeSubsidiaryId(orgId, body.employeePartyId)
-  if (subsidiaryId === undefined) {
-    return NextResponse.json(
-      { error: `no employee "${body.employeePartyId}" in this organization — create the employee record before filing a certificate` },
-      { status: 422 },
-    )
-  }
-  const denied = guardSubsidiaryScope(gate, subsidiaryId)
-  if (denied) return denied
+export const POST = defineRoute({
+  permission: 'payroll.manage',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const orgId = gate.user.orgId
+    const userId = gate.user.id
+    const parsedBody = await parseJsonBody(req, certificateBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data
 
-  // The pack registry is the only validator for the country and the form.
-  const country = String(body.country ?? '')
-  if (!(country in PAYROLL_COUNTRY_PACKS)) {
-    return NextResponse.json({ error: 'unknown payroll country pack' }, { status: 422 })
-  }
-  let certificate
-  try {
-    certificate = payrollCertificate(country, String(body.certificateKey ?? ''))
-  } catch {
-    return NextResponse.json({ error: `unknown certificate "${String(body.certificateKey ?? '')}" for ${country}` }, { status: 422 })
-  }
-  if (certificate.storage !== 'certificate_rows') {
-    return NextResponse.json(
-      { error: `certificate "${certificate.key}" is edited through the payroll profile, not here` },
-      { status: 422 },
-    )
-  }
-  // The stored jurisdiction point must be the certificate's own scope: a
-  // country-level form carries no region, a region-level form carries its
-  // region, a sub-region form carries both. Anything else would fork "which
-  // certificate is in force" into ambiguous rows.
-  // Omitting the point means "the certificate's own" — the declaration already
-  // says where a region-scoped form files, so a caller that does not repeat it
-  // is not thereby wrong. Sending a CONFLICTING point still refuses below.
-  const region = body.region === undefined
-    ? certificate.scope.region ?? null
-    : (body.region === null || body.region === '' ? null : String(body.region))
-  const subRegion = body.subRegion === undefined
-    ? certificate.scope.subRegion ?? null
-    : (body.subRegion === null || body.subRegion === '' ? null : String(body.subRegion))
-  const { level } = certificate.scope
-  if (level === 'country' && (region !== null || subRegion !== null)) {
-    return NextResponse.json({ error: `certificate "${certificate.key}" is country-level and carries no region` }, { status: 422 })
-  }
-  if (level === 'region' && (region !== certificate.scope.region || subRegion !== null)) {
-    return NextResponse.json({ error: `certificate "${certificate.key}" is filed for region "${certificate.scope.region ?? ''}"` }, { status: 422 })
-  }
-  if (level === 'sub_region' && (region !== certificate.scope.region || subRegion !== certificate.scope.subRegion)) {
-    return NextResponse.json({ error: `certificate "${certificate.key}" is filed for "${certificate.scope.region ?? ''}/${certificate.scope.subRegion ?? ''}"` }, { status: 422 })
-  }
+    if (!isUuid(body.employeePartyId)) return NextResponse.json({ error: 'employeePartyId required' }, { status: 422 })
+    const subsidiaryId = await employeeSubsidiaryId(orgId, body.employeePartyId)
+    if (subsidiaryId === undefined) {
+      return NextResponse.json(
+        { error: `no employee "${body.employeePartyId}" in this organization — create the employee record before filing a certificate` },
+        { status: 422 },
+      )
+    }
+    const denied = guardSubsidiaryScope(gate, subsidiaryId)
+    if (denied) return denied
 
-  const effectiveFrom = body.effectiveFrom == null || body.effectiveFrom === ''
-    ? null : String(body.effectiveFrom)
-  if (effectiveFrom !== null && !isIsoCalendarDate(effectiveFrom)) {
-    return NextResponse.json({ error: 'effectiveFrom must be a real ISO calendar date (YYYY-MM-DD)' }, { status: 422 })
-  }
+    // The pack registry is the only validator for the country and the form.
+    const country = String(body.country ?? '')
+    if (!(country in PAYROLL_COUNTRY_PACKS)) {
+      return NextResponse.json({ error: 'unknown payroll country pack' }, { status: 422 })
+    }
+    let certificate
+    try {
+      certificate = payrollCertificate(country, String(body.certificateKey ?? ''))
+    } catch {
+      return NextResponse.json({ error: `unknown certificate "${String(body.certificateKey ?? '')}" for ${country}` }, { status: 422 })
+    }
+    if (certificate.storage !== 'certificate_rows') {
+      return NextResponse.json(
+        { error: `certificate "${certificate.key}" is edited through the payroll profile, not here` },
+        { status: 422 },
+      )
+    }
+    // The stored jurisdiction point must be the certificate's own scope: a
+    // country-level form carries no region, a region-level form carries its
+    // region, a sub-region form carries both. Anything else would fork "which
+    // certificate is in force" into ambiguous rows.
+    // Omitting the point means "the certificate's own" — the declaration already
+    // says where a region-scoped form files, so a caller that does not repeat it
+    // is not thereby wrong. Sending a CONFLICTING point still refuses below.
+    const region = body.region === undefined
+      ? certificate.scope.region ?? null
+      : (body.region === null || body.region === '' ? null : String(body.region))
+    const subRegion = body.subRegion === undefined
+      ? certificate.scope.subRegion ?? null
+      : (body.subRegion === null || body.subRegion === '' ? null : String(body.subRegion))
+    const { level } = certificate.scope
+    if (level === 'country' && (region !== null || subRegion !== null)) {
+      return NextResponse.json({ error: `certificate "${certificate.key}" is country-level and carries no region` }, { status: 422 })
+    }
+    if (level === 'region' && (region !== certificate.scope.region || subRegion !== null)) {
+      return NextResponse.json({ error: `certificate "${certificate.key}" is filed for region "${certificate.scope.region ?? ''}"` }, { status: 422 })
+    }
+    if (level === 'sub_region' && (region !== certificate.scope.region || subRegion !== certificate.scope.subRegion)) {
+      return NextResponse.json({ error: `certificate "${certificate.key}" is filed for "${certificate.scope.region ?? ''}/${certificate.scope.subRegion ?? ''}"` }, { status: 422 })
+    }
 
-  // Canonicalize before validating: empty answers are "unanswered" (the
-  // reader falls back to the declared default), so they are dropped rather
-  // than stored as empty strings beside real answers.
-  const raw = body.answers ?? {}
-  const answers: Record<string, string> = {}
-  for (const [key, value] of Object.entries(raw)) {
-    if (value === null || value === undefined) continue
-    const text = String(value).trim()
-    if (text === '') continue
-    answers[key] = text
-  }
-  // The scope check reads the employee's OWN profile, not just the body: a
-  // region-scoped certificate files only for an employee of that region, and a
-  // pack's form files only for an employee under that pack. Without this, a New
-  // York certificate could be filed against a California employee and withhold
-  // by the wrong state's table. The declared scope is the authority — the key's
-  // name is never parsed.
-  const profile = (await db.execute<{ country: string; province: string }>(sql`
-    select country, province from employee_payroll_profiles
-     where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}`)).rows[0]
-  if (!profile) {
-    return NextResponse.json(
-      { error: 'no payroll profile for this employee — save the profile before filing a certificate' },
-      { status: 422 },
-    )
-  }
-  if (profile.country !== country) {
-    return NextResponse.json(
-      {
-        error: `"${certificate.key}" belongs to the ${country} payroll pack but this employee's `
-          + `profile is under ${profile.country} — file the certificate the employee's own pack declares`,
-      },
-      { status: 422 },
-    )
-  }
-  if (certificate.scope.level !== 'country' && profile.province !== region) {
-    return NextResponse.json(
-      {
-        error: `"${certificate.key}" is scoped to ${region ?? '(unscoped)'} but this employee works in `
-          + `${profile.province || '(no region)'} — a certificate files only for its own region`,
-      },
-      { status: 422 },
-    )
-  }
+    const effectiveFrom = body.effectiveFrom == null || body.effectiveFrom === ''
+      ? null : String(body.effectiveFrom)
+    if (effectiveFrom !== null && !isIsoCalendarDate(effectiveFrom)) {
+      return NextResponse.json({ error: 'effectiveFrom must be a real ISO calendar date (YYYY-MM-DD)' }, { status: 422 })
+    }
 
-  // A filing that answers NOTHING is refused outright. Where every required
-  // field carries a declared default, nothing below would object — and the
-  // stored row would then read as "on file" downstream while asserting
-  // nothing, which is worse than no certificate at all.
-  if (Object.keys(answers).length === 0) {
-    return NextResponse.json(
-      { error: `"${certificate.key}" was filed with no answers — a certificate on file must state something` },
-      { status: 422 },
-    )
-  }
-
-  const problem = certificateAnswersProblem(certificate, answers)
-  if (problem) return NextResponse.json({ error: problem }, { status: 422 })
-
-  // Store amounts AT THE DECLARED SCALE. "25.5" and "25.5000" are the same
-  // answer, and leaving whichever the operator typed makes two stored rows
-  // that must compare equal look different to anything reading them back.
-  // Validation above already proved each one normalizes.
-  for (const field of certificate.fields) {
-    if (field.kind !== 'amount' || field.decimals == null) continue
-    const answer = answers[field.key]
-    if (answer === undefined) continue
-    answers[field.key] = normalizeDecimal(answer, field.decimals)
-  }
-
-  return withOrgTransaction(orgId, async () => {
-    // Lock the stable parent before reading current certificates. On a first
-    // filing there is no certificate row for FOR UPDATE to lock, so locking
-    // only the open rows lets two transactions both decide to insert a
-    // current row. The payroll profile exists for every eligible employee and
-    // serializes certificate filings for that employee, including first ones.
-    const profileLock = (await db.execute<{ employee_party_id: string }>(sql`
-      select employee_party_id from employee_payroll_profiles
-       where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
-       for update`)).rows
-    if (profileLock.length !== 1) {
+    // Canonicalize before validating: empty answers are "unanswered" (the
+    // reader falls back to the declared default), so they are dropped rather
+    // than stored as empty strings beside real answers.
+    const raw = body.answers ?? {}
+    const answers: Record<string, string> = {}
+    for (const [key, value] of Object.entries(raw)) {
+      if (value === null || value === undefined) continue
+      const text = String(value).trim()
+      if (text === '') continue
+      answers[key] = text
+    }
+    // The scope check reads the employee's OWN profile, not just the body: a
+    // region-scoped certificate files only for an employee of that region, and a
+    // pack's form files only for an employee under that pack. Without this, a New
+    // York certificate could be filed against a California employee and withhold
+    // by the wrong state's table. The declared scope is the authority — the key's
+    // name is never parsed.
+    const profile = (await db.execute<{ country: string; province: string }>(sql`
+      select country, province from employee_payroll_profiles
+       where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}`)).rows[0]
+    if (!profile) {
       return NextResponse.json(
         { error: 'no payroll profile for this employee — save the profile before filing a certificate' },
         { status: 422 },
       )
     }
-    const open = (await db.execute<{ id: string; effective_from: string | null }>(sql`
-      select id, effective_from::text as effective_from from employee_tax_certificates
-       where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
-         and certificate_key = ${certificate.key}
-         and coalesce(region, '') = coalesce(${region}, '')
-         and coalesce(sub_region, '') = coalesce(${subRegion}, '')
-         and superseded_on is null
-       for update`)).rows
-    // Backdating across a later certificate would fork the history the
-    // engine reads as of a pay date: refuse, so the operator supersedes
-    // forward instead.
-    // A new certificate takes effect on the org's business day, never the UTC
-    // day (which is tomorrow in the evening for the Americas).
-    const effective = effectiveFrom ?? (await businessToday(orgId))
-    for (const row of open) {
-      if (row.effective_from !== null && row.effective_from > effective) {
+    if (profile.country !== country) {
+      return NextResponse.json(
+        {
+          error: `"${certificate.key}" belongs to the ${country} payroll pack but this employee's `
+            + `profile is under ${profile.country} — file the certificate the employee's own pack declares`,
+        },
+        { status: 422 },
+      )
+    }
+    if (certificate.scope.level !== 'country' && profile.province !== region) {
+      return NextResponse.json(
+        {
+          error: `"${certificate.key}" is scoped to ${region ?? '(unscoped)'} but this employee works in `
+            + `${profile.province || '(no region)'} — a certificate files only for its own region`,
+        },
+        { status: 422 },
+      )
+    }
+
+    // A filing that answers NOTHING is refused outright. Where every required
+    // field carries a declared default, nothing below would object — and the
+    // stored row would then read as "on file" downstream while asserting
+    // nothing, which is worse than no certificate at all.
+    if (Object.keys(answers).length === 0) {
+      return NextResponse.json(
+        { error: `"${certificate.key}" was filed with no answers — a certificate on file must state something` },
+        { status: 422 },
+      )
+    }
+
+    const problem = certificateAnswersProblem(certificate, answers)
+    if (problem) return NextResponse.json({ error: problem }, { status: 422 })
+
+    // Store amounts AT THE DECLARED SCALE. "25.5" and "25.5000" are the same
+    // answer, and leaving whichever the operator typed makes two stored rows
+    // that must compare equal look different to anything reading them back.
+    // Validation above already proved each one normalizes.
+    for (const field of certificate.fields) {
+      if (field.kind !== 'amount' || field.decimals == null) continue
+      const answer = answers[field.key]
+      if (answer === undefined) continue
+      answers[field.key] = normalizeDecimal(answer, field.decimals)
+    }
+
+    return withOrgTransaction(orgId, async () => {
+      // Lock the stable parent before reading current certificates. On a first
+      // filing there is no certificate row for FOR UPDATE to lock, so locking
+      // only the open rows lets two transactions both decide to insert a
+      // current row. The payroll profile exists for every eligible employee and
+      // serializes certificate filings for that employee, including first ones.
+      const profileLock = (await db.execute<{ employee_party_id: string }>(sql`
+        select employee_party_id from employee_payroll_profiles
+         where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
+         for update`)).rows
+      if (profileLock.length !== 1) {
         return NextResponse.json(
-          { error: `a later "${certificate.key}" certificate (effective ${row.effective_from}) is already on file` },
+          { error: 'no payroll profile for this employee — save the profile before filing a certificate' },
           { status: 422 },
         )
       }
-    }
-    await db.execute(sql`
-      update employee_tax_certificates
-         set superseded_on = ${effective}::date, updated_by = ${userId}, updated_at = clock_timestamp()
-       where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
-         and certificate_key = ${certificate.key}
-         and coalesce(region, '') = coalesce(${region}, '')
-         and coalesce(sub_region, '') = coalesce(${subRegion}, '')
-         and superseded_on is null`)
-    const inserted = (await db.execute<{ id: string }>(sql`
-      insert into employee_tax_certificates
-        (org_id, employee_party_id, country, certificate_key, region, sub_region,
-         answers, effective_from, created_by, updated_by)
-      values (${orgId}, ${body.employeePartyId}, ${country}, ${certificate.key},
-              ${region}, ${subRegion}, ${JSON.stringify(answers)}::jsonb,
-              ${effective}::date, ${userId}, ${userId})
-      returning id`)).rows[0]!
-    await db.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id, at)
-      values (${orgId}, 'employee_tax_certificates', ${inserted.id}, 'insert',
-        ${JSON.stringify({
-          after: {
-            certificate_key: certificate.key, country, region, sub_region: subRegion,
-            answers, effective_from: effective,
-            superseded: open.map((row) => row.id),
-          },
-        })}::jsonb,
-        ${userId}, ${req.headers.get('X-Request-Id')}, clock_timestamp())`)
-    return NextResponse.json({ ok: true, certificateKey: certificate.key, effectiveFrom: effective })
-  })
-}
+      const open = (await db.execute<{ id: string; effective_from: string | null }>(sql`
+        select id, effective_from::text as effective_from from employee_tax_certificates
+         where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
+           and certificate_key = ${certificate.key}
+           and coalesce(region, '') = coalesce(${region}, '')
+           and coalesce(sub_region, '') = coalesce(${subRegion}, '')
+           and superseded_on is null
+         for update`)).rows
+      // Backdating across a later certificate would fork the history the
+      // engine reads as of a pay date: refuse, so the operator supersedes
+      // forward instead.
+      // A new certificate takes effect on the org's business day, never the UTC
+      // day (which is tomorrow in the evening for the Americas).
+      const effective = effectiveFrom ?? (await businessToday(orgId))
+      for (const row of open) {
+        if (row.effective_from !== null && row.effective_from > effective) {
+          return NextResponse.json(
+            { error: `a later "${certificate.key}" certificate (effective ${row.effective_from}) is already on file` },
+            { status: 422 },
+          )
+        }
+      }
+      await db.execute(sql`
+        update employee_tax_certificates
+           set superseded_on = ${effective}::date, updated_by = ${userId}, updated_at = clock_timestamp()
+         where org_id = ${orgId} and employee_party_id = ${body.employeePartyId}
+           and certificate_key = ${certificate.key}
+           and coalesce(region, '') = coalesce(${region}, '')
+           and coalesce(sub_region, '') = coalesce(${subRegion}, '')
+           and superseded_on is null`)
+      const inserted = (await db.execute<{ id: string }>(sql`
+        insert into employee_tax_certificates
+          (org_id, employee_party_id, country, certificate_key, region, sub_region,
+           answers, effective_from, created_by, updated_by)
+        values (${orgId}, ${body.employeePartyId}, ${country}, ${certificate.key},
+                ${region}, ${subRegion}, ${JSON.stringify(answers)}::jsonb,
+                ${effective}::date, ${userId}, ${userId})
+        returning id`)).rows[0]!
+      await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id, at)
+        values (${orgId}, 'employee_tax_certificates', ${inserted.id}, 'insert',
+          ${JSON.stringify({
+            after: {
+              certificate_key: certificate.key, country, region, sub_region: subRegion,
+              answers, effective_from: effective,
+              superseded: open.map((row) => row.id),
+            },
+          })}::jsonb,
+          ${userId}, ${req.headers.get('X-Request-Id')}, clock_timestamp())`)
+      return NextResponse.json({ ok: true, certificateKey: certificate.key, effectiveFrom: effective })
+    })
+
+  },
+})

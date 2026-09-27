@@ -1,8 +1,9 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { resolveFlag } from "@openbooks/engine/src/hrm/ai/anomalies.ts";
-import { aiRailsErrorResponse, requireAnyPerm } from "../../../../../lib/ai-rails";
+import { aiRailsErrorResponse } from "../../../../../lib/ai-rails";
+import { can } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
@@ -21,22 +22,24 @@ const transitionBody = z.object({
  * or dismiss only through the payroll manager (enforced in the service);
  * false-positives feed the per-org suppression list. One transaction.
  */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await requireAnyPerm(["payroll.manage", "time.approve", "hrm.employment.read"]);
-  if (gate instanceof NextResponse) return gate;
+export const PATCH = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string() }),
+  body: transitionBody,
+  handler: async ({ params, body, authz: gate }) => {
+  if (!("payroll.manage time.approve hrm.employment.read".split(" ")).some((permission) => can(gate, permission))) {
+    return NextResponse.json({ error: "missing permission: one of payroll.manage, time.approve, hrm.employment.read" }, { status: 403 });
+  }
   if (
     !(await isFeatureEnabled(gate.user.orgId, "hrmPayrollAnomalies")) &&
     !(await isFeatureEnabled(gate.user.orgId, "hrmTimeAnomalies"))
   ) {
     return notFound("record");
   }
-  const { id } = await params;
+  const { id } = params;
   if (!isUuid(id)) {
     return NextResponse.json({ error: "flag id must be a uuid" }, { status: 400 });
   }
-  const parsedBody = await parseJsonBody(req, transitionBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
   try {
     const flag = await resolveFlag({
       orgId: gate.user.orgId,
@@ -49,4 +52,5 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   } catch (e) {
     return aiRailsErrorResponse(e);
   }
-}
+  },
+})

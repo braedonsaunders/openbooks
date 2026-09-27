@@ -1,5 +1,7 @@
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -25,6 +27,17 @@ import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { decimalNullRefusal, moneyRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.looseObject({
+  country: z.unknown().optional(),
+  rateKey: z.unknown().optional(),
+  region: z.unknown().optional(),
+  subRegion: z.unknown().optional(),
+  filingAccountId: z.unknown().optional(),
+  taxYear: z.unknown().optional(),
+  values: z.unknown().optional(),
+})
+
 
 
 export const dynamic = 'force-dynamic'
@@ -160,170 +173,179 @@ function persistStatutoryRateValues(
   return persisted
 }
 
-export async function GET(req: Request) {
-  const gate = await guardFeaturePermission('payroll.manage', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const scopeDenied = await guardRootSubsidiaryScope(gate)
-  if (scopeDenied) return scopeDenied
-  const orgId = gate.user.orgId
-  const url = new URL(req.url)
+export const GET = defineRoute({
+  permission: 'payroll.manage',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const scopeDenied = await guardRootSubsidiaryScope(gate)
+    if (scopeDenied) return scopeDenied
+    const orgId = gate.user.orgId
+    const url = new URL(req.url)
 
-  const blobRes = (await db.execute<{ p: Record<string, unknown> | null }>(
-    sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
-  ))
-  const installed = await installedPayrollCountries(orgId, blobRes.rows[0]?.p ?? {})
-  const requestedYear = Number(url.searchParams.get('year'))
-  const year = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100
-    ? requestedYear
-    : await defaultYear(orgId, installed)
+    const blobRes = (await db.execute<{ p: Record<string, unknown> | null }>(
+      sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
+    ))
+    const installed = await installedPayrollCountries(orgId, blobRes.rows[0]?.p ?? {})
+    const requestedYear = Number(url.searchParams.get('year'))
+    const year = Number.isInteger(requestedYear) && requestedYear >= 2000 && requestedYear <= 2100
+      ? requestedYear
+      : await defaultYear(orgId, installed)
 
-  const [rows, accounts] = await Promise.all([
-    listStatutoryRates(orgId, { taxYear: year }),
-    listFilingAccounts(orgId),
-  ])
+    const [rows, accounts] = await Promise.all([
+      listStatutoryRates(orgId, { taxYear: year }),
+      listFilingAccounts(orgId),
+    ])
 
-  // Only the installed packs' declarations — an org that runs one country is not
-  // shown another's levies.
-  const packs = []
-  const gaps = []
-  for (const country of installed) {
-    let declaration
-    try {
-      declaration = packRates(country)
-    } catch (error) {
-      if (!(error instanceof PayrollPackError)) throw error
-      continue // a pack that declares no tenant-entered rates has no surface
-    }
-    const regions = payrollPack(country).regions
-    packs.push({
-      country,
-      regionLabel: regions.label,
-      knownRegions: [...regions.known],
-      slots: declaration.slots.map((slot) => ({
-        key: slot.key,
-        label: slot.label,
-        scope: slot.scope,
-        programType: slot.programType ?? null,
-        regions: slot.regions ? [...slot.regions] : null,
-        citation: slot.citation,
-        variesBecause: slot.variesBecause,
-        systemKeys: [...slot.systemKeys],
-        fields: slot.fields.map((field) => ({ ...field })),
-      })),
-      accounts: accounts
-        .filter((account) => account.country === country)
-        .map((account) => ({
-          id: account.id,
-          accountNumber: account.accountNumber,
-          name: account.name,
-          programType: account.programType,
-          stateCode: account.stateCode,
+    // Only the installed packs' declarations — an org that runs one country is not
+    // shown another's levies.
+    const packs = []
+    const gaps = []
+    for (const country of installed) {
+      let declaration
+      try {
+        declaration = packRates(country)
+      } catch (error) {
+        if (!(error instanceof PayrollPackError)) throw error
+        continue // a pack that declares no tenant-entered rates has no surface
+      }
+      const regions = payrollPack(country).regions
+      packs.push({
+        country,
+        regionLabel: regions.label,
+        knownRegions: [...regions.known],
+        slots: declaration.slots.map((slot) => ({
+          key: slot.key,
+          label: slot.label,
+          scope: slot.scope,
+          programType: slot.programType ?? null,
+          regions: slot.regions ? [...slot.regions] : null,
+          citation: slot.citation,
+          variesBecause: slot.variesBecause,
+          systemKeys: [...slot.systemKeys],
+          fields: slot.fields.map((field) => ({ ...field })),
         })),
-    })
-    gaps.push(...await payrollStatutoryRateGaps(orgId, country, year))
-  }
-
-  return NextResponse.json({
-    year,
-    installed,
-    packs,
-    rows: rows.filter((row) => installed.includes(row.country)),
-    gaps,
-    // What the packs' statutory tables are loaded for — the same declaration the
-    // readiness blocker and the year-end refusal read.
-    coverage: payrollTaxYearCoverage().filter((entry) => installed.includes(entry.country)),
-  })
-}
-
-export async function PUT(req: Request) {
-  const gate = await guardFeaturePermission('payroll.manage', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const scopeDenied = await guardRootSubsidiaryScope(gate)
-  if (scopeDenied) return scopeDenied
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const parsed = parseBody(parsedBody.data)
-  if (typeof parsed === 'string') return NextResponse.json({ error: parsed }, { status: 422 })
-
-  const account = parsed.filingAccountId
-    ? (await listFilingAccounts(gate.user.orgId)).find((a) => a.id === parsed.filingAccountId) ?? null
-    : null
-  // The pack declaration is the only validator — scope, region, program type and
-  // every field's scale and range come from it, exactly as filing-account
-  // program types are validated against the pack's filing declaration.
-  // Inside the refusal path: `country` is any non-empty string off the request,
-  // so an unknown one throws PayrollJurisdictionError here. Outside a catch that
-  // was a 500; the thrown message already names the implemented countries.
-  let pack
-  try {
-    pack = payrollPack(parsed.country)
-  } catch (error) {
-    if (error instanceof PayrollError) {
-      return apiErrorResponse(error, { safeStatus: 422 })
+        accounts: accounts
+          .filter((account) => account.country === country)
+          .map((account) => ({
+            id: account.id,
+            accountNumber: account.accountNumber,
+            name: account.name,
+            programType: account.programType,
+            stateCode: account.stateCode,
+          })),
+      })
+      gaps.push(...await payrollStatutoryRateGaps(orgId, country, year))
     }
-    throw error
-  }
-  const problem = statutoryRateProblem({
-    rates: pack.statutoryRates,
-    regions: pack.regions,
-    rateKey: parsed.rateKey,
-    region: parsed.region,
-    subRegion: parsed.subRegion,
-    filingAccountId: parsed.filingAccountId,
-    taxYear: parsed.taxYear,
-    account: account
-      ? { country: account.country, programType: account.programType, stateCode: account.stateCode }
-      : null,
-  })
-  if (problem) return NextResponse.json({ error: problem }, { status: 422 })
 
-  const values = persistStatutoryRateValues(parsed.country, parsed.rateKey, parsed.values)
-  if (typeof values === 'string') return NextResponse.json({ error: values }, { status: 422 })
+    return NextResponse.json({
+      year,
+      installed,
+      packs,
+      rows: rows.filter((row) => installed.includes(row.country)),
+      gaps,
+      // What the packs' statutory tables are loaded for — the same declaration the
+      // readiness blocker and the year-end refusal read.
+      coverage: payrollTaxYearCoverage().filter((entry) => installed.includes(entry.country)),
+    })
 
-  try {
-    const saved = await upsertStatutoryRate({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
+  },
+})
+
+export const PUT = defineRoute({
+  permission: 'payroll.manage',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const scopeDenied = await guardRootSubsidiaryScope(gate)
+    if (scopeDenied) return scopeDenied
+    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
+    const parsed = parseBody(parsedBody.data)
+    if (typeof parsed === 'string') return NextResponse.json({ error: parsed }, { status: 422 })
+
+    const account = parsed.filingAccountId
+      ? (await listFilingAccounts(gate.user.orgId)).find((a) => a.id === parsed.filingAccountId) ?? null
+      : null
+    // The pack declaration is the only validator — scope, region, program type and
+    // every field's scale and range come from it, exactly as filing-account
+    // program types are validated against the pack's filing declaration.
+    // Inside the refusal path: `country` is any non-empty string off the request,
+    // so an unknown one throws PayrollJurisdictionError here. Outside a catch that
+    // was a 500; the thrown message already names the implemented countries.
+    let pack
+    try {
+      pack = payrollPack(parsed.country)
+    } catch (error) {
+      if (error instanceof PayrollError) {
+        return apiErrorResponse(error, { safeStatus: 422 })
+      }
+      throw error
+    }
+    const problem = statutoryRateProblem({
       rates: pack.statutoryRates,
+      regions: pack.regions,
       rateKey: parsed.rateKey,
       region: parsed.region,
       subRegion: parsed.subRegion,
       filingAccountId: parsed.filingAccountId,
       taxYear: parsed.taxYear,
-      values,
+      account: account
+        ? { country: account.country, programType: account.programType, stateCode: account.stateCode }
+        : null,
     })
-    return NextResponse.json({ ok: true, ...saved })
-  } catch (error) {
-    if (error instanceof PayrollPackError) {
-      return apiErrorResponse(error, { safeStatus: 422 })
-    }
-    throw error
-  }
-}
+    if (problem) return NextResponse.json({ error: problem }, { status: 422 })
 
-export async function DELETE(req: Request) {
-  const gate = await guardFeaturePermission('payroll.manage', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const scopeDenied = await guardRootSubsidiaryScope(gate)
-  if (scopeDenied) return scopeDenied
-  const id = new URL(req.url).searchParams.get('id') ?? ''
-  if (!isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
-  try {
-    const removed = await deleteStatutoryRate(gate.user.orgId, gate.user.id, id)
-    if (!removed) return notFound("record")
-    return NextResponse.json({ ok: true })
-  } catch (error) {
-    // `deleteStatutoryRate` RETIRES the open row (stamps superseded_on, writes
-    // no successor) rather than deleting it: statutory rows are
-    // effective-dated payroll inputs, so prior periods keep resolving while
-    // the current setup reads unconfigured. A refusal here is a genuine
-    // failure, and like every other payroll refusal it must reach the
-    // operator as a 422 — uncaught it became a 500, and the UI's `res.json()`
-    // then failed on the non-JSON error body, so the toast showed a parse
-    // error instead of the message.
-    if (error instanceof PayrollError) {
-      return apiErrorResponse(error, { safeStatus: 422 })
+    const values = persistStatutoryRateValues(parsed.country, parsed.rateKey, parsed.values)
+    if (typeof values === 'string') return NextResponse.json({ error: values }, { status: 422 })
+
+    try {
+      const saved = await upsertStatutoryRate({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        rates: pack.statutoryRates,
+        rateKey: parsed.rateKey,
+        region: parsed.region,
+        subRegion: parsed.subRegion,
+        filingAccountId: parsed.filingAccountId,
+        taxYear: parsed.taxYear,
+        values,
+      })
+      return NextResponse.json({ ok: true, ...saved })
+    } catch (error) {
+      if (error instanceof PayrollPackError) {
+        return apiErrorResponse(error, { safeStatus: 422 })
+      }
+      throw error
     }
-    throw error
-  }
-}
+
+  },
+})
+
+export const DELETE = defineRoute({
+  permission: 'payroll.manage',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
+    const scopeDenied = await guardRootSubsidiaryScope(gate)
+    if (scopeDenied) return scopeDenied
+    const id = new URL(req.url).searchParams.get('id') ?? ''
+    if (!isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
+    try {
+      const removed = await deleteStatutoryRate(gate.user.orgId, gate.user.id, id)
+      if (!removed) return notFound("record")
+      return NextResponse.json({ ok: true })
+    } catch (error) {
+      // `deleteStatutoryRate` RETIRES the open row (stamps superseded_on, writes
+      // no successor) rather than deleting it: statutory rows are
+      // effective-dated payroll inputs, so prior periods keep resolving while
+      // the current setup reads unconfigured. A refusal here is a genuine
+      // failure, and like every other payroll refusal it must reach the
+      // operator as a 422 — uncaught it became a 500, and the UI's `res.json()`
+      // then failed on the non-JSON error body, so the toast showed a parse
+      // error instead of the message.
+      if (error instanceof PayrollError) {
+        return apiErrorResponse(error, { safeStatus: 422 })
+      }
+      throw error
+    }
+
+  },
+})

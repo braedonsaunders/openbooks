@@ -1,5 +1,7 @@
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -15,6 +17,15 @@ import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { guardPayrollEmployees } from '../subsidiary-scope'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.looseObject({
+  "action": z.unknown().optional(),
+  "employeePartyIds": z.unknown().optional(),
+  "excludeSourcePayRunDocumentIds": z.unknown().optional(),
+  "payDate": z.unknown().optional(),
+  "payScheduleId": z.unknown().optional(),
+})
+
 
 
 export const dynamic = 'force-dynamic'
@@ -136,87 +147,90 @@ async function guardExcludedSourceRuns(
     : notFound("record")
 }
 
-export async function POST(req: Request) {
-  const gate = await guardFeaturePermission('payroll.run', 'payroll')
-  if (gate instanceof NextResponse) return gate
+export const POST = defineRoute({
+  permission: 'payroll.run',
+  feature: 'payroll',
+  handler: async ({ request: req, authz: gate }) => {
 
-  let body: Body
-  try {
-    const parsedBody = await parseJsonBody(req, jsonObject);
-    if (!parsedBody.ok) return parsedBody.response;
-    body = (parsedBody.data) as Body
-  } catch {
-    return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
-  }
-  if (typeof body.payScheduleId !== 'string' || !isUuid(body.payScheduleId)) {
-    return NextResponse.json({ error: 'payScheduleId must be a pay schedule' }, { status: 422 })
-  }
-  if (!isIsoCalendarDate(body.payDate)) {
-    return NextResponse.json({ error: 'payDate must be a real calendar date (YYYY-MM-DD)' }, { status: 422 })
-  }
-
-  // An explicitly empty list is the workspace's default state (no
-  // exclusions checked, no employee filter applied) and means the same as
-  // an absent key. uuidList already folds [] to undefined; the checks below
-  // must not mistake that fold for a malformed value, or every UI propose
-  // that excludes nothing is refused with 422.
-  const employeeIdsInput =
-    Array.isArray(body.employeePartyIds) && body.employeePartyIds.length === 0
-      ? undefined
-      : body.employeePartyIds;
-  const requestedEmployees = employeeIdsInput === undefined
-    ? undefined
-    : uuidList(employeeIdsInput)
-  if (employeeIdsInput !== undefined && !requestedEmployees) {
-    return NextResponse.json({ error: 'employeePartyIds must be UUIDs' }, { status: 422 })
-  }
-  const employeePartyIds = await scopedRetroEmployees(
-    gate,
-    body.payScheduleId,
-    requestedEmployees,
-  )
-  if (employeePartyIds instanceof NextResponse) return employeePartyIds
-
-  const exclusionsInput =
-    Array.isArray(body.excludeSourcePayRunDocumentIds) && body.excludeSourcePayRunDocumentIds.length === 0
-      ? undefined
-      : body.excludeSourcePayRunDocumentIds;
-  const excludedSourcePayRunDocumentIds = exclusionsInput === undefined ? undefined : uuidList(exclusionsInput)
-  if (exclusionsInput !== undefined && !excludedSourcePayRunDocumentIds) {
-    return NextResponse.json({ error: 'excludeSourcePayRunDocumentIds must be UUIDs' }, { status: 422 })
-  }
-  const deniedExcluded = await guardExcludedSourceRuns(
-    gate,
-    body.payScheduleId,
-    excludedSourcePayRunDocumentIds,
-  )
-  if (deniedExcluded) return deniedExcluded
-
-  const input = {
-    orgId: gate.user.orgId,
-    actorId: gate.user.id,
-    payScheduleId: body.payScheduleId,
-    payDate: body.payDate,
-    employeePartyIds,
-    allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
-  }
-
-  try {
-    if (body.action === 'create') {
-      const result = await createRetroPayRun({
-        ...input,
-        excludeSourcePayRunDocumentIds: excludedSourcePayRunDocumentIds,
-      })
-      return NextResponse.json(result)
+    let body: Body
+    try {
+      const parsedBody = await parseJsonBody(req, requestBodySchema);
+      if (!parsedBody.ok) return parsedBody.response;
+      body = (parsedBody.data) as Body
+    } catch {
+      return NextResponse.json({ error: 'invalid JSON body' }, { status: 400 })
     }
-    return NextResponse.json(await proposeRetroPay(input))
-  } catch (error) {
-    // A refusal is the product working: nothing to pay, a decrease that is an
-    // overpayment recovery, a period in another statutory year. It reaches the
-    // operator as its own sentence, never as a 500.
-    if (error instanceof PayrollError) {
-      return apiErrorResponse(error, { safeStatus: 422 })
+    if (typeof body.payScheduleId !== 'string' || !isUuid(body.payScheduleId)) {
+      return NextResponse.json({ error: 'payScheduleId must be a pay schedule' }, { status: 422 })
     }
-    throw error
-  }
-}
+    if (!isIsoCalendarDate(body.payDate)) {
+      return NextResponse.json({ error: 'payDate must be a real calendar date (YYYY-MM-DD)' }, { status: 422 })
+    }
+
+    // An explicitly empty list is the workspace's default state (no
+    // exclusions checked, no employee filter applied) and means the same as
+    // an absent key. uuidList already folds [] to undefined; the checks below
+    // must not mistake that fold for a malformed value, or every UI propose
+    // that excludes nothing is refused with 422.
+    const employeeIdsInput =
+      Array.isArray(body.employeePartyIds) && body.employeePartyIds.length === 0
+        ? undefined
+        : body.employeePartyIds;
+    const requestedEmployees = employeeIdsInput === undefined
+      ? undefined
+      : uuidList(employeeIdsInput)
+    if (employeeIdsInput !== undefined && !requestedEmployees) {
+      return NextResponse.json({ error: 'employeePartyIds must be UUIDs' }, { status: 422 })
+    }
+    const employeePartyIds = await scopedRetroEmployees(
+      gate,
+      body.payScheduleId,
+      requestedEmployees,
+    )
+    if (employeePartyIds instanceof NextResponse) return employeePartyIds
+
+    const exclusionsInput =
+      Array.isArray(body.excludeSourcePayRunDocumentIds) && body.excludeSourcePayRunDocumentIds.length === 0
+        ? undefined
+        : body.excludeSourcePayRunDocumentIds;
+    const excludedSourcePayRunDocumentIds = exclusionsInput === undefined ? undefined : uuidList(exclusionsInput)
+    if (exclusionsInput !== undefined && !excludedSourcePayRunDocumentIds) {
+      return NextResponse.json({ error: 'excludeSourcePayRunDocumentIds must be UUIDs' }, { status: 422 })
+    }
+    const deniedExcluded = await guardExcludedSourceRuns(
+      gate,
+      body.payScheduleId,
+      excludedSourcePayRunDocumentIds,
+    )
+    if (deniedExcluded) return deniedExcluded
+
+    const input = {
+      orgId: gate.user.orgId,
+      actorId: gate.user.id,
+      payScheduleId: body.payScheduleId,
+      payDate: body.payDate,
+      employeePartyIds,
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+    }
+
+    try {
+      if (body.action === 'create') {
+        const result = await createRetroPayRun({
+          ...input,
+          excludeSourcePayRunDocumentIds: excludedSourcePayRunDocumentIds,
+        })
+        return NextResponse.json(result)
+      }
+      return NextResponse.json(await proposeRetroPay(input))
+    } catch (error) {
+      // A refusal is the product working: nothing to pay, a decrease that is an
+      // overpayment recovery, a period in another statutory year. It reaches the
+      // operator as its own sentence, never as a 500.
+      if (error instanceof PayrollError) {
+        return apiErrorResponse(error, { safeStatus: 422 })
+      }
+      throw error
+    }
+
+  },
+})

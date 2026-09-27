@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
+import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -12,6 +14,12 @@ import {
   CARD_ACCOUNT_TYPE,
   validateReferences,
 } from "../../../../../lib/cash/category-references";
+
+const requestBodySchema = z.looseObject({
+  "categories": z.unknown().optional(),
+  "expectedRevision": z.unknown().optional(),
+})
+
 
 export const runtime = "nodejs";
 
@@ -219,114 +227,120 @@ async function clean(
   return { ok: true, category: out };
 }
 
-export async function GET() {
-  const gate = await guardPermission("reports.read");
-  if (gate instanceof NextResponse) return gate;
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
-  const r = ((await db.execute(sql`
-    select settings -> 'analytics' -> 'cashflowCategories' as cats,
-           coalesce((settings -> 'analytics' ->> 'cashflowCategoriesRevision')::int, 0) as rev
-      from orgs where id = ${gate.user.orgId}
-  `)));
-  const raw = r.rows[0]?.cats;
-  return NextResponse.json({
-    categories: Array.isArray(raw) ? raw : [],
-    revision: typeof r.rows[0]?.rev === "number" ? r.rows[0].rev : 0,
-  });
-}
-
-export async function PUT(req: Request) {
-  const gate = await guardPermission("admin.setup.manage");
-  if (gate instanceof NextResponse) return gate;
-  // Cashflow categories are one org-wide forecasting policy stored on orgs;
-  // their subsidiary references constrain inputs, not which entities the
-  // replacement governs.
-  const scopeDenied = guardUnrestrictedScope(gate);
-  if (scopeDenied) return scopeDenied;
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { categories?: unknown[]; expectedRevision?: unknown } | null;
-  if (!body || !Array.isArray(body.categories)) return NextResponse.json({ error: "categories array required" }, { status: 400 });
-  if (body.categories.length > 50) return NextResponse.json({ error: "too many categories (max 50)" }, { status: 400 });
-  // Optimistic concurrency: the editor sends the revision it read, and a
-  // stale writer gets 409 instead of silently discarding the other edit.
-  if (!Number.isInteger(body.expectedRevision)) {
-    return NextResponse.json(
-      { error: "expectedRevision required", message: "Send the revision returned by GET with every replacement." },
-      { status: 400 },
-    );
-  }
-  const expectedRevision = body.expectedRevision as number;
-
-  // Sequential: the first invalid index wins, and reference checks stay ordered.
-  const cleaned: CleanResult[] = [];
-  for (const raw of body.categories) {
-    cleaned.push(await clean(raw, gate.user.orgId, gate.allowedSubsidiaryIds));
-  }
-  const invalidIndex = cleaned.findIndex((result) => !result.ok);
-  if (invalidIndex !== -1) {
-    const failure = cleaned[invalidIndex] as { ok: false; error: string };
-    return NextResponse.json(
-      {
-        error: `invalid category at index ${invalidIndex}`,
-        message: failure.error,
-      },
-      { status: 400 },
-    );
-  }
-  // Every result is ok here (any failure returned above); project the stored rows.
-  const categories = cleaned.flatMap((result) => (result.ok ? [result.category] : []));
-
-  // Lock the current document and commit its replacement together with complete
-  // before/after audit evidence. A malformed payload returns above, before a
-  // transaction or mutation can begin. The revision is read from the locked
-  // row and the replacement refused when it moved: concurrent editors
-  // serialize on the org row, but serialization alone would still let the
-  // second writer silently discard the first — the 409 forces a re-read.
-  const result = await db.transaction(async (tx) => {
-    const existing = await tx.execute(sql`
+export const GET = defineRoute({
+  permission: "reports.read",
+  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  handler: async ({ authz: gate }) => {
+    const scopeDenied = guardUnrestrictedScope(gate);
+    if (scopeDenied) return scopeDenied;
+    const r = ((await db.execute(sql`
       select settings -> 'analytics' -> 'cashflowCategories' as cats,
              coalesce((settings -> 'analytics' ->> 'cashflowCategoriesRevision')::int, 0) as rev
-        from orgs where id = ${gate.user.orgId} for update
-    `);
-    if (!existing.rows[0]) return NextResponse.json({ error: "org not found" }, { status: 404 });
-    const currentRevision = typeof existing.rows[0].rev === "number" ? existing.rows[0].rev : 0;
-    if (currentRevision !== expectedRevision) {
+        from orgs where id = ${gate.user.orgId}
+    `)));
+    const raw = r.rows[0]?.cats;
+    return NextResponse.json({
+      categories: Array.isArray(raw) ? raw : [],
+      revision: typeof r.rows[0]?.rev === "number" ? r.rows[0].rev : 0,
+    });
+
+  },
+})
+
+export const PUT = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  handler: async ({ request: req, authz: gate }) => {
+    // Cashflow categories are one org-wide forecasting policy stored on orgs;
+    // their subsidiary references constrain inputs, not which entities the
+    // replacement governs.
+    const scopeDenied = guardUnrestrictedScope(gate);
+    if (scopeDenied) return scopeDenied;
+    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = (parsedBody.data) as { categories?: unknown[]; expectedRevision?: unknown } | null;
+    if (!body || !Array.isArray(body.categories)) return NextResponse.json({ error: "categories array required" }, { status: 400 });
+    if (body.categories.length > 50) return NextResponse.json({ error: "too many categories (max 50)" }, { status: 400 });
+    // Optimistic concurrency: the editor sends the revision it read, and a
+    // stale writer gets 409 instead of silently discarding the other edit.
+    if (!Number.isInteger(body.expectedRevision)) {
       return NextResponse.json(
-        {
-          error: "revision conflict",
-          message: `Cashflow categories changed since revision ${expectedRevision} (now at ${currentRevision}): reload and reapply your edit.`,
-          revision: currentRevision,
-        },
-        { status: 409 },
+        { error: "expectedRevision required", message: "Send the revision returned by GET with every replacement." },
+        { status: 400 },
       );
     }
-    const rawBefore = existing.rows[0].cats;
-    const before = Array.isArray(rawBefore) ? rawBefore : [];
-    const nextRevision = currentRevision + 1;
-    await tx.execute(sql`
-      update orgs
-      set settings = jsonb_set(
-        jsonb_set(
-          jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
-          '{analytics,cashflowCategories}', ${JSON.stringify(categories)}::jsonb, true),
-        '{analytics,cashflowCategoriesRevision}', ${JSON.stringify(nextRevision)}::jsonb, true)
-      where id = ${gate.user.orgId}
-    `);
-    await tx.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (
-        ${gate.user.orgId}, 'orgs', ${gate.user.orgId}, 'update',
-        ${JSON.stringify({
-          before: { analytics: { cashflowCategories: before } },
-          after: { analytics: { cashflowCategories: categories } },
-        })}::jsonb,
-        ${gate.user.id}
-      )
-    `);
-    return nextRevision;
-  });
-  if (result instanceof NextResponse) return result;
-  return NextResponse.json({ ok: true, categories, revision: result });
-}
+    const expectedRevision = body.expectedRevision as number;
+
+    // Sequential: the first invalid index wins, and reference checks stay ordered.
+    const cleaned: CleanResult[] = [];
+    for (const raw of body.categories) {
+      cleaned.push(await clean(raw, gate.user.orgId, gate.allowedSubsidiaryIds));
+    }
+    const invalidIndex = cleaned.findIndex((result) => !result.ok);
+    if (invalidIndex !== -1) {
+      const failure = cleaned[invalidIndex] as { ok: false; error: string };
+      return NextResponse.json(
+        {
+          error: `invalid category at index ${invalidIndex}`,
+          message: failure.error,
+        },
+        { status: 400 },
+      );
+    }
+    // Every result is ok here (any failure returned above); project the stored rows.
+    const categories = cleaned.flatMap((result) => (result.ok ? [result.category] : []));
+
+    // Lock the current document and commit its replacement together with complete
+    // before/after audit evidence. A malformed payload returns above, before a
+    // transaction or mutation can begin. The revision is read from the locked
+    // row and the replacement refused when it moved: concurrent editors
+    // serialize on the org row, but serialization alone would still let the
+    // second writer silently discard the first — the 409 forces a re-read.
+    const result = await db.transaction(async (tx) => {
+      const existing = await tx.execute(sql`
+        select settings -> 'analytics' -> 'cashflowCategories' as cats,
+               coalesce((settings -> 'analytics' ->> 'cashflowCategoriesRevision')::int, 0) as rev
+          from orgs where id = ${gate.user.orgId} for update
+      `);
+      if (!existing.rows[0]) return NextResponse.json({ error: "org not found" }, { status: 404 });
+      const currentRevision = typeof existing.rows[0].rev === "number" ? existing.rows[0].rev : 0;
+      if (currentRevision !== expectedRevision) {
+        return NextResponse.json(
+          {
+            error: "revision conflict",
+            message: `Cashflow categories changed since revision ${expectedRevision} (now at ${currentRevision}): reload and reapply your edit.`,
+            revision: currentRevision,
+          },
+          { status: 409 },
+        );
+      }
+      const rawBefore = existing.rows[0].cats;
+      const before = Array.isArray(rawBefore) ? rawBefore : [];
+      const nextRevision = currentRevision + 1;
+      await tx.execute(sql`
+        update orgs
+        set settings = jsonb_set(
+          jsonb_set(
+            jsonb_set(coalesce(settings, '{}'::jsonb), '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
+            '{analytics,cashflowCategories}', ${JSON.stringify(categories)}::jsonb, true),
+          '{analytics,cashflowCategoriesRevision}', ${JSON.stringify(nextRevision)}::jsonb, true)
+        where id = ${gate.user.orgId}
+      `);
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (
+          ${gate.user.orgId}, 'orgs', ${gate.user.orgId}, 'update',
+          ${JSON.stringify({
+            before: { analytics: { cashflowCategories: before } },
+            after: { analytics: { cashflowCategories: categories } },
+          })}::jsonb,
+          ${gate.user.id}
+        )
+      `);
+      return nextRevision;
+    });
+    if (result instanceof NextResponse) return result;
+    return NextResponse.json({ ok: true, categories, revision: result });
+
+  },
+})

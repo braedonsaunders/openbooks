@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
+import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -9,6 +11,13 @@ import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
 import { DEFAULT_PROFILE, type TrueCostConfig, type TrueCostProfile, type CustomCategory } from "../../../../../lib/analytics/true-cost-data";
 import { ALLOCATION_BASES, ALLOCATION_METHODS, RATE_FORMATS, COMPOSITE_METHODS, type AllocationBase, type AllocationMethod, type RateFormat, type CompositeMethod } from "../../../../../lib/analytics/true-cost-engine";
+
+const requestBodySchema = z.looseObject({
+  "activeProfileId": z.unknown().optional(),
+  "expectedRevision": z.unknown().optional(),
+  "profiles": z.unknown().optional(),
+})
+
 
 export const runtime = "nodejs";
 
@@ -213,62 +222,68 @@ function cleanProfile(raw: unknown): TrueCostProfile {
   };
 }
 
-export async function GET() {
-  const gate = await guardFeaturePermission("reports.read", "projects");
-  if (gate instanceof NextResponse) return gate;
-  return NextResponse.json(await loadTrueCostSnapshot(gate.user.orgId));
-}
+export const GET = defineRoute({
+  permission: "reports.read",
+  feature: "projects",
+  handler: async ({ authz: gate }) => {
+    return NextResponse.json(await loadTrueCostSnapshot(gate.user.orgId));
 
-export async function PUT(req: Request) {
-  const gate = await guardFeaturePermission("admin.setup.manage", "projects");
-  if (gate instanceof NextResponse) return gate;
-  const scopeDenied = guardUnrestrictedScope(gate)
-  if (scopeDenied) return scopeDenied
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as { expectedRevision?: unknown; activeProfileId?: string; profiles?: unknown[] } | null;
-  if (!body || !Array.isArray(body.profiles)) return NextResponse.json({ error: "profiles array required" }, { status: 400 });
-  if (body.profiles.length > 20) return NextResponse.json({ error: "too many profiles (max 20)" }, { status: 400 });
+  },
+})
 
-  const expectedRevision = parseRevision(body.expectedRevision);
-  if (expectedRevision === null) {
-    return NextResponse.json(
-      { error: "the True Cost configuration revision is required; reload and review the latest revision" },
-      { status: 409 },
-    );
-  }
+export const PUT = defineRoute({
+  permission: "admin.setup.manage",
+  feature: "projects",
+  handler: async ({ request: req, authz: gate }) => {
+    const scopeDenied = guardUnrestrictedScope(gate)
+    if (scopeDenied) return scopeDenied
+    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = (parsedBody.data) as { expectedRevision?: unknown; activeProfileId?: string; profiles?: unknown[] } | null;
+    if (!body || !Array.isArray(body.profiles)) return NextResponse.json({ error: "profiles array required" }, { status: 400 });
+    if (body.profiles.length > 20) return NextResponse.json({ error: "too many profiles (max 20)" }, { status: 400 });
 
-  let profiles: TrueCostProfile[];
-  try {
-    profiles = body.profiles.map(cleanProfile);
-  } catch (error) {
-    if (error instanceof InvalidTrueCostAmount) {
-      return NextResponse.json({ error: "rates and amounts must be non-negative decimals" }, { status: 400 });
+    const expectedRevision = parseRevision(body.expectedRevision);
+    if (expectedRevision === null) {
+      return NextResponse.json(
+        { error: "the True Cost configuration revision is required; reload and review the latest revision" },
+        { status: 409 },
+      );
     }
-    if (error instanceof InvalidTrueCostConfiguration) {
-      return NextResponse.json({ error: "profiles and nested categories must be valid; correct every item before saving" }, { status: 400 });
-    }
-    throw error;
-  }
-  if (!profiles.length) return NextResponse.json({ error: "at least one valid profile required" }, { status: 400 });
-  const activeProfileId = body.activeProfileId && profiles.some((p) => p.id === body.activeProfileId) ? body.activeProfileId : profiles[0]!.id;
-  const revision = expectedRevision + 1;
-  const config = { revision, activeProfileId, profiles };
 
-  const updated = await db.execute(sql`
-    update orgs
-    set settings = jsonb_set(
-      jsonb_set(settings, '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
-      '{analytics,trueCost}', ${JSON.stringify(config)}::jsonb, true)
-    where id = ${gate.user.orgId}
-      and coalesce(settings -> 'analytics' -> 'trueCost' ->> 'revision', '0') = ${String(expectedRevision)}
-    returning settings -> 'analytics' -> 'trueCost' ->> 'revision' as revision
-  `);
-  if (!updated.rows.length) {
-    return NextResponse.json(
-      { error: "this True Cost configuration changed after you opened it; reload and review the latest revision" },
-      { status: 409 },
-    );
-  }
-  return NextResponse.json({ ok: true, revision, activeProfileId, profiles });
-}
+    let profiles: TrueCostProfile[];
+    try {
+      profiles = body.profiles.map(cleanProfile);
+    } catch (error) {
+      if (error instanceof InvalidTrueCostAmount) {
+        return NextResponse.json({ error: "rates and amounts must be non-negative decimals" }, { status: 400 });
+      }
+      if (error instanceof InvalidTrueCostConfiguration) {
+        return NextResponse.json({ error: "profiles and nested categories must be valid; correct every item before saving" }, { status: 400 });
+      }
+      throw error;
+    }
+    if (!profiles.length) return NextResponse.json({ error: "at least one valid profile required" }, { status: 400 });
+    const activeProfileId = body.activeProfileId && profiles.some((p) => p.id === body.activeProfileId) ? body.activeProfileId : profiles[0]!.id;
+    const revision = expectedRevision + 1;
+    const config = { revision, activeProfileId, profiles };
+
+    const updated = await db.execute(sql`
+      update orgs
+      set settings = jsonb_set(
+        jsonb_set(settings, '{analytics}', coalesce(settings -> 'analytics', '{}'::jsonb), true),
+        '{analytics,trueCost}', ${JSON.stringify(config)}::jsonb, true)
+      where id = ${gate.user.orgId}
+        and coalesce(settings -> 'analytics' -> 'trueCost' ->> 'revision', '0') = ${String(expectedRevision)}
+      returning settings -> 'analytics' -> 'trueCost' ->> 'revision' as revision
+    `);
+    if (!updated.rows.length) {
+      return NextResponse.json(
+        { error: "this True Cost configuration changed after you opened it; reload and review the latest revision" },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ ok: true, revision, activeProfileId, profiles });
+
+  },
+})

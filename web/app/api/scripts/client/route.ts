@@ -1,10 +1,8 @@
 import { NextResponse } from 'next/server'
+import { defineRoute } from '@/lib/api/route'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { getAuthz } from '@/lib/authz'
 import { isFeatureEnabled } from '@/lib/features'
-
-export const runtime = 'nodejs'
 
 /**
  * Client-script delivery: the active 'client' scripts for a document kind
@@ -12,9 +10,9 @@ export const runtime = 'nodejs'
  * validate THEIR form entry, and they execute in an opaque-origin sandbox in
  * the user's own browser, never in the host page.
  */
-export async function GET(req: Request) {
-  const authz = await getAuthz()
-  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+export const GET = defineRoute({
+  public: 'session',
+  handler: async ({ request: req, authz }) => {
   if (!(await isFeatureEnabled(authz.user.orgId, 'scripts'))) {
     // Feature-off is a normal empty state, not "not found": the client
     // loader calls this endpoint on every save, and browsers log failed
@@ -35,4 +33,5 @@ export async function GET(req: Request) {
      order by sort_order, name`))
 
   return NextResponse.json({ scripts: r.rows })
-}
+  },
+})

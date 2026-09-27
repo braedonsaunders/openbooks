@@ -1,3 +1,4 @@
+import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from "next/server";
 import {
   actOnInboxItem,
@@ -37,22 +38,24 @@ function errorOf(error: unknown): { status: number; message: string } {
  * boundary) — the same scope the inbox list renders — so deciding by id
  * cannot approve an out-of-scope gate a restricted actor guessed or kept.
  */
-export async function POST(req: Request) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "not authenticated" }, { status: 401 });
-  const parsedBody = await parseJsonBody(req, actBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    await actOnInboxItem(
-      await inboxContext(authz),
-      body.itemId,
-      body.actionKey,
-      body.reason,
-    );
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    const { status, message } = errorOf(error);
-    return NextResponse.json({ error: message }, { status });
-  }
-}
+export const POST = defineRoute({
+  public: 'session',
+  handler: async ({ request: req }) => {
+    const parsedBody = await parseJsonBody(req, actBody);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = parsedBody.data;
+    try {
+      await actOnInboxItem(
+        await inboxContext(authz),
+        body.itemId,
+        body.actionKey,
+        body.reason,
+      );
+      return NextResponse.json({ ok: true });
+    } catch (error) {
+      const { status, message } = errorOf(error);
+      return NextResponse.json({ error: message }, { status });
+    }
+
+  },
+})

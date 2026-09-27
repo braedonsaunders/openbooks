@@ -1,3 +1,5 @@
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
@@ -25,30 +27,35 @@ export const dynamic = 'force-dynamic'
  * returns the same numbers — and needs `payroll.run`, not `payroll.read`,
  * because it produces negotiable instruments.
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('payroll.run', 'payroll')
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return notFound("record")
-  const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select d.subsidiary_id as "subsidiaryId"
-      from pay_runs r
-      join documents d on d.id = r.document_id and d.org_id = r.org_id
-     where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
-  if (!owned) return notFound("record")
-  const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
-  if (denied) return denied
-  try {
-    const merged = await mergedRunChequesPdf(gate.user.orgId, id, gate.user.id, gate.allowedSubsidiaryIds)
-    if (!merged) return NextResponse.json({ error: 'no cheques to print' }, { status: 404 })
-    const stamp = await businessToday(gate.user.orgId)
-    return pdfResponse(Buffer.from(merged.pdf), safeName(`Pay-cheques-${id.slice(0, 8)}-${stamp}`))
-  } catch (error) {
-    if (error instanceof PayrollError) {
-      return apiErrorResponse(error, { safeStatus: 409 })
+export const POST = defineRoute({
+  permission: 'payroll.run',
+  feature: 'payroll',
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    const { id } = await params
+    if (!isUuid(id)) return notFound("record")
+    const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select d.subsidiary_id as "subsidiaryId"
+        from pay_runs r
+        join documents d on d.id = r.document_id and d.org_id = r.org_id
+       where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
+    if (!owned) return notFound("record")
+    const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
+    if (denied) return denied
+    try {
+      const merged = await mergedRunChequesPdf(gate.user.orgId, id, gate.user.id, gate.allowedSubsidiaryIds)
+      if (!merged) return NextResponse.json({ error: 'no cheques to print' }, { status: 404 })
+      const stamp = await businessToday(gate.user.orgId)
+      return pdfResponse(Buffer.from(merged.pdf), safeName(`Pay-cheques-${id.slice(0, 8)}-${stamp}`))
+    } catch (error) {
+      if (error instanceof PayrollError) {
+        return apiErrorResponse(error, { safeStatus: 409 })
+      }
+      const rendererRefusal = rendererUnavailableResponse(error)
+      if (rendererRefusal) return rendererRefusal
+      throw error
     }
-    const rendererRefusal = rendererUnavailableResponse(error)
-    if (rendererRefusal) return rendererRefusal
-    throw error
-  }
-}
+
+  },
+})

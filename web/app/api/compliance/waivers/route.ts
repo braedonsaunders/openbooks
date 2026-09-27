@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from 'zod'
+import { defineRoute } from '@/lib/api/route'
+import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -9,6 +11,16 @@ import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { loadApplicableRequirement } from '@openbooks/engine/src/compliance/compliance.ts'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.looseObject({
+  "effectiveFrom": z.unknown().optional(),
+  "expiresOn": z.unknown().optional(),
+  "partyId": z.unknown().optional(),
+  "projectId": z.unknown().optional(),
+  "reason": z.unknown().optional(),
+  "requirementId": z.unknown().optional(),
+})
+
 
 
 export const runtime = 'nodejs'
@@ -27,112 +39,115 @@ const MAX_WAIVER_DAYS = 120
  * reason, a mandatory end date inside a hard ceiling, segregation of duties,
  * and a permanent audit entry for each transition.
  */
-export async function POST(req: Request) {
-  const gate = await guardPermission('compliance.waive')
-  if (gate instanceof NextResponse) return gate
-  const blocked = await guardComplianceFeature(gate.user.orgId)
-  if (blocked) return blocked
-  const { orgId, id: actorId } = gate.user
+export const POST = defineRoute({
+  permission: 'compliance.waive',
+  feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
+  handler: async ({ request: req, authz: gate }) => {
+    const blocked = await guardComplianceFeature(gate.user.orgId)
+    if (blocked) return blocked
+    const { orgId, id: actorId } = gate.user
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as {
-    partyId?: string
-    requirementId?: string
-    projectId?: string | null
-    reason?: string
-    effectiveFrom?: string
-    expiresOn?: string
-  }
-  const partyId = body.partyId
-  if (!partyId || !isUuid(partyId)) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
-  const requirementId = body.requirementId
-  if (!requirementId || !isUuid(requirementId)) {
-    return NextResponse.json({ error: 'requirementId is required' }, { status: 400 })
-  }
-  const reason = (body.reason ?? '').trim()
-  if (reason.length < 10) {
-    return NextResponse.json({ error: 'an exception needs a reason of at least 10 characters' }, { status: 400 })
-  }
-  const effectiveFrom = body.effectiveFrom ?? (await businessToday(orgId))
-  if (!body.expiresOn) return NextResponse.json({ error: 'an exception must have an end date' }, { status: 400 })
-  // Date.parse normalises non-calendar dates (2026-09-31 becomes October
-  // 1st), so the span math below would bless them and the write would die in
-  // the date column, leaking the full INSERT through the catch below. Refuse
-  // anything that is not a real calendar date before any write is attempted.
-  for (const [label, value] of [['start date', effectiveFrom], ['end date', body.expiresOn]] as const) {
-    if (!isIsoCalendarDate(value)) {
-      return NextResponse.json({ error: `the ${label} must be a real calendar date (YYYY-MM-DD)` }, { status: 400 })
+    const parsedBody = await parseJsonBody(req, requestBodySchema);
+    if (!parsedBody.ok) return parsedBody.response;
+    const body = (parsedBody.data) as {
+      partyId?: string
+      requirementId?: string
+      projectId?: string | null
+      reason?: string
+      effectiveFrom?: string
+      expiresOn?: string
     }
-  }
-  const span = Math.round(
-    (Date.parse(`${body.expiresOn}T00:00:00Z`) - Date.parse(`${effectiveFrom}T00:00:00Z`)) / 86_400_000,
-  )
-  if (!Number.isFinite(span) || span < 0) {
-    return NextResponse.json({ error: 'the end date must not precede the start date' }, { status: 400 })
-  }
-  if (span > MAX_WAIVER_DAYS) {
-    return NextResponse.json(
-      { error: `an exception cannot run longer than ${MAX_WAIVER_DAYS} days — change the policy instead` },
-      { status: 422 },
+    const partyId = body.partyId
+    if (!partyId || !isUuid(partyId)) return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
+    const requirementId = body.requirementId
+    if (!requirementId || !isUuid(requirementId)) {
+      return NextResponse.json({ error: 'requirementId is required' }, { status: 400 })
+    }
+    const reason = (body.reason ?? '').trim()
+    if (reason.length < 10) {
+      return NextResponse.json({ error: 'an exception needs a reason of at least 10 characters' }, { status: 400 })
+    }
+    const effectiveFrom = body.effectiveFrom ?? (await businessToday(orgId))
+    if (!body.expiresOn) return NextResponse.json({ error: 'an exception must have an end date' }, { status: 400 })
+    // Date.parse normalises non-calendar dates (2026-09-31 becomes October
+    // 1st), so the span math below would bless them and the write would die in
+    // the date column, leaking the full INSERT through the catch below. Refuse
+    // anything that is not a real calendar date before any write is attempted.
+    for (const [label, value] of [['start date', effectiveFrom], ['end date', body.expiresOn]] as const) {
+      if (!isIsoCalendarDate(value)) {
+        return NextResponse.json({ error: `the ${label} must be a real calendar date (YYYY-MM-DD)` }, { status: 400 })
+      }
+    }
+    const span = Math.round(
+      (Date.parse(`${body.expiresOn}T00:00:00Z`) - Date.parse(`${effectiveFrom}T00:00:00Z`)) / 86_400_000,
     )
-  }
+    if (!Number.isFinite(span) || span < 0) {
+      return NextResponse.json({ error: 'the end date must not precede the start date' }, { status: 400 })
+    }
+    if (span > MAX_WAIVER_DAYS) {
+      return NextResponse.json(
+        { error: `an exception cannot run longer than ${MAX_WAIVER_DAYS} days — change the policy instead` },
+        { status: 422 },
+      )
+    }
 
-  // The exception must name a requirement that belongs to this org and
-  // applies to the vendor's class — the same check the evidence write uses.
-  // An exception against an inactive, wrong-class or other-org requirement
-  // would never be evaluated and would quietly read as "on file".
-  const requirement = await loadApplicableRequirement(orgId, partyId, requirementId)
-  if (!requirement) {
-    return NextResponse.json(
-      { error: 'that requirement does not apply to this vendor — check its compliance class' },
-      { status: 422 },
-    )
-  }
+    // The exception must name a requirement that belongs to this org and
+    // applies to the vendor's class — the same check the evidence write uses.
+    // An exception against an inactive, wrong-class or other-org requirement
+    // would never be evaluated and would quietly read as "on file".
+    const requirement = await loadApplicableRequirement(orgId, partyId, requirementId)
+    if (!requirement) {
+      return NextResponse.json(
+        { error: 'that requirement does not apply to this vendor — check its compliance class' },
+        { status: 422 },
+      )
+    }
 
-  // Subsidiary fence: no exception for a vendor — or under a project —
-  // the caller cannot see. Missing and hidden both read as 404, so the
-  // refusal never oracles which ids exist elsewhere.
-  const waiverParty = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select subsidiary_id as "subsidiaryId" from parties where org_id = ${orgId} and id = ${body.partyId}
-  `)).rows[0]
-  if (!waiverParty) return notFound("record")
-  const waiverPartyDenied = guardSubsidiaryScope(gate, waiverParty.subsidiaryId, { orgWideNull: true })
-  if (waiverPartyDenied) return waiverPartyDenied
-  if (body.projectId !== undefined && body.projectId !== null) {
-    const waiverProject = (await db.execute<{ subsidiaryId: string | null }>(sql`
-      select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${body.projectId}
+    // Subsidiary fence: no exception for a vendor — or under a project —
+    // the caller cannot see. Missing and hidden both read as 404, so the
+    // refusal never oracles which ids exist elsewhere.
+    const waiverParty = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from parties where org_id = ${orgId} and id = ${body.partyId}
     `)).rows[0]
-    if (!waiverProject) return notFound("record")
-    const waiverProjectDenied = guardSubsidiaryScope(gate, waiverProject.subsidiaryId, { orgWideNull: true })
-    if (waiverProjectDenied) return waiverProjectDenied
-  }
+    if (!waiverParty) return notFound("record")
+    const waiverPartyDenied = guardSubsidiaryScope(gate, waiverParty.subsidiaryId, { orgWideNull: true })
+    if (waiverPartyDenied) return waiverPartyDenied
+    if (body.projectId !== undefined && body.projectId !== null) {
+      const waiverProject = (await db.execute<{ subsidiaryId: string | null }>(sql`
+        select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${body.projectId}
+      `)).rows[0]
+      if (!waiverProject) return notFound("record")
+      const waiverProjectDenied = guardSubsidiaryScope(gate, waiverProject.subsidiaryId, { orgWideNull: true })
+      if (waiverProjectDenied) return waiverProjectDenied
+    }
 
-  try {
-    const id = await db.transaction(async (tx) => {
-      // Requesting is not granting: the exception files as pending and
-      // covers nothing until a different holder of compliance.waive
-      // approves it (PATCH waivers/[id]). Whoever requests can never be
-      // the one who approves — approval is a separate transition, and the
-      // evaluator only honours approved exceptions.
-      const inserted = (await tx.execute<{ id: string }>(sql`
-        insert into compliance_waivers
-          (org_id, party_id, requirement_id, project_id, reason, effective_from, expires_on,
-           requested_by, approved_by, approved_at, created_by, updated_by)
-        values (${orgId}, ${body.partyId}, ${body.requirementId}, ${body.projectId ?? null},
-                ${reason}, ${effectiveFrom}, ${body.expiresOn},
-                ${actorId}, null, null, ${actorId}, ${actorId})
-        returning id
-      `))
-      const newId = inserted.rows[0]!.id
-      await tx.execute(sql`
-        insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'compliance_waivers', ${newId}, 'insert',
-                ${JSON.stringify({ after: { ...body, reason, effectiveFrom, status: 'pending_approval', requestedBy: actorId } })}::jsonb, ${actorId})`)
-      return newId
-    })
-    return NextResponse.json({ id, status: 'pending_approval' })
-  } catch (e) {
-    return complianceWriteFailure(e)
-  }
-}
+    try {
+      const id = await db.transaction(async (tx) => {
+        // Requesting is not granting: the exception files as pending and
+        // covers nothing until a different holder of compliance.waive
+        // approves it (PATCH waivers/[id]). Whoever requests can never be
+        // the one who approves — approval is a separate transition, and the
+        // evaluator only honours approved exceptions.
+        const inserted = (await tx.execute<{ id: string }>(sql`
+          insert into compliance_waivers
+            (org_id, party_id, requirement_id, project_id, reason, effective_from, expires_on,
+             requested_by, approved_by, approved_at, created_by, updated_by)
+          values (${orgId}, ${body.partyId}, ${body.requirementId}, ${body.projectId ?? null},
+                  ${reason}, ${effectiveFrom}, ${body.expiresOn},
+                  ${actorId}, null, null, ${actorId}, ${actorId})
+          returning id
+        `))
+        const newId = inserted.rows[0]!.id
+        await tx.execute(sql`
+          insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+          values (${orgId}, 'compliance_waivers', ${newId}, 'insert',
+                  ${JSON.stringify({ after: { ...body, reason, effectiveFrom, status: 'pending_approval', requestedBy: actorId } })}::jsonb, ${actorId})`)
+        return newId
+      })
+      return NextResponse.json({ id, status: 'pending_approval' })
+    } catch (e) {
+      return complianceWriteFailure(e)
+    }
+
+  },
+})

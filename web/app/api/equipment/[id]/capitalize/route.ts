@@ -1,3 +1,5 @@
+import { defineRoute } from '@/lib/api/route'
+import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -56,142 +58,147 @@ function isCapitalizationRace(error: unknown): boolean {
  * begins depreciating on the Fixed Assets register. The user refines the asset's
  * category (which drives the depreciation method and tax class) on the asset.
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardFeaturePermission('assets.manage', 'equipment')
-  if (gate instanceof NextResponse) return gate
-  // Capitalize writes a fixed_assets row. Equipment being on is not enough —
-  // turning Fixed Assets off must stop new register rows without touching
-  // units that already exist.
-  if (!(await isFeatureEnabled(gate.user.orgId, 'fixedAssets'))) {
-    return notFound("record")
-  }
-  const { id } = await params
-  // A malformed id names no unit: same answer as an unknown one, never a
-  // PostgreSQL uuid cast error escaping as a 500.
-  if (!isUuid(id)) return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
-  const { orgId, id: userId } = gate.user
+export const POST = defineRoute({
+  permission: 'assets.manage',
+  feature: 'equipment',
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const params = Promise.resolve(routeParams);
+    // Capitalize writes a fixed_assets row. Equipment being on is not enough —
+    // turning Fixed Assets off must stop new register rows without touching
+    // units that already exist.
+    if (!(await isFeatureEnabled(gate.user.orgId, 'fixedAssets'))) {
+      return notFound("record")
+    }
+    const { id } = await params
+    // A malformed id names no unit: same answer as an unknown one, never a
+    // PostgreSQL uuid cast error escaping as a 500.
+    if (!isUuid(id)) return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
+    const { orgId, id: userId } = gate.user
 
-  const unitRes = (await db.execute<{
-      id: string; subsidiary_id: string; name: string; description: string | null
-      purchase_price: string; acquired_on: string | null; in_service_on: string | null
-      serial_number: string | null; fixed_asset_id: string | null
-    }>(sql`
-    select id, subsidiary_id, name, description, purchase_price::text, acquired_on::text,
-           in_service_on::text, serial_number, fixed_asset_id
-      from equipment_units where id = ${id} and org_id = ${orgId} limit 1`))
-  const unit = unitRes.rows[0]
-  if (!unit) return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
-  if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(unit.subsidiary_id)) {
-    return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
-  }
-  if (unit.fixed_asset_id) return NextResponse.json({ error: 'already_capitalized' }, { status: 409 })
-  const ownedSub = (await db.execute<{ id: string }>(sql`
-    select id from subsidiaries
-     where org_id = ${orgId} and id = ${unit.subsidiary_id}
-       and is_active and not is_elimination`))
-  if (!ownedSub.rows[0]) {
-    return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
-  }
-  const acquisitionCostRaw = canonicalDecimal(unit.purchase_price || '0', 4)
-  if (acquisitionCostRaw === null) {
-    return NextResponse.json({ error: 'acquisition_cost_invalid' }, { status: 422 })
-  }
-  try {
-    normalizeMoney(acquisitionCostRaw)
-  } catch {
-    return NextResponse.json({ error: 'acquisition_cost_invalid' }, { status: 422 })
-  }
-
-  const categoryId = await ensureDefaultCategory(orgId, userId)
-
-  let result: CapitalizationResult
-  try {
-    result = await db.transaction(async (tx): Promise<CapitalizationResult> => {
-      // The source row is the idempotency gate.  A second request waits here,
-      // then observes the winner's committed fixed_asset_id instead of
-      // creating an orphan that overwrites the link.
-      const lockedRes = (await tx.execute<{
+    const unitRes = (await db.execute<{
         id: string; subsidiary_id: string; name: string; description: string | null
         purchase_price: string; acquired_on: string | null; in_service_on: string | null
         serial_number: string | null; fixed_asset_id: string | null
       }>(sql`
-        select id, subsidiary_id, name, description, purchase_price::text, acquired_on::text,
-               in_service_on::text, serial_number, fixed_asset_id
-          from equipment_units
-         where id = ${id} and org_id = ${orgId}
-         for update`))
-      const lockedUnit = lockedRes.rows[0]
-      if (!lockedUnit) return { kind: 'not_found' }
-      if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(lockedUnit.subsidiary_id)) {
-        return { kind: 'not_found' }
-      }
-      if (lockedUnit.fixed_asset_id) return { kind: 'already_capitalized' }
+      select id, subsidiary_id, name, description, purchase_price::text, acquired_on::text,
+             in_service_on::text, serial_number, fixed_asset_id
+        from equipment_units where id = ${id} and org_id = ${orgId} limit 1`))
+    const unit = unitRes.rows[0]
+    if (!unit) return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
+    if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(unit.subsidiary_id)) {
+      return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
+    }
+    if (unit.fixed_asset_id) return NextResponse.json({ error: 'already_capitalized' }, { status: 409 })
+    const ownedSub = (await db.execute<{ id: string }>(sql`
+      select id from subsidiaries
+       where org_id = ${orgId} and id = ${unit.subsidiary_id}
+         and is_active and not is_elimination`))
+    if (!ownedSub.rows[0]) {
+      return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
+    }
+    const acquisitionCostRaw = canonicalDecimal(unit.purchase_price || '0', 4)
+    if (acquisitionCostRaw === null) {
+      return NextResponse.json({ error: 'acquisition_cost_invalid' }, { status: 422 })
+    }
+    try {
+      normalizeMoney(acquisitionCostRaw)
+    } catch {
+      return NextResponse.json({ error: 'acquisition_cost_invalid' }, { status: 422 })
+    }
 
-      const lockedOwnedSub = (await tx.execute<{ id: string }>(sql`
-        select id from subsidiaries
-         where org_id = ${orgId} and id = ${lockedUnit.subsidiary_id}
-           and is_active and not is_elimination`))
-      if (!lockedOwnedSub.rows[0]) return { kind: 'invalid_subsidiary' }
+    const categoryId = await ensureDefaultCategory(orgId, userId)
 
-      const lockedAcquisitionCostRaw = canonicalDecimal(lockedUnit.purchase_price || '0', 4)
-      if (lockedAcquisitionCostRaw === null) return { kind: 'acquisition_cost_invalid' }
-      let lockedAcquisitionCost: string
-      try {
-        lockedAcquisitionCost = normalizeMoney(lockedAcquisitionCostRaw)
-      } catch {
-        return { kind: 'acquisition_cost_invalid' }
-      }
+    let result: CapitalizationResult
+    try {
+      result = await db.transaction(async (tx): Promise<CapitalizationResult> => {
+        // The source row is the idempotency gate.  A second request waits here,
+        // then observes the winner's committed fixed_asset_id instead of
+        // creating an orphan that overwrites the link.
+        const lockedRes = (await tx.execute<{
+          id: string; subsidiary_id: string; name: string; description: string | null
+          purchase_price: string; acquired_on: string | null; in_service_on: string | null
+          serial_number: string | null; fixed_asset_id: string | null
+        }>(sql`
+          select id, subsidiary_id, name, description, purchase_price::text, acquired_on::text,
+                 in_service_on::text, serial_number, fixed_asset_id
+            from equipment_units
+           where id = ${id} and org_id = ${orgId}
+           for update`))
+        const lockedUnit = lockedRes.rows[0]
+        if (!lockedUnit) return { kind: 'not_found' }
+        if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(lockedUnit.subsidiary_id)) {
+          return { kind: 'not_found' }
+        }
+        if (lockedUnit.fixed_asset_id) return { kind: 'already_capitalized' }
 
-      // Serialize the org-wide advisory allocation with every capitalization
-      // route.  The unique constraint remains the final authority for other
-      // fixed-asset writers, while this fence keeps max()+1 deterministic here.
-      await tx.execute(sql`
-        select pg_advisory_xact_lock(
-          hashtextextended(${`equipment-capitalization:${orgId}`}, 0)
-        )`)
-      const lockedNextRes = (await tx.execute<{ n: number }>(sql`
-        select coalesce(max((regexp_replace(asset_number, '\\D', '', 'g'))::int), 0) + 1 as n
-          from fixed_assets
-         where org_id = ${orgId} and asset_number ~ '^FA-\\d+$'`))
-      const lockedAssetNumber = `FA-${String(Number(lockedNextRes.rows[0]?.n ?? 1)).padStart(4, '0')}`
-      const lockedStatus = lockedUnit.in_service_on ? 'in_service' : 'draft'
+        const lockedOwnedSub = (await tx.execute<{ id: string }>(sql`
+          select id from subsidiaries
+           where org_id = ${orgId} and id = ${lockedUnit.subsidiary_id}
+             and is_active and not is_elimination`))
+        if (!lockedOwnedSub.rows[0]) return { kind: 'invalid_subsidiary' }
 
-      const ins = (await tx.execute<{ id: string }>(sql`
-        insert into fixed_assets
-          (org_id, subsidiary_id, category_id, asset_number, name, description, status,
-           acquired_on, in_service_on, acquisition_cost, salvage_value, serial_number, created_by, updated_by)
-        values (${orgId}, ${lockedOwnedSub.rows[0]!.id}, ${categoryId}, ${lockedAssetNumber}, ${lockedUnit.name},
-                ${lockedUnit.description}, ${lockedStatus}, ${lockedUnit.acquired_on}, ${lockedUnit.in_service_on},
-                ${lockedAcquisitionCost}, '0', ${lockedUnit.serial_number}, ${userId}, ${userId})
-        returning id`))
-      const newId = ins.rows[0]!.id
-      const linked = (await tx.execute<{ fixed_asset_id: string }>(sql`
-        update equipment_units
-           set fixed_asset_id = ${newId}, revision = revision + 1, updated_at = now(), updated_by = ${userId}
-         where id = ${id} and org_id = ${orgId} and fixed_asset_id is null
-         returning fixed_asset_id`))
-      // The row lock above makes this path unreachable for a normal race, but
-      // keep the invariant explicit: never commit an asset without its source
-      // linkage if a trigger/RLS rule causes the CAS to affect zero rows.
-      if (!linked.rows[0]) throw new CapitalizationLinkConflict()
+        const lockedAcquisitionCostRaw = canonicalDecimal(lockedUnit.purchase_price || '0', 4)
+        if (lockedAcquisitionCostRaw === null) return { kind: 'acquisition_cost_invalid' }
+        let lockedAcquisitionCost: string
+        try {
+          lockedAcquisitionCost = normalizeMoney(lockedAcquisitionCostRaw)
+        } catch {
+          return { kind: 'acquisition_cost_invalid' }
+        }
 
-      await tx.execute(sql`
-        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-        values (${orgId}, 'fixed_assets', ${newId}, 'insert',
-                ${JSON.stringify({ capitalizedFromEquipment: id, assetNumber: lockedAssetNumber })}::jsonb, ${userId})`)
-      return { kind: 'created', assetId: newId, assetNumber: lockedAssetNumber }
-    })
-  } catch (error) {
-    // The 0068 storage guards deliberately abort a losing transaction so its
-    // asset row cannot survive as an orphan.  Turn that expected race into the
-    // route's established conflict response; unrelated failures still surface.
-    if (!isCapitalizationRace(error)) throw error
-    return NextResponse.json({ error: 'already_capitalized' }, { status: 409 })
-  }
+        // Serialize the org-wide advisory allocation with every capitalization
+        // route.  The unique constraint remains the final authority for other
+        // fixed-asset writers, while this fence keeps max()+1 deterministic here.
+        await tx.execute(sql`
+          select pg_advisory_xact_lock(
+            hashtextextended(${`equipment-capitalization:${orgId}`}, 0)
+          )`)
+        const lockedNextRes = (await tx.execute<{ n: number }>(sql`
+          select coalesce(max((regexp_replace(asset_number, '\\D', '', 'g'))::int), 0) + 1 as n
+            from fixed_assets
+           where org_id = ${orgId} and asset_number ~ '^FA-\\d+$'`))
+        const lockedAssetNumber = `FA-${String(Number(lockedNextRes.rows[0]?.n ?? 1)).padStart(4, '0')}`
+        const lockedStatus = lockedUnit.in_service_on ? 'in_service' : 'draft'
 
-  if (result.kind === 'not_found') return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
-  if (result.kind === 'already_capitalized') return NextResponse.json({ error: 'already_capitalized' }, { status: 409 })
-  if (result.kind === 'invalid_subsidiary') return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
-  if (result.kind === 'acquisition_cost_invalid') return NextResponse.json({ error: 'acquisition_cost_invalid' }, { status: 422 })
-  return NextResponse.json({ assetId: result.assetId, assetNumber: result.assetNumber })
-}
+        const ins = (await tx.execute<{ id: string }>(sql`
+          insert into fixed_assets
+            (org_id, subsidiary_id, category_id, asset_number, name, description, status,
+             acquired_on, in_service_on, acquisition_cost, salvage_value, serial_number, created_by, updated_by)
+          values (${orgId}, ${lockedOwnedSub.rows[0]!.id}, ${categoryId}, ${lockedAssetNumber}, ${lockedUnit.name},
+                  ${lockedUnit.description}, ${lockedStatus}, ${lockedUnit.acquired_on}, ${lockedUnit.in_service_on},
+                  ${lockedAcquisitionCost}, '0', ${lockedUnit.serial_number}, ${userId}, ${userId})
+          returning id`))
+        const newId = ins.rows[0]!.id
+        const linked = (await tx.execute<{ fixed_asset_id: string }>(sql`
+          update equipment_units
+             set fixed_asset_id = ${newId}, revision = revision + 1, updated_at = now(), updated_by = ${userId}
+           where id = ${id} and org_id = ${orgId} and fixed_asset_id is null
+           returning fixed_asset_id`))
+        // The row lock above makes this path unreachable for a normal race, but
+        // keep the invariant explicit: never commit an asset without its source
+        // linkage if a trigger/RLS rule causes the CAS to affect zero rows.
+        if (!linked.rows[0]) throw new CapitalizationLinkConflict()
+
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${orgId}, 'fixed_assets', ${newId}, 'insert',
+                  ${JSON.stringify({ capitalizedFromEquipment: id, assetNumber: lockedAssetNumber })}::jsonb, ${userId})`)
+        return { kind: 'created', assetId: newId, assetNumber: lockedAssetNumber }
+      })
+    } catch (error) {
+      // The 0068 storage guards deliberately abort a losing transaction so its
+      // asset row cannot survive as an orphan.  Turn that expected race into the
+      // route's established conflict response; unrelated failures still surface.
+      if (!isCapitalizationRace(error)) throw error
+      return NextResponse.json({ error: 'already_capitalized' }, { status: 409 })
+    }
+
+    if (result.kind === 'not_found') return NextResponse.json({ error: 'equipment unit not found' }, { status: 404 })
+    if (result.kind === 'already_capitalized') return NextResponse.json({ error: 'already_capitalized' }, { status: 409 })
+    if (result.kind === 'invalid_subsidiary') return NextResponse.json({ error: 'invalid_subsidiary' }, { status: 422 })
+    if (result.kind === 'acquisition_cost_invalid') return NextResponse.json({ error: 'acquisition_cost_invalid' }, { status: 422 })
+    return NextResponse.json({ assetId: result.assetId, assetNumber: result.assetNumber })
+
+  },
+})
