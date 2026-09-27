@@ -18,9 +18,13 @@ registerHooks({
   resolve(specifier, context, next) {
     if (specifier === "next/navigation") return virtual("export function redirect() {}; export function notFound() {}");
     if (specifier === "next/headers") return virtual("export function cookies() { throw new Error('no cookies in route test') }");
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/hrm/feedback/settings/")) {
+    if (
+      specifier.endsWith("/lib/authz") &&
+      (context.parentURL?.includes("/api/hrm/feedback/settings/") ||
+        context.parentURL?.endsWith("/web/lib/api/route.ts"))
+    ) {
       return virtual(`
-        export { guardUnrestrictedScope } from ${JSON.stringify(authzUrl)};
+        export { guardUnrestrictedScope, guardRootSubsidiaryScope } from ${JSON.stringify(authzUrl)};
         export async function getAuthz() {
           const s = globalThis.__feedbackSettingsScopeState;
           return {
@@ -29,6 +33,7 @@ registerHooks({
             allowedSubsidiaryIds: s.allowedSubsidiaryIds,
           };
         }
+        export async function guardPermission() { return await getAuthz(); }
       `);
     }
     return next(specifier, context);
