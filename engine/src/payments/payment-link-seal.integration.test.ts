@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import test, { after, before } from "node:test";
+import test, { afterEach, beforeEach } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import { sealSecret, unsealSecret } from "../platform/secrets.ts";
@@ -16,32 +16,24 @@ const priorDataKey = process.env.OPENBOOKS_DATA_KEY;
 
 let org: Awaited<ReturnType<typeof createScratchOrg>> | null = null;
 
-before(async () => {
+beforeEach(async () => {
   process.env.OPENBOOKS_DATA_KEY = "00".repeat(32);
-  if (!DB) return;
-  org = await createScratchOrg();
+  if (DB) org = await createScratchOrg();
 });
 
-after(async () => {
-  if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
-  else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
-  if (org) await dropScratchOrg(org.orgId);
+afterEach(async () => {
+  const leasedOrg = org; org = null;
+  try { if (leasedOrg) await dropScratchOrg(leasedOrg.orgId); } finally {
+    if (priorDataKey === undefined) delete process.env.OPENBOOKS_DATA_KEY;
+    else process.env.OPENBOOKS_DATA_KEY = priorDataKey;
+  }
 });
 
-type LinkSeed = {
-  id: string;
-  orgId: string;
-  token: string | null;
-  tokenSealed: string | null;
-  tokenHash: string | null;
-};
+type LinkSeed = { id: string; orgId: string; token: string | null; tokenSealed: string | null; tokenHash: string | null };
 
 async function insertLink(seed: Partial<LinkSeed> & { token?: string | null }): Promise<LinkSeed> {
   const orgId = org!.orgId;
-  // payment_links carries composite foreign keys to documents/parties/
-  // subsidiaries/accounts plus an account-class trigger, so each probe link
-  // rides a minimal draft invoice on the scratch org (mirrors the acceptance
-  // suite's own legacy-row inserts).
+  // The composite foreign keys and account-class trigger require the acceptance suite's minimal draft invoice.
   const invoiceId = randomUUID();
   await withBypassContext(() => db.execute(sql`
     insert into documents
@@ -52,10 +44,8 @@ async function insertLink(seed: Partial<LinkSeed> & { token?: string | null }): 
             '100', '0', '100', '100')
   `));
   const row: LinkSeed = {
-    id: randomUUID(),
-    orgId,
-    token: seed.token ?? null,
-    tokenSealed: seed.tokenSealed ?? null,
+    id: randomUUID(), orgId,
+    token: seed.token ?? null, tokenSealed: seed.tokenSealed ?? null,
     tokenHash: seed.tokenHash ?? null,
   };
   await withBypassContext(() => db.execute(sql`
@@ -90,8 +80,6 @@ async function resolveByHash(hash: string): Promise<string | null> {
 }
 
 test("deploy-window plaintext rows are sealed AND hashed in one step", { skip: !DB }, async () => {
-  // Simulates a link created by code still serving while migrations ran:
-  // plaintext present, no hash, no seal.
   const secret = `link-secret-${randomUUID()}`;
   const row = await insertLink({ token: secret });
   try {
@@ -108,7 +96,6 @@ test("deploy-window plaintext rows are sealed AND hashed in one step", { skip: !
 });
 
 test("rows sealed-without-hash by an older bootstrap are healed, not re-sealed", { skip: !DB }, async () => {
-  // This is the state the pre-fix bootstrap left behind: sealed, nulled, unresolvable.
   const secret = `link-secret-${randomUUID()}`;
   const sealed = sealSecret(secret, { orgId: org!.orgId, purpose: "payment.link.token" });
   const row = await insertLink({ token: null, tokenSealed: sealed });
@@ -124,9 +111,7 @@ test("rows sealed-without-hash by an older bootstrap are healed, not re-sealed",
 });
 
 test("node hash encoding is byte-identical to the 0251 migration SQL", { skip: !DB }, async () => {
-  // The migration hashes in SQL (encode(sha256(token::bytea),'hex')); the
-  // engine and the seal step hash in node. A divergence would make
-  // migration-backfilled rows unresolvable by engine-computed hashes.
+  // Migration SQL and engine hashing must agree so migrated rows remain resolvable.
   const ascii = "AbC123xY-9_8qZ";
   const r = await withBypassContext(() => db.execute<{ h: string }>(sql`
     select encode(sha256(${ascii}::bytea), 'hex') as h
@@ -141,8 +126,7 @@ test("unrecoverable links refuse the bootstrap and name reissue as the remedy", 
   const bad = await insertLink({ token: null, tokenSealed: "enc:v1:definitely-not-a-seal" });
   try {
     await assert.rejects(sealLegacyPaymentLinkTokens(), /Reissue those links/);
-    // The refusal fires after recoverable rows are sealed: one bad link must
-    // not strand every good link behind it.
+    // Recoverable links are sealed before one bad link causes refusal.
     const goodAfter = await readLink(good.id);
     assert.equal(goodAfter.token, null);
     assert.equal(goodAfter.tokenHash, paymentLinkTokenHash(goodSecret));
@@ -167,9 +151,6 @@ test("already-hashed rows are untouched (engine-written links)", { skip: !DB }, 
 });
 
 test("upgraded-install rows (migration hash + leftover plaintext) are sealed and nulled", { skip: !DB }, async () => {
-  // This is the state 0251 itself leaves on an upgraded install: the
-  // migration backfilled the hash in SQL but could not seal or null the
-  // plaintext without the data key.
   const secret = `link-secret-${randomUUID()}`;
   const row = await insertLink({ token: secret, tokenSealed: null, tokenHash: paymentLinkTokenHash(secret) });
   try {
@@ -204,33 +185,20 @@ test("planner prefers plaintext, keeps an existing seal, refuses empty rows", ()
     unseal: (sealed: string) => (sealed === "good-seal" ? "unsealed-secret" : null),
     hash: (plain: string) => `hash(${plain})`,
   };
-  const legacy = planPaymentLinkSeal({ id: "a", orgId: "org-1", token: "plain", token_sealed: null, token_hash: null }, crypto);
-  assert.deepEqual(legacy, { id: "a", tokenHash: "hash(plain)", tokenSealed: "sealed(plain)" });
-
-  const partial = planPaymentLinkSeal({ id: "b", orgId: "org-1", token: "plain", token_sealed: "existing", token_hash: null }, crypto);
-  assert.deepEqual(partial, { id: "b", tokenHash: "hash(plain)", tokenSealed: "existing" });
-
-  // The 0251-upgraded shape: hash already present and matching, plaintext
-  // still present, no seal — seal it, null it, keep the verified hash.
-  const upgraded = planPaymentLinkSeal(
-    { id: "b2", orgId: "org-1", token: "plain", token_sealed: null, token_hash: "hash(plain)" },
-    crypto,
-  );
-  assert.deepEqual(upgraded, { id: "b2", tokenHash: "hash(plain)", tokenSealed: "sealed(plain)" });
-
-  const healed = planPaymentLinkSeal({ id: "c", orgId: "org-1", token: null, token_sealed: "good-seal", token_hash: null }, crypto);
-  assert.deepEqual(healed, { id: "c", tokenHash: "hash(unsealed-secret)", tokenSealed: "good-seal" });
-
-  assert.deepEqual(
-    planPaymentLinkSeal({ id: "d", orgId: "org-1", token: null, token_sealed: "bad-seal", token_hash: null }, crypto),
-    { id: "d", unrecoverable: true, reason: "missing-secret" },
-  );
-  assert.deepEqual(
-    planPaymentLinkSeal({ id: "e", orgId: "org-1", token: null, token_sealed: null, token_hash: null }, crypto),
-    { id: "e", unrecoverable: true, reason: "missing-secret" },
-  );
-  assert.deepEqual(
-    planPaymentLinkSeal({ id: "f", orgId: "org-1", token: "plain", token_sealed: null, token_hash: "hash(other)" }, crypto),
-    { id: "f", unrecoverable: true, reason: "hash-mismatch" },
-  );
+  const input = (id: string, token: string | null, tokenSealed: string | null, tokenHash: string | null) =>
+    ({ id, orgId: "org-1", token, token_sealed: tokenSealed, token_hash: tokenHash });
+  const saved = (id: string, tokenHash: string, tokenSealed: string) => ({ id, tokenHash, tokenSealed });
+  const refused = (id: string, reason: "missing-secret" | "hash-mismatch") => ({ id, unrecoverable: true, reason });
+  const cases = [
+    ["plaintext", input("a", "plain", null, null), saved("a", "hash(plain)", "sealed(plain)")],
+    ["existing seal", input("b", "plain", "existing", null), saved("b", "hash(plain)", "existing")],
+    ["upgraded row", input("b2", "plain", null, "hash(plain)"), saved("b2", "hash(plain)", "sealed(plain)")],
+    ["recoverable seal", input("c", null, "good-seal", null), saved("c", "hash(unsealed-secret)", "good-seal")],
+    ["bad seal", input("d", null, "bad-seal", null), refused("d", "missing-secret")],
+    ["empty row", input("e", null, null, null), refused("e", "missing-secret")],
+    ["mismatched hash", input("f", "plain", null, "hash(other)"), refused("f", "hash-mismatch")],
+  ] as const;
+  for (const [caseName, input, expected] of cases) {
+    assert.deepEqual(planPaymentLinkSeal(input, crypto), expected, caseName);
+  }
 });
