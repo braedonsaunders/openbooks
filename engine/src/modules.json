@@ -121,7 +121,8 @@
         "platform",
         "records",
         "resourcing",
-        "scripting"
+        "scripting",
+        "tax-returns"
       ]
     },
     "compliance": {
@@ -348,7 +349,8 @@
         "organization",
         "periods",
         "platform",
-        "records"
+        "records",
+        "tax-returns"
       ]
     },
     "organization": {

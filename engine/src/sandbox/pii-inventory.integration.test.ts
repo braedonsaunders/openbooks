@@ -1934,6 +1934,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "tax_registrations.registration_number",
   "tax_registrations.return_form_code",
   "tax_report_lines.basis",
+  "tax_report_lines.input_key",
   "tax_report_lines.formula",
   "tax_report_lines.label",
   "tax_report_lines.line_code",

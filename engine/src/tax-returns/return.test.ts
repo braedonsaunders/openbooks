@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CANADA_RETURN_PACKS } from "../country-tax-packs/ca-returns.ts";
-import { assembleReturn, computeTaxReturn, evalFormula, planReturn, taxableBaseSideForCode, TaxReturnError, type TaxReturnBoxDef, type TaxReportLineRow, type TaxReturnRunner } from "./return.ts";
+import { assembleReturn, computeTaxReturn, evalFormula, planReturn, registerReturnInputProvider, taxableBaseSideForCode, TaxReturnError, TaxReturnInputError, type TaxReturnBoxDef, type TaxReportLineRow, type TaxReturnRunner } from "./return.ts";
 
 const codes = (...c: string[]) => new Set(c);
 
@@ -272,4 +272,36 @@ test("computeTaxReturn with a caller runner uses that executor and opens no tran
     (error: unknown) => error === sentinel,
   );
   assert.equal(transactionOpened, false);
+});
+
+test("computeTaxReturn resolves declared input boxes and refuses a missing provider", async () => {
+  const inputKey = "returntest.amount";
+  const makeRunner = (): TaxReturnRunner => {
+    const responses: unknown[][] = [
+      [{ name: "Test return", submission_channel: "portal_manual", watermark: null, jurisdiction_id: null }],
+      [], [],
+      [{ id: "00000000-0000-4000-8000-000000000001", name: "Root", base_currency: "USD", is_elimination: false, parent_id: null }],
+      [{ id: "00000000-0000-4000-8000-000000000002" }],
+      [{ tax_collected: null, tax_paid: null }],
+      [{ line_code: "SOURCE", label: "Source amount", sign: 1, sequence: 1, tax_code_id: null, basis: null, input_key: inputKey, formula: null, pdf_field: null }],
+    ];
+    return { execute: (async () => ({ rows: responses.shift() ?? [], rowCount: 1 })) as unknown as TaxReturnRunner["execute"] };
+  };
+  const missingRunner = makeRunner();
+  await assert.rejects(
+    computeTaxReturn("org-1", "FORM_INPUT", "2026-01-01", "2026-12-31", {}, { runner: missingRunner }),
+    (error: unknown) => error instanceof TaxReturnInputError && error.message.includes("SOURCE") && error.message.includes(inputKey),
+  );
+  const runner = makeRunner();
+  let calls = 0;
+  registerReturnInputProvider("returntest", async ({ runner: actual, keys }) => {
+    calls++;
+    assert.equal(actual, runner);
+    assert.deepEqual(keys, [inputKey]);
+    return { [inputKey]: "12.3400" };
+  });
+  const result = await computeTaxReturn("org-1", "FORM_INPUT", "2026-01-01", "2026-12-31", {}, { runner });
+  assert.equal(calls, 1);
+  assert.equal(result.boxes[0]?.value, "12.3400");
+  assert.deepEqual(result.inputSources, [{ lineCode: "SOURCE", inputKey, value: "12.3400" }]);
 });
