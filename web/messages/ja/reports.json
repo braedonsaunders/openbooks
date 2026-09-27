@@ -909,6 +909,10 @@
       "grant_pipeline": {
         "label": "助成金パイプライン",
         "description": "助成金、スポンサー、期間、状態、関連基金の分類。"
+      },
+      "usage_billing_lines": {
+        "label": "従量課金明細",
+        "description": "評価済みの従量課金請求明細を、評価実行・プラン版・メーター・元レコードのハッシュ・対象期間・コミット期間の追跡情報とともに表示します。"
       }
     },
     "columns": {
@@ -2124,6 +2128,29 @@
         "fund_name": "基金",
         "restriction_class": "制限クラス",
         "base_currency": "基準通貨"
+      },
+      "usage_billing_lines": {
+        "document_number": "請求書番号",
+        "document_date": "請求日",
+        "status": "請求書ステータス",
+        "party_name": "顧客",
+        "line_number": "明細番号",
+        "currency": "通貨",
+        "amount": "金額",
+        "run_id": "評価実行（ID）",
+        "plan_version_id": "プラン版（ID）",
+        "meter_id": "メーター（ID）",
+        "meter_key": "メーターキー",
+        "kind": "評価方式",
+        "band_seq": "階層番号",
+        "quantity": "評価数量",
+        "unit_price": "評価単価",
+        "records_hash": "レコードハッシュ",
+        "period_start": "利用期間開始",
+        "period_end": "利用期間終了",
+        "commit_window_start": "コミット期間開始",
+        "commit_window_end": "コミット期間終了",
+        "rated_total": "コミット前の評価合計"
       }
     },
     "enumValues": {
@@ -2429,6 +2456,10 @@
     "grant-pipeline": {
       "name": "助成金パイプライン",
       "description": "助成金、スポンサー、期間、状態、基金分類。"
+    },
+    "usage-billing-detail": {
+      "name": "従量課金明細",
+      "description": "メーター、評価実行、プラン版、元レコードの追跡情報とともに、評価済みの従量課金請求明細をすべて表示します。"
     }
   },
   "generalLedger": {

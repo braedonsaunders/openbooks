@@ -909,6 +909,10 @@
       "grant_pipeline": {
         "label": "Pipeline de concessões",
         "description": "Concessões, patrocinadores, períodos, status e classificação do fundo associado."
+      },
+      "usage_billing_lines": {
+        "label": "Linhas de cobrança por uso",
+        "description": "Linhas de fatura tarifadas com rastreabilidade da execução de tarifação, versão do plano, medidor, hash dos registros de origem, período e janela do compromisso."
       }
     },
     "columns": {
@@ -2124,6 +2128,29 @@
         "fund_name": "Fundo",
         "restriction_class": "Classe de restrição",
         "base_currency": "Moeda base"
+      },
+      "usage_billing_lines": {
+        "document_number": "Nº da fatura",
+        "document_date": "Data da fatura",
+        "status": "Status da fatura",
+        "party_name": "Cliente",
+        "line_number": "Nº da linha",
+        "currency": "Moeda",
+        "amount": "Valor",
+        "run_id": "Execução de tarifação (id)",
+        "plan_version_id": "Versão do plano (id)",
+        "meter_id": "Medidor (id)",
+        "meter_key": "Chave do medidor",
+        "kind": "Tipo de tarifa",
+        "band_seq": "Nº da faixa",
+        "quantity": "Quantidade tarifada",
+        "unit_price": "Preço unitário tarifado",
+        "records_hash": "Hash dos registros",
+        "period_start": "Início do período de uso",
+        "period_end": "Fim do período de uso",
+        "commit_window_start": "Início da janela do compromisso",
+        "commit_window_end": "Fim da janela do compromisso",
+        "rated_total": "Total tarifado antes do compromisso"
       }
     },
     "enumValues": {
@@ -2429,6 +2456,10 @@
     "grant-pipeline": {
       "name": "Pipeline de concessões",
       "description": "Concessões, patrocinadores, períodos, status e classificação do fundo."
+    },
+    "usage-billing-detail": {
+      "name": "Detalhes da cobrança por uso",
+      "description": "Lista cada linha de fatura tarifada por uso com o medidor, a execução de tarifação, a versão do plano e a rastreabilidade dos registros de origem."
     }
   },
   "generalLedger": {

@@ -909,6 +909,10 @@
       "grant_pipeline": {
         "label": "Cartera de subvenciones",
         "description": "Subvenciones, patrocinadores, períodos, estado y clasificación del fondo asociado."
+      },
+      "usage_billing_lines": {
+        "label": "Líneas de facturación por uso",
+        "description": "Líneas de factura con cargos calculados y trazabilidad del ciclo de cálculo, versión del plan, medidor, hash de registros de origen, período y ventana del compromiso."
       }
     },
     "columns": {
@@ -2124,6 +2128,29 @@
         "fund_name": "Fondo",
         "restriction_class": "Clase de restricción",
         "base_currency": "Moneda base"
+      },
+      "usage_billing_lines": {
+        "document_number": "N.º de factura",
+        "document_date": "Fecha de factura",
+        "status": "Estado de factura",
+        "party_name": "Cliente",
+        "line_number": "N.º de línea",
+        "currency": "Moneda",
+        "amount": "Importe",
+        "run_id": "Ciclo de cálculo (id)",
+        "plan_version_id": "Versión del plan (id)",
+        "meter_id": "Medidor (id)",
+        "meter_key": "Clave del medidor",
+        "kind": "Tipo de tarifa",
+        "band_seq": "N.º de tramo",
+        "quantity": "Cantidad calculada",
+        "unit_price": "Precio unitario calculado",
+        "records_hash": "Hash de registros",
+        "period_start": "Inicio del período de uso",
+        "period_end": "Fin del período de uso",
+        "commit_window_start": "Inicio de ventana del compromiso",
+        "commit_window_end": "Fin de ventana del compromiso",
+        "rated_total": "Total calculado antes del compromiso"
       }
     },
     "enumValues": {
@@ -2409,6 +2436,10 @@
     "grant-pipeline": {
       "name": "Cartera de subvenciones",
       "description": "Subvenciones, patrocinadores, períodos, estado y clasificación del fondo."
+    },
+    "usage-billing-detail": {
+      "name": "Detalle de facturación por uso",
+      "description": "Enumera cada línea de factura por uso con el medidor, el ciclo de cálculo, la versión del plan y la trazabilidad de los registros de origen."
     }
   },
   "generalLedger": {

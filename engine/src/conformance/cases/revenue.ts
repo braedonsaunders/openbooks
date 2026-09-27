@@ -8,8 +8,9 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../../platform/db.ts";
+import { db, withBypassContext } from "../../platform/db.ts";
 import { add, fromUnits, toUnits } from "../../money/money.ts";
+import { parseMoney, parseQuantity, parseRate } from "../../money/brands.ts";
 import { postDocument } from "../../ledger/posting-document.ts";
 import {
   allocateByRelativeSSP,
@@ -19,6 +20,18 @@ import {
   separateFinancingComponent,
 } from "../../revenue/recognition.ts";
 import { measureRevenueModificationGroup } from "../../revenue/contract-modification-measurement.ts";
+import { createPrepaidGrant } from "../../billing/usage/prepaid.ts";
+import { commitRateRun } from "../../billing/usage/rate-run.ts";
+import { createUsageMeter, ingestUsageRecords } from "../../billing/usage/records.ts";
+import {
+  createSubscriptionUsageLink,
+  createUsageRatingPlan,
+  createUsageRatingPlanVersion,
+  publishUsagePlanVersion,
+  replaceUsageRatingBands,
+} from "../../billing/usage/rating-plans.ts";
+import { aggregateUsage, commitShortfall, rateUsage } from "../../billing/usage/rating.ts";
+import { commitWindowForRun } from "../../billing/usage/true-ups.ts";
 import { capture, deps, type DraftDocumentInput } from "../ledger-helpers.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 
@@ -75,6 +88,115 @@ async function ensureRecognitionPeriods(orgId: string): Promise<void> {
               false, ${calendar.id})
       on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing`);
   }
+}
+
+interface UsageCorpusFixture {
+  meterId: string;
+  meterKey: string;
+  subscriptionId: string;
+  linkId: string;
+}
+
+/** Create the minimum subscription and published meter setup used by usage cases. */
+async function createUsageCorpusFixture(
+  ctx: CaseContext,
+  options: { commitAmount?: string } = {},
+): Promise<UsageCorpusFixture> {
+  const ledger = ctx.ledger!;
+  const suffix = randomUUID().slice(0, 8);
+  const itemId = randomUUID();
+  const subscriptionPlanId = randomUUID();
+  const subscriptionId = randomUUID();
+  const enabled = await withBypassContext(() => db.execute(sql`
+    update orgs set settings = jsonb_set(settings, '{features}',
+      coalesce(settings->'features', '{}'::jsonb)
+        || '{"subscriptionBilling":true,"usageBilling":true}'::jsonb, true)
+     where id = ${ledger.orgId} returning id`));
+  if (enabled.rows.length !== 1) throw new Error("usage conformance organization was not updated");
+  await withBypassContext(async () => {
+    const item = await db.execute(sql`
+      insert into items (id, org_id, kind, name, income_account_id, is_active, custom)
+      values (${itemId}, ${ledger.orgId}, 'service', ${`Usage item ${suffix}`}, ${ctx.roles.revenue}, true, '{}'::jsonb)
+      returning id`);
+    if (item.rows.length !== 1) throw new Error("usage conformance item was not created");
+    const plan = await db.execute(sql`
+      insert into subscription_plans (id, org_id, name, amount, currency_code, "interval", interval_count)
+      values (${subscriptionPlanId}, ${ledger.orgId}, ${`Usage subscription ${suffix}`}, 0, 'CAD', 'monthly', 1)
+      returning id`);
+    if (plan.rows.length !== 1) throw new Error("usage conformance subscription plan was not created");
+    const subscription = await db.execute(sql`
+      insert into subscriptions (id, org_id, customer_id, plan_id, quantity, status, start_on, next_bill_on)
+      values (${subscriptionId}, ${ledger.orgId}, ${ledger.customerId}, ${subscriptionPlanId}, 1, 'active', '2026-07-01', '2026-08-01')
+      returning id`);
+    if (subscription.rows.length !== 1) throw new Error("usage conformance subscription was not created");
+  });
+
+  const meterKey = `conformance-${suffix}`;
+  const meter = await createUsageMeter(ledger.orgId, ledger.actorId, {
+    key: meterKey,
+    name: `Conformance usage ${suffix}`,
+    unit: "request",
+    aggregation: "sum",
+    itemId,
+  });
+  const plan = await createUsageRatingPlan(ledger.orgId, ledger.actorId, {
+    name: `Conformance plan ${suffix}`,
+    currency: "CAD",
+  });
+  const version = await createUsageRatingPlanVersion(ledger.orgId, ledger.actorId, {
+    planId: plan.id,
+    effectiveFrom: "2026-07-01",
+  });
+  await replaceUsageRatingBands(ledger.orgId, ledger.actorId, version.id, [
+    { meterId: meter.id, kind: "graduated", seq: 1, upToQty: "2", unitPrice: "1.25" },
+    { meterId: meter.id, kind: "graduated", seq: 2, upToQty: null, unitPrice: "2.50" },
+  ]);
+  await publishUsagePlanVersion(ledger.orgId, ledger.actorId, version.id);
+  const link = await createSubscriptionUsageLink(ledger.orgId, ledger.actorId, {
+    subscriptionId,
+    customerId: ledger.customerId,
+    planVersionId: version.id,
+    meterIds: [meter.id],
+    effectiveFrom: "2026-07-01",
+    commitAmount: options.commitAmount ?? null,
+    commitPeriod: options.commitAmount === undefined ? null : "monthly",
+    allowOverage: true,
+  });
+  return { meterId: meter.id, meterKey, subscriptionId, linkId: link.id };
+}
+
+async function ingestCorpusUsage(ctx: CaseContext, fixture: UsageCorpusFixture, quantity: string): Promise<void> {
+  const ledger = ctx.ledger!;
+  await ingestUsageRecords(ledger.orgId, ledger.actorId, [{
+    meterKey: fixture.meterKey,
+    customerId: ledger.customerId,
+    subscriptionId: fixture.subscriptionId,
+    occurredOn: ledger.date,
+    quantity,
+    source: "api",
+    idempotencyKey: randomUUID(),
+  }]);
+}
+
+async function postDraftUsageInvoice(ctx: CaseContext, invoiceId: string): Promise<void> {
+  const orgId = ctx.ledger!.orgId;
+  const approved = await db.execute(sql`
+    update documents set status = 'approved'
+     where org_id = ${orgId} and id = ${invoiceId} and status = 'draft'
+     returning id`);
+  if (approved.rows.length !== 1) throw new Error("usage invoice did not complete its approval transition");
+  await postDocument(invoiceId, deps(ctx));
+}
+
+function ratedUsageTotal(quantity: string): string {
+  const lines = rateUsage({
+    quantity: parseQuantity(quantity),
+    bands: [
+      { kind: "graduated", seq: 1, upToQty: parseQuantity("2"), unitPrice: parseRate("1.25"), flatAmount: parseMoney("0"), includedQty: parseQuantity("0"), packageSize: null, packageRounding: null },
+      { kind: "graduated", seq: 2, upToQty: null, unitPrice: parseRate("2.50"), flatAmount: parseMoney("0"), includedQty: parseQuantity("0"), packageSize: null, packageRounding: null },
+    ],
+  });
+  return fromUnits(lines.reduce((sum, line) => sum + toUnits(line.amount), 0n));
 }
 
 export const REVENUE_CASES: readonly ConformanceCase[] = [
@@ -549,6 +671,302 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
         },
       };
     },
+  },
+
+  {
+    id: "rev-series-usage-allocation",
+    title: "Hosted-service usage is allocated to the month that supplied it",
+    citations: [
+      {
+        standard: "ASC 606",
+        reference: "606-10-25-14–15; 606-10-32-39–41; 606-10-55-18",
+        kind: "requirement",
+        requirement:
+          "A hosted service is a series of distinct monthly promises, and variable consideration that matches a month's value is allocated to that month under the right-to-invoice expedient.",
+      },
+      {
+        standard: "IFRS 15",
+        reference: "IFRS 15.22–23; IFRS 15.84–86; IFRS 15.B16",
+        kind: "requirement",
+        requirement:
+          "A hosted service's usage price belongs to the distinct monthly service increment whose value it reflects, rather than being spread over later months.",
+      },
+    ],
+    support: "supported",
+    tier: "ledger",
+    assertion:
+      "The July usage is rated from its published bands, billed as a July invoice, and posts to receivables and usage revenue without a deferred balance.",
+    facts: [
+      "A hosted API service provides one distinct monthly service increment from 2026-07-01 through 2026-07-31.",
+      "The customer records 3 requests on 2026-07-15; the first 2 cost 1.25 each and the next costs 2.50.",
+      "The July usage invoice is 5.00, dated 2026-07-31, and no amount relates to a later service month.",
+    ],
+    expected: {
+      entries: [{
+        step: "July usage invoice",
+        lines: [
+          { role: "ar", amount: "5.0000" },
+          { role: "revenue", amount: "-5.0000" },
+        ],
+      }],
+      values: { ratedAmount: "5.0000", tracedLines: "2", lineTotal: "5.0000" },
+    },
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      const fixture = await createUsageCorpusFixture(ctx);
+      await ingestCorpusUsage(ctx, fixture, "3");
+      const rated = await commitRateRun(ledger.orgId, ledger.actorId, fixture.linkId, "2026-07-01", "2026-07-31");
+      const invoiceId = rated.invoiceId;
+      if (!invoiceId) throw new Error("rated usage did not produce an invoice");
+      const invoice = await capture(ctx, "July usage invoice", async () => postDraftUsageInvoice(ctx, invoiceId));
+      const rows = (await db.execute<{ tracedLines: number; lineTotal: string }>(sql`
+        select count(*) filter (where custom->'rating'->>'runId' = ${rated.run.id})::int as "tracedLines",
+               coalesce(sum(amount), 0)::text as "lineTotal"
+          from document_lines where org_id = ${ledger.orgId} and document_id = ${invoiceId}`)).rows[0];
+      if (!rows) throw new Error("usage invoice lines were not readable");
+      return {
+        entries: [invoice],
+        values: {
+          ratedAmount: rated.preview.totalRated,
+          tracedLines: String(rows.tracedLines),
+          lineTotal: rows.lineTotal,
+        },
+      };
+    },
+  },
+
+  {
+    id: "rev-usage-royalty",
+    title: "A licence royalty is earned as the customer uses the intellectual property",
+    citations: [
+      {
+        standard: "ASC 606",
+        reference: "606-10-55-65",
+        kind: "requirement",
+        requirement:
+          "A sales- or usage-based royalty promised for a licence of intellectual property is recognised when the related use occurs.",
+      },
+      {
+        standard: "IFRS 15",
+        reference: "IFRS 15.B63",
+        kind: "requirement",
+        requirement:
+          "A usage-based royalty on an intellectual-property licence is recognised as the customer's use takes place.",
+      },
+    ],
+    support: "supported",
+    tier: "computation",
+    assertion:
+      "The rating kernel produces no amount before a licence is used and prices the first 4 uses at 3.25 each when that use occurs.",
+    facts: [
+      "The customer receives a licence to use intellectual property; this is not a hosted service.",
+      "Before any use, the 0-use royalty is 0.00.",
+      "The customer uses the licence 4 times on 2026-07-15 at 3.25 per use, creating a 13.00 royalty for July.",
+    ],
+    expected: { values: { beforeUse: "0.0000", usedQuantity: "4", royalty: "13.0000" } },
+    run: () => {
+      const band = {
+        kind: "volume" as const,
+        seq: 1,
+        upToQty: null,
+        unitPrice: parseRate("3.25"),
+        flatAmount: parseMoney("0"),
+        includedQty: parseQuantity("0"),
+        packageSize: null,
+        packageRounding: null,
+      };
+      const records = [{
+        id: "licence-use-2026-07-15",
+        occurredOn: "2026-07-15",
+        quantity: parseQuantity("4"),
+        distinctKey: null,
+        reversesId: null,
+      }];
+      const amount = (quantity: ReturnType<typeof parseQuantity>): string =>
+        fromUnits(rateUsage({ quantity, bands: [band] }).reduce((sum, line) => sum + toUnits(line.amount), 0n));
+      return {
+        values: {
+          beforeUse: amount(aggregateUsage("sum", [])),
+          usedQuantity: aggregateUsage("sum", records),
+          royalty: amount(aggregateUsage("sum", records)),
+        },
+      };
+    },
+  },
+
+  {
+    id: "rev-prepaid-drawdown",
+    title: "A usage prepayment remains a liability until the month's usage is drawn",
+    citations: [
+      {
+        standard: "ASC 606",
+        reference: "606-10-45-2; 606-10-32-39–41",
+        kind: "requirement",
+        requirement:
+          "Consideration invoiced before performance remains a contract liability, and usage consideration allocated to a monthly service is recognised as that service is transferred.",
+      },
+      {
+        standard: "IFRS 15",
+        reference: "IFRS 15.106; IFRS 15.84–86",
+        kind: "requirement",
+        requirement:
+          "A usage prepayment is a contract liability until the related monthly service is provided, when the amount for that service is released to revenue.",
+      },
+    ],
+    support: "supported",
+    tier: "ledger",
+    assertion:
+      "The prepaid invoice credits deferred revenue, and the rating run's 2026-07 draw drives the recognition run to release the same amount in July.",
+    facts: [
+      "A customer prepays 7.50 for a usage-based licence on 2026-07-15; the invoice is posted before the July usage occurs.",
+      "The customer records 4 requests in July; the first 2 cost 1.25 each and the next 2 cost 2.50 each, for a 7.50 draw.",
+      "The July usage draw is recognised by 2026-07-31, leaving 0.00 of this prepayment deferred.",
+    ],
+    expected: {
+      entries: [
+        { step: "prepaid invoice", lines: [{ role: "ar", amount: "7.5000" }, { role: "deferredRevenue", amount: "-7.5000" }] },
+        { step: "July usage recognition", lines: [{ role: "deferredRevenue", amount: "7.5000" }, { role: "recognizedRevenue", amount: "-7.5000" }] },
+      ],
+      values: { drawn: "7.5000", draftUsageInvoice: "0", recognitionPosts: "1", recognized: "7.5000" },
+    },
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      const fixture = await createUsageCorpusFixture(ctx);
+      const rule = await withBypassContext(() => db.execute<{ id: string }>(sql`
+        select recognition_rule_id as id from items where org_id = ${ledger.orgId} and id = ${ledger.items.service}`));
+      const ruleId = rule.rows[0]?.id;
+      if (!ruleId) throw new Error("prepaid service item has no recognition rule");
+      const changed = await withBypassContext(() => db.execute(sql`
+        update recognition_rules set method = 'usage'
+         where org_id = ${ledger.orgId} and id = ${ruleId} returning id`));
+      if (changed.rows.length !== 1) throw new Error("prepaid recognition rule was not updated");
+
+      const prepaidInvoice = await capture(ctx, "prepaid invoice", async () => {
+        await postConformanceDocument(ctx, {
+          kind: "customer_invoice",
+          number: `CONF-USAGE-PREPAID-${randomUUID().slice(0, 8)}`,
+          partyId: ledger.customerId,
+          lines: [{ itemId: ledger.items.service, accountId: ctx.roles.revenue, quantity: "1", unitPrice: "7.50", amount: "7.50" }],
+        });
+      });
+      const source = (await db.execute<{ id: string }>(sql`
+        select dl.id from document_lines dl join documents d on d.org_id = dl.org_id and d.id = dl.document_id
+         where dl.org_id = ${ledger.orgId} and d.document_number like 'CONF-USAGE-PREPAID-%'`)).rows[0];
+      if (!source) throw new Error("posted prepaid invoice line was not readable");
+      await createPrepaidGrant(ledger.orgId, ledger.actorId, {
+        customerId: ledger.customerId,
+        sourceDocumentLineId: source.id,
+        amount: "7.50",
+        currency: "CAD",
+      });
+      await ingestCorpusUsage(ctx, fixture, "4");
+
+      let drawn = "";
+      let invoiceId: string | null | undefined;
+      let recognized = "";
+      let posts = 0;
+      const monthRecognition = await capture(ctx, "July usage recognition", async () => {
+        const run = await commitRateRun(ledger.orgId, ledger.actorId, fixture.linkId, "2026-07-01", "2026-07-31");
+        drawn = run.preview.prepaidDrawn;
+        invoiceId = run.invoiceId;
+        const recognition = await runRevenueRecognition(ledger.orgId, "2026-07-31", ledger.actorId);
+        recognized = recognition.totalAmount;
+        posts = recognition.posted;
+      });
+      return {
+        entries: [prepaidInvoice, monthRecognition],
+        values: { drawn, draftUsageInvoice: invoiceId === null ? "0" : "1", recognitionPosts: String(posts), recognized },
+      };
+    },
+  },
+
+  {
+    id: "rev-minimum-commit",
+    title: "A minimum usage commitment closes against the usage in its monthly window",
+    citations: [
+      {
+        standard: "ASC 606",
+        reference: "606-10-55-48",
+        kind: "requirement",
+        requirement:
+          "A minimum commitment's unused amount is accounted for when the customer's remaining right expires at the end of its commitment window.",
+      },
+      {
+        standard: "IFRS 15",
+        reference: "IFRS 15.B46",
+        kind: "requirement",
+        requirement:
+          "An unexercised customer right is recognised when the entity no longer expects the customer to use it, rather than before that point.",
+      },
+    ],
+    support: "supported",
+    tier: "computation",
+    assertion:
+      "The rating kernel measures the 5.00 usage against the 10.00 monthly minimum and computes the 5.00 shortfall for the window that ends on 2026-07-31.",
+    facts: [
+      "The customer has a nonrefundable minimum commitment of 10.00 for 2026-07-01 through 2026-07-31.",
+      "The customer uses 3 requests in July; tier pricing makes the usage consideration 5.00.",
+      "The window-end minimum shortfall is 5.00; no expected-breakage estimate is applied before the window closes.",
+    ],
+    expected: {
+      values: {
+        ratedUsage: "5.0000",
+        minimum: "10.0000",
+        shortfall: "5.0000",
+        totalAtWindowEnd: "10.0000",
+        windowStart: "2026-07-01",
+        windowEnd: "2026-07-31",
+      },
+    },
+    run: () => {
+      const ratedUsage = ratedUsageTotal("3");
+      const minimum = parseMoney("10.00");
+      const shortfall = commitShortfall({ commitAmount: minimum, ratedInWindow: parseMoney(ratedUsage) });
+      const window = commitWindowForRun("2026-07-01", "2026-07-31", "monthly" as const);
+      if (!window) throw new Error("the monthly minimum commitment did not close in its window");
+      return {
+        values: {
+          ratedUsage,
+          minimum,
+          shortfall,
+          totalAtWindowEnd: add(ratedUsage, shortfall),
+          windowStart: window.start,
+          windowEnd: window.end,
+        },
+      };
+    },
+  },
+
+  {
+    id: "rev-expected-breakage-estimation",
+    title: "Expected breakage is recognised in proportion to customer redemptions",
+    citations: [
+      {
+        standard: "ASC 606",
+        reference: "606-10-55-48",
+        kind: "requirement",
+        requirement:
+          "When expected breakage can be estimated, the entity recognises it in proportion to customers exercising their rights; otherwise it waits until further use becomes remote.",
+      },
+      {
+        standard: "IFRS 15",
+        reference: "IFRS 15.B46",
+        kind: "requirement",
+        requirement:
+          "Expected unexercised rights are recognised in line with the pattern of exercised rights when that estimate is supportable.",
+      },
+    ],
+    support: "not-implemented",
+    tier: "computation",
+    assertion:
+      "Expected breakage is not recognised in proportion to earlier customer use; the system waits for a breakage policy rather than silently estimating it.",
+    facts: [
+      "Customers pay 100.00 for 100 usage credits, and 60 credits have been exercised by 2026-07-31.",
+      "The entity estimates that 20.00 of the remaining credit value will never be used.",
+    ],
+    gap:
+      "The billing and recognition services do not store a breakage estimate or recognise expected breakage in proportion to customer redemptions; they can only account for the right when its commitment window closes.",
+    expected: { values: { proportionalBreakageRevenue: "12.0000" } },
   },
 
   {

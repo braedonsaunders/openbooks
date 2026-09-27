@@ -863,6 +863,29 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       sorts: [{ column: 'lifecycle_stage', direction: 'asc' }],
     },
   },
+  {
+    slug: 'usage-billing-detail',
+    name: 'Usage billing detail',
+    description: 'Every rated usage invoice line with its meter, rating run, plan version and source-record trace.',
+    query: {
+      entity: 'usage_billing_lines',
+      mode: 'rows',
+      columns: [
+        'document_number', 'document_date', 'status', 'party_name', 'line_number', 'currency', 'amount',
+        'run_id', 'plan_version_id', 'meter_id', 'meter_key', 'kind', 'band_seq', 'quantity', 'unit_price',
+        'records_hash', 'period_start', 'period_end', 'commit_window_start', 'commit_window_end', 'rated_total',
+      ],
+      breakouts: [],
+      measures: [],
+      filters: null,
+      groupBy: null,
+      sorts: [
+        { column: 'document_date', direction: 'desc' },
+        { column: 'line_number', direction: 'asc' },
+      ],
+      limit: 1000,
+    },
+  },
   ...SAAS_METRICS_BUILT_IN_REPORTS,
   ...WORKFORCE_BUILT_IN_REPORT_DEFINITIONS,
   {
