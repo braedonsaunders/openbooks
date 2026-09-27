@@ -50,7 +50,7 @@ const hooks = registerHooks({
       return { url: "mock:authz", shortCircuit: true };
     }
     if (
-      specifier === "../../../../lib/feature-gates" &&
+      (specifier === "../../../../lib/feature-gates" || specifier === "@/lib/feature-gates") &&
       context.parentURL?.includes("payroll/settings")
     ) {
       return { url: "mock:feature-gates", shortCircuit: true };
