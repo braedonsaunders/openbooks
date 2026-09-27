@@ -960,6 +960,39 @@ export async function recomputeSaasMetrics(
   });
 }
 
+export interface SaasMetricsMonth {
+  month: string;
+  computedAt: string;
+  frozen: boolean;
+}
+
+/** Read the recorded facts and their period-close state for the metrics API. */
+export async function listSaasMetricsMonths(orgId: string): Promise<SaasMetricsMonth[]> {
+  if (!(await orgFeatureEnabled(orgId, "saasMetrics"))) {
+    throw refusal("feature_off", "SaaS metrics are disabled for this organization.", FEATURES_REMEDY);
+  }
+  return withOrgTransaction(orgId, async () => {
+    const rows = (await db.execute<{ month: string; computedAt: string }>(sql`
+      select month, max(computed_at)::text as "computedAt"
+        from (
+          select month::text as month, computed_at from saas_metrics_monthly where org_id = ${orgId}
+          union all
+          select month::text as month, computed_at from saas_metrics_facts_monthly where org_id = ${orgId}
+          union all
+          select month::text as month, computed_at from saas_metrics_cohort_monthly where org_id = ${orgId}
+        ) facts
+       group by month order by month desc`)).rows;
+    const subsidiaries = (await db.execute<SubsidiaryRow>(sql`
+      select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id`)).rows;
+    const result: SaasMetricsMonth[] = [];
+    for (const row of rows) {
+      const close = await monthCloseState(db, orgId, row.month, subsidiaries.map((subsidiary) => subsidiary.id));
+      result.push({ month: row.month, computedAt: row.computedAt, frozen: !close.open });
+    }
+    return result;
+  });
+}
+
 export async function saasMetricsScanTargets(): Promise<SaasMetricsScanTargets> {
   // bypass: scheduler-tick — the metrics pass lists every organization before checking each one's feature gate.
   const orgIds = await withBypassContext(async () =>

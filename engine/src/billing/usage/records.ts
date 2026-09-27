@@ -9,6 +9,7 @@ import {
   lockAndCheckOrgFeature,
   orgFeatureEnabled,
 } from "../../organization/org-feature-lock.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
 import { db, withOrg } from "../../platform/db.ts";
 import { businessToday } from "../../platform/business-date.ts";
 import { UsageBillingError } from "./errors.ts";
@@ -17,6 +18,7 @@ export type UsageAggregation = (typeof USAGE_AGGREGATIONS)[number];
 export type UsageRecordSource = (typeof USAGE_RECORD_SOURCES)[number];
 export type UsageMeter = typeof usageMeters.$inferSelect;
 export type UsageRecord = typeof usageRecords.$inferSelect;
+export type UsageSubsidiaryScope = ReadonlySet<string> | null;
 
 export interface CreateUsageMeterInput {
   key: string;
@@ -349,17 +351,13 @@ async function requireOpenArPeriod(
 async function customerSubsidiary(
   orgId: string,
   customerId: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<string | null> {
   const customer = (await db.execute<{ id: string; subsidiary_id: string | null }>(sql`
-    select id, subsidiary_id from parties where org_id = ${orgId} and id = ${customerId}`)).rows[0];
-  if (!customer) {
-    refuse(
-      "usage_customer_unavailable",
-      "The selected customer does not belong to this organization.",
-      "Choose a customer from this organization.",
-      "customer_id",
-    );
-  }
+    select id, subsidiary_id from parties p where org_id = ${orgId} and id = ${customerId}
+      ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+      for share`)).rows[0];
+  if (!customer || !subsidiaryScopeAllows(allowedSubsidiaryIds, customer.subsidiary_id, { orgWideNull: true })) throw new ScopeNotFoundError();
   return customer.subsidiary_id;
 }
 
@@ -410,6 +408,7 @@ export async function ingestUsageRecords(
   orgId: string,
   actor: string,
   records: readonly IngestUsageRecordInput[],
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<UsageRecord[]> {
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
@@ -417,6 +416,8 @@ export async function ingestUsageRecords(
     for (const input of records) {
       const meterKey = requiredText(input.meterKey, "meter_key");
       const idempotencyKey = requiredText(input.idempotencyKey, "idempotency_key");
+      const customerId = uuidText(input.customerId, "customer_id");
+      const subsidiaryId = await customerSubsidiary(orgId, customerId, allowedSubsidiaryIds);
       const meter = (await db.execute<{
         id: string;
         aggregation: UsageAggregation;
@@ -436,7 +437,9 @@ export async function ingestUsageRecords(
 
       const replay = (await db.execute<UsageRecord>(sql`
         select ${RECORD_COLUMNS} from usage_records
-         where org_id = ${orgId} and meter_id = ${meter.id} and idempotency_key = ${idempotencyKey}`)).rows[0];
+         where org_id = ${orgId} and meter_id = ${meter.id} and idempotency_key = ${idempotencyKey}
+           and exists (select 1 from parties c where c.org_id = usage_records.org_id and c.id = usage_records.customer_id
+             ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})`)).rows[0];
       if (replay) {
         insertedRecords.push(replay);
         continue;
@@ -450,7 +453,6 @@ export async function ingestUsageRecords(
         );
       }
 
-      const customerId = uuidText(input.customerId, "customer_id");
       const occurredOn = dateText(input.occurredOn);
       const quantity = normalizeQuantity(input.quantity);
       const distinctKey = validateDistinctKey(meter.aggregation, input.distinctKey);
@@ -460,7 +462,6 @@ export async function ingestUsageRecords(
       const sourceRef = input.sourceRef ?? null;
       const subscriptionId = input.subscriptionId == null ? null : uuidText(input.subscriptionId, "subscription_id");
       await validateSubscriptionCustomer(orgId, subscriptionId, customerId);
-      const subsidiaryId = await customerSubsidiary(orgId, customerId);
       await requireOpenArPeriod(orgId, subsidiaryId, occurredOn);
 
       // The unique key makes simultaneous sender retries converge on one immutable evidence row.
@@ -482,7 +483,9 @@ export async function ingestUsageRecords(
       }
       const racedReplay = (await db.execute<UsageRecord>(sql`
         select ${RECORD_COLUMNS} from usage_records
-         where org_id = ${orgId} and meter_id = ${meter.id} and idempotency_key = ${idempotencyKey}`)).rows[0];
+         where org_id = ${orgId} and meter_id = ${meter.id} and idempotency_key = ${idempotencyKey}
+           and exists (select 1 from parties c where c.org_id = usage_records.org_id and c.id = usage_records.customer_id
+             ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})`)).rows[0];
       if (!racedReplay) {
         refuse(
           "usage_idempotency_result_missing",
@@ -504,6 +507,7 @@ export async function reverseUsageRecord(
   recordId: string,
   reason: string,
   occurredOn?: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<UsageRecord> {
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
@@ -517,15 +521,15 @@ export async function reverseUsageRecord(
       quantity: string;
       distinct_key: string | null;
       reverses_id: string | null;
+      subsidiary_id: string | null;
     }>(sql`
-      select id, meter_id, customer_id, subscription_id, occurred_on::text as occurred_on,
-             quantity::text as quantity, distinct_key, reverses_id
-        from usage_records
-       where org_id = ${orgId} and id = ${safeRecordId}
-       for update`)).rows[0];
-    if (!original) {
-      refuse("usage_record_not_found", "The usage record does not exist in this organization.", "Choose an original usage record from this organization.", "record_id");
-    }
+      select r.id, r.meter_id, r.customer_id, r.subscription_id, r.occurred_on::text as occurred_on,
+             r.quantity::text as quantity, r.distinct_key, r.reverses_id, c.subsidiary_id
+        from usage_records r join parties c on c.org_id = r.org_id and c.id = r.customer_id
+       where r.org_id = ${orgId} and r.id = ${safeRecordId}
+         ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+       for update of r, c`)).rows[0];
+    if (!original || !subsidiaryScopeAllows(allowedSubsidiaryIds, original.subsidiary_id, { orgWideNull: true })) throw new ScopeNotFoundError();
     if (original.reverses_id !== null) {
       refuse(
         "usage_reversal_not_reversible",
@@ -548,8 +552,7 @@ export async function reverseUsageRecord(
     }
     const reversalReason = requiredText(reason, "reason");
     const reversalDate = dateText(occurredOn ?? (await businessToday(orgId)));
-    const subsidiaryId = await customerSubsidiary(orgId, original.customer_id);
-    await requireOpenArPeriod(orgId, subsidiaryId, reversalDate);
+    await requireOpenArPeriod(orgId, original.subsidiary_id, reversalDate);
     const reversedQuantity = neg(parseQuantity(original.quantity));
 
     const inserted = await db.execute<UsageRecord>(sql`
@@ -579,6 +582,7 @@ export async function listUsageRecordsForWindow(
   customerId: string,
   from: string,
   to: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<UsageRecord[]> {
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
@@ -589,11 +593,51 @@ export async function listUsageRecordsForWindow(
     if (fromDate > toDate) {
       refuse("usage_window_invalid", "The usage window start must not be after its end.", "Choose a window with from on or before to.");
     }
+    await customerSubsidiary(orgId, safeCustomerId, allowedSubsidiaryIds);
     const rows = await db.execute<UsageRecord>(sql`
       select ${RECORD_COLUMNS} from usage_records
        where org_id = ${orgId} and meter_id = ${safeMeterId} and customer_id = ${safeCustomerId}
          and occurred_on >= ${fromDate} and occurred_on <= ${toDate}
+         and exists (select 1 from parties c where c.org_id = usage_records.org_id and c.id = usage_records.customer_id
+           ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})
        order by occurred_on, id`);
     return rows.rows;
+  });
+}
+
+export async function listUsageMeters(orgId: string): Promise<UsageMeter[]> {
+  return withOrg(orgId, async () => {
+    await requireUsageBillingRead(orgId);
+    return (await db.execute<UsageMeter>(sql`
+      select ${METER_COLUMNS} from usage_meters where org_id = ${orgId} order by key, id`)).rows;
+  });
+}
+
+export async function listUsageRecords(orgId: string, filters: {
+  from: string;
+  to: string;
+  meterId?: string;
+  customerId?: string;
+  limit?: number;
+  offset?: number;
+}, allowedSubsidiaryIds: UsageSubsidiaryScope = null): Promise<UsageRecord[]> {
+  return withOrg(orgId, async () => {
+    await requireUsageBillingRead(orgId);
+    const from = dateText(filters.from, "from");
+    const to = dateText(filters.to, "to");
+    if (from > to) refuse("usage_window_invalid", "The usage window start must not be after its end.", "Choose a window with from on or before to.");
+    const meterId = filters.meterId === undefined ? null : uuidText(filters.meterId, "meter_id");
+    const customerId = filters.customerId === undefined ? null : uuidText(filters.customerId, "customer_id");
+    if (customerId !== null) await customerSubsidiary(orgId, customerId, allowedSubsidiaryIds);
+    const limit = Math.min(Math.max(filters.limit ?? 100, 1), 500);
+    const offset = Math.max(filters.offset ?? 0, 0);
+    return (await db.execute<UsageRecord>(sql`
+      select ${RECORD_COLUMNS} from usage_records
+       where org_id = ${orgId} and occurred_on >= ${from} and occurred_on <= ${to}
+         and (${meterId}::uuid is null or meter_id = ${meterId})
+         and (${customerId}::uuid is null or customer_id = ${customerId})
+         and exists (select 1 from parties c where c.org_id = usage_records.org_id and c.id = usage_records.customer_id
+           ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })})
+       order by occurred_on desc, id limit ${limit} offset ${offset}`)).rows;
   });
 }

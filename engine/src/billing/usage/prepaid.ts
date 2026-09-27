@@ -7,11 +7,13 @@ import {
   lockAndCheckOrgFeature,
   orgFeatureEnabled,
 } from "../../organization/org-feature-lock.ts";
+import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../../organization/subsidiary-scope.ts";
 import { db, withOrg } from "../../platform/db.ts";
 import { UsageBillingError } from "./errors.ts";
 
 export type UsagePrepaidGrant = typeof UsagePrepaidGrantTable.$inferSelect;
 export type UsagePrepaidState = "active" | "depleted" | "expired";
+export type UsageSubsidiaryScope = ReadonlySet<string> | null;
 
 export interface CreatePrepaidGrantInput {
   customerId: string;
@@ -34,6 +36,11 @@ const GRANT_COLUMNS = sql`
   source_document_line_id as "sourceDocumentLineId", amount::text as amount,
   currency_code as currency, expires_on::text as "expiresOn",
   created_at as "createdAt", created_by as "createdBy"`;
+const LIST_GRANT_COLUMNS = sql`
+  g.id, g.org_id as "orgId", g.customer_id as "customerId",
+  g.source_document_line_id as "sourceDocumentLineId", g.amount::text as amount,
+  g.currency_code as currency, g.expires_on::text as "expiresOn",
+  g.created_at as "createdAt", g.created_by as "createdBy"`;
 const DRAW_COLUMNS = sql`
   id, org_id as "orgId", grant_id as "grantId", run_id as "runId",
   period_month::text as "periodMonth", amount::text as amount,
@@ -112,10 +119,16 @@ export async function createPrepaidGrant(
   orgId: string,
   actor: string,
   input: CreatePrepaidGrantInput,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<UsagePrepaidGrant> {
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
     const customerId = uuidText(input.customerId, "customer_id");
+    const customer = (await db.execute<{ subsidiaryId: string | null }>(sql`
+      select subsidiary_id as "subsidiaryId" from parties p where org_id = ${orgId} and id = ${customerId}
+        ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+        for share`)).rows[0];
+    if (!customer || !subsidiaryScopeAllows(allowedSubsidiaryIds, customer.subsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
     const sourceLineId = uuidText(input.sourceDocumentLineId, "source_document_line_id");
     const amount = exactMoney(input.amount, "amount");
     if (cmp(amount, "0") <= 0) {
@@ -185,15 +198,20 @@ interface PrepaidSnapshot {
   drawn: string;
 }
 
-async function readSnapshot(orgId: string, grantIdInput: string, asOfInput: string): Promise<PrepaidSnapshot> {
+async function readSnapshot(
+  orgId: string,
+  grantIdInput: string,
+  asOfInput: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
+): Promise<PrepaidSnapshot> {
   const grantId = uuidText(grantIdInput, "grant_id");
   const asOf = dateText(asOfInput, "as_of");
-  const grant = (await db.execute<{ amount: string; expiresOn: string | null }>(sql`
-    select amount::text as amount, expires_on::text as "expiresOn"
-      from usage_prepaid_grants where org_id = ${orgId} and id = ${grantId}`)).rows[0];
-  if (!grant) {
-    refuse("usage_prepaid_grant_not_found", "The prepaid grant does not exist in this organization.", "Choose a prepaid grant from this organization.", "grant_id");
-  }
+  const grant = (await db.execute<{ amount: string; expiresOn: string | null; subsidiaryId: string | null }>(sql`
+    select g.amount::text as amount, g.expires_on::text as "expiresOn", c.subsidiary_id as "subsidiaryId"
+      from usage_prepaid_grants g join parties c on c.org_id = g.org_id and c.id = g.customer_id
+     where g.org_id = ${orgId} and g.id = ${grantId}
+       ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}`)).rows[0];
+  if (!grant || !subsidiaryScopeAllows(allowedSubsidiaryIds, grant.subsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
   const drawn = (await db.execute<{ amount: string }>(sql`
     select coalesce(sum(amount), 0)::text as amount
       from usage_prepaid_draws
@@ -201,10 +219,15 @@ async function readSnapshot(orgId: string, grantIdInput: string, asOfInput: stri
   return { amount: grant.amount, expiresOn: grant.expiresOn, drawn };
 }
 
-export async function prepaidBalance(orgId: string, grantId: string, asOf: string): Promise<string> {
+export async function prepaidBalance(
+  orgId: string,
+  grantId: string,
+  asOf: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
+): Promise<string> {
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
-    const snapshot = await readSnapshot(orgId, grantId, asOf);
+    const snapshot = await readSnapshot(orgId, grantId, asOf, allowedSubsidiaryIds);
     return subMoney(snapshot.amount, snapshot.drawn);
   });
 }
@@ -213,11 +236,12 @@ export async function prepaidState(
   orgId: string,
   grantId: string,
   asOf: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<{ state: UsagePrepaidState; balance: string }> {
   return withOrg(orgId, async () => {
     await requireUsageBillingRead(orgId);
     const date = dateText(asOf, "as_of");
-    const snapshot = await readSnapshot(orgId, grantId, date);
+    const snapshot = await readSnapshot(orgId, grantId, date, allowedSubsidiaryIds);
     const balance = subMoney(snapshot.amount, snapshot.drawn);
     if (cmp(balance, "0") <= 0) return { state: "depleted", balance };
     if (snapshot.expiresOn !== null && date > snapshot.expiresOn) return { state: "expired", balance };
@@ -225,10 +249,39 @@ export async function prepaidState(
   });
 }
 
+export async function listPrepaidGrants(orgId: string, asOf: string, allowedSubsidiaryIds: UsageSubsidiaryScope = null): Promise<Array<UsagePrepaidGrant & {
+  balance: string;
+  state: UsagePrepaidState;
+}>> {
+  return withOrg(orgId, async () => {
+    await requireUsageBillingRead(orgId);
+    const date = dateText(asOf, "as_of");
+    const rows = (await db.execute<UsagePrepaidGrant & { drawn: string; subsidiaryId: string | null }>(sql`
+      select ${LIST_GRANT_COLUMNS}, c.subsidiary_id as "subsidiaryId",
+             coalesce(sum(d.amount), 0)::text as drawn
+        from usage_prepaid_grants g
+        join parties c on c.org_id = g.org_id and c.id = g.customer_id
+        left join usage_prepaid_draws d on d.org_id = g.org_id and d.grant_id = g.id and d.period_month <= ${date}::date
+       where g.org_id = ${orgId}
+         ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+       group by g.id, c.subsidiary_id
+       order by g.created_at, g.id`)).rows;
+    return rows.map(({ drawn, subsidiaryId, ...grant }) => {
+      if (!subsidiaryScopeAllows(allowedSubsidiaryIds, subsidiaryId, { orgWideNull: true })) throw new ScopeNotFoundError();
+      const balance = subMoney(grant.amount, drawn);
+      const state: UsagePrepaidState = cmp(balance, "0") <= 0
+        ? "depleted"
+        : grant.expiresOn !== null && date > grant.expiresOn ? "expired" : "active";
+      return { ...grant, balance, state };
+    });
+  });
+}
+
 /** Internal append-only draw writer used by the usage rating commit path. */
 export async function recordPrepaidDraw(
   orgId: string,
   input: RecordPrepaidDrawInput,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<typeof usagePrepaidDraws.$inferSelect> {
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
@@ -243,12 +296,14 @@ export async function recordPrepaidDraw(
       refuse("usage_prepaid_amount_invalid", "A prepaid draw amount must be greater than zero.", "Provide a positive draw amount within the grant's remaining balance.", "amount");
     }
     const grant = (await db.execute<{ amount: string; expiresOn: string | null }>(sql`
-      select amount::text as amount, expires_on::text as "expiresOn"
-        from usage_prepaid_grants
-       where org_id = ${orgId} and id = ${grantId}
-       for update`)).rows[0];
+      select g.amount::text as amount, g.expires_on::text as "expiresOn"
+        from usage_prepaid_grants g
+        join parties c on c.org_id = g.org_id and c.id = g.customer_id
+       where g.org_id = ${orgId} and g.id = ${grantId}
+         ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+       for update of g, c`)).rows[0];
     if (!grant) {
-      refuse("usage_prepaid_grant_not_found", "The prepaid grant does not exist in this organization.", "Choose a prepaid grant from this organization.", "grant_id");
+      throw new ScopeNotFoundError();
     }
     if (grant.expiresOn !== null && periodMonth > grant.expiresOn) {
       refuse(
@@ -290,6 +345,7 @@ export async function recordPrepaidDraw(
 export async function reversePrepaidDraw(
   orgId: string,
   drawIdInput: string,
+  allowedSubsidiaryIds: UsageSubsidiaryScope = null,
 ): Promise<typeof usagePrepaidDraws.$inferSelect> {
   return withOrg(orgId, async () => {
     await lockAndRequireUsageBilling(orgId);
@@ -301,15 +357,19 @@ export async function reversePrepaidDraw(
       periodMonth: string;
       amount: string;
       reversesDrawId: string | null;
+      subsidiaryId: string | null;
     }>(sql`
-      select id, grant_id as "grantId", run_id as "runId",
-             period_month::text as "periodMonth", amount::text as amount,
-             reverses_draw_id as "reversesDrawId"
-        from usage_prepaid_draws
-       where org_id = ${orgId} and id = ${drawId}
-       for update`)).rows[0];
+      select d.id, d.grant_id as "grantId", d.run_id as "runId",
+             d.period_month::text as "periodMonth", d.amount::text as amount,
+             d.reverses_draw_id as "reversesDrawId", c.subsidiary_id as "subsidiaryId"
+        from usage_prepaid_draws d
+        join usage_prepaid_grants g on g.org_id = d.org_id and g.id = d.grant_id
+        join parties c on c.org_id = g.org_id and c.id = g.customer_id
+       where d.org_id = ${orgId} and d.id = ${drawId}
+         ${subsidiaryVisibleFilter(sql`c.subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+       for update of d, g, c`)).rows[0];
     if (!original) {
-      refuse("usage_prepaid_draw_not_found", "The prepaid draw does not exist in this organization.", "Choose an original prepaid draw from this organization.", "draw_id");
+      throw new ScopeNotFoundError();
     }
     if (original.reversesDrawId !== null) {
       refuse("usage_prepaid_draw_reversal_not_allowed", "A prepaid draw reversal cannot itself be reversed.", "Choose the original positive draw; reversal entries are final.", "draw_id", 409);
