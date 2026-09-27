@@ -101,10 +101,8 @@ export const resourcingRequestFlowAdapter: FlowSubjectAdapter = {
     return `Resource request ${subjectId.slice(0, 8)}`;
   },
 
-  deepLink(): string {
-    // Resource requests have no record page yet; the hub is the landing
-    // surface until one ships (party_bank_account precedent).
-    return "/inbox";
+  deepLink(subjectId: string): string {
+    return `/resourcing/requests?request=${subjectId}`;
   },
 
   async getStatus(subjectId: string): Promise<string | null> {

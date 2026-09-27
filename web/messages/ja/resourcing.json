@@ -1,5 +1,39 @@
 {
   "prefill": { "badge": "予定 {hours} 時間" },
+  "requests": {
+    "title": "リソース依頼",
+    "description": "プロジェクトの人員を依頼し、各案を承認手続きに送ります。",
+    "newRequest": "依頼を作成",
+    "drawer": {
+      "title": "リソース依頼",
+      "newTitle": "新しいリソース依頼",
+      "description": "プロジェクトの人員案と承認履歴。",
+      "unsaved": "未保存の変更があります",
+      "requestFailed": "依頼を保存できませんでした。内容を確認して、もう一度お試しください。",
+      "decisionComment": "決定コメント",
+      "tabs": { "label": "リソース依頼のセクション", "details": "詳細", "weeks": "週別", "approval": "承認" },
+      "status": { "draft": "下書き", "submitted": "申請済み", "approved": "承認済み", "rejected": "却下", "cancelled": "取消済み" },
+      "fields": {
+        "project": "プロジェクト", "person": "担当者", "jobTitle": "職種", "requestFor": "依頼対象",
+        "firstWeek": "開始週", "lastWeek": "最終週", "hoursPerWeek": "週あたりの時間",
+        "billable": "請求対象", "billItem": "請求項目", "reason": "理由", "choose": "選択してください",
+        "yes": "はい", "no": "いいえ", "noBillItem": "請求項目なし"
+      },
+      "weeks": {
+        "week": "週の開始日", "requested": "依頼時間", "netCapacity": "実質稼働可能時間",
+        "bookedHard": "確定済みの割当時間", "overallocation": "稼働超過", "unknown": "不明",
+        "over": "上限超過", "within": "上限内", "empty": "依頼対象の週がありません。",
+        "saveFirst": "下書きを保存すると週ごとの稼働状況を確認できます。"
+      },
+      "approval": { "saveFirst": "承認履歴を開く前に下書きを保存してください。" },
+      "actions": { "save": "保存", "saving": "保存中…", "submit": "承認に申請", "cancelRequest": "依頼を取り消す" },
+      "cancelReasonTitle": "リソース依頼の取消",
+      "cancelReasonLabel": "取消理由",
+      "cancelConfirmTitle": "取消の確認",
+      "cancelConfirmMessage": "依頼を取り消し、その理由を記録します。",
+      "continue": "続行"
+    }
+  },
   "demand": {
     "basis": {
       "manual": "手動入力",

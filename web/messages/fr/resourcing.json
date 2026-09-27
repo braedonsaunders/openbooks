@@ -1,5 +1,39 @@
 {
   "prefill": { "badge": "Prévu : {hours} h" },
+  "requests": {
+    "title": "Demandes de ressources",
+    "description": "Demandez du personnel pour un projet et soumettez chaque proposition à approbation.",
+    "newRequest": "Nouvelle demande",
+    "drawer": {
+      "title": "Demande de ressources",
+      "newTitle": "Nouvelle demande de ressources",
+      "description": "Proposition d’affectation au projet et historique des approbations.",
+      "unsaved": "Modifications non enregistrées",
+      "requestFailed": "La demande n’a pas pu être enregistrée. Vérifiez les informations et réessayez.",
+      "decisionComment": "Commentaire de décision",
+      "tabs": { "label": "Sections de la demande de ressources", "details": "Détails", "weeks": "Semaines", "approval": "Approbation" },
+      "status": { "draft": "Brouillon", "submitted": "Soumise", "approved": "Approuvée", "rejected": "Refusée", "cancelled": "Annulée" },
+      "fields": {
+        "project": "Projet", "person": "Personne", "jobTitle": "Intitulé du poste", "requestFor": "Demande pour",
+        "firstWeek": "Première semaine", "lastWeek": "Dernière semaine", "hoursPerWeek": "Heures par semaine",
+        "billable": "Facturable", "billItem": "Article à facturer", "reason": "Motif", "choose": "Choisir une option",
+        "yes": "Oui", "no": "Non", "noBillItem": "Aucun article à facturer"
+      },
+      "weeks": {
+        "week": "Semaine commençant le", "requested": "Heures demandées", "netCapacity": "Capacité nette",
+        "bookedHard": "Heures déjà affectées fermement", "overallocation": "Dépassement de capacité", "unknown": "Inconnue",
+        "over": "Capacité dépassée", "within": "Capacité respectée", "empty": "Aucune semaine n’est demandée.",
+        "saveFirst": "Enregistrez le brouillon pour consulter la capacité hebdomadaire."
+      },
+      "approval": { "saveFirst": "Enregistrez le brouillon avant d’ouvrir son historique d’approbation." },
+      "actions": { "save": "Enregistrer", "saving": "Enregistrement…", "submit": "Soumettre à approbation", "cancelRequest": "Annuler la demande" },
+      "cancelReasonTitle": "Annuler la demande de ressources",
+      "cancelReasonLabel": "Motif de l’annulation",
+      "cancelConfirmTitle": "Confirmer l’annulation",
+      "cancelConfirmMessage": "La demande sera annulée et le motif sera conservé.",
+      "continue": "Continuer"
+    }
+  },
   "demand": {
     "basis": {
       "manual": "Saisie manuelle",

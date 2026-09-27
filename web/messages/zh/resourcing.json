@@ -1,5 +1,39 @@
 {
   "prefill": { "badge": "计划 {hours} 小时" },
+  "requests": {
+    "title": "资源申请",
+    "description": "为项目申请人员，并将每项方案提交审批。",
+    "newRequest": "新建申请",
+    "drawer": {
+      "title": "资源申请",
+      "newTitle": "新建资源申请",
+      "description": "项目人员方案及审批记录。",
+      "unsaved": "有未保存的更改",
+      "requestFailed": "无法保存申请。请检查信息后重试。",
+      "decisionComment": "审批意见",
+      "tabs": { "label": "资源申请栏目", "details": "详细信息", "weeks": "周安排", "approval": "审批" },
+      "status": { "draft": "草稿", "submitted": "已提交", "approved": "已批准", "rejected": "已拒绝", "cancelled": "已取消" },
+      "fields": {
+        "project": "项目", "person": "人员", "jobTitle": "职位", "requestFor": "申请对象",
+        "firstWeek": "首周", "lastWeek": "末周", "hoursPerWeek": "每周工时",
+        "billable": "可计费", "billItem": "计费项目", "reason": "原因", "choose": "请选择",
+        "yes": "是", "no": "否", "noBillItem": "不指定计费项目"
+      },
+      "weeks": {
+        "week": "周起始日", "requested": "申请工时", "netCapacity": "净可用工时",
+        "bookedHard": "已确认安排工时", "overallocation": "超额安排", "unknown": "未知",
+        "over": "超出容量", "within": "未超出容量", "empty": "没有申请的周次。",
+        "saveFirst": "保存草稿后查看每周容量。"
+      },
+      "approval": { "saveFirst": "保存草稿后再查看审批记录。" },
+      "actions": { "save": "保存", "saving": "正在保存…", "submit": "提交审批", "cancelRequest": "取消申请" },
+      "cancelReasonTitle": "取消资源申请",
+      "cancelReasonLabel": "取消原因",
+      "cancelConfirmTitle": "确认取消",
+      "cancelConfirmMessage": "申请将被取消，取消原因也会记录。",
+      "continue": "继续"
+    }
+  },
   "demand": {
     "basis": {
       "manual": "手动录入",

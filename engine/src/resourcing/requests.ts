@@ -45,6 +45,7 @@ export type ResourceRequestDraftInput = RequestWriteContext & ResourceRequestSub
   isBillable?: boolean;
   billItemId?: string | null;
   reason?: unknown;
+  custom?: Record<string, unknown>;
 };
 
 export type UpdateResourceRequestInput = ResourceRequestDraftInput & {
@@ -196,6 +197,7 @@ function requestSnapshot(row: RequestRow): Record<string, unknown> {
     decidedBy: row.decidedBy,
     decidedAt: row.decidedAt,
     decisionComment: row.decisionComment,
+    custom: row.custom,
   };
 }
 
@@ -211,12 +213,12 @@ export async function createResourceRequest(
       const result = await tx.execute<RequestWriteRow>(sql`
         insert into res_requests (
           id, org_id, project_id, employee_party_id, job_title, first_week, last_week,
-          hours_per_week, is_billable, bill_item_id, reason, status, created_by, updated_by
+          hours_per_week, is_billable, bill_item_id, reason, custom, status, created_by, updated_by
         ) values (
           coalesce(${idempotency?.id ?? null}::uuid, public.uuid_generate_v7()), ${input.orgId},
           ${input.projectId}, ${values.employeePartyId}, ${values.jobTitle}, ${values.firstWeek},
           ${values.lastWeek}, ${values.hoursPerWeek}, ${values.isBillable}, ${values.billItemId},
-          ${values.reason}, 'draft', ${input.actorId}, ${input.actorId}
+          ${values.reason}, ${JSON.stringify(input.custom ?? {})}::jsonb, 'draft', ${input.actorId}, ${input.actorId}
         ) returning id, org_id as "orgId", project_id as "projectId",
           employee_party_id as "employeePartyId", job_title as "jobTitle",
           first_week::text as "firstWeek", last_week::text as "lastWeek",
@@ -250,6 +252,7 @@ export async function createResourceRequest(
         isBillable: values.isBillable,
         billItemId: values.billItemId,
         reason: values.reason,
+        custom: input.custom ?? {},
         status: "draft",
         createdBy: input.actorId,
         updatedBy: input.actorId,
@@ -285,6 +288,7 @@ export async function updateResourceRequestDraft(input: UpdateResourceRequestInp
       isBillable: values.isBillable,
       billItemId: values.billItemId,
       reason: values.reason,
+      ...(input.custom === undefined ? {} : { custom: input.custom }),
       updatedBy: input.actorId,
       updatedAt: new Date(),
     }).where(and(
