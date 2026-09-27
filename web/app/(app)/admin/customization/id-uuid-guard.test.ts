@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Member routes must refuse a non-UUID [id] with HTTP 400 naming that the id
@@ -9,7 +8,6 @@ import test from 'node:test'
 // Auth, gates, and the database are stubbed so the only thing under test is
 // that response contract.
 
-const root = pathToFileURL(process.cwd() + '/').href
 const stateKey = Symbol.for('openbooks.customization-id-uuid-guard')
 const MALFORMED = ['not-a-uuid', 'new', '-'.repeat(36)] as const
 const CANONICAL = '019f68a5-6a24-78ec-bed6-cc04e06f2078'

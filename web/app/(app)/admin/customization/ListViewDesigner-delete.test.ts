@@ -8,7 +8,6 @@ const here = dirname(fileURLToPath(import.meta.url))
 
 const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
 await bootJsdomEnvironment({ url: 'http://localhost:4800/admin/customization?recordType=vendor_bill&tab=views', matchMediaMatches: false, resizeObserver: false })
-const globals = globalThis as Record<string, unknown>
 
 const { registerHooks } = await import('node:module')
 const { pathToFileURL } = await import('node:url')

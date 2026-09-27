@@ -9,10 +9,6 @@ import test from 'node:test'
 // filing read: an entity-restricted caller opening another legal entity's
 // filing URL must see "not found", never the filing. (Was FilingDetail.scope
 // source pins on the loadFiling call.)
-const virtual = (source: string) => ({
-  shortCircuit: true as const,
-  url: 'data:text/javascript,' + encodeURIComponent(source),
-})
 
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')

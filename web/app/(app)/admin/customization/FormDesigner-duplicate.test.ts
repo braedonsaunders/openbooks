@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // Member-drawer sessions must remount per session: FormDesigner seeds its
@@ -11,7 +10,6 @@ import test from 'node:test'
 // Auth, gates, and the database are stubbed so the only thing under test
 // is the loader's per-session drawer key.
 
-const root = pathToFileURL(process.cwd() + '/').href
 const SOURCE_ID = '019f68a5-6a24-78ec-bed6-cc04e06f2078'
 const stateKey = Symbol.for('openbooks.customization-duplicate-guard')
 const state: { statements: unknown[] } = { statements: [] }
