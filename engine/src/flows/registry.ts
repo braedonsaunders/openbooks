@@ -24,6 +24,11 @@ import {
   allocationRunsFlowAdapter,
 } from "./allocation-runs-adapter.ts";
 import {
+  FUND_RELEASE_SUBJECT_KIND,
+  fundReleaseSubjectProfile,
+  fundReleasesFlowAdapter,
+} from "./fund-releases-adapter.ts";
+import {
   FIELD_TICKET_SUBJECT_KIND,
   fieldTicketSubjectProfile,
   fieldTicketsFlowAdapter,
@@ -89,6 +94,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === BUDGET_SCENARIO_SUBJECT_KIND) return budgetScenariosFlowAdapter;
   if (subjectKind === CLOSE_RUN_SUBJECT_KIND) return closeRunsFlowAdapter;
   if (subjectKind === ALLOCATION_RUN_SUBJECT_KIND) return allocationRunsFlowAdapter;
+  if (subjectKind === FUND_RELEASE_SUBJECT_KIND) return fundReleasesFlowAdapter;
   if (subjectKind === FIELD_TICKET_SUBJECT_KIND) return fieldTicketsFlowAdapter;
   if (subjectKind === TIMESHEET_WEEK_SUBJECT_KIND) return timesheetWeeksFlowAdapter;
   if (subjectKind === HRM_CHANGE_REQUEST_SUBJECT_KIND) return hrmChangeRequestFlowAdapter;
@@ -137,6 +143,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     budgetScenarioSubjectProfile,
     closeRunSubjectProfile,
     allocationRunSubjectProfile,
+    fundReleaseSubjectProfile,
     fieldTicketSubjectProfile,
     payRunSubjectProfile,
     timesheetWeekSubjectProfile,
