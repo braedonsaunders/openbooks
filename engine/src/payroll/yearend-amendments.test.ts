@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { sealSecret } from "../platform/secrets.ts";
+import { describeSealedBlob, sealSecret, unsealSecret } from "../platform/secrets.ts";
+import { rotateDataKey } from "../../../scripts/rotate-data-key.ts";
 import { PayrollError } from "./error.ts";
 import {
   registerPayrollFilings,
@@ -924,6 +925,135 @@ test(
       assert.equal(lifecycle.rows[0]!.lastRevision, "amended");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "rotation keeps amendments honest: stored-key recompute, named refusal on a dropped key, re-fingerprint on --apply",
+  { skip: !DB },
+  async () => {
+    // The full Finding-1 sequence on one T4: issue under k1, rotate the
+    // active key to k2, amend without a spurious SIN change, drop k1 for the
+    // named refusal, then rotate --apply and compare cleanly under k2 alone.
+    const K1_HEX = "01".repeat(32);
+    const K2_HEX = "02".repeat(32);
+    const K1_B64 = Buffer.from(K1_HEX, "hex").toString("base64");
+    const K2_B64 = Buffer.from(K2_HEX, "hex").toString("base64");
+    const saved = {
+      OPENBOOKS_DATA_KEY: process.env.OPENBOOKS_DATA_KEY,
+      OPENBOOKS_DATA_KEYS: process.env.OPENBOOKS_DATA_KEYS,
+      OPENBOOKS_DATA_KEY_ACTIVE: process.env.OPENBOOKS_DATA_KEY_ACTIVE,
+    };
+    const useSingle = (hex: string): void => {
+      delete process.env.OPENBOOKS_DATA_KEYS;
+      delete process.env.OPENBOOKS_DATA_KEY_ACTIVE;
+      process.env.OPENBOOKS_DATA_KEY = hex;
+    };
+    const useRing = (active: string): void => {
+      delete process.env.OPENBOOKS_DATA_KEY;
+      process.env.OPENBOOKS_DATA_KEYS = `k1=${K1_B64},k2=${K2_B64}`;
+      process.env.OPENBOOKS_DATA_KEY_ACTIVE = active;
+    };
+    const useOnlyK2 = (): void => {
+      delete process.env.OPENBOOKS_DATA_KEY;
+      process.env.OPENBOOKS_DATA_KEYS = `k2=${K2_B64}`;
+      process.env.OPENBOOKS_DATA_KEY_ACTIVE = "k2";
+    };
+    const restore = (): void => {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    };
+    useSingle(K1_HEX);
+    let fx: Awaited<ReturnType<typeof seedT4Year>> | null = null;
+    try {
+      fx = await seedT4Year();
+      await recordFilingIssue({
+        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
+        taxYear: 2026, revision: "original", note: "Filed by Internet File Transfer",
+      });
+      // Production rows predate key ids: strip the stored fingerprint to the
+      // bare digest a v1-era snapshot carries.
+      const slips = await db.execute<{ id: string; reported: { confidential: { label: string; fingerprint: string }[] } }>(sql`
+        select sl.id::text as id, sl.reported as reported
+          from payroll_filing_submission_slips sl
+          join payroll_filing_submissions s on s.id = sl.submission_id and s.org_id = sl.org_id
+         where s.org_id = ${fx.orgId} and s.country = 'CA' and s.filing_key = 't4' and s.tax_year = 2026`);
+      assert.equal(slips.rows.length, 1);
+      const bare = slips.rows[0]!.reported.confidential[0]!.fingerprint.replace(/^k1:/, "");
+      assert.match(bare, /^[0-9a-f]{64}$/);
+      await db.execute(sql`
+        update payroll_filing_submission_slips set reported = ${JSON.stringify({
+          ...slips.rows[0]!.reported,
+          confidential: [{ label: "Social insurance number", fingerprint: bare }],
+        })}::jsonb where id = ${slips.rows[0]!.id}`);
+
+      // Rotate: k2 becomes active with k1 retained. The SIN is untouched, so
+      // the amendment review must stay silent — no spurious CHANGED.
+      useRing("k2");
+      const lifecycle = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
+      assert.equal(lifecycle.rows[0]!.status, "unchanged");
+      assert.deepEqual(lifecycle.rows[0]!.changes, []);
+
+      // A real box moves in the ledger; the amendment issues with the SIN
+      // still comparing equal under its stored key.
+      await db.execute(sql`
+        insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount,
+                                    created_by, updated_by)
+        select org_id, id, ${fx.earningComponentId}, 'earning', 'Taxable benefit', '1500.0000',
+               ${fx.actorId}, ${fx.actorId}
+          from pay_stubs where org_id = ${fx.orgId} and pay_run_document_id = ${fx.documentId}`);
+      // Fresh binding: an earlier deepEqual against [] narrows .changes to
+      // never[] along this path, and the narrowing outlives reassignment.
+      const moved = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
+      assert.equal(moved.rows[0]!.status, "changed");
+      assert.deepEqual(moved.rows[0]!.changes.map((change) => change.code), ["14"]);
+      const amended = await recordFilingIssue({
+        orgId: fx.orgId, actorId: fx.actorId, country: "CA", filingKey: "t4",
+        taxYear: 2026, revision: "amended", rowIds: [fx.rowId],
+      });
+      assert.equal(amended.submission.revisionNumber, 2);
+
+      // The sealed columns rotate (profile re-sealed under k2, as --apply
+      // does) while the snapshots still name k1. Dropping k1 then refuses by
+      // name — the comparison names the key and the remedy, not a 500.
+      const profile = (await db.execute<{ sealed: string }>(sql`
+        select sin_encrypted as sealed from employee_payroll_profiles
+         where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}`)).rows[0]!.sealed;
+      const sin = unsealSecret(profile, { orgId: fx.orgId, purpose: "payroll.employee.sin" });
+      await db.execute(sql`
+        update employee_payroll_profiles
+           set sin_encrypted = ${sealSecret(sin, { orgId: fx.orgId, purpose: "payroll.employee.sin" })}
+         where org_id = ${fx.orgId} and employee_party_id = ${fx.employeeId}`);
+      useOnlyK2();
+      await assert.rejects(
+        filingLifecycle(fx.orgId, "CA", "t4", 2026),
+        /k1.*not configured|OPENBOOKS_DATA_KEYS|rotate-data-key/,
+      );
+
+      // Restore k1 and run the rotation: sealed columns verify and the
+      // snapshots re-fingerprint under k2. Afterwards k1 can go and the
+      // comparison works under the new key alone.
+      useRing("k2");
+      const applied = await rotateDataKey({ apply: true, org: fx.orgId });
+      const slipsReport = applied.find((r) => r.table === "payroll_filing_submission_slips")!;
+      assert.equal(slipsReport.rows, 2, "both snapshots re-fingerprint");
+      assert.equal(slipsReport.resealed, 2);
+      const after = await db.execute<{ fingerprint: string }>(sql`
+        select jsonb_path_query_first(sl.reported, '$.confidential[*].fingerprint')::text as fingerprint
+          from payroll_filing_submission_slips sl
+          join payroll_filing_submissions s on s.id = sl.submission_id and s.org_id = sl.org_id
+         where s.org_id = ${fx.orgId}`);
+      for (const row of after.rows) assert.match(row.fingerprint, /^"k2:[0-9a-f]{64}"$/);
+      useOnlyK2();
+      const settled = await filingLifecycle(fx.orgId, "CA", "t4", 2026);
+      assert.equal(settled.rows[0]!.status, "unchanged");
+      assert.deepEqual(settled.rows[0]!.changes, []);
+    } finally {
+      restore();
+      if (fx) await dropScratchOrgReporting(fx.orgId);
     }
   },
 );

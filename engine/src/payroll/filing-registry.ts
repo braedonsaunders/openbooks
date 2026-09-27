@@ -312,9 +312,19 @@ export type PayrollFilingAmendment =
      * Confidential identity facts to compare by fingerprint (the SIN on a T4,
      * the SSN on a W-2). Server-side only: the fingerprints are stored in the
      * snapshot and never returned to a browser — only "changed" is.
+     *
+     * `previous` carries the row's last-issued fingerprints by label. The
+     * pack recomputes the CURRENT value under each stored fingerprint's key
+     * id (see `keyedFingerprintForComparison`), so a data-key rotation never
+     * reads an unchanged identifier as changed. Absent for a first issue,
+     * which fingerprints under the active key.
      */
-    confidential?(orgId: string, taxYear: number, rowId: string):
-    Promise<{ label: string; fingerprint: string }[]>;
+    confidential?(
+      orgId: string,
+      taxYear: number,
+      rowId: string,
+      previous?: readonly { label: string; fingerprint: string }[],
+    ): Promise<{ label: string; fingerprint: string }[]>;
     /** Immutable, nonprinted values needed to reproduce a corrected artifact. */
     privateFacts?(orgId: string, taxYear: number, rowId: string): Promise<Record<string, string>>;
   };

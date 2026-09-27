@@ -70,7 +70,7 @@ export function plPackFilings(): PayrollPackFilings {
             "no electronic PIT-11 korekta file is generated, the same gap the original "
             + "information declares — the as-filed/amended boxes above are complete; file "
             + "the korekta through the Ministry's e-Deklaracje / e-Urząd Skarbowy channel",
-          confidential: (orgId, taxYear, rowId) => pit11ConfidentialFields(orgId, taxYear, rowId),
+          confidential: (orgId, taxYear, rowId, previous) => pit11ConfidentialFields(orgId, taxYear, rowId, previous),
         },
       },
     ],

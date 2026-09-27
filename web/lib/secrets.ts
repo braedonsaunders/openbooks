@@ -8,9 +8,14 @@ import "server-only";
  */
 export {
   describeSealedBlob,
+  fingerprintUnderKey,
   isNamedNonProductionEnvironment,
   keyedFingerprint,
+  keyedFingerprintForComparison,
+  KeyedFingerprintError,
   loadDataKeyRing,
+  matchKeyedFingerprint,
+  parseKeyedFingerprint,
   requireDataKey,
   sealJson,
   sealSecret,

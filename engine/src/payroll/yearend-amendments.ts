@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { db, orgContext, pool } from "../platform/db.ts";
+import { KeyedFingerprintError, parseKeyedFingerprint } from "../platform/secrets.ts";
 import { PayrollError } from "./error.ts";
 import {
   yearEndFiling,
@@ -130,11 +131,30 @@ export interface PayrollFilingIssuedSlip {
   reported: PayrollFilingReported;
 }
 
+/**
+ * Snapshots written before key ids existed store the bare digest; read those
+ * as k1 so every comparison meets a keyed fingerprint and a rotation never
+ * string-mismatches an unchanged identifier. Unparseable values pass through
+ * untouched — they cannot prove equality, so they read as changed.
+ */
+function normalizeConfidential(
+  entries: { label: string; fingerprint: string }[],
+): { label: string; fingerprint: string }[] {
+  return entries.map((entry) => {
+    const parsed = typeof entry?.fingerprint === "string" ? parseKeyedFingerprint(entry.fingerprint) : null;
+    return {
+      label: entry.label,
+      fingerprint: parsed ? `${parsed.keyId}:${parsed.hmac}` : entry.fingerprint,
+    };
+  });
+}
+
 function toReported(raw: unknown): PayrollFilingReported {
   const value = (raw ?? {}) as Partial<PayrollFilingReported>;
+  const confidential = Array.isArray(value.confidential) ? value.confidential : [];
   return {
     fields: Array.isArray(value.fields) ? value.fields : [],
-    confidential: Array.isArray(value.confidential) ? value.confidential : [],
+    confidential: normalizeConfidential(confidential),
     ...(value.privateFacts && typeof value.privateFacts === "object"
       ? { privateFacts: Object.fromEntries(Object.entries(value.privateFacts).filter(
         (entry): entry is [string, string] => typeof entry[1] === "string",
@@ -422,7 +442,9 @@ export async function filingLifecycle(
     }
     // Only rows that were actually issued cost a slip build — an unfiled
     // population never pays for a per-row query it has nothing to compare to.
-    const current = await currentReported(filing, orgId, taxYear, data, row);
+    // The stored snapshot rides along so the confidential comparison
+    // recomputes under the key that proved the last issue.
+    const current = await currentReported(filing, orgId, taxYear, data, row, previous.slip.reported);
     const changes = diffReported(previous.slip.reported, current.reported);
     const cancelled = previous.slip.revision === "cancelled";
     rows.push({
@@ -507,11 +529,23 @@ async function currentReported(
   taxYear: number,
   data: PayrollFilingData,
   row: Record<string, string | number | null>,
+  previous?: PayrollFilingReported,
 ): Promise<{ slip: PayrollFilingSlipData | null; reported: PayrollFilingReported }> {
   const rowId = String(row[data.rowKey] ?? "");
-  const confidential = filing.amendment.supported && filing.amendment.confidential
-    ? await filing.amendment.confidential(orgId, taxYear, rowId)
-    : [];
+  // The pack recomputes the current identifiers under the STORED snapshots'
+  // key ids, so a rotation between issue and review never reads an unchanged
+  // identifier as changed. A stored key the ring no longer holds refuses by
+  // name as a PayrollError, so the amendments route answers 422 with the
+  // remedy instead of a 500.
+  let confidential: { label: string; fingerprint: string }[] = [];
+  if (filing.amendment.supported && filing.amendment.confidential) {
+    try {
+      confidential = await filing.amendment.confidential(orgId, taxYear, rowId, previous?.confidential);
+    } catch (error) {
+      if (error instanceof KeyedFingerprintError) throw new PayrollError(error.message);
+      throw error;
+    }
+  }
   const privateFacts = filing.amendment.supported && filing.amendment.privateFacts
     ? await filing.amendment.privateFacts(orgId, taxYear, rowId)
     : undefined;
@@ -538,6 +572,95 @@ async function currentReported(
       })),
       confidential,
       ...(privateFacts ? { privateFacts } : {}),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Re-fingerprinting snapshots across a data-key rotation
+// ---------------------------------------------------------------------------
+
+/**
+ * What `scripts/rotate-data-key.ts --apply` should do with one issued slip's
+ * snapshot once sealed columns move to the active key.
+ *
+ *  - `current`   — every stored fingerprint already matches a fresh one
+ *    under the active key; nothing to write.
+ *  - `rewritten` — the profile still holds exactly what the snapshot
+ *    reported (each stored fingerprint re-proves under its own key id), so
+ *    the snapshot is safe to carry forward under the active key. Only the
+ *    confidential fingerprints move; boxes and private facts are untouched.
+ *  - `drifted`   — the identifier moved (or can no longer be proven: a
+ *    missing profile, an invalid PESEL, a filing the packs no longer
+ *    declare). The snapshot stays on its old key id, still comparable while
+ *    that key is configured — rewriting it from today's profile would erase
+ *    the pending change the snapshot exists to surface.
+ *
+ * A stored key id absent from the ring throws KeyedFingerprintError: without
+ * the key nothing can prove the snapshot, so the rotation refuses by name
+ * (restore the key) instead of guessing.
+ */
+export type FingerprintResealPlan =
+  | { status: "current" }
+  | { status: "rewritten"; reported: PayrollFilingReported }
+  | { status: "drifted" };
+
+export async function planFingerprintReseal(
+  orgId: string,
+  country: string,
+  filingKey: string,
+  taxYear: number,
+  rowId: string,
+  storedRaw: PayrollFilingReported,
+): Promise<FingerprintResealPlan> {
+  // The rotation script reads the snapshot raw, bypassing the submission
+  // read that normalizes legacy fingerprints — normalize here so a bare
+  // pre-rotation digest verifies instead of looking drifted.
+  const stored: PayrollFilingReported = {
+    ...storedRaw,
+    confidential: normalizeConfidential(storedRaw.confidential ?? []),
+  };
+  let confidential:
+    | ((orgId: string, taxYear: number, rowId: string, previous?: readonly { label: string; fingerprint: string }[]) =>
+      Promise<{ label: string; fingerprint: string }[]>)
+    | undefined;
+  try {
+    const filing = yearEndFiling(country, filingKey);
+    confidential = filing.amendment.supported ? filing.amendment.confidential : undefined;
+  } catch (error) {
+    if (error instanceof PayrollError) return { status: "drifted" };
+    throw error;
+  }
+  if (!confidential) {
+    return stored.confidential.length === 0 ? { status: "current" } : { status: "drifted" };
+  }
+  let fresh: { label: string; fingerprint: string }[];
+  let comparable: { label: string; fingerprint: string }[];
+  try {
+    fresh = await confidential(orgId, taxYear, rowId);
+    comparable = await confidential(orgId, taxYear, rowId, stored.confidential);
+  } catch (error) {
+    // The profile cannot prove what was reported (an invalid PESEL, a
+    // missing profile): leave the snapshot on its old key, still comparable
+    // while that key is configured. A missing KEY is different — nothing
+    // can prove anything — so that refusal propagates to the rotation run.
+    if (error instanceof PayrollError) return { status: "drifted" };
+    throw error;
+  }
+  const byLabel = (entries: { label: string; fingerprint: string }[], label: string) =>
+    entries.find((entry) => entry.label === label)?.fingerprint;
+  const verified = stored.confidential.every((entry) => byLabel(comparable, entry.label) === entry.fingerprint);
+  if (!verified) return { status: "drifted" };
+  const current = stored.confidential.every((entry) => byLabel(fresh, entry.label) === entry.fingerprint);
+  if (current) return { status: "current" };
+  return {
+    status: "rewritten",
+    reported: {
+      ...stored,
+      confidential: stored.confidential.map((entry) => ({
+        label: entry.label,
+        fingerprint: byLabel(fresh, entry.label) ?? entry.fingerprint,
+      })),
     },
   };
 }
@@ -875,7 +998,7 @@ async function issueCorrection(
     // ones it carried, not a recomputation that may no longer produce them.
     const current = revision === "cancelled" || !row
       ? { slip: null, reported: previous.slip.reported }
-      : await currentReported(filing, orgId, taxYear, data, row);
+      : await currentReported(filing, orgId, taxYear, data, row, previous.slip.reported);
     const changes = revision === "cancelled"
       ? []
       : diffReported(previous.slip.reported, current.reported);
@@ -1082,7 +1205,7 @@ export async function filingCorrectionSlip(
   const row = data.rows.find((candidate) => String(candidate[data.rowKey] ?? "") === rowId);
   const current = revision === "cancelled" || !row
     ? { slip: null, reported: previous.slip.reported }
-    : await currentReported(filing, orgId, taxYear, data, row);
+    : await currentReported(filing, orgId, taxYear, data, row, previous.slip.reported);
   return await filing.amendment.slip.build(
     {
       rowId,
