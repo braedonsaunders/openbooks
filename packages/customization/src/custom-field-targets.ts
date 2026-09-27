@@ -10,9 +10,10 @@ export type CustomFieldTarget = {
 };
 
 /** Native tables whose custom JSON values are stored and consumed today.
- * A registry list profile alone does not establish writable custom storage
- * (for example, budget scenarios have no custom column). Keep the API and
- * settings switchboard on this single storage-capability catalog. */
+ * A record type offers custom fields only on a table listed here; one with no
+ * custom column (budget scenarios, revenue contracts, equipment units) names
+ * no customFieldTable at all. Keep the API and settings switchboard on this
+ * single storage-capability catalog. */
 const STORAGE_TARGETS = [
   ['documents', 'documents'],
   ['document_lines', 'documentLines'],

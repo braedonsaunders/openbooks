@@ -295,14 +295,16 @@ export interface RecordTypeMeta {
   supportsForms?: boolean
   /**
    * The table whose `custom` jsonb + custom_field_defs back this record type's
-   * custom fields. Defaults to 'documents' (transactions). Entity record types
-   * point at their own table (e.g. 'projects'). Custom-field defs for entity
+   * custom fields. Transactions default to 'documents'; an entity record type
+   * points at its own table (e.g. 'projects') or, naming none, has no custom
+   * fields at all — it never falls back to documents. Custom-field defs for entity
    * tables use a null `target_kind`; documents defs use the record type as kind.
    */
   customFieldTable?: string
   /**
    * The table backing LINE custom fields, or null for header-only record types
-   * (all 'entity' types, plus payments/transfer). Defaults to 'document_lines'.
+   * (all 'entity' types, plus payments/transfer). Transactions default to
+   * 'document_lines'; entity types default to null.
    */
   customFieldLineTable?: string | null
   /**
