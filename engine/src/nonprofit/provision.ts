@@ -21,7 +21,7 @@ export interface ProvisionFundAccountingInput {
   actorId?: string | null;
 }
 
-export interface HistoricalFundImbalance {
+export interface HistoricalFundImbalance extends Record<string, unknown> {
   fundId: string;
   code: string;
   name: string;
@@ -36,7 +36,7 @@ export interface ProvisionFundAccountingResult {
   historicalUnbalancedByFund: HistoricalFundImbalance[];
 }
 
-interface SegmentRow {
+interface SegmentRow extends Record<string, unknown> {
   id: string;
   sourceKind: string;
   isHierarchical: boolean;
@@ -46,14 +46,14 @@ interface SegmentRow {
   featureKey: string | null;
 }
 
-interface SegmentValueRow {
+interface SegmentValueRow extends Record<string, unknown> {
   id: string;
   code: string | null;
   name: string;
   isActive: boolean;
 }
 
-interface FundRow {
+interface FundRow extends Record<string, unknown> {
   id: string;
   kind: FundKind;
   restrictionClass: string;

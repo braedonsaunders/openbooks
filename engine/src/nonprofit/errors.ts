@@ -12,7 +12,7 @@ export interface NonprofitRefusalInput {
 
 /** A typed refusal that route boundaries can safely return as a 4xx response. */
 export class NonprofitError extends PostingError {
-  readonly name = "NonprofitError";
+  readonly name: string = "NonprofitError";
   readonly status: NonprofitStatus;
   readonly code: string;
   readonly remedy: string;
@@ -29,7 +29,7 @@ export class NonprofitError extends PostingError {
 
 /** Posting-time refusals preserve the ledger's PostingError contract. */
 export class NonprofitPostingError extends NonprofitError {
-  readonly name = "NonprofitPostingError";
+  readonly name: string = "NonprofitPostingError";
 }
 
 export const FUND_FEATURE_REMEDY = "Enable Fund Accounting in Company Settings → Features.";

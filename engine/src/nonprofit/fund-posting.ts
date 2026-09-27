@@ -272,7 +272,7 @@ export function interfundLegs(
   return legs;
 }
 
-interface FundSegmentLookup {
+interface FundSegmentLookup extends Record<string, unknown> {
   segmentId: string;
   defaultValueId: string | null;
   isActive: boolean;
@@ -285,7 +285,7 @@ interface FundSegmentLookup {
   isClassified: boolean | null;
 }
 
-interface FundPairLookup {
+interface FundPairLookup extends Record<string, unknown> {
   subsidiaryId: string;
   subsidiaryName: string;
   baseCurrency: string;
