@@ -574,6 +574,7 @@ export const TENANT_TABLE_POLICIES = {
   "usage_rating_bands": "clone:catalog-uuid-rebase",
   "usage_rating_plan_versions": "clone:catalog-uuid-rebase",
   "usage_rating_plans": "clone:catalog-uuid-rebase",
+  "usage_rating_runs": "clone:catalog-uuid-rebase",
   "usage_records": "clone:catalog-uuid-rebase",
   "user_dashboard_layouts": "clone:catalog-uuid-rebase",
   "user_form_preferences": "clone:catalog-uuid-rebase",

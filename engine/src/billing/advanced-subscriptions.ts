@@ -1074,6 +1074,8 @@ export type AdvancedBillingLine = {
   description: string;
   quantity: string;
   unitPrice: string;
+  amount?: string;
+  custom?: Record<string, unknown>;
   incomeAccountId: string | null;
   itemId: string | null;
   taxCodeId: string | null;
