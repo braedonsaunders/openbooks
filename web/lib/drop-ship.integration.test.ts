@@ -93,13 +93,16 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
           where m.org_id = ${org.orgId} and l.document_id = receipt.id) as movement_count,
         (select coalesce(sum(jl.amount), 0)::text from journal_entries je join journal_lines jl
           on jl.org_id = je.org_id and jl.entry_id = je.id
-          where je.org_id = ${org.orgId} and je.custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text
+          where je.org_id = ${org.orgId} and je.book_id = ${org.bookId}
+            and je.custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text
             and jl.account_id = ${org.accounts.cogs}) as cost,
         (select coalesce(sum(jl.amount), 0)::text from journal_entries je join journal_lines jl
           on jl.org_id = je.org_id and jl.entry_id = je.id
-          where je.org_id = ${org.orgId} and je.custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text
+          where je.org_id = ${org.orgId} and je.book_id = ${org.bookId}
+            and je.custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text
             and jl.account_id = ${org.accounts.clearing}) as clearing,
         (select count(*)::int from journal_entries je where je.org_id = ${org.orgId}
+          and je.book_id = ${org.bookId}
           and je.custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text) as entry_count
        from document_lines pol join drop_ship_lines routed
          on routed.org_id = pol.org_id and routed.purchase_order_line_id = pol.id
@@ -125,9 +128,11 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
     const clearingAfterBill = await withBypassContext(() => db.execute<{ balance: string; ppv: string }>(sql`
       select
         (select coalesce(sum(l.amount), 0)::text from journal_lines l join journal_entries e on e.id = l.entry_id
-          where l.org_id = ${org.orgId} and e.status = 'posted' and l.account_id = ${org.accounts.clearing}) as balance,
+          where l.org_id = ${org.orgId} and e.org_id = l.org_id and e.book_id = ${org.bookId}
+            and e.status in ('posted', 'reversed') and l.account_id = ${org.accounts.clearing}) as balance,
         (select coalesce(sum(l.amount), 0)::text from journal_lines l join journal_entries e on e.id = l.entry_id
-          where l.org_id = ${org.orgId} and e.status = 'posted' and l.account_id = ${org.accounts.adjustment}) as ppv`));
+          where l.org_id = ${org.orgId} and e.org_id = l.org_id and e.book_id = ${org.bookId}
+            and e.status in ('posted', 'reversed') and l.account_id = ${org.accounts.adjustment}) as ppv`));
     assert.equal(clearingAfterBill.rows[0]!.balance, "0.0000");
     assert.equal(clearingAfterBill.rows[0]!.ppv, "15.0000");
 
@@ -142,13 +147,36 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
     await requestDocumentVoid({ documentId: invoice.id, orgId: org.orgId, actorId, reason: "Correct the customer invoice", reversalDate: org.date, source: "api" });
     await requestDocumentVoid({ documentId: bill.id, orgId: org.orgId, actorId, reason: "Correct the vendor bill", reversalDate: org.date, source: "api" });
     await requestDocumentVoid({ documentId: first.salesFulfillment.id, orgId: org.orgId, actorId, reason: "Reverse the vendor confirmation", reversalDate: org.date, source: "api" });
-    const voidFacts = await withBypassContext(() => db.execute<{ receipt_status: string; fulfillment_status: string; posted: number; reversed: number; so_fulfilled: string; po_received: string }>(sql`
+    const voidFacts = await withBypassContext(() => db.execute<{ receipt_status: string; fulfillment_status: string; confirmation_entries: number; reversed: number; cogs_net: string; clearing_net: string; so_fulfilled: string; po_received: string }>(sql`
       select receipt.status as receipt_status, fulfillment.status as fulfillment_status,
-        (select count(*)::int from journal_entries where org_id = ${org.orgId}
-          and custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text and status = 'posted') as posted,
-        (select count(*)::int from journal_entries where org_id = ${org.orgId}
-          and reverses_entry_id in (select id from journal_entries where org_id = ${org.orgId}
-            and custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text)) as reversed,
+        (select count(*)::int from journal_entries original where original.org_id = ${org.orgId}
+          and original.book_id = ${org.bookId}
+          and original.custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text
+          and original.status in ('posted', 'reversed')) as confirmation_entries,
+        (select count(*)::int from journal_entries reversal where reversal.org_id = ${org.orgId}
+          and reversal.book_id = ${org.bookId} and reversal.status in ('posted', 'reversed')
+          and reversal.reverses_entry_id in (select original.id from journal_entries original
+            where original.org_id = ${org.orgId} and original.book_id = ${org.bookId}
+              and original.status in ('posted', 'reversed')
+              and original.custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text)) as reversed,
+        (select coalesce(sum(line.amount), 0)::text from journal_entries entry
+          join journal_lines line on line.org_id = entry.org_id and line.entry_id = entry.id
+          where entry.org_id = ${org.orgId} and entry.book_id = ${org.bookId}
+            and entry.status in ('posted', 'reversed') and line.account_id = ${org.accounts.cogs}
+            and (entry.custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text
+              or entry.reverses_entry_id in (select original.id from journal_entries original
+                where original.org_id = ${org.orgId} and original.book_id = ${org.bookId}
+                  and original.status in ('posted', 'reversed')
+                  and original.custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text))) as cogs_net,
+        (select coalesce(sum(line.amount), 0)::text from journal_entries entry
+          join journal_lines line on line.org_id = entry.org_id and line.entry_id = entry.id
+          where entry.org_id = ${org.orgId} and entry.book_id = ${org.bookId}
+            and entry.status in ('posted', 'reversed') and line.account_id = ${org.accounts.clearing}
+            and (entry.custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text
+              or entry.reverses_entry_id in (select original.id from journal_entries original
+                where original.org_id = ${org.orgId} and original.book_id = ${org.bookId}
+                  and original.status in ('posted', 'reversed')
+                  and original.custom->'dropShipConfirmation'->>'receiptId' = receipt.id::text))) as clearing_net,
         sol.quantity_fulfilled::text as so_fulfilled, pol.quantity_fulfilled::text as po_received
        from documents receipt join documents fulfillment on fulfillment.org_id = receipt.org_id
         and fulfillment.custom->'dropShipConfirmation'->>'purchaseReceiptId' = receipt.id::text
@@ -161,8 +189,10 @@ test("drop-ship confirmation posts cost once, covers the vendor bill, invoices, 
        where receipt.org_id = ${org.orgId} and receipt.id = ${first.purchaseReceipt.id} limit 1`));
     assert.equal(voidFacts.rows[0]!.receipt_status, "voided");
     assert.equal(voidFacts.rows[0]!.fulfillment_status, "voided");
-    assert.equal(voidFacts.rows[0]!.posted, 0);
+    assert.equal(voidFacts.rows[0]!.confirmation_entries, 1);
     assert.equal(voidFacts.rows[0]!.reversed, 1);
+    assert.equal(voidFacts.rows[0]!.cogs_net, "0.0000");
+    assert.equal(voidFacts.rows[0]!.clearing_net, "0.0000");
     assert.equal(voidFacts.rows[0]!.so_fulfilled, "0.00000000");
     assert.equal(voidFacts.rows[0]!.po_received, "0.00000000");
   } finally {
