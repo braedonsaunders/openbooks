@@ -1,5 +1,5 @@
 import { Rng } from "../../sim/rng.ts";
-import { eachDay, isMonthEnd, isWeekend } from "../../sim/manifest.ts";
+import { addDays, eachDay, isMonthEnd, isWeekend } from "../../sim/manifest.ts";
 import { fromCents, toCents } from "./reference-ledger.ts";
 import type {
   Corpus,
@@ -9,7 +9,6 @@ import type {
   JournalEvent,
   PaymentEvent,
 } from "../corpus-lib/types.ts";
-import { addCalendarDays } from "../../platform/civil-date.ts";
 
 /**
  * Deterministic corpus generator. Same seed → byte-identical corpus, so the
@@ -161,7 +160,7 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
       const n = r.int(1, 3);
       const id = nextId();
       events.push({
-        id, kind: "customer_invoice", date, party, dueDate: addCalendarDays(date, 30),
+        id, kind: "customer_invoice", date, party, dueDate: addDays(date, 30),
         lines: splitLines(r, total, n).map((cents, k) => ({
           account: r.pick(REVENUE), amount: fromCents(cents), description: `Service line ${k + 1}`,
         })),
@@ -172,16 +171,16 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
       // Payment plan: full (85%), two tranches (10%), never (5%).
       const roll = r.next();
       if (roll < 0.85) {
-        schedule(arSchedule, addCalendarDays(date, r.int(8, 45)), { party, doc: id, amount: total });
+        schedule(arSchedule, addDays(date, r.int(8, 45)), { party, doc: id, amount: total });
       } else if (roll < 0.95) {
         const first = (total * BigInt(r.int(30, 70))) / 100n;
         if (first > 0n && first < total) {
-          schedule(arSchedule, addCalendarDays(date, r.int(8, 30)), { party, doc: id, amount: first });
+          schedule(arSchedule, addDays(date, r.int(8, 30)), { party, doc: id, amount: first });
           if (r.chance(0.6)) {
-            schedule(arSchedule, addCalendarDays(date, r.int(35, 70)), { party, doc: id, amount: total - first });
+            schedule(arSchedule, addDays(date, r.int(35, 70)), { party, doc: id, amount: total - first });
           }
         } else {
-          schedule(arSchedule, addCalendarDays(date, r.int(8, 45)), { party, doc: id, amount: total });
+          schedule(arSchedule, addDays(date, r.int(8, 45)), { party, doc: id, amount: total });
         }
       }
     }
@@ -210,13 +209,13 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
       const n = Math.min(accounts.length, r.int(1, 2));
       const id = nextId();
       events.push({
-        id, kind: "vendor_bill", date, party: vendorKey, dueDate: addCalendarDays(date, 30),
+        id, kind: "vendor_bill", date, party: vendorKey, dueDate: addDays(date, 30),
         lines: splitLines(r, total, n).map((cents, k) => ({
           account: accounts[k % accounts.length]!, amount: fromCents(cents),
         })),
       });
       if (!r.chance(0.08)) {
-        schedule(apSchedule, addCalendarDays(date, r.int(20, 40)), { party: vendorKey, doc: id, amount: total });
+        schedule(apSchedule, addDays(date, r.int(20, 40)), { party: vendorKey, doc: id, amount: total });
       }
     }
 
@@ -230,7 +229,7 @@ export function generateCorpus(opts: { seed: string; startDate: string; endDate:
         id, kind: "expense_report", date, party: emp,
         lines: [{ account: "travel", amount: fromCents(total), description: "Travel & per diem" }],
       });
-      schedule(apSchedule, addCalendarDays(date, r.int(5, 14)), { party: emp, doc: id, amount: total });
+      schedule(apSchedule, addDays(date, r.int(5, 14)), { party: emp, doc: id, amount: total });
     }
 
     // --- scheduled payments, batched per party per day -----------------------
