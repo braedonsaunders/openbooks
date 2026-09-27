@@ -142,6 +142,8 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "parties", columnName: "legal_name", transform: "faker_name" },
   { tableName: "parties", columnName: "phone", transform: "faker_phone" },
   { tableName: "parties", columnName: "tax_ids", transform: "null_out" },
+  { tableName: "usage_records", columnName: "distinct_key", transform: "hash" },
+  { tableName: "usage_records", columnName: "reversal_reason", transform: "redact" },
   // 0195: candidate PII masks exactly like parties (a prospect's contact
   // identity is as sensitive as a worker's). Columns absent from the schema
   // are skipped by the clone generator, so ordering with the migration is

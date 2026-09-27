@@ -551,6 +551,8 @@ export const TENANT_TABLE_POLICIES = {
   "union_classifications": "clone:catalog-uuid-rebase",
   "union_fringes": "clone:catalog-uuid-rebase",
   "upgrade_legacy_provenance": "clone:catalog-uuid-rebase",
+  "usage_meters": "clone:catalog-uuid-rebase",
+  "usage_records": "clone:catalog-uuid-rebase",
   "user_dashboard_layouts": "clone:catalog-uuid-rebase",
   "user_form_preferences": "clone:catalog-uuid-rebase",
   "user_list_preferences": "clone:catalog-uuid-rebase",

@@ -25,6 +25,7 @@ export * from "./dunning";
 export * from "./construction";
 export * from "./compliance";
 export * from "./subscriptions";
+export * from "./usage";
 export * from "./subcontracts";
 export * from "./property-management";
 export * from "./iam";

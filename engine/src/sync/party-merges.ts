@@ -108,6 +108,7 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["subcontracts", "vendor_id"],
   ["time_entries", "employee_party_id"],
   ["union_agreements", "remittance_party_id"],
+  ["usage_records", "customer_id"],
   ["wip_prebill_lines", "employee_party_id"],
   // 0184: stable employment rows follow the audited merge wholesale (IDs
   // retained; status/assignment/version/evidence episodes follow via

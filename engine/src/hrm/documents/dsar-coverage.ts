@@ -218,6 +218,7 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   },
   { table: "crm_opportunities", reason: "CRM remit; account counterparty." },
   { table: "revenue_contracts", reason: "commercial contracts; customer counterparty." },
+  { table: "usage_records", reason: "usage evidence; customer counterparty." },
   { table: "subcontracts", reason: "vendor remit." },
   { table: "subcontract_payment_controls", reason: "vendor remit." },
   { table: "vendor_roles", reason: "vendor remit." },
