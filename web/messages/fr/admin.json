@@ -867,10 +867,12 @@
       "close": "Périodes et clôture",
       "ap": "Comptes fournisseurs",
       "ar": "Comptes clients",
+      "usage": "Facturation à l’usage",
       "reports": "Rapports",
       "budgets": "Budgets et prévisions",
       "insights": "Analyses",
       "items": "Articles et services",
+      "orders": "Commandes et expédition",
       "projects": "Projets et coût de revient",
       "time": "Temps et feuilles de temps",
       "records": "Enregistrements personnalisés",
@@ -888,6 +890,7 @@
       "crm": "Gestion de la relation client",
       "compliance": "Conformité",
       "allocations": "Répartitions",
+      "nonprofit": "Organismes sans but lucratif",
       "payroll": "Paie"
     },
     "gl_read": "Consulter les journaux et les soldes",
@@ -908,6 +911,7 @@
     "ar_approve": "Approuver ou rejeter des factures",
     "ar_post": "Comptabiliser les factures au grand livre",
     "ar_pay": "Enregistrer les paiements clients",
+    "usage_read": "Consulter la consommation mesurée",
     "reports_read": "Consulter les rapports",
     "reports_create": "Créer et enregistrer des rapports",
     "reports_schedule": "Planifier l’envoi de rapports",
@@ -921,6 +925,8 @@
     "items_manage": "Créer et modifier des articles",
     "items_post": "Comptabiliser les mouvements de stock",
     "items_reverse": "Contrepasser les mouvements de stock",
+    "items_warehouses": "Gérer les entrepôts et emplacements",
+    "orders_fulfill": "Préparer, emballer et expédier les commandes",
     "projects_read": "Consulter les projets et le coût de revient",
     "projects_manage": "Créer et modifier des projets",
     "time_read": "Consulter les feuilles de temps",
@@ -983,6 +989,7 @@
     "compliance_file": "Finaliser et déposer les déclarations de renseignements",
     "admin_sandboxes_manage": "Créer et gérer les environnements sandbox",
     "allocations_approve": "Approuver les répartitions en attente d’approbation",
+    "nonprofit_report": "Exécuter les rapports des organismes sans but lucratif",
     "allocations_manage": "Créer et modifier les règles et inducteurs de répartition",
     "allocations_read": "Consulter les règles, les exécutions et la traçabilité des répartitions",
     "allocations_run": "Prévisualiser, comptabiliser, contre-passer et réexécuter les répartitions",
@@ -4774,6 +4781,18 @@
       "title": "Inventaire",
       "description": "Stocks, emplacements, coût des articles et assemblages."
     },
+    "warehousing": {
+      "title": "Entreposage",
+      "description": "Entrepôts, zones et emplacements, avec des stocks détenus et comptés par emplacement."
+    },
+    "fulfillment": {
+      "title": "Exécution des commandes",
+      "description": "Préparez, emballez et expédiez les commandes clients depuis le stock de l’entrepôt."
+    },
+    "manufacturing": {
+      "title": "Fabrication",
+      "description": "Nomenclatures, gammes et ordres de fabrication qui produisent des produits finis à partir de composants."
+    },
     "equipment": {
       "title": "Équipement et locations",
       "description": "Unités d'équipement, barèmes et imputations d'utilisation aux chantiers."
@@ -4830,6 +4849,14 @@
       "title": "Cycle de vie avancé des abonnements",
       "description": "Régimes versionnés, composants multiples, essais, renouvellements, harmonisation des échéances, avenants et facturation d’avance ou à terme échu."
     },
+    "usageBilling": {
+      "title": "Facturation à l’usage",
+      "description": "Valorisez la consommation mesurée selon les formules d’abonnement et facturez-la sur la facture d’abonnement."
+    },
+    "saasMetrics": {
+      "title": "Indicateurs SaaS",
+      "description": "Revenus récurrents, attrition, rétention et cohortes calculés à partir des données d’abonnement."
+    },
     "allocations": {
       "title": "Répartitions",
       "description": "Un seul modèle de règles versionné qui répartit les coûts mutualisés vers des cibles au moyen d’un inducteur : clés de répartition à la saisie, lignes de GL supplémentaires à la comptabilisation et balais de fin de période planifiés, avec traçabilité complète."
@@ -4841,6 +4868,34 @@
     "allocationsAtPosting": {
       "title": "Répartitions à la comptabilisation",
       "description": "Laissez les règles de répartition et les scripts autorisés ajouter des lignes de GL supplémentaires à l’écriture de journal propre à une transaction, lors de la comptabilisation."
+    },
+    "nonprofit": {
+      "title": "Organismes sans but lucratif",
+      "description": "Comptabilité des organismes sans but lucratif : fonds, subventions, promesses de dons et ventilation des charges par fonction."
+    },
+    "fundAccounting": {
+      "title": "Comptabilité par fonds",
+      "description": "Suivez l’actif net par fonds et par restriction du donateur, y compris les levées de restriction."
+    },
+    "grantManagement": {
+      "title": "Gestion des subventions",
+      "description": "Attributions de subventions, budgets, dépenses admissibles et rapports aux bailleurs de fonds, rattachés aux fonds."
+    },
+    "pledges": {
+      "title": "Promesses de dons",
+      "description": "Enregistrez les promesses de dons, planifiez leur encaissement et suivez le montant restant à recevoir."
+    },
+    "encumbrances": {
+      "title": "Engagements budgétaires",
+      "description": "Réservez le budget des engagements avant la dépense et suivez le solde encore disponible."
+    },
+    "functionalExpenses": {
+      "title": "Charges par fonction",
+      "description": "Ventilez les charges entre les fonctions programmes, administration générale et collecte de fonds."
+    },
+    "form990": {
+      "title": "Formulaire 990",
+      "description": "Préparez la déclaration annuelle d’information des organismes exonérés d’impôt à partir des charges par fonction."
     },
     "apiAccess": {
       "title": "API REST",
@@ -4885,6 +4940,18 @@
     "wipBilling": {
       "title": "Travaux en cours et préfacturation",
       "description": "Révisez les travaux de projet facturables, bloquez ou ajustez des lignes avec preuves, approuvez les préfactures et suivez l’ancienneté des travaux en cours, la réalisation et les pertes."
+    },
+    "resourcing": {
+      "title": "Affectation des ressources",
+      "description": "Planifiez les personnes face à la demande des projets selon le rôle, les compétences et la disponibilité."
+    },
+    "resourceRequests": {
+      "title": "Demandes de ressources",
+      "description": "Demandez du personnel pour les rôles de projet et soumettez chaque demande à un circuit d’approbation."
+    },
+    "retainerBilling": {
+      "title": "Facturation des provisions",
+      "description": "Facturez des provisions payées d’avance et imputez-les à mesure que le travail du projet est réalisé."
     },
     "automations": {
       "title": "Automatisations",

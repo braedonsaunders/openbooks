@@ -867,11 +867,14 @@
       "close": "期间与结账",
       "ap": "应付账款",
       "ar": "应收账款",
+      "usage": "按用量计费",
       "reports": "报表",
       "budgets": "预算与预测",
       "allocations": "分摊",
+      "nonprofit": "非营利组织",
       "insights": "洞察",
       "items": "物料与服务",
+      "orders": "订单与履行",
       "projects": "项目与作业成本核算",
       "time": "工时与工时单",
       "payroll": "工资",
@@ -908,6 +911,7 @@
     "ar_approve": "审批或驳回发票",
     "ar_post": "将发票过账至总账",
     "ar_pay": "记录客户收款",
+    "usage_read": "查看计量用量",
     "reports_read": "查看报表",
     "reports_create": "创建并保存报表",
     "reports_schedule": "安排报表发送",
@@ -918,6 +922,7 @@
     "allocations_manage": "创建与编辑分摊规则及动因",
     "allocations_run": "预览、过账、冲销并重新运行分摊",
     "allocations_approve": "审批待批准的分摊运行",
+    "nonprofit_report": "运行非营利组织报告",
     "insights_read": "查看洞察和库",
     "insights_create": "构建卡片和仪表板",
     "insights_publish": "发布到共享库",
@@ -925,6 +930,8 @@
     "items_manage": "创建并编辑物料",
     "items_post": "过账库存变动",
     "items_reverse": "冲销库存变动",
+    "items_warehouses": "管理仓库和库位",
+    "orders_fulfill": "订单拣货、包装和发运",
     "projects_read": "查看项目和作业成本核算",
     "projects_manage": "创建并编辑项目",
     "time_read": "查看工时单",
@@ -4782,6 +4789,18 @@
       "title": "存货",
       "description": "库存跟踪、地点、物料成本与组装。"
     },
+    "warehousing": {
+      "title": "仓储",
+      "description": "仓库、库区和库位，按库位持有和盘点库存。"
+    },
+    "fulfillment": {
+      "title": "订单履行",
+      "description": "从仓库库存中拣货、包装并发运销售订单。"
+    },
+    "manufacturing": {
+      "title": "生产制造",
+      "description": "物料清单、工艺路线和生产工单，将组件制造为成品。"
+    },
     "equipment": {
       "title": "设备与租赁",
       "description": "设备单元、费率阶梯与计入项目的用量收费。"
@@ -4854,6 +4873,14 @@
       "title": "高级订阅生命周期",
       "description": "版本化计划、多组成、试用、续订、统一到期、修订，以及预付或后付开票。"
     },
+    "usageBilling": {
+      "title": "按用量计费",
+      "description": "按订阅方案对计量用量计价，并在订阅发票中收费。"
+    },
+    "saasMetrics": {
+      "title": "SaaS 指标",
+      "description": "基于订阅数据的经常性收入、流失、留存和同期群指标。"
+    },
     "subcontracts": {
       "title": "分包合同与进度开票",
       "description": "供应商承诺、分包变更、供应商 SOV 与付款申请、应付保留款、释放、联合支票与付款冻结。"
@@ -4861,6 +4888,18 @@
     "wipBilling": {
       "title": "在制品与预开票",
       "description": "复核可开票项目工作，凭证据冻结或调整明细，批准预开票，监控在产账龄、实现率与漏损。"
+    },
+    "resourcing": {
+      "title": "资源调配",
+      "description": "按角色、技能和可用性，根据项目需求安排人员。"
+    },
+    "resourceRequests": {
+      "title": "资源申请",
+      "description": "为项目角色申请人员，并通过审批流程处理每项申请。"
+    },
+    "retainerBilling": {
+      "title": "预付聘金计费",
+      "description": "开具预付聘金账单，并随项目工作交付逐步冲抵。"
     },
     "propertyManagement": {
       "title": "物业管理",
@@ -4885,6 +4924,34 @@
     "allocationsAtPosting": {
       "title": "过账时分摊",
       "description": "让分摊规则与授权脚本在过账时为交易自有日记账分录贡献额外总账明细。"
+    },
+    "nonprofit": {
+      "title": "非营利组织",
+      "description": "面向非营利组织的会计：基金、资助、认捐和按功能分类的费用报告。"
+    },
+    "fundAccounting": {
+      "title": "基金会计",
+      "description": "按基金和捐赠方限制跟踪净资产，包括限制的解除。"
+    },
+    "grantManagement": {
+      "title": "资助管理",
+      "description": "按基金管理资助授予、预算、允许支出和向资助方的报告。"
+    },
+    "pledges": {
+      "title": "认捐",
+      "description": "记录捐赠承诺，安排收款计划，并跟踪尚未收回的款项。"
+    },
+    "encumbrances": {
+      "title": "预算保留",
+      "description": "在支出前为承诺事项预留预算，并报告仍可用的余额。"
+    },
+    "functionalExpenses": {
+      "title": "功能费用",
+      "description": "将费用分配到项目、管理及一般行政和筹款职能。"
+    },
+    "form990": {
+      "title": "990 表",
+      "description": "根据功能费用数据编制免税组织的年度信息申报表。"
     },
     "automations": {
       "title": "自动化",

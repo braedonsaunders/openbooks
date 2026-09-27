@@ -36,6 +36,8 @@ export const PERMISSION_CATALOGUE = [
   "ar.approve",
   "ar.post",
   "ar.pay",
+  // Usage billing: see metered usage and the charges rated from it.
+  "usage.read",
   // Customer relationship management
   "crm.accounts.read",
   "crm.accounts.create",
@@ -65,6 +67,8 @@ export const PERMISSION_CATALOGUE = [
   "allocations.manage",
   "allocations.run",
   "allocations.approve",
+  // Nonprofit accounting: run fund, grant, and functional-expense reports.
+  "nonprofit.report",
   // Insights — native BI (cards, dashboards, library)
   "insights.read",
   "insights.create",
@@ -78,6 +82,12 @@ export const PERMISSION_CATALOGUE = [
   // their own grants, not riders on items.manage.
   "items.post",
   "items.reverse",
+  // Warehousing: maintain warehouse locations. A catalog fact like
+  // items.manage, so it carries no posting authority of its own.
+  "items.warehouses",
+  // Order fulfillment: pick, pack, and ship sales orders. Shipping moves
+  // stock, so it is granted where order entry and items.post already meet.
+  "orders.fulfill",
   // Projects & job costing
   "projects.read",
   "projects.manage",
@@ -352,6 +362,11 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "usage",
+    labelKey: "permissions.groups.usage",
+    permissions: [{ key: "usage.read", labelKey: permissionLabelKey("usage.read") }],
+  },
+  {
     key: "reports",
     labelKey: "permissions.groups.reports",
     permissions: [
@@ -399,6 +414,11 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "nonprofit",
+    labelKey: "permissions.groups.nonprofit",
+    permissions: [{ key: "nonprofit.report", labelKey: permissionLabelKey("nonprofit.report") }],
+  },
+  {
     key: "insights",
     labelKey: "permissions.groups.insights",
     permissions: [
@@ -415,7 +435,13 @@ export const PERMISSION_GROUPS: {
       { key: "items.manage", labelKey: permissionLabelKey("items.manage") },
       { key: "items.post", labelKey: permissionLabelKey("items.post") },
       { key: "items.reverse", labelKey: permissionLabelKey("items.reverse") },
+      { key: "items.warehouses", labelKey: permissionLabelKey("items.warehouses") },
     ],
+  },
+  {
+    key: "orders",
+    labelKey: "permissions.groups.orders",
+    permissions: [{ key: "orders.fulfill", labelKey: permissionLabelKey("orders.fulfill") }],
   },
   {
     key: "projects",
@@ -694,6 +720,7 @@ export const BUILT_IN_ROLES: Record<
       "ar.approve",
       "ar.post",
       "ar.pay",
+      "usage.read",
       "crm.accounts.read",
       "crm.accounts.create",
       "crm.accounts.manage",
@@ -717,6 +744,7 @@ export const BUILT_IN_ROLES: Record<
       "allocations.manage",
       "allocations.run",
       "allocations.approve",
+      "nonprofit.report",
       "insights.read",
       "insights.create",
       "insights.publish",
@@ -727,6 +755,8 @@ export const BUILT_IN_ROLES: Record<
       "items.manage",
       "items.post",
       "items.reverse",
+      "items.warehouses",
+      "orders.fulfill",
       "projects.read",
       "projects.manage",
       "compliance.read",
@@ -797,6 +827,7 @@ export const BUILT_IN_ROLES: Record<
       "ar.create",
       "ar.post",
       "ar.pay",
+      "usage.read",
       "reports.read",
       "reports.create",
       "budgets.read",
@@ -804,6 +835,7 @@ export const BUILT_IN_ROLES: Record<
       "allocations.read",
       "allocations.manage",
       "allocations.run",
+      "nonprofit.report",
       "insights.read",
       "records.read",
       "records.create",
@@ -812,6 +844,8 @@ export const BUILT_IN_ROLES: Record<
       // Day-to-day stock movements are bookkeeping; erasing them is not —
       // reversal stays with the controller (maker/checker on posted value).
       "items.post",
+      "items.warehouses",
+      "orders.fulfill",
       "projects.read",
       "projects.manage",
       "compliance.read",
@@ -851,12 +885,14 @@ export const BUILT_IN_ROLES: Record<
       "ap.approve",
       "ar.read",
       "ar.approve",
+      "usage.read",
       "flows.approve",
       "reports.read",
       "budgets.read",
       "budgets.approve",
       "allocations.read",
       "allocations.approve",
+      "nonprofit.report",
       "insights.read",
       "records.read",
       "compliance.read",
@@ -880,7 +916,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "allocations.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "usage.read", "reports.read", "budgets.read", "allocations.read", "nonprofit.report", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request"],
   },
   sales_manager: {
     name: "Sales Manager",
@@ -890,7 +926,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.activities.read", "crm.activities.manage",
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage", "crm.forecasts.override", "crm.setup.manage",
-      "parties.read", "parties.manage", "ar.read", "ar.create", "items.read", "reports.read",
+      "parties.read", "parties.manage", "ar.read", "ar.create", "usage.read", "items.read", "reports.read",
       "insights.read", "documents.read", "feedback.use", "data.export", "data.import", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",
@@ -907,7 +943,7 @@ export const BUILT_IN_ROLES: Record<
       "crm.activities.read", "crm.activities.manage",
       "crm.opportunities.read", "crm.opportunities.manage", "crm.opportunities.close",
       "crm.forecasts.read", "crm.forecasts.manage",
-      "parties.read", "parties.manage", "ar.read", "ar.create", "items.read", "reports.read",
+      "parties.read", "parties.manage", "ar.read", "ar.create", "usage.read", "items.read", "reports.read",
       "documents.read", "feedback.use", "data.export", "assistant.use",
       // HR-9 self-service on every built-in role (see controller).
       "hrm.self.read", "hrm.self.request",

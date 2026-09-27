@@ -47,6 +47,10 @@ export const FEATURES: FeatureDef[] = [
   // plan/subscription engine: versioned catalog terms, components, trials,
   // amendments, renewals, co-terming, and advance/arrears timing.
   { key: 'advancedSubscriptions', defaultEnabled: false, category: 'sales', requiresAll: ['subscriptionBilling'] },
+  // Usage billing and SaaS metrics: metered usage rated onto subscriptions,
+  // and recurring-revenue analytics read from subscription data.
+  { key: 'usageBilling', defaultEnabled: false, category: 'sales', requiresAll: ['subscriptionBilling'] },
+  { key: 'saasMetrics', defaultEnabled: false, category: 'sales', requiresAll: ['subscriptionBilling'], recommends: ['revenueRecognition', 'advancedSubscriptions'] },
   // Online customer payments: hosted payment links on invoices (Stripe /
   // Adyen / GoCardless bank debit), surcharge rules, provider webhooks that
   // auto-apply receipts to open items. Off by default — manual receipts and
@@ -128,6 +132,10 @@ export const FEATURES: FeatureDef[] = [
   // Commercial review of billable project work before it reaches a customer
   // invoice. Time is a recommended source; project cost WIP works without it.
   { key: 'wipBilling', defaultEnabled: false, category: 'operations', navModules: ['wip-billing'], requiresAll: ['projects'], recommends: ['timeTracking'] },
+  // Resourcing: staffing project demand, request approval, and retainers.
+  { key: 'resourcing', defaultEnabled: false, category: 'operations', navModules: ['resourcing'], parentKey: 'projects' },
+  { key: 'resourceRequests', defaultEnabled: false, category: 'operations', parentKey: 'resourcing', requiresAll: ['flows'] },
+  { key: 'retainerBilling', defaultEnabled: false, category: 'operations', parentKey: 'resourcing', requiresAll: ['revenueRecognition'] },
   // Lease, rent, CAM, and deposit operations. A third-party manager may not
   // own the buildings or use separate legal entities, so adjacent accounting
   // capabilities are recommendations rather than hard dependencies.
@@ -142,6 +150,11 @@ export const FEATURES: FeatureDef[] = [
   // would take insurance tracking down with it.
   { key: 'subcontractorCompliance', defaultEnabled: false, category: 'operations', navModules: ['compliance', 'compliance-vendors', 'lien-waivers', 'information-returns'] },
   { key: 'inventory', defaultEnabled: true, category: 'operations', navModules: ['inventory'] },
+  // Warehousing and fulfillment: warehouse locations, then pick and ship.
+  { key: 'warehousing', defaultEnabled: false, category: 'operations', navModules: ['warehouses'], requiresAll: ['inventory'] },
+  { key: 'fulfillment', defaultEnabled: false, category: 'operations', navModules: ['picks', 'shipments'], requiresAll: ['orders', 'warehousing'] },
+  // Manufacturing: building finished goods from inventory components.
+  { key: 'manufacturing', defaultEnabled: false, category: 'operations', navModules: ['manufacturing'], requiresAll: ['inventory'] },
   { key: 'equipment', defaultEnabled: true, category: 'operations', navModules: ['equipment'] },
   { key: 'expenses', defaultEnabled: true, category: 'operations', navModules: ['expenses'] },
   // Accounting
@@ -175,6 +188,15 @@ export const FEATURES: FeatureDef[] = [
   { key: 'allocations', defaultEnabled: false, category: 'accounting' },
   { key: 'allocationsAtEntry', defaultEnabled: true, category: 'accounting', parentKey: 'allocations' },
   { key: 'allocationsAtPosting', defaultEnabled: true, category: 'accounting', parentKey: 'allocations' },
+  // Nonprofit accounting: funds, grants, pledges, encumbrances, and
+  // functional-expense reporting, all subordinate to the nonprofit parent.
+  { key: 'nonprofit', defaultEnabled: false, category: 'accounting' },
+  { key: 'fundAccounting', defaultEnabled: false, category: 'accounting', parentKey: 'nonprofit' },
+  { key: 'grantManagement', defaultEnabled: false, category: 'accounting', parentKey: 'nonprofit', requiresAll: ['fundAccounting'] },
+  { key: 'pledges', defaultEnabled: false, category: 'accounting', parentKey: 'nonprofit' },
+  { key: 'encumbrances', defaultEnabled: false, category: 'accounting', parentKey: 'nonprofit', requiresAll: ['budgets'] },
+  { key: 'functionalExpenses', defaultEnabled: false, category: 'accounting', parentKey: 'nonprofit' },
+  { key: 'form990', defaultEnabled: false, category: 'accounting', parentKey: 'nonprofit', requiresAll: ['functionalExpenses'] },
   // Platform
   // HR-15: the inbox nav module ('approvals') is NO LONGER a flows surface.
   // It is the one place a person completes work — leave requests, checklist
