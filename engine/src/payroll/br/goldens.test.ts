@@ -21,9 +21,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { computeBrStatutoryWithRates, type BrEmployerRates } from "./compute-statutory.ts";
-import { calculateBrInss2026 } from "./inss-2026.ts";
 import { calculateBrInssFromTables } from "./inss-year.ts";
-import { calculateBrIrrf2026 } from "./irrf-2026.ts";
 import { calculateBrIrrfFromTables } from "./irrf-year.ts";
 import { BR_2024_IRRF_FEB, BR_2024_IRRF_JAN } from "./tax-year-2024.ts";
 import { BR_2025_IRRF_EARLY, BR_2025_IRRF_LATE } from "./tax-year-2025.ts";
@@ -166,12 +164,12 @@ const REFUSALS: Refusal[] = [
 async function price(year: Year, input: Input): Promise<object> {
   if ("salario" in input) {
     const i = { salarioContribuicao: input.salario };
-    return year === 2026 ? calculateBrInss2026(i) : calculateBrInssFromTables(brTablesForPayDate(year, `${year}-01-01`).inss, i);
+    return calculateBrInssFromTables(brTablesForPayDate(year, `${year}-01-01`).inss, i);
   }
   if ("rendimentos" in input) {
     const { payDate, ...rest } = input;
     const i = { inss: "0.00", dependentes: 0, pensaoMensal: "0.00", ...rest };
-    return year === 2026 ? calculateBrIrrf2026(i) : calculateBrIrrfFromTables(brTablesForPayDate(year, payDate ?? "").irrf, i);
+    return calculateBrIrrfFromTables(brTablesForPayDate(year, payDate ?? `${year}-01-01`).irrf, i);
   }
   const lines: StubLine[] = [];
   const pushStatutory = createPushStatutory({
@@ -223,10 +221,11 @@ test("prior-year pay dates resolve to the IRRF edition in force that month", () 
 
 test("2026 INSS and IRRF are monotone in pay, flat past the teto and never negative", () => {
   const cents = (amount: string): bigint => BigInt(amount.replace(".", ""));
+  const tables = brTablesForPayDate(2026, "2026-01-01");
   const salaries = ["0.00", "1000.00", "1621.00", "2500.00", "4354.27", "6000.00", "8475.55", "8475.56", "30000.00"];
-  const inss = salaries.map((s) => cents(calculateBrInss2026({ salarioContribuicao: s }).contribuicao));
+  const inss = salaries.map((s) => cents(calculateBrInssFromTables(tables.inss, { salarioContribuicao: s }).contribuicao));
   const pays = ["0.00", "1000.00", "3000.00", "5000.00", "5500.00", "6000.00", "7350.00", "20000.00"];
-  const irrf = pays.map((r) => cents(calculateBrIrrf2026({ rendimentos: r, inss: "0.00", dependentes: 0, pensaoMensal: "0.00" }).irrf));
+  const irrf = pays.map((r) => cents(calculateBrIrrfFromTables(tables.irrf, { rendimentos: r, inss: "0.00", dependentes: 0, pensaoMensal: "0.00" }).irrf));
   for (let i = 1; i < inss.length; i++) assert.ok(inss[i]! >= inss[i - 1]!, `INSS ${salaries[i]} prices below ${salaries[i - 1]}`);
   for (let i = 1; i < irrf.length; i++) assert.ok(irrf[i]! >= irrf[i - 1]!, `IRRF ${pays[i]} withholds below ${pays[i - 1]}`);
   assert.ok(inss[5]! > inss[4]!, "INSS still rising below the teto");

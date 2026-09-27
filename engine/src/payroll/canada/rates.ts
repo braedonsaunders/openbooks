@@ -17,7 +17,7 @@ import type {
   PayrollEditionScaffold, PayrollTaxYearEdition, PayrollTaxYearSupport,
 } from "../tax-years.ts";
 import type {
-  LegacyRateRow, PayrollPackRates, PayrollStatutoryRateSlot,
+  PayrollPackRates, PayrollStatutoryRateSlot,
 } from "../statutory-rates.ts";
 import { CA_EXTRA_EDITIONS } from "./editions.ts";
 import { RATES_2025_JUL } from "./rates-2025.ts";
@@ -976,24 +976,4 @@ const CA_HSF_SLOT: PayrollStatutoryRateSlot = {
 export const CA_PACK_RATES: PayrollPackRates = {
   country: "CA",
   slots: [CA_EHT_SLOT, CA_HSF_SLOT],
-  /**
-   * The pre-scoping shape: `orgs.settings.payroll.ca.eht` held one enabled flag,
-   * one rate and one exemption, applied to Ontario only. Reproduced exactly —
-   * including the `enabled` gate, so an employer that stored a rate and switched
-   * the levy off does not start accruing it — and read only when no Ontario row
-   * has been entered.
-   */
-  legacyRows: (blob) => {
-    const ca = (blob.ca ?? {}) as {
-      eht?: { enabled?: unknown; rate?: unknown; annualExemption?: unknown };
-    };
-    const eht = ca.eht;
-    if (!eht || eht.enabled !== true || eht.rate == null || eht.rate === "") return [];
-    const values: Record<string, string> = { rate: String(eht.rate) };
-    if (eht.annualExemption != null && eht.annualExemption !== "") {
-      values.annualExemption = String(eht.annualExemption);
-    }
-    const rows: LegacyRateRow[] = [{ slotKey: "ca_eht", region: "ON", values }];
-    return rows;
-  },
 };

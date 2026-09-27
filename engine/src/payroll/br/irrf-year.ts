@@ -1,6 +1,6 @@
 /**
- * IRRF for transcribed pre-2026 years — the pure monthly withholding
- * calculator with the tables passed in.
+ * IRRF for a transcribed year — the pure monthly withholding calculator
+ * with the tables passed in.
  *
  * Order of operations (the thing the hand-worked goldens prove):
  *  1. rendimentos = the month's aggregate taxable receipts (gross);
@@ -11,11 +11,9 @@
  *  4. IRRF = base × alíquota − parcela a deduzir (monthly table),
  *     truncated to cents, floored at zero.
  *
- * There is deliberately NO art. 3º-A reduction step: the reduction
- * (Lei 15.270/2025) produces effects from 1 January 2026 only, so every
- * pre-2026 golden asserts reducao "0.00". The table-pricing steps are
- * line-for-line the irrf-2026.ts algorithm; only the table source differs
- * (argument, not the 2026 constants), so the 2026 path is untouched.
+ * Editions that carry Lei 15.270/2025's art. 3º-A reduction declare its
+ * exact thresholds and coefficient alongside the progressive table. Earlier
+ * editions omit it and produce no reduction.
  *
  * Decimal strings in and out; no floats anywhere.
  */
@@ -35,6 +33,15 @@ export interface BrIrrfTables {
   dependente: string;
   /** Names the edition in refusals, e.g. "BR 2024 IRRF (feb-dec)". */
   tag: string;
+  /** Present only for editions with Lei 15.270/2025 art. 3º-A. */
+  reduction?: {
+    faixaIsencao: string;
+    faixaIsencaoCap: string;
+    faixaTransicao: string;
+    base: string;
+    coeficienteNum: bigint;
+    coeficienteDen: bigint;
+  };
 }
 
 function truncCents(numerator: bigint, denominator: bigint): bigint {
@@ -127,12 +134,29 @@ export function calculateBrIrrfFromTables(
     break;
   }
 
+  let reducao = 0n;
+  if (tables.reduction) {
+    const reduction = tables.reduction;
+    const faixaIsencao = toCents(reduction.faixaIsencao, "faixa de isencao", tables.tag);
+    const faixaTransicao = toCents(reduction.faixaTransicao, "faixa de transicao", tables.tag);
+    if (rendimentos <= faixaIsencao) {
+      const cap = toCents(reduction.faixaIsencaoCap, "reduction cap", tables.tag);
+      reducao = impostoBruto < cap ? impostoBruto : cap;
+    } else if (rendimentos <= faixaTransicao) {
+      const exact = toCents(reduction.base, "reduction base", tables.tag)
+        - truncCents(rendimentos * reduction.coeficienteNum, reduction.coeficienteDen);
+      const positive = exact < 0n ? 0n : exact;
+      reducao = impostoBruto < positive ? impostoBruto : positive;
+    }
+  }
+  const irrf = impostoBruto > reducao ? impostoBruto - reducao : 0n;
+
   return {
     deducaoAplicada: fromCents(deducao),
     deducaoVia: via,
     baseCalculo: fromCents(base),
     impostoBruto: fromCents(impostoBruto),
-    reducao: "0.00",
-    irrf: fromCents(impostoBruto),
+    reducao: fromCents(reducao),
+    irrf: fromCents(irrf),
   };
 }

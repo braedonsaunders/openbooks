@@ -30,10 +30,8 @@ Two different things, and conflating them is money:
   | `filing_account` | one value per registered account, with a region-wide row as the default every account uses | an experience-rated SUI rate — a two-EIN employer in one state holds two |
 
   Values live in `payroll_statutory_rates`, keyed by scope point **and tax year**,
-  and are read through `resolveStatutoryRates`. A pack may declare a `legacyRows`
-  reader for its pre-scoping `orgs.settings.payroll` shape; that fallback is
-  READ-ONLY, so a tenant configured before scoping existed calculates
-  byte-identically and there is still exactly one writable home.
+  and are read through `resolveStatutoryRates`. Existing settings are moved into
+  these effective-dated rows before the old storage shape is removed.
 
 ## Adding a tax year
 

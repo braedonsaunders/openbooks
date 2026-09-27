@@ -229,6 +229,22 @@ test(
   },
 );
 
+test("the removed CRA organization frequency is refused before database access", async () => {
+  authorize(randomUUID(), randomUUID());
+  try {
+    const response = await PUT(
+      request("PUT", { craRemittanceFrequency: "accelerated_2" }),
+    );
+    assert.equal(response.status, 422);
+    assert.match(
+      (await response.json()).error,
+      /unknown payroll setting.*Filing accounts/,
+    );
+  } finally {
+    routeState.authz = null;
+  }
+});
+
 test(
   "slot-account mutations share the payroll settings transaction",
   { skip: !DB },
@@ -390,20 +406,6 @@ test(
         null,
       );
 
-      // The CRA schedule validates against its own bands: a CRA remitter type
-      // is accepted on the CRA key and refused on the RQ key (and vice versa).
-      const craAccepted = await PUT(
-        request("PUT", { craRemittanceFrequency: "accelerated_2" }),
-      );
-      assert.equal(craAccepted.status, 200);
-      assert.equal(
-        (await payrollState(fixture.orgId)).settings?.craRemittanceFrequency,
-        "accelerated_2",
-      );
-      const craCrossAgency = await PUT(
-        request("PUT", { craRemittanceFrequency: "twice_monthly" }),
-      );
-      assert.equal(craCrossAgency.status, 422);
     });
   },
 );

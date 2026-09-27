@@ -26,10 +26,9 @@ import { AU_SUPER_2027 } from "./tax-year-2027.ts";
  * the per-employee channel (this hook) prices identically to an aggregate
  * one — no `employerAggregateLevies` declaration needed.
  *
- * Unconfigured stays inert (the slot's `legacy` answer): readiness keeps
- * warning "nothing is being accrued" until a rate resolves for the stub's
- * region. A resolving rate accrues here, so the warning clears only when
- * the money actually moves.
+ * A positive-wage employer without a rate refuses by name: an absent rate
+ * cannot silently omit a compulsory premium. An explicit zero records a
+ * confirmed nil liability.
  */
 
 const RATE_SCALE = 1_000_000n;
@@ -115,11 +114,15 @@ export async function applyAuEmployerLevies(
   }
   const resolution = await resolveStatutoryRates(orgId, AU_PACK_RATES, taxYear);
   const rate = resolution.values("au_workers_comp", { region })?.rate ?? null;
-  // Legacy slot: no rate for this region accrues nothing, and readiness
-  // says so by name until one resolves.
-  if (rate == null || rate === "") return { ...EMPTY_EMPLOYER_LEVY_FACTORS };
   const gross = sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
   if (toUnits(gross) <= 0n) return { ...EMPTY_EMPLOYER_LEVY_FACTORS };
+  if (rate == null || rate === "") {
+    throw new PayrollPackError(
+      `AU workers' compensation refuses: no insurer premium rate is configured for ${region} in ${taxYear} — `
+      + "enter the rate from the employer's state insurer notice, or an explicit 0 for a confirmed nil premium, "
+      + "in Payroll Setup → Statutory rates before calculating",
+    );
+  }
   const pensionable = sum(lines
     .filter((line) => line.kind === "earning" && !line.accrualOnly && (line.pensionable ?? true))
     .map((line) => line.amount));

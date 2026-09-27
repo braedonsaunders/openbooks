@@ -270,7 +270,7 @@ test("BR rate lookup carries the region, or no saved rate resolves", () => {
     { id: "r1", country: "BR", rateKey: "br_rat", region: "BR", filingAccountId: null, taxYear: 2026, values: { aliquota: "2.00" }, supersededOn: null },
     { id: "r2", country: "BR", rateKey: "br_rat", region: "BR", filingAccountId: account, taxYear: 2026, values: { aliquota: "3.00" }, supersededOn: null },
   ];
-  const resolution = buildResolution({ country: "BR", taxYear: 2026, pack: BR_PACK_RATES, rows, legacy: [] });
+  const resolution = buildResolution({ country: "BR", taxYear: 2026, pack: BR_PACK_RATES, rows });
   const scope = brRateLookupScope({ region: "BR", filingAccountId: account });
   assert.deepEqual(scope, { region: "BR", filingAccountId: account });
   // The establishment's own row answers first; the region-wide row covers

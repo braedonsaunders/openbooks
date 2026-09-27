@@ -7,8 +7,7 @@ import type {
  * destination schedule for the CA pack's `craRemittancePartyId` vendor.
  *
  * Transcribed from the CRA's published "When to remit (pay)" table and its
- * weekend/holiday sentence — the same page the legacy per-account function in
- * `engine/src/payroll/remittance.ts` (`remittanceDueDateExplained`) quotes:
+ * weekend/holiday sentence:
  *
  *   https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/
  *     payroll/remitting-source-deductions/how-when-remit-due-dates.html
@@ -19,14 +18,11 @@ import type {
  *
  *   https://www.canada.ca/en/revenue-agency/services/tax/public-holidays.html
  *
- * The frequencies are the CRA's remitter types, keyed EXACTLY as
- * `payroll_filing_accounts.remitter_type` spells them (`regular`,
- * `quarterly`, `accelerated_1`, `accelerated_2`), so the future
- * filing-account handoff (F-f7-001) feeds the account's registration straight
- * into this schedule with no translation table. Until that handoff lands, the
- * frequency resolves the RQ way — the org's configured `craRemittanceFrequency`
- * or the schedule default — and the legacy function stays the live path for
- * destinations the schedule does not yet govern.
+ * The frequencies are the CRA's remitter types, read only from each
+ * `payroll_filing_accounts.remitter_type` (`regular`, `quarterly`,
+ * `accelerated_1`, `accelerated_2`). A CRA remittance without an assigned
+ * filing account refuses; an organization setting cannot substitute for the
+ * account's registration.
  *
  * The bands: a remitter's threshold follows its average monthly withholding
  * amount (AMWA) — under $3,000 quarterly, $25,000 to under $100,000
@@ -36,8 +32,7 @@ import type {
  * bands read as quarterly — the bands only feed the readiness advisory (never
  * a bill date), which tells the operator to confirm against the CRA notice.
  * A new employer is a regular remitter, which is why `defaultFrequency` is
- * regular — the same default the legacy function applies when no filing
- * account names a type.
+ * regular. A missing filing-account type is refused rather than substituted.
  *
  * The deadlines: regular — the 15th of the month following the month of the
  * pay date; quarterly — the 15th of the month following the end of the
@@ -59,9 +54,8 @@ import type {
  * names, so the Québec variant is proven from the same data.
  *
  * `effectiveFrom` marks transcription coverage, not a law change: these bands
- * long predate it. Periods ending before it keep the legacy function's dates
- * (byte-identical for regular filers — the goldens prove it), and a future CRA
- * change ships as a second schedule version with a contiguous range.
+ * long predate it. A future CRA change ships as a second schedule version
+ * with a contiguous range.
  */
 export const CRA_REMITTANCE_SCHEDULE: PayrollRemittanceSchedule = {
   vendorSettingsKey: "craRemittancePartyId",
@@ -74,7 +68,7 @@ export const CRA_REMITTANCE_SCHEDULE: PayrollRemittanceSchedule = {
   ],
   effectiveFrom: "2024-01-01",
   calendar: "CA-CRA",
-  frequencySettingsKey: "craRemittanceFrequency",
+  frequencySource: "filing_account",
   defaultFrequency: "regular",
   frequencies: [
     {

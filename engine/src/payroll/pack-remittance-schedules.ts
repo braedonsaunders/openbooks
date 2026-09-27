@@ -102,7 +102,15 @@ export function allRemittanceSchedules(
           declaredJurisdictions().map((j) => j.key).join(", ")})`,
       );
     }
-    if (!schedule.frequencySettingsKey) throw new PayrollPackError(`${where} names no frequency settings key`);
+    if (schedule.frequencySource !== "organization" && schedule.frequencySource !== "filing_account") {
+      throw new PayrollPackError(`${where} names no supported frequency source`);
+    }
+    if (schedule.frequencySource === "organization" && !schedule.frequencySettingsKey) {
+      throw new PayrollPackError(`${where} names no organization frequency settings key`);
+    }
+    if (schedule.frequencySource === "filing_account" && schedule.frequencySettingsKey) {
+      throw new PayrollPackError(`${where} has an ignored frequency settings key despite using filing-account data`);
+    }
     if (schedule.frequencies.length === 0) throw new PayrollPackError(`${where} declares no frequencies`);
     const names = new Set(schedule.frequencies.map((band) => band.frequency));
     if (names.size !== schedule.frequencies.length) {
@@ -217,14 +225,15 @@ export function packRemittanceSchedules(country: string): readonly PayrollRemitt
 
 /**
  * The schedule owning a frequency settings key, or null when no pack
- * declares it. The settings route validates a new schedule's frequency the
- * moment its pack declares both halves.
+ * declares it. Filing-account frequencies are intentionally absent because
+ * their source is the account record, not an organization setting.
  */
 export function remittanceScheduleForFrequencyKey(
   frequencySettingsKey: string,
 ): PayrollRemittanceSchedule | null {
   return allRemittanceSchedules()
-    .find((schedule) => schedule.frequencySettingsKey === frequencySettingsKey) ?? null;
+    .find((schedule) => schedule.frequencySource === "organization"
+      && schedule.frequencySettingsKey === frequencySettingsKey) ?? null;
 }
 
 /**
@@ -234,7 +243,10 @@ export function remittanceScheduleForFrequencyKey(
  * declares it.
  */
 export function declaredRemittanceFrequencySettingsKeys(): string[] {
-  return allRemittanceSchedules().map((schedule) => schedule.frequencySettingsKey);
+  return allRemittanceSchedules()
+    .flatMap((schedule) => schedule.frequencySource === "organization" && schedule.frequencySettingsKey
+      ? [schedule.frequencySettingsKey]
+      : []);
 }
 
 /**
@@ -271,19 +283,6 @@ export function packRemittanceVendorSettingsKeys(country: string): string[] {
     }
   }
   return [...keys];
-}
-
-/**
- * Whether destinations `country`'s pack declares but leaves unscheduled may
- * fall back to the legacy registration timetable instead of refusing (see
- * `allowsRegistrationTimetableFallback`). Unknown countries — and packs that
- * do not declare it — refuse: an undated destination must never borrow
- * another authority's timetable.
- */
-export function packAllowsRegistrationTimetableFallback(country: string): boolean {
-  const pack = PAYROLL_COUNTRY_PACKS[country];
-  if (!pack) return false;
-  return pack.allowsRegistrationTimetableFallback ?? false;
 }
 
 /**

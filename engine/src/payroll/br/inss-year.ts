@@ -1,14 +1,13 @@
 /**
- * INSS for transcribed pre-2026 years — the pure employee-contribution
- * calculator with the tables passed in.
+ * INSS for a transcribed year — the pure employee-contribution calculator
+ * with the tables passed in.
  *
  * This is the EC 103/2019 methodology the January portaria applies every
  * year: each salary-de-contribuição slice prices at its own rate
  * ("faixa a faixa"), capped at the year's teto, with every slice truncated
- * to cents (the eSocial operational rule — see BR_2026_ROUNDING). The
- * arithmetic below is line-for-line the inss-2026.ts algorithm; only the
- * table source differs (argument, not the 2026 constants), so the 2026 path
- * is untouched. Proven by goldens.test.ts.
+ * to cents (the eSocial operational rule — see BR_2026_ROUNDING). The same
+ * integer calculation handles every edition; only the declared
+ * table data changes by year.
  *
  * Decimal strings in and out (BRL centavos scale); no floats anywhere.
  */

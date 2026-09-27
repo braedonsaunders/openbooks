@@ -18,7 +18,6 @@ import {
 import { PayrollError } from "./error.ts";
 import {
   allRemittanceSchedules,
-  packAllowsRegistrationTimetableFallback,
   packRemittanceVendorSettingsKeys,
   PAYROLL_COUNTRY_PACKS,
   remittanceBandForAverage,
@@ -131,14 +130,9 @@ export interface RemittanceGroup {
   vendorKeys: string[];
   /**
    * The destination's declared remittance schedule for the queried period —
-   * authority, frequency, and the due date the bill will carry — or null when
-   * no schedule governs the destination. Null keeps the legacy
-   * registration-timetable path only for unattributed legacy groups and for
-   * destinations whose pack allows that fallback; a declared destination
-   * without a timetable or fallback refuses at billing instead of borrowing
-   * another authority's (see remittanceGroupDueDate). A scheduled destination
-   * NEVER inherits the filing account's CRA remitter type: that registration
-   * is with another agency.
+   * authority, frequency, and due date — or null when no schedule governs.
+   * An undated group refuses at billing rather than borrowing another
+   * authority's timetable (see remittanceGroupDueDate).
    */
   schedule: RemittanceGroupSchedule | null;
   /**
@@ -207,7 +201,7 @@ export interface RemittanceGroupSchedule {
   /** The frequency the bill is dated under. */
   frequency: string;
   /** Whether the frequency is the org's configured value or the schedule default. */
-  frequencySource: "configured" | "default";
+  frequencySource: "configured" | "default" | "filing_account";
   /** The bill due date for the group's period, from the destination's schedule. */
   dueDate: string;
   /** The statutory rule applied, carried onto the bill like the CRA rules. */
@@ -742,7 +736,8 @@ export async function payrollRemittanceSummary(
   // arrived through a scheduled destination's vendor key are governed by that
   // schedule. Otherwise a group whose PARTY is a scheduled destination's
   // configured vendor (an `external` component pointed at the RQ vendor)
-  // resolves through the party. Anything else keeps the legacy CRA path.
+  // resolves through the party. A destination without a schedule refuses when
+  // the bill is dated.
   const schedules = allRemittanceSchedules();
   for (const group of groups.values()) {
     group.schedule = scheduleForRemittanceGroup({
@@ -750,6 +745,8 @@ export async function payrollRemittanceSummary(
       partyId: group.partyId,
       periodTo: range.to,
       payrollSettings: rawSettings,
+      filingAccount: group.filingAccount,
+      regionalCalendar: group.regionalCalendar,
       schedules,
     });
   }
@@ -1408,22 +1405,6 @@ function remittanceMemo(
 }
 
 /**
- * The CRA public-holiday calendar a remittance deadline moves against.
- *
- * NOT the employer's calendar, and deliberately not tenant-overridable. The
- * CRA recognizes Easter Monday and the Civic Holiday, which no province's
- * employment standards act lists, and it excludes the Civic Holiday in Quebec
- * while recognizing Saint-Jean-Baptiste Day there. Letting an employer's own
- * closures push a federal deadline would be letting configuration create a
- * penalty; the pack's declaration is the whole input.
- *
- * Source: https://www.canada.ca/en/revenue-agency/services/tax/public-holidays.html
- */
-function craCalendar(around: string, regionalCalendar: string | null): ReadonlySet<string> {
-  return scheduleCalendar(around, regionalCalendar ?? "CA-CRA");
-}
-
-/**
  * The working-day calendar a declared destination schedule moves deadlines
  * against. The jurisdiction is the schedule's own declaration — a
  * `tax_administration` calendar, never an employment one — so the generic
@@ -1464,124 +1445,31 @@ export interface RemittanceDue {
 }
 
 /**
- * The CRA due date for a remittance period, for every remitter type.
- *
- * A remitter's deadline is a function of
- * `payroll_filing_accounts.remitter_type` and of where the period ends inside
- * the month. Each rule below is transcribed from the CRA's published
- * "When to remit (pay)" table, verified against canada.ca:
- *
- *   https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/
- *     payroll/remitting-source-deductions/how-when-remit-due-dates.html
- *
- * - QUARTERLY — "January 1 to March 31 … April 15; April 1 to June 30 …
- *   July 15; July 1 to September 30 … October 15; October 1 to December 31 …
- *   January 15": the 15th of the month following the end of the quarter the
- *   period falls in.
- * - REGULAR — remitting period is the calendar month; due "the 15th day of the
- *   next month".
- * - ACCELERATED THRESHOLD 1 — "1st to 15th of the month … 25th day of same
- *   month; 16th to end of the month … 10th day of the next month."
- * - ACCELERATED THRESHOLD 2 — four quarter-month periods, "1st to 7th … 3rd
- *   working day after the 7th; 8th to 14th … 3rd working day after the 14th;
- *   15th to 21st … 3rd working day after the 21st; 22nd to the last day … 3rd
- *   working day after the last day of the month."
- *
- * And the shift, from the same page: "If your due date falls on a Saturday, a
- * Sunday, or a public holiday recognized by the CRA, your remittance is on
- * time if the CRA receives it on the next business day." That applies to the
- * three fixed-date schedules. Threshold 2 needs no shift — counting three
- * WORKING days necessarily lands on a working day, which is exactly why this
- * function could not exist before there was a working-day calendar.
- *
- * The penalty for getting this wrong is 3% to 10% of the remittance (20% for a
- * repeat in the same calendar year), which is why every rule above is quoted
- * rather than remembered, and why the calendar is the CRA's own list rather
- * than an employer's.
- */
-export function remittanceDueDateExplained(
-  periodTo: string,
-  remitterType: PayrollFilingAccount["remitterType"] | null,
-  options: { regionalCalendar?: string | null } = {},
-): RemittanceDue {
-  const date = periodTo.slice(0, 10);
-  const holidays = craCalendar(date, options.regionalCalendar ?? null);
-  const day = Number(date.slice(8, 10));
-  // No filing account configured = the CRA's default registration for a new
-  // employer, which is a regular remitter. Previous single-account behaviour,
-  // preserved exactly.
-  const remitter = remitterType ?? "regular";
-
-  switch (remitter) {
-    case "regular":
-      return {
-        dueDate: nextBusinessDay(dayOfMonth(date, 1, 15), holidays),
-        rule: "regular remitter — the 15th of the month following the month of the pay date",
-      };
-    case "quarterly": {
-      // The quarter the period ends in; its following month's 15th.
-      const month = Number(date.slice(5, 7));
-      const monthsToQuarterEnd = 2 - ((month - 1) % 3);
-      return {
-        dueDate: nextBusinessDay(dayOfMonth(date, monthsToQuarterEnd + 1, 15), holidays),
-        rule: "quarterly remitter — the 15th of the month following the end of the quarter",
-      };
-    }
-    case "accelerated_1":
-      return day <= 15
-        ? {
-            dueDate: nextBusinessDay(dayOfMonth(date, 0, 25), holidays),
-            rule: "accelerated threshold 1 — remuneration paid the 1st to the 15th, "
-              + "due the 25th of the same month",
-          }
-        : {
-            dueDate: nextBusinessDay(dayOfMonth(date, 1, 10), holidays),
-            rule: "accelerated threshold 1 — remuneration paid the 16th to month end, "
-              + "due the 10th of the following month",
-          };
-    case "accelerated_2": {
-      // Three WORKING days after the end of the quarter-month period the
-      // remittance period closes in. addBusinessDays never counts the day it
-      // starts from, so a period ending on the 7th counts the 8th onward.
-      const [periodEnd, label] = day <= 7 ? [dayOfMonth(date, 0, 7), "the 1st to the 7th"]
-        : day <= 14 ? [dayOfMonth(date, 0, 14), "the 8th to the 14th"]
-        : day <= 21 ? [dayOfMonth(date, 0, 21), "the 15th to the 21st"]
-        : [monthEnd(date), "the 22nd to the last day of the month"];
-      return {
-        dueDate: addBusinessDays(periodEnd!, 3, holidays),
-        rule: `accelerated threshold 2 — remuneration paid ${label}, due the 3rd working day `
-          + "after the end of that period",
-      };
-    }
-  }
-}
-
-/**
- * The due date alone. Never null any more: the working-day calendar this used
- * to be missing is `engine/src/payroll/holidays.ts`, and all four CRA
- * schedules are now computed rather than refused.
- */
-export function remittanceDueDate(
-  periodTo: string,
-  remitterType: PayrollFilingAccount["remitterType"] | null,
-  options: { regionalCalendar?: string | null } = {},
-): string {
-  return remittanceDueDateExplained(periodTo, remitterType, options).dueDate;
-}
-
-/**
- * Which frequency of a declared destination schedule governs: the org's
- * configured value under the schedule's frequency settings key, or the
- * schedule's own default when unconfigured or naming nothing declared.
- * Falling back rather than throwing is deliberate — an unconfigured schedule
- * still dates the bill, and readiness (not the bill path) nags the org to
- * confirm the frequency against the agency's notice.
+ * Resolve from the source the pack declares. A filing-account schedule must
+ * have a remitter type on the group's account; missing attribution refuses.
+ * Organization-configured schedules may use their published default when
+ * no setting is recorded, with readiness prompting the operator to confirm it.
  */
 export function scheduledRemittanceFrequency(
   schedule: PayrollRemittanceSchedule,
   payrollSettings: Record<string, unknown>,
-): { frequency: string; source: "configured" | "default" } {
-  const configured = payrollSettings[schedule.frequencySettingsKey];
+  filingAccount: Pick<FilingAccountRef, "id" | "name" | "remitterType"> | null = null,
+): { frequency: string; source: "configured" | "default" | "filing_account" } {
+  if (schedule.frequencySource === "filing_account") {
+    const frequency = filingAccount?.remitterType;
+    if (!frequency || !remittanceFrequencyBand(schedule, frequency)) {
+      throw new PayrollError(
+        `${schedule.authority} remittance refuses: this group has no filing account with a declared remitter type — `
+        + "assign a CRA filing account and set its remitter type in Payroll Setup → Filing accounts before dating the bill",
+      );
+    }
+    return { frequency, source: "filing_account" };
+  }
+  const key = schedule.frequencySettingsKey;
+  if (!key) {
+    throw new PayrollError(`${schedule.authority} remittance schedule has no organization frequency setting key`);
+  }
+  const configured = payrollSettings[key];
   if (typeof configured === "string" && remittanceFrequencyBand(schedule, configured)) {
     return { frequency: configured, source: "configured" };
   }
@@ -1590,15 +1478,14 @@ export function scheduledRemittanceFrequency(
 
 /**
  * The due date for a remittance period under a pack-declared destination
- * schedule (Revenu Québec's, today) — the counterpart to
- * `remittanceDueDateExplained`, which remains the legacy path for
- * destinations no pack declares. The rule shapes are the schedule's data;
+ * schedule. The rule shapes are the schedule's data;
  * this function only executes them against the schedule's own calendar, so a
  * second agency's timetable is a second declaration, never a branch.
  *
- * An unknown frequency falls back to the schedule default rather than
- * throwing: the caller already reports whether the frequency was configured,
- * and a bill must date itself even when configuration drifted.
+ * Organization schedules may use their declared default when no setting is
+ * recorded. Filing-account schedules refuse when the account has no declared
+ * remitter type, because a CRA due date cannot be guessed from organization
+ * settings.
  */
 export function scheduledRemittanceDueDateExplained(
   schedule: PayrollRemittanceSchedule,
@@ -1665,18 +1552,17 @@ export function scheduledRemittanceDueDateExplained(
 
 /**
  * The schedule governing one remittance group for one period end — the
- * destination-keyed counterpart to the CRA-function path. Resolution order:
+ * destination-keyed schedule. Resolution order:
  *
  * 1. Provenance: a row that arrived through a scheduled destination's vendor
  *    key is governed by that schedule, even when the org left the vendor
  *    unconfigured (an unassigned RQ destination is still an RQ destination).
- *    A declared schedule always beats the legacy path, so a misconfigured org
- *    pointing two keys at one party still gets the declared date.
+ *    A declared schedule always beats another destination's schedule, so a
+ *    misconfigured org pointing two keys at one party still gets the declared date.
  * 2. Party: an `external` component pointed at a scheduled destination's
  *    configured vendor (Québec income tax remitted to the RQ vendor).
  *
- * Null when no pack declares the destination — the caller keeps the legacy
- * CRA-function behaviour. Pure over an explicit schedule list, so the
+ * Null when no pack declares the destination. Pure over an explicit schedule list, so the
  * precedence is verifiable without a database.
  */
 export function scheduleForRemittanceGroup(input: {
@@ -1684,29 +1570,40 @@ export function scheduleForRemittanceGroup(input: {
   partyId: string | null;
   periodTo: string;
   payrollSettings: Record<string, unknown>;
+  filingAccount?: FilingAccountRef | null;
+  regionalCalendar?: string | null;
   schedules?: readonly PayrollRemittanceSchedule[];
 }): RemittanceGroupSchedule | null {
   const schedules = input.schedules ?? allRemittanceSchedules();
-  const dated = input.vendorKeys
-    .map((vendorSettingsKey) => ({
-      vendorSettingsKey,
-      schedule: remittanceScheduleInForce(vendorSettingsKey, input.periodTo, schedules),
-    }))
-    .find((candidate) => candidate.schedule);
-  const byParty = (): { vendorSettingsKey: string; schedule: PayrollRemittanceSchedule } | null => {
-    if (!input.partyId) return null;
-    for (const schedule of schedules) {
+  const dated = [...new Set(input.vendorKeys)].flatMap((vendorSettingsKey) => {
+    const schedule = remittanceScheduleInForce(vendorSettingsKey, input.periodTo, schedules);
+    return schedule ? [{ vendorSettingsKey, schedule }] : [];
+  });
+  const byParty = (): { vendorSettingsKey: string; schedule: PayrollRemittanceSchedule }[] => {
+    if (!input.partyId) return [];
+    return schedules.flatMap((schedule) => {
       const configured = input.payrollSettings[schedule.vendorSettingsKey];
-      if (typeof configured !== "string" || !configured || configured !== input.partyId) continue;
+      if (typeof configured !== "string" || !configured || configured !== input.partyId) return [];
       const inForce = remittanceScheduleInForce(schedule.vendorSettingsKey, input.periodTo, schedules);
-      if (inForce) return { vendorSettingsKey: schedule.vendorSettingsKey, schedule: inForce };
-    }
-    return null;
+      return inForce ? [{ vendorSettingsKey: schedule.vendorSettingsKey, schedule: inForce }] : [];
+    });
   };
-  const resolved = dated ?? byParty();
+  const candidates = dated.length ? dated : byParty();
+  if (candidates.length > 1) {
+    throw new PayrollError(
+      `remittance group resolves to multiple declared destination schedules (${candidates.map((candidate) => candidate.vendorSettingsKey).join(", ")}) — `
+      + "correct the destination mapping in Payroll Setup → Accounts so the group has one authority",
+    );
+  }
+  const resolved = candidates[0] ?? null;
   if (!resolved || !resolved.schedule) return null;
-  const { frequency, source } = scheduledRemittanceFrequency(resolved.schedule, input.payrollSettings);
-  const due = scheduledRemittanceDueDateExplained(resolved.schedule, frequency, input.periodTo);
+  const { frequency, source } = scheduledRemittanceFrequency(
+    resolved.schedule, input.payrollSettings, input.filingAccount ?? null,
+  );
+  const schedule = input.regionalCalendar
+    ? { ...resolved.schedule, calendar: input.regionalCalendar }
+    : resolved.schedule;
+  const due = scheduledRemittanceDueDateExplained(schedule, frequency, input.periodTo);
   return {
     vendorSettingsKey: resolved.vendorSettingsKey,
     authority: resolved.schedule.authority,
@@ -1718,49 +1615,21 @@ export function scheduleForRemittanceGroup(input: {
 }
 
 /**
- * Destination countries behind a remittance group's vendor keys, resolved
- * through the packs' own vendor declarations. Empty when no row carried a
- * declared vendor key (legacy unattributed groups).
- */
-function remittanceDestinationCountries(vendorKeys: readonly string[]): string[] {
-  const countries = new Set<string>();
-  for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
-    const declared = new Set(packRemittanceVendorSettingsKeys(country));
-    for (const key of vendorKeys) {
-      if (declared.has(key)) countries.add(country);
-    }
-  }
-  return [...countries].sort();
-}
-
-/**
  * The bill's dating rule, shared by the write path (createRemittanceBill)
  * and the read path (the agent's due-date forecast) so the two cannot
- * disagree: a pack-declared destination schedule when one governs; otherwise
- * the legacy registration timetable for legacy unattributed groups and for
- * destinations whose pack allows that fallback — and a named refusal for a
- * declared destination with no timetable and no fallback (an ATO or Revenue
- * bill dated to CRA's 15th pays on the wrong day with a wrong on-time
- * story). Which packs allow the fallback is pack data
- * (allowsRegistrationTimetableFallback), never a country branch here.
+ * disagree. A destination without a pack-declared schedule refuses instead
+ * of borrowing another authority's deadlines.
  */
 export function remittanceGroupDueDate(
   group: Pick<RemittanceGroup, "schedule" | "vendorKeys" | "filingAccount" | "regionalCalendar">,
   periodTo: string,
 ): string {
   if (group.schedule) return group.schedule.dueDate;
-  const undated = remittanceDestinationCountries(group.vendorKeys).filter(
-    (country) => !packAllowsRegistrationTimetableFallback(country),
+  const destination = group.vendorKeys.length ? group.vendorKeys.join(", ") : "this remittance destination";
+  throw new PayrollError(
+    `no remittance schedule is declared for ${destination} for period ${periodTo} — `
+    + "assign a pack-declared remittance destination in Payroll Setup → Accounts before dating the bill",
   );
-  if (undated.length > 0) {
-    throw new PayrollError(
-      `no remittance schedule is declared for ${undated.join("/")} — the bill cannot borrow CRA's `
-      + "timetable. Declare the destination timetable, then regenerate this bill",
-    );
-  }
-  return remittanceDueDate(periodTo, group.filingAccount.remitterType, {
-    regionalCalendar: group.regionalCalendar,
-  });
 }
 
 /**
@@ -1786,6 +1655,7 @@ export async function scheduledFrequencyAdvisory(
   vendorPartyId: string,
   payrollSettings: Record<string, unknown>,
   year: number,
+  filingAccount: FilingAccountRef | null = null,
   executor: RemittanceExecutor = db,
 ): Promise<string | null> {
   let groups: RemittanceGroup[];
@@ -1799,10 +1669,17 @@ export async function scheduledFrequencyAdvisory(
   } catch {
     return null;
   }
-  const group = groups.find((candidate) => candidate.partyId === vendorPartyId);
+  const group = groups.find((candidate) => candidate.partyId === vendorPartyId
+    && (schedule.frequencySource !== "filing_account"
+      || candidate.filingAccount.id === filingAccount?.id));
   if (!group || cmp(group.total, "0") === 0) return null;
   const average = div(group.total, "12");
-  const { frequency } = scheduledRemittanceFrequency(schedule, payrollSettings);
+  let frequency: string;
+  try {
+    ({ frequency } = scheduledRemittanceFrequency(schedule, payrollSettings, filingAccount));
+  } catch {
+    return null;
+  }
   const measured = remittanceBandForAverage(schedule, average);
   if (!measured || measured.frequency === frequency) return null;
   return `${schedule.authority} remittances averaged $${formatMoney(average, 2)}/month across ${year} — ` +
@@ -2323,13 +2200,9 @@ export async function createRemittanceBill(
         "remittance bill coverage does not match the billed payroll — regenerate this bill",
       );
     }
-    // The bill's due date comes from the DESTINATION's schedule when a pack
-    // declares one (Revenu Québec's, today) — the filing account's CRA
-    // remitter type is a registration with another agency and never applies
-    // to a scheduled destination. A destination with no declared schedule
-    // refuses instead of borrowing another authority's timetable, unless its
-    // pack allows the legacy fallback; legacy unattributed groups keep the
-    // CRA path (see remittanceGroupDueDate).
+    // The bill's due date comes from the destination's pack-declared schedule.
+    // Filing-account remitter types feed only schedules that declare that
+    // source; an undated destination refuses instead of borrowing a timetable.
     const dueDate = remittanceGroupDueDate(group, input.to);
     const doc = (await tx.execute<{ id: string }>(sql`
       insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,

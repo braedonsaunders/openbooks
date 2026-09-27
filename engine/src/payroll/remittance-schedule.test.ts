@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CRA_REMITTANCE_SCHEDULE } from "./canada/cra/remittance.ts";
 import { RQ_REMITTANCE_SCHEDULE } from "./canada/quebec/remittance.ts";
 import {
   groupRemittanceRows,
+  remittanceGroupDueDate,
   scheduledRemittanceDueDateExplained,
   scheduledRemittanceFrequency,
   scheduleForRemittanceGroup,
@@ -130,11 +132,12 @@ test("frequency resolution prefers configuration, then the schedule default", ()
 
 test("schedule resolution prefers provenance, then the configured party", () => {
   const settings = { rqRemittancePartyId: RQ_VENDOR };
+  const schedules = [RQ, CRA_REMITTANCE_SCHEDULE];
   // Rows that arrived through the RQ vendor key are RQ-governed even when the
   // party is unassigned (the org has not configured its RQ vendor yet).
   const unassigned = scheduleForRemittanceGroup({
     vendorKeys: ["rqRemittancePartyId"], partyId: null, periodTo: "2026-07-31",
-    payrollSettings: {}, schedules: [RQ],
+    payrollSettings: {}, schedules,
   });
   assert.equal(unassigned?.authority, "Revenu Québec");
   assert.equal(unassigned?.frequency, "monthly");
@@ -143,35 +146,44 @@ test("schedule resolution prefers provenance, then the configured party", () => 
   // An `external` component pointed at the RQ vendor resolves through the party.
   const byParty = scheduleForRemittanceGroup({
     vendorKeys: [], partyId: RQ_VENDOR, periodTo: "2026-07-31",
-    payrollSettings: { ...settings, rqRemittanceFrequency: "quarterly" }, schedules: [RQ],
+    payrollSettings: { ...settings, rqRemittanceFrequency: "quarterly" }, schedules,
   });
   assert.equal(byParty?.vendorSettingsKey, "rqRemittancePartyId");
   assert.equal(byParty?.frequency, "quarterly");
   assert.equal(byParty?.frequencySource, "configured");
   assert.equal(byParty?.dueDate, "2026-10-15");
-  // A CRA-vendor group has no declared schedule: the legacy path governs.
-  assert.equal(scheduleForRemittanceGroup({
+  const cra = scheduleForRemittanceGroup({
     vendorKeys: ["craRemittancePartyId"], partyId: CRA_VENDOR, periodTo: "2026-07-31",
-    payrollSettings: { ...settings, craRemittancePartyId: CRA_VENDOR }, schedules: [RQ],
-  }), null);
-  // Unassigned rows with no provenance stay on the legacy path too.
+    payrollSettings: { ...settings, craRemittancePartyId: CRA_VENDOR },
+    filingAccount: ACCOUNT, schedules,
+  });
+  assert.equal(cra?.frequency, "accelerated_2");
+  assert.equal(cra?.frequencySource, "filing_account");
+  assert.equal(cra?.dueDate, "2026-08-06");
+  assert.throws(
+    () => scheduleForRemittanceGroup({
+      vendorKeys: ["craRemittancePartyId"], partyId: CRA_VENDOR, periodTo: "2026-07-31",
+      payrollSettings: {}, schedules,
+    }),
+    /assign a CRA filing account and set its remitter type in Payroll Setup → Filing accounts/,
+  );
+  // Groups with no declared provenance are unresolved and refuse when dated.
   assert.equal(scheduleForRemittanceGroup({
     vendorKeys: [], partyId: null, periodTo: "2026-07-31",
-    payrollSettings: settings, schedules: [RQ],
+    payrollSettings: settings, schedules,
   }), null);
 });
 
-test("a declared schedule beats the legacy path when one party serves two keys", () => {
-  // A misconfigured org pointing both vendors at one party still gets the
-  // declared date — provenance with a schedule wins over provenance without.
-  const resolved = scheduleForRemittanceGroup({
-    vendorKeys: ["craRemittancePartyId", "rqRemittancePartyId"],
-    partyId: RQ_VENDOR, periodTo: "2026-07-31",
-    payrollSettings: { rqRemittancePartyId: RQ_VENDOR, craRemittancePartyId: RQ_VENDOR },
-    schedules: [RQ],
-  });
-  assert.equal(resolved?.authority, "Revenu Québec");
-  assert.equal(resolved?.dueDate, "2026-08-17");
+test("one group cannot combine two authorities with declared schedules", () => {
+  assert.throws(
+    () => scheduleForRemittanceGroup({
+      vendorKeys: ["craRemittancePartyId", "rqRemittancePartyId"],
+      partyId: RQ_VENDOR, periodTo: "2026-07-31",
+      payrollSettings: { rqRemittancePartyId: RQ_VENDOR, craRemittancePartyId: RQ_VENDOR },
+      filingAccount: ACCOUNT, schedules: [RQ, CRA_REMITTANCE_SCHEDULE],
+    }),
+    /multiple declared destination schedules.*Payroll Setup → Accounts/,
+  );
 });
 
 test("no schedule governs before its effective date", () => {
@@ -186,6 +198,17 @@ const ACCOUNT: PayrollFilingAccount = {
   name: "Head office", remitterType: "accelerated_2", subsidiaryId: null, stateCode: null,
   isDefault: true, isActive: true,
 };
+
+test("an undated destination refuses instead of using a registration timetable", () => {
+  assert.throws(
+    () => remittanceGroupDueDate({
+      schedule: null, vendorKeys: ["craRemittancePartyId"],
+      filingAccount: { id: ACCOUNT.id, accountNumber: ACCOUNT.accountNumber, name: ACCOUNT.name, remitterType: ACCOUNT.remitterType },
+      regionalCalendar: null,
+    }, "2026-07-31"),
+    /no remittance schedule is declared.*assign a pack-declared remittance destination in Payroll Setup → Accounts/,
+  );
+});
 
 const ROW: RemittanceRow = {
   component_id: "qpip", code: "QPIP", name: "QPIP", kind: "deduction",

@@ -439,16 +439,13 @@ test("every installable pack names its statutory engine and declares withholding
   }
 });
 
-test("every remittance schedule declares a non-empty, unique frequency settings key", () => {
-  // declaredRemittanceFrequencySettingsKeys() is a bare .map with no dedup
-  // while its sibling declaredRemittanceVendorSettingsKeys() builds a Set —
-  // yet the frequency helper's doc comment claims "the same derivation
-  // pattern as the vendor keys". A duplicate key would validate a value
-  // against whichever schedule loads first, so the same input changes verdict
-  // when an unrelated pack installs, silently, on a frequency that drives
-  // when money is due. Deduping would hide that pack-authoring mistake behind
-  // silent first-one-wins, so fail loudly here instead.
+test("organization remittance frequency keys are unique and account schedules carry no setting key", () => {
+  // A duplicate organization key would validate a value against whichever
+  // schedule loads first, so the same input could change verdict when another
+  // pack is installed. Account-sourced schedules must not expose a parallel
+  // organization setting.
   const owners = new Map<string, string>()
+  let filingAccountSchedules = 0
   for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
     for (const schedule of pack.remittanceSchedules ?? []) {
       // Same location format allRemittanceSchedules() builds for its own
@@ -456,21 +453,25 @@ test("every remittance schedule declares a non-empty, unique frequency settings 
       // their country — "both CA and CA" tells a pack author with several
       // schedules in one country nothing about which two collide.
       const where = `the ${country} payroll pack's remittance schedule for ${schedule.vendorSettingsKey || "(no vendor key)"}`
-      assert.ok(
-        schedule.frequencySettingsKey,
-        `${where} names no frequency settings key`,
-      )
-      const prior = owners.get(schedule.frequencySettingsKey)
-      assert.equal(
-        prior,
-        undefined,
-        `frequency settings key "${schedule.frequencySettingsKey}" is declared by both ${prior} and ${where}`,
-      )
-      owners.set(schedule.frequencySettingsKey, where)
+      if (schedule.frequencySource === "organization") {
+        assert.ok(schedule.frequencySettingsKey, `${where} names no frequency settings key`)
+        const key = schedule.frequencySettingsKey!
+        const prior = owners.get(key)
+        assert.equal(
+          prior,
+          undefined,
+          `frequency settings key "${key}" is declared by both ${prior} and ${where}`,
+        )
+        owners.set(key, where)
+      } else {
+        filingAccountSchedules += 1
+        assert.equal(schedule.frequencySettingsKey, undefined, `${where} stores no organization frequency key`)
+      }
     }
   }
   // Non-vacuity: an empty schedule list would pass every assertion above.
-  assert.ok(owners.size >= 2, "expected more than one declared frequency key")
+  assert.ok(owners.size >= 1, "expected an organization-declared frequency key")
+  assert.ok(filingAccountSchedules >= 1, "expected a filing-account-declared frequency source")
 })
 
 test("the CA pack declares the QPIP program base under its own stub factor (C-12)", () => {

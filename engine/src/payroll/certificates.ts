@@ -144,10 +144,7 @@ export interface PayrollCertificateChoice {
  *
  * `column` — a named column on `employee_payroll_profiles`. Legal ONLY for the
  * certificates that predate this model (the W-4 and the TD1 family). It is a
- * READ mapping over storage that already exists, exactly as
- * `PayrollPackRates.legacyRows` is a read mapping over the pre-scoping settings
- * blob, and for the same reason: the alternative is a data migration whose
- * failure mode is silently different withholding.
+ * read mapping over storage that already exists.
  */
 export type PayrollCertificateStorage =
   | { kind: "row" }

@@ -20,7 +20,7 @@ import type {
   PayrollEditionScaffold, PayrollTaxYearSupport,
 } from "../tax-years.ts";
 import type {
-  LegacyRateRow, PayrollPackRates, PayrollStatutoryRateSlot,
+  PayrollPackRates, PayrollStatutoryRateSlot,
 } from "../statutory-rates.ts";
 import { US_EXTRA_EDITIONS } from "./editions.ts";
 import {
@@ -598,32 +598,4 @@ export const US_PACK_RATES: PayrollPackRates = {
   // engine/src/payroll/us/states/local-rates.ts, beside the engines that read
   // them and the reasoning for why their rates cannot be pack constants.
   slots: [US_FUTA_SLOT, US_SUI_SLOT, US_CA_ETT_SLOT, US_PA_LOCAL_EIT_SLOT, ...US_LOCAL_RATE_SLOTS],
-  /**
-   * The pre-scoping shape: `orgs.settings.payroll.us` held ONE FUTA rate for the
-   * whole employer and ONE SUI entry per state for every account. Reproduced
-   * here exactly — the org rate standing in for every state, the state SUI entry
-   * standing in for every account — so a tenant that has not touched the new
-   * surface calculates byte-for-byte as it did before, and the defect is fixed
-   * by entering scoped rows rather than by a migration nobody can audit.
-   */
-  legacyRows: (blob) => {
-    const us = (blob.us ?? {}) as {
-      futaRate?: unknown;
-      sui?: Record<string, { rate?: unknown; wageBase?: unknown }>;
-    };
-    const rows: LegacyRateRow[] = [];
-    if (us.futaRate != null && us.futaRate !== "") {
-      for (const state of US_STATES) {
-        rows.push({ slotKey: "us_futa", region: state, values: { rate: String(us.futaRate) } });
-      }
-    }
-    for (const [state, entry] of Object.entries(us.sui ?? {})) {
-      if (!entry || entry.rate == null || entry.wageBase == null) continue;
-      rows.push({
-        slotKey: "us_sui", region: state,
-        values: { rate: String(entry.rate), wageBase: String(entry.wageBase) },
-      });
-    }
-    return rows;
-  },
 };

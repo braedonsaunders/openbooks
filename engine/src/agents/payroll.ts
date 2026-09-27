@@ -13,7 +13,6 @@ import {
 } from "../payroll/readiness.ts";
 import {
   payrollRemittanceSummary,
-  remittanceDueDateExplained,
   remittanceGroupDueDate,
 } from "../payroll/remittance.ts";
 import { packWarnsOnMissingIdentifier, payrollTaxYearForDate } from "../payroll/packs.ts";
@@ -109,25 +108,17 @@ export async function payrollFindings(
         continue;
       }
       for (const group of groups) {
-        // The bill's own dating rule (remittanceGroupDueDate, shared with
-        // createRemittanceBill): a pack-declared destination schedule when
-        // one governs, otherwise the filing account's CRA remitter-type rule
-        // — and a refusal for a declared foreign destination with no
-        // timetable. Never a third copy of any of them. A refused group is
-        // an unevaluable month, not a skipped one: the missing remittance
-        // stays visible either way.
-        //
-        // `scheduled`/`cra` below are main's display locals (the merged-slot
-        // authority/frequency/rule), kept byte-identical: the date comes from
-        // the shared helper, the explained legacy rule still feeds the slot.
+        // The bill's own pack-declared dating rule is shared with
+        // createRemittanceBill. A destination without a schedule refuses; it
+        // remains visible as an unevaluable month instead of being skipped.
         const scheduled = group.schedule;
-        const cra = scheduled
-          ? null
-          : remittanceDueDateExplained(month.to, group.filingAccount.remitterType, {
-              regionalCalendar: group.regionalCalendar,
-            });
         let dueDate: string;
         try {
+          if (!scheduled) {
+            throw new PayrollError(
+              "no pack-declared remittance schedule governs this destination — assign a declared destination in Payroll Setup → Accounts",
+            );
+          }
           dueDate = remittanceGroupDueDate(group, month.to);
         } catch (error) {
           if (!(error instanceof PayrollError)) throw error;
@@ -161,9 +152,9 @@ export async function payrollFindings(
             fingerprint,
             dueDate,
             party: group.partyName,
-            authority: scheduled?.authority ?? null,
-            frequency: scheduled?.frequency ?? group.filingAccount.remitterType ?? "regular",
-            rule: scheduled?.rule ?? cra!.rule,
+            authority: scheduled!.authority,
+            frequency: scheduled!.frequency,
+            rule: scheduled!.rule,
             provinces: [...group.provinces],
             currency: group.currency,
             translated: group.translated,

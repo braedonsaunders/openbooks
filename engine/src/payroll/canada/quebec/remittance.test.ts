@@ -140,7 +140,6 @@ test("a schedule on an undeclared calendar is refused", () => {
 test("frequency settings keys derive from the declared schedules", () => {
   assert.deepEqual(declaredRemittanceFrequencySettingsKeys(), [
     "rqRemittanceFrequency",
-    "craRemittanceFrequency",
   ]);
 });
 

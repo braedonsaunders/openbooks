@@ -63,6 +63,7 @@ import type {
  */
 export const RQ_REMITTANCE_SCHEDULE: PayrollRemittanceSchedule = {
   vendorSettingsKey: "rqRemittancePartyId",
+  frequencySource: "organization",
   authority: "Revenu Québec",
   sources: [
     "Revenu Québec, Guide TP-1015.G-V, Guide for Employers: Source Deductions and Contributions (remittance frequency and deadlines)",
