@@ -1,14 +1,17 @@
 import assert from "node:assert/strict";
 import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
+import { z } from "zod";
 
 const stateKey = Symbol.for("openbooks.v1-command-exec-test");
+const zodKey = Symbol.for("openbooks.v1-command-exec-zod");
 interface RouteState {
   executed: Array<{ name: string; input: unknown }>;
 }
 
 const routeState: RouteState = { executed: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
+(globalThis as typeof globalThis & Record<symbol, unknown>)[zodKey] = z;
 
 stubModules({
   navigation: false,
@@ -57,17 +60,10 @@ stubModules({
     `,
     "../../../../../lib/application/tool-catalog": `
       const state = globalThis[Symbol.for('openbooks.v1-command-exec-test')]
-      const postJournal = {
-        name: "post_journal",
-        readOnly: false,
-      }
-      export function applicationTool(name) {
-        return name === "post_journal" ? postJournal : undefined
-      }
-      export async function executeApplicationTool(definition, context, input) {
-        state.executed.push({ name: definition.name, input })
-        return { ok: true, status: "posted" }
-      }
+      const z = globalThis[Symbol.for('openbooks.v1-command-exec-zod')]
+      const postJournal = {name:"post_journal",readOnly:false,inputSchema:z.object({documentId:z.string().uuid(),idempotencyKey:z.string().min(8)})}
+      export function applicationTool(name) { return name === "post_journal" ? postJournal : undefined }
+      export async function executeApplicationTool(definition, context, input) { state.executed.push({name:definition.name,input}); return {ok:true,status:"posted"} }
     `,
     "../../../../../lib/assistant/registry": `export function applicationToolVisible() { return true }`,
     "../../../../../lib/features": `export async function resolvedFeatureState() { return {} }`,
