@@ -1,5 +1,6 @@
 {
   "modules": {
+    "warehouses": "仓库",
     "accounts": "会计科目表",
     "assets": "固定资产",
     "equipment": "设备",

@@ -1,5 +1,6 @@
 {
   "modules": {
+    "warehouses": "倉庫",
     "accounts": "勘定科目表",
     "assets": "固定資産",
     "equipment": "設備",

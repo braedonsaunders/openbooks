@@ -5,6 +5,7 @@ import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organizati
 import { toBaseQuantity } from "./costing.ts";
 import { InventoryError, InventoryOwnershipError, type InventoryProfile, type Runner } from "./contracts.ts";
 import { assertStockLocationAdmitsSubsidiary, assertMovementOwner } from "./profile-policy.ts";
+import { WarehouseRefusal, type StockMovementDirection } from "./warehouses.ts";
 
 // ---------------------------------------------------------------------------
 // Document integration — bill receipts & invoice/shipment issues
@@ -40,6 +41,16 @@ async function defaultStockLocation(
   const r = (await runner.execute<{ id: string }>(sql`
     select id from stock_locations where org_id = ${orgId} and is_active`));
   return r.rows.length === 1 ? r.rows[0]!.id : null;
+}
+
+const INBOUND_DOCUMENT_KINDS = new Set(["vendor_bill", "purchase_receipt", "customer_credit"]);
+const OUTBOUND_DOCUMENT_KINDS = new Set(["customer_invoice", "sales_fulfillment", "vendor_credit"]);
+
+/** Which way a document's stock lines move, for warehouse admission. */
+function documentStockDirection(kind: string): StockMovementDirection {
+  if (INBOUND_DOCUMENT_KINDS.has(kind)) return "inbound";
+  if (OUTBOUND_DOCUMENT_KINDS.has(kind)) return "outbound";
+  throw new InventoryError(`a ${kind} document does not move stock, so its lines cannot be admitted to a warehouse`);
 }
 
 /**
@@ -120,8 +131,12 @@ export async function loadDocumentInventoryLines(
         ctx,
         loc,
         subsidiaryId,
+        documentStockDirection(row.document_kind),
       );
     } catch (error) {
+      if (error instanceof WarehouseRefusal) {
+        throw new WarehouseRefusal(`${lineLabel}: ${error.message}`, error.code, error.remedy, error.status);
+      }
       if (error instanceof InventoryOwnershipError) {
         throw new InventoryOwnershipError(`${lineLabel}: ${error.message}`);
       }

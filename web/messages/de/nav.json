@@ -1,5 +1,6 @@
 {
   "modules": {
+    "warehouses": "Lager",
     "accounts": "Kontenplan",
     "assets": "Anlagevermögen",
     "equipment": "Ausrüstung",

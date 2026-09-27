@@ -2452,6 +2452,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/warehouse': {
+    route: '/warehouse',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/warehouse/view')
+      return {
+        load: (input) => m.loadWarehouse(input.searchParams ?? {}),
+        spec: (data) => m.warehouseSpec(data as never),
+      }
+    },
+  },
 }
 
 /** Every route that has a built-in layout, sorted. */

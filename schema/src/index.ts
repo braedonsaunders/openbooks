@@ -11,6 +11,7 @@ export * from "./depreciation-conventions";
 export * from "./extension";
 export * from "./inventory";
 export * from "./manufacturing";
+export * from "./warehouses";
 export * from "./revenue";
 export * from "./assets";
 export * from "./labor-costing";

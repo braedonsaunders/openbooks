@@ -24,6 +24,7 @@ import { DIMENSION_ENTITIES } from './entities/dimensions'
 import { BILLING_ENTITIES } from './entities/billing'
 import { REVENUE_ENTITIES } from './entities/revenue'
 import { INVENTORY_ENTITIES } from './entities/inventory'
+import { WAREHOUSE_ENTITIES } from './entities/warehouses'
 import { WORKFORCE_ENTITIES } from './entities/workforce'
 import { HRM_PROCESS_ENTITIES } from './entities/hrm-processes'
 import { ASSET_ENTITIES } from './entities/assets'
@@ -42,6 +43,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...BILLING_ENTITIES,
   ...REVENUE_ENTITIES,
   ...INVENTORY_ENTITIES,
+  ...WAREHOUSE_ENTITIES,
   ...WORKFORCE_ENTITIES,
   ...HRM_PROCESS_ENTITIES,
   ...ASSET_ENTITIES,

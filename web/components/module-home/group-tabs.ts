@@ -13,7 +13,7 @@ import type { ModuleHomeTab } from './ui'
  * (nav-module names for cockpits — never a context-dependent "Overview").
  */
 
-export type TabGroup = 'customers' | 'purchasing' | 'banking' | 'accounting' | 'payroll' | 'hrm'
+export type TabGroup = 'customers' | 'purchasing' | 'banking' | 'accounting' | 'payroll' | 'hrm' | 'warehouse'
 
 // DASHBOARDS AND WORKING SURFACES — a tab lands on a cockpit, or on the ONE
 // canonical list for a thing the group works on daily (accounts, pay runs,
@@ -38,6 +38,11 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     { href: '/purchasing', ns: 'purchasing', key: 'home.title' },
     { href: '/ap', ns: 'nav', key: 'modules.ap' },
     { href: '/expenses', ns: 'nav', key: 'modules.expenses' },
+  ],
+  // The warehouse cockpit beside the inventory workspace it moves stock for.
+  warehouse: [
+    { href: '/warehouse', ns: 'warehouse', key: 'home.title' },
+    { href: '/inventory', ns: 'nav', key: 'modules.inventory' },
   ],
   banking: [
     { href: '/banking', ns: 'banking', key: 'home.title' },
@@ -129,6 +134,8 @@ const TAB_FEATURE: Record<string, string> = {
   // hrmCompensation at the page gate.
   '/hrm/compliance': 'hrmConstructionCompliance',
   '/close': 'continuousClose',
+  '/warehouse': 'warehousing',
+  '/inventory': 'inventory',
 }
 
 /**

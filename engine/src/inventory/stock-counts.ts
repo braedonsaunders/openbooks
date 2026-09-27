@@ -667,6 +667,7 @@ export async function postStockCount(
         lotId: line.lotId,
         memo: `Stock count ${prepared.count.id}`,
         locationId: prepared.count.locationId,
+        admission: "count",
       });
       movementId = posted.movementId;
       entryId = posted.entryId;

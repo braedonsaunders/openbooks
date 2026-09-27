@@ -3,11 +3,17 @@ import { db, type SqlExecutor } from "../platform/db.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { restrictionAdmits, type SubsidiaryContext } from "../organization/subsidiaries.ts";
 import { type InventoryProfile, InventoryError, InventoryOwnershipError, CostingPolicyChangeBlockedError, type Runner } from "./contracts.ts";
+import { assertWarehouseAdmitsMovement, type StockMovementDirection } from "./warehouses.ts";
 /**
  * A stock location sits under a `locations` dimension row that may be
  * restricted to one subsidiary's subtree. Receiving into, issuing from, or
  * transferring through a location that does not admit the posting entity is
  * exactly how one subsidiary ends up holding another's goods.
+ *
+ * The same check enforces the enclosing warehouse's lifecycle for the
+ * movement's direction (see `warehouseAdmits`). Every caller names its
+ * direction; there is no default, because guessing it is how a suspended
+ * warehouse would quietly take stock.
  */
 export async function assertStockLocationAdmitsSubsidiary(
   tx: Runner,
@@ -15,6 +21,7 @@ export async function assertStockLocationAdmitsSubsidiary(
   ctx: SubsidiaryContext,
   stockLocationId: string,
   subsidiaryId: string,
+  direction: StockMovementDirection,
 ): Promise<void> {
   // Hold the warehouse row through the caller's transaction. A concurrent
   // deactivation waits for in-flight movements, while a movement that arrives
@@ -48,6 +55,7 @@ export async function assertStockLocationAdmitsSubsidiary(
       `stock location "${location.code}" is restricted to another legal entity`,
     );
   }
+  await assertWarehouseAdmitsMovement(tx, orgId, stockLocationId, direction);
 }
 
 /**

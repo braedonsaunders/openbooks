@@ -234,7 +234,7 @@ async function assertTransitLocationUsable(
   // so creation, picker, and posting can never disagree. The ownership
   // refusal propagates unchanged: a warehouse of another legal entity is
   // an authorization failure, and its message already names the warehouse.
-  await assertStockLocationAdmitsSubsidiary(tx, orgId, ctx, transitStockLocationId, subsidiaryId);
+  await assertStockLocationAdmitsSubsidiary(tx, orgId, ctx, transitStockLocationId, subsidiaryId, "inbound");
 }
 
 /**

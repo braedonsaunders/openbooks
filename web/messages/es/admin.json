@@ -2054,6 +2054,16 @@
       }
     },
     "entities": {
+      "warehouses": {
+        "title": "Almacenes",
+        "singular": "Almacén",
+        "description": "Nombre, dirección y ciclo de vida de cada ubicación de existencias de tipo almacén."
+      },
+      "putaway-rules": {
+        "title": "Reglas de ubicación",
+        "singular": "Regla de ubicación",
+        "description": "Reglas ordenadas que deciden dónde se ubican las existencias recibidas dentro de un almacén."
+      },
       "company": {
         "title": "Empresa y contabilidad",
         "description": "Identidad de la organización, moneda base, ejercicio fiscal y cuentas de control."
@@ -2600,6 +2610,16 @@
       }
     },
     "fields": {
+      "addressLine1": "Dirección, línea 1",
+      "addressLine2": "Dirección, línea 2",
+      "city": "Ciudad",
+      "postalCode": "Código postal",
+      "stockLocationId": "Ubicación de existencias",
+      "status": "Estado",
+      "warehouseId": "Almacén",
+      "strategy": "Estrategia",
+      "targetLocationId": "Ubicación de destino",
+      "capacityQuantity": "Capacidad",
       "accountId": "Cuenta",
       "classAttribute": "Atributo de clase de activo",
       "countryCode": "País",
@@ -2990,6 +3010,8 @@
       "reviewMonths": "Cadencia (meses)"
     },
     "fieldHelp": {
+      "putawayItem": "Déjelo en blanco para aplicar la regla a todos los artículos.",
+      "putawayCapacity": "Lo máximo que el destino puede contener del artículo. Obligatorio en una zona a granel; déjelo en blanco en un hueco fijo para no poner límite.",
       "recognitionRulePolicy": "Cambiar el método, el plazo, las fechas, los desfases, el porcentaje o las cuentas de una regla ya utilizada en ingresos crea una nueva versión; las obligaciones existentes conservan la versión anterior.",
       "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida.",
       "lienWaiverEnforcement": "Bloquear significa que una factura de esta clase no puede pagarse hasta que una renuncia firmada la cubra.",
@@ -3091,6 +3113,17 @@
       "aiRailsReviewMonths": "Cadencia en meses (1–36); las capacidades vencidas avisan al inbox de setup."
     },
     "options": {
+      "warehouseStatus": {
+        "draft": "Borrador",
+        "active": "Activo",
+        "suspended": "Suspendido",
+        "retired": "Retirado"
+      },
+      "putawayStrategy": {
+        "fixed-bin": "Hueco fijo",
+        "empty-bin": "Hueco vacío",
+        "bulk-zone": "Zona a granel"
+      },
       "priceLevelMethod": { "explicit": "Precios matriciales explícitos", "markupDiscount": "Aumento / descuento", "costPlus": "Costo más margen" },
       "priceCostBasis": { "itemCost": "Costo del artículo", "standardCost": "Costo estándar de inventario", "averageCost": "Costo promedio de inventario" },
       "timeClassification": {
@@ -4455,6 +4488,7 @@
     },
     "filterAll": "Todos",
     "sections": {
+      "address": "Dirección",
       "basisCaps": "Topes de base",
       "deductionProtection": "Protección de deducciones",
       "holidayCompanyDay": "Festivo de empresa",

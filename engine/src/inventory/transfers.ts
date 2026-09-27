@@ -154,6 +154,7 @@ export async function transferInventoryTx(
       ctx,
       locationId,
       input.subsidiaryId,
+      locationId === input.fromStockLocationId ? "outbound" : "inbound",
     );
   }
   await assertInventoryFeature(tx, orgId);

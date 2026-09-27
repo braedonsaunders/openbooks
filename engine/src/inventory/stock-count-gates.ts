@@ -160,7 +160,7 @@ export async function assertCountWarehouses(
       );
     }
     try {
-      await assertStockLocationAdmitsSubsidiary(tx, orgId, ctx, stockLocationId, subsidiaryId);
+      await assertStockLocationAdmitsSubsidiary(tx, orgId, ctx, stockLocationId, subsidiaryId, "count");
     } catch (error) {
       if (error instanceof InventoryOwnershipError) {
         throw new InventoryError(

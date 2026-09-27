@@ -2169,6 +2169,16 @@
       "saveFailed": "Die Konfiguration konnte nicht gespeichert werden."
     },
     "entities": {
+      "warehouses": {
+        "title": "Lager",
+        "singular": "Lager",
+        "description": "Bezeichnung, Adresse und Lebenszyklus jedes Lagerorts der Art Lager."
+      },
+      "putaway-rules": {
+        "title": "Einlagerungsregeln",
+        "singular": "Einlagerungsregel",
+        "description": "Geordnete Regeln, die bestimmen, wohin empfangener Bestand innerhalb eines Lagers kommt."
+      },
       "company": {
         "title": "Unternehmen & Buchhaltung",
         "description": "Organisationsidentität, Basiswährung, Geschäftsjahr und Kontrollkonten."
@@ -2715,6 +2725,16 @@
       }
     },
     "fields": {
+      "addressLine1": "Adresszeile 1",
+      "addressLine2": "Adresszeile 2",
+      "city": "Ort",
+      "postalCode": "Postleitzahl",
+      "stockLocationId": "Lagerort",
+      "status": "Zustand",
+      "warehouseId": "Lager",
+      "strategy": "Strategie",
+      "targetLocationId": "Ziellagerort",
+      "capacityQuantity": "Kapazität",
       "accountId": "Konto",
       "classAttribute": "Attribut der Anlagegüterklasse",
       "countryCode": "Land",
@@ -3105,6 +3125,8 @@
       "reviewMonths": "Prüfrhythmus (Monate)"
     },
     "fieldHelp": {
+      "putawayItem": "Leer lassen, damit die Regel für alle Artikel gilt.",
+      "putawayCapacity": "Die Höchstmenge des Artikels am Ziel. Für eine Blockzone erforderlich; bei einem festen Lagerplatz leer lassen für keine Begrenzung.",
       "recognitionRulePolicy": "Wenn Sie Methode, Laufzeit, Daten, Versätze, Prozentsatz oder Konten einer bereits im Umsatz verwendeten Regel ändern, entsteht eine neue Version; bestehende Verpflichtungen behalten die alte Version.",
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen.",
       "basisCapAmountPerPeriod": "Diese Komponente stoppen, sobald sie in einer Lohnperiode diesen Betrag erreicht hat.",
@@ -3206,6 +3228,17 @@
       "aiRailsReviewMonths": "Prüfrhythmus in Monaten (1–36); überfällige Fähigkeiten melden sich im Setup-Postfach."
     },
     "options": {
+      "warehouseStatus": {
+        "draft": "Entwurf",
+        "active": "Aktiv",
+        "suspended": "Gesperrt",
+        "retired": "Stillgelegt"
+      },
+      "putawayStrategy": {
+        "fixed-bin": "Fester Lagerplatz",
+        "empty-bin": "Leerer Lagerplatz",
+        "bulk-zone": "Blockzone"
+      },
       "priceLevelMethod": { "explicit": "Explizite Matrixpreise", "markupDiscount": "Aufschlag / Rabatt", "costPlus": "Kosten plus" },
       "priceCostBasis": { "itemCost": "Artikelkosten", "standardCost": "Standardlagerkosten", "averageCost": "Durchschnittliche Lagerkosten" },
       "timeClassification": {
@@ -4455,6 +4488,7 @@
     },
     "filterAll": "Alle",
     "sections": {
+      "address": "Anschrift",
       "basisCaps": "Bemessungsdeckel",
       "deductionProtection": "Abzugsschutz",
       "holidayCompanyDay": "Firmenfeiertag",

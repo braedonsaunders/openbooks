@@ -2099,6 +2099,16 @@
       "saveFailed": "无法保存配置。"
     },
     "entities": {
+      "warehouses": {
+        "title": "仓库",
+        "singular": "仓库",
+        "description": "每个仓库类库存地点的名称、地址和生命周期。"
+      },
+      "putaway-rules": {
+        "title": "上架规则",
+        "singular": "上架规则",
+        "description": "决定收货库存在仓库内存放位置的有序规则。"
+      },
       "company": {
         "title": "公司与会计",
         "description": "组织标识、基准币种、财年和控制科目。"
@@ -2645,6 +2655,16 @@
       }
     },
     "fields": {
+      "addressLine1": "地址行 1",
+      "addressLine2": "地址行 2",
+      "city": "城市",
+      "postalCode": "邮政编码",
+      "stockLocationId": "库存地点",
+      "status": "状态",
+      "warehouseId": "仓库",
+      "strategy": "策略",
+      "targetLocationId": "目标地点",
+      "capacityQuantity": "容量",
       "accountId": "科目",
       "code": "代码",
       "name": "名称",
@@ -3035,6 +3055,8 @@
       "reviewMonths": "评审周期（月）"
     },
     "fieldHelp": {
+      "putawayItem": "留空则规则适用于所有物料。",
+      "putawayCapacity": "目标位置可存放该物料的最大数量。批量区必填；固定库位留空表示不限。",
       "recognitionRulePolicy": "更改已用于收入的规则的方法、期限、日期、偏移、百分比或科目会创建新版本；现有履约义务保留旧版本。",
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。",
       "lienWaiverEnforcement": "“阻止”表示此类交易对方的账单在有签署的弃权书覆盖之前不得付款。",
@@ -3136,6 +3158,17 @@
       "aiRailsReviewMonths": "评审周期（月，1–36）；逾期能力会通知 setup 收件箱。"
     },
     "options": {
+      "warehouseStatus": {
+        "draft": "草稿",
+        "active": "启用",
+        "suspended": "已暂停",
+        "retired": "已停用"
+      },
+      "putawayStrategy": {
+        "fixed-bin": "固定库位",
+        "empty-bin": "空库位",
+        "bulk-zone": "批量区"
+      },
       "priceLevelMethod": { "explicit": "显式矩阵价格", "markupDiscount": "加价 / 折扣", "costPlus": "成本加成" },
       "priceCostBasis": { "itemCost": "物料成本", "standardCost": "标准库存成本", "averageCost": "平均库存成本" },
       "payFrequency": {
@@ -4376,6 +4409,7 @@
     },
     "filterAll": "全部",
     "sections": {
+      "address": "地址",
       "deductionProtection": "扣款保护",
       "basisCaps": "基数上限",
       "holidayElection": "法定假日选项",

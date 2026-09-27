@@ -393,6 +393,7 @@ async function returnCustomerCreditInventoryLine(
     ctx,
     line.stockLocationId,
     subsidiaryId,
+    "inbound",
   );
   const periodId = await periodForDate(orgId, date, runner);
   if (!periodId) throw new InventoryError(`no accounting period for ${date}`);

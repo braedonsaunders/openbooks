@@ -1,5 +1,6 @@
 {
   "modules": {
+    "warehouses": "Warehouses",
     "accounts": "Chart of Accounts",
     "assets": "Fixed Assets",
     "equipment": "Equipment",

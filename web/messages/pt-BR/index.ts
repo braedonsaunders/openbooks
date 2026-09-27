@@ -65,6 +65,7 @@ import sync from './sync.json'
 import tax from './tax.json'
 import timesheets from './timesheets.json'
 import ui from './ui.json'
+import warehouse from './warehouse.json'
 
 export default {
   accounting,
@@ -130,4 +131,5 @@ export default {
   tax,
   timesheets,
   ui,
+  warehouse,
 } as const

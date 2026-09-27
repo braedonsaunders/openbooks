@@ -307,6 +307,7 @@ async function returnVendorCreditInventoryLine(
     ctx,
     line.stockLocationId,
     subsidiaryId,
+    "outbound",
   );
   await validateTrackingSelection(
     runner,

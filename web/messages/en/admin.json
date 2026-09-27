@@ -2099,6 +2099,16 @@
       "saveFailed": "Could not save the configuration."
     },
     "entities": {
+      "warehouses": {
+        "title": "Warehouses",
+        "singular": "Warehouse",
+        "description": "Name, address and lifecycle of each warehouse-kind stock location."
+      },
+      "putaway-rules": {
+        "title": "Putaway Rules",
+        "singular": "Putaway Rule",
+        "description": "Ordered rules that choose where received stock goes inside a warehouse."
+      },
       "company": {
         "title": "Company & Accounting",
         "description": "Organization identity, base currency, fiscal year, and control accounts."
@@ -2645,6 +2655,16 @@
       }
     },
     "fields": {
+      "addressLine1": "Address line 1",
+      "addressLine2": "Address line 2",
+      "city": "City",
+      "postalCode": "Postal code",
+      "stockLocationId": "Stock location",
+      "status": "Status",
+      "warehouseId": "Warehouse",
+      "strategy": "Strategy",
+      "targetLocationId": "Target location",
+      "capacityQuantity": "Capacity",
       "accountId": "Account",
       "code": "Code",
       "name": "Name",
@@ -3035,6 +3055,8 @@
       "reviewMonths": "Review cadence (months)"
     },
     "fieldHelp": {
+      "putawayItem": "Leave blank to apply the rule to every item.",
+      "putawayCapacity": "The most the target may hold of the item. Required for a bulk zone; leave blank on a fixed bin for no limit.",
       "recognitionRulePolicy": "Changing the method, term, dates, offsets, percent, or accounts on a rule already used by revenue creates a new version; existing obligations keep the old version.",
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
       "lienWaiverEnforcement": "Block means a bill for this class cannot be paid until a signed waiver covers it.",
@@ -3136,6 +3158,17 @@
       "aiRailsReviewMonths": "Ledger review cadence in months (1–36); overdue capabilities nudge the setup admins' inbox."
     },
     "options": {
+      "warehouseStatus": {
+        "draft": "Draft",
+        "active": "Active",
+        "suspended": "Suspended",
+        "retired": "Retired"
+      },
+      "putawayStrategy": {
+        "fixed-bin": "Fixed bin",
+        "empty-bin": "Empty bin",
+        "bulk-zone": "Bulk zone"
+      },
       "priceLevelMethod": { "explicit": "Explicit matrix prices", "markupDiscount": "Markup / discount", "costPlus": "Cost plus" },
       "priceCostBasis": { "itemCost": "Item cost", "standardCost": "Standard inventory cost", "averageCost": "Average inventory cost" },
       "payFrequency": {
@@ -4376,6 +4409,7 @@
     },
     "filterAll": "All",
     "sections": {
+      "address": "Address",
       "deductionProtection": "Deduction protection",
       "basisCaps": "Basis caps",
       "holidayElection": "Election on a statutory holiday",

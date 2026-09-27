@@ -39,6 +39,7 @@ import { TAX_TOOLS } from "./tools-tax";
 import { FILE_TOOLS } from "./tools-files";
 import { OPS_TOOLS } from "./tools-ops";
 import { INVENTORY_TOOLS } from "./tools-inventory";
+import { WAREHOUSE_TOOLS } from "./tools-warehouses";
 import { ORDERS_TOOLS } from "./tools-orders";
 import { ASSETS_TOOLS } from "./tools-assets";
 import { EQUIPMENT_TOOLS } from "./tools-equipment";
@@ -82,6 +83,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
   ...FILE_TOOLS,
   ...OPS_TOOLS,
   ...INVENTORY_TOOLS,
+  ...WAREHOUSE_TOOLS,
   ...ORDERS_TOOLS,
   ...ASSETS_TOOLS,
   ...EQUIPMENT_TOOLS,

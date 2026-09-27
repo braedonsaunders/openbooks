@@ -507,6 +507,7 @@ export const INDUSTRIES: IndustryDef[] = [
     category: 'commerce',
     features: {
       inventory: true,
+      warehousing: true,
       projects: false,
       fieldTickets: false,
       equipment: false,
