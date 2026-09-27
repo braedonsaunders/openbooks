@@ -664,7 +664,7 @@ for(const row of consolidatedRows) await row.register();
 const generalLedgerCases = [
   { label: "gl summary split boundary", register: async () => {
         const { pathToFileURL } = await import("node:url");
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const root = pathToFileURL(process.cwd() + "/").href;

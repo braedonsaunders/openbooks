@@ -81,7 +81,7 @@ const priorSecret = process.env.SESSION_SECRET;
 
 const consolidatedRows = [
   { label: "auth reset concurrency", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { createHash, randomBytes, randomUUID } = await import("node:crypto");
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
@@ -252,7 +252,7 @@ const consolidatedRows = [
         });
   } },
   { label: "auth reset delivery order", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomBytes } = await import("node:crypto");
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
@@ -405,7 +405,7 @@ const consolidatedRows = [
         });
   } },
   { label: "auth reset kdf", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { createHash, randomBytes } = await import("node:crypto");
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
@@ -505,7 +505,7 @@ for (const row of consolidatedRows) await row.register();
 
 const authCredentialCases = [
   { label: "auth blank email", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
         const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
@@ -547,7 +547,7 @@ const authCredentialCases = [
         });
   } },
   { label: "auth credential expiry", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { createHash, randomBytes, randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
@@ -662,7 +662,7 @@ const authCredentialCases = [
         }
   } },
   { label: "auth proxy session", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { createHash, createHmac, randomBytes, randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { NextRequest } = await import("next/server");
@@ -688,7 +688,7 @@ const authCredentialCases = [
           return `${payload}.${signature}`;
         }
 
-        function apiRequest(token: string): NextRequest {
+        function apiRequest(token: string): import("next/server").NextRequest {
           return new NextRequest("http://openbooks.test/api/gl/accounts", {
             headers: { cookie: `ob_session=${token}` },
           });
@@ -769,7 +769,7 @@ const authCredentialCases = [
         });
   } },
   { label: "auth session revoke liveness", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomBytes, randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
@@ -930,7 +930,7 @@ const authCredentialCases = [
 for (const row of authCredentialCases) await row.register();
 
 const mfaAuditCases = [{ label: "auth-mfa-audit", register: async () => {
-const assert = (await import("node:assert/strict")).default;
+const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const { randomBytes, randomUUID } = await import("node:crypto");
 const test = (await import("node:test")).default;
 const { sql } = await import("drizzle-orm");
@@ -1049,7 +1049,7 @@ const previousSecret = process.env.SESSION_SECRET;
 
 const consolidatedRows = [
   { label: "auth mfa concurrency", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomBytes } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
@@ -1182,7 +1182,7 @@ const consolidatedRows = [
         });
   } },
   { label: "auth mfa reauth refusals", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomBytes, randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
@@ -1299,7 +1299,7 @@ const consolidatedRows = [
         });
   } },
   { label: "auth mfa session liveness", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomBytes, randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
@@ -1465,7 +1465,7 @@ const consolidatedRows = [
         });
   } },
   { label: "auth mfa tamper", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomBytes, randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");

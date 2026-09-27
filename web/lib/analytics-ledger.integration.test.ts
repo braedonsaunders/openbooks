@@ -509,7 +509,7 @@ for(const row of consolidatedRows) await row.register();
 }}] as const; for (const row of trueCostCases) await row.register();
 
 const analyticsScopeCases = [{ label: "analytics-scope", register: async () => {
-const assert = (await import("node:assert/strict")).default;
+const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const { randomUUID } = await import("node:crypto");
 const { registerHooks } = await import("node:module");
 const { resolveAppModule } = await import("./test-module-hooks");
@@ -641,7 +641,8 @@ const insightBookCases = [{ label: "insight primary book scope", register: async
     if (specifier === 'next/headers') return { shortCircuit: true, url: 'data:text/javascript,export async function headers(){throw new Error("no headers")};export async function cookies(){throw new Error("no cookies")}' };
     return next(specifier, context);
   }});
-  const { resolveInsightBookScope } = await import('./insight-books.ts?analytics-ledger');
+  const insightBooksModule: string = './insight-books.ts?analytics-ledger';
+  const { resolveInsightBookScope } = await import(insightBooksModule) as typeof import('./insight-books');
   hooks.deregister();
   const plan: import('@openbooks/analytics').InsightQuery = { source: 'ledger_lines', measures: [{ agg: 'sum', field: 'amount' }], dimensions: [{ field: 'posting_date', bin: 'month' }] };
   test('insight book scope defaults to the primary and never silently falls back', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

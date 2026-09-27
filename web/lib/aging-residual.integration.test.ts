@@ -250,7 +250,7 @@ const consolidatedRows = [
 for(const row of consolidatedRows) await row.register();
 
 const expenseSettlementReadersCases = [{ label: "expense-settlement-readers", register: async () => {
-const assert = (await import("node:assert/strict")).default;
+const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const { randomUUID } = await import("node:crypto");
 const test = (await import("node:test")).default;
 const {sql}=await import('drizzle-orm');

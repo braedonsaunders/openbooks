@@ -195,7 +195,7 @@ test(
 const payrollReportingCases = [
   { label: "payroll collapse", register: async () => {
         const { pathToFileURL } = await import('node:url');
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
         const { randomUUID } = await import('node:crypto');
         const { cmp, sum } = await import('@openbooks/engine/src/money/money.ts');
@@ -395,7 +395,7 @@ const payrollReportingCases = [
         })
   } },
   { label: "payroll confidentiality", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         type Authz = import('./authz.ts').Authz;
@@ -701,7 +701,7 @@ const payrollReportingCases = [
         })
   } },
   { label: "payroll register income tax", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
         const { randomUUID } = await import('node:crypto');
         const { sql } = await import('drizzle-orm');
@@ -1147,7 +1147,7 @@ const payrollReportingCases = [
   } },
   { label: "ledger payroll collapse", register: async () => {
         const { pathToFileURL } = await import('node:url');
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
         const { randomUUID } = await import('node:crypto');
         /**
@@ -1248,7 +1248,7 @@ const payrollReportingCases = [
         })
   } },
   { label: "year earnings", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm')

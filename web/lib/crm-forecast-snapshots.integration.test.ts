@@ -120,7 +120,7 @@ test('the forecast page clamps impossible dates before issuing its report querie
 
 const crmForecastCases = [
   { label: "crm forecast closed", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
         const { randomUUID } = await import('node:crypto');
         const { registerHooks } = await import('node:module');
@@ -231,7 +231,7 @@ const crmForecastCases = [
         });
   } },
   { label: "crm forecast exclusions", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const { randomUUID } = await import('node:crypto');
         const { registerHooks } = await import('node:module');
         const test = (await import('node:test')).default;

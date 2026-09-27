@@ -344,7 +344,7 @@ test('customer pulse project rollup reports true cost and margin', { skip: !env.
 
 const customerListCases = [
   { label: "customer list crm off", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
         const { stubModules } = await import('../testing/stub-modules.ts');
         // /entities/customers crashes for orgs with CRM off. The list's

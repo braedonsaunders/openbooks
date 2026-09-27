@@ -39,7 +39,7 @@ test('project charges are customizable transactions instead of a parallel tab', 
 
 const projectFeatureCases = [
   { label: "project percent feature race", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
@@ -48,6 +48,12 @@ const projectFeatureCases = [
         const state: { gate: Authz | null } = { gate: null };
         (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.project-percent-feature-race")] = state;
         registerHooks({ resolve(specifier, context, next) {
+          if (specifier === "./authz" && context.parentURL?.endsWith("/lib/feature-gates.ts")) {
+            return { shortCircuit: true, url: "data:text/javascript,export async function guardPermission(){return globalThis[Symbol.for('openbooks.project-percent-feature-race')].gate}" };
+          }
+          if (specifier === "./features" && context.parentURL?.endsWith("/lib/feature-gates.ts")) {
+            return { shortCircuit: true, url: "data:text/javascript,export async function isFeatureEnabled(){return true}" };
+          }
           if (specifier === "../../../../../lib/authz" && decodeURIComponent(context.parentURL ?? "").endsWith("/api/projects/[id]/percent-complete/route.ts")) {
             return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(
               "export async function guardPermission(){return globalThis[Symbol.for('openbooks.project-percent-feature-race')].gate}") };
@@ -101,7 +107,7 @@ const projectFeatureCases = [
         });
   } },
   { label: "project work breakdown feature gate", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm')
@@ -149,7 +155,7 @@ for (const row of projectFeatureCases) await row.register();
 
 const projectSubcontractCases = [
   { label: "subcontracts gate", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
         // Regression for B-PRJ-06: web/lib/subcontracts-gate.ts re-implemented the
@@ -213,7 +219,7 @@ const projectSubcontractCases = [
 for (const row of projectSubcontractCases) await row.register();
 
 const projectCostingCases = [{ label: "project-costing-book-scope", register: async () => {
-const assert = (await import("node:assert/strict")).default;
+const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const { randomUUID } = await import("node:crypto");
 const test = (await import("node:test")).default;
 const { sql } = await import('drizzle-orm')
@@ -286,7 +292,7 @@ for(const row of consolidatedRows) await row.register();
 }}] as const; for (const row of projectCostingCases) await row.register();
 
 const projectRankingCases = [{ label: "project-ranking-subsidiary-scope", register: async () => {
-const assert = (await import("node:assert/strict")).default;
+const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const { randomUUID } = await import("node:crypto");
 const test = (await import("node:test")).default;
 const { sql } = await import('drizzle-orm')
@@ -571,7 +577,7 @@ test('schedule dependency and task-creation inputs fail closed', enabled, async 
 
 const consolidatedRows = [
   { label: "project schedule feature gate", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
@@ -606,7 +612,7 @@ const consolidatedRows = [
         })
   } },
   { label: "project schedule parent validation", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
@@ -678,7 +684,7 @@ const consolidatedRows = [
         })
   } },
   { label: "project schedule patch validation", register: async () => {
-        const assert = (await import("node:assert/strict")).default;
+        const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
@@ -741,7 +747,7 @@ for (const row of consolidatedRows) await row.register();
 }}] as const; for (const row of projectScheduleCases) await row.register();
 
 const taskRevisionCases = [{ label: "task-revision-integrity", register: async () => {
-const assert = (await import("node:assert/strict")).default;
+const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const test = (await import("node:test")).default;
 const { registerHooks } = await import("node:module");
 type SessionUser = import("./auth").SessionUser;
@@ -834,14 +840,15 @@ const subcontractTransitionCases = [{ label: "subcontract transition validation"
     resolve(specifier, context, next) { const mock = mockUrls.get(specifier); return mock ? { url: mock, shortCircuit: true } : next(specifier, context) },
     load(url, context, next) { const source = mockSources.get(url); return source === undefined ? next(url, context) : { format: "module", source, shortCircuit: true } },
   });
-  const { POST } = await import("../app/api/subcontracts/route.ts?subcontract-transition-contract");
+  const subcontractRouteModule: string = "../app/api/subcontracts/route.ts?subcontract-transition-contract";
+  const { POST } = await import(subcontractRouteModule) as typeof import("../app/api/subcontracts/route");
   hooks.deregister();
   test("subcontract API refuses an invalid transition before the engine call", async () => {
     state.transitionCalls = 0;
-    const response = await POST(new Request("http://openbooks.test/api/subcontracts", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "transitionSubcontract", id: "subcontract-1", transition: "approve" }) }));
-    assert.equal(response.status, 400);
-    assert.deepEqual(await response.json(), { error: "Invalid subcontract transition action" });
+            const response = await POST(new Request("http://openbooks.test/api/subcontracts", { method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ action: "transitionSubcontract", id: "00000000-0000-4000-8000-000000000001", transition: "approve" }) }));
+            assert.equal(response.status, 400);
+            assert.match((await response.json()).error, /expected one of.*substantially_complete.*close.*void/);
     assert.equal(state.transitionCalls, 0, "invalid input must not reach the transition engine");
   });
 }}] as const;

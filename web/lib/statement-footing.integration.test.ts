@@ -1091,7 +1091,7 @@ const consolidatedRows = [
 
         const consolidatedRows = [
           { label: "statement matrix control loss", register: async () => {
-                const assert = (await import("node:assert/strict")).default;
+                const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
                 const { randomUUID } = await import("node:crypto");
                 const test = (await import("node:test")).default;
                 type StatementSubsidiaryContext = import("./statement-matrix").StatementSubsidiaryContext;
@@ -1235,7 +1235,7 @@ const consolidatedRows = [
                 );
           } },
           { label: "statement matrix draft columns", register: async () => {
-                const assert = (await import("node:assert/strict")).default;
+                const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
                 const { randomUUID } = await import("node:crypto");
                 const test = (await import("node:test")).default;
                 const { sql } = await import('drizzle-orm')
@@ -1332,7 +1332,7 @@ for(const row of consolidatedRows) await row.register();
 const statementActivityCases = [
   { label: "transaction detail cash basis", register: async () => {
         const { pathToFileURL } = await import('node:url');
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
         const { randomUUID } = await import('node:crypto');
         /**
@@ -1416,7 +1416,7 @@ const statementActivityCases = [
         })
   } },
   { label: "trial balance activity", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm')
@@ -1478,7 +1478,7 @@ for (const row of statementActivityCases) await row.register();
 
 const partnerStatementCases = [
   { label: "partner statement quiet party", register: async () => {
-        const assert = (await import('node:assert/strict')).default;
+        const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm')
@@ -1531,7 +1531,7 @@ const partnerStatementCases = [
 for (const row of partnerStatementCases) await row.register();
 
 const multiBookStatementsCases = [{ label: "multi-book-statements", register: async () => {
-const assert = (await import("node:assert/strict")).default;
+const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const { spawnSync } = await import("node:child_process");
 const test = (await import("node:test")).default;
 const { env } = await import("@openbooks/engine/src/platform/db.ts");

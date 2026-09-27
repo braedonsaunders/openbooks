@@ -179,7 +179,7 @@ test('expense_other with segment + project tags reaches every P&L slice', { skip
 }}] as const; for (const row of pnlUniverseCases) await row.register();
 
 const healthScopeCases = [{ label: "health-scope", register: async () => {
-const assert = (await import("node:assert/strict")).default;
+const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const { randomUUID } = await import("node:crypto");
 const { registerHooks } = await import("node:module");
 const { resolveAppModule } = await import("./test-module-hooks");
