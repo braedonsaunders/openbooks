@@ -5,6 +5,8 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
 import { guardPermission, guardSubsidiaryScope, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -25,7 +27,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const { accountId } = (parsedBody.data) as { accountId?: string };
@@ -34,7 +36,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const group = await loadGroup(id, gate.user.orgId);
-  if (!group) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!group) return notFound("record");
 
   // The delete and insert must share one transaction and one per-account /
   // per-dimension fence.  Otherwise two replicas can both clear siblings
@@ -79,14 +81,14 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   const accountId = new URL(req.url).searchParams.get("accountId");
   if (!accountId || !isUuid(accountId)) {
     return NextResponse.json({ error: "accountId required" }, { status: 400 });
   }
 
   const group = await loadGroup(id, gate.user.orgId);
-  if (!group) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!group) return notFound("record");
 
   const pinLockKey = `account-group-pin:${gate.user.orgId}:${group.dimension}:${accountId}`;
   const denied = await db.transaction(async (tx) => {

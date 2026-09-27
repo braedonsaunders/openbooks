@@ -15,6 +15,8 @@ import {
 import { reportCsvOptions } from '../../../../../lib/report-labels'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../lib/export'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -31,11 +33,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json({ error: 'invalid format' }, { status: 422 })
   }
 
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const view = await loadView(user.orgId, id, user.id, permissions)
-  if (!view) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!view) return notFound("record")
   if (!(await canRunReportEntity(gate, view.query))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   let result

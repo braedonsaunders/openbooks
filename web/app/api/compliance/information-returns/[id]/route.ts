@@ -14,6 +14,8 @@ import { getAuthz, can, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -35,7 +37,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (blocked) return blocked
   const { orgId, id: actorId } = authz.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -55,7 +57,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // checked here before any action — an out-of-scope filing is indistinguishable
   // from a missing one (the same 404 the list and create paths use).
   const filingScope = await loadInformationReturnFilingScope(orgId, id)
-  if (!filingScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!filingScope) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(authz, filingScope.subsidiaryId)
   if (scopeDenied) return scopeDenied
 

@@ -71,7 +71,7 @@ const mockSources = new Map<string, string>([
         const allowed = authz.allowedSubsidiaryIds
         if (allowed === null) return null
         if (subsidiaryId !== null && subsidiaryId !== undefined && allowed.has(subsidiaryId)) return null
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return NextResponse.json({ error: 'not_found' }, { status: 404 })
       }
       export function guardUnrestrictedScope(authz) {
         if (authz.allowedSubsidiaryIds === null) return null

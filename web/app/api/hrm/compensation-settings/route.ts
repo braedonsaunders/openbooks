@@ -7,6 +7,8 @@ import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { compensationErrorResponse } from "../compensation/_lib";
 import { COMPENSATION_PERCENTAGE_INPUTS } from "../compensation/percentage-inputs";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -38,7 +40,7 @@ export async function GET() {
   const gate = await guardPermission("hrm.compensation.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCompensation"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const row = (await db.execute<{ settings: Record<string, unknown> | null }>(
     sql`select settings from orgs where id = ${gate.user.orgId}`,
@@ -51,7 +53,7 @@ export async function PUT(req: Request) {
   const gate = await guardPermission("hrm.compensation.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCompensation"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const scopeDenied = guardUnrestrictedScope(gate);
   if (scopeDenied) return scopeDenied;

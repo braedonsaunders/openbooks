@@ -8,6 +8,8 @@ import { guardComplianceFeature } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { loadApplicableRequirement } from '@openbooks/engine/src/compliance/compliance.ts'
 import { isUuid } from '@/lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -94,14 +96,14 @@ export async function POST(req: Request) {
   const waiverParty = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from parties where org_id = ${orgId} and id = ${body.partyId}
   `)).rows[0]
-  if (!waiverParty) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!waiverParty) return notFound("record")
   const waiverPartyDenied = guardSubsidiaryScope(gate, waiverParty.subsidiaryId, { orgWideNull: true })
   if (waiverPartyDenied) return waiverPartyDenied
   if (body.projectId !== undefined && body.projectId !== null) {
     const waiverProject = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${body.projectId}
     `)).rows[0]
-    if (!waiverProject) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!waiverProject) return notFound("record")
     const waiverProjectDenied = guardSubsidiaryScope(gate, waiverProject.subsidiaryId, { orgWideNull: true })
     if (waiverProjectDenied) return waiverProjectDenied
   }

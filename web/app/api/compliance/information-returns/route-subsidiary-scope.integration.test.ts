@@ -60,7 +60,7 @@ const hooks = registerHooks({
           }
           export function guardSubsidiaryScope(gate, subsidiaryId, opts) {
             if (subsidiaryScopeAllows(gate.allowedSubsidiaryIds, subsidiaryId, opts)) return null
-            return Response.json({ error: 'not found' }, { status: 404 })
+            return Response.json({ error: 'not_found' }, { status: 404 })
           }`,
       };
     }
@@ -138,7 +138,7 @@ test("an out-of-scope subsidiary reads as missing with nothing filed", async () 
     const response = await POST(postRequest(filingBody(randomUUID())));
 
     assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), { error: "not found" });
+    assert.deepEqual(await response.json(), { error: "not_found" });
     assert.equal(await filingCount(org.orgId), 0);
   } finally {
     state.gate = null;
@@ -155,7 +155,7 @@ test("a well-formed id outside the org is a 404, not an org-wide filing", async 
     const response = await POST(postRequest(filingBody(randomUUID())));
 
     assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), { error: "not found" });
+    assert.deepEqual(await response.json(), { error: "not_found" });
     assert.equal(await filingCount(org.orgId), 0);
   } finally {
     state.gate = null;

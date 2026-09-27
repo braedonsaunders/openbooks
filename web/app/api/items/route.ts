@@ -11,6 +11,8 @@ import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../lib/exa
 import { moneyRefusal } from '../../../lib/payroll-decimal-refusal'
 import { isUuid } from '../../../lib/list-params'
 import { loadItem } from './_lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -294,7 +296,7 @@ export async function POST(request: Request) {
       return true
     })
   } catch (error) {
-    if (error instanceof CreateNotFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof CreateNotFound) return notFound("record")
     if (error instanceof CreateInvalid) return bad(error.message)
     if (error instanceof CreateConflict) return bad('Invalid idempotency key', 409)
     const message = error instanceof Error

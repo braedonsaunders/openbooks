@@ -22,6 +22,8 @@ import { ScopeNotFoundError, UnrestrictedScopeError } from "@openbooks/engine/sr
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -82,7 +84,7 @@ export async function POST(req: Request) {
   if (!authz)
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await isFeatureEnabled(authz.user.orgId, "banking"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -196,7 +198,7 @@ export async function POST(req: Request) {
         // subsidiary lookup below would otherwise surface a Postgres uuid
         // cast error as a 500.
         if (typeof body.batchId !== "string" || !isUuid(body.batchId)) {
-          return NextResponse.json({ error: "not found" }, { status: 404 });
+          return notFound("record");
         }
         const posted = await postSettlementBatch(orgId, body.batchId, userId, authz.allowedSubsidiaryIds);
         return NextResponse.json(posted);
@@ -227,7 +229,7 @@ export async function POST(req: Request) {
             { status: 422 },
           );
         if (typeof body.batchId !== "string" || !isUuid(body.batchId)) {
-          return NextResponse.json({ error: "not found" }, { status: 404 });
+          return notFound("record");
         }
         const reversed = await reverseSettlementBatch(
           orgId,
@@ -246,7 +248,7 @@ export async function POST(req: Request) {
     }
   } catch (e) {
     if (e instanceof ScopeNotFoundError) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      return notFound("record");
     }
     if (e instanceof PspSettlementConflictError) {
       return apiErrorResponse(e, { safeStatus: 409, details: { batch: e.persistedBatch } });

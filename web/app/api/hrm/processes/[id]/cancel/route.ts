@@ -6,6 +6,8 @@ import { isFeatureEnabled } from "../../../../../../lib/features";
 import { isUuid } from "../../../../../../lib/list-params";
 import { processErrorResponse } from "../../_lib";
 import { cancelProcessBody } from "../../bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -14,7 +16,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const gate = await guardPermission("hrm.process.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await ctx.params;
   if (!isUuid(id)) return NextResponse.json({ error: "process id must be a uuid" }, { status: 400 });

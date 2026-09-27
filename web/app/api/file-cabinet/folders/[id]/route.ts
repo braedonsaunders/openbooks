@@ -9,6 +9,8 @@ import {
 import { isUuid } from '../../../../../lib/list-params'
 import { can, guardPermission } from '../../../../../lib/authz'
 import { fileViewer, requireFolderAccess, requireSession } from '../../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -18,9 +20,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission('documents.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const folder = await getFolder(gate.user.orgId, id, fileViewer(gate))
-  if (!folder) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!folder) return notFound("record")
   return NextResponse.json({ folder })
 }
 
@@ -29,7 +31,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // Editing a folder (rename/move/flags) needs Manager on it.
   const access = await requireFolderAccess(gate, id, 'manager')
   if (access) return access
@@ -90,7 +92,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // Deleting a folder needs Manager on it.
   const access = await requireFolderAccess(gate, id, 'manager')
   if (access) return access

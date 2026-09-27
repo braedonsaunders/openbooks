@@ -113,7 +113,7 @@ test('journal GET and DELETE enforce the caller subsidiary scope', async () => {
       assert.equal(seen.status, 200, JSON.stringify(await seen.clone().json()))
 
       const hiddenGet = await GET(new Request('http://journals.local/api'), ctxFor(concealed))
-      assert.deepEqual([hiddenGet.status, await hiddenGet.json(), await loadJournalDoc(concealed, org.orgId, new Set([org.subsidiaryId]))], [404, { error: 'not found' }, null])
+      assert.deepEqual([hiddenGet.status, await hiddenGet.json(), await loadJournalDoc(concealed, org.orgId, new Set([org.subsidiaryId]))], [404, { error: 'not_found' }, null])
 
       const hiddenDelete = await DELETE(
         new Request('http://journals.local/api', {

@@ -6,6 +6,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { ensureCrmDefaults, nextOpportunityNumber, promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -13,7 +15,7 @@ export async function POST(req: NextRequest) {
   const gate = await guardFeaturePermission('crm.opportunities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  if (gate.allowedSubsidiaryIds?.size === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (gate.allowedSubsidiaryIds?.size === 0) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as { partyId?: string }
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest) {
   const opportunity = await db.transaction(async (tx) => {
     if (body.partyId) {
       const visible = await tx.execute(sql`select id, is_active from parties where id=${body.partyId} and org_id=${user.orgId}${crmSharedScope(sql`subsidiary_id`,gate.allowedSubsidiaryIds)} for update`)
-      if (!visible.rows[0]) return NextResponse.json({error:'not found'},{status:404})
+      if (!visible.rows[0]) return notFound("record")
       if (!visible.rows[0].is_active) return NextResponse.json({ error: 'an active account is required for new opportunities' }, { status: 422 })
     }
     const status = (await tx.execute(sql`

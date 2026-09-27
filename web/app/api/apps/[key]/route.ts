@@ -8,6 +8,8 @@ import {
   getAppByKey,
   setAppStatus,
 } from '@/lib/apps/store'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -20,7 +22,7 @@ export async function GET(
   if (gate instanceof NextResponse) return gate
   const { key } = await params
   const app = await getAppByKey(gate.user.orgId, key)
-  if (!app) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!app) return notFound("record")
   return NextResponse.json({ app })
 }
 

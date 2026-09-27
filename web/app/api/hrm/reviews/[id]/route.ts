@@ -13,6 +13,8 @@ import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { performanceErrorResponse } from "../../review-cycles/_lib";
 import { patchReviewBody } from "../bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -30,7 +32,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await isFeatureEnabled(authz.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid review" }, { status: 400 });
@@ -46,7 +48,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await isFeatureEnabled(authz.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid review" }, { status: 400 });

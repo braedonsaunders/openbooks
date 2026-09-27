@@ -44,7 +44,7 @@ const mockAuthz = `
     const scope = authz?.allowedSubsidiaryIds ?? null;
     if (scope === null) return null;
     if (subsidiaryId && scope.has(subsidiaryId)) return null;
-    return Response.json({ error: 'not found' }, { status: 404 });
+    return Response.json({ error: 'not_found' }, { status: 404 });
   }
 `;
 

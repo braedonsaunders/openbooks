@@ -47,6 +47,8 @@ import {
 } from "../../../lib/custom-fields";
 import { isFeatureEnabled } from "../../../lib/features";
 import { guardPropertyManagementFeature } from "../../../lib/property-management-gate";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -300,7 +302,7 @@ async function refuseDisabledPropertyFixedAsset(
     if (currentId === submitted) return null;
   }
   if (await isFeatureEnabled(orgId, "fixedAssets")) return null;
-  return NextResponse.json({ error: "not found" }, { status: 404 });
+  return notFound("record");
 }
 
 async function refuseDisabledPropertyCurrency(
@@ -313,7 +315,7 @@ async function refuseDisabledPropertyCurrency(
     body.currency !== undefined &&
     !(await isFeatureEnabled(orgId, "multiCurrency"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   return null;
 }
@@ -332,7 +334,7 @@ async function refuseDisabledLeaseChargeInventory(
   const item = (await db.execute<{ kind: string }>(sql`
     select kind from items where id = ${String(itemId)} and org_id = ${orgId}`));
   if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   return null;
 }
@@ -665,7 +667,7 @@ export async function POST(request: Request) {
     // A subsidiary refusal inside an engine transaction is the uniform
     // not-found: the rehome-race denial must not reveal the record exists.
     if (error instanceof ScopeNotFoundError)
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      return notFound("record");
     if (error instanceof PropertyManagementError)
       return apiErrorResponse(error);
     // Drizzle wraps driver errors, so the PostgreSQL code can sit on `cause`.

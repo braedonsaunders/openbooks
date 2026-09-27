@@ -6,6 +6,8 @@ import { inTypeAudience, loadRecordTypeByKey } from '../../../../lib/records'
 import { clamp } from '../../../../lib/list-params'
 import { pgTextArrayLiteral } from '../../../../lib/pg-array'
 import { lintRecordFields } from '../../../../lib/record-schema'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -21,7 +23,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ typeKey:
 
   const type = await loadRecordTypeByKey(user.orgId, typeKey)
   if (!type || type.status !== 'published' || !inTypeAudience(user.roles.map(({ key }) => key), type.allowed_roles)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const lint = lintRecordFields(type.fields, type.name)
   const hasSubsidiaryField = lint.success && lint.sections.some((section) =>

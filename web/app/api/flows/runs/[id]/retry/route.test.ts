@@ -110,7 +110,7 @@ const mockSources = new Map<string, string>([
         state.scopeChecks.push(subsidiaryId ?? null)
         if (authz.allowedSubsidiaryIds !== null &&
             (subsidiaryId === null || !authz.allowedSubsidiaryIds.has(subsidiaryId))) {
-          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
+          return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 })
         }
         return null
       }
@@ -147,7 +147,7 @@ hooks.deregister();
 
 const RUN_ID = "019f0000-0000-4000-8000-000000000001";
 const SUBJECT_SUBSIDIARY = "sub-hidden";
-const NOT_FOUND = { error: "not found" };
+const NOT_FOUND = { error: "not_found" };
 
 function reset(allowedSubsidiaryIds: Set<string> | null): void {
   retryState.authz.allowedSubsidiaryIds = allowedSubsidiaryIds;

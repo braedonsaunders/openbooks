@@ -292,7 +292,7 @@ test("S2: post/reverse/rerun on a hidden run refuse 404 and change nothing", asy
       { params: Promise.resolve({ id: s.runId }) },
     );
     assert.equal(post.status, 404);
-    assert.deepEqual(await post.json(), { error: "not found" });
+    assert.deepEqual(await post.json(), { error: "not_found" });
     const reverse = await reverseRoute.POST(
       jsonRequest(`/api/allocations/runs/${postedId}/reverse`, "POST", { reason: "takeover attempt" }),
       { params: Promise.resolve({ id: postedId }) },

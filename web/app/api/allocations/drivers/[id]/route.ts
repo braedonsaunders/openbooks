@@ -12,6 +12,8 @@ import {
   getDriver,
   updateDriver,
 } from "../../../../../../engine/src/allocations/driver-admin.ts";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -39,9 +41,9 @@ export async function GET(_req: Request, { params }: Ctx) {
   const gate = await guardAllocations("allocations.read");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   const driver = await getDriver(gate.user.orgId, id, undefined, gate.allowedSubsidiaryIds);
-  if (!driver) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!driver) return notFound("record");
   return NextResponse.json({ driver });
 }
 
@@ -51,7 +53,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
   const scopeDenied = guardUnrestrictedScope(gate)
   if (scopeDenied) return scopeDenied
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   const parsedBody = await parseJsonBody(req, driverPatchSchema);
   if (!parsedBody.ok) return parsedBody.response;
   try {
@@ -68,7 +70,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   const scopeDenied = guardUnrestrictedScope(gate)
   if (scopeDenied) return scopeDenied
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   try {
     await deleteDriver(gate.user.orgId, gate.user.id, id);
     return NextResponse.json({ ok: true });

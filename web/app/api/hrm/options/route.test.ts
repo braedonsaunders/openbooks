@@ -37,7 +37,7 @@ const mockSources = new Map<string, string>([
           return NextResponse.json({ error: 'denied' }, { status: state.gate.status })
         }
         if (!state.featureOn) {
-          return NextResponse.json({ error: 'not found' }, { status: 404 })
+          return NextResponse.json({ error: 'not_found' }, { status: 404 })
         }
         return state.gate
       }

@@ -16,6 +16,8 @@ import {
   slugifyReportName,
   uniqueReportSlug,
 } from '../../../../../lib/custom-reports'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -37,12 +39,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const def = await loadReportDefinition(gate.user.orgId, id)
-  if (!def) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!def) return notFound("record")
   // Hidden definitions 404 like missing ones: the response must not say
   // whether the id exists, which gate failed, or which type it carries.
-  if (!(await canSeeReportDefinition(gate, def))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!(await canSeeReportDefinition(gate, def))) return notFound("record")
   // node-postgres maps timestamptz to Date and drops PostgreSQL's
   // microseconds. Return the exact wire revision so an autosave can use it as
   // an optimistic-concurrency precondition without authorizing a lossy token.
@@ -59,10 +61,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const existing = await loadReportDefinition(user.orgId, id)
-  if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!existing) return notFound("record")
   if (!(await canAccessReportDefinition(gate, existing))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })
 
   const parsedBody = await parseJsonBody(req, jsonObject);
@@ -158,10 +160,10 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const existing = await loadReportDefinition(user.orgId, id)
-  if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!existing) return notFound("record")
   if (!(await canAccessReportDefinition(gate, existing))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })
   if (existing.kind === 'built_in') {
     return NextResponse.json(
@@ -209,6 +211,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     return after
   })
 
-  if (!archived) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!archived) return notFound("record")
   return NextResponse.json({ ok: true })
 }

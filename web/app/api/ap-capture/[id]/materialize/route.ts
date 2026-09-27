@@ -6,6 +6,8 @@ import { materializeCapture, CaptureMaterializationError } from '@openbooks/engi
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -31,7 +33,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const { id } = await params
     // The engine binds the id into a uuid column without validating it; a
     // malformed id must 404 here instead of escaping as a cast-error 500.
-    if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    if (!isUuid(id)) return notFound("record")
     const visible = (await db.execute<{ id: string }>(sql`
       select ci.id
         from ap_capture_items ci

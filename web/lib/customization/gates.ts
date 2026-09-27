@@ -9,8 +9,10 @@ import {
   recordTypeFeatureKey,
 } from '@openbooks/customization'
 import { featureEnabled, isFeatureEnabled, orgFeatureState } from '../features'
+import { notFound } from "@/lib/api/responses";
 
 /** False when this record type belongs to a Features switch that is off. */
+
 export async function isRecordTypeEnabled(orgId: string, recordType: string): Promise<boolean> {
   const feature = recordTypeFeatureKey(recordType)
   if (!feature) return true
@@ -81,7 +83,7 @@ export async function refuseDisabledRecordType(
 ): Promise<NextResponse | null> {
   if (!RECORD_TYPE_BY_KEY[recordType]) return null
   if (!(await isRecordTypeEnabled(orgId, recordType))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   return null
 }

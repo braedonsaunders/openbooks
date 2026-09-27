@@ -5,6 +5,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -25,7 +27,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (blocked) return blocked
   const { orgId, id: actorId } = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -50,7 +52,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       left join projects pj on pj.id = w.project_id and pj.org_id = w.org_id
      where w.org_id = ${orgId} and w.id = ${id}
   `)).rows[0]
-  if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!row) return notFound("record")
   const partyDenied = guardSubsidiaryScope(gate, row.partySubsidiaryId, { orgWideNull: true })
   if (partyDenied) return partyDenied
   // A vendor-wide exception has no project leg to fence; a project-scoped
@@ -107,7 +109,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (blocked) return blocked
   const { orgId, id: actorId } = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -125,7 +127,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       left join projects pj on pj.id = w.project_id and pj.org_id = w.org_id
      where w.org_id = ${orgId} and w.id = ${id}
   `)).rows[0]
-  if (!fenced) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!fenced) return notFound("record")
   const fencedPartyDenied = guardSubsidiaryScope(gate, fenced.partySubsidiaryId, { orgWideNull: true })
   if (fencedPartyDenied) return fencedPartyDenied
   const fencedProjectDenied = guardSubsidiaryScope(gate, fenced.projectSubsidiaryId, { orgWideNull: true })

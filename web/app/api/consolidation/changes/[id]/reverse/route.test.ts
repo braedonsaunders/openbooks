@@ -39,7 +39,7 @@ const hooks = registerHooks({
       return {
         shortCircuit: true,
         format: "module",
-        source: `import {NextResponse} from 'next/server';export async function guardFeaturePermission(...args){const s=globalThis[Symbol.for('control-loss-reversal-route')];s.gateArgs=args;return s.enabled?{user:{id:'actor',orgId:'org'}}:NextResponse.json({error:'not found'},{status:404})}`,
+        source: `import {NextResponse} from 'next/server';export async function guardFeaturePermission(...args){const s=globalThis[Symbol.for('control-loss-reversal-route')];s.gateArgs=args;return s.enabled?{user:{id:'actor',orgId:'org'}}:NextResponse.json({error:'not_found'},{status:404})}`,
       };
     if (url === "mock:control-loss-reversal-authority")
       return {

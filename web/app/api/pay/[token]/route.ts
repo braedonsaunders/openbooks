@@ -4,6 +4,8 @@ import { NextResponse } from "next/server";
 import { appBaseUrl } from "@openbooks/engine/src/flows/email-tokens.ts";
 import { PaymentAcceptanceError, createCheckoutSession, paymentLinkOrgId } from "@openbooks/engine/src/payments/acceptance.ts";
 import { isFeatureEnabled } from "../../../../lib/features";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -25,7 +27,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ token:
   }
   const orgId = await paymentLinkOrgId(token);
   if (!orgId || !(await isFeatureEnabled(orgId, "onlinePayments"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const origin = appBaseUrl();
   try {

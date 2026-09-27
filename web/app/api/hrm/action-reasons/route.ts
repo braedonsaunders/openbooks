@@ -8,6 +8,8 @@ import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { actionReasonRouteBody } from "../../automations/bodies";
 import { automationErrorResponse } from "../../automations/_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -19,10 +21,10 @@ export async function GET(req: Request) {
   const gate = await guardPermission("hrm.employment.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmActionReasons"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const url = new URL(req.url);
   const action = url.searchParams.get("action");
@@ -42,10 +44,10 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.employment.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmActionReasons"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, actionReasonRouteBody);
   if (!parsedBody.ok) return parsedBody.response;

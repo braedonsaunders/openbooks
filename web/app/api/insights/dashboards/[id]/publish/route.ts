@@ -6,6 +6,8 @@ import { UNTITLED_DASHBOARD_NAME } from '@/lib/insight-untitled'
 import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { loadDashboard } from '../../../_lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -19,11 +21,11 @@ export async function POST(
   const user = gate.user
   const { id } = await params
   if (!isUuid(id))
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
 
   const dashboard = await loadDashboard(id, user.orgId)
   if (!dashboard)
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject)
   if (!parsedBody.ok) return parsedBody.response

@@ -166,12 +166,12 @@ test("reconcile-legacy oracle: out-of-scope and missing obligations share one 40
 
     const denied = await post(ids.foreignDenied);
     assert.equal(denied.status, 404);
-    assert.deepEqual(await denied.json(), { error: "not found" });
+    assert.deepEqual(await denied.json(), { error: "not_found" });
     assert.equal(await reconciledAt(org.orgId, ids.foreignDenied), null);
 
     const missing = await post(randomUUID());
     assert.equal(missing.status, 404);
-    assert.deepEqual(await missing.json(), { error: "not found" });
+    assert.deepEqual(await missing.json(), { error: "not_found" });
 
     const own = await post(ids.own);
     assert.equal(own.status, 200);

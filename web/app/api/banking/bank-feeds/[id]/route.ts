@@ -12,6 +12,8 @@ import {
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../lib/list-params";
 import type { Authz } from "../../../../../lib/authz";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -33,18 +35,18 @@ async function lockScopedConnection(
   const reference = (await tx.execute<{ account_id: string }>(sql`
     select account_id from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
   `)).rows[0];
-  if (!reference) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!reference) return notFound("record");
   try {
     await lockScopeRow(tx, authz.user.orgId, "account", reference.account_id, authz.allowedSubsidiaryIds, "share");
   } catch (error) {
     if (!(error instanceof ScopeNotFoundError)) throw error;
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const connection = (await tx.execute<Record<string, unknown>>(sql`
     select * from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId} and account_id = ${reference.account_id}
      ${lockConnection ? sql`for update` : sql``}
   `)).rows[0];
-  return connection ?? NextResponse.json({ error: "not found" }, { status: 404 });
+  return connection ?? notFound("record");
 }
 
 async function audit(
@@ -72,7 +74,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // A malformed id names nothing: same answer as a missing connection, never
   // a PostgreSQL uuid cast error escaping as a 500.
   if (!isUuid(id)) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -140,7 +142,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (authz instanceof NextResponse) return authz;
   const { id } = await params;
   if (!isUuid(id)) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const missing = await db.transaction(async (tx) => {
     const before = await lockScopedConnection(tx, authz, id);
@@ -149,7 +151,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       delete from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}
        returning id
     `));
-    if (!deleted.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (!deleted.rows[0]) return notFound("record");
     await audit(tx, authz.user.orgId, id, "delete", {
       before: withoutCredentials(before),
     }, authz.user.id, req.headers.get("X-Request-Id"));
@@ -165,7 +167,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (authz instanceof NextResponse) return authz;
   const { id } = await params;
   if (!isUuid(id)) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;

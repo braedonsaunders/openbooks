@@ -10,6 +10,8 @@ import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isUuid } from "../../../../lib/list-params";
 import { prettifyTemplateHtml } from "../../../../lib/pdf-templates/prettify";
 import { getPdfTemplate, getVisiblePdfTemplate } from "../../../../lib/pdf-templates/store";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -22,9 +24,9 @@ export async function GET(_req: Request, { params }: Params) {
   const { id } = await params;
   // A malformed id is indistinguishable from a missing template and never
   // reaches the uuid column.
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   const row = await getVisiblePdfTemplate(gate.user.orgId, id);
-  if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!row) return notFound("record");
   return NextResponse.json({ row });
 }
 
@@ -34,11 +36,11 @@ export async function PATCH(req: Request, { params }: Params) {
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   const existing = await getPdfTemplate(user.orgId, id);
-  if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!existing) return notFound("record");
   if (!(await isDocKindEnabled(user.orgId, existing.recordType))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
 
   const parsedBody = await parseJsonBody(req, jsonObject);
@@ -154,7 +156,7 @@ export async function PATCH(req: Request, { params }: Params) {
                 ${JSON.stringify({ before: before.rows[0]!.snapshot, after: updated.rows[0]!.snapshot })}, ${user.id})`);
       return 'ok' as const
     });
-    if (outcome === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 });
+    if (outcome === 'missing') return notFound("record");
     return NextResponse.json({ ok: true });
   } catch (e) {
     // Same Drizzle-wrapper caveat as the collection POST: match
@@ -171,11 +173,11 @@ export async function DELETE(_req: Request, { params }: Params) {
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   const existing = await getPdfTemplate(user.orgId, id);
-  if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!existing) return notFound("record");
   if (!(await isDocKindEnabled(user.orgId, existing.recordType))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   // The removed design's before-image rides the row lock, so the delete
   // event stays auditable after no read can observe the row. A concurrent
@@ -196,6 +198,6 @@ export async function DELETE(_req: Request, { params }: Params) {
               ${JSON.stringify({ before: before.rows[0]!.snapshot })}, ${user.id})`);
     return 'ok' as const
   }));
-  if (deleted === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 });
+  if (deleted === 'missing') return notFound("record");
   return NextResponse.json({ ok: true });
 }

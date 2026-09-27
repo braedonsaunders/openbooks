@@ -58,15 +58,15 @@ test("dunning [id] routes return 404 for a malformed policy id", async () => {
     for (const id of ["not-a-uuid", "new", "00000000-0000-0000-0000-00000000000"]) {
       const patched = await patch(json("PATCH", { name: "Renamed" }), params(id));
       assert.equal(patched.status, 404, `PATCH ${id}`);
-      assert.deepEqual(await patched.json(), { error: "not found" });
+      assert.deepEqual(await patched.json(), { error: "not_found" });
       const deleted = await remove(json("DELETE"), params(id));
       assert.equal(deleted.status, 404, `DELETE ${id}`);
-      assert.deepEqual(await deleted.json(), { error: "not found" });
+      assert.deepEqual(await deleted.json(), { error: "not_found" });
     }
     // A well-formed id that names nothing keeps the sibling's not-found shape.
     const missing = await patch(json("PATCH", { name: "Renamed" }), params(randomUUID()));
     assert.equal(missing.status, 404);
-    assert.deepEqual(await missing.json(), { error: "not found" });
+    assert.deepEqual(await missing.json(), { error: "not_found" });
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

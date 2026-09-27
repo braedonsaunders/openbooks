@@ -3,19 +3,21 @@ import { NextResponse } from "next/server";
 import { guardPermission, type Authz } from "./authz";
 import { isFeatureEnabled } from "./features";
 import { permissionSetCovers } from "./permissions";
+import { notFound } from "@/lib/api/responses";
 
 /**
  * Allocations feature gate (A8): the governed `allocations` switch
  * (accounting category, default OFF). Sub-gates `allocationsAtEntry` /
  * `allocationsAtPosting` live with the entry/post surfaces (A9/A5).
  */
+
 export async function isAllocationsEnabled(orgId: string): Promise<boolean> {
   return isFeatureEnabled(orgId, "allocations");
 }
 
 /** Feature-off looks like a missing route (the Setup precedent). */
 export function allocationsNotFound(): NextResponse {
-  return NextResponse.json({ error: "not found" }, { status: 404 });
+  return notFound("record");
 }
 
 /**

@@ -97,7 +97,7 @@ const mockSources = new Map<string, string>([
         if (authz.allowedSubsidiaryIds === null) return null
         if (subsidiaryId === null && options.orgWideNull === true) return null
         if (subsidiaryId !== null && authz.allowedSubsidiaryIds.has(subsidiaryId)) return null
-        return new Response(JSON.stringify({ error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } })
+        return new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json' } })
       }
     `,
   ],
@@ -162,7 +162,7 @@ test("entity drills reject a malformed party selector before querying", async ()
   const response = await GET(new Request("http://openbooks.test/api/analytics/cashflow/entity?party=not-a-uuid&side=ar"));
 
   assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { error: "not found" });
+  assert.deepEqual(await response.json(), { error: "not_found" });
   assert.equal(routeState.calls.length, 0, "malformed party must stop before the party lookup");
 });
 
@@ -173,7 +173,7 @@ test("restricted entity drills gate the party before disclosure", async () => {
   const response = await GET(request());
 
   assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { error: "not found" });
+  assert.deepEqual(await response.json(), { error: "not_found" });
   assert.equal(routeState.calls.length, 1, "out-of-scope party must stop before transaction queries");
 });
 

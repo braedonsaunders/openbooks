@@ -8,6 +8,8 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { resolveItemRate } from '../../../../lib/item-rates'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -18,7 +20,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission('time.read')
   if (gate instanceof NextResponse) return gate
   if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const q = new URL(req.url).searchParams
   const projectId = q.get('projectId')
@@ -41,7 +43,7 @@ export async function GET(req: Request) {
     select subsidiary_id from projects
      where id = ${projectId} and org_id = ${gate.user.orgId} and is_active
   `)).rows[0]
-  if (!project) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!project) return notFound("record")
   const denied = guardSubsidiaryScope(gate, project.subsidiary_id)
   if (denied) return denied
 
@@ -54,13 +56,13 @@ export async function GET(req: Request) {
   // must also 404 a crafted preview so a live price cannot be quoted for an
   // inventory / assembly / kit item. Stored ticket lines stay as they are.
   if (INVENTORY_ITEM_KINDS.has(item.rows[0].kind) && !(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   // The picker and add-line already refuse this kind. Turning Equipment off
   // must also 404 a crafted preview so a live price cannot be quoted for an
   // equipment_charge item. Stored ticket lines stay as they are.
   if (item.rows[0].kind === 'equipment_charge' && !(await isFeatureEnabled(gate.user.orgId, 'equipment'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   let resolved: Awaited<ReturnType<typeof resolveItemRate>>
@@ -76,7 +78,7 @@ export async function GET(req: Request) {
       allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
     })
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof ScopeNotFoundError) return notFound("record")
     return apiErrorResponse(error)
   }
   // Absent pricing is not a zero price: when the rate book has no match and

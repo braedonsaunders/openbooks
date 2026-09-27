@@ -11,6 +11,8 @@ import {
   loadAttachmentTarget,
   requireSession,
 } from '../../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -29,16 +31,16 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const link = await getAttachmentLink(gate.user.orgId, id)
-  if (!link) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!link) return notFound("record")
   const target = await loadAttachmentTarget(gate.user.orgId, link.targetTable, link.targetId)
   if (!target || !attachmentTargetInScope(gate, target)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const permission = attachmentReadPermission(link.targetTable, target.kind)
-  if (!permission) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!permission) return notFound("record")
   if (!can(gate, permission) || !canMutateFiles(gate, link.targetTable, target.kind)) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
@@ -58,7 +60,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     if (result.reason === 'retained') {
       return NextResponse.json({ error: 'attachments of posted or active records are retained' }, { status: 409 })
     }
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   return NextResponse.json({ ok: true })
 }

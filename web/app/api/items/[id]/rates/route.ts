@@ -11,6 +11,8 @@ import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { parseItemRateDecimal } from '../../../../../lib/item-rate-numerics'
 import { validateTimeTypeBillRates } from '../../../../../lib/item-rate-time-types'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -35,9 +37,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('items.read', 'projects')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const item = ((await db.execute(sql`select 1 from items where id = ${id} and org_id = ${gate.user.orgId}`)))
-  if (!item.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!item.rows[0]) return notFound("record")
   const [books, profile, versions, timeTypes] = await Promise.all([
     (db.execute(sql`select id, code, name, currency, is_default from item_rate_books where org_id = ${gate.user.orgId} and is_active order by is_default desc, name`)),
     (db.execute(sql`select base_unit, pricing_policy, invoice_presentation from item_rate_profiles where org_id = ${gate.user.orgId} and item_id = ${id}`)),
@@ -70,14 +72,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const unrestricted = guardUnrestrictedScope(gate)
   if (unrestricted) return unrestricted
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // Stored rate lines stay. Turning Inventory off must 404 a save that would
   // persist new rates on an inventory / assembly / kit item.
   if (!(await isFeatureEnabled(gate.user.orgId, 'inventory'))) {
     const existing = (await db.execute<{ kind: string }>(sql`
       select kind from items where id = ${id} and org_id = ${gate.user.orgId}`))
     if (existing.rows[0] && INVENTORY_ITEM_KINDS.has(existing.rows[0].kind)) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
   }
   // Stored rate lines stay. Turning Equipment off must 404 a save that would
@@ -86,7 +88,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const existing = (await db.execute<{ kind: string }>(sql`
       select kind from items where id = ${id} and org_id = ${gate.user.orgId}`))
     if (existing.rows[0] && existing.rows[0].kind === 'equipment_charge') {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
   }
   const parsedBody = await parseJsonBody(req, jsonObject);

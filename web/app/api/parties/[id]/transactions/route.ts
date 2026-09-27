@@ -6,6 +6,8 @@ import { DOC_KIND_FEATURE } from '../../../../../lib/document-kinds'
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -16,7 +18,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const gate = await guardPermission('parties.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   // The party is the record boundary (null-subsidiary parties are org-wide);
   // its transaction rows are additionally narrowed to the caller's visible
@@ -24,7 +26,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const scope = (await db.execute<{ subsidiaryId: string | null }>(
     sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`,
   ))
-  if (!scope.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!scope.rows[0]) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
   const documentScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)
@@ -37,7 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
 
   if (kind && !(await isDocKindEnabled(gate.user.orgId, kind))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const hiddenKinds: string[] = []
   for (const optionalKind of Object.keys(DOC_KIND_FEATURE)) {

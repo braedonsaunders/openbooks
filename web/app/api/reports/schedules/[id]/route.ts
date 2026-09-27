@@ -12,6 +12,8 @@ import { loadReportDefinition } from '../../../../../lib/custom-reports'
 import { canAccessReportArtifact, canAccessReportDefinition } from '../../../../../lib/report-execution-context'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -41,7 +43,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -66,7 +68,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
        where id = ${id} and org_id = ${user.orgId}
        for update
     `)).rows[0]
-    if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!existing) return notFound("record")
     const def = await loadReportDefinition(user.orgId, existing.definition_id)
     if (!def || !(await canAccessReportDefinition(gate, def))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })
     if (existing.authorization_snapshot != null && !(await canAccessReportArtifact(gate, existing.authorization_snapshot))) return NextResponse.json({ error: 'original report scope access denied' }, { status: 403 })
@@ -114,7 +116,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       where id = ${id} and org_id = ${user.orgId}
       returning *
     `)).rows[0]
-    if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!updated) return notFound("record")
 
     await db.execute(sql`
       insert into audit_log
@@ -137,7 +139,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   let reason: unknown
   // DELETE historically accepted an empty body. req.body is still a (possibly
@@ -168,7 +170,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
        where id = ${id} and org_id = ${user.orgId}
        for update
     `)).rows[0]
-    if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!existing) return notFound("record")
     const def = await loadReportDefinition(user.orgId, existing.definition_id)
     if (!def || !(await canAccessReportDefinition(gate, def))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })
     if (existing.authorization_snapshot != null && !(await canAccessReportArtifact(gate, existing.authorization_snapshot))) return NextResponse.json({ error: 'original report scope access denied' }, { status: 403 })

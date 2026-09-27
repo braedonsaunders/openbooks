@@ -6,6 +6,8 @@ import { getAuthz, guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { performanceErrorResponse } from "./_lib";
 import { createCycleBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -20,7 +22,7 @@ export async function GET() {
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await isFeatureEnabled(authz.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     // One loader for both audiences: HR sees every cycle with org-wide
@@ -37,7 +39,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.performance.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, createCycleBody);
   if (!parsedBody.ok) return parsedBody.response;

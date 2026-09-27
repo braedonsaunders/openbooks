@@ -12,6 +12,8 @@ import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
 import { documentRevisionSql } from "../../../../../../engine/src/records/revision.ts";
 import { isDocumentRevisionToken } from '../../../../../lib/api/registry-data'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -85,7 +87,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     body.currency !== undefined &&
     !(await isFeatureEnabled(user.orgId, 'multiCurrency'))
   ) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const validationError = validateBody(body, true)
   if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
@@ -147,7 +149,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     body.currency !== undefined &&
     !(await isFeatureEnabled(user.orgId, 'multiCurrency'))
   ) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const validationError = validateBody(body, false)
   if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
@@ -182,7 +184,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         from party_bank_accounts
        where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
     `))
-    if (existing.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (existing.rows.length === 0) return notFound("record")
     if (!expectedUpdatedAt || expectedUpdatedAt !== existing.rows[0]!.updatedAt) {
       return NextResponse.json(
         { error: 'these bank details changed after you opened them; reload and review the latest revision' },

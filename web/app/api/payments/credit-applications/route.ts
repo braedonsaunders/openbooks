@@ -14,6 +14,8 @@ import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse } from '../lib'
 import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -57,7 +59,7 @@ async function guardParty(
     select subsidiary_id as "subsidiaryId" from parties
      where id = ${partyId} and org_id = ${gate.user.orgId}
   `))
-  if (!party.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!party.rows[0]) return notFound("record")
   // Null-subsidiary parties are org-wide, like every other party reader here.
   return guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
 }
@@ -86,7 +88,7 @@ export async function GET(req: Request) {
      where id = ${documentId} and org_id = ${gate.user.orgId}
        and kind = ${side === 'ap' ? 'vendor_credit' : 'customer_credit'}
   `))
-  if (!doc.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!doc.rows[0]) return notFound("record")
   const documentDenied = guardSubsidiaryScope(gate, doc.rows[0].subsidiaryId)
   if (documentDenied) return documentDenied
   if (doc.rows[0].partyId) {
@@ -96,7 +98,7 @@ export async function GET(req: Request) {
   try {
     return NextResponse.json({ state: await creditSettlementState(gate.user.orgId, documentId, gate.allowedSubsidiaryIds) })
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof ScopeNotFoundError) return notFound("record")
     throw error
   }
 }
@@ -130,7 +132,7 @@ export async function POST(req: Request) {
     }, gate.allowedSubsidiaryIds)
     return NextResponse.json(result)
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof ScopeNotFoundError) return notFound("record")
     // A reused key that cannot replay is a conflict with a named remedy, not
     // a validation failure: the operator must reload and review what settled.
     if (e instanceof CreditApplicationConflictError) {
@@ -168,7 +170,7 @@ export async function DELETE(req: Request) {
   const row = settlement.rows[0]
   const actualSide = row?.kind === 'vendor_credit' ? 'ap' : row?.kind === 'customer_credit' ? 'ar' : null
   if (!row || actualSide !== side) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   if (row.partyId) {
     const denied = await guardParty(gate, row.partyId)
@@ -183,7 +185,7 @@ export async function DELETE(req: Request) {
     )
     return NextResponse.json(result)
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof ScopeNotFoundError) return notFound("record")
     return paymentErrorResponse(e)
   }
 }

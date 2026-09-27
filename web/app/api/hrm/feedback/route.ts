@@ -6,6 +6,8 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { performanceErrorResponse } from "../review-cycles/_lib";
 import { writeFeedbackBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -27,7 +29,7 @@ export async function GET(req: Request) {
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await gated(authz.user.orgId))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const subjectEmploymentId = new URL(req.url).searchParams.get("subjectEmploymentId");
   if (subjectEmploymentId !== null && !isUuid(subjectEmploymentId)) {
@@ -49,7 +51,7 @@ export async function POST(req: Request) {
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await gated(authz.user.orgId))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, writeFeedbackBody);
   if (!parsedBody.ok) return parsedBody.response;

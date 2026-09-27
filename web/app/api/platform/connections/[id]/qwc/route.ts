@@ -5,6 +5,8 @@ import { getConnection, QBD_WEB_CONNECTOR_REGIONS } from '@openbooks/engine/src/
 import { xmlEscape } from '@openbooks/engine/src/qbd/qbxml.ts'
 import { guardPermission, guardUnrestrictedScope } from '../../../../../../lib/authz'
 import { storageIdentityError } from '../../_storage-identity'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -20,7 +22,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if (storageIdentityError(e)) return null
     throw e
   })
-  if (!connection) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!connection) return notFound("record")
   if (connection.source !== 'qbd') return NextResponse.json({ error: 'not a QuickBooks Desktop connection' }, { status: 400 })
   const region = String((connection.config as { region?: unknown } | null)?.region ?? '').trim().toUpperCase()
   if (!(QBD_WEB_CONNECTOR_REGIONS as readonly string[]).includes(region)) {

@@ -15,6 +15,8 @@ import { isUuid } from '../../../../lib/list-params'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody } from '../../../../lib/api/json'
+import { notFound } from "@/lib/api/responses";
+
 
 type RouteTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
@@ -43,7 +45,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission('gl.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // One transaction for the scope gate and the detail reads, locking the
   // journal row first (READ COMMITTED, like loadAsset): a concurrent rehome
   // blocks on the lock instead of authorizing the header and then moving
@@ -62,7 +64,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if (!loaded) return null
     return withExactDocumentRevision(loaded, id, gate.user.orgId)
   })
-  if (!journal) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!journal) return notFound("record")
   return NextResponse.json(journal)
 }
 
@@ -113,12 +115,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const existing = (await db.execute<{ status: string; subsidiaryId: string | null; custom: Record<string, unknown> | null }>(
     sql`select status, subsidiary_id as "subsidiaryId", custom from documents where id = ${id} and kind = 'journal' and org_id = ${user.orgId}`,
   ))
-  if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!existing.rows[0]) return notFound("record")
   const denied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
   if (denied) return denied
   if (existing.rows[0].status !== 'draft') {
@@ -418,7 +420,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (e instanceof DocumentEditError) {
       return apiErrorResponse(e, { details: e.fieldErrors ? { fieldErrors: e.fieldErrors } : undefined })
     }
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof ScopeNotFoundError) return notFound("record")
     // Composite org-scoped storage keys make cross-tenant references
     // unrepresentable; map their FK refusal to a domain 422 instead of a
     // raw 500. The whole save (lines + header + totals) rolls back, so a
@@ -440,10 +442,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const loaded = await loadJournalDoc(id, user.orgId, gate.allowedSubsidiaryIds)
       return loaded ? withExactDocumentRevision(loaded, id, user.orgId) : null
     })
-    if (!journal) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!journal) return notFound("record")
     return NextResponse.json(journal)
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof ScopeNotFoundError) return notFound("record")
     throw error
   }
 }
@@ -463,7 +465,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const gate = await guardPermission('gl.post')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // Existence and scope probe first, so a malformed or unknown id still
   // answers 404 (never a body-shape refusal). The scope is enforced again
   // under the document lock inside deleteDocument; this probe is a fast
@@ -472,7 +474,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const owned = (await db.execute<{ subsidiaryId: string | null }>(
     sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'journal' and org_id = ${gate.user.orgId}`,
   ))
-  if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!owned.rows[0]) return notFound("record")
   const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
   if (denied) return denied
   const parsedBody = await parseJsonBody(req, z.looseObject({ expectedUpdatedAt: z.string().optional() }))
@@ -491,7 +493,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     })
     return NextResponse.json({ ok: true })
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof ScopeNotFoundError) return notFound("record")
     if (e instanceof DeleteError) return apiErrorResponse(e)
     throw e
   }

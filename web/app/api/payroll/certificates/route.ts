@@ -16,6 +16,8 @@ import {
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 
@@ -72,7 +74,7 @@ export async function GET(req: Request) {
   const employee = new URL(req.url).searchParams.get('employee')
   if (!employee || !isUuid(employee)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
   const subsidiaryId = await employeeSubsidiaryId(gate.user.orgId, employee)
-  if (subsidiaryId === undefined) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (subsidiaryId === undefined) return notFound("record")
   const denied = guardSubsidiaryScope(gate, subsidiaryId)
   if (denied) return denied
 

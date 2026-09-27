@@ -29,7 +29,7 @@ registerHooks({
           const orgWideNull = options !== undefined && options !== null && options.orgWideNull === true;
           if ((subsidiaryId === null || subsidiaryId === undefined) && orgWideNull) return null;
           if (typeof subsidiaryId === "string" && allowed.has(subsidiaryId)) return null;
-          return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
+          return new Response(JSON.stringify({ error: "not_found" }), { status: 404 });
         }
       `);
     if (specifier.endsWith("/lib/compliance"))

@@ -11,6 +11,8 @@ import {
 import { guardPermission, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { guardProjectsFeature } from "../../../../lib/projects-gate";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -26,7 +28,7 @@ async function guardMergeScope(
     select subsidiary_id from projects
      where org_id = ${gate.user.orgId} and id in (${survivorId}, ${duplicateId})`)).rows;
   if (rows.length !== 2) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   for (const row of rows) {
     const denied = guardSubsidiaryScope(gate, row.subsidiary_id);

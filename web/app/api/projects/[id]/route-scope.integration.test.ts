@@ -61,7 +61,7 @@ test('project detail and time-entries enforce the caller subsidiary scope', asyn
 
     const concealed = await get(org.orgId, projectB)
     assert.equal(concealed.status, 404)
-    assert.deepEqual(await concealed.json(), { error: 'not found' })
+    assert.deepEqual(await concealed.json(), { error: 'not_found' })
 
     const cross = await get(org.orgId, projectCrossCustomer)
     assert.equal(cross.status, 200)

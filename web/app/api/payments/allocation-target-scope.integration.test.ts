@@ -35,7 +35,7 @@ registerHooks({
               if (allowed === null) return null;
               if (subsidiaryId != null && allowed.has(subsidiaryId)) return null;
               if (subsidiaryId == null && opts.orgWideNull) return null;
-              return { status: 404, json: async () => ({ error: 'not found' }) };
+              return { status: 404, json: async () => ({ error: 'not_found' }) };
             }
           `),
       };
@@ -90,12 +90,12 @@ test("a malformed allocation target id fails closed as 404, never a 500", async 
     for (const openLineId of ["not-a-uuid", "new", "00000000-0000-0000-0000-00000000000"]) {
       const response = await POST(json({ documentId, allocations: [allocation(openLineId)] }));
       assert.equal(response.status, 404, `POST allocations[0].openLineId ${openLineId}`);
-      assert.deepEqual(await response.json(), { error: "not found" });
+      assert.deepEqual(await response.json(), { error: "not_found" });
     }
     // A well-formed id that names nothing keeps the sibling's not-found shape.
     const missing = await POST(json({ documentId, allocations: [allocation(randomUUID())] }));
     assert.equal(missing.status, 404);
-    assert.deepEqual(await missing.json(), { error: "not found" });
+    assert.deepEqual(await missing.json(), { error: "not_found" });
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

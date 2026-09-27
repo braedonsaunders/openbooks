@@ -12,8 +12,10 @@ import { applicationContextFromSession } from "../../../../lib/application/conte
 import { executeIdempotent } from "../../../../lib/application/idempotency";
 import { verifyProposal, type JournalPreview } from "../../../../lib/assistant/proposals";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import { notFound } from "@/lib/api/responses";
 
 /** Whole-digit width of a canonical decimal: numeric(19,4) holds 15. */
+
 function wholeDigits(canonical: string): number {
   return canonical.replace(/^[+-]/, "").split(".")[0]!.replace(/^0+/, "").length;
 }
@@ -216,7 +218,7 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     if (error instanceof AccountScopeChangedError) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      return notFound("record");
     }
     throw error;
   }

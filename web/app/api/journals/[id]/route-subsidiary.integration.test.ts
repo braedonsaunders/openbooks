@@ -34,7 +34,7 @@ const mockAuthz = `
     if (authz.allowedSubsidiaryIds === null) return null
     if (subsidiaryId === null || subsidiaryId === undefined) return null
     if (authz.allowedSubsidiaryIds.has(subsidiaryId)) return null
-    return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
+    return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 })
   }
   export function subsidiariesInScope(authz, ids) {
     if (authz.allowedSubsidiaryIds === null) return true

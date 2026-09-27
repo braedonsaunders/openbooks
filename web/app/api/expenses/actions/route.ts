@@ -17,6 +17,8 @@ import { documentRevisionCounterSql } from "../../../../../engine/src/records/re
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -172,7 +174,7 @@ export async function POST(req: Request) {
   // disabled module must not keep a submit/post path open. 404, not 403 — an
   // off feature is indistinguishable from an absent API.
   if (!(await isFeatureEnabled(user.orgId, 'expenses'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;

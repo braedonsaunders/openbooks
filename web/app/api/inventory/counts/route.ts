@@ -23,7 +23,7 @@ import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } fr
 import { guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
-import { recordNotFoundResponse } from '../../../../lib/api/record-not-found'
+import { notFound } from "@/lib/api/responses";
 
 export const runtime = 'nodejs'
 
@@ -47,7 +47,7 @@ const stockCountBody = z.looseObject({
 })
 
 function refusal(e: unknown): Promise<NextResponse> {
-  if (e instanceof InventoryNotFoundError) return Promise.resolve(recordNotFoundResponse())
+  if (e instanceof InventoryNotFoundError) return Promise.resolve(notFound("record"))
   return apiErrorResponse(e, { safeStatus: inventoryErrorStatus(e) })
 }
 
@@ -129,9 +129,9 @@ export async function POST(req: Request) {
 
   async function fenceCount(countId: string): Promise<NextResponse | null> {
     const subsidiaryId = await countSubsidiary(countId)
-    if (!subsidiaryId) return recordNotFoundResponse()
+    if (!subsidiaryId) return notFound("record")
     if (allowedSubsidiaryIds && !allowedSubsidiaryIds.has(subsidiaryId)) {
-      return recordNotFoundResponse()
+      return notFound("record")
     }
     return null
   }

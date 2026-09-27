@@ -8,6 +8,8 @@ import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { performanceErrorResponse } from "../review-cycles/_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -37,7 +39,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission("hrm.retention.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const departmentId = new URL(req.url).searchParams.get("departmentId");
   if (departmentId !== null && !isUuid(departmentId)) {

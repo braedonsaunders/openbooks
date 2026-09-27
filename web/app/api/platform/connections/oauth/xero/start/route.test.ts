@@ -137,7 +137,7 @@ test("a Postgres 22P02 connection id is 404, not an unhandled 500", async () => 
       new Request("https://books.example/api/platform/connections/oauth/xero/start?connectionId=not-a-uuid"),
     );
     assert.equal(res.status, 404);
-    assert.deepEqual(await res.json(), { error: "not found" });
+    assert.deepEqual(await res.json(), { error: "not_found" });
   } finally {
     state.identityError = null;
   }

@@ -11,6 +11,8 @@ import {
 import { canonicalDecimal } from "../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
 import { guardProjectsFeature } from "../../../lib/projects-gate";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -74,7 +76,7 @@ export async function POST(req: Request) {
     return NextResponse.json(created);
   } catch (e) {
     if ((e as Error).message === "Project not found") {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      return notFound("record");
     }
     return apiErrorResponse(e);
   }

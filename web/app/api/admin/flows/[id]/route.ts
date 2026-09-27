@@ -9,6 +9,8 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { filterFlowRunSubjectsToScope } from '../../../flows/_lib'
 import { isUuid } from '../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -41,7 +43,7 @@ export async function GET(_req: Request, { params }: Params) {
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   const flow = await loadFlow(gate.user.orgId, id)
-  if (!flow) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!flow) return notFound("record")
   const runs = (await db.execute<Record<string, unknown>>(sql`
     select id, subject_kind, subject_id, trigger, status, error, started_at, finished_at
       from flow_runs where flow_id = ${id} and org_id = ${gate.user.orgId}
@@ -71,7 +73,7 @@ export async function PATCH(req: Request, { params }: Params) {
   if (scopeDenied) return scopeDenied
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject)
   if (!parsedBody.ok) return parsedBody.response
   const body = parsedBody.data as Record<string, unknown>
@@ -91,7 +93,7 @@ export async function PATCH(req: Request, { params }: Params) {
       select flows.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
         from flows where id = ${id} and org_id = ${user.orgId} for update
     `)).rows[0]
-    if (!flow) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!flow) return notFound("record")
     if (flow.updated_at !== body.expectedUpdatedAt) return revisionConflict()
     const sets = [sql`updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond')`, sql`updated_by = ${user.id}`]
     if (typeof body.name === 'string') sets.push(sql`name = ${body.name.trim()}`)
@@ -162,7 +164,7 @@ export async function DELETE(req: Request, { params }: Params) {
   if (scopeDenied) return scopeDenied
   const orgId = gate.user.orgId
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject)
   if (!parsedBody.ok) return parsedBody.response
   if (!isDocumentRevisionToken(parsedBody.data.expectedUpdatedAt)) return revisionConflict()
@@ -174,7 +176,7 @@ export async function DELETE(req: Request, { params }: Params) {
       select flows.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
         from flows where id = ${id} and org_id = ${orgId} for update
     `)).rows[0]
-    if (!flow) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!flow) return notFound("record")
     if (flow.updated_at !== parsedBody.data.expectedUpdatedAt) return revisionConflict()
     const history = (await tx.execute<{ used: boolean }>(sql`
       select exists(select 1 from flow_runs where flow_id = ${id} and org_id = ${orgId})

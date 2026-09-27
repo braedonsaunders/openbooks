@@ -59,7 +59,7 @@ test('guardSubsidiaryScope denies with the same response as a missing record', a
     'sub-b',
   )
   assert.equal(response?.status, 404)
-  assert.deepEqual(await response?.json(), { error: 'not found' })
+  assert.deepEqual(await response?.json(), { error: 'not_found' })
 })
 
 test('subsidiariesInScope refuses assigning records outside the visible set', () => {
@@ -261,7 +261,7 @@ test('run creation validates every selected bill against the caller scope', () =
   assert.match(src, /select id, subsidiary_id as "subsidiaryId" from documents/)
   assert.match(src, /inScope\.length !== selected\.length/)
   // Fail closed: unresolved ids are treated exactly like out-of-scope ones.
-  assert.doesNotMatch(src, /inScope\.length === selected\.length\)\s*\n\s*return NextResponse\.json\(\{ error: 'not found' \}/)
+  assert.doesNotMatch(src, /inScope\.length === selected\.length\)\s*\n\s*return notFound\(/)
 })
 
 // ---------------------------------------------------------------------------

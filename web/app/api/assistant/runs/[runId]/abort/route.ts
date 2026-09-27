@@ -2,6 +2,8 @@ import { jsonObject, parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../../../lib/authz";
 import { createDbOwnedRunStore } from "../../../../../../lib/assistant/owned-runs-db";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -20,6 +22,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ runId: 
   const { runId } = await params;
   if (!UUID_RE.test(runId)) return NextResponse.json({ error: "bad request" }, { status: 400 });
   const aborted = await createDbOwnedRunStore(gate).requestAbort(runId);
-  if (!aborted) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!aborted) return notFound("record");
   return NextResponse.json({ ok: true });
 }

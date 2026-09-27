@@ -3,18 +3,20 @@ import { listRetentionActions } from "@openbooks/engine/src/hrm/documents/retent
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export async function GET(req: Request) {
   const gate = await guardPermission("hrm.documents.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmDocuments"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmDocumentRetention"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     const pendingOnly = new URL(req.url).searchParams.get("pending") === "1";

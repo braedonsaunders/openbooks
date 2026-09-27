@@ -203,7 +203,7 @@ test('PUT refuses an out-of-scope project before changing its override or schedu
   const response = await put({ percentComplete: 55, expectedPercentComplete: null })
 
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
   assert.equal(routeState.syncCalls.length, 0, 'revenue schedule sync never ran for a hidden project')
   const guard = routeState.calls.find((call) => call.text.includes('for update'))
   assert.ok(guard, 'the guarded locked read ran')

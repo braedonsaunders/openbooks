@@ -13,6 +13,8 @@ import {
   parseWorkBreakdownTaskInput,
   ProjectWorkBreakdownError,
 } from '../../../../../../lib/project-work-breakdown-validation'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -26,7 +28,7 @@ export async function PATCH(
   if (feature) return feature
   const { id, taskId } = await params
   if (!isUuid(id) || !isUuid(taskId)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   try {
@@ -55,7 +57,7 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof ProjectWorkBreakdownError) {
       // A missing project or task reads as a bare 404: existence stays hidden.
-      if (error.status === 404) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (error.status === 404) return notFound("record")
       return apiErrorResponse(error)
     }
     throw error

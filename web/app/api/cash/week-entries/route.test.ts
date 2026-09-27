@@ -158,7 +158,7 @@ const restrictedDenied = async () => {
   const response = await get("week=2026-08-23&sub=00000000-0000-4000-8000-000000000002");
 
   assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { error: "not found" });
+  assert.deepEqual(await response.json(), { error: "not_found" });
   assert.deepEqual(routeState.cashPositionCalls, []);
 };
 

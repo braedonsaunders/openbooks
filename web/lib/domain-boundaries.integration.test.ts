@@ -395,7 +395,7 @@ for (const boundary of [
               await restrict(org.orgId, [org.subsidiaryId])
               const denied = await opportunityDelete(request({}), params)
               assert.equal(denied.status, 404)
-              assert.deepEqual(await denied.json(), { error: 'not found' })
+              assert.deepEqual(await denied.json(), { error: 'not_found' })
               assert.equal(
                 (
                   await db.execute(

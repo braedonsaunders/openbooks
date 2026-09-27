@@ -8,6 +8,8 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { BudgetMutationError, saveBudgetCells, type BudgetCellInput } from '../../../../../lib/budget-mutations'
 import { outOfScopeScenarioError, scenarioOutOfScopeSubsidiaryNames } from '../../../../../lib/budget-scope'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -15,7 +17,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardFeaturePermission('budgets.manage', 'budgets')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { expectedRevision?: number; cells?: Record<string, unknown>[] }

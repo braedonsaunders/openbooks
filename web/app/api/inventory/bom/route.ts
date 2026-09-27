@@ -8,6 +8,8 @@ import { guardUnrestrictedScope } from '@/lib/authz'
 import { guardFeaturePermission } from '@/lib/feature-gates'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { isUuid } from '@/lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -199,7 +201,7 @@ export async function PUT(req: Request) {
       return refusal('This bill of materials changed after you opened it. Close the drawer, reopen it, and apply your changes to the latest revision.', 409)
     }
     if ('featureDisabled' in result) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     if ('invalidItems' in result) {
       return refusal('Every assembly and component must be an active inventory item in this organization.')

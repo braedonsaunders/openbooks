@@ -5,6 +5,8 @@ import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { cancelBillingRequest } from '../../../../lib/billing-requests'
 import { guardProjectsFeature } from '../../../../lib/projects-gate'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -14,7 +16,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const feature = await guardProjectsFeature(gate.user.orgId)
   if (feature) return feature
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = ((parsedBody.data))
@@ -23,7 +25,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await cancelBillingRequest(gate.user.orgId, gate.user.id, id, gate.allowedSubsidiaryIds)
       return NextResponse.json({ ok: true })
     } catch (e) {
-      if ((e as Error).message === 'Billing request not found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if ((e as Error).message === 'Billing request not found') return notFound("record")
       return apiErrorResponse(e)
     }
   }

@@ -111,7 +111,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const gate = await guardPermission('items.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id) || !(await itemExists(gate.user.orgId, id))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id) || !(await itemExists(gate.user.orgId, id))) return notFound("record")
   const [levels, customers, currencies, organization, schedules] = await Promise.all([
     db.execute(sql`select id,code,name,pricing_method,percentage,cost_basis,is_base from price_levels where org_id=${gate.user.orgId} and is_active order by is_base desc,name`),
     db.execute(sql`select p.id,p.display_name from parties p join customer_roles r on r.org_id=p.org_id and r.party_id=p.id and r.is_active where p.org_id=${gate.user.orgId} and p.is_active ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, gate.allowedSubsidiaryIds, { orgWideNull: true })} order by p.display_name limit 2000`),
@@ -272,7 +272,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const gate = await guardPermission('items.manage')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(request, jsonObject)
   if (!parsedBody.ok) return parsedBody.response
   const body = parsedBody.data as Record<string, unknown>
@@ -402,11 +402,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: scheduleId, action: 'update', changes: { before: { ...locked, breaks: priorBreaks }, after: { ...after, breaks: parsed.breaks }, ...(reason ? { reason } : {}) }, actorId: gate.user.id }, tx)
       return { kind: 'saved' as const, scheduleId }
     })
-    if (outcome.kind === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (outcome.kind === 'missing') return notFound("record")
     if (outcome.kind === 'refused') return NextResponse.json({ error: outcome.error }, { status: outcome.status })
     return NextResponse.json({ id: outcome.scheduleId })
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof ScopeNotFoundError) return notFound("record")
     const code = (error as { code?: string }).code
     if (code === '23P01') {
       return NextResponse.json({ error: 'An active pricing schedule already covers that scope and date range' }, { status: 409 })
@@ -421,7 +421,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   const { id } = await params
   const query = new URL(request.url).searchParams
   const scheduleId = query.get('schedule') ?? ''
-  if (!isUuid(id) || !isUuid(scheduleId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id) || !isUuid(scheduleId)) return notFound("record")
   const reason = (query.get('reason') ?? '').trim()
   const expectedRevision = parseRevision(Number(query.get('revision')))
   if (query.get('revision') === null || expectedRevision === null) {
@@ -475,8 +475,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     if (error instanceof ScopeNotFoundError) return { kind: 'scope-denied' as const }
     throw error
   })
-  if (outcome.kind === 'scope-denied') return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (outcome.kind === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (outcome.kind === 'scope-denied') return notFound("record")
+  if (outcome.kind === 'missing') return notFound("record")
   if (outcome.kind === 'refused') return NextResponse.json({ error: outcome.error }, { status: outcome.status })
   return NextResponse.json({ ok: true, endDated: outcome.kind === 'ended' })
 }

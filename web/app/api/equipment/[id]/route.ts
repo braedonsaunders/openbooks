@@ -10,6 +10,8 @@ import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { loadEquipment, loadEquipmentInWrite } from '../_lib'
 import { ScopeNotFoundError, lockScopeRows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 function text(v: unknown): string | null { return typeof v === 'string' && v.trim() ? v.trim() : null }
 function bad(error: string) { return NextResponse.json({ error, code: error }, { status: 422 }) }
@@ -27,7 +29,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // out-of-scope unit answers exactly like a missing one, with no post-hoc
   // check for a concurrent rehome to race.
   const data = isUuid(id) ? await loadEquipment(id, gate.user.orgId, gate.allowedSubsidiaryIds) : null
-  if (!data) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!data) return notFound("record")
   return NextResponse.json(data)
 }
 
@@ -65,7 +67,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardFeaturePermission('assets.manage', 'equipment')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data)
@@ -87,9 +89,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
          where id = ${id} and org_id = ${gate.user.orgId}
          for update`)))
       const current = locked.rows[0] as EquipmentUnitRow | undefined
-      if (!current) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+      if (!current) return notFound("record")
       if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(current.subsidiary_id))) {
-        return NextResponse.json({ error: 'not_found' }, { status: 404 })
+        return notFound("record")
       }
       // Scope precedes the revision comparison so a rehomed unit remains
       // indistinguishable from a missing row, even with a stale token.
@@ -111,7 +113,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
             'share',
           )
         } catch (error) {
-          if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+          if (error instanceof ScopeNotFoundError) return notFound("record")
           throw error
         }
       }
@@ -123,14 +125,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         const currentId = current.fixed_asset_id ? String(current.fixed_asset_id) : null
         const nextId = text(body.fixedAssetId)
         if (currentId !== nextId && !(await isFeatureEnabled(gate.user.orgId, 'fixedAssets'))) {
-          return NextResponse.json({ error: 'not found' }, { status: 404 })
+          return notFound("record")
         }
       }
       if (body.rateBookId !== undefined) {
         const currentId = current.rate_book_id ? String(current.rate_book_id) : null
         const nextId = text(body.rateBookId)
         if (currentId !== nextId && !(await isFeatureEnabled(gate.user.orgId, 'projects'))) {
-          return NextResponse.json({ error: 'not found' }, { status: 404 })
+          return notFound("record")
         }
       }
       const status = body.status !== undefined ? body.status : current.status
@@ -191,14 +193,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       // neither side cannot introduce a mismatch, so the locked pair stands.
       if (body.fixedAssetId !== undefined && fixedAssetId) {
         const found = lockedAssets.find((asset) => asset.id === fixedAssetId)
-        if (!found) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+        if (!found) return notFound("record")
         if (String(found.subsidiaryId) !== String(subsidiaryId)) {
           return bad('subsidiary_mismatch')
         }
       }
       if (body.fixedAssetId === undefined && body.subsidiaryId !== undefined && fixedAssetId) {
         const linked = lockedAssets.find((asset) => asset.id === String(fixedAssetId))
-        if (!linked) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+        if (!linked) return notFound("record")
         if (String(linked.subsidiaryId) !== String(subsidiaryId)) {
           return bad('subsidiary_mismatch')
         }
@@ -305,7 +307,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await guardFeaturePermission('assets.manage', 'equipment')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   return db.transaction(async (tx) => {
     // The draft check happens under the row lock inside the same transaction
     // as the delete: a concurrent activation can no longer slip between the
@@ -318,9 +320,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
        where id = ${id} and org_id = ${gate.user.orgId}
        for update`)))
     const row = locked.rows[0] as { status: string; subsidiary_id: string } | undefined
-    if (!row) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+    if (!row) return notFound("record")
     if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(row.subsidiary_id))) {
-      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+      return notFound("record")
     }
     if (row.status !== 'draft') return NextResponse.json({ error: 'draft_only_delete' }, { status: 409 })
     const used = ((await tx.execute(sql`select 1 from document_lines where equipment_unit_id = ${id} and org_id = ${gate.user.orgId} limit 1`)))
@@ -331,7 +333,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
        returning id`)
     if (deleted.rows.length !== 1) {
       const again = ((await tx.execute(sql`select status from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`)))
-      if (!again.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+      if (!again.rows[0]) return notFound("record")
       return NextResponse.json({ error: 'draft_only_delete' }, { status: 409 })
     }
     await tx.execute(sql`

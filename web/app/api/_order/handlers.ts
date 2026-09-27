@@ -29,6 +29,7 @@ import {
 import { assignWarehouseBody, jsonObject, parseJsonBody } from '@/lib/api/json'
 import { unexpectedServerError } from '../../../lib/api/unexpected'
 import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyOptions, listScopedProjectOptions } from '../../../lib/scoped-options'
+import { notFound } from "@/lib/api/responses";
 
 /**
  * Shared GET / PATCH / convert handlers for the three order-cycle modules.
@@ -38,6 +39,7 @@ import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyO
  *   sales_order    → ar.read / ar.create
  *   purchase_order → ap.read / ap.create
  */
+
 export interface OrderHandlerConfig {
   kind: OrderKind
   readPerm: string
@@ -87,7 +89,7 @@ export function makeGET(cfg: OrderHandlerConfig) {
     const gate = await guardFeaturePermission(cfg.readPerm, 'orders')
     if (gate instanceof NextResponse) return gate
     const { id } = await params
-    if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!isUuid(id)) return notFound("record")
     return withOrgTransaction(gate.user.orgId, async () => {
       // Draft writers lock this aggregate before replacing its header/lines.
       // Hold its ownership stable from authorization through payload loading;
@@ -95,11 +97,11 @@ export function makeGET(cfg: OrderHandlerConfig) {
       const owned = (await db.execute<{ subsidiaryId: string | null }>(
         sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${gate.user.orgId} for share`,
       ))
-      if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (!owned.rows[0]) return notFound("record")
       const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
       if (denied) return denied
       const order = await loadOrder(id, gate.user.orgId, cfg.kind, gate.allowedSubsidiaryIds)
-      if (!order) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (!order) return notFound("record")
       return NextResponse.json(order)
     })
   }
@@ -136,12 +138,12 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
-    if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!isUuid(id)) return notFound("record")
 
     const existing = (await db.execute<{ status: string; document_date: string; currency: string; party_id: string | null; subsidiaryId: string | null; updated_at: string }>(
       sql`select status, document_date, currency, party_id, subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
     ))
-    if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!existing.rows[0]) return notFound("record")
     const recordDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
     if (recordDenied) return recordDenied
     const status = existing.rows[0].status
@@ -336,7 +338,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           return NextResponse.json(order)
         } catch (error) {
           if (error instanceof ScopeNotFoundError) {
-            return NextResponse.json({ error: 'not found' }, { status: 404 })
+            return notFound("record")
           }
           if (error instanceof DocumentVoidError) {
             return NextResponse.json({ error: error.message }, { status: error.status })
@@ -368,7 +370,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
            for update
         `))
         const current = locked.rows[0]
-        if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
+        if (!current) return notFound("record")
         // The aggregate lock is held: recheck scope against the locked row —
         // the route pre-check ran unlocked, so a rehome landing between the
         // two must deny here rather than issue into the new subsidiary.
@@ -555,7 +557,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           const item = (await db.execute<{ kind: string }>(sql`
             select kind from items where id = ${l.itemId} and org_id = ${user.orgId}`))
           if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-            return NextResponse.json({ error: 'not found' }, { status: 404 })
+            return notFound("record")
           }
         }
       }
@@ -662,7 +664,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
 
     if (mutation instanceof NextResponse) return mutation
     if (mutation === 'not_found') {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     if (mutation === 'stale') {
       return NextResponse.json({ error: STALE_REVISION }, { status: 409 })
@@ -687,7 +689,7 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
-    if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!isUuid(id)) return notFound("record")
     // A missing/malformed body just means no revision token was supplied;
     // the fence below answers that with the same reload-and-retry 409 as a
     // stale token, so legacy empty-body deletes fail closed uniformly.
@@ -705,7 +707,7 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
          where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}
          for update
       `))
-      if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (!owned.rows[0]) return notFound("record")
       const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
       if (denied) return denied
       if (staleRevision(expectedUpdatedAt, owned.rows[0].updated_at)) {
@@ -715,7 +717,7 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
       return NextResponse.json({ ok: true })
     }).catch((error: unknown) => {
       if (error instanceof ScopeNotFoundError) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
       if (error instanceof DeleteError) {
         return NextResponse.json({ error: error.message }, { status: 422 })
@@ -732,7 +734,7 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
-    if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!isUuid(id)) return notFound("record")
     const parsedBody = await parseJsonBody(req, jsonObject)
     if (!parsedBody.ok) return parsedBody.response
     const body = parsedBody.data as {
@@ -748,7 +750,7 @@ export function makeConvertPOST(cfg: OrderHandlerConfig) {
       sql`select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
     ))
     const source = owns.rows[0]
-    if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!source) return notFound("record")
     const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
     if (denied) return denied
     // Fulfillment and receipt conversions move stock and post value-carrying
@@ -810,7 +812,7 @@ export function makeAssignWarehousePOST(cfg: OrderHandlerConfig) {
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
-    if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!isUuid(id)) return notFound("record")
     if (cfg.kind !== 'sales_order' && cfg.kind !== 'purchase_order') {
       return NextResponse.json({ error: 'warehouse assignment applies to sales and purchase orders only' }, { status: 422 })
     }
@@ -826,7 +828,7 @@ export function makeAssignWarehousePOST(cfg: OrderHandlerConfig) {
       sql`select subsidiary_id as "subsidiaryId", ${documentRevisionCounterSql(sql`revision_seq`)} as updated_at from documents where id = ${id} and kind = ${cfg.kind} and org_id = ${user.orgId}`,
     ))
     const source = owns.rows[0]
-    if (!source) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!source) return notFound("record")
     const denied = guardSubsidiaryScope(gate, source.subsidiaryId)
     if (denied) return denied
     if (staleRevision(body.expectedUpdatedAt, source.updated_at)) {

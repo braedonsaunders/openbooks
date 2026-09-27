@@ -6,6 +6,8 @@ import { deleteFile, getFile, isRetainedFileEvidence, moveFile, purgeFile, renam
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
 import { fileViewer, requireFileAccess, requireFolderAccess, requireSession } from '../../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -24,9 +26,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission('documents.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const file = await getFile(gate.user.orgId, id, fileViewer(gate))
-  if (!file) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!file) return notFound("record")
   return NextResponse.json({ file })
 }
 
@@ -35,7 +37,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // Editing (rename/move) a file needs Editor+ on it.
   const gateAccess = await requireFileAccess(gate, id, 'editor')
   if (gateAccess) return gateAccess
@@ -85,7 +87,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // Deleting needs Manager on the file.
   const gateAccess = await requireFileAccess(gate, id, 'manager')
   if (gateAccess) return gateAccess
@@ -99,7 +101,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       return NextResponse.json({ error: 'retained_evidence_cannot_be_purged' }, { status: 409 })
     }
     if (outcome === 'forbidden') return NextResponse.json({ error: 'forbidden' }, { status: 403 })
-    if (outcome === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (outcome === 'not_found') return notFound("record")
     return NextResponse.json({ ok: true })
   }
   const ok = await deleteFile(gate.user.orgId, id, audit)
@@ -117,7 +119,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
         { status: 409 },
       )
     }
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   return NextResponse.json({ ok: true })
 }

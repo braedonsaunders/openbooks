@@ -25,6 +25,8 @@ import {
   withComputedFormulas,
   type RecordStatus,
 } from '../../../../../lib/record-schema'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -127,7 +129,7 @@ export async function GET(
     id,
     gate.allowedSubsidiaryIds,
   )
-  if (!scope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!scope) return notFound("record")
   return NextResponse.json({ record: scope.record })
 }
 
@@ -161,7 +163,7 @@ export async function PATCH(
     id,
     gate.allowedSubsidiaryIds,
   )
-  if (!scope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!scope) return notFound("record")
   const { sections } = scope
 
   const parsedBody = await parseJsonBody(req, jsonObject);
@@ -385,7 +387,7 @@ export async function PATCH(
     return { kind: 'updated' as const }
   })
 
-  if (outcome.kind === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (outcome.kind === 'not_found') return notFound("record")
   if (outcome.kind === 'response') return outcome.response
   const updated = await loadRecord(user.orgId, typeKey, id)
   return NextResponse.json({ record: updated })
@@ -407,7 +409,7 @@ export async function DELETE(
     id,
     gate.allowedSubsidiaryIds,
   )
-  if (!scope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!scope) return notFound("record")
   let reason: string | null = null
   if ((req.headers.get('content-type') ?? '').includes('application/json')) {
     const parsedBody = await parseJsonBody(req, jsonObject)
@@ -446,7 +448,7 @@ export async function DELETE(
     })
     return { kind: 'deleted' as const }
   })
-  if (outcome.kind === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (outcome.kind === 'not_found') return notFound("record")
   if (outcome.kind === 'protected') {
     return NextResponse.json({ error: 'Only draft records can be deleted — deactivate instead' }, { status: 422 })
   }

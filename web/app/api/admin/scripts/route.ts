@@ -16,6 +16,8 @@ import {
 } from '@openbooks/engine/src/scripting/scheduled-env.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -78,7 +80,7 @@ export async function POST(req: Request) {
   // A script can mint or mutate posted documents on every matching event, so
   // its creation is audited with the full row in the same transaction.
   const row = await db.transaction(async (tx) => {
-    if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return notFound("record")
     const created = (await tx.execute<Record<string, unknown>>(sql`
       insert into user_scripts (org_id, name, trigger_point, document_kind, endpoint_slug, source, cron, next_run_at, timeout_ms, sort_order, is_active)
       values (${user.orgId}, ${body.name}, ${body.triggerPoint}, ${body.documentKind ?? null}, ${slug}, ${body.source},
@@ -110,7 +112,7 @@ export async function PATCH(req: Request) {
   // A malformed id names nothing: same answer as an unknown script, never a
   // PostgreSQL uuid cast error escaping as a 500.
   if (typeof body.id !== 'string' || !isUuid(body.id)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const err = validate(body)
   if (err) return validationResponse(err)
@@ -118,7 +120,7 @@ export async function PATCH(req: Request) {
   const cron = body.triggerPoint === 'scheduled' ? String(body.cron ?? '').trim() : null
   const slug = body.triggerPoint === 'endpoint' ? String(body.endpointSlug ?? '').trim() : null
   const missing = await db.transaction(async (tx) => {
-    if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!(await lockAndCheckOrgFeature(tx, user.orgId, 'scripts'))) return notFound("record")
     const before = (await tx.execute<Record<string, unknown>>(sql`
       select * from user_scripts where id = ${body.id} and org_id = ${user.orgId} for update
     `))
@@ -164,6 +166,6 @@ export async function PATCH(req: Request) {
     return false
   })
   if (missing instanceof NextResponse) return missing
-  if (missing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (missing) return notFound("record")
   return NextResponse.json({ ok: true })
 }

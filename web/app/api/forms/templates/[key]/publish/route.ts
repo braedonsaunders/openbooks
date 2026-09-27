@@ -7,6 +7,8 @@ import { parseFormSchema } from '@openbooks/forms-core'
 import { guardPermission } from '../../../../../../lib/authz'
 import { auditSetupChange } from '../../../../../../lib/setup/audit'
 import { getTemplateByKey } from '../../../_lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -27,7 +29,7 @@ export async function POST(
 
   const template = await getTemplateByKey(user.orgId, key)
   if (!template)
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject)
   if (!parsedBody.ok) return parsedBody.response
@@ -138,7 +140,7 @@ export async function POST(
   })
 
   if (outcome.kind === 'not-found')
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   if (outcome.kind === 'no-draft')
     return NextResponse.json(
       { error: 'template has no draft' },

@@ -8,6 +8,8 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { csvResponse, xlsxResponse } from '../../../../../lib/export'
 import { isUuid } from '../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -16,14 +18,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (gate instanceof NextResponse) return gate
   if (!can(gate, 'data.export')) return NextResponse.json({ error: 'missing permission: data.export' }, { status: 403 })
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const format = new URL(req.url).searchParams.get('format') ?? 'xlsx'
   if (!['csv', 'xlsx'].includes(format)) return NextResponse.json({ error: 'invalid_format' }, { status: 422 })
 
   const scenario = (await db.execute<{ name: string; fiscal_year: number }>(sql`
     select name, fiscal_year from budget_scenarios where id = ${id} and org_id = ${gate.user.orgId}
   `))
-  if (!scenario.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!scenario.rows[0]) return notFound("record")
   // The exported title and filename carry the scenario's name and year, so
   // a scenario with NOTHING visible to the caller answers as missing: its
   // rows would all filter out, leaving only the header as a disclosure
@@ -37,7 +39,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
        ${subsidiaryVisibleFilter(sql`subsidiary_id`, gate.allowedSubsidiaryIds)}
     `))
     if (Number(visible.rows[0]?.n ?? 0) === 0) {
-      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+      return notFound("record")
     }
   }
   interface BudgetExportRow extends Record<string, unknown> {

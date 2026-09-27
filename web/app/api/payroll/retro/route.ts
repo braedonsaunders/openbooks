@@ -14,6 +14,8 @@ import { isUuid } from '../../../../lib/list-params'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { guardPayrollEmployees } from '../subsidiary-scope'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -112,7 +114,7 @@ async function scopedRetroEmployees(
   // An empty scoped population must never be represented as `undefined`: the
   // engine treats undefined/empty as "all employees". There is no retro data
   // to expose when no allowed employee has a committed source run.
-  return ids.length > 0 ? ids : NextResponse.json({ error: 'not found' }, { status: 404 })
+  return ids.length > 0 ? ids : notFound("record")
 }
 
 async function guardExcludedSourceRuns(
@@ -131,7 +133,7 @@ async function guardExcludedSourceRuns(
        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, gate.allowedSubsidiaryIds)}`)
   return rows.rows.length === new Set(sourceIds).size
     ? null
-    : NextResponse.json({ error: 'not found' }, { status: 404 })
+    : notFound("record")
 }
 
 export async function POST(req: Request) {

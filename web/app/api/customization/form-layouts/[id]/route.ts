@@ -9,6 +9,8 @@ import { guardPermission } from "../../../../../lib/authz";
 import { lockedFormEntriesUnchanged, parseFormLayout, type FormLayoutConfig } from "@openbooks/customization";
 import { refuseDisabledRecordType } from "../../../../../lib/customization/gates";
 import { inactiveDefaultMessage, nextDefaultFlags, refuseInactiveDefault } from "../../../../../lib/customization/active-default";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -33,7 +35,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const row = await loadOwn(gate.user.orgId, id);
-  if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!row) return notFound("record");
   const refused = await refuseDisabledRecordType(gate.user.orgId, row.recordType);
   if (refused) return refused;
   return NextResponse.json(row);
@@ -47,7 +49,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const existing = await loadOwn(user.orgId, id);
-  if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!existing) return notFound("record");
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
   if (refused) return refused;
   const parsedBody = await parseJsonBody(req, nameBodySchema);
@@ -183,7 +185,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         values (${user.orgId}, 'form_layouts', ${id}, 'update', ${JSON.stringify({ before: locked.snapshot, after: written.snapshot })}, ${user.id})`);
       return { kind: "ok" as const };
     });
-    if (updated.kind === "not_found") return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (updated.kind === "not_found") return notFound("record");
     if (updated.kind === "locked_entries") return NextResponse.json({ error: "locked built-in fields cannot be changed" }, { status: 400 });
     if (updated.kind === "inactive_default") return NextResponse.json({ error: updated.error }, { status: 400 });
     return NextResponse.json({ ok: true });
@@ -203,7 +205,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const existing = await loadOwn(user.orgId, id);
-  if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!existing) return notFound("record");
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
   if (refused) return refused;
   // Delete + audit in one transaction so the two can't diverge (db.execute
@@ -221,6 +223,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       values (${user.orgId}, 'form_layouts', ${id}, 'delete', ${JSON.stringify({ before: row.snapshot, after: null })}, ${user.id})`);
     return row;
   });
-  if (!deleted) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!deleted) return notFound("record");
   return NextResponse.json({ ok: true });
 }

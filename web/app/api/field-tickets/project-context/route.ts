@@ -5,6 +5,8 @@ import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { resolveTicketPeriod } from '../../../../lib/field-tickets'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -13,7 +15,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission('time.read')
   if (gate instanceof NextResponse) return gate
   if (!(await isFeatureEnabled(gate.user.orgId, 'fieldTickets'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const projectId = new URL(req.url).searchParams.get('projectId')
   if (!projectId || !isUuid(projectId)) return NextResponse.json({ error: 'invalid project' }, { status: 422 })
@@ -24,7 +26,7 @@ export async function GET(req: Request) {
       left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${gate.user.orgId} and p.is_active
   `))
-  if (!project.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!project.rows[0]) return notFound("record")
   const denied = guardSubsidiaryScope(gate, project.rows[0].subsidiary_id)
   if (denied) return denied
 

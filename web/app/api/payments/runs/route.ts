@@ -7,6 +7,8 @@ import { createPaymentRun } from "@openbooks/engine/src/payments/run-creation.ts
 import { guardPermission } from '../../../../lib/authz'
 import { isoDate, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse } from '../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -64,7 +66,7 @@ export async function POST(req: Request) {
       (row) => row.subsidiaryId !== null && gate.allowedSubsidiaryIds!.has(row.subsidiaryId),
     )
     if (inScope.length !== selected.length) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
   }
 

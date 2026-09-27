@@ -92,7 +92,7 @@ test("provision-post oracle: restricted callers get the named 403 for existing a
     state.allowed = null;
     const unrestrictedMissing = await post(randomUUID());
     assert.equal(unrestrictedMissing.status, 404);
-    assert.deepEqual(await unrestrictedMissing.json(), { error: "not found" });
+    assert.deepEqual(await unrestrictedMissing.json(), { error: "not_found" });
   } finally {
     await dropScratchOrg(org.orgId);
   }

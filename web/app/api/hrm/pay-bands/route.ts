@@ -9,6 +9,8 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { compensationErrorResponse } from "../compensation/_lib";
 import { createBandBody } from "../compensation/bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -22,7 +24,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission("hrm.compensation.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCompensation"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const url = new URL(req.url);
   const levelId = url.searchParams.get("levelId");
@@ -50,7 +52,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.compensation.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCompensation"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, createBandBody);
   if (!parsedBody.ok) return parsedBody.response;

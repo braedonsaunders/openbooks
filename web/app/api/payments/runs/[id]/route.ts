@@ -8,6 +8,8 @@ import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { isUuid } from '../../../../../lib/list-params'
 import { parseJsonBody } from '../../../../../lib/api/json'
 import { guardPaymentRunPermission, paymentErrorResponse } from '../../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -17,7 +19,7 @@ const cancelBody = z.object({
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
 
@@ -27,7 +29,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       left join accounts a on a.id = r.bank_account_id and a.org_id = r.org_id
      where r.id = ${id} and r.org_id = ${gate.user.orgId}
   `))
-  if (!run.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!run.rows[0]) return notFound("record")
 
   // One transaction for the whole response: every payee owner is locked for
   // share first, so a concurrent rehome blocks until these reads commit and
@@ -73,7 +75,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 /** Cancel a draft/exported run: deletes its draft payments, keeps the audit row. */
 export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
   const parsed = await parseJsonBody(req, cancelBody)

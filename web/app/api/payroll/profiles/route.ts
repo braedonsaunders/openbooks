@@ -33,6 +33,8 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { decimalNullRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { isUuid } from '../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 
@@ -402,7 +404,7 @@ export async function GET(req: Request) {
       select subsidiary_id as "subsidiaryId"
         from parties
        where org_id = ${gate.user.orgId} and id = ${employee}`)).rows[0]
-    if (!employeeScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!employeeScope) return notFound("record")
     const denied = guardSubsidiaryScope(gate, employeeScope.subsidiaryId)
     if (denied) return denied
     // The default country for a NEW profile: the employee's own legal entity,

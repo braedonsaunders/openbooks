@@ -5,6 +5,8 @@ import { creditItemsForParty } from "@openbooks/engine/src/payments/payment-quer
 import { paymentErrorResponse } from '../lib'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -31,7 +33,7 @@ export async function GET(req: Request) {
     select subsidiary_id as "subsidiaryId" from parties
      where id = ${partyId} and org_id = ${gate.user.orgId}
   `))
-  if (!party.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!party.rows[0]) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(gate, party.rows[0].subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
 

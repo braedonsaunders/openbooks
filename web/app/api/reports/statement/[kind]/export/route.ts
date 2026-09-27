@@ -27,6 +27,8 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { guardProjectsFeature } from '../../../../../../lib/projects-gate'
 import { renderGeneralLedgerPaperPdf } from '../../../../../../lib/general-ledger-pdf'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -42,7 +44,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
     if (feature) return feature
   }
   if (kind === 'budget' && !(await isFeatureEnabled(gate.user.orgId, 'budgets'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   const url = new URL(req.url)

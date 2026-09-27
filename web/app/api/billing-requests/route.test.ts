@@ -148,7 +148,7 @@ test("POST refuses to create a request for a project outside the caller subsidia
   const response = await post({ projectId: PROJECT_ID });
 
   assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { error: "not found" });
+  assert.deepEqual(await response.json(), { error: "not_found" });
   assert.deepEqual(routeState.createCalls, []);
 });
 

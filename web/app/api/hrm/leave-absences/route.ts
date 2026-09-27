@@ -5,6 +5,8 @@ import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { leaveErrorResponse } from "../leave-requests/_lib";
 import { recordAbsenceBody } from "../leave-requests/bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -17,7 +19,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.leave.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, recordAbsenceBody);
   if (!parsedBody.ok) return parsedBody.response;

@@ -7,6 +7,8 @@ import { reverseAssetLifecycleEvent } from '@openbooks/engine/src/assets/asset-l
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -40,7 +42,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'invalid asset' }, { status: 422 })
   if (!await visibleAsset(gate.user.orgId, id, gate.allowedSubsidiaryIds)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   const rows = (await db.execute<{
@@ -115,7 +117,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'invalid asset' }, { status: 422 })
   if (!await visibleAsset(gate.user.orgId, id, gate.allowedSubsidiaryIds)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   const parsedBody = await parseJsonBody(req, jsonObject);

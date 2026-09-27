@@ -85,7 +85,7 @@ test('a replayed key for a rehomed document answers as missing', async () => {
       json: (await r.json()) as Record<string, unknown>,
     })))
     assert.equal(replayed.status, 404, 'an out-of-scope replay answers as missing')
-    assert.deepEqual(replayed.json, { error: 'not found' })
+    assert.deepEqual(replayed.json, { error: 'not_found' })
   } finally {
     state.user = null
     await withBypassContext(() => dropScratchOrg(org.orgId))

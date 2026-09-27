@@ -5,6 +5,8 @@ import { getFolder } from '../../../../../../lib/file-cabinet'
 import { buildZip, folderZipManifest, MAX_ZIP_FILES, ZipSizeLimitError } from '../../../../../../lib/file-zip'
 import { isUuid } from '../../../../../../lib/list-params'
 import { fileViewer, requireFolderAccess, requireSession } from '../../../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -13,12 +15,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await requireSession()
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const access = await requireFolderAccess(gate, id, 'viewer')
   if (access) return access
 
   const folder = await getFolder(gate.user.orgId, id)
-  if (!folder) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!folder) return notFound("record")
 
   const viewer = fileViewer(gate)
   const entries = await folderZipManifest(gate.user.orgId, id, viewer)

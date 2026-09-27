@@ -187,7 +187,7 @@ test(
       const failed = await post(body)
       const failedJson = (await failed.json().catch(() => null)) as { error?: string } | null
       assert.equal(failed.status, 404, JSON.stringify(failedJson))
-      assert.deepEqual(failedJson, { error: 'not found' })
+      assert.deepEqual(failedJson, { error: 'not_found' })
       assert.equal(await journalCount(fx.org.orgId), 0)
 
       body.preview.lines[1]!.accountId = fx.org.accounts.revenue

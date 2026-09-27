@@ -6,6 +6,8 @@ import { auditBackupEvent, getBackupObject } from "@openbooks/engine/src/backup/
 import { guardPermission } from "../../../../../../lib/authz";
 import { contentDisposition } from "../../../../../../lib/export";
 import { isUuid } from "../../../../../../lib/list-params";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -19,7 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const actor = gate.user;
   const { orgId } = actor;
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
 
   const res = (await db.execute<{
       id: string;

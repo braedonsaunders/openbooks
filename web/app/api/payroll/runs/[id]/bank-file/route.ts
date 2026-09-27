@@ -19,6 +19,8 @@ import { SandboxEgressError } from '@openbooks/engine/src/organization/sandbox-g
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -40,7 +42,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const orgId = gate.user.orgId
 
   // The entitlement service intentionally has no caller concept. Resolve the
@@ -52,13 +54,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${id}`)).rows[0]
-  if (!owned) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!owned) return notFound("record")
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
   if (denied) return denied
 
   const entitlement = await payRunBankFileEntitlement(orgId, id, gate.allowedSubsidiaryIds)
   if (entitlement.refusal?.code === 'notFound') {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   const [profiles, artifacts, audit] = await Promise.all([
@@ -100,14 +102,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardFeaturePermission('payroll.run', 'payroll')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const owned = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select d.subsidiary_id as "subsidiaryId"
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${gate.user.orgId} and r.document_id = ${id}`)).rows[0]
-  if (!owned) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!owned) return notFound("record")
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId)
   if (denied) return denied
 

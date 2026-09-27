@@ -6,6 +6,8 @@ import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../compensation/_lib";
 import { updateLevelBody } from "../../compensation/bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -18,7 +20,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardPermission("hrm.compensation.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCompensation"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid job level" }, { status: 400 });

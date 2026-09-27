@@ -69,11 +69,11 @@ test("schedule autosave and delete answer a malformed id with 404", async () => 
     // could resolve, which is exactly the defect.
     const patched = await PATCH(json("PATCH", { active: false }), params(id));
     assert.equal(patched.status, 404, `PATCH ${id}`);
-    assert.deepEqual(await patched.json(), { error: "not found" });
+    assert.deepEqual(await patched.json(), { error: "not_found" });
 
     const deleted = await DELETE(json("DELETE", {}), params(id));
     assert.equal(deleted.status, 404, `DELETE ${id}`);
-    assert.deepEqual(await deleted.json(), { error: "not found" });
+    assert.deepEqual(await deleted.json(), { error: "not_found" });
   }
 });
 

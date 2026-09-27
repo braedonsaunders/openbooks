@@ -11,6 +11,8 @@ import { mergeAndPrintPdf } from "../../../../../lib/pdf-templates/render";
 import { resolvePdfTemplate } from "../../../../../lib/pdf-templates/store";
 import { loadPdfRecordValues } from "../../../../../lib/pdf-templates/values";
 import { loadRecordSubsidiaryScope } from "../../lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -30,7 +32,7 @@ export async function GET(
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
   if (!(await isDocKindEnabled(user.orgId, recordType))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
 
   // A malformed id is answered exactly like a missing record, before it can

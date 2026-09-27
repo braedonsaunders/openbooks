@@ -10,6 +10,8 @@ import { getAuthz } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { performanceErrorResponse } from "../../review-cycles/_lib";
 import { patchOneOnOneBody } from "../bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -30,7 +32,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await gated(authz.user.orgId))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await ctx.params;
   try {
@@ -45,7 +47,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await gated(authz.user.orgId))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, patchOneOnOneBody);
   if (!parsedBody.ok) return parsedBody.response;

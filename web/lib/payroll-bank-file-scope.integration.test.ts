@@ -77,7 +77,7 @@ test("bank-file panel hides a run carrying an out-of-scope employee", { skip: !p
       { params: Promise.resolve({ id: documentId }) },
     ));
     assert.equal(refused.status, 404, JSON.stringify(await refused.clone().json()));
-    assert.deepEqual(await refused.json(), { error: "not found" });
+    assert.deepEqual(await refused.json(), { error: "not_found" });
 
     state.gate = { ...scopedGate(fx, "payroll.read"), allowedSubsidiaryIds: null };
     const visible = await withOrgContext(fx.orgId, () => GET(

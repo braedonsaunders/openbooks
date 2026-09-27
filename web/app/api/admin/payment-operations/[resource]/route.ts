@@ -14,6 +14,8 @@ import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { auditConfigChange } from '../_lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -23,7 +25,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ resourc
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const { resource } = await params
-  if (!RESOURCES.has(resource)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!RESOURCES.has(resource)) return notFound("record")
   if (resource === 'formats') {
     const rows = await db.execute(sql`
       select id, code, name, rail, direction, country, currency, file_extension,
@@ -84,7 +86,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const { resource } = await params
-  if (!RESOURCES.has(resource)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!RESOURCES.has(resource)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as {
@@ -106,7 +108,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
         body.currency !== undefined &&
         !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
       ) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
       if (!body.code?.trim() || !body.name?.trim() || !body.formatterScript?.trim()) {
         return NextResponse.json({ error: 'code, name, and formatterScript are required' }, { status: 400 })
@@ -144,7 +146,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
         body.currency !== undefined &&
         !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
       ) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
       const country = optionalCountry(body.country)
       if (country === undefined) return NextResponse.json({ error: 'country must be a valid ISO country code' }, { status: 400 })
@@ -240,11 +242,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ resourc
         { after: created }, gate.user.id, req.headers.get('X-Request-Id'))
       return { kind: 'created' as const, row: created }
     })
-    if (creation.kind === 'not-found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (creation.kind === 'not-found') return notFound("record")
     if (creation.kind === 'invalid-bank') return NextResponse.json({ error: 'approved counterparty bank account is invalid' }, { status: 400 })
     return NextResponse.json({ id: creation.row.id }, { status: 201 })
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof ScopeNotFoundError) return notFound("record")
     const message = error instanceof Error ? error.message : 'request failed'
     return NextResponse.json({ error: message }, { status: 422 })
   }

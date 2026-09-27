@@ -157,7 +157,7 @@ stubModules({
      }
      export function can(_authz, perm) { return state.permissions.includes(perm) }
      export function guardSubsidiaryScope(_authz, _subsidiaryId) {
-       if (state.scopeDenied) return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
+       if (state.scopeDenied) return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 })
        return null
      }
      export function subsidiariesInScope() { return true }`,
@@ -168,7 +168,7 @@ stubModules({
      }
      export function can(_authz, perm) { return state.permissions.includes(perm) }
      export function guardSubsidiaryScope(_authz, _subsidiaryId) {
-       if (state.scopeDenied) return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
+       if (state.scopeDenied) return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 })
        return null
      }
      export function subsidiariesInScope() { return true }`,

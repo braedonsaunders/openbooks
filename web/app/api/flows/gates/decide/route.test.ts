@@ -64,7 +64,7 @@ const mockSources = new Map<string, string>([
         state.scopeChecks.push(subsidiaryId ?? null)
         if (authz.allowedSubsidiaryIds !== null &&
             (subsidiaryId === null || !authz.allowedSubsidiaryIds.has(subsidiaryId))) {
-          return NextResponse.json({ error: 'not found' }, { status: 404 })
+          return NextResponse.json({ error: 'not_found' }, { status: 404 })
         }
         return null
       }

@@ -9,6 +9,8 @@ import { validateCustomFieldDefinition as validateDef, type ExistingFieldDef } f
 import { lockCustomFieldKeys } from '../../../../lib/custom-field-write-lock'
 import { guardPermission } from '../../../../lib/authz'
 import { isCustomFieldTargetEnabled } from '../../../../lib/customization/gates'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -22,7 +24,7 @@ export async function POST(req: Request) {
   const err = validateDef(body)
   if (err) return NextResponse.json({ error: err }, { status: 400 })
   if (!(await isCustomFieldTargetEnabled(user.orgId, String(body.targetTable), body.targetKind ? String(body.targetKind) : null))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   return db.transaction(async (tx) => {
@@ -61,7 +63,7 @@ export async function PATCH(req: Request) {
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as Record<string, unknown>
   if (typeof body.id !== 'string' || !isUuid(body.id)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   if (!isDocumentRevisionToken(body.expectedUpdatedAt)) return revisionConflict()
 
@@ -72,9 +74,9 @@ export async function PATCH(req: Request) {
         from custom_field_defs
        where id = ${body.id} and org_id = ${user.orgId} for update
     `)).rows[0]
-    if (!existing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!existing) return notFound("record")
     if (!(await isCustomFieldTargetEnabled(user.orgId, existing.target_table, existing.target_kind))) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     if (existing.updated_at !== body.expectedUpdatedAt) return revisionConflict()
 

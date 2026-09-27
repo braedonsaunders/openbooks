@@ -10,6 +10,8 @@ import { canonicalDecimal, isPositiveDecimal } from '../../../../../lib/exact-de
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -59,7 +61,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id) || !(await itemExists(id, gate.user.orgId))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const rows = ((await db.execute(sql`
     select id, currency, unit_price, low_value, high_value, effective_from, effective_to, is_active
@@ -112,7 +114,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { orgId, id: actorId } = gate.user
   const { id } = await params
   if (!isUuid(id) || !(await itemExists(id, orgId))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -148,7 +150,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (unrestricted) return unrestricted
   const { orgId, id: actorId } = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody2 = await parseJsonBody(req, jsonObject);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as Record<string, unknown>
@@ -156,14 +158,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(rowId)) return NextResponse.json({ error: 'id required' }, { status: 400 })
   const parsed = parseBody(body)
   if ('error' in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 })
-  let notFound = false
+  let recordMissing = false
   await db.transaction(async (tx) => {
     const before = ((await tx.execute(sql`
       select * from fair_value_prices where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
       for update
     `)))
     if (!before.rows[0]) {
-      notFound = true
+      recordMissing = true
       return
     }
     const updated = ((await tx.execute(sql`
@@ -184,7 +186,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       actorId,
     }, tx)
   })
-  if (notFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (recordMissing) return notFound("record")
   return NextResponse.json({ id: rowId })
 }
 
@@ -195,17 +197,17 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (unrestricted) return unrestricted
   const { orgId, id: actorId } = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const rowId = new URL(req.url).searchParams.get('id') ?? ''
   if (!isUuid(rowId)) return NextResponse.json({ error: 'id required' }, { status: 400 })
-  let notFound = false
+  let recordMissing = false
   await db.transaction(async (tx) => {
     const existing = ((await tx.execute(sql`
       select * from fair_value_prices where id = ${rowId} and item_id = ${id} and org_id = ${orgId}
       for update
     `)))
     if (!existing.rows[0]) {
-      notFound = true
+      recordMissing = true
       return
     }
     await tx.execute(sql`
@@ -220,6 +222,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
       actorId,
     }, tx)
   })
-  if (notFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (recordMissing) return notFound("record")
   return NextResponse.json({ ok: true })
 }

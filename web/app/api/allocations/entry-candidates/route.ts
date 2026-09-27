@@ -7,6 +7,8 @@ import { guardPermission } from '../../../../lib/authz'
 import { allocationRuleScopeVisible } from '../../../../lib/allocations-scope'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -19,7 +21,7 @@ type UuidParam = (typeof UUID_PARAMS)[number]
 function refused(): NextResponse {
   // Feature-off and out-of-scope read the same: the entry UI hides, and the
   // server refuses regardless of UI (design §5 invariant 6).
-  return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  return notFound("record")
 }
 
 function invalid(error: string): NextResponse {

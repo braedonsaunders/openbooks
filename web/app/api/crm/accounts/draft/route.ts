@@ -5,6 +5,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { ensureCrmDefaults } from '@openbooks/engine/src/crm/crm.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { parseJsonBody } from '@/lib/api/json'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -20,7 +22,7 @@ export async function POST(req: Request) {
   const gate = await guardFeaturePermission('crm.accounts.create', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  if (gate.allowedSubsidiaryIds?.size === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (gate.allowedSubsidiaryIds?.size === 0) return notFound("record")
   // The factory stays bodyless-tolerant ({} or no body means a lead) and reads
   // only an optional stage: the unified account list's New button passes the
   // lifecycle segment it is on, so prospects come through this same endpoint.

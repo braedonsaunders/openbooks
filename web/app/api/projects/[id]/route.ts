@@ -15,6 +15,8 @@ import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-
 import { guardProjectsFeature } from '../../../../lib/projects-gate'
 import { listScopedPartyOptions } from '../../../../lib/scoped-options'
 import { acquireFeatureGateLock, isFeatureEnabled } from '../../../../lib/features'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -92,12 +94,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const feature = await guardProjectsFeature(gate.user.orgId)
   if (feature) return feature
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // The loader enforces the caller scope on the header and every
   // subordinate read inside one snapshot, so an out-of-scope project answers
   // exactly like a missing one with no post-hoc check to race.
   const payload = await loadProject(id, gate.user.orgId, gate.allowedSubsidiaryIds)
-  if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!payload) return notFound("record")
   return NextResponse.json(payload)
 }
 
@@ -122,7 +124,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (feature) return feature
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const existing = (await db.execute<{
     name: string
@@ -133,7 +135,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     select name, is_active, custom, subsidiary_id
       from projects where id = ${id} and org_id = ${user.orgId}
   `))
-  if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!existing.rows[0]) return notFound("record")
   const existingDenied = guardSubsidiaryScope(gate, existing.rows[0].subsidiary_id)
   if (existingDenied) return existingDenied
 
@@ -413,10 +415,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (featureRefused) {
     return NextResponse.json({ error: 'projects feature is disabled' }, { status: 404 })
   }
-  if (scopeRefused) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (scopeRefused) return notFound("record")
   if (txRefused) return txRefused
 
   const payload = await loadProject(id, user.orgId, gate.allowedSubsidiaryIds)
-  if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!payload) return notFound("record")
   return NextResponse.json(payload)
 }

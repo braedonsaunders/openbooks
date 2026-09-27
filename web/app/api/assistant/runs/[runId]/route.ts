@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../../lib/authz";
 import { createDbOwnedRunStore } from "../../../../../lib/assistant/owned-runs-db";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -18,6 +20,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ runId: 
   const { runId } = await params;
   if (!UUID_RE.test(runId)) return NextResponse.json({ error: "bad request" }, { status: 400 });
   const run = await createDbOwnedRunStore(gate).readRun(runId);
-  if (!run) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!run) return notFound("record");
   return NextResponse.json({ run });
 }

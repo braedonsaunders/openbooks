@@ -10,6 +10,8 @@ import { isUuid } from '../../../../lib/list-params'
 import { loadItem } from '../_lib'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -162,9 +164,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission('items.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const payload = await loadItem(id, gate.user.orgId)
-  if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!payload) return notFound("record")
   return NextResponse.json(payload)
 }
 
@@ -181,7 +183,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (unrestricted) return unrestricted
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   // The patch body parses directly through its zod schema: the schema
   // already validated separately, so parsing through jsonObject first only
@@ -461,9 +463,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       `)
       return after
     })
-    if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!updated) return notFound("record")
   } catch (e: unknown) {
-    if (e instanceof PatchNotFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof PatchNotFound) return notFound("record")
     if (e instanceof PatchInvalid) return bad(e.message)
     const msg = e instanceof Error ? `${e.message} ${String((e as { cause?: unknown }).cause ?? '')}` : String(e)
     if (msg.includes('items_org_code')) return bad('Code already in use')

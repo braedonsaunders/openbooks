@@ -5,6 +5,8 @@ import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { loadPrebill, transitionPrebill } from '../../../../lib/wip-billing'
 import { guardWipBillingFeature } from '../../../../lib/wip-billing-gate'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -14,9 +16,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const feature = await guardWipBillingFeature(gate.user.orgId)
   if (feature) return feature
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const prebill = await loadPrebill(gate.user.orgId, id, gate.allowedSubsidiaryIds)
-  return prebill ? NextResponse.json({ prebill }) : NextResponse.json({ error: 'not found' }, { status: 404 })
+  return prebill ? NextResponse.json({ prebill }) : notFound("record")
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -29,7 +31,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const feature = await guardWipBillingFeature(gate.user.orgId)
   if (feature) return feature
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   if (!body || !['submit', 'return', 'approve', 'void'].includes(String(body.action))) {
     return NextResponse.json({ error: 'unsupported action' }, { status: 400 })
   }

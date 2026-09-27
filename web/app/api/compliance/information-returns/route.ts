@@ -16,6 +16,8 @@ import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 import { isUuid } from '@/lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -78,7 +80,7 @@ export async function POST(req: Request) {
            and org_id = ${orgId}
            and is_active`)
     ).rows
-    if (!subsidiary) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!subsidiary) return notFound("record")
   }
 
   // Threshold reaches a numeric(19,4) column raw: junk text or a pasted

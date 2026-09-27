@@ -7,6 +7,8 @@ import { db, type SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
 import { RecurringError, runScheduleNow, recurringTemplateScopeFilter } from "@openbooks/engine/src/billing/recurring.ts";
 import { can, guardPermission, type Authz } from "../../../../lib/authz";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -42,7 +44,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const authz = await guardPermission("documents.manage");
   if (authz instanceof NextResponse) return authz;
   const { id } = await params;
-  if (!uuidId.safeParse(id).success) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!uuidId.safeParse(id).success) return notFound("record");
   const parsedBody = await parseJsonBody(req, patchSchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data;
@@ -56,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!sets.length) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
   const outcome = await db.transaction(async (tx) => {
     const before = await ownedEnabled(tx, authz, id);
-    if (!before) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (!before) return notFound("record");
     if ((body.autoPost ?? before.auto_post) && !can(authz, "gl.post")
         && (body.isActive === true || body.nextRunOn !== undefined || body.endsOn !== undefined)) {
       return NextResponse.json({ error: "missing permission: gl.post" }, { status: 403 });
@@ -87,7 +89,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const authz = await guardPermission("documents.manage");
   if (authz instanceof NextResponse) return authz;
   const { id } = await params;
-  if (!uuidId.safeParse(id).success) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!uuidId.safeParse(id).success) return notFound("record");
   const outcome = await db.transaction(async (tx) => {
     // Snapshot first: deleting a schedule removes the only record of what was
     // set to post automatically. Lock it so the audit evidence is the exact
@@ -113,7 +115,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     `);
     return "deleted" as const;
   });
-  if (outcome === "not_found") return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (outcome === "not_found") return notFound("record");
   if (outcome === "generated_documents_exist") {
     return NextResponse.json(
       {
@@ -131,10 +133,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const authz = await guardPermission("documents.manage");
   if (authz instanceof NextResponse) return authz;
   const { id } = await params;
-  if (!uuidId.safeParse(id).success) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!uuidId.safeParse(id).success) return notFound("record");
   try {
     const existing = await db.transaction(tx => ownedEnabled(tx, authz, id));
-    if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (!existing) return notFound("record");
     const gen = await runScheduleNow(id, authz.user.id, undefined, {
       orgId: authz.user.orgId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds, canPost: can(authz, "gl.post"),
     });

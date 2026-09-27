@@ -9,6 +9,8 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { PDF_RECORD_TYPE_BY_KEY } from '../../../../../../lib/pdf-templates/catalog'
 import { resolveRecordRecipient, sendRecordPdfEmail } from '../../../../../../lib/pdf-templates/send'
 import { loadRecordSubsidiaryScope } from '../../../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -52,7 +54,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ recordTy
   const gate = await guardPermission(meta.readPermission)
   if (gate instanceof NextResponse) return gate
   if (!(await isDocKindEnabled(gate.user.orgId, recordType))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   // A malformed id is a plain not-found, settled before any record lookup.
   if (!isUuid(id)) return NextResponse.json({ error: 'record not found' }, { status: 404 })
@@ -73,7 +75,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ recordT
   const gate = await guardPermission(meta.readPermission)
   if (gate instanceof NextResponse) return gate
   if (!(await isDocKindEnabled(gate.user.orgId, recordType))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   if (!isUuid(id)) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   const owned = await loadRecordSubsidiaryScope(recordType, gate.user.orgId, id)

@@ -24,7 +24,7 @@ registerHooks({
         }
         export function guardSubsidiaryScope(authz) {
           if (authz.allowedSubsidiaryIds === null) return null;
-          return new Response(JSON.stringify({ error: 'not found' }), { status: 404 });
+          return new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
         }
       `);
     if (specifier.endsWith("/lib/compliance")) return virtual("export async function guardComplianceFeature() { return null }");

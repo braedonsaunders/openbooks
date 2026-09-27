@@ -38,7 +38,7 @@ registerHooks({
               if (allowed === null) return null;
               if (subsidiaryId != null && allowed.has(subsidiaryId)) return null;
               if (subsidiaryId == null && opts.orgWideNull) return null;
-              return { status: 404, json: async () => ({ error: 'not found' }) };
+              return { status: 404, json: async () => ({ error: 'not_found' }) };
             }
             export function guardUnrestrictedScope(authz){
               if (authz.allowedSubsidiaryIds === null) return null;
@@ -109,7 +109,7 @@ test("post rechecks the locked batch after a concurrent subsidiary rehome", asyn
     await holder.query("commit");
     const response = await pending;
     assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), { error: "not found" });
+    assert.deepEqual(await response.json(), { error: "not_found" });
     const batch = (await withBypassContext(() => db.execute(sql`
       select status, subsidiary_id from psp_settlement_batches where org_id = ${org.orgId} and id = ${imported.batchId}
     `))).rows[0] as { status: string; subsidiary_id: string };
@@ -162,7 +162,7 @@ test("reverse rechecks the locked batch after a concurrent subsidiary rehome", a
     await holder.query("commit");
     const response = await pending;
     assert.equal(response.status, 404);
-    assert.deepEqual(await response.json(), { error: "not found" });
+    assert.deepEqual(await response.json(), { error: "not_found" });
     const batch = (await withBypassContext(() => db.execute(sql`
       select status, subsidiary_id, reversal_entry_id from psp_settlement_batches where org_id = ${org.orgId} and id = ${imported.batchId}
     `))).rows[0] as { status: string; subsidiary_id: string; reversal_entry_id: string | null };
@@ -195,12 +195,12 @@ test("post/reverse answer a malformed batch id with 404, never a 500", async () 
     ]) {
       const response = await POST(json(body));
       assert.equal(response.status, 404, `${body.action} not-a-uuid`);
-      assert.deepEqual(await response.json(), { error: "not found" });
+      assert.deepEqual(await response.json(), { error: "not_found" });
     }
     // A well-formed id that names nothing keeps the miss shape.
     const missing = await POST(json({ action: "post", batchId: randomUUID() }));
     assert.equal(missing.status, 404);
-    assert.deepEqual(await missing.json(), { error: "not found" });
+    assert.deepEqual(await missing.json(), { error: "not_found" });
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
   }

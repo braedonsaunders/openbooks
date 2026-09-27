@@ -8,6 +8,8 @@ import { blobResponse } from '../../../../../../lib/blob-response'
 import { isUuid } from '../../../../../../lib/list-params'
 import { can, getAuthz } from '../../../../../../lib/authz'
 import { fileViewer } from '../../../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -20,7 +22,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const gate = await getAuthz()
   if (!gate) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   let viewer = fileViewer(gate)
   if (!can(gate, 'documents.read')) {
@@ -37,7 +39,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
            : sql``}
        limit 1
     `))
-    if (!attachedAsset.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!attachedAsset.rows[0]) return notFound("record")
     // The attachment relation above limits this exception to evidence on an
     // asset the caller can see; it does not grant cabinet-wide visibility.
     viewer = { userId: gate.user.id, isAdmin: can(gate, '*'), baseline: 'viewer', allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
@@ -46,7 +48,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const url = new URL(req.url)
   const versionId = url.searchParams.get('versionId') ?? undefined
   if (versionId && !isUuid(versionId)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   // A masked-clone tombstone refuses by name. Per the repo rule, the error
   // body is produced from the checked refusal, never parsed out of a 500.
@@ -59,7 +61,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
     throw err
   }
-  if (!blob) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!blob) return notFound("record")
 
   return blobResponse(req, blob, { immutable: versionId != null })
 }

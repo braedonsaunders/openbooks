@@ -6,6 +6,8 @@ import { listRequisitions } from "@openbooks/engine/src/hrm/recruiting/recruitin
 import { guardPermission } from "../../../../../lib/authz";
 import { recruitingErrorResponse } from "../_lib";
 import { createRequisitionBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -19,7 +21,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission("hrm.recruiting.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const status = new URL(req.url).searchParams.get("status");
   if (status !== null && !["draft", "open", "on_hold", "filled", "cancelled"].includes(status)) {
@@ -41,7 +43,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, createRequisitionBody);
   if (!parsedBody.ok) return parsedBody.response;

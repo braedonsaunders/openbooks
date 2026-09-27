@@ -6,6 +6,8 @@ import { recordPaymentSettlement } from '@openbooks/engine/src/payments/operatio
 import { isoDate, parseJsonBody } from '@/lib/api/json'
 import { isUuid } from '@/lib/list-params'
 import { guardPaymentRunPermission, paymentErrorResponse } from '@/app/api/payments/lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -23,7 +25,7 @@ const settlementBody = z
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string; instructionId: string }> }) {
   const { id, instructionId } = await params
-  if (!isUuid(id) || !isUuid(instructionId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id) || !isUuid(instructionId)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
   const owned = (await db.execute(sql`

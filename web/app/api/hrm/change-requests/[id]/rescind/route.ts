@@ -9,6 +9,8 @@ import { isUuid } from "../../../../../../lib/list-params";
 import { changeRequestErrorResponse } from '../../_lib';
 import { automationErrorResponse } from "../../../../automations/_lib";
 import { rescindBody } from "../../../../automations/bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -22,10 +24,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   const gate = await guardPermission("hrm.employment.approve");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmEventVerbs"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await ctx.params;
   if (!isUuid(id)) return NextResponse.json({ error: "change id must be a uuid" }, { status: 400 });

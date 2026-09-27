@@ -3,6 +3,8 @@ import { deleteTalentPool } from "@openbooks/engine/src/hrm/recruiting/pools.ts"
 import { guardPermission } from "../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -18,7 +20,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
     !(await isFeatureEnabled(gate.user.orgId, "hrmTalentPool"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   try {

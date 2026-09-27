@@ -11,6 +11,8 @@ import { loadApplicableRequirement } from '@openbooks/engine/src/compliance/comp
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -117,14 +119,14 @@ export async function POST(req: Request) {
   const partyScope = (await db.execute<{ subsidiaryId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId" from parties where org_id = ${orgId} and id = ${body.partyId}
   `)).rows[0]
-  if (!partyScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!partyScope) return notFound("record")
   const partyDenied = guardSubsidiaryScope(gate, partyScope.subsidiaryId, { orgWideNull: true })
   if (partyDenied) return partyDenied
   if (body.projectId !== undefined && body.projectId !== null && body.projectId !== '') {
     const projectScope = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from projects where org_id = ${orgId} and id = ${body.projectId}
     `)).rows[0]
-    if (!projectScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!projectScope) return notFound("record")
     const projectDenied = guardSubsidiaryScope(gate, projectScope.subsidiaryId, { orgWideNull: true })
     if (projectDenied) return projectDenied
   }

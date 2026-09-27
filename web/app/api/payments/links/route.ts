@@ -14,6 +14,8 @@ import { guardSubsidiaryScope } from "@/lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { nullableUuidId, parseJsonBody, uuidId } from "../../../../lib/api/json";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -43,7 +45,7 @@ async function denyOutsideDocumentScope(
     select subsidiary_id as "subsidiaryId" from documents
      where id = ${documentId} and org_id = ${authz.user.orgId}
   `));
-  if (!owned.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!owned.rows[0]) return notFound("record");
   return guardSubsidiaryScope(authz, owned.rows[0].subsidiaryId);
 }
 
@@ -71,7 +73,7 @@ export async function GET(req: Request) {
     ]);
     return NextResponse.json({ links, providers: providers.rows.map((r) => r.provider) });
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (e instanceof ScopeNotFoundError) return notFound("record");
     throw e;
   }
 }
@@ -102,7 +104,7 @@ export async function POST(req: Request) {
     );
     return NextResponse.json(link, { status: 201 });
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (e instanceof ScopeNotFoundError) return notFound("record");
     if (e instanceof PaymentAcceptanceError) return apiErrorResponse(e, { safeStatus: 422 });
     return apiErrorResponse(e);
   }

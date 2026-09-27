@@ -27,7 +27,7 @@ registerHooks({
           const allowed = authz?.allowedSubsidiaryIds ?? null;
           if (allowed === null) return null;
           if (typeof subsidiaryId === 'string' && allowed.has(subsidiaryId)) return null;
-          return Response.json({ error: 'not found' }, { status: 404 });
+          return Response.json({ error: 'not_found' }, { status: 404 });
         }
       `);
     // The real @/lib/compliance loads: the fixture enables subcontractorCompliance.

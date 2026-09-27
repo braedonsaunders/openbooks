@@ -12,6 +12,8 @@ import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isFeatureEnabled } from '../../../../lib/features'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -141,7 +143,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const { id } = await params
   // A malformed id names nothing: same answer as an unknown one, never a
   // PostgreSQL uuid cast error escaping as a 500.
-  if (!UUID.test(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!UUID.test(id)) return notFound("record")
   return withScopeSnapshot(gate.user.orgId, async () => {
   const result = (await db.execute<Record<string, unknown>>(sql`
     select ci.*, f.content_type, f.size_bytes
@@ -151,7 +153,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
      where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
      ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
   `))
-  if (!result.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!result.rows[0]) return notFound("record")
   const [fields, events] = await Promise.all([
     db.execute(sql`
       select af.* from ap_capture_fields af join ap_capture_runs ar on ar.id = af.run_id and ar.org_id = af.org_id
@@ -171,7 +173,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const gate = await guardPermission('ap.create')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!UUID.test(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!UUID.test(id)) return notFound("record")
   const parsedBody = await parseJsonBody(request, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>
@@ -204,7 +206,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
      where ci.org_id = ${gate.user.orgId} and ci.id = ${id}
      ${apCaptureSubsidiaryScope(gate.allowedSubsidiaryIds)}
   `))
-  if (!current.rows[0]) return NextResponse.json({ error: 'not_found' }, { status: 404 })
+  if (!current.rows[0]) return notFound("record")
   if (['materialized', 'rejected', 'extracting', 'queued'].includes(current.rows[0].status)) {
     return NextResponse.json({ error: 'not_editable' }, { status: 409 })
   }
@@ -221,7 +223,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const item = (await db.execute<{ kind: string }>(sql`
         select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
       if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   }
@@ -238,7 +240,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       const item = (await db.execute<{ kind: string }>(sql`
         select kind from items where id = ${line.itemId} and org_id = ${gate.user.orgId}`))
       if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
     }
   }
@@ -247,7 +249,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     && nextPurchaseOrderId !== current.rows[0].purchase_order_id
     && !(await isDocKindEnabled(gate.user.orgId, 'purchase_order'))
   ) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const settings = await getDocumentCaptureSettings(gate.user.orgId)
   let saved: { resolved: Awaited<ReturnType<typeof resolveAndValidateCapture>>; kind: 'vendor_bill' | 'vendor_credit' }
@@ -373,7 +375,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       return apiErrorResponse(error, { safeStatus: 422 })
     }
     if (error instanceof Error && error.message === 'capture_not_found') {
-      return NextResponse.json({ error: 'not_found' }, { status: 404 })
+      return notFound("record")
     }
     if (error instanceof Error && error.message === 'capture_not_editable') {
       return NextResponse.json({ error: 'not_editable' }, { status: 409 })

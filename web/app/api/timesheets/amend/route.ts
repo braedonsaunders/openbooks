@@ -12,6 +12,8 @@ import {
   pinTimesheetEntryEmployee,
   weekStart,
 } from '../_lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -66,7 +68,7 @@ export async function POST(req: Request) {
     )
     return NextResponse.json({ ...payload, ...result }, { status: 201 })
   } catch (e) {
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof ScopeNotFoundError) return notFound("record")
     return apiErrorResponse(e)
   }
 }

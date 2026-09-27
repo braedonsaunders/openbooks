@@ -12,6 +12,8 @@ import { guardPermission } from "../../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { isUuid } from "../../../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../../../compensation/_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -67,7 +69,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const gate = await guardPermission("hrm.compensation.read");
     if (gate instanceof NextResponse) return gate;
     if (!(await isFeatureEnabled(gate.user.orgId, "hrmMeritCycles"))) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      return notFound("record");
     }
     const proposedPct = body.proposedPct ?? null;
     const proposedRate = body.proposedRate ?? null;
@@ -88,7 +90,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardPermission("hrm.compensation.approve");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmMeritCycles"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const reason = body.reason?.trim() ? body.reason : null;
   try {

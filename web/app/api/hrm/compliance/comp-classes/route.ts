@@ -12,6 +12,8 @@ import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { constructionErrorResponse } from "../_lib";
 import { createCompClassBody, createCompRuleBody, splitBody } from "../bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -20,7 +22,7 @@ export async function GET() {
   const gate = await guardPermission("hrm.construction.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmConstructionCompliance"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     const classes = await listCompClasses(db, gate.user.orgId, gate.user.id);
@@ -34,7 +36,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.construction.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmConstructionCompliance"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const url = new URL(req.url);
   const action = url.searchParams.get("action");

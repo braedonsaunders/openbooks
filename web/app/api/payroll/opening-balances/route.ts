@@ -24,6 +24,7 @@ import {
   saveItSurtaxSaldoCarryIns,
   SurtaxSaldoSaveError,
 } from '@openbooks/engine/src/payroll/it/saldo-carryins.ts'
+import { notFound } from "@/lib/api/responses";
 
 /**
  * The carry-in grid's two IT-only assessed-saldo columns (migration 0393):
@@ -34,6 +35,7 @@ import {
  * channel's refusal. Explicit values, including explicit zeros, persist
  * (presence is the declaration).
  */
+
 const IT_SALDO_KEYS = ['itRegionaleSaldo', 'itComunaleSaldo'] as const
 
 export const dynamic = 'force-dynamic'
@@ -305,7 +307,7 @@ export async function POST(req: Request) {
     })
     return NextResponse.json(result)
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof ScopeNotFoundError) return notFound("record")
     // A refusal is data the operator has to see per row, not a bare 4xx: a
     // whole-workforce load rejected for one transposed column must say which
     // employee, and nothing was written.

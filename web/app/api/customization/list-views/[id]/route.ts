@@ -17,6 +17,8 @@ import {
   clearSiblingListViewDefaults,
   lockListViewDefaultScope,
 } from "../../../../../lib/customization/list-view-default";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -45,7 +47,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const row = await loadOwn(authz.user.orgId, authz.user.id, id);
-  if (!row) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!row) return notFound("record");
   const refused = await refuseDisabledRecordType(authz.user.orgId, row.recordType);
   if (refused) return refused;
   return NextResponse.json(row);
@@ -59,7 +61,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const existing = await loadOwn(user.orgId, user.id, id);
-  if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!existing) return notFound("record");
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
   if (refused) return refused;
   const adminGated = can(authz, "admin.customization.manage");
@@ -198,7 +200,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         values (${user.orgId}, 'list_views', ${id}, 'update', ${JSON.stringify(changes)}, ${user.id})`);
       return { kind: "ok" as const };
     });
-    if (updated.kind === "not_found") return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (updated.kind === "not_found") return notFound("record");
     if (updated.kind === "locked_entries") return NextResponse.json({ error: "locked built-in columns cannot be changed" }, { status: 400 });
     if (updated.kind === "inactive_default") return NextResponse.json({ error: updated.error }, { status: 400 });
     return NextResponse.json({ ok: true });
@@ -222,7 +224,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "id must be a UUID" }, { status: 400 });
   const existing = await loadOwn(user.orgId, user.id, id);
-  if (!existing) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!existing) return notFound("record");
   const refused = await refuseDisabledRecordType(user.orgId, existing.recordType);
   if (refused) return refused;
   const adminGated = can(authz, "admin.customization.manage");
@@ -244,6 +246,6 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       values (${user.orgId}, 'list_views', ${id}, 'delete', ${JSON.stringify({ name: row.name, scope: row.scope })}, ${user.id})`);
     return row;
   });
-  if (!deleted) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!deleted) return notFound("record");
   return NextResponse.json({ ok: true });
 }

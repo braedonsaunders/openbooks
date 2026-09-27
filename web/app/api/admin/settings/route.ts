@@ -1,4 +1,5 @@
 import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../lib/authz";
 import {
@@ -36,6 +37,7 @@ export async function GET() {
   const gate = await guardPermission(SETTINGS_READ_PERMISSION);
   if (gate instanceof NextResponse) return gate;
   const result = await readCompanySettings(gate.user.orgId);
+  if (result.status === 404) return notFound("company settings");
   return NextResponse.json(result.body, { status: result.status });
 }
 
@@ -45,5 +47,6 @@ export async function PUT(req: Request) {
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const result = await updateCompanySettings(gate.user, parsedBody.data as Record<string, unknown>);
+  if (result.status === 404) return notFound("company settings");
   return NextResponse.json(result.body, { status: result.status });
 }

@@ -133,7 +133,7 @@ test("Run now cannot execute another organization's script by id", async () => {
     session.user = caller(home.orgId, userId);
     const res = await POST(runReq(foreignId), { params: Promise.resolve({ id: foreignId }) });
     assert.equal(res.status, 404);
-    assert.deepEqual(await res.json(), { error: "not found" });
+    assert.deepEqual(await res.json(), { error: "not_found" });
     assert.equal(await runCount(other.orgId), 0, "foreign scheduled script must not run");
     assert.equal(await runCount(home.orgId), 0);
   } finally {

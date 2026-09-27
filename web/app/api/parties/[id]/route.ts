@@ -13,6 +13,8 @@ import { isIsoCalendarDate } from '../../../../lib/crm-dates'
 import { loadParty } from '../_lib'
 import { denyLockedOutsidePartyScope } from './bank-accounts/party-scope'
 import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/exact-decimal'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -181,17 +183,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission('parties.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // Parties are org-wide when their primary subsidiary is null (mirrors the
   // party lists' `is null or = any(...)` predicate).
   const scope = await db.execute<{ subsidiaryId: string | null }>(
     sql`select subsidiary_id as "subsidiaryId" from parties where id = ${id} and org_id = ${gate.user.orgId}`,
   )
-  if (!scope.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!scope.rows[0]) return notFound("record")
   const denied = guardSubsidiaryScope(gate, scope.rows[0].subsidiaryId, { orgWideNull: true })
   if (denied) return denied
   const payload = await loadParty(id, gate.user.orgId, gate.allowedSubsidiaryIds)
-  if (!payload) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!payload) return notFound("record")
   return NextResponse.json(payload)
 }
 
@@ -206,7 +208,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const existing = await db.execute<{
     display_name: string
@@ -244,7 +246,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       left join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
      where p.id = ${id} and p.org_id = ${user.orgId}
   `)
-  if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!existing.rows[0]) return notFound("record")
   const existingParty = existing.rows[0]
   const scopeDenied = guardSubsidiaryScope(gate, existingParty.subsidiaryId, { orgWideNull: true })
   if (scopeDenied) return scopeDenied
@@ -256,7 +258,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // Turning that switch off must refuse a new write; the stored link stays so
   // turning the feature back on restores the same assignment.
   if (body.roles?.employee?.workerCompGroupId !== undefined && !(await isFeatureEnabled(user.orgId, 'payroll'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   // Customer/vendor currency is Multi-currency configuration living on the
   // role. Turning that switch off must refuse a new write; the stored code
@@ -265,7 +267,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     (body.roles?.customer?.currency !== undefined || body.roles?.vendor?.currency !== undefined) &&
     !(await isFeatureEnabled(user.orgId, 'multiCurrency'))
   ) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const displayName = body.displayName !== undefined ? body.displayName.trim() : undefined
   // Draft-completion sentinels: the parties draft flow stores 'New party',

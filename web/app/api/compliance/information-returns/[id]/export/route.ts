@@ -6,6 +6,8 @@ import { filedBoxAmounts, formDefinition } from '@openbooks/engine/src/complianc
 import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -46,10 +48,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (blocked) return blocked
   const { orgId } = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // Entity isolation before any filing detail is read (same 404 as a missing filing).
   const filingScope = await loadInformationReturnFilingScope(orgId, id)
-  if (!filingScope) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!filingScope) return notFound("record")
   const scopeDenied = guardSubsidiaryScope(gate, filingScope.subsidiaryId)
   if (scopeDenied) return scopeDenied
 
@@ -62,7 +64,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
      where f.org_id = ${orgId} and f.id = ${id}
   `))
   const filing = filings.rows[0]
-  if (!filing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!filing) return notFound("record")
   const form = formDefinition(filing.form_type)
 
   const recipients = (await db.execute<{

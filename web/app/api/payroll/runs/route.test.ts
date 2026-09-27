@@ -75,7 +75,7 @@ const mockSources = new Map<string, string>([
       const NextResponse = globalThis.openbooksPayrollRunsNextResponse
       export function guardSubsidiaryScope(_gate, subsidiaryId) {
         if (state.allowedSubsidiaryIds !== null && !state.allowedSubsidiaryIds.has(subsidiaryId)) {
-          return NextResponse.json({ error: 'not found' }, { status: 404 })
+          return NextResponse.json({ error: 'not_found' }, { status: 404 })
         }
         return null
       }

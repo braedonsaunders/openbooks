@@ -5,6 +5,8 @@ import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { lockBankMatchRuleSet } from '../../../../../lib/banking-rule-set-lock'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -17,7 +19,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (unrestricted) return unrestricted
   const user = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const missing = await db.transaction(async (tx) => {
     await lockBankMatchRuleSet(user.orgId)
     // Snapshot the rule first: deletion removes the record of what used to
@@ -41,6 +43,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     `)
     return false
   })
-  if (missing) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (missing) return notFound("record")
   return NextResponse.json({ ok: true })
 }

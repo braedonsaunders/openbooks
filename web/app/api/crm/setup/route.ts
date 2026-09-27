@@ -12,6 +12,8 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -293,7 +295,7 @@ export async function POST(req: NextRequest) {
         body.currency !== undefined &&
         !(await isFeatureEnabled(user.orgId, "multiCurrency"))
       ) {
-        return NextResponse.json({ error: "not found" }, { status: 404 });
+        return notFound("record");
       }
       const ownerUserId = body.ownerUserId || null;
       const salesTeamId = body.salesTeamId || null;

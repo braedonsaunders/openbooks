@@ -9,6 +9,8 @@ import { getAuthz } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { performanceErrorResponse } from "../../review-cycles/_lib";
 import { patchCalibrationEntryBody } from "../../calibration-sessions/bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -26,7 +28,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||
     !(await isFeatureEnabled(authz.user.orgId, "hrmCalibration"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, patchCalibrationEntryBody);
   if (!parsedBody.ok) return parsedBody.response;

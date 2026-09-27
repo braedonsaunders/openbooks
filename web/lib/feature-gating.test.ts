@@ -29,7 +29,7 @@ registerHooks({
           export function guardSubsidiaryScope(authz, subsidiaryId) {
             if (authz.allowedSubsidiaryIds === null) return null
             if (subsidiaryId !== null && subsidiaryId !== undefined && authz.allowedSubsidiaryIds.has(String(subsidiaryId))) return null
-            return new Response(JSON.stringify({ error: 'not found' }), { status: 404, headers: { 'content-type': 'application/json' } })
+            return new Response(JSON.stringify({ error: 'not_found' }), { status: 404, headers: { 'content-type': 'application/json' } })
           }
           export function subsidiariesInScope(authz, ids) {
             return authz.allowedSubsidiaryIds === null || ids.every((id) => id !== null && id !== undefined && authz.allowedSubsidiaryIds.has(id))

@@ -32,6 +32,8 @@ import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { isCalendarDate } from '../../../../../lib/setup/coerce'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 
@@ -136,14 +138,14 @@ async function lockedRateScope(
   gate: Authz,
   id: string,
 ): Promise<{ row: WageScope & { id: string } } | { response: NextResponse }> {
-  const notFound = { response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
+  const missingRecord = { response: notFound("record") }
   const located = await db.execute<WageScope & { id: string }>(sql`
     select r.id, r.employee_party_id as "employeePartyId", r.job_title as "jobTitle",
            r.trade_id as "tradeId", r.department_id as "departmentId", r.subsidiary_id as "subsidiaryId"
       from labor_cost_rates r
      where r.org_id = ${orgId} and r.id = ${id}`)
   const row = located.rows[0]
-  if (!row) return notFound
+  if (!row) return missingRecord
   if (isOrgWideWageScope(row)) {
     const denied = guardUnrestrictedScope(gate)
     if (denied) return { response: denied }
@@ -154,7 +156,7 @@ async function lockedRateScope(
     const locked = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from parties
        where org_id = ${orgId} and id = ${row.employeePartyId} for share`)).rows[0]
-    if (!locked) return notFound
+    if (!locked) return missingRecord
     employeeSubsidiary = locked.subsidiaryId
   }
   let departmentSubsidiary: string | null = null
@@ -162,7 +164,7 @@ async function lockedRateScope(
     const locked = (await db.execute<{ subsidiaryId: string | null }>(sql`
       select subsidiary_id as "subsidiaryId" from departments
        where org_id = ${orgId} and id = ${row.departmentId} for share`)).rows[0]
-    if (!locked) return notFound
+    if (!locked) return missingRecord
     departmentSubsidiary = locked.subsidiaryId
   }
   if (row.employeePartyId !== null && employeeSubsidiary == null) {
@@ -171,8 +173,8 @@ async function lockedRateScope(
     if (denied) return { response: denied }
     return { row }
   }
-  if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, row.subsidiaryId ?? employeeSubsidiary ?? departmentSubsidiary ?? null)) return notFound
-  if (row.subsidiaryId && !subsidiariesInScope(gate, [row.subsidiaryId])) return notFound
+  if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, row.subsidiaryId ?? employeeSubsidiary ?? departmentSubsidiary ?? null)) return missingRecord
+  if (row.subsidiaryId && !subsidiariesInScope(gate, [row.subsidiaryId])) return missingRecord
   return { row }
 }
 
@@ -272,7 +274,7 @@ export async function GET(req: Request) {
         left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id and s.is_active
        where p.org_id = ${gate.user.orgId} and p.id = ${employee}
        for share of p`)
-    if (employeeContext.rows.length !== 1) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (employeeContext.rows.length !== 1) return notFound("record")
     // Wage data is confidential per subsidiary: an employee outside the
     // caller's subsidiary scope is indistinguishable from a nonexistent one.
     const scopeDenied = guardSubsidiaryScope(gate, employeeContext.rows[0]!.subsidiaryId, {
@@ -509,13 +511,13 @@ export async function POST(req: Request) {
     // Wages are confidential per subsidiary: an employee/department/subsidiary
     // outside the caller's scope is indistinguishable from a missing one.
     if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, employeeRef?.rows[0]?.subsidiaryId ?? null, { orgWideNull: true })) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     if (!subsidiaryScopeAllows(gate.allowedSubsidiaryIds, departmentRef?.rows[0]?.subsidiaryId ?? null)) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     if (subsidiaryId && !subsidiariesInScope(gate, [subsidiaryId])) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     const currencies = await configuredCurrencies(orgId)
     const currency = typeof body.currency === 'string' ? body.currency.toUpperCase() : ''
@@ -568,7 +570,7 @@ export async function POST(req: Request) {
             select p.subsidiary_id as "subsidiaryId" from parties p
              where p.org_id = ${orgId} and p.id = ${employeePartyId} for share`)).rows[0]
           if (!lockedEmployee || !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, lockedEmployee.subsidiaryId, { orgWideNull: true })) {
-            return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
+            return { ok: false, response: notFound("record") }
           }
         }
         if (departmentId) {
@@ -576,7 +578,7 @@ export async function POST(req: Request) {
             select subsidiary_id as "subsidiaryId" from departments
              where org_id = ${orgId} and id = ${departmentId} for share`)).rows[0]
           if (!lockedDepartment || !subsidiaryScopeAllows(gate.allowedSubsidiaryIds, lockedDepartment.subsidiaryId)) {
-            return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
+            return { ok: false, response: notFound("record") }
           }
         }
         // The canonical writer (engine/src/projects/labor-cost-rates.ts):
@@ -646,7 +648,7 @@ export async function POST(req: Request) {
           before.departmentId !== row.departmentId ||
           before.subsidiaryId !== row.subsidiaryId
         ) {
-          return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
+          return { ok: false, response: notFound("record") }
         }
         if (to !== null && to < before.effectiveFrom) {
           return {
@@ -706,7 +708,7 @@ export async function POST(req: Request) {
           before.departmentId !== row.departmentId ||
           before.subsidiaryId !== row.subsidiaryId
         ) {
-          return { ok: false, response: NextResponse.json({ error: 'not found' }, { status: 404 }) }
+          return { ok: false, response: notFound("record") }
         }
         // Keep the resolved-rate provenance on approved time entries intact:
         // deactivation, never a physical delete.
@@ -741,7 +743,7 @@ export async function POST(req: Request) {
     if (subsidiary.rows.length !== 1) {
       return NextResponse.json({ error: await subsidiaryProblem(orgId, body.subsidiaryId) }, { status: 422 })
     }
-    if (!subsidiariesInScope(gate, [body.subsidiaryId])) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!subsidiariesInScope(gate, [body.subsidiaryId])) return notFound("record")
     try {
       const rec = await laborClearingReconciliation(orgId, body.periodStart, body.periodEnd, body.subsidiaryId)
       if (!rec) return NextResponse.json({ error: 'labor clearing account is not configured' }, { status: 422 })
@@ -766,7 +768,7 @@ export async function POST(req: Request) {
     if (subsidiary.rows.length !== 1) {
       return NextResponse.json({ error: await subsidiaryProblem(orgId, body.subsidiaryId) }, { status: 422 })
     }
-    if (!subsidiariesInScope(gate, [body.subsidiaryId])) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!subsidiariesInScope(gate, [body.subsidiaryId])) return notFound("record")
     try {
       const result = await postPayrollVariance({ orgId, actorId: userId, periodStart: body.periodStart, periodEnd: body.periodEnd, subsidiaryId: body.subsidiaryId })
       return NextResponse.json({ ok: true, ...result })

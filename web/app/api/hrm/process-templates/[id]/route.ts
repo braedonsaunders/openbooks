@@ -6,6 +6,8 @@ import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { processErrorResponse } from '../../processes/_lib'
 import { updateProcessTemplateBody } from '../bodies'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -13,7 +15,7 @@ async function gate() {
   const result = await guardPermission('hrm.process.manage')
   if (result instanceof NextResponse) return result
   if (!(await isFeatureEnabled(result.user.orgId, 'hrm'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   return result
 }

@@ -22,6 +22,8 @@ import {
   upsertScheduleCalendar,
   upsertScheduleResource,
 } from '../../../lib/project-schedule'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -46,7 +48,7 @@ async function resolveProject(gate: Gate, projectId: string | null) {
      where id = ${projectId} and org_id = ${gate.user.orgId}`))
   const row = project.rows[0]
   if (!row || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(row.subsidiary_id)))) {
-    return { error: NextResponse.json({ error: 'not found' }, { status: 404 }) }
+    return { error: notFound("record") }
   }
   return { projectId: row.id }
 }

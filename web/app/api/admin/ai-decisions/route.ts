@@ -4,6 +4,8 @@ import { listDecisions } from "@openbooks/engine/src/hrm/ai/governance.ts";
 import { aiRailsErrorResponse } from "../../../../lib/ai-rails";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -24,7 +26,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "aiGovernanceLedger"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const url = new URL(req.url);
   const capabilityKey = url.searchParams.get("capabilityKey") ?? undefined;

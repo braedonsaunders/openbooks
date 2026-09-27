@@ -54,9 +54,7 @@ export const POST = defineRoute({
 `web/lib/api/responses.ts` is the one refusal vocabulary. Every body shares
 the shape `{ error, code?, field?, fieldErrors?, remedy? }`:
 
-- `notFound(kind, id?)` — one 404 spelling (`not_found`). Absent,
-  foreign-org, and out-of-scope rows answer identically; the kind and id
-  never reach the body.
+- `notFound(kind, id?)` — guards and routes share its `{ error: "not_found" }` body; absent, foreign-org, and out-of-scope rows answer identically.
 - `unprocessable(error, { field?, fieldErrors? })` — 422 domain refusals
   (`{ status: 400 }` for a malformed idempotency key, which travels in a
   header no 422 could point at).

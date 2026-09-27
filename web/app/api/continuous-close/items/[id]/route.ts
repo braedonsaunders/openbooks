@@ -18,6 +18,8 @@ import {
   loadWorkItemAssignment,
   setWorkItemAssignment,
 } from "../../../../../lib/agents/assignments";
+import { notFound } from "@/lib/api/responses";
+
 
 const ACTION_STATUS = {
   review: "in_review",
@@ -46,7 +48,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     readableContinuousCloseAgents(authz),
     authz.allowedSubsidiaryIds,
   );
-  if (!item) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!item) return notFound("record");
   const canWrite = can(authz, "assistant.write");
   const [assignment, notes] = await Promise.all([
     loadWorkItemAssignment(authz, id),
@@ -69,14 +71,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
   const access = await loadWorkItemAccess(authz.user.orgId, id);
-  if (!access) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!access) return notFound("record");
   if (!canReadContinuousCloseAgent(authz, access.agentKey)) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
   // Lifecycle and assignment writes move another entity's finding when the
   // subject is out of scope: restricted callers share the uniform not-found.
   if (!subsidiaryScopeAllows(authz.allowedSubsidiaryIds, access.subjectSubsidiaryId)) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
+    return notFound("record");
   }
   let body: Record<string, unknown>;
   try {
@@ -149,7 +151,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     `);
     return { status };
   });
-  if (!result) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!result) return notFound("record");
   if ("error" in result) {
     const statusCode = result.error === "not_found" ? 404 : result.error === "forbidden" ? 403 : 409;
     return NextResponse.json({ error: result.error }, { status: statusCode });

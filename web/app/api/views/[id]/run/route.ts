@@ -4,6 +4,8 @@ import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { canRunReportEntity } from '../../../../../lib/report-authz'
 import { loadView, runView } from '../../../../../lib/views'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -13,11 +15,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { user, permissions } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const view = await loadView(user.orgId, id, user.id, permissions)
-  if (!view) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!view) return notFound("record")
   if (!(await canRunReportEntity(gate, view.query))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   try {

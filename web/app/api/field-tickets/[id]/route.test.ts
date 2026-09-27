@@ -112,7 +112,7 @@ const mockSources = new Map<string, string>([
       export function guardSubsidiaryScope(authz, subsidiaryId) {
         if (authz.allowedSubsidiaryIds === null || authz.allowedSubsidiaryIds === undefined) return null
         if (subsidiaryId && authz.allowedSubsidiaryIds.has(subsidiaryId)) return null
-        return Response.json({ error: 'not found' }, { status: 404 })
+        return Response.json({ error: 'not_found' }, { status: 404 })
       }
     `,
   ],
@@ -328,25 +328,25 @@ test('GET and every POST/PATCH mutation fail closed for an out-of-scope ticket',
 
   const read = await get()
   assert.equal(read.status, 404)
-  assert.deepEqual(await read.json(), { error: 'not found' })
+  assert.deepEqual(await read.json(), { error: 'not_found' })
   assert.ok(!routeState.calls.some((call) => call.text.includes('field_ticket_labor_snapshots')))
 
   routeState.calls.length = 0
   const patchResponse = await patch({ memo: 'hidden', expectedRevision: STORED_REVISION })
   assert.equal(patchResponse.status, 404)
-  assert.deepEqual(await patchResponse.json(), { error: 'not found' })
+  assert.deepEqual(await patchResponse.json(), { error: 'not_found' })
   assert.ok(!routeState.calls.some((call) => call.kind === 'tx-execute'))
 
   routeState.calls.length = 0
   const postResponse = await post({ action: 'submit' })
   assert.equal(postResponse.status, 404)
-  assert.deepEqual(await postResponse.json(), { error: 'not found' })
+  assert.deepEqual(await postResponse.json(), { error: 'not_found' })
   assert.ok(!routeState.calls.some((call) => call.kind === 'tx-execute'))
 
   routeState.calls.length = 0
   const malformed = await postRaw('{')
   assert.equal(malformed.status, 404)
-  assert.deepEqual(await malformed.json(), { error: 'not found' })
+  assert.deepEqual(await malformed.json(), { error: 'not_found' })
 })
 
 test('add-line and remove-line require the exact revision before the locked mutation', async () => {

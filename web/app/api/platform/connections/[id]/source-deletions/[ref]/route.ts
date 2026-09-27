@@ -8,6 +8,8 @@ import {
 } from "@openbooks/engine/src/sync/source-deletions.ts";
 import { guardPermission, guardUnrestrictedScope } from "../../../../../../../lib/authz";
 import { storageIdentityError } from "../../../_storage-identity";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -47,7 +49,7 @@ export async function POST(
       return apiErrorResponse(error, { safeStatus: 422 });
     }
     if (storageIdentityError(error)) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      return notFound("record");
     }
     throw error;
   }

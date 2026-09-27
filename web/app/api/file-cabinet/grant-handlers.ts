@@ -13,8 +13,10 @@ import {
 import { isUuid } from '../../../lib/list-params'
 import type { Authz } from '../../../lib/authz'
 import { fileViewer, requireFileAccess, requireFolderAccess } from './lib'
+import { notFound } from "@/lib/api/responses";
 
 /** Manager on the resource is required to view or edit its sharing. */
+
 async function requireManager(
   authz: Authz,
   resourceType: ResourceType,
@@ -45,7 +47,7 @@ async function requireAnchor(
   resourceId: string,
 ): Promise<NextResponse | null> {
   if (!(await cabinetResourceExists(authz.user.orgId, resourceType, resourceId))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   return null
 }
@@ -56,7 +58,7 @@ export async function getGrants(
   resourceType: ResourceType,
   resourceId: string,
 ): Promise<NextResponse> {
-  if (!isUuid(resourceId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(resourceId)) return notFound("record")
   const anchor = await requireAnchor(authz, resourceType, resourceId)
   if (anchor) return anchor
   const gate = await requireManager(authz, resourceType, resourceId)
@@ -72,7 +74,7 @@ export async function postGrant(
   resourceId: string,
   body: unknown,
 ): Promise<NextResponse> {
-  if (!isUuid(resourceId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(resourceId)) return notFound("record")
   const anchor = await requireAnchor(authz, resourceType, resourceId)
   if (anchor) return anchor
   const gate = await requireManager(authz, resourceType, resourceId)
@@ -121,7 +123,7 @@ export async function deleteGrant(
   grantId: string,
 ): Promise<NextResponse> {
   if (!isUuid(resourceId) || !isUuid(grantId)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const anchor = await requireAnchor(authz, resourceType, resourceId)
   if (anchor) return anchor
@@ -134,6 +136,6 @@ export async function deleteGrant(
     resourceId,
     { actorId: authz.user.id, viewer: fileViewer(authz) },
   )
-  if (!ok) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!ok) return notFound("record")
   return NextResponse.json({ ok: true })
 }

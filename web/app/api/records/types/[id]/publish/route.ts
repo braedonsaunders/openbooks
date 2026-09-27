@@ -6,6 +6,8 @@ import { guardPermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { describeIssue, lintRecordFields, typeKeyError } from '../../../../../../lib/record-schema'
 import { auditSetupChange } from '../../../../../../lib/setup/audit'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -35,7 +37,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -178,7 +180,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     })
   }
 
-  if (outcome.kind === 'not_found') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (outcome.kind === 'not_found') return notFound("record")
   if (outcome.kind === 'response') return outcome.response
   return NextResponse.json({ ok: true, status: outcome.status })
 }

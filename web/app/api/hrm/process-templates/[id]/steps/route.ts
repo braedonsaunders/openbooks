@@ -6,6 +6,8 @@ import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
 import { processErrorResponse } from '../../../processes/_lib'
 import { saveProcessTemplateStepBody } from '../../bodies'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -13,7 +15,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const authz = await guardPermission('hrm.process.manage')
   if (authz instanceof NextResponse) return authz
   if (!(await isFeatureEnabled(authz.user.orgId, 'hrm'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const parsed = await parseJsonBody(req, saveProcessTemplateStepBody)
   if (!parsed.ok) return parsed.response

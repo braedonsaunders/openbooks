@@ -4,6 +4,8 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -114,7 +116,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { id } = await params;
   // A malformed id names nothing: same answer as a group in another org,
   // never a PostgreSQL uuid cast error escaping as a 500.
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -172,6 +174,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     `);
     return after;
   });
-  if (!updated) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!updated) return notFound("record");
   return NextResponse.json({ ok: true });
 }

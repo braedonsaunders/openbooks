@@ -9,6 +9,8 @@ import { pdfResponse, safeName } from '../../../../../lib/export'
 import { assembleInvoiceBackup, loadInvoiceBackup, InvoiceBackupImmutableError, InvoiceBackupNotFoundError, InvoiceBackupSourceAccessError, type BackupType } from '../../../../../lib/invoice-backup'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -34,15 +36,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const feature = await guardProjectsFeature(gate.user.orgId)
   if (feature) return feature
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const req = await requestInvoice(gate.user.orgId, id, gate.allowedSubsidiaryIds)
-  if (!req) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!req) return notFound("record")
   if (!req.invoice_document_id) return NextResponse.json({ error: 'This request has no invoice to back up yet' }, { status: 422 })
   try {
     const result = await assembleInvoiceBackup(gate.user.orgId, gate.user.id, req.invoice_document_id, req.backup_type as BackupType, gate.allowedSubsidiaryIds)
     return NextResponse.json({ fileId: result.fileId, pageCount: result.pageCount })
   } catch (e) {
-    if (e instanceof InvoiceBackupNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof InvoiceBackupNotFoundError) return notFound("record")
     if (e instanceof InvoiceBackupSourceAccessError) return apiErrorResponse(e, { safeStatus: 403 })
     if (e instanceof InvoiceBackupImmutableError) return apiErrorResponse(e, { safeStatus: 422 })
     const rendererRefusal = rendererUnavailableResponse(e)
@@ -62,9 +64,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const feature = await guardProjectsFeature(gate.user.orgId)
   if (feature) return feature
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const req = await requestInvoice(gate.user.orgId, id, gate.allowedSubsidiaryIds)
-  if (!req) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!req) return notFound("record")
   if (!req.invoice_document_id) return NextResponse.json({ error: 'No invoice to back up' }, { status: 404 })
   try {
     const backup = await loadInvoiceBackup(gate.user.orgId, req.invoice_document_id, gate.allowedSubsidiaryIds)
@@ -76,7 +78,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     }
     return pdfResponse(backup.bytes, safeName(backup.filename))
   } catch (e) {
-    if (e instanceof InvoiceBackupNotFoundError) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (e instanceof InvoiceBackupNotFoundError) return notFound("record")
     if (e instanceof InvoiceBackupSourceAccessError) return apiErrorResponse(e, { safeStatus: 403 })
     throw e
   }

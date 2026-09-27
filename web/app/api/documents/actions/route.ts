@@ -14,6 +14,8 @@ import { canReadDocumentKind } from "../../../../lib/flow-subject-authz.ts";
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { toActionFailure } from './action-failure'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -64,7 +66,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'documentId required' }, { status: 400 })
   }
   // A malformed id can name nothing: same answer as a missing document.
-  if (!isUuid(body.documentId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(body.documentId)) return notFound("record")
 
   // Gate on the narrowest row first — kind, status and subsidiary only.
   // The full document is never loaded before the scope and permission
@@ -79,11 +81,11 @@ export async function POST(req: Request) {
     })
     .from(schema.documents)
     .where(and(eq(schema.documents.id, body.documentId), eq(schema.documents.orgId, user.orgId)))
-  if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!doc) return notFound("record")
   const denied = guardSubsidiaryScope(authz, doc.subsidiaryId)
   if (denied) return denied
   if (!(await isDocKindEnabled(user.orgId, doc.kind))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const cfg = DOC_KINDS[doc.kind]
   if (!cfg) return NextResponse.json({ error: `kind "${doc.kind}" is not actionable here` }, { status: 422 })
@@ -92,7 +94,7 @@ export async function POST(req: Request) {
   // missing, like GET /api/documents/[id] — the 403 below stays for
   // callers who can read but may not submit/post.
   if (!canReadDocumentKind(authz, doc.kind)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const perm = action === 'post' ? postPermission(doc.kind) : createPermission(doc.kind)
   if (!can(authz, perm)) {
@@ -167,7 +169,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: `document is ${submission.status}, not draft` }, { status: 422 })
       }
       if (submission.kind === 'scope_revoked') {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
       // A policy-refused release is answered by name: the bill stays
       // submitted (the refusal audit above stands), never released.
@@ -247,10 +249,10 @@ export async function POST(req: Request) {
       return { kind: 'posted' as const, entryId, previousStatus }
     })
     if (outcome.kind === 'not_found') {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     if (outcome.kind === 'scope_revoked') {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     if (outcome.kind === 'pending') {
       return NextResponse.json(

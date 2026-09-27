@@ -6,6 +6,8 @@ import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { performanceErrorResponse } from "../../review-cycles/_lib";
 import { patchExitBody } from "../../exit-records/bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -19,7 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission("hrm.retention.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid exit record" }, { status: 400 });
@@ -35,7 +37,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardPermission("hrm.performance.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid exit record" }, { status: 400 });

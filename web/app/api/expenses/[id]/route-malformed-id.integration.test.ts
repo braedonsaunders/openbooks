@@ -86,7 +86,7 @@ for (const method of ['GET', 'PATCH', 'DELETE'] as const) {
     try {
       const result = await call(method, 'reports')
       assert.equal(result.status, 404, `expected 404, got ${result.status}: ${JSON.stringify(result.json)}`)
-      assert.deepEqual(result.json, { error: 'not found' })
+      assert.deepEqual(result.json, { error: 'not_found' })
     } finally {
       await dropScratchOrg(org.orgId)
     }

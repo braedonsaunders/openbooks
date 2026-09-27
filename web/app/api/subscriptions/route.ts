@@ -21,6 +21,8 @@ import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
 import { guardPermission, guardSubsidiaryScope, guardUnrestrictedScope, type Authz } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -121,7 +123,7 @@ async function guardSubscriptionScope(
       join parties c on c.id = s.customer_id and c.org_id = s.org_id
      where s.id = ${subscriptionId} and s.org_id = ${authz.user.orgId}
   `));
-  if (!owned.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!owned.rows[0]) return notFound("record");
   return guardSubsidiaryScope(authz, owned.rows[0].subsidiaryId, { orgWideNull: true });
 }
 
@@ -135,7 +137,7 @@ async function guardCustomerScope(
       from parties c
      where c.id = ${customerId} and c.org_id = ${authz.user.orgId}
   `));
-  if (!customer.rows[0]) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!customer.rows[0]) return notFound("record");
   return guardSubsidiaryScope(authz, customer.rows[0].subsidiaryId, { orgWideNull: true });
 }
 
@@ -175,12 +177,12 @@ async function refuseInventoryPlanItem(
     select kind from items where id = ${nextId} and org_id = ${orgId}`));
   if (!(await isFeatureEnabled(orgId, "inventory"))) {
     if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      return notFound("record");
     }
   }
   if (item.rows[0] && item.rows[0].kind === "equipment_charge") {
     if (!(await isFeatureEnabled(orgId, "equipment"))) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      return notFound("record");
     }
   }
   return null;
@@ -267,7 +269,7 @@ export async function POST(req: Request) {
         // off must refuse a new write; omitted currency leaves the column
         // unset so turning the feature back on does not invent a code.
         if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
-          return NextResponse.json({ error: "not found" }, { status: 404 });
+          return notFound("record");
         }
         if (typeof body.name !== "string" || !body.name.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
         const cadence = normalizeSubscriptionCadence(body.interval, body.intervalCount ?? 1);
@@ -301,7 +303,7 @@ export async function POST(req: Request) {
         // off must refuse a new write; the stored code stays so turning the
         // feature back on restores the same currency.
         if (body.currency !== undefined && !(await isFeatureEnabled(orgId, "multiCurrency"))) {
-          return NextResponse.json({ error: "not found" }, { status: 404 });
+          return notFound("record");
         }
         if (typeof body.name !== "string" || !body.name.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
         const cadence = normalizeSubscriptionCadence(body.interval, body.intervalCount ?? 1);
@@ -341,7 +343,7 @@ export async function POST(req: Request) {
           `);
           return false;
         });
-        if (missingPlan) return NextResponse.json({ error: "not found" }, { status: 404 });
+        if (missingPlan) return notFound("record");
         return NextResponse.json({ ok: true });
       }
       case "deletePlan": {
@@ -566,7 +568,7 @@ export async function POST(req: Request) {
           `);
           return { skippedWindow };
         });
-        if (!outcome) return NextResponse.json({ error: "not found" }, { status: 404 });
+        if (!outcome) return notFound("record");
         if (outcome.skippedWindow) {
           return NextResponse.json({
             ok: true,
@@ -589,7 +591,7 @@ export async function POST(req: Request) {
     }
   } catch (e) {
     if (e instanceof SubscriptionError) return apiErrorResponse(e);
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (e instanceof ScopeNotFoundError) return notFound("record");
     throw e;
   }
 }

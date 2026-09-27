@@ -36,7 +36,7 @@ registerHooks({
               if (allowed === null) return null;
               if (subsidiaryId != null && allowed.has(subsidiaryId)) return null;
               if (subsidiaryId == null && opts.orgWideNull) return null;
-              return { status: 404, json: async () => ({ error: 'not found' }) };
+              return { status: 404, json: async () => ({ error: 'not_found' }) };
             }
           `),
       };
@@ -71,12 +71,12 @@ test("payment-document oracle: no pay permission sees existing and missing ids i
       params: Promise.resolve({ id: documentId }),
     });
     assert.equal(existing.status, 404);
-    assert.deepEqual(await existing.json(), { error: "not found" });
+    assert.deepEqual(await existing.json(), { error: "not_found" });
     const missing = await GET(new Request("https://openbooks.test/api/payments/fixture"), {
       params: Promise.resolve({ id: randomUUID() }),
     });
     assert.equal(missing.status, 404);
-    assert.deepEqual(await missing.json(), { error: "not found" });
+    assert.deepEqual(await missing.json(), { error: "not_found" });
 
     // Wrong-direction callers learn nothing: an ar.pay-only caller sees the
     // existing vendor payment exactly like a missing id (uniform 404).
@@ -85,12 +85,12 @@ test("payment-document oracle: no pay permission sees existing and missing ids i
       params: Promise.resolve({ id: documentId }),
     });
     assert.equal(wrongDir.status, 404);
-    assert.deepEqual(await wrongDir.json(), { error: "not found" });
+    assert.deepEqual(await wrongDir.json(), { error: "not_found" });
     const wrongDirMissing = await GET(new Request("https://openbooks.test/api/payments/fixture"), {
       params: Promise.resolve({ id: randomUUID() }),
     });
     assert.equal(wrongDirMissing.status, 404);
-    assert.deepEqual(await wrongDirMissing.json(), { error: "not found" });
+    assert.deepEqual(await wrongDirMissing.json(), { error: "not_found" });
 
     // The matching direction passes the gate and the draft document loads.
     state.permissions = new Set<string>(["ap.pay"]);

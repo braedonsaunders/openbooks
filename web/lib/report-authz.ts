@@ -6,6 +6,7 @@ import { customRecordReportCatalog } from './custom-record-report-catalog'
 import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 import { can, type Authz } from './authz'
 import { isFeatureEnabled } from './features'
+import { notFound } from "@/lib/api/responses";
 
 /**
  * The entity gate for every path that can EXECUTE a stored report plan.
@@ -30,6 +31,7 @@ import { isFeatureEnabled } from './features'
  * Statement definitions carry no entity plan; they are gated by
  * `STATEMENT_KIND_FEATURE` instead of being refused here.
  */
+
 export function reportEntityPermission(query: unknown): string | null {
   const entity = (query as { entity?: unknown } | null | undefined)?.entity
   if (typeof entity !== 'string') return null
@@ -124,7 +126,7 @@ export async function guardReportEntity(authz: Authz, query: unknown): Promise<N
   }
   const featureKey = reportEntityFeatureKey(query)
   if (featureKey && !(await isFeatureEnabled(authz.user.orgId, featureKey))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
 }

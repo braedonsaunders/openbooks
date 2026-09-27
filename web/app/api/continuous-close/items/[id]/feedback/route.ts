@@ -8,12 +8,14 @@ import {
   canReadContinuousCloseAgent,
   withLockedWorkItemAccess,
 } from "../../../../../../lib/continuous-close";
+import { notFound } from "@/lib/api/responses";
+
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!(await isFeatureEnabled(authz.user.orgId, 'continuousClose'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid_id" }, { status: 400 });
@@ -47,7 +49,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     `);
     return { rating };
   });
-  if (!result) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (!result) return notFound("record");
   if ("error" in result) {
     return NextResponse.json(
       { error: result.error },

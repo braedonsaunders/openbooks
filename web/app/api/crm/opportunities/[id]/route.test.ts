@@ -421,7 +421,7 @@ test('disappearance after preflight returns 404 before any transaction write', a
   const response = await patch({ title: 'Gone opportunity', expectedUpdatedAt: REVISION })
 
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
   assert.equal(routeState.txWrites, 0)
   assert.equal(routeState.auditWrites, 0)
   assert.equal(routeState.calls.some((call) => call.text.includes('update crm_opportunities')), false)

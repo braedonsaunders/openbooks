@@ -9,6 +9,8 @@ import {
   connectionOauthRedirectUri,
   mintConnectionOauthState,
 } from '../../_flow'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -30,7 +32,7 @@ export async function GET(req: Request) {
     if (storageIdentityError(e)) return null
     throw e
   })
-  if (!conn || conn.source !== 'xero') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!conn || conn.source !== 'xero') return notFound("record")
   const secret = conn.secrets == null ? null : unsealJson<{ clientId?: string }>(conn.secrets, { orgId: gate.user.orgId, purpose: "connection.secrets" })
   if (!secret?.clientId) {
     return NextResponse.json({ error: 'connection has no Client ID — save the app credentials first' }, { status: 400 })

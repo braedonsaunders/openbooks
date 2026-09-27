@@ -3,6 +3,8 @@ import { scorecardSummary } from "@openbooks/engine/src/hrm/recruiting/scorecard
 import { guardPermission } from "../../../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../../../lib/features";
 import { recruitingErrorResponse } from "../../../../_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -18,7 +20,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
     !(await isFeatureEnabled(gate.user.orgId, "hrmStructuredInterviews"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   try {

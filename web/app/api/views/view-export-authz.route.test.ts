@@ -103,7 +103,7 @@ test('view export refuses a payroll plan when the caller lacks payroll.read', as
   )
 
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
   assert.equal(state.ran, false, 'the executor must not run after the entity gate refuses')
 })
 

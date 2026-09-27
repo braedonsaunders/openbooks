@@ -10,6 +10,8 @@ import { performanceErrorResponse } from "../../../review-cycles/_lib";
 import { addSuccessionCandidateBody } from "../../../talent-reviews/bodies";
 import { z } from "zod";
 import { isUuid } from "../../../../../../lib/list-params";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -28,7 +30,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||
     !(await isFeatureEnabled(authz.user.orgId, "hrmSuccession"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, addSuccessionCandidateBody);
   if (!parsedBody.ok) return parsedBody.response;
@@ -56,7 +58,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||
     !(await isFeatureEnabled(authz.user.orgId, "hrmSuccession"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, removeCandidateBody);
   if (!parsedBody.ok) return parsedBody.response;

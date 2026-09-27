@@ -14,6 +14,8 @@ import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isoDate, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
   const denied = guardSubsidiaryScope(gate, doc.subsidiaryId)
   if (denied) return denied
   if (!(await isDocKindEnabled(user.orgId, doc.kind))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   const reversalDate = body.reversalDate ?? (await businessToday(user.orgId))

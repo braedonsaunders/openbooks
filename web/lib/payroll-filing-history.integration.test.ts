@@ -120,7 +120,7 @@ for (const change of [
             ));
           const response = await get(fx.orgId);
           assert.equal(response.status, 404);
-          assert.deepEqual(await response.json(), { error: "not found" });
+          assert.deepEqual(await response.json(), { error: "not_found" });
         } else if (change === "inactive-original") {
           await withBypassContext(() =>
             db.execute(

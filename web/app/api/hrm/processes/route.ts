@@ -7,6 +7,8 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { processErrorResponse } from "./_lib";
 import { openProcessBody } from "./bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -23,7 +25,7 @@ export async function GET(req: Request) {
   const gate = await guardPermission("hrm.process.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const url = new URL(req.url);
   const segment = url.searchParams.get("segment") ?? "open";
@@ -52,7 +54,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.process.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, openProcessBody);
   if (!parsedBody.ok) return parsedBody.response;

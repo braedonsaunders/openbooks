@@ -26,7 +26,7 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   if (url === "mock:subcontract-rehome-authz") return { format: "module", shortCircuit: true, source: `
     const state = globalThis.__subcontractRehomeRace;
     export async function guardPermission() { return { user: state.user, allowedSubsidiaryIds: new Set([state.allowedSubsidiaryId]) }; }
-    export function guardSubsidiaryScope(authz, subsidiaryId) { return authz.allowedSubsidiaryIds.has(subsidiaryId) ? null : new Response(JSON.stringify({error:'not found'}), {status:404}); }
+    export function guardSubsidiaryScope(authz, subsidiaryId) { return authz.allowedSubsidiaryIds.has(subsidiaryId) ? null : new Response(JSON.stringify({error:'not_found'}), {status:404}); }
   ` };
   if (url === "mock:subcontract-rehome-gate") return { format: "module", shortCircuit: true, source: "export async function guardSubcontractsFeature() { return null }" };
   return nextLoad(url, context);
@@ -103,7 +103,7 @@ test("POST rechecks the project scope after waiting out a concurrent rehome", as
     await holder.query("commit");
     const response = await pending;
     assert.equal(response.status, 404, JSON.stringify(await response.clone().json()));
-    assert.deepEqual(await response.json(), { error: "not found" });
+    assert.deepEqual(await response.json(), { error: "not_found" });
     const result = (await withBypassContext(() => db.execute(sql`
       select s.title, p.subsidiary_id from subcontracts s join projects p on p.id = s.project_id and p.org_id = s.org_id
        where s.org_id = ${org.orgId} and s.id = ${subcontractId}
@@ -167,7 +167,7 @@ test("GET detail retries a stale snapshot after a project is rehomed", async () 
     await holder.query("commit");
     const response = await pending;
     assert.equal(response.status, 404, JSON.stringify(await response.clone().json()));
-    assert.deepEqual(await response.json(), { error: "not found" });
+    assert.deepEqual(await response.json(), { error: "not_found" });
   } finally {
     await holder.query("rollback").catch(() => undefined);
     holder.release();

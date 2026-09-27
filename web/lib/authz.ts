@@ -14,6 +14,8 @@ import { currentUser, type SessionUser } from "./auth";
 import { accessDeniedHref } from "./gate-targets";
 import { permissionSetCovers, resolveEffectivePermissions } from "./permissions";
 import { allowedSubsidiaryIds } from "./subsidiaries";
+import { notFound } from "@/lib/api/responses";
+
 
 export {
   subsidiaryScopeAllows,
@@ -187,7 +189,7 @@ export function guardSubsidiaryScope(
   opts: SubsidiaryScopeOptions = {},
 ): NextResponse | null {
   if (subsidiaryScopeAllows(authz.allowedSubsidiaryIds, subsidiaryId, opts)) return null;
-  return NextResponse.json({ error: "not found" }, { status: 404 });
+  return notFound("record");
 }
 
 /**

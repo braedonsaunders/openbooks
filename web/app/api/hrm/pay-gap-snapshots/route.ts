@@ -8,6 +8,8 @@ import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { compensationErrorResponse } from "../compensation/_lib";
 import { generateSnapshotBody } from "../compensation/bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -21,7 +23,7 @@ export async function GET() {
   const gate = await guardPermission("hrm.compensation.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmPayTransparency"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     const snapshot = await latestGapSnapshot({ orgId: gate.user.orgId, actorId: gate.user.id });
@@ -35,7 +37,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.compensation.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmPayTransparency"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, generateSnapshotBody);
   if (!parsedBody.ok) return parsedBody.response;

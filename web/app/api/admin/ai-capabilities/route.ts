@@ -10,6 +10,8 @@ import {
 import { aiRailsErrorResponse } from "../../../../lib/ai-rails";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -31,7 +33,7 @@ export async function GET() {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "aiGovernanceLedger"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     const capabilities = await listCapabilities(db, gate.user.orgId);
@@ -45,7 +47,7 @@ export async function PATCH(req: Request) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "aiGovernanceLedger"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, patchBody);
   if (!parsedBody.ok) return parsedBody.response;
@@ -69,7 +71,7 @@ export async function POST() {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "aiGovernanceLedger"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     const seeded = await syncCapabilitiesForOrg({ orgId: gate.user.orgId, actorId: gate.user.id });

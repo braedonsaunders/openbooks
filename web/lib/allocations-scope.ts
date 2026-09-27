@@ -10,6 +10,7 @@ import {
   allocationScopeVisible,
 } from "../../engine/src/organization/allocation-scope.ts";
 import type { RuleInEffect } from "../../engine/src/allocations/types.ts";
+import { notFound } from "@/lib/api/responses";
 
 /**
  * Allocation run scope gate (m40_allocation_scope): the ONE shared helper
@@ -20,6 +21,7 @@ import type { RuleInEffect } from "../../engine/src/allocations/types.ts";
  * the GET detail route answers, never a lifecycle or permission shape that
  * would confirm the run exists.
  */
+
 export async function requireVisibleAllocationRun(
   orgId: string,
   runId: string,
@@ -30,12 +32,12 @@ export async function requireVisibleAllocationRun(
     run = await getRun(orgId, runId);
   } catch (error) {
     if (error instanceof RunQueryError && error.code === "not_found") {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      return notFound("record");
     }
     throw error;
   }
   if (!allocationScopeVisible(allowed, run.subsidiaryId, run.computation)) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   return run;
 }

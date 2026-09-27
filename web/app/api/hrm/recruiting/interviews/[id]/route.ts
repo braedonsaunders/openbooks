@@ -9,6 +9,8 @@ import { guardPermission } from "../../../../../../lib/authz";
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";
 import { patchInterviewBody } from "../bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -21,7 +23,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const gate = await guardPermission("hrm.recruiting.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid interview" }, { status: 400 });

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { can, getAuthz } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadCustomerPulse, pulseSectionsFor } from '../../../../../lib/customer-pulse'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -23,10 +25,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
 
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const data = await loadCustomerPulse(id, authz.user.orgId, authz.allowedSubsidiaryIds, sections)
-  if (!data) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!data) return notFound("record")
 
   return NextResponse.json(data)
 }

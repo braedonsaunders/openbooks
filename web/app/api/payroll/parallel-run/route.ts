@@ -16,6 +16,8 @@ import {
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
+import { notFound } from "@/lib/api/responses";
+
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -86,9 +88,9 @@ async function assertComparisonInputsInScope(
 ): Promise<NextResponse | null> {
   if (allowed === null) return null
   const registers = await visibleRegisterIds(orgId, allowed)
-  if (!registers?.has(registerId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!registers?.has(registerId)) return notFound("record")
   const runs = await visibleRunIds(orgId, allowed)
-  if (!runs?.has(payRunDocumentId)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!runs?.has(payRunDocumentId)) return notFound("record")
   return null
 }
 

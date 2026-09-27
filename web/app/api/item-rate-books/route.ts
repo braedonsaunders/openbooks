@@ -11,6 +11,8 @@ import { validateTimeTypeBillRates } from '@/lib/item-rate-time-types'
 import { isUuid } from '@/lib/list-params'
 import { saveSetupBook } from '@/lib/setup/books'
 import { resolveSetupEntity } from '@/lib/setup/write'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -70,7 +72,7 @@ export async function POST(request: Request) {
   }
 
   const multiCurrency = await isFeatureEnabled(gate.user.orgId, 'multiCurrency')
-  if (body.currency !== undefined && !multiCurrency) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (body.currency !== undefined && !multiCurrency) return notFound("record")
   const inventoryEnabled = await isFeatureEnabled(gate.user.orgId, 'inventory')
   const equipmentEnabled = await isFeatureEnabled(gate.user.orgId, 'equipment')
   const entity = resolveSetupEntity('item-rate-books')

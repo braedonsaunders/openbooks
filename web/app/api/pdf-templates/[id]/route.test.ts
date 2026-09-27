@@ -129,7 +129,7 @@ test('a missing template is a plain 404 on every verb', async () => {
     await DELETE(new Request(url(id), { method: 'DELETE' }), params(id)),
   ]) {
     assert.equal(response.status, 404)
-    assert.deepEqual(await response.json(), { error: 'not found' })
+    assert.deepEqual(await response.json(), { error: 'not_found' })
   }
   assert.deepEqual(state.lookups, [id, id, id])
 })
@@ -146,7 +146,7 @@ test('a PATCH whose row vanishes mid-flight is a 404, not a success', async () =
     params(id),
   )
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
 })
 
 test('a DELETE whose row vanishes mid-flight is a 404, not a success', async () => {
@@ -155,7 +155,7 @@ test('a DELETE whose row vanishes mid-flight is a 404, not a success', async () 
   const id = STORED_TEMPLATE.id as string
   const response = await DELETE(new Request(url(id), { method: 'DELETE' }), params(id))
   assert.equal(response.status, 404)
-  assert.deepEqual(await response.json(), { error: 'not found' })
+  assert.deepEqual(await response.json(), { error: 'not_found' })
 })
 
 test('a malformed template id is indistinguishable from a missing one and never reaches the store', async () => {
@@ -167,7 +167,7 @@ test('a malformed template id is indistinguishable from a missing one and never 
       await DELETE(new Request(url(bad), { method: 'DELETE' }), params(bad)),
     ]) {
       assert.equal(response.status, 404, `"${bad}" must be a plain not-found`)
-      assert.deepEqual(await response.json(), { error: 'not found' })
+      assert.deepEqual(await response.json(), { error: 'not_found' })
     }
     assert.deepEqual(state.lookups, [], `"${bad}" must never be bound to the uuid column`)
     assert.equal(state.writes, 0)

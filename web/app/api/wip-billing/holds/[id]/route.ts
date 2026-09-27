@@ -5,6 +5,8 @@ import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { releaseWipHold } from '../../../../../lib/wip-billing'
 import { guardWipBillingFeature } from '../../../../../lib/wip-billing-gate'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -14,7 +16,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const feature = await guardWipBillingFeature(gate.user.orgId)
   if (feature) return feature
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { reason?: string } | null

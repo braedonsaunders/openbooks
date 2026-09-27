@@ -4,6 +4,8 @@ import { removeRequirement } from "@openbooks/engine/src/hrm/qualifications/requ
 import { guardPermission } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { qualificationErrorResponse } from "../../qualifications/_lib";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -12,7 +14,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   const gate = await guardPermission("hrm.certifications.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   try {
     const { id } = await params;

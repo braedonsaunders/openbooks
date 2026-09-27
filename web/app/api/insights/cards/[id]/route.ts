@@ -14,6 +14,8 @@ import {
   normalizeVizSettings,
   strOrNull,
 } from '../../_lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -48,9 +50,9 @@ export async function GET(
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id))
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   const card = await loadCard(id, gate.user.orgId)
-  if (!card) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!card) return notFound("record")
   return NextResponse.json(card)
 }
 
@@ -74,11 +76,11 @@ export async function PATCH(
   const user = gate.user
   const { id } = await params
   if (!isUuid(id))
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
 
   const existing = await loadCard(id, user.orgId)
   if (!existing)
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
 
   const parsedBody = await parseJsonBody(req, nameBodySchema)
   if (!parsedBody.ok) return parsedBody.response
@@ -188,10 +190,10 @@ export async function DELETE(
   const user = gate.user
   const { id } = await params
   if (!isUuid(id))
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
 
   if (!(await loadCard(id, user.orgId)))
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
 
   return mutateInsight(gate, 'insight_cards', id, 'delete', async (tx) => {
     // Lock affected boards in stable order and advance their revisions, so an

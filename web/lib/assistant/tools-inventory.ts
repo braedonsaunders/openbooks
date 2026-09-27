@@ -90,7 +90,7 @@ const getItem: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { id: string };
     const payload = await loadItem(a.id, authz.user.orgId);
-    if (!payload) return { ok: false, error: "not found" };
+    if (!payload) return { ok: false, error: "not_found" };
     const item = payload.item as Record<string, unknown>;
     return {
       ok: true,

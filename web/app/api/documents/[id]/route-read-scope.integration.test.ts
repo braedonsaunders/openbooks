@@ -71,7 +71,7 @@ test('GET hides an unreadable bill as missing, symmetrically', async () => {
 
     const existing = await getJson(org.orgId, bill)
     assert.equal(existing.status, 404, 'an existing unreadable bill is 404')
-    assert.deepEqual(existing.json, { error: 'not found' })
+    assert.deepEqual(existing.json, { error: 'not_found' })
 
     const missing = await getJson(org.orgId, randomUUID())
     assert.equal(missing.status, 404)

@@ -16,6 +16,8 @@ import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -53,7 +55,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (blocked) return blocked
   const { orgId, id: actorId } = gate.user
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const parsedBody = await parseJsonBody(req, jsonObject)
   if (!parsedBody.ok) return parsedBody.response
@@ -90,7 +92,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
          for update of lw
       `)
       const waiver = before.rows[0]
-      if (!waiver) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (!waiver) return notFound("record")
       const denied = guardSubsidiaryScope(gate, waiver.subsidiaryId as string | null | undefined)
       if (denied) return denied
       if (!ALLOWED_FROM[action].includes(String(waiver.status))) {

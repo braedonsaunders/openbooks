@@ -21,6 +21,8 @@ import {
   connectionConfigUrlRefusal,
   mergedDeclaredSourceConfig,
 } from "../_connector-guard";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -92,7 +94,7 @@ export async function PATCH(
       )
       .for("update");
     if (!existing) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      return notFound("record");
     }
 
     const manifest = sourceType(existing.source);
@@ -229,7 +231,7 @@ export async function PATCH(
     });
     return updated;
   }).catch((e) => {
-    if (storageIdentityError(e)) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (storageIdentityError(e)) return notFound("record");
     throw e;
   });
   if (result instanceof NextResponse) return result;
@@ -259,7 +261,7 @@ export async function DELETE(
     throw e;
   });
   if (!existing)
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   const deleted = await db.transaction(async (tx) => {
     // Preserve run history while detaching it from the connection being
     // removed.  The migration makes connection_id nullable; doing this
@@ -297,7 +299,7 @@ export async function DELETE(
     throw e;
   });
   if (!deleted) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   return NextResponse.json({ ok: true });
 }

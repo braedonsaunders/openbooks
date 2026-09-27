@@ -6,6 +6,8 @@ import { requireVisibleAllocationRun } from "../../../../../../lib/allocations-s
 import { isUuid } from "../../../../../../lib/list-params";
 import { rerunAllocationRun } from "../../../../../../../engine/src/allocations/period-run.ts";
 import { allocationRunErrorResponse } from "../../../_lib.ts";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -26,7 +28,7 @@ export async function POST(req: Request, { params }: Ctx) {
   if (gate instanceof NextResponse) return gate;
   if (!gateCan(gate, "gl.post")) return missingPermission("gl.post");
   const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!isUuid(id)) return notFound("record");
   const scoped = await requireVisibleAllocationRun(gate.user.orgId, id, gate.allowedSubsidiaryIds);
   if (scoped instanceof NextResponse) return scoped;
   // The Runs tab always posts a JSON object (`{}` for a one-click re-run);

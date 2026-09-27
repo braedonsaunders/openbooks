@@ -11,6 +11,8 @@ import { exportDataToPdf, exportDataToXlsx, orgBranding, resolveLayout, type Tra
 import { resolvePeriod } from '../../../../../lib/periods'
 import { parseReportQuery } from '../../../../../lib/report-filters'
 import { internalTokenMatches, parseInternalOrgId } from '../../../../../lib/internal-token'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -160,7 +162,7 @@ export async function GET(req: Request) {
     // A stored plan survives a Features toggle; a fresh artifact must not.
     // 404 (not 422) so the scheduler treats this as refuse, not a bad plan.
     if (message.endsWith('feature is disabled')) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
     return NextResponse.json({ error: message }, { status: 422 })
   }

@@ -6,6 +6,8 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { cashPosition } from "../../../../lib/cash/cash-position";
 import { normalizeMoneyValue } from "../../../../lib/cash/core";
 import { analyticsConfig } from "../../../../lib/analytics/config";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -30,7 +32,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "missing permission: banking.read, ap.read or ar.read" }, { status: 403 });
   }
   if (!(await isFeatureEnabled(gate.user.orgId, "banking"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const user = gate.user;
 
@@ -68,7 +70,7 @@ export async function GET(req: Request) {
         (requestedSubIds.length === 0 ||
           requestedSubIds.some((id) => !gate.allowedSubsidiaryIds!.has(id))))
     ) {
-      return NextResponse.json({ error: "not found" }, { status: 404 });
+      return notFound("record");
     }
   }
   const subIds = gate.allowedSubsidiaryIds

@@ -9,6 +9,8 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
 import { parseJsonBody, uuidId } from '../../../../../../lib/api/json'
 import { guardPaymentRunPermission } from '../../../lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -21,7 +23,7 @@ const deliverBody = z.object({
 /** Active SFTP servers the run can be delivered to (picker for the run drawer). */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
   const r = (await db.execute(sql`
@@ -35,7 +37,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 /** Deliver a payment run's bank file to an SFTP server's outbound folder: { sftpServerId }. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const gate = await guardPaymentRunPermission(id)
   if (gate instanceof NextResponse) return gate
   const { user } = gate

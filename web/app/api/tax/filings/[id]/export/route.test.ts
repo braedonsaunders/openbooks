@@ -58,7 +58,7 @@ stubModules({
         state.scopeChecks.push(subsidiaryId ?? null)
         if (authz.allowedSubsidiaryIds === null) return null
         if (subsidiaryId !== null && authz.allowedSubsidiaryIds.has(subsidiaryId)) return null
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return NextResponse.json({ error: 'not_found' }, { status: 404 })
       }
     `,
     "@openbooks/engine/src/platform/db.ts": `

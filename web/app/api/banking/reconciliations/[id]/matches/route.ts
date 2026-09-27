@@ -4,6 +4,8 @@ import { createMatch, unmatchStatementLine } from '@openbooks/engine/src/banking
 import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 import { bankingErrorResponse } from '../../../util'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -15,7 +17,7 @@ export async function POST(req: Request, { params }: Params) {
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { statementLineId?: string; journalLineIds?: string[] }

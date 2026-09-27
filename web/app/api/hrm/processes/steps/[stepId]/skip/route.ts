@@ -6,6 +6,8 @@ import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { isUuid } from "../../../../../../../lib/list-params";
 import { processErrorResponse } from "../../../_lib";
 import { skipStepBody } from "../../../bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -14,7 +16,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ stepId: string
   const gate = await guardPermission("hrm.process.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { stepId } = await ctx.params;
   if (!isUuid(stepId)) return NextResponse.json({ error: "step id must be a uuid" }, { status: 400 });

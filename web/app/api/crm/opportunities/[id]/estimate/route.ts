@@ -14,6 +14,8 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { getTranslations } from 'next-intl/server'
 import { claimSetupCreate, SetupCreateConflict } from '../../../../../../lib/api/idempotency'
 import { draftDocumentId } from '../../../../../../lib/order-cycle'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -75,10 +77,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (arGate instanceof NextResponse) return arGate
   const { user } = gate
   if (!(await isDocKindEnabled(user.orgId, 'quote'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   // A retry or double click must not mint a second quote. The caller sends
   // one Idempotency-Key per estimate action (the house draft-route pattern):
   // same key replays the first quote, a changed payload conflicts, and a
@@ -98,7 +100,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         join items i on i.id = line.item_id and i.org_id = line.org_id
        where line.org_id = ${user.orgId} and line.opportunity_id = ${id}`))
     if (lineItems.rows.some((row) => INVENTORY_ITEM_KINDS.has(row.kind))) {
-      return NextResponse.json({ error: 'not found' }, { status: 404 })
+      return notFound("record")
     }
   }
   const today = await businessToday(user.orgId)
@@ -110,7 +112,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const opportunity = (await tx.execute(sql`
       select o.* from crm_opportunities o where o.id = ${id} and o.org_id = ${user.orgId} and o.is_active${crmOpportunityScope(gate.allowedSubsidiaryIds)} for update of o`))
     const op = opportunity.rows[0]
-    if (!op) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (!op) return notFound("record")
     if (!op?.party_id) throw new Error('The opportunity needs an account before an estimate can be created')
     // The revision pins the conversion inputs: an identical retry replays
     // the first quote, while a reused key over an edited opportunity

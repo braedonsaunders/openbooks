@@ -255,7 +255,7 @@ test("an AR-gated caller cannot release an AP settlement", async () => {
   assert.equal(res.status, 404);
   assert.deepEqual(state.released, []);
   // And the refusal must not disclose that an AP settlement exists there.
-  assert.deepEqual(await res.json(), { error: "not found" });
+  assert.deepEqual(await res.json(), { error: "not_found" });
 });
 
 test("a cash application id is not releasable through this route", async () => {

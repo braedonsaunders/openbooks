@@ -40,7 +40,7 @@ const mockSources = new Map<string, string>([
       state.calls.push('permission');
       if (state.permission !== 'allow') return NextResponse.json({ error: state.permission }, { status: state.permission === 'deny401' ? 401 : 403 });
       state.calls.push('feature');
-      if (state.feature === 'off') return NextResponse.json({ error: 'not found' }, { status: 404 });
+      if (state.feature === 'off') return NextResponse.json({ error: 'not_found' }, { status: 404 });
       return gate();
     }
   `],

@@ -17,6 +17,8 @@ import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../compensation/_lib";
 import { setBudgetsBody } from "../../compensation/bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -34,7 +36,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const gate = await guardPermission("hrm.compensation.read");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmMeritCycles"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid cycle" }, { status: 400 });
@@ -54,7 +56,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const gate = await guardPermission("hrm.compensation.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmMeritCycles"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const { id } = await params;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid cycle" }, { status: 400 });

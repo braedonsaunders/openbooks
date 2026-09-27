@@ -12,6 +12,8 @@ import { normalizeCountryCode } from '../../../../../../lib/countries'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { subsidiaryVisibleFilter } from '../../../../../../lib/subsidiaries'
 import { auditConfigChange } from '../../_lib'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -26,7 +28,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
   if (gate instanceof NextResponse) return gate
   const { resource, id } = await params
   if (!isUuid(id) || !['formats', 'profiles', 'schedules', 'mandates'].includes(resource)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
@@ -68,7 +70,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
         body.currency !== undefined &&
         !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
       ) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
       await updatePaymentBankProfile(id, gate.user.orgId, gate.user.id, body, gate.allowedSubsidiaryIds)
     } else if (resource === 'formats') {
@@ -79,7 +81,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
         body.currency !== undefined &&
         !(await isFeatureEnabled(gate.user.orgId, 'multiCurrency'))
       ) {
-        return NextResponse.json({ error: 'not found' }, { status: 404 })
+        return notFound("record")
       }
       // POST requires a non-empty name and formatter script. A blank PATCH
       // value would otherwise store '' / NULL: an empty name corrupts the
@@ -132,7 +134,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
         return NextResponse.json({ error: 'action must be submit_for_approval or create_draft' }, { status: 400 })
       }
       const current = (await db.execute<{ cron: string; timezone: string }>(sql`select cron, timezone from payment_schedules where id = ${id} and org_id = ${gate.user.orgId}`))
-      if (!current.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (!current.rows[0]) return notFound("record")
       const next = body.cron || body.timezone ? computeNextRunAt(body.cron?.trim() || current.rows[0].cron, new Date(), body.timezone?.trim() || current.rows[0].timezone) : undefined
       if ((body.cron || body.timezone) && !next) return NextResponse.json({ error: 'cron expression or time zone is invalid' }, { status: 400 })
       if (body.paymentBankProfileId) {
@@ -166,7 +168,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
           { before: before.rows[0], after: updated.rows[0] }, gate.user.id, req.headers.get('X-Request-Id'))
         return 'updated' as const
       })
-      if (scheduleWrite === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (scheduleWrite === 'missing') return notFound("record")
     } else {
       // POST allowlists the mandate status; PATCH must enforce the same
       // contract instead of storing an unknown status that silently disables
@@ -226,7 +228,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
           { before, after: updated.rows[0] }, gate.user.id, req.headers.get('X-Request-Id'))
         return 'updated' as const
       })
-      if (mandateWrite === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
+      if (mandateWrite === 'missing') return notFound("record")
     }
     return NextResponse.json({ ok: true })
   } catch (error) {

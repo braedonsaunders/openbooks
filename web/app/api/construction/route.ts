@@ -31,6 +31,8 @@ import { acquireFeatureGateLock } from "../../../lib/features";
 import { lockAndCheckOrgFeature } from "@openbooks/engine/src/organization/org-feature-lock.ts";
 import { supportsApplicationsForPayment } from "../../../lib/project-billing-procedure";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -50,7 +52,7 @@ export async function GET(req: Request) {
   const orgId = authz.user.orgId;
   // A project outside the caller's subsidiary scope is a missing project.
   const scope = await projectScope(orgId, projectId);
-  if (!scope) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!scope) return notFound("record");
   const denied = guardSubsidiaryScope(authz, scope.subsidiaryId);
   if (denied) return denied;
   if (!(await supportsApplicationsForPayment(orgId, projectId))) {
@@ -129,7 +131,7 @@ export async function GET(req: Request) {
       });
     });
   } catch (error) {
-    if (error instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (error instanceof ScopeNotFoundError) return notFound("record");
     throw error;
   }
 }
@@ -285,7 +287,7 @@ export async function POST(req: Request) {
   let scope: ProjectScope | null = null;
   if (projectActions.has(action)) {
     const resolved = await actionProjectScope(orgId, action, body);
-    if (!resolved) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (!resolved) return notFound("record");
     // Out of the caller's subsidiary scope ⇒ indistinguishable from missing.
     const denied = guardSubsidiaryScope(authz, resolved.subsidiaryId);
     if (denied) return denied;
@@ -306,7 +308,7 @@ export async function POST(req: Request) {
   try {
     switch (action) {
       case "addSov": {
-        if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
+        if (!(await ownsProject(orgId, body.projectId as string))) return notFound("record");
         const description = String(body.description ?? "").trim();
         const scheduledRaw = canonicalDecimal(body.scheduledValue ?? "0", 4);
         if (scheduledRaw === null) throw new ConstructionBillingError(moneyRefusal("Scheduled value", body.scheduledValue ?? "0"));
@@ -439,7 +441,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
       case "addChangeOrder": {
-        if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
+        if (!(await ownsProject(orgId, body.projectId as string))) return notFound("record");
         const number = String(body.number ?? "").trim();
         const amountRaw = canonicalDecimal(body.amount ?? "0", 4);
         if (amountRaw === null) return NextResponse.json({ error: moneyRefusal("Change-order amount", body.amount ?? "0") }, { status: 422 });
@@ -647,7 +649,7 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
       case "createPayApp": {
-        if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
+        if (!(await ownsProject(orgId, body.projectId as string))) return notFound("record");
         const retainageRaw = canonicalDecimal(body.retainagePercent ?? "10", 4);
         if (retainageRaw === null) throw new ConstructionBillingError(moneyRefusal("Retainage percent", body.retainagePercent ?? "10", "a percent"));
         const r = await createPayApplication(orgId, userId, body.projectId as string, body.periodEnd as string, normalizeMoney(retainageRaw), authz.allowedSubsidiaryIds);
@@ -692,7 +694,7 @@ export async function POST(req: Request) {
         return NextResponse.json(r);
       }
       case "releaseRetainage": {
-        if (!(await ownsProject(orgId, body.projectId as string))) return NextResponse.json({ error: "not found" }, { status: 404 });
+        if (!(await ownsProject(orgId, body.projectId as string))) return notFound("record");
         const amountRaw = canonicalDecimal(body.amount ?? "0", 4);
         if (amountRaw === null) return NextResponse.json({ error: moneyRefusal("Release amount", body.amount ?? "0") }, { status: 422 });
         const r = await releaseRetainage(orgId, userId, body.projectId as string, body.periodEnd as string, normalizeMoney(amountRaw), authz.allowedSubsidiaryIds);
@@ -704,7 +706,7 @@ export async function POST(req: Request) {
   } catch (e) {
     // A locked scope recheck that fails (missing, cross-org, or moved out of
     // the caller's subsidiaries) is indistinguishable from a missing record.
-    if (e instanceof ScopeNotFoundError) return NextResponse.json({ error: "not found" }, { status: 404 });
+    if (e instanceof ScopeNotFoundError) return notFound("record");
     if (e instanceof ConstructionBillingError) return apiErrorResponse(e, { safeStatus: 422 });
     // Residual simultaneous-insert race against change_orders_project_number:
     // the pre-check above already answered, so report its verdict.

@@ -8,6 +8,8 @@ import { getAuthz } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { performanceErrorResponse } from "../review-cycles/_lib";
 import { linkCompetencyBody } from "../competency-frameworks/bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -26,7 +28,7 @@ export async function POST(req: Request) {
     !(await isFeatureEnabled(authz.user.orgId, "hrmPerformance")) ||
     !(await isFeatureEnabled(authz.user.orgId, "hrmCompetencies"))
   ) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const parsedBody = await parseJsonBody(req, linkCompetencyBody);
   if (!parsedBody.ok) return parsedBody.response;

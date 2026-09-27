@@ -14,6 +14,8 @@ import { documentRouteReadPermission } from "../../../../../lib/flow-subject-aut
 import { lockedDocumentScopeDenied } from "../../../../../lib/document-scope.ts";
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { isUuid } from '../../../../../lib/list-params'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -41,18 +43,18 @@ type VoidGuard = { authz: NonNullable<Awaited<ReturnType<typeof getAuthz>>>; id:
 async function guardVoidDocument(id: string): Promise<VoidGuard | NextResponse> {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const found = (await db.execute<{ kind: string; subsidiaryId: string | null }>(sql`
     select kind, subsidiary_id as "subsidiaryId"
       from documents
      where id = ${id} and org_id = ${authz.user.orgId}
   `))
   const doc = found.rows[0]
-  if (!doc) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!doc) return notFound("record")
   const denied = guardSubsidiaryScope(authz, doc.subsidiaryId)
   if (denied) return denied
   if (!(await isDocKindEnabled(authz.user.orgId, doc.kind))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const permission = voidPermission(doc.kind)
   if (!permission) {
@@ -67,7 +69,7 @@ async function guardVoidDocument(id: string): Promise<VoidGuard | NextResponse> 
   // confirms the record exists or names its family.
   const readPerm = documentRouteReadPermission(doc.kind)
   if (readPerm && !can(authz, readPerm)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   if (!can(authz, permission)) {
     return NextResponse.json({ error: `missing permission: ${permission}` }, { status: 403 })

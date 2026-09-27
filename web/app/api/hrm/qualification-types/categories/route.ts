@@ -6,6 +6,8 @@ import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/auth
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { qualificationErrorResponse } from "../../qualifications/_lib";
 import { declareCategoryBody } from "../../qualifications/bodies";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -14,7 +16,7 @@ export async function POST(req: Request) {
   const gate = await guardPermission("hrm.certifications.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmCertifications"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const scopeDenied = guardUnrestrictedScope(gate);
   if (scopeDenied) return scopeDenied;

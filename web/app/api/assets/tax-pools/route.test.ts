@@ -63,7 +63,7 @@ const mockSources = new Map<string, string>([
       const NextResponse = globalThis.openbooksTaxPoolsNextResponse
       export function guardSubsidiaryScope(_gate, subsidiaryId) {
         if (state.allowedSubsidiaryIds !== null && !state.allowedSubsidiaryIds.has(subsidiaryId)) {
-          return NextResponse.json({ error: 'not found' }, { status: 404 })
+          return NextResponse.json({ error: 'not_found' }, { status: 404 })
         }
         return null
       }
@@ -223,7 +223,7 @@ test("POST refuses an explicit subsidiary outside the caller scope before runnin
   const response = await post({ taxYear: 2026, subsidiaryId: "sub-other" });
 
   assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { error: "not found" });
+  assert.deepEqual(await response.json(), { error: "not_found" });
   assert.deepEqual(
     routeState.runCalls,
     [],
@@ -268,7 +268,7 @@ test("POST refuses an explicit book outside the caller org before running the po
   });
 
   assert.equal(response.status, 404);
-  assert.deepEqual(await response.json(), { error: "not found" });
+  assert.deepEqual(await response.json(), { error: "not_found" });
   assert.deepEqual(routeState.runCalls, [], "a foreign-org book must never reach the engine");
 });
 

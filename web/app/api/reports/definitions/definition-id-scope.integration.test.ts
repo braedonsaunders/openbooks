@@ -51,18 +51,18 @@ test("definition read, autosave, delete, and export answer a malformed id with 4
   for (const id of ["not-a-uuid", "new"]) {
     const got = await GET(json("GET"), params(id));
     assert.equal(got.status, 404, `GET ${id}`);
-    assert.deepEqual(await got.json(), { error: "not found" });
+    assert.deepEqual(await got.json(), { error: "not_found" });
 
     const patched = await PATCH(
       json("PATCH", { name: "Renamed", expectedUpdatedAt: "2026-01-01T00:00:00.000000Z" }),
       params(id),
     );
     assert.equal(patched.status, 404, `PATCH ${id}`);
-    assert.deepEqual(await patched.json(), { error: "not found" });
+    assert.deepEqual(await patched.json(), { error: "not_found" });
 
     const deleted = await DELETE(json("DELETE"), params(id));
     assert.equal(deleted.status, 404, `DELETE ${id}`);
-    assert.deepEqual(await deleted.json(), { error: "not found" });
+    assert.deepEqual(await deleted.json(), { error: "not_found" });
 
     const exported = await exportDefinition(
       new Request(`http://audit.local/api/reports/definitions/${id}/export?format=csv`),

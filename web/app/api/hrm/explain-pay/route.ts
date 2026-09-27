@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { explainPayslip } from "@openbooks/engine/src/hrm/ai/explain-pay.ts";
 import { aiRailsErrorResponse, requireAnyPerm, uuidParam } from "../../../../lib/ai-rails";
 import { isFeatureEnabled } from "../../../../lib/features";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = "nodejs";
 
@@ -16,7 +18,7 @@ export async function GET(req: Request) {
   const gate = await requireAnyPerm(["hrm.self.read", "hrm.employment.read", "payroll.manage"]);
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "hrmExplainPay"))) {
-    return NextResponse.json({ error: "not found" }, { status: 404 });
+    return notFound("record");
   }
   const url = new URL(req.url);
   const employmentId = uuidParam(url, "employmentId", true);

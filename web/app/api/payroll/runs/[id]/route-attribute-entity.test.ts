@@ -213,7 +213,7 @@ test(
         subsidiaryId: otherId,
       });
       assert.equal(scoped.status, 404);
-      assert.deepEqual(await scoped.json(), { error: "not found" });
+      assert.deepEqual(await scoped.json(), { error: "not_found" });
       assert.equal(await docSubsidiary(orgId, scopedDocumentId), null);
     } finally {
       routeState.authz = null;

@@ -22,6 +22,8 @@ import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decim
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -165,7 +167,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   const opportunity = isUuid(id) ? await loadOpportunity(id, gate.user.orgId, gate.allowedSubsidiaryIds) : null
-  return opportunity ? NextResponse.json(opportunity) : NextResponse.json({ error: 'not found' }, { status: 404 })
+  return opportunity ? NextResponse.json(opportunity) : notFound("record")
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -173,13 +175,13 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const existing = (await db.execute<LockedOpportunityRow>(sql`
     select o.*, s.is_closed, s.is_won from crm_opportunities o
     join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
     where o.id = ${id} and o.org_id = ${user.orgId}${crmOpportunityScope(gate.allowedSubsidiaryIds)}`))
   let current = existing.rows[0]
-  if (!current) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!current) return notFound("record")
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as typeof parsedBody.data & { expectedUpdatedAt?: unknown }
@@ -223,7 +225,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   let title = body.title === undefined ? current.title : textOrNull(body.title)
   if (!title) return NextResponse.json({ error: 'title is required' }, { status: 422 })
   if (body.currency !== undefined && !(await isFeatureEnabled(user.orgId, 'multiCurrency'))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   let currency = body.currency === undefined ? current.currency : String(body.currency).toUpperCase()
   if (!((await db.execute(sql`select 1 from currencies where code = ${currency}`))).rows[0]) return NextResponse.json({ error: 'invalid currency' }, { status: 422 })
@@ -289,7 +291,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         const item = (await db.execute<{ kind: string }>(sql`
           select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
         if (item.rows[0] && INVENTORY_ITEM_KINDS.has(item.rows[0].kind)) {
-          return NextResponse.json({ error: 'not found' }, { status: 404 })
+          return notFound("record")
         }
       }
     }
@@ -305,7 +307,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         const item = (await db.execute<{ kind: string }>(sql`
           select kind from items where id = ${line.itemId} and org_id = ${user.orgId}`))
         if (item.rows[0] && item.rows[0].kind === 'equipment_charge') {
-          return NextResponse.json({ error: 'not found' }, { status: 404 })
+          return notFound("record")
         }
       }
     }
@@ -642,9 +644,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       values (${user.orgId}, 'crm_opportunities', ${id}, 'update', ${JSON.stringify({ before: current, requested: body })}::jsonb, ${user.id})`)
     })
   } catch (error) {
-    if (error instanceof OpportunityDisappeared) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof OpportunityDisappeared) return notFound("record")
     if (error instanceof OpportunityRevisionError) return apiErrorResponse(error, { safeStatus: 409 })
-    if (error instanceof OpportunityNotFound) return NextResponse.json({ error: 'not found' }, { status: 404 })
+    if (error instanceof OpportunityNotFound) return notFound("record")
     if (error instanceof OpportunityContactMismatch) return NextResponse.json({ error: 'contact does not belong to the account' }, { status: 422 })
     if (error instanceof OpportunityStageRefusalError) return apiErrorResponse(error, { safeStatus: 422, details: { code: error.refusal } })
     if (error instanceof OpportunityValidationError) return apiErrorResponse(error, { safeStatus: 422 })
@@ -659,7 +661,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
   const outcome = await db.transaction(async (tx) => {
     // Lock the row inside the caller's entity scope first. The estimate route
     // takes the same lock before it links a quote, so the linked-document
@@ -686,7 +688,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       values (${user.orgId}, 'crm_opportunities', ${id}, 'delete', ${JSON.stringify({ before: current })}::jsonb, ${user.id})`)
     return 'deleted' as const
   })
-  if (outcome === 'missing') return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (outcome === 'missing') return notFound("record")
   if (outcome === 'linked') return NextResponse.json({ error: 'An opportunity with linked sales documents cannot be deleted; close it instead' }, { status: 422 })
   return NextResponse.json({ ok: true })
 }

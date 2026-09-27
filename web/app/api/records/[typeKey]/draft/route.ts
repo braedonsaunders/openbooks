@@ -14,6 +14,8 @@ import {
   validateRecordData,
   withComputedFormulas,
 } from '../../../../../lib/record-schema'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -31,7 +33,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ typeKe
 
   const type = await loadRecordTypeByKey(user.orgId, typeKey)
   if (!type || type.status !== 'published' || !inTypeAudience(user.roles.map(({ key }) => key), type.allowed_roles)) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
   const lint = lintRecordFields(type.fields, type.name)
   if (!lint.success) {

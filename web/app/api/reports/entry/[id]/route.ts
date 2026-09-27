@@ -4,6 +4,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { isReportUuidParam } from '../../../../../lib/report-filters'
 import { getAuthz, can } from '../../../../../lib/authz'
 import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from '../../../../../lib/payroll-confidentiality'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -21,7 +23,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: 'missing permission: gl.read or reports.read' }, { status: 403 })
   }
   const { id } = await params
-  if (!isReportUuidParam(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isReportUuidParam(id)) return notFound("record")
   const subsidiaryFilter = authz.allowedSubsidiaryIds
     ? authz.allowedSubsidiaryIds.size > 0
       ? sql`and e.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
@@ -45,7 +47,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
        ${subsidiaryFilter}
   `))
   const entry = e.rows[0]
-  if (!entry) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!entry) return notFound("record")
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.line_number, l.amount, l.memo, l.is_open_item,

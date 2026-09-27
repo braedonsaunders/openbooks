@@ -4,6 +4,8 @@ import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
 import { createDocumentDraft, DocumentDraftError, isDocKindEnabled } from "../../../../lib/documents.ts";
 import { DOC_KINDS, createPermission } from "../../../../lib/document-kinds.ts";
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -19,7 +21,7 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   if (!(await isDocKindEnabled(user.orgId, body.kind))) {
-    return NextResponse.json({ error: 'not found' }, { status: 404 })
+    return notFound("record")
   }
 
   try {

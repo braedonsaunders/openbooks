@@ -8,6 +8,8 @@ import {
   ProjectTimeDetailError,
   type ProjectTimeDimension,
 } from '../../../../../lib/project-time-detail'
+import { notFound } from "@/lib/api/responses";
+
 
 export const runtime = 'nodejs'
 
@@ -20,7 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   if (feature) return feature
 
   const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!isUuid(id)) return notFound("record")
 
   const url = new URL(request.url)
   const rawDimension = url.searchParams.get('dimension')

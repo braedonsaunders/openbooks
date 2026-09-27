@@ -62,12 +62,12 @@ test("payment-run oracle: no pay permission sees existing and missing ids identi
     const existing = await guardPaymentRunPermission(runId);
     assert.ok(existing instanceof NextResponse);
     assert.equal(existing.status, 404);
-    assert.deepEqual(await existing.json(), { error: "not found" });
+    assert.deepEqual(await existing.json(), { error: "not_found" });
     const missingId = randomUUID();
     const missing = await guardPaymentRunPermission(missingId);
     assert.ok(missing instanceof NextResponse);
     assert.equal(missing.status, 404);
-    assert.deepEqual(await missing.json(), { error: "not found" });
+    assert.deepEqual(await missing.json(), { error: "not_found" });
 
     // Caller holding the matching direction passes the family gate.
     state.permissions = new Set<string>(["ap.pay"]);
@@ -84,11 +84,11 @@ test("payment-run oracle: no pay permission sees existing and missing ids identi
     const wrongDir = await guardPaymentRunPermission(inboundId);
     assert.ok(wrongDir instanceof NextResponse);
     assert.equal(wrongDir.status, 404);
-    assert.deepEqual(await wrongDir.json(), { error: "not found" });
+    assert.deepEqual(await wrongDir.json(), { error: "not_found" });
     const wrongDirMissing = await guardPaymentRunPermission(randomUUID());
     assert.ok(wrongDirMissing instanceof NextResponse);
     assert.equal(wrongDirMissing.status, 404);
-    assert.deepEqual(await wrongDirMissing.json(), { error: "not found" });
+    assert.deepEqual(await wrongDirMissing.json(), { error: "not_found" });
 
     // Symmetrically, an ar.pay-only caller sees an existing outbound run
     // exactly like a missing id.
@@ -96,11 +96,11 @@ test("payment-run oracle: no pay permission sees existing and missing ids identi
     const outboundDenied = await guardPaymentRunPermission(runId);
     assert.ok(outboundDenied instanceof NextResponse);
     assert.equal(outboundDenied.status, 404);
-    assert.deepEqual(await outboundDenied.json(), { error: "not found" });
+    assert.deepEqual(await outboundDenied.json(), { error: "not_found" });
     const outboundMissing = await guardPaymentRunPermission(randomUUID());
     assert.ok(outboundMissing instanceof NextResponse);
     assert.equal(outboundMissing.status, 404);
-    assert.deepEqual(await outboundMissing.json(), { error: "not found" });
+    assert.deepEqual(await outboundMissing.json(), { error: "not_found" });
     // And the matching inbound direction passes.
     const inboundAllowed = await guardPaymentRunPermission(inboundId);
     assert.ok(!(inboundAllowed instanceof NextResponse));
