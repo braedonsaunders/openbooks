@@ -98,6 +98,7 @@ export function planPaymentLinkSeal(
  * those; there is no safe automatic repair for a lost or disagreeing secret.
  */
 export async function sealLegacyPaymentLinkTokens(): Promise<void> {
+  // bypass: cross-org-by-design — installation-wide maintenance sealing every organization's legacy link tokens.
   await withBypassContext(async () => {
     // 0251 backfilled the hash but left the plaintext, so "hash present" is
     // NOT "finished": any row still holding plaintext — or missing hash or

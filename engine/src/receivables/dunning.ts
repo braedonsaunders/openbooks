@@ -282,6 +282,7 @@ function dunningFailureMessage(error: unknown): string {
  */
 export async function runDunning(asOf?: string): Promise<DunningRunResult> {
   const orgRows = (
+    // bypass: scheduler-tick — the unscoped run lists every production organization with an active dunning policy.
     await withBypass(async () => {
       return (await db.execute<{ orgId: string }>(sql`
         select distinct policy.org_id as "orgId"

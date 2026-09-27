@@ -94,6 +94,7 @@ export async function tick(): Promise<void> {
     // uploaded object (matching both ledger hash and size) is finalized; an
     // absent/mismatched object is cleaned and failed. Storage outages leave the
     // row running so a later tick can decide without destroying evidence.
+    // bypass: scheduler-tick — stale running backups are found across every organization.
     const staleRunning = await withBypassContext(() =>
       db.execute<{ id: string; org_id: string; object_key: string | null; sha256: string | null; byte_size: string | null }>(sql`
       select id, org_id, object_key, sha256, byte_size::text as byte_size
@@ -196,6 +197,7 @@ export async function tick(): Promise<void> {
     // touched after the removal request itself carries durable evidence; the
     // ledger reference is then cleared together with removal confirmation as
     // one audited unit.
+    // bypass: scheduler-tick — failed uploads awaiting cleanup are found across every organization.
     const failedUploads = await withBypassContext(() =>
       db.execute<{ id: string; org_id: string; object_key: string }>(sql`
       select id, org_id, object_key from backup_runs
@@ -247,6 +249,7 @@ export async function tick(): Promise<void> {
       }
     }
 
+    // bypass: scheduler-tick — due backup policies are found across every organization.
     const due = await withBypassContext(() =>
       db.execute<DuePolicy>(sql`
       select org_id, frequency, hour_utc, day_of_week, day_of_month
@@ -304,6 +307,7 @@ export async function tick(): Promise<void> {
     }
 
     // Self-heal queued runs whose job never made it to (or survived in) Redis.
+    // bypass: scheduler-tick — stale queued backups are found across every organization.
     const staleQueued = await withBypassContext(() =>
       db.execute<{ id: string; org_id: string }>(sql`
       select id, org_id from backup_runs

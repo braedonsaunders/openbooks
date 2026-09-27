@@ -144,6 +144,7 @@ async function finalizeOccurrence(
   durationMs: number | null,
   event: OccurrenceEvent,
 ): Promise<boolean> {
+  // bypass: scheduler-tick — finalizes a claimed occurrence by id before its organization is in scope.
   const finalized = await withBypassContext(() =>
     db.execute(sql`
       update script_runs
@@ -339,6 +340,7 @@ async function dispatchScriptOccurrence(
 export async function scanDueScripts(): Promise<DueScript[]> {
   // NOTE: this org-less scan needs a supporting index on user_scripts with
   // column order (trigger_point, is_active, next_run_at).
+  // bypass: scheduler-tick — due scheduled scripts are found across every organization.
   const due = await withBypassContext(() =>
     db.execute<{ id: string; orgId: string; cron: string | null; nextRunAt: Date | string }>(sql`
       select script.id, script.org_id as "orgId", script.cron, script.next_run_at as "nextRunAt"
@@ -398,6 +400,7 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
   //    CTEs because PostgreSQL forbids an UPDATE ... FROM item from
   //    referencing the update target (42P10); as ordinary FROM items the
   //    same correlated lookups are legal, and the statement stays atomic.
+  // bypass: scheduler-tick — lost script occurrences are reconciled across every organization.
   await withBypassContext(() =>
     db.execute(sql`
       with exact as (
@@ -464,6 +467,7 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
   //    terminal evidence is a loss: stamp it visibly instead of retrying
   //    forever (scripts can create governed journals — double-firing is worse
   //    than a loud, durable miss).
+  // bypass: scheduler-tick — exhausted script occurrences are stamped lost across every organization.
   await withBypassContext(() =>
     db.execute(sql`
       update script_runs
@@ -482,6 +486,7 @@ export async function recoverLostScriptOccurrences(now = new Date()): Promise<vo
   //    fix. Re-deriving from `at` would mint a fresh journal namespace and
   //    double-post (SCHED1). Rows predating the fix stamped `at` with the
   //    scheduled tick, so the legacy derivation still resolves them.
+  // bypass: scheduler-tick — stale script occurrences are found for recovery across every organization.
   const stale = await withBypassContext(() =>
     db.execute<{ id: string; orgId: string; scriptId: string; at: Date | string; logs: unknown }>(sql`
       select id, org_id as "orgId", script_id as "scriptId", at, logs
@@ -616,11 +621,14 @@ export async function tick(
       // backoff). A crash leaves the row — Redis is not the source of truth.
       try {
         const { ensureScanOutboxRows, processDueSchedulerOutbox } = await import("./outbox.ts");
+        // bypass: scheduler-tick — the tick materializes scan outbox rows for every organization.
         await withBypassContext(() => ensureScanOutboxRows());
         const { processGateTimers } = await import("../flows/gates.ts");
         await processGateTimers();
+        // bypass: scheduler-tick — the tick drains due outbox rows of every organization.
         await withBypassContext(() => processDueSchedulerOutbox());
         const { processDuePostingEffects } = await import("../ledger/posting-effects.ts");
+        // bypass: scheduler-tick — the tick drains due posting effects of every organization.
         await withBypassContext(() => processDuePostingEffects());
       } catch (e) {
         failSection("durable-outbox", e);
@@ -632,6 +640,7 @@ export async function tick(
       // orphaned by a crash before runDueScheduledFlows scans new ones.
       try {
         const { recoverLostScheduledFlows, runDueScheduledFlows } = await import("../flows/scheduled.ts");
+        // bypass: scheduler-tick — the tick recovers lost scheduled-flow occurrences of every organization.
         await withBypassContext(() => recoverLostScheduledFlows());
         await runDueScheduledFlows();
       } catch (e) {

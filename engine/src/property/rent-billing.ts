@@ -484,6 +484,7 @@ export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: nu
     { billed: 0, invoices: 0, lateFees: 0, levelled: 0, orgErrors: [] };
   // Registry fallback shape: a non-boolean stored value falls back to the
   // default instead of throwing 22P02 like the previous ::boolean cast.
+  // bypass: scheduler-tick — the scan lists every organization with property management enabled.
   const orgs = await withBypass(async () => (await db.execute<{ id: string }>(sql`select id from orgs where case (settings->'features'->>'propertyManagement') when 'true' then true when 'false' then false else false end`)));
   for (const org of orgs.rows) {
     try {

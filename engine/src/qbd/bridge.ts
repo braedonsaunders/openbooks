@@ -37,6 +37,7 @@ function secureEqual(left: string, right: string): boolean {
 }
 
 async function publicConnection(connectionId: string): Promise<PublicConnection | null> {
+  // bypass: connector-token — the Web Connector names only its connection id; the organization is read from that row.
   return withBypassContext(async () => {
     const result = (await db.execute<PublicConnection>(sql`
       select id, org_id as "orgId", config, secrets, status
@@ -130,6 +131,7 @@ export async function releaseCapture(orgId: string, captureId: string): Promise<
 
 /** Worker janitor: enforce raw-response retention even after a hard process exit. */
 export async function purgeExpiredQbdBridgeData(): Promise<void> {
+  // bypass: scheduler-tick — the janitor expires Web Connector captures and sessions across every organization.
   await withBypassContext(async () => db.transaction(async (tx) => {
     await tx.execute(sql`
       update qbd_captures set status = 'failed', error_message = coalesce(error_message, 'Web Connector capture expired'),
@@ -165,6 +167,7 @@ function qbwcGuessBucket(connectionId: string): string {
 }
 
 async function qbwcGuessesTripped(connectionId: string): Promise<boolean> {
+  // bypass: connector-token — password-guess throttling for a connector that has not yet authenticated.
   return withBypassContext(async () => {
     // The ceiling is per sliding window: a bucket whose window started more
     // than QBWC_AUTH_GUESS_WINDOW_S ago no longer trips, so a flood cannot
@@ -182,6 +185,7 @@ async function qbwcGuessesTripped(connectionId: string): Promise<boolean> {
 }
 
 async function recordQbwcGuessFailure(connectionId: string): Promise<void> {
+  // bypass: connector-token — password-guess throttling for a connector that has not yet authenticated.
   await withBypassContext(async () => {
     await db.execute(sql`
       insert into auth_rate_limit_buckets as bucket
@@ -267,6 +271,7 @@ export async function authenticateWebConnector(connectionId: string, username: s
     await recordQbwcGuessFailure(connectionId);
     return { ticket: "", companyFile: "nvu" };
   }
+  // bypass: connector-token — the connector's ticket is minted here, and its expired-session sweep spans organizations.
   return withBypassContext(async () => {
     // No reset on success: the connector authenticates on every polling
     // cycle, so clearing the bucket here would hand out a fresh 30 guesses
@@ -322,6 +327,7 @@ export async function authenticateWebConnector(connectionId: string, username: s
 type SessionRow = { id: string; orgId: string; connectionId: string; status: string; expectedRegion: string | null; connectionStatus: string | null };
 
 async function session(ticket: string): Promise<SessionRow | null> {
+  // bypass: connector-token — a Web Connector ticket is resolved to its session before the organization is known.
   return withBypassContext(async () => {
     const result = (await db.execute<SessionRow>(sql`
       select s.id, s.org_id as "orgId", s.connection_id as "connectionId", s.status,

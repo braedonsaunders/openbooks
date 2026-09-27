@@ -170,6 +170,7 @@ export async function resolveKioskByToken(deviceToken: string): Promise<KioskRow
   // bypass (the recruiting booking-link precedent), because a sessionless
   // device carries no org context and under FORCE RLS the unscoped read
   // below would resolve nothing — every kiosk request would 404.
+  // bypass: connector-token — a sessionless kiosk's device token binds the kiosk but not its organization.
   const found = await withBypassContext(async () => {
     const rows = (await db.execute<(KioskRow & { org_id: string })>(sql`
       select id::text as id, org_id::text as "orgId", org_id::text as org_id, name,

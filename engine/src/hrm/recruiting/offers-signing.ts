@@ -642,6 +642,7 @@ async function offerScopeForToken(signingToken: string): Promise<{ orgId: string
   // not passed. This is the booking slot's rule, and it is what makes
   // resending an offer revoke the previous link rather than add one.
   const tokenHash = hashRecruitingToken(signingToken);
+  // bypass: connector-token — a candidate's signing token binds the offer but not its organization.
   const row = await withBypassContext(async () => {
     const found = (await db.execute<{ orgId: string }>(sql`
       select org_id as "orgId" from hrm_offers

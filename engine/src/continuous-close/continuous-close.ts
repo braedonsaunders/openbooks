@@ -588,6 +588,7 @@ export async function runDueContinuousCloseAgents(now = new Date()): Promise<voi
   // explicit trusted boundary; the agent run itself is scoped to its own org. A
   // scheduler tick holds no request store — without these the connection layer
   // denies by default and no agent ever fires.
+  // bypass: scheduler-tick — due continuous-close policies are found across every organization.
   const due = await withBypassContext(() =>
     db.execute<{
       id: string;

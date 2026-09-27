@@ -82,6 +82,7 @@ export async function setSuperAdminAction(
       throw new Error("You cannot revoke your own super-admin access");
     }
 
+    // bypass: cross-org-by-design — platform super-admin status is installation-wide, not an organization's.
     await withBypass(async () => {
       // Serialize every platform-wide super-admin grant/revoke. The active
       // quorum check below reads other administrators' rows, which this
@@ -166,6 +167,7 @@ export async function grantAccessAction(formData: FormData): Promise<PlatformMut
     assertUuid(orgId, "Organization");
     assertUuid(actingUserId, "Acting user");
 
+    // bypass: cross-org-by-design — an access grant links a member of one organization to another organization.
     await withBypass(async () => {
       await lockPlatformAdminMutations();
       await lockSuperAdminActor(db, authz.user.homeUserId);
@@ -269,6 +271,7 @@ export async function revokeAccessAction(accessId: string): Promise<PlatformMuta
     assertUuid(accessId, "Access grant");
     let memberUserId: string | null = null;
 
+    // bypass: cross-org-by-design — an access grant links a member of one organization to another organization.
     await withBypass(async () => {
       await lockPlatformAdminMutations();
       await lockSuperAdminActor(db, authz.user.homeUserId);

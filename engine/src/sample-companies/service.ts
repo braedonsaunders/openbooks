@@ -137,6 +137,7 @@ const TEMPLATE_MINIMUMS = {
  * data leaves the boundary.
  */
 async function assertSampleRequestAccess(input: CreateSampleCompanyInput): Promise<void> {
+  // bypass: user-keyed-lookup — decides whether this person may request a sample from an organization they may not belong to.
   const allowed = await withBypassContext(async () => {
     const result = (await db.execute<{ allowed: boolean }>(sql`
       select exists (
@@ -185,6 +186,7 @@ async function templateCandidates(profileId: string): Promise<Array<{ id: string
   // tenants, but it deliberately does not touch users or accounting tables.
   // Content verification happens separately under each candidate's own RLS
   // context below.
+  // bypass: cross-org-by-design — sample templates are discovered among every organization of the installation.
   return withBypassContext(async () => {
     const result = (await db.execute<{ id: string }>(sql`
       select o.id
@@ -387,6 +389,7 @@ export async function promoteExistingSampleTemplate(
   }
   assertTemplateCoverage(source);
 
+  // bypass: cross-org-by-design — creating a sandbox copies a production organization into a new one.
   const clone = await withBypassContext(() => createSandbox({
     productionOrgId: source.id,
     name: `SIM · ${profile.companyName}`,
@@ -458,6 +461,7 @@ export async function promoteExistingSampleTemplate(
 }
 
 async function existingFor(memberUserId: string, industryKey: string): Promise<{ id: string; name: string } | null> {
+  // bypass: user-keyed-lookup — finds this person's sample companies across the organizations they can reach.
   return withBypassContext(async () => {
     const result = (await db.execute<{ id: string; name: string }>(sql`
       select o.id, o.name
@@ -506,6 +510,7 @@ async function findPartialSampleCompany(
   memberUserId: string,
   industryKey: string,
 ): Promise<PartialSampleCompany | null> {
+  // bypass: user-keyed-lookup — finds this person's partial sample company across the organizations they can reach.
   return withBypassContext(async () => {
     const result = (await db.execute<{
       id: string;
@@ -691,6 +696,7 @@ async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"
 
 export async function sampleCompanyStatuses(memberUserId: string): Promise<SampleCompanyStatus[]> {
   const [templates, existing] = await Promise.all([
+    // bypass: cross-org-by-design — sample templates are discovered among every organization of the installation.
     withBypassContext(async () => {
       const result = (await db.execute<{ profile: string }>(sql`
         select distinct o.settings->'sampleTemplate'->>'profileId' as profile
@@ -702,6 +708,7 @@ export async function sampleCompanyStatuses(memberUserId: string): Promise<Sampl
       `));
       return new Set(result.rows.map((row) => row.profile));
     }),
+    // bypass: user-keyed-lookup — finds this person's sample companies across the organizations they can reach.
     withBypassContext(async () => {
       const result = (await db.execute<{ id: string; industry: string }>(sql`
         select o.id, o.settings->'sampleCompany'->>'industryKey' as industry
@@ -802,6 +809,7 @@ async function sweepStaleTemplateAttempts(
   profileId: string,
   wipe: (orgId: string) => Promise<void>,
 ): Promise<void> {
+  // bypass: cross-org-by-design — stale template attempts are swept across every organization of the installation.
   const stale = await withBypassContext(async () => {
     const result = (await db.execute<{ id: string }>(sql`
       select id from orgs
@@ -1262,6 +1270,7 @@ export interface SampleCompanyProvisionDeps {
 export async function cloneSampleCompanyTemplate(
   args: CloneSampleCompanyArgs,
 ): Promise<{ sandboxId: string; sandboxOrgId: string }> {
+  // bypass: cross-org-by-design — creating a sandbox copies the template organization into a new one.
   return withBypassContext(() =>
     createSandbox({
       productionOrgId: args.templateOrgId,
@@ -1476,6 +1485,7 @@ export async function createSampleCompany(
     await reacquireLockIfNeeded();
     const winnerBeforeFinalize = await existingFor(input.memberUserId, input.industryKey);
     if (winnerBeforeFinalize) {
+      // bypass: cross-org-by-design — deleting a sandbox spans the sandbox and its production organization.
       await withBypassContext(() => deleteSandbox(cloned.sandboxId, { systemReason: "compensate duplicate sample company provisioning" }));
       return {
         orgId: winnerBeforeFinalize.id,
@@ -1510,6 +1520,7 @@ export async function createSampleCompany(
       await reacquireLockIfNeeded();
       const winner = await existingFor(input.memberUserId, input.industryKey);
       if (winner && winner.id !== cloned.sandboxOrgId) {
+        // bypass: cross-org-by-design — deleting a sandbox spans the sandbox and its production organization.
         await withBypassContext(() => deleteSandbox(cloned.sandboxId, { systemReason: "compensate duplicate sample company provisioning" }));
         return {
           orgId: winner.id,

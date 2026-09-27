@@ -1,7 +1,6 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { drizzle } from 'drizzle-orm/node-postgres'
-import { db, orgContext, pool } from '@openbooks/engine/src/platform/db.ts'
+import { db, orgContext, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { add, fromUnits, neg, normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
 import { directSubcontractOpenCommitment } from './subcontract-commitments'
 import { pgTextArrayLiteral } from './pg-array'
@@ -187,11 +186,13 @@ async function projectCostSummaryInSnapshot(
  * produce a response whose totals disagree with its own detail. Pin a
  * REPEATABLE READ READ ONLY snapshot so every field observes the same ledger
  * generation. If a caller already owns a tenant transaction, participate in
- * that transaction instead of opening a nested transaction on its connection.
+ * that transaction instead of opening a nested transaction on its connection;
+ * inside a bypass transaction `withOrgTransaction` refuses the snapshot by
+ * name rather than reading under bypass.
  *
- * The transaction is published through the tenant context so
- * `directSubcontractOpenCommitment` (and any future helper) resolves its `db`
- * queries on this same connection and snapshot.
+ * `withOrgTransaction` publishes the transaction through the tenant context
+ * so `directSubcontractOpenCommitment` (and any future helper) resolves its
+ * `db` queries on this same connection and snapshot.
  */
 export async function projectCostSummary(
   orgId: string,
@@ -206,31 +207,11 @@ export async function projectCostSummary(
     return projectCostSummaryInSnapshot(orgId, projectId, allowedSubsidiaryIds)
   }
 
-  const client = await pool.connect()
-  try {
-    await client.query('begin isolation level repeatable read read only')
-    // Scope this transaction after BEGIN so the tenant setting is local to the
-    // snapshot and resets when the client is committed or rolled back.
-    await client.query(
-      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
-      [orgId],
-    )
-    const txDb = drizzle({ client })
-    const summary = await orgContext.run({ orgId, bypass: false, txDb }, async () =>
-      await projectCostSummaryInSnapshot(orgId, projectId, allowedSubsidiaryIds),
-    )
-    await client.query('commit')
-    return summary
-  } catch (error) {
-    try {
-      await client.query('rollback')
-    } catch {
-      // A broken connection is discarded when released.
-    }
-    throw error
-  } finally {
-    client.release()
-  }
+  return withOrgTransaction(
+    orgId,
+    () => projectCostSummaryInSnapshot(orgId, projectId, allowedSubsidiaryIds),
+    { isolationLevel: 'REPEATABLE READ', readOnly: true },
+  )
 }
 
 function assembleSummary(
@@ -433,31 +414,11 @@ export async function projectUnbilled(orgId: string, projectId: string, opts: Un
     return projectUnbilledInSnapshot(orgId, projectId, opts)
   }
 
-  const client = await pool.connect()
-  try {
-    await client.query('begin isolation level repeatable read read only')
-    // Scope this transaction after BEGIN so the tenant setting is local to the
-    // snapshot and resets when the client is committed or rolled back.
-    await client.query(
-      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
-      [orgId],
-    )
-    const txDb = drizzle({ client })
-    const unbilled = await orgContext.run({ orgId, bypass: false, txDb }, async () =>
-      await projectUnbilledInSnapshot(orgId, projectId, opts),
-    )
-    await client.query('commit')
-    return unbilled
-  } catch (error) {
-    try {
-      await client.query('rollback')
-    } catch {
-      // A broken connection is discarded when released.
-    }
-    throw error
-  } finally {
-    client.release()
-  }
+  return withOrgTransaction(
+    orgId,
+    () => projectUnbilledInSnapshot(orgId, projectId, opts),
+    { isolationLevel: 'REPEATABLE READ', readOnly: true },
+  )
 }
 
 async function projectUnbilledInSnapshot(orgId: string, projectId: string, opts: UnbilledOpts = {}): Promise<ProjectUnbilled> {

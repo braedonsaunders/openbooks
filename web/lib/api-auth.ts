@@ -133,6 +133,7 @@ export async function resolveApiKeyAuth(
   // The key's org isn't known until the row is read — look it up under bypass.
   // The owner user and the org row are part of the credential: a key whose
   // user lives in another org, or whose org is not production, is not a key.
+  // bypass: identity-bootstrap — an API key's organization is unknown until its row is read.
   const keyRow = await withBypassContext(
     async () =>
       (

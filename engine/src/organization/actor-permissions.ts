@@ -13,6 +13,7 @@ export async function actorIdentity(exec: SqlExecutor, orgId: string, actorId: s
     select is_super_admin as "isSuperAdmin", is_active as "isActive"
       from users where id = ${actorId} and org_id = ${orgId}
   `)).rows[0];
+  // bypass: user-keyed-lookup — an actor with no row in this organization (a super admin) is found by user id alone.
   return local ?? (await withBypassContext(() => db.execute<Identity>(sql`
     select is_super_admin as "isSuperAdmin", is_active as "isActive"
       from users where id = ${actorId}

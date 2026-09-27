@@ -51,12 +51,15 @@ export async function tick(): Promise<void> {
       // One span per claimed pass: every outbox/report attempt below joins it
       // as a child, so a collector shows the full tick tree per replica.
       await runInSpan("scheduler.tick", undefined, async () => {
+        // bypass: scheduler-tick — the tick materializes and dispatches scheduled reports of every organization.
         await withBypassContext(() => materializeDueReportRuns());
         await withBypassContext(() => dispatchQueuedReportRuns());
         await withBypassContext(() => dispatchReportDeliveries());
+        // bypass: scheduler-tick — the tick materializes scan outbox rows and drains due outbox rows of every organization.
         await withBypassContext(() => ensureScanOutboxRows());
         await processGateTimers();
         await withBypassContext(() => processDueSchedulerOutbox());
+        // bypass: scheduler-tick — the tick drains due posting effects of every organization.
         await withBypassContext(() => processDuePostingEffects());
       });
     });

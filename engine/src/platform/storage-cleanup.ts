@@ -159,6 +159,7 @@ export interface StorageCleanupDrainSummary {
  */
 export async function drainStorageCleanupOutbox(limit: number = DRAIN_BATCH_LIMIT): Promise<StorageCleanupDrainSummary> {
   const summary: StorageCleanupDrainSummary = { claimed: 0, deleted: 0, deferred: 0 };
+  // bypass: scheduler-tick — the drain claims due cleanup intents across every organization.
   await withBypassContext(async () => {
     const due = (await db.execute<{
       id: string;

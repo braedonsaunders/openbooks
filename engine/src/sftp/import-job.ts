@@ -625,6 +625,7 @@ export async function runDueSftpImports(
   // orgId) and crosses an explicit trusted boundary; each import then runs
   // inside its own tenant. A timer callback holds no request store, so without
   // these the connection layer denies by default and the scan sees nothing.
+  // bypass: scheduler-tick — due SFTP import schedules are found across every organization.
   const rows = await withBypassContext(() =>
     db.execute<ScheduleRow>(sql`
     select sc.id, sc.org_id, sc.sftp_server_id, sc.account_id, sc.format, sc.folder, sc.csv_mapping,

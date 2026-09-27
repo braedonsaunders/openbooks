@@ -159,13 +159,13 @@ const mockSources = new Map<string, string>([
       }
       // The production summary participates in an ambient tenant transaction
       // when one exists. Keep the fixture on that path so the test exercises
-      // the rollup queries without opening a real pool connection.
+      // the rollup queries without opening a transaction of its own.
       export const orgContext = {
         getStore: () => ({ orgId: 'org-1', bypass: false, txDb: db }),
         run: async (_ctx, fn) => fn(),
       }
-      export const pool = {
-        connect: async () => { throw new Error('project-costing FX fixture unexpectedly opened a pool') },
+      export const withOrgTransaction = async () => {
+        throw new Error('project-costing FX fixture unexpectedly opened a transaction')
       }
     `,
   ],

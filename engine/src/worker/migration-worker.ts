@@ -288,6 +288,7 @@ const MIRROR_TICK_MS = 5 * 60_000;
  * connection lock as claimSyncRun to close the claim/reaper race.
  */
 export async function reapStaleSyncRuns(): Promise<number> {
+  // bypass: scheduler-tick — stale sync runs are found across every organization.
   const stale = await withBypassContext(() => db.execute<{
     id: string;
     orgId: string;
@@ -402,6 +403,7 @@ export function startMirrorScheduler(): void {
       if (reaped > 0)
         console.log(`[mirror-scheduler] reaped ${reaped} stale sync run(s)`);
       await purgeExpiredQbdBridgeData();
+      // bypass: scheduler-tick — mirror connections due a scheduled run are found across every organization.
       const candidates = (await withBypassContext(() => db.execute(sql`
         select c.id, c.org_id as "orgId", c.mirror_schedule as schedule,
                history.last_successful_at as "lastSuccessfulAt",

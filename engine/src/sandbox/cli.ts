@@ -29,6 +29,7 @@ function flag(args: string[], name: string): string | undefined {
 }
 
 async function firstOrg(): Promise<string> {
+  // bypass: cross-org-by-design — with no organization given, the operator CLI picks the first production organization of the installation.
   const r = await withBypassContext(() => db.execute<{ id: string }>(sql`select id from orgs where env_kind = 'production' order by created_at limit 1`));
   if (!r.rows[0]) throw new Error("no production org found");
   return r.rows[0].id;
@@ -50,6 +51,7 @@ async function commandOrg(cmd: string | undefined, positional: string[], rest: s
     if (suppliedOrg) return suppliedOrg;
     return firstOrg();
   }
+  // bypass: cross-org-by-design — resolves which production organization owns a sandbox or change set.
   const ownerId = await withBypassContext(async () => {
     if (cmd === "apply") {
       return (await db.execute<{ org_id: string }>(sql`select org_id from change_sets where id = ${targetId}`)).rows[0]?.org_id;

@@ -229,6 +229,7 @@ async function takeOccurrenceForFiring(
   const expectedUpdatedAt = fence.updatedAt
     ? sql`and updated_at = ${fence.updatedAt}::timestamptz`
     : sql``;
+  // bypass: scheduler-tick — takes a claimed occurrence by id before its organization is in scope.
   const taken = await withBypassContext(() =>
     db.execute<{ attempt_count: number }>(sql`
       update flow_scheduled_occurrences
@@ -247,6 +248,7 @@ async function takeOccurrenceForFiring(
 
 /** Close a claim that cannot be fired to completion. */
 async function stampOccurrenceLost(claimId: string, reason: string, result?: Record<string, unknown>): Promise<void> {
+  // bypass: scheduler-tick — closes a claimed occurrence by id before its organization is in scope.
   await withBypassContext(() =>
     db.execute(sql`
       update flow_scheduled_occurrences
@@ -335,6 +337,7 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
   // trusted boundary; the firing itself already runs inside `withOrg` below. A
   // scheduler tick holds no request store, so without this the connection layer
   // denies by default and no scheduled flow is ever found.
+  // bypass: scheduler-tick — enabled scheduled flows are found across every production organization.
   const candidates = await withBypassContext(() =>
     db.execute<{ id: string }>(sql`
     select flow.id
@@ -348,6 +351,7 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
   `));
 
   for (const { id } of candidates.rows) {
+    // bypass: scheduler-tick — the candidate scan returns flow ids only; this load discovers the owning organization.
     const [flow] = await withBypassContext(() =>
       db.select().from(schema.flows).where(eq(schema.flows.id, id)));
     if (!flow || !flow.enabled) continue;
@@ -422,6 +426,7 @@ export async function recoverLostScheduledFlows(now = new Date()): Promise<void>
   // 1) An attempt that already consumed its retry and still has no completion
   //    evidence is a loss: stamp it visibly instead of retrying forever
   //    (double-firing notifications is worse than a loud, durable miss).
+  // bypass: scheduler-tick — stale occurrences are stamped lost across every organization.
   await withBypassContext(() =>
     db.execute(sql`
       update flow_scheduled_occurrences
@@ -435,6 +440,7 @@ export async function recoverLostScheduledFlows(now = new Date()): Promise<void>
 
   // 2) Resume open ('open' = died between claim and take; 'firing' = died mid
   //    firing) stale occurrences within the retry budget, oldest first.
+  // bypass: scheduler-tick — stale occurrences are found for recovery across every organization.
   const stale = await withBypassContext(() =>
     db.execute<{
       id: string;

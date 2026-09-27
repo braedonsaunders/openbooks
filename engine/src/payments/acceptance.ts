@@ -1322,6 +1322,7 @@ async function loadLinkByToken(token: string): Promise<LinkWithContext | null> {
   // the sha256 hash — the raw bearer token is never stored, so a database
   // read alone cannot mint a payable URL.
   const tokenHash = paymentLinkTokenHash(token);
+  // bypass: connector-token — a public payment link's token hash is resolved before its organization is known.
   const r = await withBypassContext(async () =>
     db.execute(sql`
       select id, org_id as "orgId", ${token} as token, document_id as "documentId", party_id as "partyId",
@@ -1691,6 +1692,7 @@ export async function handleProviderWebhook(
   headers: Record<string, string | string[] | undefined>,
   rawBody: string,
 ): Promise<ProviderWebhookResult | null> {
+  // bypass: connector-token — an inbound provider webhook is verified against every organization's signing secret.
   const configs = await withBypassContext(async () =>
     db.execute(sql`
       select id, provider, display_name, is_enabled, acceptance_enabled, default_bank_account_id,

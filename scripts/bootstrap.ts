@@ -68,6 +68,7 @@ async function main(): Promise<void> {
     // while migration validation must see every row before it changes a global
     // constraint. Context-only scope keeps each tracked migration's own
     // transaction authoritative instead of pinning an outer transaction.
+    // bypass: cross-org-by-design — installation bootstrap validates migrations against every organization's rows.
     await withBypassContext(async () => {
       if (constrainedSchemaOwnerMigration) {
         if (!runtimeConfig) {

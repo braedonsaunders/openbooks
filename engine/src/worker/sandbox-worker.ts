@@ -21,6 +21,7 @@ import { createSandbox, deleteSandbox, refreshSandbox, resetSandbox } from "../s
  * forever), and deletes returned success without deleting anything.
  */
 export async function processSandboxJobData(d: SandboxJobData): Promise<unknown> {
+  // bypass: cross-org-by-design — sandbox create, refresh and delete span a production organization and its copy.
   return await withBypassContext(async () => {
     switch (d.op) {
       case "create":

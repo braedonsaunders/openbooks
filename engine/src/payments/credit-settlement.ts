@@ -223,6 +223,7 @@ export async function applyStandaloneCredits(
     // and the collision surfaces later as a raw primary-key violation — a
     // correct refusal arriving as an internal error instead of the named
     // 409. The row is never returned to the caller; only its org_id is.
+    // bypass: cross-org-by-design — an idempotency key owned by another organization must be seen to be refused by name.
     const priorOwner = await withBypassContext(async () =>
       (await db.execute<{ org_id: string }>(sql`
         select org_id from applications where id = ${input.idempotencyKey}

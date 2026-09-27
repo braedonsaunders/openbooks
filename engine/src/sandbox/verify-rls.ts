@@ -186,6 +186,7 @@ export async function verifyCloneRls(args: {
 }): Promise<CloneRlsProof> {
   assertCloneRlsPair(args.productionOrgId, args.sandboxOrgId);
 
+  // bypass: cross-org-by-design — the clone proof reads both the production organization and its sandbox copy.
   const orgs = await withBypass(async () => {
     const result = await db.execute<{
       id: string;
@@ -225,6 +226,7 @@ export async function verifyCloneRls(args: {
     );
   }
 
+  // bypass: cross-org-by-design — unscoped counts are the reference the scoped counts below are proven against.
   const bypassProduction = await withBypass(() => countChunk(verifyTables, args.productionOrgId));
   const bypassSandbox = await withBypass(() => countChunk(verifyTables, args.sandboxOrgId));
   const scopedProduction = await withOrg(args.productionOrgId, () => countChunk(verifyTables, null));
@@ -258,6 +260,7 @@ async function resolveClonePair(argv: string[]): Promise<{
   const productionOrgId = argv[0];
   const sandboxOrgId = argv[1];
   if (productionOrgId && sandboxOrgId) {
+    // bypass: cross-org-by-design — a sandbox row links a production organization to its copy.
     const row = await withBypass(async () => {
       const result = await db.execute<{ tier: SandboxTier }>(sql`
         select tier from sandboxes where org_id = ${sandboxOrgId} order by created_at desc limit 1`);
@@ -275,6 +278,7 @@ async function resolveClonePair(argv: string[]): Promise<{
       "clone RLS re-verification usage: npx tsx engine/src/sandbox/verify-rls.ts <productionOrgId> <sandboxOrgId>",
     );
   }
+  // bypass: cross-org-by-design — with no pair given, the proof picks the newest ready sandbox of the installation.
   const pair = await withBypass(async () => {
     const result = await db.execute<{ production_org_id: string; org_id: string; tier: SandboxTier }>(sql`
       select production_org_id, org_id, tier

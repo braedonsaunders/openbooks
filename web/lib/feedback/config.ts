@@ -106,6 +106,7 @@ export function sanitizeFeedbackSettingsInput(input: FeedbackSettingsInput): Fee
 }
 
 async function readStored(): Promise<StoredFeedback> {
+  // bypass: cross-org-by-design — the feedback destination is an installation-wide platform setting, not an organization's.
   const rows = await withBypassContext(() =>
     db
       .select({ settings: platformSettings.settings })
@@ -186,6 +187,7 @@ export async function saveFeedbackSettings(
   authorize?: () => Promise<unknown>,
 ): Promise<FeedbackSettingsView> {
   const validated = sanitizeFeedbackSettingsInput(input)
+  // bypass: cross-org-by-design — the feedback destination is an installation-wide platform setting, not an organization's.
   return withBypass(async () => {
     await authorize?.()
     const settings = await lockSettings()
@@ -205,6 +207,7 @@ export async function saveFeedbackSettings(
 
 /** Forget the stored credential without losing the rest of the destination. */
 export async function clearFeedbackToken(actorId: string, authorize?: () => Promise<unknown>): Promise<void> {
+  // bypass: cross-org-by-design — the feedback destination is an installation-wide platform setting, not an organization's.
   await withBypass(async () => {
     await authorize?.()
     const settings = await lockSettings()

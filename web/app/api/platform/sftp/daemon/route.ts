@@ -50,6 +50,7 @@ export async function PATCH(req: Request) {
   }
   let cfg;
   try {
+    // bypass: cross-org-by-design — the SFTP daemon configuration is installation-wide, edited by a platform operator.
     cfg = await withBypassContext(() => db.transaction(async (tx) => {
       const actor = await lockSuperAdminActor(tx, gate.user.id);
       const before = sftpDaemonConfigAuditSnapshot(await loadDaemonConfig(tx));

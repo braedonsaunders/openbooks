@@ -13,6 +13,7 @@ const argv = process.argv.slice(2);
 const connectionIndex = argv.indexOf("--connection");
 const requestedId = connectionIndex >= 0 ? argv[connectionIndex + 1] : null;
 
+// bypass: cross-org-by-design — the operator CLI walks every active connection of the installation.
 await withBypassContext(async () => {
 const result = (await db.execute<ConnectionRow>(sql`
   select id, org_id as "orgId", source, display_name as "displayName",

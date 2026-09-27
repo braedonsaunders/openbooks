@@ -91,6 +91,7 @@ async function loadServer(username: string): Promise<ServerRow | null> {
   // (while a listener started from a platform-admin PATCH could inherit that
   // request's org instead). The username is globally unique, which is what
   // makes this installation-wide resolution deterministic.
+  // bypass: connector-token — an SFTP login names a globally unique username; its organization is read from that row.
   return withBypassContext(async () => {
     const r = await db.execute<ServerRow>(sql`
     select id, org_id as "orgId", username, backend, bucket, root_prefix, password_encrypted, authorized_keys, updated_at
@@ -266,6 +267,7 @@ export const dbResolver: SftpResolver = {
    * an already-authorized write to publish, or wins first and refuses it.
    */
   async withMutationGuard(config, operation) {
+    // bypass: cross-org-by-design — locks the installation-wide daemon row together with the login and feature it guards.
     await withBypass(async () => {
       const daemon = (await db.execute<{ enabled: boolean }>(sql`
         select enabled from sftp_daemon where id = 'default' for share

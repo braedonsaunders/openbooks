@@ -803,6 +803,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
   const scopedOrgId = orgContext.getStore()?.orgId;
   const orgScope = scopedOrgId ? sql`and s.org_id = ${scopedOrgId}` : sql``;
 
+  // bypass: scheduler-tick — the unscoped scan finds due subscriptions across every production organization.
   const due = await withBypass(async () =>
     (await db.execute<{
       id: string;

@@ -1932,6 +1932,7 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
   // and creating the run happen inside that tenant's own scope. A scheduler tick
   // holds no request store — without these, RLS denies by default and no
   // scheduled payment run is ever created.
+  // bypass: scheduler-tick — due payment schedules are found across every production organization.
   const schedules = await withBypassContext(() =>
     db.execute<DuePaymentSchedule>(sql`
     select s.id, s.org_id, s.payment_bank_profile_id, s.cron, s.timezone, s.selection_criteria,
@@ -2266,6 +2267,7 @@ async function markOccurrenceSubmitted(
  * MAX_OCCURRENCE_SUBMIT_ATTEMPTS; a terminal failure is durable on the row.
  */
 async function recoverPaymentScheduleOccurrences(): Promise<void> {
+  // bypass: scheduler-tick — unfinished schedule occurrences are found across every production organization.
   const pending = await withBypassContext(() =>
     db.execute<{ orgId: string; scheduleId: string; runId: string; occurrenceAt: Date | string }>(sql`
       select o.org_id as "orgId", o.schedule_id as "scheduleId",

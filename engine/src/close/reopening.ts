@@ -422,6 +422,7 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
   // trusted boundary; each re-close then commits inside its own tenant. The
   // scheduler tick that calls this holds no request store, so without the
   // boundary RLS denies by default and no window is ever closed again.
+  // bypass: scheduler-tick — expired reopen windows are found across every organization.
   const expired = await withBypassContext(() =>
     db.execute<{
       id: string;

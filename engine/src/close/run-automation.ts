@@ -672,6 +672,7 @@ export async function runDueCloseAutomations(): Promise<number> {
   // Org-spanning discovery crosses an explicit trusted boundary; each rule then
   // executes inside its own tenant. Without this the contextless scheduler tick
   // is denied by default and no deadline automation ever runs.
+  // bypass: scheduler-tick — due close automations are found across every production organization.
   const due = await withBypassContext(() =>
     db.execute<{ org_id: string; id: string; target_close_date: string }>(sql`
     select distinct r.org_id, r.id, r.target_close_date::text as target_close_date

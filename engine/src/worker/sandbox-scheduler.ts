@@ -98,6 +98,7 @@ async function withRefreshRecoveryLock(sandboxId: string, recover: () => Promise
 export async function releaseStaleSandboxClaims(
   getJobState: (jobId: string) => Promise<string | null> = getSandboxRefreshJobState,
 ): Promise<number> {
+  // bypass: scheduler-tick — stale refresh claims are found across every organization.
   const stale = (await withBypassContext(() =>
     db.execute<{ id: string; orgId: string; cadence: string | null; lastError: string | null }>(sql`
       select id, org_id as "orgId", refresh_schedule as "cadence", last_error as "lastError"
@@ -146,6 +147,7 @@ export async function tick(
     // A timer tick carries no request context, so this cross-tenant scan and
     // its claim must cross an explicit trusted boundary — otherwise RLS denies
     // by default and the scanner silently sees no sandboxes at all.
+    // bypass: scheduler-tick — sandboxes due a refresh are found across every organization.
     const due = (await withBypassContext(() =>
       db.execute<{
         id: string;

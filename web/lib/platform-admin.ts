@@ -93,6 +93,7 @@ function direction(dir: "asc" | "desc"): SQL {
 }
 
 export async function platformSummary(): Promise<PlatformSummary> {
+  // bypass: cross-org-by-design — the platform operator console summarizes every organization.
   return withBypassContext(async () => {
     const result = (await db.execute(sql`
       select
@@ -128,6 +129,7 @@ export async function platformOrganizations(
   total: number;
   environmentCounts: Record<string, number>;
 }> {
+  // bypass: cross-org-by-design — the platform operator console lists every organization.
   return withBypassContext(async () => {
     const search = searchClause(input.q, [
       sql`o.name`,
@@ -193,6 +195,7 @@ export async function platformUsers(
   total: number;
   statusCounts: Record<string, number>;
 }> {
+  // bypass: cross-org-by-design — the platform operator console lists users of every organization.
   return withBypassContext(async () => {
     const search = searchClause(input.q, [
       sql`u.name`,
@@ -273,6 +276,7 @@ export async function platformGrants(
   total: number;
   statusCounts: Record<string, number>;
 }> {
+  // bypass: cross-org-by-design — the platform operator console lists access grants between organizations.
   return withBypassContext(async () => {
     const search = searchClause(input.q, [
       sql`m.email`,
@@ -343,6 +347,7 @@ export async function platformUser(
   id: string,
   grantsInput?: { page: number; perPage: number },
 ): Promise<{ user: PlatformUser; grants: PlatformGrant[]; totalGrants: number } | null> {
+  // bypass: cross-org-by-design — the platform operator console shows one user with grants into other organizations.
   return withBypassContext(async () => {
     const usersResult = (await db.execute(sql`
       select u.id, u.email, u.name, u.org_id as "orgId", o.name as "orgName",
@@ -398,6 +403,7 @@ export async function platformGrantOptions(): Promise<{
     "id" | "name" | "email" | "orgName" | "orgId"
   >[];
 }> {
+  // bypass: cross-org-by-design — the platform operator console offers users and organizations from every tenant.
   return withBypassContext(async () => {
     const usersResult = await db.execute<
       Pick<PlatformUser, "id" | "name" | "email" | "orgName" | "orgId">
@@ -429,6 +435,7 @@ export async function platformEmails(
   total: number;
   statusCounts: Record<string, number>;
 }> {
+  // bypass: cross-org-by-design — the platform operator console lists outbound email of every organization.
   return withBypassContext(async () => {
     const search = searchClause(input.q, [
       sql`e.subject`,

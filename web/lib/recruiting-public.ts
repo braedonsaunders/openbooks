@@ -15,6 +15,7 @@ export async function resolvePublicOrgFeatures(
   rowId: string,
   table: 'interview' | 'offer',
 ): Promise<{ orgId: string } | null> {
+  // bypass: connector-token — a public offer or booking link, already matched by its token, resolves its organization.
   return withBypassContext(async () => {
     const found =
       table === 'interview'
