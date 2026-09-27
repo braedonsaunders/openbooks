@@ -395,6 +395,7 @@
   },
   "roles": {
     "metaTitle": "Funções",
+    "named": {"production":{"name":"Produção","description":"Gerencia cadastros e operações de fábrica; pode contabilizar estoque, mas não estornar."}},
     "title": "Funções",
     "description": "Conjuntos de permissões que você atribui aos usuários. Funções integradas vêm com o aplicativo; crie funções personalizadas para qualquer coisa mais granular.",
     "manageUsers": "Gerenciar usuários",
@@ -873,6 +874,7 @@
       "allocations": "Rateios",
       "nonprofit": "Organizações sem fins lucrativos",
       "insights": "Insights",
+      "manufacturing": "Manufatura",
       "items": "Itens e serviços",
       "orders": "Pedidos e atendimento",
       "projects": "Projetos e apropriação de custos",
@@ -931,6 +933,8 @@
     "items_post": "Lançar movimentações de estoque",
     "items_reverse": "Estornar movimentações de estoque",
     "items_warehouses": "Gerenciar armazéns e endereços",
+    "manufacturing_read": "Visualizar registros de manufatura",
+    "manufacturing_manage": "Gerenciar cadastros e ordens de manufatura",
     "orders_fulfill": "Separar, embalar e expedir pedidos",
     "projects_read": "Ver projetos e apropriação de custos",
     "projects_manage": "Criar e editar projetos",
@@ -2294,6 +2298,9 @@
         "singular": "Local de Estoque",
         "description": "Compartimentos, zonas e armazéns físicos sob a dimensão de localizações."
       },
+      "mfg-scrap-reasons": {"title":"Motivos de refugo","singular":"Motivos de refugo"},
+      "mfg-item-policies": {"title":"Políticas de manufatura por item","singular":"Políticas de manufatura por item"},
+      "manufacturing-policies": {"title":"Políticas de manufatura","singular":"Políticas de manufatura","description":"Defina como o planejamento de manufatura trata falta de materiais, tolerâncias de conclusão e refugo anormal.","shortage":"Política de falta de materiais","warn":"Avisar e permitir a liberação","refuse":"Recusar a liberação quando faltarem materiais","tolerance":"Tolerância de conclusão (%)","threshold":"Limite de aprovação para refugo anormal","thresholdHelp":"Deixe em branco quando a aprovação não for necessária.","save":"Salvar políticas","saving":"Salvando políticas…","saved":"Políticas de manufatura salvas","failed":"Não foi possível salvar as políticas de manufatura."},
       "item-inventory-profiles": {
         "title": "Custeio de Itens",
         "description": "Método de custeio, contas de estoque, rastreamento e custo padrão por item."
@@ -3359,6 +3366,8 @@
         "transit": "Trânsito",
         "quarantine": "Quarentena"
       },
+      "manufacturingScrap": {"normal":"Refugo normal","abnormal":"Refugo anormal"},
+      "manufacturingSupplyMethod": {"make":"Fabricar","buy":"Comprar","transfer":"Transferir entre locais"},
       "overheadMethod": {
         "live": "Ao vivo",
         "standard": "Padrão"

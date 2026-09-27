@@ -395,6 +395,7 @@
   },
   "roles": {
     "metaTitle": "角色",
+    "named": {"production":{"name":"生产","description":"管理制造主数据和车间作业，可过账库存，但无权冲销。"}},
     "title": "角色",
     "description": "你分配给用户的权限集合。内置角色随应用提供；如需更细粒度的控制，可创建自定义角色。",
     "manageUsers": "管理用户",
@@ -873,6 +874,7 @@
       "allocations": "分摊",
       "nonprofit": "非营利组织",
       "insights": "洞察",
+      "manufacturing": "制造",
       "items": "物料与服务",
       "orders": "订单与履行",
       "projects": "项目与作业成本核算",
@@ -931,6 +933,8 @@
     "items_post": "过账库存变动",
     "items_reverse": "冲销库存变动",
     "items_warehouses": "管理仓库和库位",
+    "manufacturing_read": "查看制造记录",
+    "manufacturing_manage": "管理制造主数据和工单",
     "orders_fulfill": "订单拣货、包装和发运",
     "projects_read": "查看项目和作业成本核算",
     "projects_manage": "创建并编辑项目",
@@ -2294,6 +2298,9 @@
         "singular": "库存地点",
         "description": "地点维度下的实体货位、区域和仓库。"
       },
+      "mfg-scrap-reasons": {"title":"报废原因","singular":"报废原因"},
+      "mfg-item-policies": {"title":"物料制造策略","singular":"物料制造策略"},
+      "manufacturing-policies": {"title":"制造策略","singular":"制造策略","description":"设置制造计划对物料短缺、完工容差和异常报废的处理方式。","shortage":"物料短缺策略","warn":"发出警告并允许释放","refuse":"物料不足时拒绝释放","tolerance":"完工容差 (%)","threshold":"异常报废审批阈值","thresholdHelp":"无需审批时请留空。","save":"保存策略","saving":"正在保存策略…","saved":"制造策略已保存","failed":"无法保存制造策略。"},
       "item-inventory-profiles": {
         "title": "物料成本核算",
         "description": "每种物料的成本核算方法、库存科目、跟踪和标准成本。"
@@ -3359,6 +3366,8 @@
         "transit": "在途",
         "quarantine": "隔离区"
       },
+      "manufacturingScrap": {"normal":"正常报废","abnormal":"异常报废"},
+      "manufacturingSupplyMethod": {"make":"自制","buy":"采购","transfer":"地点间调拨"},
       "overheadMethod": {
         "live": "实时",
         "standard": "标准"

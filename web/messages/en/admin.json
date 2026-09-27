@@ -395,6 +395,7 @@
   },
   "roles": {
     "metaTitle": "Roles",
+    "named": {"production":{"name":"Production","description":"Manages manufacturing masters and shop-floor work, with inventory posting authority but no reversal authority."}},
     "title": "Roles",
     "description": "Bundles of permissions you assign to users. Built-in roles ship with the app; create custom roles for anything finer-grained.",
     "manageUsers": "Manage users",
@@ -861,6 +862,7 @@
       "allocations": "Allocations",
       "nonprofit": "Nonprofit",
       "insights": "Insights",
+      "manufacturing": "Manufacturing",
       "items": "Items & services",
       "orders": "Orders & fulfillment",
       "projects": "Projects & job costing",
@@ -920,6 +922,8 @@
     "items_post": "Post inventory movements",
     "items_reverse": "Reverse inventory movements",
     "items_warehouses": "Manage warehouses and locations",
+    "manufacturing_read": "View manufacturing records",
+    "manufacturing_manage": "Manage manufacturing masters and work orders",
     "orders_fulfill": "Pick, pack, and ship orders",
     "projects_read": "View projects and job costing",
     "projects_manage": "Create and edit projects",
@@ -2294,6 +2298,9 @@
         "singular": "Stock Location",
         "description": "Physical bins, zones, and warehouses under the locations dimension."
       },
+      "mfg-scrap-reasons": {"title":"Scrap reasons","singular":"Scrap reasons"},
+      "mfg-item-policies": {"title":"Manufacturing item policies","singular":"Manufacturing item policies"},
+      "manufacturing-policies": {"title":"Manufacturing policies","singular":"Manufacturing policies","description":"Set how manufacturing planning handles material shortages, completion tolerances, and abnormal scrap.","shortage":"Material shortage policy","warn":"Warn and allow release","refuse":"Refuse release when materials are short","tolerance":"Completion tolerance (%)","threshold":"Abnormal scrap approval threshold","thresholdHelp":"Leave blank when approval is not required.","save":"Save policies","saving":"Saving policies…","saved":"Manufacturing policies saved","failed":"Could not save manufacturing policies."},
       "item-inventory-profiles": {
         "title": "Item Costing",
         "description": "Costing method, inventory accounts, tracking, and standard cost per item."
@@ -3359,6 +3366,8 @@
         "transit": "Transit",
         "quarantine": "Quarantine"
       },
+      "manufacturingScrap": {"normal":"Normal scrap","abnormal":"Abnormal scrap"},
+      "manufacturingSupplyMethod": {"make":"Make","buy":"Buy","transfer":"Transfer between locations"},
       "overheadMethod": {
         "live": "Live",
         "standard": "Standard"

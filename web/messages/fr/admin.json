@@ -395,6 +395,7 @@
   },
   "roles": {
     "metaTitle": "Rôles",
+    "named": {"production":{"name":"Production","description":"Gère les référentiels et les opérations d’atelier, avec le droit de comptabiliser les stocks mais sans droit d’annulation."}},
     "title": "Rôles",
     "description": "Des ensembles de permissions que vous attribuez aux utilisateurs. Les rôles intégrés sont fournis avec l’application; créez des rôles personnalisés pour un contrôle plus fin.",
     "manageUsers": "Gérer les utilisateurs",
@@ -871,6 +872,7 @@
       "reports": "Rapports",
       "budgets": "Budgets et prévisions",
       "insights": "Analyses",
+      "manufacturing": "Fabrication",
       "items": "Articles et services",
       "orders": "Commandes et expédition",
       "projects": "Projets et coût de revient",
@@ -926,6 +928,8 @@
     "items_post": "Comptabiliser les mouvements de stock",
     "items_reverse": "Contrepasser les mouvements de stock",
     "items_warehouses": "Gérer les entrepôts et emplacements",
+    "manufacturing_read": "Consulter les données de fabrication",
+    "manufacturing_manage": "Gérer les référentiels et les ordres de fabrication",
     "orders_fulfill": "Préparer, emballer et expédier les commandes",
     "projects_read": "Consulter les projets et le coût de revient",
     "projects_manage": "Créer et modifier des projets",
@@ -2198,6 +2202,9 @@
         "singular": "Emplacement de stock",
         "description": "Casiers, zones et entrepôts physiques sous la dimension emplacements."
       },
+      "mfg-scrap-reasons": {"title":"Motifs de rebut","singular":"Motifs de rebut"},
+      "mfg-item-policies": {"title":"Politiques de fabrication par article","singular":"Politiques de fabrication par article"},
+      "manufacturing-policies": {"title":"Politiques de fabrication","singular":"Politiques de fabrication","description":"Définissez la gestion des ruptures de matières, des tolérances de réalisation et des rebuts anormaux par la planification.","shortage":"Politique de rupture de matières","warn":"Avertir et autoriser le lancement","refuse":"Refuser le lancement en cas de matières manquantes","tolerance":"Tolérance de réalisation (%)","threshold":"Seuil d’approbation des rebuts anormaux","thresholdHelp":"Laissez vide si aucune approbation n’est requise.","save":"Enregistrer les politiques","saving":"Enregistrement des politiques…","saved":"Politiques de fabrication enregistrées","failed":"Impossible d’enregistrer les politiques de fabrication."},
       "item-inventory-profiles": {
         "title": "Coût des articles",
         "description": "Méthode de coût, comptes de stock, suivi et coût standard par article."
@@ -3254,6 +3261,8 @@
         "transit": "Transit",
         "quarantine": "Quarantaine"
       },
+      "manufacturingScrap": {"normal":"Rebut normal","abnormal":"Rebut anormal"},
+      "manufacturingSupplyMethod": {"make":"Fabriquer","buy":"Acheter","transfer":"Transférer entre emplacements"},
       "overheadMethod": {
         "live": "Live",
         "standard": "Standard"
