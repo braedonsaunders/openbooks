@@ -128,6 +128,11 @@ export type Role =
   | "grantReceivable"
   | "refundableAdvance"
   | "grantRevenue"
+  // Nonprofit contributions
+  | "pledgesReceivable"
+  | "discountOnPledges"
+  | "pledgeAllowance"
+  | "contributions"
   // Inventory
   | "inventory"
   | "cogs"
