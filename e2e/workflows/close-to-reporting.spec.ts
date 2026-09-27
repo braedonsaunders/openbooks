@@ -1,5 +1,6 @@
 import { test } from "@playwright/test";
 import { authedContext, dismissSetupWizard } from "../auth";
+import { acceptConfirm } from "./support/accept-confirm";
 import {
   ADMIN_NAME,
   AMT,
@@ -479,11 +480,10 @@ test.describe.serial("close to reporting", () => {
 
       await page.goto(`/close?run=${SEED.runId}&stage=lock`);
       await expect(page.getByText("Approved").first()).toBeVisible();
-      page.on("dialog", (d) => void d.accept());
       const locked = page.waitForResponse(
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
-      await page.getByRole("button", { name: "Lock period" }).click();
+      await Promise.all([acceptConfirm(page), page.getByRole("button", { name: "Lock period" }).click()]);
       await expectOkResponse(await locked, "lock period");
       await expect(page.getByText("Closed").first()).toBeVisible();
       await expect(page.getByText(/Period locked by/).first()).toBeVisible();
@@ -778,11 +778,10 @@ test.describe.serial("close to reporting", () => {
     const { context, page } = await authedContext(browser, baseURL);
     try {
       await page.goto(`/close?run=${SEED.runId}&stage=publish`);
-      page.on("dialog", (d) => void d.accept());
       const published = page.waitForResponse(
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
-      await page.getByRole("button", { name: "Publish package" }).click();
+      await Promise.all([acceptConfirm(page), page.getByRole("button", { name: "Publish package" }).click()]);
       await expectOkResponse(await published, "publish package");
       await expect(page.getByText("Published").first()).toBeVisible();
 
@@ -822,7 +821,6 @@ test.describe.serial("close to reporting", () => {
     const { context, page } = await authedContext(browser, baseURL);
     const actx = await browser.newContext({ baseURL });
     const apage = await actx.newPage();
-    page.on("dialog", (d) => void d.accept());
     try {
       // Request a controlled reopen for GL from the period drawer.
       await page.goto(`/admin/setup/period-close?tab=periods&book=${SEED.primaryBookId}&fy=${P.name.slice(0, 4)}`);
@@ -948,7 +946,7 @@ test.describe.serial("close to reporting", () => {
       const relocked = page.waitForResponse(
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
       );
-      await page.getByRole("button", { name: "Lock period" }).click();
+      await Promise.all([acceptConfirm(page), page.getByRole("button", { name: "Lock period" }).click()]);
       await expectOkResponse(await relocked, "re-lock period");
       const republished = page.waitForResponse(
         (r) => r.url().endsWith(`/api/close/runs/${SEED.runId}`) && r.request().method() === "POST",
