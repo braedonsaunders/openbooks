@@ -129,7 +129,7 @@ test("an unposted credit renders nothing", async () => {
 });
 
 test("a credit this reader cannot see renders nothing instead of an error", async () => {
-  const net = scriptFetch(() => new Response(JSON.stringify({ error: "not found" }), { status: 404 }));
+  const net = scriptFetch(() => new Response(JSON.stringify({ error: "not_found" }), { status: 404 }));
   try {
     const { host, root } = await mount();
     assert.equal(host.textContent, "");

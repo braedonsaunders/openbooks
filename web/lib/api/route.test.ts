@@ -123,7 +123,7 @@ test("a disabled feature answers 404 without naming the feature", async () => {
   const response = await handler(get());
   assert.equal(response.status, 404);
   assert.deepEqual(state.calls, ["permission", "feature"]);
-  // The legacy gate spells its 404 "not found"; the factory unifies it.
+  // The factory normalizes the feature gate's legacy 404 response.
   assert.deepEqual(await response.json(), { error: "not_found" });
 });
 
