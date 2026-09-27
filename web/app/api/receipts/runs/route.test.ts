@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { NextResponse } from 'next/server'
 
 const stateKey = Symbol.for('openbooks.receipts-runs-route-test')
@@ -104,7 +104,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?receipts-runs-scope-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function reset(allowedSubsidiaryIds: Set<string> | null): void {
   routeState.allowedSubsidiaryIds = allowedSubsidiaryIds

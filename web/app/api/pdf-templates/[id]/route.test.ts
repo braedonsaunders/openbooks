@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 
 // Route boundary suite for /api/pdf-templates/[id]: the REAL GET/PATCH/DELETE
 // handlers run against scripted gates and a spied template store. A malformed
@@ -96,7 +96,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?pdf-template-id-route-test'
 const { GET, PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+after(() => hooks.deregister())
 
 function reset(): void {
   state.lookups = []

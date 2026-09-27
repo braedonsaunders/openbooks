@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
 
 // Route boundary suite: a described temporary difference with an unknown
 // category must be refused (400), never silently dropped from the provision
@@ -92,7 +92,7 @@ const hooks = registerHooks({
 });
 
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
+after(() => hooks.deregister());
 
 function post(body: Record<string, unknown>): Promise<Response> {
   return POST(
