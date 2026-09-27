@@ -1,14 +1,14 @@
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json"
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getTranslations } from "next-intl/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { ensureCrmDefaults } from "@openbooks/engine/src/crm/crm.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { guardFeaturePermission } from "../../../../lib/feature-gates";
+import "../../../../lib/feature-gates";
 import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";

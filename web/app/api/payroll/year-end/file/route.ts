@@ -7,7 +7,7 @@ import { yearEndFiling } from '@openbooks/engine/src/payroll/filing-registry.ts'
 import { PayrollPackError } from '@openbooks/engine/src/payroll/packs.ts'
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { orgYearEndFilings } from '@openbooks/engine/src/payroll/yearend.ts'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import '../../../../../lib/feature-gates';
 import { payrollYearRefusal } from '../../../../../lib/payroll-year'
 import { isUuid } from '../../../../../lib/list-params'
 import type { Authz } from '../../../../../lib/authz'

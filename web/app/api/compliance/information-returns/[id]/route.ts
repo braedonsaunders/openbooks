@@ -12,7 +12,7 @@ import {
   recomputeFiling,
   voidFiling,
 } from '@openbooks/engine/src/compliance/information-returns.ts'
-import { getAuthz, can, guardSubsidiaryScope } from '@/lib/authz'
+import { can, guardSubsidiaryScope } from '@/lib/authz';
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
@@ -35,8 +35,6 @@ const requestBodySchema = z.discriminatedUnion('action', [
 
 
 export const runtime = 'nodejs'
-
-type Action = 'compute' | 'finalize' | 'file' | 'void'
 
 const FILING_CHANNELS = new Set(['iris', 'fire', 'paper', 'provider', 'other'])
 

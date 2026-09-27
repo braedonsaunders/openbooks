@@ -1,11 +1,11 @@
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
+import 'next/server';
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { withScopeSnapshot } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { guardPermission, can } from '../../../../../lib/authz'
+import { can } from '../../../../../lib/authz';
 import { isMaskedFileContentError } from '../../../../../lib/file-storage'
 import { getFileBlob } from '../../../../../lib/file-cabinet'
 import { blobResponse } from '../../../../../lib/blob-response'

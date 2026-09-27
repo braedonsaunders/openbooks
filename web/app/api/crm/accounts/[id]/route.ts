@@ -8,7 +8,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { CrmLifecycleRefusalError, promoteCrmAccount, routeCrmAccount, transitionCrmAccountStage } from '@openbooks/engine/src/crm/crm.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import '../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../lib/list-params'
 import { loadCrmAccount } from '../../../../../lib/crm'
 import { isIsoTimestamp } from '../../../../../lib/crm-dates'

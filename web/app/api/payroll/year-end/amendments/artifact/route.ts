@@ -4,7 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { filingArtifact } from '@openbooks/engine/src/payroll/yearend-amendments.ts'
 import { orgYearEndFilings } from '@openbooks/engine/src/payroll/yearend.ts'
-import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+import '../../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../../lib/list-params'
 import { suppliedValue } from '../../../../../../lib/payroll-decimal-refusal'
 import { guardPayrollFilingData, guardPayrollFilingRowIds } from '../../../subsidiary-scope'

@@ -15,7 +15,7 @@ import {
   runParallelComparison,
   suggestedPayRunForRegister,
 } from '@openbooks/engine/src/payroll/parallel-run-store.ts'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import '../../../../lib/feature-gates';
 import { isUuid } from '../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { notFound } from "@/lib/api/responses";

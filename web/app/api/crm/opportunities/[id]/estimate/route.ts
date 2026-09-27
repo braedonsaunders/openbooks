@@ -10,7 +10,7 @@ import { isDocKindEnabled } from "../../../../../../lib/documents.ts";
 import { guardPermission } from '../../../../../../lib/authz'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 import { decimalNullRefusal, moneyRefusal } from '../../../../../../lib/payroll-decimal-refusal'
-import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+import '../../../../../../lib/feature-gates';
 import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
 import { getTranslations } from 'next-intl/server'

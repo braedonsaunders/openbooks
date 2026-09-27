@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { getAuthz, can, guardSubsidiaryScope } from '@/lib/authz'
+import { can, guardSubsidiaryScope } from '@/lib/authz';
 import { guardComplianceFeature } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'

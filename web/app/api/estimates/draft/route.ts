@@ -1,7 +1,7 @@
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import '../../../../lib/feature-gates';
 import { resolveDraftSubsidiary } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { createOrderDraft, OrderDraftError } from '../../../../lib/order-cycle'
 import { isUuid } from '../../../../lib/list-params'

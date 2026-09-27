@@ -12,7 +12,7 @@ import {
   filingLifecycle,
   recordFilingIssue,
 } from '@openbooks/engine/src/payroll/yearend-amendments.ts'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import '../../../../../lib/feature-gates';
 import { payrollYearRefusal } from '../../../../../lib/payroll-year'
 import {
   FilingScopeDenied,

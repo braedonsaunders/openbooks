@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { add, mulDecimal, normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
-import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
+import { guardSubsidiaryScope } from "../../../../../lib/authz";
 import { statementBookExpr } from "../../../../../lib/gl-summary";
 import { flowRates, presentationCurrency } from "../../../../../lib/fx-presentation";
 import { toISO } from "../../../../../lib/cash/core";

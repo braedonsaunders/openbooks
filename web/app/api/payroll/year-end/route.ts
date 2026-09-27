@@ -3,7 +3,7 @@ import { orgYearEndFilings } from '@openbooks/engine/src/payroll/yearend.ts'
 import { defineRoute } from '@/lib/api/route'
 import { payrollYearRefusal } from '../../../../lib/payroll-year'
 import { guardPayrollYearEndFilings } from '../subsidiary-scope'
-import { z } from 'zod'
+import 'zod';
 
 export const dynamic = 'force-dynamic'
 

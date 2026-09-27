@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { filedBoxAmounts, formDefinition } from '@openbooks/engine/src/compliance/information-returns.ts'
-import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
+import { guardSubsidiaryScope } from '@/lib/authz';
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";

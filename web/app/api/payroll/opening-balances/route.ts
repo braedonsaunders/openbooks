@@ -19,9 +19,9 @@ import {
 import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import '../../../../lib/feature-gates';
 import { scopedOpeningBalances } from '../../../../lib/payroll-scoped-views'
-import { isUuid } from '../../../../lib/list-params'
+import '../../../../lib/list-params';
 import {
   saveItSurtaxSaldoCarryIns,
   SurtaxSaldoSaveError,

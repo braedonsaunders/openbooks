@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
+import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import { canonicalDecimal } from "../../../../../lib/exact-decimal";
 import type { ForecastCategory } from "../../../../../lib/analytics/cashflow-data";
 import {

@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
+import { guardSubsidiaryScope } from '@/lib/authz';
 import { guardComplianceFeature } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { loadApplicableRequirement } from '@openbooks/engine/src/compliance/compliance.ts'

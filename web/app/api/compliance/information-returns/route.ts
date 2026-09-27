@@ -12,7 +12,7 @@ import {
   InformationReturnError,
   type FormType,
 } from '@openbooks/engine/src/compliance/information-returns.ts'
-import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
+import { guardSubsidiaryScope } from '@/lib/authz';
 import { guardComplianceFeature, loadFilings } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { canonicalDecimal } from '@/lib/exact-decimal'

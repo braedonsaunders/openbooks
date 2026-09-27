@@ -7,7 +7,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { loadWorkSchedules } from '@openbooks/engine/src/payroll/work-schedules.ts'
 import { UNRESTRICTED_SCOPE_REQUIRED } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 import { guardSubsidiaryScope, type Authz } from '../../../lib/authz'
-import { guardFeaturePermission } from '../../../lib/feature-gates'
+import '../../../lib/feature-gates';
 import { isUuid } from '../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { parseCycleDays } from '../../../lib/work-schedule-days'

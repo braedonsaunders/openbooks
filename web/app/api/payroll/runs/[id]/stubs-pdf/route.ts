@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+import '../../../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { sql } from 'drizzle-orm'

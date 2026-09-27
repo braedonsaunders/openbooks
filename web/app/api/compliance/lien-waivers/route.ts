@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { nextNumber } from "@openbooks/engine/src/payments/payment-documents.ts";
-import { guardPermission } from '@/lib/authz'
+import '@/lib/authz';
 import { complianceSubsidiaryFilter, guardLienWaiverFeature, loadLienWaivers } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid, pickString } from '@/lib/list-params'

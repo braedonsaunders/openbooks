@@ -8,7 +8,7 @@ import { enqueueApCapture } from '@openbooks/jobs'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { captureContentMatchesMime } from '@openbooks/engine/src/payables/ap-capture.ts'
 import { getDocumentCaptureRuntimeConfig, type DocumentCaptureRuntimeConfig } from '@openbooks/engine/src/payables/ap-capture-config.ts'
-import { guardPermission } from '../../../lib/authz'
+import '../../../lib/authz';
 import { createFile, deleteFile, ensureApCaptureRoot } from '../../../lib/file-cabinet'
 import { enqueueStorageCleanupStandalone, fileCabinetObjectKey } from '../../../lib/file-storage'
 

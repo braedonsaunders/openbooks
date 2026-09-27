@@ -4,7 +4,7 @@ import {
   actOnInboxItem,
   InboxError,
 } from "@openbooks/engine/src/inbox/index.ts";
-import { getAuthz } from "../../../../lib/authz";
+import "../../../../lib/authz";
 import { inboxContext } from "../../../../lib/inbox-context";
 import { parseJsonBody } from "@/lib/api/json";
 import { z } from "zod";

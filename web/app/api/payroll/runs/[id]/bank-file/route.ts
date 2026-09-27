@@ -18,7 +18,7 @@ import {
 } from '@openbooks/engine/src/payroll/bank-file-artifact.ts'
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
 import { SandboxEgressError } from '@openbooks/engine/src/organization/sandbox-guard.ts'
-import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+import '../../../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";

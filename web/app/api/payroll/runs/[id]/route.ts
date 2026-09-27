@@ -22,7 +22,7 @@ import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
 import { canonicalAdjustmentHours, mutatePayRunAdjustment, payRunBulkAdjustmentId, PayRunAdjustmentIdempotencyConflict } from '@openbooks/engine/src/payroll/run-adjustments.ts'
 import { storedHolidayEligibilityForRun } from '@openbooks/engine/src/payroll/holiday-attestations.ts'
 import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import '../../../../../lib/feature-gates';
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { aiRailsErrorResponse } from '../../../../../lib/ai-rails'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
