@@ -243,7 +243,7 @@ test(
  *
  * These cases run against a real database in a scratch org. Deferred live-PG
  * execution command (schema-ready throwaway database):
- *   eval "$(scripts/testdb.sh new)" && NODE_ENV=test node --import tsx --test --test-force-exit web/lib/file-audit.test.ts web/lib/cabinet.private-boundary.test.ts
+ *   eval "$(scripts/testdb.sh new)" && NODE_ENV=test node --import tsx --test --test-force-exit web/lib/file-audit.test.ts web/lib/file-cabinet.private-boundary.integration.test.ts
  * (with OPENBOOKS_TRUSTED_TEST_BYPASS=1 exported for the trusted test boundary;
  * npm test supplies it).
  */

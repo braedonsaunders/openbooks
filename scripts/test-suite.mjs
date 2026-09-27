@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createConnection } from 'node:net'
-import { existsSync, globSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { existsSync, globSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { filesWithoutTests } from './verify-test-registration.mjs'
 
@@ -24,101 +24,6 @@ export const TEST_RUNTIME_FLAGS = Object.freeze(['--no-concurrent-sparkplug', '-
 const TEST_PATTERNS = ['scripts', 'deploy', 'engine', 'packages', 'web', 'schema']
   .flatMap((root) => ['ts', 'tsx', 'js', 'mjs'].map((ext) => `${root}/**/*.test.${ext}`))
 
-// Most database tests predate the `.integration.test.ts` naming convention.
-// Keep their ownership explicit here instead of guessing from arbitrary
-// source text (which would misclassify contract tests that merely mention a
-// database environment variable). New database tests should use the suffix;
-// this list is the maintained compatibility inventory for legacy files.
-const DATABASE_TEST_OVERRIDES = new Set([
-  'scripts/test-fixture-architecture.test.mjs',
-  'engine/src/payables/ap-capture.test.ts',
-  'engine/src/banking/bank-feed-providers.test.ts',
-  'engine/src/platform/business-date.test.ts',
-  'engine/src/close/close.test.ts',
-  'engine/src/conformance/conformance.test.ts',
-  'engine/src/conformance/controls.test.ts',
-  'engine/src/records/control-accounts.test.ts',
-  'engine/src/payments/direct-debit.test.ts',
-  'engine/src/receivables/dunning.test.ts',
-  'engine/src/fx/providers.test.ts',
-  // Proves the pack-refusal hierarchy at the real boundary: it installs every
-  // declared country and runs their population() calls, which needs a database.
-  // Left in the unit partition its DB block silently skipped, so the guard for
-  // the year-end crash was never actually exercised in CI.
-  'engine/src/payroll/pack-refusal-class.test.ts',
-  'engine/src/harness/scenario.test.ts',
-  'engine/src/inventory/costing.test.ts',
-  'engine/src/ledger/journal-writes.test.ts',
-  'engine/src/payments/operations.test.ts',
-  'engine/src/payroll/agnostic-core.test.ts',
-  'engine/src/payroll/bank-file.test.ts',
-  // The rail siblings are DB-gated ({ skip: !DB }) like their cemtex kin;
-  // left out of the integration manifest they skipped in the unit partition
-  // and never ran in any CI partition - dead green, several of them
-  // refusal-naming cases (malformed SUN, broken IBAN, convênio).
-  'engine/src/payroll/bank-file-bacs.test.ts',
-  'engine/src/payroll/bank-file-cnab240.test.ts',
-  'engine/src/payroll/bank-file-cemtex.test.ts',
-  'engine/src/payroll/bank-file-sepa.test.ts',
-  'engine/src/payroll/bank-file-zengin.test.ts',
-  'engine/src/payroll/cheques.test.ts',
-  'engine/src/payroll/controls.test.ts',
-  'engine/src/payroll/derived-earnings.test.ts',
-  'engine/src/hrm/field-time/field-time-isolation.test.ts',
-  'engine/src/payroll/entitlements.test.ts',
-  'engine/src/payroll/filing-registry.test.ts',
-  'engine/src/payroll/opening-balances.test.ts',
-  'engine/src/payroll/opening-entitlements.test.ts',
-  'engine/src/payroll/payment-method.test.ts',
-  'engine/src/payroll/roexml.test.ts',
-  'engine/src/payroll/run.test.ts',
-  'engine/src/payroll/statutory-rates.test.ts',
-  'engine/src/payroll/statutory-rate-history.test.ts',
-  'engine/src/payroll/tax-years.test.ts',
-  'engine/src/payroll/yearend-amendments.test.ts',
-  'engine/src/ledger/posting-subsidiary-restrictions.test.ts',
-  'engine/src/ledger/posting.test.ts',
-  'engine/src/revenue/recognition.test.ts',
-  'engine/src/sync/migrate.test.ts',
-  'engine/src/sync/source-deletions.test.ts',
-  'engine/src/tax/rate-providers.test.ts',
-  'engine/src/payroll/work-schedules.test.ts',
-  // DB-gated files cannot run in the unit partition, which clears the URL.
-  'engine/src/worker/overhead-scheduler.test.ts',
-  'web/app/api/ap-capture/route-config-refusal.test.ts',
-  'web/app/api/consolidation/route.test.ts',
-  'web/app/api/data/export/route.test.ts',
-  'web/app/api/file-cabinet/bulk/route.test.ts',
-  'web/app/api/file-cabinet/files/[id]/replace/route.test.ts',
-  'web/app/api/file-cabinet/files/[id]/restore/route.test.ts',
-  'web/app/api/file-cabinet/folders/route.test.ts',
-  'web/app/api/journals/actions/route.test.ts',
-  'web/app/api/account-groups/[id]/route.test.ts',
-  'web/app/api/admin/setup/[entity]/route.test.ts',
-  'web/app/api/file-cabinet/files/route.test.ts',
-  'web/app/api/file-cabinet/lib.test.ts',
-  'web/app/api/insights/_lib.test.ts',
-  'web/app/api/items/[id]/fair-values/route.test.ts',
-  'web/app/api/payments/webhooks/[provider]/route.test.ts',
-  'web/app/api/payroll/runs/subsidiary-scope.test.ts',
-  'web/app/api/payroll/runs/[id]/route-attribute-entity.test.ts',
-  'web/app/api/payroll/settings/route.test.ts',
-  'web/lib/analytics/vendor-data.test.ts',
-  'web/lib/api-auth.test.ts',
-  'web/lib/application/document-concurrency.test.ts',
-  'web/lib/application/records.test.ts',
-  'web/lib/apps/platform.test.ts',
-  'web/lib/apps/store-audit.test.ts',
-  'web/lib/cash-flow-indirect.test.ts',
-  // The primary-book refusal case is DB-gated ({ skip: !env.OPENBOOKS_DB_URL });
-  // without this entry it was dead in every partition.
-  'web/lib/custom-report-books.test.ts',
-  'web/lib/data-io/setup-resources.test.ts',
-  'web/lib/documents.test.ts',
-  'web/lib/feature-gating.test.ts',
-  'web/lib/file-cabinet.private-boundary.test.ts',
-])
-
 // Restore is an isolated disaster-recovery rehearsal. It has its own
 // scheduled/manual workflow owner and must not run as part of the ordinary
 // integration partition.
@@ -130,19 +35,119 @@ function allTestFiles() {
     .sort()
 }
 
-// A file is database-owned when it explicitly opts into the database contract
-// or carries the repository's integration suffix. This catches the handful of
-// legacy files that contain both pure and database-backed cases without relying
-// on naming alone; each file still executes exactly once in CI.
-function isDatabaseOwned(file) {
-  return /\.integration\.test\.(?:tsx?|mjs|js)$/.test(file) || DATABASE_TEST_OVERRIDES.has(file)
+// Database ownership is derived from what a test file imports, never from a
+// hand-kept list. The suffix decides when present: `.integration.test.*`
+// is database-owned and `.unit.test.*` is not. Otherwise a file is
+// database-owned when its runtime imports reach the tenant fixture module or
+// any `*.integration.*` file. Imports are followed only through test code
+// (test files, the shared helpers under engine/src/testing and web/testing,
+// and `*.integration.*` files); following product modules would reach the
+// database module from nearly every test in the tree.
+//
+// The database module itself is not a signal: pure tests import it to stub
+// `db.execute` or read `env`. A test that uses a live database without a
+// fixture must carry the integration suffix. Left unsuffixed it either fails
+// loudly in the unit partition, which clears OPENBOOKS_DB_URL, or gates a skip
+// on the database, which scripts/conformance-partition.test.mjs refuses.
+const DATABASE_MODULES = new Set(['engine/src/testing/fixtures.ts'])
+const INTEGRATION_FILE = /\.integration\.(?:[^/]+\.)?[cm]?[jt]sx?$/
+const UNIT_TEST_FILE = /\.unit\.test\.[cm]?[jt]sx?$/
+const TEST_FILE = /\.test\.[cm]?[jt]sx?$/
+const TEST_HELPER_ROOTS = ['engine/src/testing/', 'web/testing/']
+const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts', '.mjs', '.js']
+
+function followsImports(file) {
+  return TEST_FILE.test(file) || INTEGRATION_FILE.test(file) || TEST_HELPER_ROOTS.some((root) => file.startsWith(root))
+}
+
+let workspaceDirs
+function workspaceDir(name) {
+  if (!workspaceDirs) {
+    workspaceDirs = new Map()
+    for (const dir of ['schema', 'engine', 'web', ...globSync('packages/*', { cwd: ROOT })]) {
+      try {
+        workspaceDirs.set(JSON.parse(readFileSync(resolve(ROOT, dir, 'package.json'), 'utf8')).name, dir)
+      } catch {}
+    }
+  }
+  return workspaceDirs.get(name)
+}
+
+function resolveImport(from, specifier) {
+  let base
+  if (specifier.startsWith('.')) base = join(dirname(from), specifier)
+  else if (specifier.startsWith('@/') && from.startsWith('web/')) base = join('web', specifier.slice(2))
+  else {
+    const match = /^(@openbooks\/[^/]+)\/(.+)$/.exec(specifier)
+    const dir = match && workspaceDir(match[1])
+    if (!dir) return undefined
+    base = join(dir, match[2])
+  }
+  const stem = base.replace(/\.js$/, '')
+  for (const candidate of [base, ...SOURCE_EXTENSIONS.map((ext) => stem + ext), ...SOURCE_EXTENSIONS.map((ext) => join(base, `index${ext}`))]) {
+    if (existsSync(resolve(ROOT, candidate)) && statSync(resolve(ROOT, candidate)).isFile()) return candidate
+  }
+  return undefined
+}
+
+// An import clause holds only bindings, braces, commas and `*`; anything
+// else means the match ran past a statement that was not an import.
+const STATIC_IMPORT = /^[ \t]*(?:import|export)\s+(type\s+)?([\w\s{},*$]*?)\s*from\s*['"]([^'"]+)['"]/gm
+const BARE_IMPORT = /^[ \t]*import\s*['"]([^'"]+)['"]/gm
+// `import("x").Name` in a type position is a type query, not a load.
+const DYNAMIC_IMPORT = /\bimport\(\s*['"]([^'"]+)['"]\s*,?\s*\)(?!\s*\.\s*(?!then\b)[A-Za-z_$])/g
+
+function runtimeImports(file) {
+  let text
+  try {
+    text = readFileSync(resolve(ROOT, file), 'utf8')
+  } catch {
+    return []
+  }
+  const specifiers = []
+  for (const [, typeOnly, clause, specifier] of text.matchAll(STATIC_IMPORT)) {
+    if (typeOnly) continue
+    const named = /^\{([^}]*)\}$/.exec(clause.trim())
+    if (named && named[1].split(',').map((part) => part.trim()).filter(Boolean).every((part) => part.startsWith('type '))) continue
+    specifiers.push(specifier)
+  }
+  for (const [, specifier] of text.matchAll(BARE_IMPORT)) specifiers.push(specifier)
+  for (const match of text.matchAll(DYNAMIC_IMPORT)) {
+    const line = text.slice(text.lastIndexOf('\n', match.index) + 1, match.index)
+    if (!/^\s*(?:\/\/|\*)/.test(line)) specifiers.push(match[1])
+  }
+  return specifiers.map((specifier) => resolveImport(file, specifier)).filter(Boolean)
+}
+
+function databaseOwnedFiles(files) {
+  const imports = new Map()
+  const pending = [...files]
+  while (pending.length > 0) {
+    const file = pending.pop()
+    if (imports.has(file)) continue
+    const targets = followsImports(file) ? runtimeImports(file) : []
+    imports.set(file, targets)
+    pending.push(...targets)
+  }
+  // Propagate to a fixed point so an import cycle cannot hide a reachable fixture.
+  const owned = new Set([...imports.keys()].filter((file) => DATABASE_MODULES.has(file) || INTEGRATION_FILE.test(file)))
+  for (let grew = true; grew;) {
+    grew = false
+    for (const [file, targets] of imports) {
+      if (owned.has(file) || !targets.some((target) => owned.has(target))) continue
+      owned.add(file)
+      grew = true
+    }
+  }
+  return new Set(files.filter((file) => owned.has(file) && !UNIT_TEST_FILE.test(file)))
 }
 
 export function testManifest() {
   const all = allTestFiles()
   const restore = all.filter((file) => RESTORE_TEST_FILES.has(file))
   const restoreSet = new Set(restore)
-  const integration = all.filter((file) => isDatabaseOwned(file) && !restoreSet.has(file))
+  const databaseOwned = databaseOwnedFiles(all)
+  const integration = all.filter((file) => databaseOwned.has(file) && !restoreSet.has(file))
   const integrationSet = new Set(integration)
   const unit = all.filter((file) => !integrationSet.has(file) && !restoreSet.has(file))
   return { all, unit, integration, restore }

@@ -9,7 +9,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 /**
  * The internal-controls evidence set, as a test suite.
  *
- * Same doctrine as the standards corpus (conformance.test.ts): computation
+ * Same doctrine as the standards corpus (conformance.integration.test.ts): computation
  * cases run everywhere including the no-database CI job; ledger cases post
  * through the real kernel and self-skip without a database; a declared gap
  * asserts that it is still a gap so the published matrix can never quietly
