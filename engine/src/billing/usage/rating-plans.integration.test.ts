@@ -249,6 +249,13 @@ test("subscription links validate the customer's identity and plan currency", DB
       usageError("usage_link_customer_mismatch", "subscription's own customer"),
     );
 
+    const validLink = await createSubscriptionUsageLink(org.orgId, actor, {
+      ...input,
+      customerId: org.customerId,
+      planVersionId: version.id,
+    });
+    assert.deepEqual(validLink.meterIds, input.meterIds);
+
     const usd = await publishedVersion(org, actor, meter.id, "USD");
     await assert.rejects(
       createSubscriptionUsageLink(org.orgId, actor, { ...input, customerId: org.customerId, planVersionId: usd.version.id }),
