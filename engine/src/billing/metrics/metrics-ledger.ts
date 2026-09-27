@@ -33,18 +33,62 @@ const CLOSED_PERIOD_REMEDY =
 
 export interface SaasMetricsDefinitions {
   orgId: string;
-  evergreenBookingMonths: "12";
-  billingsUsePreTaxSubtotal: true;
-  customerCreditsReduceBillings: true;
+  evergreenBookingMonths: string;
+  billingsUsePreTaxSubtotal: boolean;
+  customerCreditsReduceBillings: boolean;
 }
 
-/** The resolver owns the defaults until the Setup-backed definitions ship. */
-export function saasMetricsDefinitions(orgId: string): SaasMetricsDefinitions {
+/** Read the tenant's SaaS metrics policy, using the former resolver values for unset fields. */
+export function saasMetricsDefinitions(orgId: string, rawSettings: unknown): SaasMetricsDefinitions {
+  const settings = rawSettings !== null && typeof rawSettings === "object" && !Array.isArray(rawSettings)
+    ? rawSettings as Record<string, unknown>
+    : {};
+  const stored = settings.saasMetrics;
+  const definitions = stored === undefined
+    ? {}
+    : stored !== null && typeof stored === "object" && !Array.isArray(stored)
+      ? stored as Record<string, unknown>
+      : null;
+  if (!definitions) {
+    throw new UsageBillingError(
+      "saas_metrics_definition_invalid",
+      "SaaS metrics definitions must be stored as an object.",
+      "Correct the definitions in Company Settings → Setup → Company, then recompute SaaS metrics.",
+      { field: "saasMetrics" },
+    );
+  }
+  const evergreenBookingMonths = definitions.evergreenBookingMonths ?? "12";
+  if (typeof evergreenBookingMonths !== "string" || !/^[1-9]\d*$/.test(evergreenBookingMonths)) {
+    throw new UsageBillingError(
+      "saas_metrics_definition_invalid",
+      "Evergreen booking term must be a positive whole number of months.",
+      "Enter a positive whole number of months in Company Settings → Setup → Company.",
+      { field: "evergreenBookingMonths" },
+    );
+  }
+  const billingsUsePreTaxSubtotal = definitions.billingsUsePreTaxSubtotal ?? true;
+  if (typeof billingsUsePreTaxSubtotal !== "boolean") {
+    throw new UsageBillingError(
+      "saas_metrics_definition_invalid",
+      "Billings basis must be a boolean setting.",
+      "Choose the billings basis in Company Settings → Setup → Company.",
+      { field: "billingsUsePreTaxSubtotal" },
+    );
+  }
+  const customerCreditsReduceBillings = definitions.customerCreditsReduceBillings ?? true;
+  if (typeof customerCreditsReduceBillings !== "boolean") {
+    throw new UsageBillingError(
+      "saas_metrics_definition_invalid",
+      "Customer-credit treatment must be a boolean setting.",
+      "Choose the customer-credit treatment in Company Settings → Setup → Company.",
+      { field: "customerCreditsReduceBillings" },
+    );
+  }
   return {
     orgId,
-    evergreenBookingMonths: "12",
-    billingsUsePreTaxSubtotal: true,
-    customerCreditsReduceBillings: true,
+    evergreenBookingMonths,
+    billingsUsePreTaxSubtotal,
+    customerCreditsReduceBillings,
   };
 }
 
@@ -296,6 +340,7 @@ async function readSources(
   monthEnd: string;
   previousMonth: string;
   baseCurrency: string;
+  definitions: SaasMetricsDefinitions;
   subsidiaries: SubsidiaryRow[];
   subscriptions: SubscriptionSource[];
   history: HistoryRow[];
@@ -312,11 +357,11 @@ async function readSources(
   `);
   const monthEnd = bounds.rows[0]!.month_end;
   const previousMonth = bounds.rows[0]!.previous_month;
-  const definitions = saasMetricsDefinitions(orgId);
-  const org = (await executor.execute<{ base_currency: string }>(sql`
-    select base_currency from orgs where id = ${orgId}
+  const org = (await executor.execute<{ base_currency: string; settings: unknown }>(sql`
+    select base_currency, settings from orgs where id = ${orgId}
   `)).rows[0];
   if (!org) throw refusal("saas_metrics_org_missing", "The organization no longer exists.", "Select an active organization and run the metrics recompute again.");
+  const definitions = saasMetricsDefinitions(orgId, org.settings);
   const subsidiaries = (await executor.execute<SubsidiaryRow>(sql`
     select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination order by id
   `)).rows;
@@ -488,6 +533,7 @@ async function readSources(
     monthEnd,
     previousMonth,
     baseCurrency: org.base_currency,
+    definitions,
     subsidiaries,
     subscriptions,
     history,
@@ -583,10 +629,11 @@ async function computeRows(
         "Correct the subscription price, quantity, status, or dated FX rate and recompute the month.",
       );
     }
-    const rawTermMonths = source.renewal_term_months
-      ?? (source.term_starts_on && source.term_ends_on
-        ? Math.max(1, monthOrdinal(monthStartForDate(source.term_ends_on)) - monthOrdinal(monthStartForDate(source.term_starts_on)) + 1)
-        : Number(saasMetricsDefinitions(orgId).evergreenBookingMonths));
+    const rawTermMonths = source.renewal_term_months == null
+      ? source.term_starts_on && source.term_ends_on
+        ? String(Math.max(1, monthOrdinal(monthStartForDate(source.term_ends_on)) - monthOrdinal(monthStartForDate(source.term_starts_on)) + 1))
+        : sources.definitions.evergreenBookingMonths
+      : String(source.renewal_term_months);
     const bookedRecurring = movement === "new" || movement === "reactivation"
       ? mrrEnd
       : movement === "expansion"
@@ -605,7 +652,7 @@ async function computeRows(
       movement,
       recognizedRevenue: revenueBySubscription.get(source.id) ?? "0.0000",
       deferredDelta: deferredBySubscription.get(source.id)?.deferred_delta ?? "0.0000",
-      booking: mul(bookedRecurring, String(rawTermMonths)),
+      booking: mul(bookedRecurring, rawTermMonths),
     });
   }
   return { rows, rates };
@@ -876,7 +923,7 @@ export async function recomputeSaasMetrics(
       revenueRecognitionEnabled: sources.revenueRecognitionEnabled,
       subscriptions: computed.rows,
       cohortStarts: sources.cohortStartRows,
-      definitions: saasMetricsDefinitions(orgId),
+      definitions: sources.definitions,
       rates: computed.rates,
       revenue: sources.revenueRows,
       deferred: sources.deferredRows,

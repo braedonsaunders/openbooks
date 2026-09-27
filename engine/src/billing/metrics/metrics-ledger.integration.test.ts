@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { neg, toUnits } from "../../money/money.ts";
 import { runScenario } from "../../golden/scenario.ts";
 import { cancelRevenueRecognitionForInvoice } from "../../ledger/revenue-recognition-cancellation.ts";
-import { db, withBypassContext } from "../../platform/db.ts";
+import { db, withBypassContext, withOrgTransaction } from "../../platform/db.ts";
 import { runRevenueRecognition } from "../../revenue/recognition.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../../testing/fixtures.ts";
 import { createSubscriptionInvoice } from "../subscription-billing.ts";
@@ -80,12 +80,12 @@ async function seedPriorMetric(args: {
 }
 
 test("SaaS metrics movements reconcile by subsidiary and a bad movement identity is refused", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = randomUUID();
     const secondSubsidiaryId = randomUUID();
     const secondCustomerId = randomUUID();
-    await withBypassContext(async () => {
+    await withOrgTransaction(org.orgId, async () => {
       await enableMetrics(org.orgId);
       const subsidiary = await db.execute<{ id: string }>(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
@@ -109,7 +109,7 @@ test("SaaS metrics movements reconcile by subsidiary and a bad movement identity
       reactivation: randomUUID(),
     };
     const plans = Object.fromEntries(Object.keys(ids).map((kind) => [kind, randomUUID()])) as Record<keyof typeof ids, string>;
-    await withBypassContext(async () => {
+    await withOrgTransaction(org.orgId, async () => {
       await seedSubscription({ orgId: org.orgId, customerId: org.customerId, actorId, subscriptionId: ids.new, planId: plans.new, amount: "100", startOn: "2026-07-15" });
       await seedSubscription({ orgId: org.orgId, customerId: org.customerId, actorId, subscriptionId: ids.expansion, planId: plans.expansion, amount: "150", startOn: "2026-06-01" });
       await seedSubscription({ orgId: org.orgId, customerId: secondCustomerId, actorId, subscriptionId: ids.contraction, planId: plans.contraction, amount: "150", startOn: "2026-06-01" });
@@ -176,9 +176,24 @@ test("SaaS metrics movements reconcile by subsidiary and a bad movement identity
     assert.equal(totals.rows[0]!.mrr_end, "475.0000", "subsidiary facts sum to the organization total");
     assert.equal(totals.rows[0]!.recognized_revenue, "0.0000");
     assert.equal(totals.rows[0]!.deferred_delta, "0.0000");
+    const defaults = await db.execute<{ bookings: string; inputs_hash: string }>(sql`
+      select sum(bookings)::text as bookings, string_agg(inputs_hash, ',' order by subsidiary_id) as inputs_hash
+        from saas_metrics_facts_monthly where org_id = ${org.orgId} and month = ${MONTH}::date
+    `);
+    await withOrgTransaction(org.orgId, () => db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{saasMetrics}', '{"evergreenBookingMonths":"6"}'::jsonb, true)
+       where id = ${org.orgId}
+    `));
+    await recomputeSaasMetrics(org.orgId, MONTH);
+    const configured = await db.execute<{ bookings: string; inputs_hash: string }>(sql`
+      select sum(bookings)::text as bookings, string_agg(inputs_hash, ',' order by subsidiary_id) as inputs_hash
+        from saas_metrics_facts_monthly where org_id = ${org.orgId} and month = ${MONTH}::date
+    `);
+    assert.notEqual(configured.rows[0]!.bookings, defaults.rows[0]!.bookings);
+    assert.notEqual(configured.rows[0]!.inputs_hash, defaults.rows[0]!.inputs_hash);
 
     await assert.rejects(
-      withBypassContext(() => db.execute(sql`
+      withOrgTransaction(org.orgId, () => db.execute(sql`
         insert into saas_metrics_monthly
           (org_id, subsidiary_id, customer_id, subscription_id, month, cohort_month,
            mrr_start, mrr_end, new_mrr, expansion_mrr, contraction_mrr, churned_mrr,
@@ -199,12 +214,12 @@ test("SaaS metrics movements reconcile by subsidiary and a bad movement identity
 });
 
 test("closed SaaS metrics months freeze after their first computation", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
   try {
     const actorId = randomUUID();
     const planId = randomUUID();
     const subscriptionId = randomUUID();
-    await withBypassContext(async () => {
+    await withOrgTransaction(org.orgId, async () => {
       await enableMetrics(org.orgId);
       await seedSubscription({ orgId: org.orgId, customerId: org.customerId, actorId, subscriptionId, planId, amount: "100", startOn: "2026-07-01" });
       const usePlanPrice = await db.execute<{ id: string }>(sql`
@@ -214,7 +229,7 @@ test("closed SaaS metrics months freeze after their first computation", { skip: 
       assert.equal(usePlanPrice.rows.length, 1, "the subscription must use its plan price");
     });
     await recomputeSaasMetrics(org.orgId, MONTH);
-    await withBypassContext(async () => {
+    await withOrgTransaction(org.orgId, async () => {
       const periodLock = await db.execute<{ period_id: string }>(sql`
         insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state)
         values (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'ar', 'closed')
@@ -242,10 +257,11 @@ test("closed SaaS metrics months freeze after their first computation", { skip: 
 });
 
 test("voided subscription invoices preserve closed-month metrics and reverse in the void month", { skip: !DB }, async () => {
-  const org = await createScratchOrg(), actorId = await createScratchUser(org.orgId, "Metrics void controller", "admin");
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = await withOrgTransaction(org.orgId, () => createScratchUser(org.orgId, "Metrics void controller", "admin"));
   try {
     const subscriptionId = randomUUID(), planId = randomUUID();
-    await withBypassContext(async () => {
+    await withOrgTransaction(org.orgId, async () => {
       await enableMetrics(org.orgId);
       await seedSubscription({ orgId: org.orgId, customerId: org.customerId, actorId, subscriptionId, planId, amount: "120", startOn: MONTH });
       const calendar = (await db.execute<{ id: string }>(sql`select fiscal_calendar_id as id from accounting_periods where id = ${org.periodId} and org_id = ${org.orgId}`)).rows[0]!;
@@ -261,7 +277,7 @@ test("voided subscription invoices preserve closed-month metrics and reverse in 
     const snapshot = async () => (await db.execute<{ value: string }>(sql`select jsonb_build_object('subscription', (select to_jsonb(m) from saas_metrics_monthly m where m.org_id = ${org.orgId} and m.subscription_id = ${subscriptionId} and m.month = ${MONTH}::date), 'facts',
       (select to_jsonb(f) from saas_metrics_facts_monthly f where f.org_id = ${org.orgId} and f.month = ${MONTH}::date))::text as value`)).rows[0]?.value;
     const julyBefore = await snapshot(); assert.ok(julyBefore);
-    await withBypassContext(async () => {
+    await withOrgTransaction(org.orgId, async () => {
       const closed = await db.execute(sql`insert into period_locks (org_id, period_id, book_id, subsidiary_id, module, state) values (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'ar', 'closed') returning period_id`); assert.equal(closed.rows.length, 1, "July AR must be closed before the void");
     });
     const voided = await cancelRevenueRecognitionForInvoice({ documentId: invoice.invoiceId, orgId: org.orgId, actorId, reason: "Subscription cancelled by customer", reversalDate: "2026-08-15", allowedSubsidiaryIds: null }); assert.equal(voided.status, "cancelled");
@@ -277,7 +293,7 @@ test("voided subscription invoices preserve closed-month metrics and reverse in 
 });
 
 test("SaaS metrics refuse by name when their feature is off", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
   try {
     await assert.rejects(
       recomputeSaasMetrics(org.orgId, MONTH),
