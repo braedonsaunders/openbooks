@@ -40,14 +40,14 @@ const mockAuthz = `
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
-      specifier === "../../../../../lib/feature-gates" &&
-      context.parentURL?.includes("/api/items/")
+      specifier === "@/lib/feature-gates" &&
+      context.parentURL?.endsWith("/web/lib/api/route.ts")
     ) {
       return { url: "mock:feature-gates", shortCircuit: true };
     }
     if (
-      specifier === "../../../../../lib/authz" &&
-      context.parentURL?.includes("/api/items/")
+      specifier === "@/lib/authz" &&
+      context.parentURL?.endsWith("/web/lib/api/route.ts")
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
