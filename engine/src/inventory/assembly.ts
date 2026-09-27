@@ -195,12 +195,15 @@ export async function buildAssembly(
     for (const itemId of positionItemIds) {
       await lockInventoryPosition(tx, itemId, input.stockLocationId);
     }
+    // A build mints the finished good at this location, so it is admitted
+    // as inbound: a suspended warehouse takes no new builds.
     await assertStockLocationAdmitsSubsidiary(
       tx,
       orgId,
       ctx,
       input.stockLocationId,
       input.subsidiaryId,
+      "inbound",
     );
     for (const component of components) {
       component.onHand = await getOnHandWith(

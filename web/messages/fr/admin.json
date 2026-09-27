@@ -2054,6 +2054,16 @@
       }
     },
     "entities": {
+      "warehouses": {
+        "title": "Entrepôts",
+        "singular": "Entrepôt",
+        "description": "Nom, adresse et cycle de vie de chaque emplacement de stock de type entrepôt."
+      },
+      "putaway-rules": {
+        "title": "Règles de rangement",
+        "singular": "Règle de rangement",
+        "description": "Règles ordonnées qui choisissent où ranger le stock reçu dans un entrepôt."
+      },
       "company": {
         "title": "Société et comptabilité",
         "description": "Identité de l'organisation, devise de base, exercice fiscal et comptes de contrôle."
@@ -2600,6 +2610,16 @@
       }
     },
     "fields": {
+      "addressLine1": "Adresse, ligne 1",
+      "addressLine2": "Adresse, ligne 2",
+      "city": "Ville",
+      "postalCode": "Code postal",
+      "stockLocationId": "Emplacement de stock",
+      "status": "Statut",
+      "warehouseId": "Entrepôt",
+      "strategy": "Stratégie",
+      "targetLocationId": "Emplacement cible",
+      "capacityQuantity": "Capacité",
       "accountId": "Compte",
       "classAttribute": "Attribut de catégorie d'immobilisation",
       "countryCode": "Pays",
@@ -2990,6 +3010,8 @@
       "reviewMonths": "Cadence (mois)"
     },
     "fieldHelp": {
+      "putawayItem": "Laissez vide pour appliquer la règle à tous les articles.",
+      "putawayCapacity": "Quantité maximale de l’article dans la cible. Obligatoire pour une zone de vrac ; laissez vide sur un emplacement fixe pour ne pas fixer de limite.",
       "recognitionRulePolicy": "Modifier la méthode, la durée, les dates, les décalages, le pourcentage ou les comptes d’une règle déjà utilisée pour les produits crée une nouvelle version ; les obligations existantes conservent l’ancienne version.",
       "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
       "lienWaiverEnforcement": "Bloquer signifie qu'une facture de cette catégorie ne peut être payée sans renonciation signée qui la couvre.",
@@ -3091,6 +3113,17 @@
       "aiRailsReviewMonths": "Cadence en mois (1–36) ; les capacités en retard notifient la boîte setup."
     },
     "options": {
+      "warehouseStatus": {
+        "draft": "Brouillon",
+        "active": "Actif",
+        "suspended": "Suspendu",
+        "retired": "Retiré"
+      },
+      "putawayStrategy": {
+        "fixed-bin": "Emplacement fixe",
+        "empty-bin": "Emplacement vide",
+        "bulk-zone": "Zone de vrac"
+      },
       "priceLevelMethod": { "explicit": "Prix matriciels explicites", "markupDiscount": "Majoration / remise", "costPlus": "Coût majoré" },
       "priceCostBasis": { "itemCost": "Coût de l’article", "standardCost": "Coût de stock standard", "averageCost": "Coût de stock moyen" },
       "timeClassification": {
@@ -4455,6 +4488,7 @@
     },
     "filterAll": "Tous",
     "sections": {
+      "address": "Adresse postale",
       "basisCaps": "Plafonds d’assiette",
       "deductionProtection": "Protection des retenues",
       "holidayCompanyDay": "Jour férié d’entreprise",

@@ -26,6 +26,7 @@ import { PERSONA_WIDGETS } from './widgets-home-persona'
 import { OPERATIONS_WIDGETS } from './widgets-operations'
 import { RECORDS_WIDGETS } from './widgets-records'
 import { CONTROLS_WIDGETS } from './widgets-controls'
+import { WAREHOUSE_WIDGETS } from './widgets-warehouse'
 import { str, type WidgetRenderer } from './widget-props'
 
 /**
@@ -191,6 +192,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ...OPERATIONS_WIDGETS,
   ...RECORDS_WIDGETS,
   ...CONTROLS_WIDGETS,
+  ...WAREHOUSE_WIDGETS,
 }
 
 export class UnknownWidgetError extends Error {

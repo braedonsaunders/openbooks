@@ -119,6 +119,7 @@ export async function postLandedCostVoucher(
         ctx,
         target.stockLocationId,
         input.subsidiaryId,
+        "revalue",
       );
       // Capitalize only onto the voucher entity's own layers — freight on
       // another legal entity's stock is another form of taking its value.

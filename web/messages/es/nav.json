@@ -1,5 +1,6 @@
 {
   "modules": {
+    "warehouses": "Almacenes",
     "accounts": "Plan de cuentas",
     "assets": "Activos fijos",
     "equipment": "Equipos",

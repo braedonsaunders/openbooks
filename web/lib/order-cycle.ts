@@ -1156,7 +1156,14 @@ export async function assignOrderLineWarehouse(
     const locationId = resolved.locationId ?? input.stockLocationId
     const ctx = await loadSubsidiaryContext(tx, input.orgId)
     try {
-      await assertStockLocationAdmitsSubsidiary(tx, input.orgId, ctx, locationId, doc.subsidiary_id ?? ctx.rootId)
+      await assertStockLocationAdmitsSubsidiary(
+        tx,
+        input.orgId,
+        ctx,
+        locationId,
+        doc.subsidiary_id ?? ctx.rootId,
+        input.kind === 'sales_order' ? 'outbound' : 'inbound',
+      )
     } catch (error) {
       if (error instanceof InventoryOwnershipError) {
         throw new ConversionError(

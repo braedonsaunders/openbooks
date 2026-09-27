@@ -431,6 +431,10 @@ export async function validateEntityIntegrity(
       return 'not found'
     }
   }
+  if (entity.key === 'putaway-rules' && body.strategy === 'bulk-zone'
+    && (body.capacityQuantity === undefined || body.capacityQuantity === null || body.capacityQuantity === '')) {
+    return 'A bulk-zone putaway rule needs a capacity: enter the most the zone may hold of the item'
+  }
   if (entity.key === 'time-types' && body.showOnFieldTicket !== undefined
     && !(await isFeatureEnabled(orgId, 'fieldTickets', executor))) {
     return 'not found'

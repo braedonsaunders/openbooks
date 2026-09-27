@@ -2169,6 +2169,16 @@
       "saveFailed": "構成を保存できませんでした。"
     },
     "entities": {
+      "warehouses": {
+        "title": "倉庫",
+        "singular": "倉庫",
+        "description": "倉庫種別の在庫ロケーションごとの名称、住所、ライフサイクル。"
+      },
+      "putaway-rules": {
+        "title": "格納ルール",
+        "singular": "格納ルール",
+        "description": "入庫した在庫を倉庫内のどこに格納するかを決める順序付きルール。"
+      },
       "company": {
         "title": "会社と会計",
         "description": "組織の識別情報、基準通貨、会計年度、および統制勘定。"
@@ -2715,6 +2725,16 @@
       }
     },
     "fields": {
+      "addressLine1": "住所 1",
+      "addressLine2": "住所 2",
+      "city": "市区町村",
+      "postalCode": "郵便番号",
+      "stockLocationId": "在庫ロケーション",
+      "status": "状態",
+      "warehouseId": "倉庫",
+      "strategy": "方式",
+      "targetLocationId": "格納先",
+      "capacityQuantity": "容量",
       "accountId": "勘定科目",
       "classAttribute": "資産区分属性",
       "countryCode": "国",
@@ -3105,6 +3125,8 @@
       "reviewMonths": "レビュー周期（月）"
     },
     "fieldHelp": {
+      "putawayItem": "空欄にするとすべての品目に適用されます。",
+      "putawayCapacity": "格納先に置ける品目の上限数量。バルクゾーンでは必須です。固定棚で空欄にすると上限なしになります。",
       "recognitionRulePolicy": "収益で既に使用されているルールの方法、期間、日付、オフセット、割合、または勘定科目を変更すると新しいバージョンが作成され、既存の履行義務は旧バージョンを保持します。",
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。",
       "basisCapAmountPerPeriod": "1給与期間にこの金額に達したらこの項目を停止します。",
@@ -3206,6 +3228,17 @@
       "aiRailsReviewMonths": "レビュー周期（月、1〜36）。期限切れはsetupの受信箱に通知。"
     },
     "options": {
+      "warehouseStatus": {
+        "draft": "下書き",
+        "active": "稼働中",
+        "suspended": "停止中",
+        "retired": "廃止"
+      },
+      "putawayStrategy": {
+        "fixed-bin": "固定棚",
+        "empty-bin": "空き棚",
+        "bulk-zone": "バルクゾーン"
+      },
       "priceLevelMethod": { "explicit": "明示マトリクス価格", "markupDiscount": "マークアップ / 割引", "costPlus": "原価加算" },
       "priceCostBasis": { "itemCost": "品目原価", "standardCost": "標準在庫原価", "averageCost": "平均在庫原価" },
       "timeClassification": {
@@ -4455,6 +4488,7 @@
     },
     "filterAll": "すべて",
     "sections": {
+      "address": "住所",
       "basisCaps": "基準上限",
       "deductionProtection": "控除保護",
       "holidayCompanyDay": "会社休日",

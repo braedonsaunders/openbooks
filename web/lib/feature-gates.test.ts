@@ -31,7 +31,9 @@ const APP_SEGMENT = 'app/(app)'
 // same shape as requireFlowsSession and requireProjectsFeature above. Each
 // verified to call isFeatureEnabled for its module AND its sub-switch before
 // being listed here; a helper that does not gate must never be added.
-const GATE = /requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardWipBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(/
+// A factory route (`defineRoute`) names its feature key and the factory
+// answers 404 while that feature is off.
+const GATE = /defineRoute\(\{[\s\S]*?\bfeature: '[A-Za-z]+'|requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardWipBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(/
 
 const read = readingPagePairs((path: string) => readFileSync(new URL(path, WEB), 'utf8'))
 const exists = (path: string) => existsSync(new URL(path, WEB))
@@ -101,6 +103,7 @@ const FEATURE_API_DIRS: Record<string, string[]> = {
   payroll: ['app/api/payroll', 'app/api/work-schedules'],
   fixedAssets: ['app/api/assets'],
   inventory: ['app/api/inventory', 'app/api/items/[id]/costing'],
+  warehousing: ['app/api/warehouses'],
   fieldTickets: ['app/api/field-tickets'],
   subscriptionBilling: ['app/api/subscriptions'],
   advancedSubscriptions: ['app/api/subscriptions/advanced'],

@@ -58,6 +58,7 @@ import { itemRates } from './articles/item-rates'
 import { fixedAssetsDepreciation } from './articles/fixed-assets-depreciation'
 import { revenueRecognition } from './articles/revenue-recognition'
 import { propertyManagement } from './articles/property-management'
+import { distributionWarehouses } from './articles/distribution-warehouses'
 import { extensions } from './articles/extensions'
 import { apps } from './articles/apps'
 import { appBuilder } from './articles/app-builder'
@@ -235,6 +236,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'purchasing-workflow': 'transactions-daily',
   'payments-and-applications': 'transactions-daily',
   'property-management': 'transactions-daily',
+  'distribution-warehouses': 'transactions-daily',
   'financial-reports': 'reporting-guides',
   'analytics-and-saved-views': 'reporting-guides',
   'agent-workbench': 'reporting-guides',
@@ -299,6 +301,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   purchasingWorkflow,
   paymentsAndApplications,
   propertyManagement,
+  distributionWarehouses,
   bankingAndReconciliation,
   periodClose,
   projectTypes, overheadCosting, laborCosting, laborPricing, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance, compensationAndTransparency,

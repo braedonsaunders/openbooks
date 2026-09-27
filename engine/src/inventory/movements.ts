@@ -55,6 +55,9 @@ export interface ReceiveInput {
   /** Join the caller's transaction instead of opening one. Required when the
    * receipt belongs to a larger accounting unit such as vendor-bill posting. */
   tx?: SqlExecutor;
+  /** Set only when the receipt books a stock count's surplus: the enclosing
+   *  warehouse then admits it as a count, which a suspended warehouse allows. */
+  admission?: "count";
 }
 
 export interface MovementResult {
@@ -143,6 +146,7 @@ export async function receiveInventory(
       ctx,
       input.stockLocationId,
       input.subsidiaryId,
+      input.admission === "count" ? "count" : "inbound",
     );
 
     // Costing lives under the position lock: a receipt without an explicit
@@ -453,6 +457,9 @@ export interface IssueInput {
    * single accounting unit: its document, source-line advance, inventory
    * movement and COGS journal either all commit or all roll back. */
   tx?: SqlExecutor;
+  /** Set only when the issue books a stock count's shortfall: the enclosing
+   *  warehouse then admits it as a count. */
+  admission?: "count";
 }
 
 /**
@@ -525,6 +532,7 @@ export async function issueInventory(
       ctx,
       input.stockLocationId,
       input.subsidiaryId,
+      input.admission === "count" ? "count" : "outbound",
     );
     await validateTrackingSelection(
       tx,
@@ -680,6 +688,8 @@ export interface AdjustInput {
   departmentId?: string | null;
   projectId?: string | null;
   locationId?: string | null;
+  /** Set when the adjustment books a stock count's variance. */
+  admission?: "count";
 }
 
 /**
@@ -725,6 +735,7 @@ export async function adjustInventory(
         departmentId: input.departmentId,
         projectId: input.projectId,
         locationId: input.locationId,
+        admission: input.admission,
         tx,
       });
     }
@@ -743,6 +754,7 @@ export async function adjustInventory(
       departmentId: input.departmentId,
       projectId: input.projectId,
       locationId: input.locationId,
+      admission: input.admission,
       tx,
     });
   });

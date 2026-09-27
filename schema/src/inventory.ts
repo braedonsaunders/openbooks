@@ -73,6 +73,9 @@ export const stockLocations = pgTable(
   (t) => [
     uniqueIndex("stock_locations_org_id_id_unique").on(t.orgId, t.id),
     uniqueIndex("stock_locations_org_code").on(t.orgId, t.locationId, t.code),
+    uniqueIndex("stock_locations_org_warehouse_code")
+      .on(t.orgId, t.code)
+      .where(sql`${t.kind} = 'warehouse'`),
   ],
 );
 

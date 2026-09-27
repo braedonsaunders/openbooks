@@ -187,6 +187,12 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // coarse jurisdiction the sandbox's tax behavior needs, not identity.
   { tableName: "addresses", columnName: "city", transform: "redact" },
   { tableName: "addresses", columnName: "postal_code", transform: "redact" },
+  // A warehouse address can be a person's premises in a small business, so
+  // its street and locality are redacted like any other address.
+  { tableName: "warehouses", columnName: "address_line1", transform: "redact" },
+  { tableName: "warehouses", columnName: "address_line2", transform: "redact" },
+  { tableName: "warehouses", columnName: "city", transform: "redact" },
+  { tableName: "warehouses", columnName: "postal_code", transform: "redact" },
   // D2b: contacts are people at a customer/vendor company, faked exactly
   // like party and user identity. Title/role stay: a job function ("Billing")
   // paired with a faked name identifies nobody.
