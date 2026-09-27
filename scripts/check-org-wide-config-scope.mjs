@@ -59,7 +59,18 @@ function handlerArm(source, method) {
     if (defined) {
       const rest = source.slice(defined.index + defined[0].length);
       const next = /\nexport\s+/.exec(rest);
-      return source.slice(defined.index, next ? defined.index + defined[0].length + next.index : source.length);
+      const arm = source.slice(defined.index, next ? defined.index + defined[0].length + next.index : source.length);
+      // A factory arm may delegate to a module-local handler function, directly
+      // or through `const handler = createHandler()`; the writer call and its
+      // guards then live in that function's body.
+      const localFunction = (name) =>
+        new RegExp(`\\n(?:export\\s+)?(?:async\\s+)?function\\s+${name}\\s*\\([\\s\\S]*?\\n\\}\\n`).exec(source)?.[0] ?? "";
+      const delegated = [...new Set([...arm.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]))]
+        .map((name) => {
+          const alias = new RegExp(`\\nconst\\s+${name}\\s*=\\s*([A-Za-z_$][\\w$]*)\\s*\\(`).exec(source);
+          return localFunction(name) || (alias ? localFunction(alias[1]) : "");
+        });
+      return [arm, ...delegated].join("\n");
     }
     // A route may expose a factory-created handler so tests can inject the
     // permission and persistence boundaries without replacing app modules.
