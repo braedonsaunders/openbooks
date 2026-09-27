@@ -137,6 +137,7 @@
       "dependsOn": [
         "allocations",
         "assets",
+        "billing",
         "close",
         "composition",
         "consolidation",

@@ -909,6 +909,10 @@
       "grant_pipeline": {
         "label": "资助项目管线",
         "description": "资助、赞助方、期间、状态和关联基金分类。"
+      },
+      "usage_billing_lines": {
+        "label": "用量计费明细",
+        "description": "列出已计价的用量发票行，并提供计价运行、计划版本、计量器、源记录哈希、期间及承诺窗口的追踪信息。"
       }
     },
     "columns": {
@@ -2124,6 +2128,29 @@
         "fund_name": "基金",
         "restriction_class": "限制类别",
         "base_currency": "本位币"
+      },
+      "usage_billing_lines": {
+        "document_number": "发票编号",
+        "document_date": "发票日期",
+        "status": "发票状态",
+        "party_name": "客户",
+        "line_number": "行号",
+        "currency": "币种",
+        "amount": "金额",
+        "run_id": "计价运行（ID）",
+        "plan_version_id": "计划版本（ID）",
+        "meter_id": "计量器（ID）",
+        "meter_key": "计量器键",
+        "kind": "计价类型",
+        "band_seq": "阶梯编号",
+        "quantity": "计价数量",
+        "unit_price": "计价单价",
+        "records_hash": "记录哈希",
+        "period_start": "用量期间开始",
+        "period_end": "用量期间结束",
+        "commit_window_start": "承诺窗口开始",
+        "commit_window_end": "承诺窗口结束",
+        "rated_total": "承诺前计价总额"
       }
     },
     "enumValues": {
@@ -2429,6 +2456,10 @@
     "grant-pipeline": {
       "name": "资助项目管线",
       "description": "资助、赞助方、期间、状态和基金分类。"
+    },
+    "usage-billing-detail": {
+      "name": "用量计费明细",
+      "description": "列出每条已计价的用量发票行，以及其计量器、计价运行、计划版本和源记录追踪信息。"
     }
   },
   "generalLedger": {

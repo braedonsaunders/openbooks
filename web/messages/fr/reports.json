@@ -909,6 +909,10 @@
       "grant_pipeline": {
         "label": "Portefeuille de subventions",
         "description": "Subventions, sponsors, périodes, statuts et classification du fonds associé."
+      },
+      "usage_billing_lines": {
+        "label": "Lignes de facturation à l’usage",
+        "description": "Lignes de facture évaluées avec la traçabilité du calcul, de la version du plan, du compteur, du hachage des enregistrements sources, de la période et de la fenêtre d’engagement."
       }
     },
     "columns": {
@@ -2124,6 +2128,29 @@
         "fund_name": "Fonds",
         "restriction_class": "Classe de restriction",
         "base_currency": "Devise de base"
+      },
+      "usage_billing_lines": {
+        "document_number": "N° de facture",
+        "document_date": "Date de facture",
+        "status": "État de la facture",
+        "party_name": "Client",
+        "line_number": "N° de ligne",
+        "currency": "Devise",
+        "amount": "Montant",
+        "run_id": "Exécution de tarification (id)",
+        "plan_version_id": "Version du plan (id)",
+        "meter_id": "Compteur (id)",
+        "meter_key": "Clé du compteur",
+        "kind": "Type de tarification",
+        "band_seq": "N° de tranche",
+        "quantity": "Quantité évaluée",
+        "unit_price": "Prix unitaire évalué",
+        "records_hash": "Empreinte des enregistrements",
+        "period_start": "Début de période d’usage",
+        "period_end": "Fin de période d’usage",
+        "commit_window_start": "Début de fenêtre d’engagement",
+        "commit_window_end": "Fin de fenêtre d’engagement",
+        "rated_total": "Total évalué avant engagement"
       }
     },
     "enumValues": {
@@ -2409,6 +2436,10 @@
     "grant-pipeline": {
       "name": "Portefeuille de subventions",
       "description": "Subventions, sponsors, périodes, statuts et classification du fonds."
+    },
+    "usage-billing-detail": {
+      "name": "Détail de la facturation à l’usage",
+      "description": "Liste chaque ligne de facture d’usage avec son compteur, son exécution de tarification, la version du plan et la traçabilité des enregistrements sources."
     }
   },
   "generalLedger": {

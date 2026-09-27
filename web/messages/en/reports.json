@@ -909,6 +909,10 @@
       "grant_pipeline": {
         "label": "Grant pipeline",
         "description": "Grant awards, sponsors, periods, status, and associated fund classification."
+      },
+      "usage_billing_lines": {
+        "label": "Usage billing lines",
+        "description": "Rated invoice lines with their rating run, plan version, meter, source-record hash, period and commit-window trace."
       }
     },
     "columns": {
@@ -2124,6 +2128,29 @@
         "fund_name": "Fund",
         "restriction_class": "Restriction class",
         "base_currency": "Base currency"
+      },
+      "usage_billing_lines": {
+        "document_number": "Invoice #",
+        "document_date": "Invoice date",
+        "status": "Invoice status",
+        "party_name": "Customer",
+        "line_number": "Line #",
+        "currency": "Currency",
+        "amount": "Amount",
+        "run_id": "Rating run (id)",
+        "plan_version_id": "Plan version (id)",
+        "meter_id": "Meter (id)",
+        "meter_key": "Meter key",
+        "kind": "Rating kind",
+        "band_seq": "Band #",
+        "quantity": "Rated quantity",
+        "unit_price": "Rated unit price",
+        "records_hash": "Records hash",
+        "period_start": "Usage period start",
+        "period_end": "Usage period end",
+        "commit_window_start": "Commit window start",
+        "commit_window_end": "Commit window end",
+        "rated_total": "Rated total before commit"
       }
     },
     "enumValues": {
@@ -2429,6 +2456,10 @@
     "grant-pipeline": {
       "name": "Grant pipeline",
       "description": "Grant awards, sponsors, periods, status, and fund classification."
+    },
+    "usage-billing-detail": {
+      "name": "Usage billing detail",
+      "description": "Lists every rated usage invoice line with its meter, rating run, plan version, and source-record trace."
     }
   },
   "generalLedger": {

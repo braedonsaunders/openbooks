@@ -909,6 +909,10 @@
       "grant_pipeline": {
         "label": "Fördermittelpipeline",
         "description": "Förderzusagen, Fördergeber, Laufzeiten, Status und zugehörige Fondsklassifikation."
+      },
+      "usage_billing_lines": {
+        "label": "Nutzungsabrechnungspositionen",
+        "description": "Bewertete Rechnungspositionen mit Nachverfolgung von Bewertungslauf, Tarifversion, Messgröße, Quellbeleg-Hash, Zeitraum und Mindestumsatzzeitraum."
       }
     },
     "columns": {
@@ -2124,6 +2128,29 @@
         "fund_name": "Fonds",
         "restriction_class": "Beschränkungsklasse",
         "base_currency": "Basiswährung"
+      },
+      "usage_billing_lines": {
+        "document_number": "Rechnungsnr.",
+        "document_date": "Rechnungsdatum",
+        "status": "Rechnungsstatus",
+        "party_name": "Kunde",
+        "line_number": "Zeile",
+        "currency": "Währung",
+        "amount": "Betrag",
+        "run_id": "Bewertungslauf (ID)",
+        "plan_version_id": "Tarifversion (ID)",
+        "meter_id": "Messgröße (ID)",
+        "meter_key": "Messgrößenschlüssel",
+        "kind": "Bewertungsart",
+        "band_seq": "Staffel",
+        "quantity": "Bewertete Menge",
+        "unit_price": "Bewerteter Stückpreis",
+        "records_hash": "Beleg-Hash",
+        "period_start": "Nutzungszeitraum Beginn",
+        "period_end": "Nutzungszeitraum Ende",
+        "commit_window_start": "Mindestumsatzzeitraum Beginn",
+        "commit_window_end": "Mindestumsatzzeitraum Ende",
+        "rated_total": "Bewerteter Gesamtbetrag vor Mindestumsatz"
       }
     },
     "enumValues": {
@@ -2429,6 +2456,10 @@
     "grant-pipeline": {
       "name": "Fördermittelpipeline",
       "description": "Förderzusagen, Fördergeber, Laufzeiten, Status und Fondsklassifikation."
+    },
+    "usage-billing-detail": {
+      "name": "Nutzungsabrechnungsdetails",
+      "description": "Listet jede bewertete Nutzungsrechnungsposition mit Messgröße, Bewertungslauf, Tarifversion und Quellbelegnachweis auf."
     }
   },
   "generalLedger": {
