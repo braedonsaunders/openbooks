@@ -633,3 +633,31 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
   }
 }
 }}] as const; for (const row of analyticsScopeCases) await row.register();
+
+const insightBookCases = [{ label: "insight primary book scope", register: async () => {
+  const { stubModules } = await import('../testing/stub-modules.ts');
+  stubModules({ intl: true, navigation: { source: 'export function redirect(){throw new Error("redirect")};export function useRouter(){throw new Error("no router")}' }, authz: false, features: false });
+  const hooks = registerHooks({ resolve(specifier, context, next) {
+    if (specifier === 'next/headers') return { shortCircuit: true, url: 'data:text/javascript,export async function headers(){throw new Error("no headers")};export async function cookies(){throw new Error("no cookies")}' };
+    return next(specifier, context);
+  }});
+  const { resolveInsightBookScope } = await import('./insight-books.ts?analytics-ledger');
+  hooks.deregister();
+  const plan: import('@openbooks/analytics').InsightQuery = { source: 'ledger_lines', measures: [{ agg: 'sum', field: 'amount' }], dimensions: [{ field: 'posting_date', bin: 'month' }] };
+  test('insight book scope defaults to the primary and never silently falls back', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      assert.deepEqual(await withBypassContext(() => resolveInsightBookScope(org.orgId, plan)), [org.bookId]);
+      await assert.rejects(withBypassContext(() => db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl)
+        values (${randomUUID()},${org.orgId},'ALT','Alternate',true,true,true)`)),
+        (error: unknown) => String((error as { cause?: { detail?: string } }).cause?.detail ?? '').includes('already exists'));
+      await withBypassContext(() => db.execute(sql`update accounting_books set is_primary=false where org_id=${org.orgId}`));
+      await assert.rejects(withBypassContext(() => resolveInsightBookScope(org.orgId, plan)), /exactly one active primary/);
+      await withBypassContext(() => db.execute(sql`update accounting_books set is_primary=true where id=${org.bookId}`));
+      assert.equal(await withBypassContext(() => resolveInsightBookScope(org.orgId, { ...plan, filters: [{ field: 'book_id', op: 'eq', value: org.bookId }] })), null);
+      assert.equal(await withBypassContext(() => resolveInsightBookScope(org.orgId, { ...plan, dimensions: [{ field: 'book' }] })), null);
+      assert.equal(await withBypassContext(() => resolveInsightBookScope(org.orgId, { source: 'documents', measures: [{ agg: 'sum', field: 'total' }] })), undefined);
+    } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
+  });
+}}] as const;
+for (const row of insightBookCases) await row.register();

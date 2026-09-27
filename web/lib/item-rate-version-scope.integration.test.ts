@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypassContext, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { resolveItemRate, snapshotTimeBillRates } = await import('./item-rates')
 const { resolveRateAdjustments } = await import('./rate-adjustments')
 
@@ -437,6 +437,82 @@ const consolidatedRows = [
 ] as const;
 
 for (const row of consolidatedRows) await row.register();
+
+const rateBookDefaultCases = [{ label: 'item rate book default controls', register: async () => {
+  const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
+  Object.assign(globalThis, { __rateBookDefaultControls: state });
+  const { registerHooks } = await import('node:module');
+  const hooks = registerHooks({ resolve(specifier, context, next) {
+    if (specifier.endsWith('/lib/authz') && context.parentURL?.includes('/api/admin/setup/'))
+      return { shortCircuit: true, url: 'data:text/javascript,export async function guardPermission(){return globalThis.__rateBookDefaultControls.gate}' };
+    return next(specifier, context);
+  }});
+  const { POST, PATCH, DELETE } = await import('../app/api/admin/setup/[entity]/route.ts?item-rate-book-default');
+  hooks.deregister();
+  const send = (method: 'POST' | 'PATCH' | 'DELETE', body: Record<string, unknown>) => ({ POST, PATCH, DELETE })[method](
+    new Request(`http://audit.local/api/admin/setup/item-rate-books${method === 'DELETE' ? '?id=' + body.id : ''}`, {
+      method, headers: { 'Content-Type': 'application/json', ...(method === 'POST' ? { 'Idempotency-Key': randomUUID() } : {}) },
+      ...(method === 'DELETE' ? {} : { body: JSON.stringify(body) }),
+    }), { params: Promise.resolve({ entity: 'item-rate-books' }) });
+  const authenticate = async (org: Awaited<ReturnType<typeof createScratchOrg>>) => {
+    const actor = (await withBypassContext(() => seedFlowActors(org.orgId))).adminId;
+    state.gate = { user: { orgId: org.orgId, id: actor } };
+    await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(coalesce(settings,'{}'::jsonb),'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiSubsidiary":true}'::jsonb) where id=${org.orgId}`));
+  };
+  const readRow = async (id: string) => (await withBypassContext(() => db.execute(sql`select * from item_rate_books where id=${id}`))).rows[0];
+  const responseEvidence = async (id: string) => (await withBypassContext(() => db.execute<{ changes: Record<string, unknown> }>(sql`select changes from audit_log where row_id=${id} and action='delete' order by at desc limit 1`))).rows[0]!;
+  const json = (value: unknown) => JSON.parse(JSON.stringify(value));
+  const { waitForLockWaiter } = await import('@openbooks/engine/src/testing/lock-wait.ts');
+  const pg = (await import('pg')).default;
+  test('rate book deletion cannot remove a concurrently promoted default', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL }); let pending: Promise<Response> | undefined;
+    try {
+      await authenticate(org);
+      const prior = await send('POST', { code: 'PRIOR', name: 'Prior default', isDefault: true, isActive: true }); assert.equal(prior.status, 200); const priorId = (await prior.json()).id;
+      const next = await send('POST', { code: 'NEXT', name: 'Next default', isDefault: false, isActive: true }); assert.equal(next.status, 200); const nextId = (await next.json()).id;
+      await writer.connect(); await writer.query('begin');
+      assert.equal((await writer.query('update item_rate_books set is_default=false where id=$1', [priorId])).rowCount, 1);
+      assert.equal((await writer.query('update item_rate_books set is_default=true where id=$1', [nextId])).rowCount, 1);
+      pending = send('DELETE', { id: nextId }); void pending.catch(() => {});
+      await waitForLockWaiter(writer, { label: 'the rate-book deletion' }); await writer.query('commit');
+      assert.equal((await pending).status, 409); assert.equal((await readRow(nextId))?.is_default, true);
+      assert.equal((await db.execute(sql`select id from audit_log where row_id=${nextId} and action='delete'`)).rows.length, 0);
+    } finally { await writer.query('rollback').catch(() => {}); await pending?.catch(() => {}); await writer.end(); state.gate = null; await withBypassContext(() => dropScratchOrg(org.orgId)); }
+  });
+  for (const isDefault of [false, true]) test(`rate book deletion ${isDefault ? 'refuses a current default' : 'audits an unused nondefault'}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      await authenticate(org);
+      const prior = await send('POST', { code: 'PRIOR', name: 'Prior book', isDefault: true, isActive: true }); assert.equal(prior.status, 200);
+      const created = await send('POST', { code: 'TARGET', name: 'Target book', isDefault, isActive: true }); assert.equal(created.status, 200); const { id } = await created.json(); const before = await readRow(id);
+      const response = await send('DELETE', { id }); assert.equal(response.status, isDefault ? 409 : 200);
+      if (isDefault) { assert.deepEqual(await readRow(id), before); assert.equal((await db.execute(sql`select id from audit_log where row_id=${id} and action='delete'`)).rows.length, 0); }
+      else { assert.equal(await readRow(id), undefined); assert.deepEqual((await responseEvidence(id)).changes, json({ before })); }
+    } finally { state.gate = null; await withBypassContext(() => dropScratchOrg(org.orgId)); }
+  });
+  test('committed rate-book deletion makes a waiting promotion refuse the missing record', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const org = await withBypassContext(() => createScratchOrg()); let release!: () => void; const gate = new Promise<void>(resolve => { release = resolve; });
+    let ready!: (pid: number) => void; const started = new Promise<number>(resolve => { ready = resolve; }); let deleting: Promise<unknown> | undefined, promoting: Promise<Response> | undefined;
+    try {
+      await authenticate(org); const prior = await send('POST', { code: 'PRIOR', name: 'Prior default', isDefault: true, isActive: true }); assert.equal(prior.status, 200); await prior.json();
+      const next = await send('POST', { code: 'TARGET', name: 'Target book', isDefault: false, isActive: true }); assert.equal(next.status, 200); const { id } = await next.json();
+      deleting = withOrgTransaction(org.orgId, async () => { const response = await send('DELETE', { id }); assert.equal(response.status, 200); ready((await db.execute(sql`select pg_backend_pid() as pid`)).rows[0]!.pid); await gate; });
+      const pid = await started; promoting = send('PATCH', { id, name: 'Target book', isDefault: true, isActive: true }); void promoting.catch(() => {});
+      let blocked = false; const deadline = Date.now() + 10000;
+      while (Date.now() < deadline) { if ((await db.execute(sql`select exists(select 1 from pg_stat_activity where ${pid}=any(pg_blocking_pids(pid))) as blocked`)).rows[0]!.blocked) { blocked = true; break; } await new Promise(resolve => setTimeout(resolve, 25)); }
+      assert.ok(blocked, 'promotion shares the deletion lock'); release(); await deleting; assert.equal((await promoting).status, 404); assert.equal(await readRow(id), undefined);
+    } finally { release(); await deleting?.catch(() => {}); await promoting?.catch(() => {}); state.gate = null; await withBypassContext(() => dropScratchOrg(org.orgId)); }
+  });
+  test('rate-book deletion cannot read or remove a foreign tenant default', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const org = await withBypassContext(() => createScratchOrg()), other = await withBypassContext(() => createScratchOrg());
+    try {
+      await authenticate(org); const created = await send('POST', { code: 'ISOLATED', name: 'Isolated default', isDefault: true, isActive: true }); assert.equal(created.status, 200); const { id } = await created.json(); const before = await readRow(id);
+      await authenticate(other); assert.equal((await send('DELETE', { id })).status, 404); assert.deepEqual(await readRow(id), before);
+    } finally { state.gate = null; await withBypassContext(() => dropScratchOrg(org.orgId)); await withBypassContext(() => dropScratchOrg(other.orgId)); }
+  });
+}}] as const;
+for (const row of rateBookDefaultCases) await row.register();
 
 
 const itemPricingAsOfRows = [

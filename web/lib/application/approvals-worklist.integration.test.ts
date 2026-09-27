@@ -12,6 +12,7 @@ const { createScratchOrg, dropScratchOrg, seedApprovalFlow, seedDraftDocument, s
 const { submitForApproval } = await import("@openbooks/engine/src/flows/submit.ts");
 const { decideApproval, listApprovalWorklist } = await import("./approvals.ts");
 const { orgVitals } = await import("./vitals.ts");
+const { resolveApprovalSubjects } = await import("../approval-subjects.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -99,6 +100,49 @@ test("worklist unifies gates, gateless documents, and pay runs; vitals counts th
     await dropScratchOrg(org.orgId);
   }
 });
+
+const approvalSubjectCases = [{ label: "approval subject summaries", register: async () => {
+  const kind = "hrm_employment_change_request";
+  const text = Object.assign((key: string) => ({
+    "me.requestKinds.hire": "Hire", "queue.columns.effective": "Effective",
+  }[key] ?? key), { has: (key: string) => key === "me.requestKinds.hire" || key === "queue.columns.effective" });
+  async function seedHire(orgId: string, subsidiaryId: string) {
+    const partyId = randomUUID(), employmentId = randomUUID(), requestId = randomUUID();
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active)
+      values (${partyId}, ${orgId}, 'person', 'Dana Employee', true)`);
+    await db.execute(sql`insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id)
+      values (${employmentId}, ${orgId}, ${partyId}, ${subsidiaryId})`);
+    await db.execute(sql`insert into hrm_employment_change_requests
+      (id, org_id, employment_id, expected_employment_revision, payload, payload_digest, payload_schema_version, status)
+      values (${requestId}, ${orgId}, ${employmentId}, 1,
+        '{"kind":"hire","status":"active","effectiveFrom":"2026-10-01","effectiveTo":null}'::jsonb,
+        repeat('0', 64), '1', 'draft')`);
+    return requestId;
+  }
+  test("approval subject resolution supplies the employee and decision summary", { skip: !DB }, async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const id = await withBypassContext(() => seedHire(org.orgId, org.subsidiaryId));
+      const details = await withBypassContext(() => resolveApprovalSubjects(org.orgId, [{ kind, subjectId: id }], text));
+      const detail = details.get(`${kind}:${id}`);
+      assert.ok(detail);
+      assert.equal(detail.partyName, "Dana Employee");
+      assert.equal(detail.summary, "Hire · Effective 2026-10-01");
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+  test("unresolvable approval subjects stay absent", { skip: !DB }, async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const details = await withBypassContext(() => resolveApprovalSubjects(org.orgId, [
+        { kind: "close_run", subjectId: randomUUID() },
+        { kind, subjectId: "not-a-uuid" },
+        { kind, subjectId: randomUUID() },
+      ], text));
+      assert.equal(details.size, 0);
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+}}] as const;
+for (const row of approvalSubjectCases) await row.register();
 
 test("decide paths resolve each subject kind with separation of duties", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());

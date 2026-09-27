@@ -2900,3 +2900,95 @@ const consolidatedRows = [
 
 for (const row of consolidatedRows) await row.register();
 }}] as const; for (const row of salesInvoiceCurrencyCases) await row.register();
+
+const documentRevisionCases = [{ label: "interactive document revision lifecycle", register: async () => {
+  type SessionUser = import("./auth").SessionUser;
+  const session: { user: SessionUser | null } = { user: null };
+  Object.assign(globalThis, { __documentRevisionSession: session });
+  (await import("../testing/stub-modules.ts")).stubModules({ intl: true, navigation: false, authz: false, features: false });
+  const { registerHooks } = await import("node:module");
+  const hooks = registerHooks({ resolve(specifier, context, next) {
+    if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts"))
+      return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__documentRevisionSession.user}" };
+    return next(specifier, context);
+  }});
+  const { POST } = await import("../app/api/documents/[id]/void/route.ts?document-revision");
+  const { DELETE } = await import("../app/api/documents/[id]/route.ts?document-revision");
+  hooks.deregister();
+  for (const operation of ["void stale", "void current", "void missing", "delete stale", "delete current", "delete missing"]) {
+    test(`interactive document lifecycle: ${operation}`, { skip: !DB }, async () => {
+      const org = await withBypassContext(() => createScratchOrg());
+      try {
+        const actor = await withBypassContext(() => createScratchUser(org.orgId, "Document controller", "reviewer"));
+        await withBypassContext(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`));
+        const id = randomUUID();
+        await withBypassContext(() => db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,party_id,subsidiary_id,currency)
+          values (${id},${org.orgId},'customer_invoice',${id},${org.date},${org.customerId},${org.subsidiaryId},'CAD')`));
+        await withBypassContext(() => db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount)
+          values (${org.orgId},${id},1,${org.accounts.revenue},1,'100','100')`));
+        if (operation.startsWith("void")) await withBypassContext(() => db.execute(sql`update documents set status='approved' where id=${id}`));
+        const token = (await withBypassContext(() => db.execute<{ revision: string }>(sql`select revision_seq::text as revision from documents where id=${id}`))).rows[0]!.revision;
+        if (operation.endsWith("stale")) await withBypassContext(() => db.execute(sql`update documents set memo='Concurrent change',updated_at=updated_at+interval '1 microsecond' where id=${id}`));
+        session.user = { id: actor, orgId: org.orgId, name: "Document controller", email: "doc@scratch.test", roles: [], isSuperAdmin: false,
+          envKind: "production", productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
+        const isVoid = operation.startsWith("void");
+        const response = await withOrgContext(org.orgId, () => (isVoid ? POST : DELETE)(new Request(`http://audit.local/api/documents/${id}/void`, {
+          method: isVoid ? "POST" : "DELETE", body: JSON.stringify({ reason: "Cancel reviewed invoice", reversalDate: org.date, expectedUpdatedAt: operation.endsWith("missing") ? undefined : token }),
+        }), { params: Promise.resolve({ id }) }));
+        assert.equal(response.status, operation.endsWith("current") ? 200 : 409, JSON.stringify(await response.json()));
+        const row = (await withOrgContext(org.orgId, () => db.execute<{ status: string }>(sql`select status from documents where id=${id}`))).rows[0];
+        if (operation === "delete current") assert.equal(row, undefined);
+        else assert.equal(row?.status, operation === "void current" ? "voided" : isVoid ? "approved" : "draft");
+      } finally { session.user = null; await dropScratchOrg(org.orgId); }
+    });
+  }
+}}] as const;
+for (const row of documentRevisionCases) await row.register();
+
+const currencyRegistryCases = [{ label: "currency registry document to statement chain", register: async () => {
+  const { partnerStatement } = await import('./reports/registers.ts');
+  const { exportDataToCsv, partnerStatementExportData } = await import('./report-pdf.ts');
+  const { createPaymentDocument, updateDraftPayment } = await import('@openbooks/engine/src/payments/payment-documents.ts');
+  const { postPaymentWithApplications } = await import('@openbooks/engine/src/payments/payment-posting.ts');
+  const atLedgerScale = (total: string) => total.includes('.') ? total.padEnd(total.indexOf('.') + 5, '0') : `${total}.0000`;
+  const translate = (key: string) => key;
+  for (const [currency, fxRate, total, paid, open, baseOpen, baseTotal] of [
+    ['JPY', '0.0091', '10501', '5000', '5501.0000', '50.0591', '95.5591'],
+    ['KWD', '3.6000', '1000.005', '400.002', '600.0030', '2160.0108', '3600.0180'],
+  ] as const) test(`${currency} keeps its ISO precision from invoice through statement export`, { skip: !DB }, async () => {
+    const org = await withBypassContext(() => createScratchOrg());
+    try {
+      const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Currency chain clerk', 'admin'));
+      const registry = await withBypassContext(() => db.execute<{ code: string; minor_units: number }>(sql`select code,minor_units from currencies where code in ('JPY','KWD') order by code`));
+      assert.deepEqual(registry.rows, [{ code: 'JPY', minor_units: 0 }, { code: 'KWD', minor_units: 3 }]);
+      const invoice = randomUUID();
+      await withBypassContext(async () => {
+        await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,party_id,document_date,currency,fx_rate,subtotal,tax_total,total,created_by)
+          values(${invoice},${org.orgId},'customer_invoice','draft',${`CUR-${currency}`},${org.subsidiaryId},${org.customerId},${org.date},${currency},${fxRate},${total},0,${total},${actor})`);
+        await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount)
+          values(${org.orgId},${invoice},1,${org.accounts.revenue},1,${total},${total},0,${total})`);
+        await db.execute(sql`update documents set status='approved' where id=${invoice} and org_id=${org.orgId}`);
+      });
+      const entry = await withBypassContext(() => postDocument(invoice, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } }));
+      const legs = await withBypassContext(() => db.execute<{ total: string }>(sql`select coalesce(sum(amount),0)::text as total from journal_lines where entry_id=${entry}`));
+      assert.equal(legs.rows[0]?.total, '0.0000');
+      const balance = await withBypassContext(() => db.execute<{ open_balance: string }>(sql`select open_balance::text as open_balance from documents where id=${invoice}`));
+      assert.equal(balance.rows[0]?.open_balance, atLedgerScale(total));
+      const line = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from journal_lines where entry_id=${entry} and is_open_item`))).rows[0]!.id;
+      const paymentDocument = await withBypassContext(() => createPaymentDocument({ allowedSubsidiaryIds: null, orgId: org.orgId, kind: 'customer_payment', createdBy: actor,
+        partyId: org.customerId, bankAccountId: org.accounts.bank, subsidiaryId: org.subsidiaryId, documentDate: org.date, currency, fxRate }));
+      await withBypassContext(() => updateDraftPayment(paymentDocument.id, { bankAccountId: org.accounts.bank, allocations: [{ openLineId: line,
+        sourceTransactionAmount: paid, targetTransactionAmount: paid, settlementRate: '1', settlementRateSource: 'same_currency', settlementRateReference: 'CURRENCY-E2E' }] }, actor, org.orgId));
+      await withBypassContext(() => db.execute(sql`update documents set status='approved',submitted_by=${actor},submitted_at=now() where id=${paymentDocument.id}`));
+      await withBypassContext(() => postPaymentWithApplications(paymentDocument.id, undefined, actor));
+      const balances = await withBypassContext(() => db.execute<{ id: string; open_balance: string }>(sql`select id,open_balance::text as open_balance from documents where id in (${invoice},${paymentDocument.id})`));
+      const byId = new Map(balances.rows.map(row => [row.id,row.open_balance]));
+      assert.equal(byId.get(invoice), open); assert.equal(byId.get(paymentDocument.id), '0.0000');
+      const statement = await withOrgContext(org.orgId, () => partnerStatement(org.customerId, org.orgId, { from: '2026-07-01', to: '2026-07-31', side: 'ar' }));
+      assert.equal(statement.closing, baseOpen); assert.equal(statement.aging.total, baseOpen);
+      assert.equal(statement.lines.find(line => line.docKind === 'customer_invoice')?.debit, baseTotal);
+      assert.ok(exportDataToCsv(partnerStatementExportData(statement, translate as never), {}).includes(baseOpen));
+    } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
+  });
+}}] as const;
+for (const row of currencyRegistryCases) await row.register();
