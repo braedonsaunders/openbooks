@@ -9,6 +9,8 @@ SET client_min_messages = warning;
 
 SELECT pg_catalog.set_config('search_path', 'public, pg_catalog', false);
 
+DROP VIEW IF EXISTS openbooks_query.res_retainer_drawdowns;
+
 ALTER TABLE public.res_retainer_drawdowns
   DROP COLUMN recognition_event_id;
 
