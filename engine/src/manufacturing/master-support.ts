@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { fitsLedgerRange } from "../money/money.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 
@@ -8,6 +9,11 @@ export function decimalValue(value: unknown, field: string, remedy: string): str
   if (typeof value !== "string" || !DECIMAL.test(value)) {
     throw new ManufacturingError(`${field} must be an exact decimal with at most four decimal places.`, {
       code: "invalid_decimal", field, remedy,
+    });
+  }
+  if (!fitsLedgerRange(value)) {
+    throw new ManufacturingError(`${field} exceeds the supported numeric range.`, {
+      code: "decimal_out_of_range", field, remedy,
     });
   }
   return value;
