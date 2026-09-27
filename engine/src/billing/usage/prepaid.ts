@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { usagePrepaidDraws, usagePrepaidGrants, type usagePrepaidGrants as UsagePrepaidGrantTable } from "@openbooks/schema";
+import { usagePrepaidDraws, type usagePrepaidGrants as UsagePrepaidGrantTable } from "@openbooks/schema";
 import { cmp } from "../../money/money.ts";
 import { parseMoney, subMoney } from "../../money/brands.ts";
 import {
