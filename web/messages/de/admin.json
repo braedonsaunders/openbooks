@@ -691,6 +691,10 @@
           "label": "Arbeits-WIP / -Kosten",
           "hint": "Genehmigte Arbeitskosten werden hier belastet (pro Projekt)"
         },
+        "mfgWip": {
+          "label": "Fertigungs-WIP",
+          "hint": "Materialkosten für laufende Fertigungsaufträge werden hier belastet."
+        },
         "laborClearing": {
           "label": "Arbeitsverrechnung",
           "hint": "Wird gutgeschrieben, wenn Arbeit einem Projekt belastet wird; wird durch die Lohnabrechnung ausgeglichen"
@@ -1909,6 +1913,7 @@
         "hint": "Bei eingeschalteter Buchung bucht genehmigte Zeit Soll Lohn-WIP (je Projekt) / Haben Lohnverrechnung zum Standardkostensatz. Lohn-Ist-Werte leeren später dasselbe Konto; der Rest ist Ihre Lohnabweichung.",
         "laborClearing": "Lohnverrechnungskonto",
         "laborWip": "Lohn-WIP- / Auftragskostenkonto",
+        "mfgWip": "Fertigungs-WIP-Konto",
         "modeOff": "Aus – nur Satzschnappschuss",
         "modePost": "Standardkosten auf Aufträge buchen",
         "overheadNote": "Gemeinkosten sind nicht Teil dieses Satzes – sie werden vom Gemeinkostenmodell als eigene Schicht angewandt.",

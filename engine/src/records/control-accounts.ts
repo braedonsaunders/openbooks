@@ -53,6 +53,7 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
     "expense",
     "expense_other",
   ],
+  mfgWip: ["asset_current_other", "asset_other"],
   laborClearing: ["asset_current_other", "liability_current_other"],
   payrollVariance: ["cogs", "expense", "expense_other"],
   unbilledReceivable: ["asset_receivable", "asset_current_other"],

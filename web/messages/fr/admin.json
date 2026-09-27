@@ -691,6 +691,10 @@
           "label": "Main-d'œuvre en cours / coût",
           "hint": "Le coût de la main-d'œuvre approuvée est débité ici (par projet)"
         },
+        "mfgWip": {
+          "label": "En-cours de fabrication",
+          "hint": "Les coûts matières des ordres de fabrication actifs sont débités ici."
+        },
         "laborClearing": {
           "label": "Compensation de main-d'œuvre",
           "hint": "Crédité lorsque la main-d'œuvre est imputée à un projet; soldé par la paie"
@@ -3957,6 +3961,7 @@
         "modeOff": "Désactivé — capturer les taux seulement",
         "modePost": "Comptabiliser le coût standard aux projets",
         "laborWip": "Compte travaux en cours / coût projet",
+        "mfgWip": "Compte d'en-cours de fabrication",
         "laborClearing": "Compte d'attente main-d'œuvre",
         "overheadNote": "Les frais généraux ne font pas partie de ce taux — ils sont appliqués par le Modèle de frais généraux comme couche distincte.",
         "payrollVariance": "Compte d'écart de paie",

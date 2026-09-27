@@ -88,6 +88,7 @@ const EMPLOYEE_PAYABLE = 'employeePayable'
 // account that holds somebody else's money.
 const PAYROLL_DEDUCTIONS = 'payrollDeductions'
 const LABOR_WIP = 'laborWip'
+const MFG_WIP = 'mfgWip'
 const LABOR_CLR = 'laborClearing'
 const UNBILLED_AR = 'unbilledReceivable'
 const PROJECT_REV = 'projectRevenue'
@@ -737,6 +738,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2400',
       [PAYROLL_DEDUCTIONS]: '2300',
+      [MFG_WIP]: '1210',
     },
   },
 

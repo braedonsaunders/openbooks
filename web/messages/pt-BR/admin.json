@@ -700,6 +700,10 @@
           "label": "Mão de obra em WIP / custo",
           "hint": "Custos de mão de obra aprovados são debitados aqui (por projeto)"
         },
+        "mfgWip": {
+          "label": "WIP de manufatura",
+          "hint": "Os custos de materiais emitidos para ordens de produção ativas são debitados aqui."
+        },
         "laborClearing": {
           "label": "Compensação de mão de obra",
           "hint": "Creditada quando a mão de obra é apropriada a um projeto; compensada pela folha de pagamento"
@@ -4005,6 +4009,7 @@
         "modeOff": "Desligado — só foto das taxas",
         "modePost": "Lançar custo-padrão nas obras",
         "laborWip": "Conta de mão de obra em WIP / custo da obra",
+        "mfgWip": "Conta de WIP de manufatura",
         "laborClearing": "Conta de compensação de mão de obra",
         "overheadNote": "Indireto não faz parte desta taxa — é aplicado pelo Modelo de indiretos como camada própria.",
         "payrollVariance": "Conta de variação de folha",
