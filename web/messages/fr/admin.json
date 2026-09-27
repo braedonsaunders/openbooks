@@ -5140,6 +5140,10 @@
       "title": "Fabrication",
       "description": "Nomenclatures, gammes et ordres de fabrication qui produisent des produits finis à partir de composants."
     },
+    "manufacturingMrp": {
+      "title": "Planification des besoins en composants (MRP)",
+      "description": "Besoins en matières échelonnés dans le temps, ordres planifiés et contrôle indicatif de capacité."
+    },
     "equipment": {
       "title": "Équipement et locations",
       "description": "Unités d'équipement, barèmes et imputations d'utilisation aux chantiers."

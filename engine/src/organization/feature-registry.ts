@@ -145,6 +145,7 @@ export const FEATURES: FeatureDef[] = [
   { key: 'barcodeScanning', defaultEnabled: false, category: 'operations', requiresAll: ['inventory'] },
   // Manufacturing: building finished goods from inventory components.
   { key: 'manufacturing', defaultEnabled: false, category: 'operations', navModules: ['manufacturing'], requiresAll: ['inventory'] },
+  { key: 'manufacturingMrp', defaultEnabled: false, category: 'operations', parentKey: 'manufacturing', recommends: ['orders'] },
   { key: 'equipment', defaultEnabled: true, category: 'operations', navModules: ['equipment'] },
   { key: 'expenses', defaultEnabled: true, category: 'operations', navModules: ['expenses'] },
   // Accounting

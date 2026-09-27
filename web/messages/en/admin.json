@@ -5148,6 +5148,10 @@
       "title": "Manufacturing",
       "description": "Bills of materials, routings, and work orders that build finished goods from components."
     },
+    "manufacturingMrp": {
+      "title": "Manufacturing MRP",
+      "description": "Time-phased material requirements, planned orders, and advisory capacity."
+    },
     "equipment": {
       "title": "Equipment & rentals",
       "description": "Equipment units, rate ladders, and usage charges to jobs."

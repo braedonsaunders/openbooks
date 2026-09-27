@@ -5148,6 +5148,10 @@
       "title": "生产制造",
       "description": "物料清单、工艺路线和生产工单，将组件制造为成品。"
     },
+    "manufacturingMrp": {
+      "title": "物料需求计划（MRP）",
+      "description": "按时间分期的物料需求、计划订单和参考性产能检查。"
+    },
     "equipment": {
       "title": "设备与租赁",
       "description": "设备单元、费率阶梯与计入项目的用量收费。"
