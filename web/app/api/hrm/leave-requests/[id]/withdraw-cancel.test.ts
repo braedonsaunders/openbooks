@@ -41,6 +41,10 @@ const mockSources = new Map<string, string>([
         if (!can(authz, perm)) return NextResponse.json({ error: 'missing permission: ' + perm }, { status: 403 })
         return authz
       }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
+      export async function isFeatureEnabled() { return true }
+      export async function guardFeaturePermission(permission, feature) { return guardPermission(permission) }
     `,
   ],
   [
@@ -68,6 +72,8 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
   ["../../../../../../lib/features", "mock:features"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/feature-gates", "mock:authz"],
   ["@openbooks/engine/src/hrm/leave.ts", "mock:service"],
 ]);
 
@@ -87,7 +93,7 @@ const mockUrls = new Map<string, string>([
   const cancelUrl = "./cancel/route.ts?hrm-leave-cancel";
   const withdrawRoute: { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> } | undefined = (await import(withdrawUrl)) as typeof import("./withdraw/route.ts");
   const cancelRoute: { POST: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response> } | undefined = (await import(cancelUrl)) as typeof import("./cancel/route.ts");
-  hooks.deregister();
+  test.after(() => hooks.deregister());
 
 
 const REQUEST_ID = "00000000-0000-4000-8000-000000000031";

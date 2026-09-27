@@ -37,6 +37,9 @@ const mockSources = new Map<string, string>([
         if (permission === 'hrm.self.read') return outcome(state.selfGate)
         throw new Error('unexpected permission ' + permission)
       }
+      export async function getAuthz() { return state.employmentGate && 'status' in state.employmentGate && state.employmentGate.status === 401 ? null : { user: { id: 'user-1', orgId: 'org-1' } } }
+      export async function guardPermission(permission) { return guardFeaturePermission(permission, 'hrm') }
+      export function guardRootSubsidiaryScope() { return null } export function guardUnrestrictedScope() { return null }
     `,
   ],
   [
@@ -66,6 +69,8 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/feature-gates", "mock:gates"],
+  ["@/lib/authz", "mock:gates"],
+  ["@/lib/feature-gates", "mock:gates"],
   ["@openbooks/engine/src/hrm/employment-read.ts", "mock:service"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
 ]);
@@ -84,7 +89,7 @@ const mockUrls = new Map<string, string>([
   });
   const routeUrl: string = "./route.ts?hrm-employment-record";
   const recordRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  hooks.deregister();
+  test.after(() => hooks.deregister());
 
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";

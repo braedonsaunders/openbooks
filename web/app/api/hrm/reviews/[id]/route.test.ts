@@ -30,18 +30,15 @@ const mockSources = new Map<string, string>([
       export async function getAuthz() {
         return state.authz
       }
+
+      export async function guardPermission() { return await getAuthz() ?? globalThis.openbooksHrmReviewItemRouteNextResponse.json({ error: 'unauthorized' }, { status: 401 }) }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
+      export async function isFeatureEnabled(orgId,key) { if (key !== 'hrmPerformance') throw new Error('unexpected feature ' + key); return state.featureOn }
+      export async function guardFeaturePermission(permission,feature) { const gate = await guardPermission(permission); if (gate instanceof globalThis.openbooksHrmReviewItemRouteNextResponse) return gate; return await isFeatureEnabled(gate.user.orgId,feature) ? gate : globalThis.openbooksHrmReviewItemRouteNextResponse.json({ error: 'not found' }, { status: 404 }) }
     `,
   ],
-  [
-    "mock:features",
-    `
-      const state = globalThis[Symbol.for('openbooks.hrm-review-item-route-test')]
-      export async function isFeatureEnabled(orgId, key) {
-        if (key !== 'hrm') throw new Error('unexpected feature ' + key)
-        return state.featureOn
-      }
-    `,
-  ],
+
   [
     "mock:service",
     `
@@ -101,10 +98,12 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
-  ["../../../../../lib/features", "mock:features"],
+  ["../../../../../lib/features", "mock:authz"],
   ["@openbooks/engine/src/hrm/performance/reviews.ts", "mock:service"],
   ["@openbooks/engine/src/hrm/performance/performance-read.ts", "mock:read"],
   ["../../review-cycles/_lib", "mock:lib"],
+  ["@/lib/authz", "mock:authz"],
+  ["@/lib/feature-gates", "mock:authz"],
 ]);
 
 const hooks = registerHooks({
@@ -121,7 +120,7 @@ const hooks = registerHooks({
 });
 const routeUrl = "./route.ts?hrm-review-item";
 const itemRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister());
 
 const REVIEW_ID = "00000000-0000-4000-8000-000000000051";
 const ANSWER_ID = "00000000-0000-4000-8000-000000000052";
