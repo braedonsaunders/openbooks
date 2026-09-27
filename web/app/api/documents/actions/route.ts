@@ -14,7 +14,7 @@ import { canReadDocumentKind } from "../../../../lib/flow-subject-authz.ts";
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { toActionFailure } from './action-failure'
-import { notFound } from "@/lib/api/responses";
+import { notFound, postingRefusal } from "@/lib/api/responses";
 
 
 export const runtime = 'nodejs'
@@ -252,7 +252,7 @@ export async function POST(req: Request) {
         // only the status is mapped.
         if (e instanceof PostingEffectsReplayError) {
           const missing = /was not found/.test(e.message)
-          return NextResponse.json({ error: e.message }, { status: missing ? 404 : 422 })
+          return missing ? notFound('record') : postingRefusal(e)!
         }
         throw e
       }
