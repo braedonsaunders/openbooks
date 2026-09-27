@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { releasePayRunBankFile } from '@openbooks/engine/src/payroll/bank-file-artifact.ts'
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
-import { guardFeaturePermission } from '../../../../../../../lib/feature-gates'
+import '../../../../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../../../../lib/authz'
 import { isUuid } from '../../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";

@@ -13,7 +13,7 @@ import {
   saveEmployerLevyOpening,
   type EmployerLevyOpeningWrite,
 } from '@openbooks/engine/src/payroll/opening-balances.ts'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import '../../../../../lib/feature-gates';
 import { guardUnrestrictedScope } from '../../../../../lib/authz'
 
 const requestBodySchema = z.strictObject({

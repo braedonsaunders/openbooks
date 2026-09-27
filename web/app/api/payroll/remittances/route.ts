@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
 import { createRemittanceBill, payrollRemittanceSummary } from '@openbooks/engine/src/payroll/remittance.ts'
 import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import '../../../../lib/feature-gates';
 import { isUuid } from '../../../../lib/list-params'
 import { suppliedValue } from '../../../../lib/payroll-decimal-refusal'
 import {

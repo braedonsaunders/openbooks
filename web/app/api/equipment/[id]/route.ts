@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import '../../../../lib/feature-gates';
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'

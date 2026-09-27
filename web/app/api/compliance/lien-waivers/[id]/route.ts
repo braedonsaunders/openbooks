@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
+import { guardSubsidiaryScope } from '@/lib/authz';
 import {
   guardLienWaiverFeature,
   lienWaiverPrintData,

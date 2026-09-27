@@ -21,7 +21,7 @@ import { assertValidPasswordExpression, pdfEncryptionAvailable } from '@openbook
 import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll/payment-method.ts'
 import { payrollSetupState } from '@openbooks/engine/src/payroll/readiness.ts'
 import { STUB_PASSWORD_TOKENS, stubPasswordPolicy } from '../../../../lib/payroll-outputs'
-import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import '../../../../lib/feature-gates';
 import { guardRootSubsidiaryScope } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { isUuid } from '../../../../lib/list-params'

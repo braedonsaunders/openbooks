@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { materializeCapture, CaptureMaterializationError } from '@openbooks/engine/src/payables/ap-capture-service.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import '../../../../../lib/authz';
 import { isUuid } from '../../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { notFound } from "@/lib/api/responses";

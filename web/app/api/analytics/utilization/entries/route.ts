@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
 import { mul, mulDecimal } from "@openbooks/engine/src/money/money.ts";
-import { guardFeaturePermission } from "../../../../../lib/feature-gates";
+import "../../../../../lib/feature-gates";
 import { flowRates, presentationCurrency } from "../../../../../lib/fx-presentation";
 import { isUuid } from "../../../../../lib/list-params";
 import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";

@@ -5,7 +5,7 @@ import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import '../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../lib/list-params'
 import { loadActivity } from '../../../../../lib/crm'
 import { isIsoTimestamp } from '../../../../../lib/crm-dates'
@@ -122,11 +122,6 @@ export const PATCH = defineRoute({
       if (value !== undefined && value !== null && !((await db.execute(sql`select 1 from users where id = ${value} and org_id = ${user.orgId}`))).rows[0]) {
         return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
       }
-    }
-    // Timestamp columns: refuse anything Postgres would not cast so a 22P02
-    // never escapes the write as a 500. Blank/null clears the value.
-    for (const key of ['startsAt', 'endsAt', 'dueAt', 'reminderAt'] as const) {
-      const value = body[key]
     }
     // The effective pair (request value, else the stored row) is refused here
     // instead of tripping crm_activity_dates inside the transaction. Re-checked

@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { guardFeaturePermission } from "../../../../../lib/feature-gates";
+import "../../../../../lib/feature-gates";
 import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'

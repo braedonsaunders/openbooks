@@ -10,7 +10,7 @@ import { getDocumentCaptureSettings } from '@openbooks/engine/src/payables/ap-ca
 import type { NormalizedCapture } from '@openbooks/engine/src/payables/ap-capture.ts'
 import { resolveAndValidateCapture } from '@openbooks/engine/src/payables/ap-capture-service.ts'
 import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
-import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
+import { guardSubsidiaryScope } from '../../../../lib/authz';
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isFeatureEnabled } from '../../../../lib/features'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'

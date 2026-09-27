@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import "../../../../../lib/authz";
 import { sentinelAccessDenied } from "../../../../../lib/analytics/sentinel-access";
 import { subsidiaryVisibleFilter } from "../../../../../lib/subsidiaries";
 

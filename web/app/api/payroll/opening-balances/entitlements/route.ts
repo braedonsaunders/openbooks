@@ -13,10 +13,10 @@ import {
 } from '@openbooks/engine/src/payroll/entitlements.ts'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
+import '../../../../../lib/feature-gates';
 import { scopedEntitlementOpenings } from '../../../../../lib/payroll-scoped-views'
 import { guardPayrollEmployees } from '../../subsidiary-scope'
-import { isUuid } from '../../../../../lib/list-params'
+import '../../../../../lib/list-params';
 
 const entitlementAmount = z.string().superRefine((value, ctx) => {
   if (value.trim() === '') return

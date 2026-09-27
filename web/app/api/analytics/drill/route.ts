@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { can, guardPermission } from "../../../../lib/authz";
+import { can } from "../../../../lib/authz";
 import { PAYROLL_RESTRICTED_PARTY_LABEL } from "../../../../lib/payroll-confidentiality";
 import { statementBookExpr } from "../../../../lib/gl-summary";
 import { flowRates, presentationCurrency } from "../../../../lib/fx-presentation";

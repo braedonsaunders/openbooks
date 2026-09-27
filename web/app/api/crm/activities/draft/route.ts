@@ -2,11 +2,11 @@ import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { crmSubjectVisible, lockCrmLinkSubject } from '../../../../../lib/crm-scope'
 import { parseJsonBody } from "@/lib/api/json"
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
-import { isUuid } from '../../../../../lib/list-params'
+import '../../../../../lib/feature-gates';
+import '../../../../../lib/list-params';
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.strictObject({

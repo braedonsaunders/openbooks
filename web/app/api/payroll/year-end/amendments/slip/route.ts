@@ -5,7 +5,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { PayrollPackError } from '@openbooks/engine/src/payroll/packs.ts'
 import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
 import { filingCorrectionSlip } from '@openbooks/engine/src/payroll/yearend-amendments.ts'
-import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
+import '../../../../../../lib/feature-gates';
 import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'
 import { payrollYearRefusal } from '../../../../../../lib/payroll-year'
 import { pdfResponse, safeName } from '../../../../../../lib/export'

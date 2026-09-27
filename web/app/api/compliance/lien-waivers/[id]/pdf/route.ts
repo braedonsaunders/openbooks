@@ -2,7 +2,7 @@ import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
-import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
+import { guardSubsidiaryScope } from '@/lib/authz';
 import {
   guardLienWaiverFeature,
   isLienWaiverLegacyUnverified,
@@ -35,7 +35,7 @@ export const GET = defineRoute({
   permission: 'compliance.read',
   feature: { none: 'No optional feature applies to this permission-governed endpoint.' },
   params: z.object({ "id": z.string() }),
-  handler: async ({ request: req, authz: gate, params: routeParams }) => {
+  handler: async ({ authz: gate, params: routeParams }) => {
     const params = Promise.resolve(routeParams);
     const blocked = await guardLienWaiverFeature(gate.user.orgId)
     if (blocked) return blocked

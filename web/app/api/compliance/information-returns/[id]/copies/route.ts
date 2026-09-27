@@ -12,7 +12,7 @@ import {
   stampRecipientCopiesPrinted,
 } from '@openbooks/engine/src/compliance/information-returns.ts'
 import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
-import { guardPermission, guardSubsidiaryScope } from '@/lib/authz'
+import { guardSubsidiaryScope } from '@/lib/authz';
 import { guardComplianceFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { maskTin, type RecipientFormData } from '@/lib/information-return-form'
 import { renderInformationReturnBatchPdf, renderInformationReturnPdf } from '@/lib/information-return-pdf'
