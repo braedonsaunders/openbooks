@@ -376,13 +376,13 @@ test('fulfillment off hides picks, shipments and backorders at every layer and p
       for (const tool of FULFILLMENT_TOOLS) {
         assert.equal(canRunTool(state.authz as never, tool, features), false, `${tool.name} is withheld`)
       }
-      assert.deepEqual(await FULFILLMENT_TOOLS[0]!.execute({}, state.authz as never),
-        { ok: false, error: 'fulfillment_feature_disabled' })
       assert.equal(await openAfterCancel(), '7.00000000', 'cancelled quantity is still subtracted')
     }
 
     await setFeature(org.orgId, 'fulfillment', false)
     await assertUnreachable('fulfillment')
+    assert.deepEqual(await FULFILLMENT_TOOLS[0]!.execute({}, state.authz as never),
+      { ok: false, error: 'fulfillment_feature_disabled' })
     // Fulfillment on but Warehousing off: fulfillment still resolves off.
     await setFeature(org.orgId, 'fulfillment', true)
     await setFeature(org.orgId, 'warehousing', false)
