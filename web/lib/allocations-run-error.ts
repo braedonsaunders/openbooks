@@ -1,5 +1,6 @@
 import type { NextResponse } from 'next/server'
 import { AllocationRuleError, AllocationRunError } from '../../engine/src/allocations/index.ts'
+import { notFound } from '@/lib/api/responses'
 import { apiErrorResponse } from './api/error-response'
 
 /**
@@ -10,7 +11,7 @@ import { apiErrorResponse } from './api/error-response'
  */
 export async function allocationWriteErrorResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof AllocationRuleError && error.code === 'NOT_FOUND') {
-    return apiErrorResponse(new AllocationRuleError('NOT_FOUND', 'not found'), { safeStatus: 404 })
+    return notFound('record')
   }
   return allocationErrorResponse(error)
 }
@@ -23,7 +24,7 @@ export async function allocationWriteErrorResponse(error: unknown): Promise<Next
  */
 export async function allocationErrorResponse(error: unknown): Promise<NextResponse> {
   if (error instanceof AllocationRuleError) {
-    if (error.code === 'NOT_FOUND') return apiErrorResponse(error, { safeStatus: 404 })
+    if (error.code === 'NOT_FOUND') return notFound('record')
     if (error.code === 'STALE') {
       return apiErrorResponse(error, { safeStatus: 409, details: { code: 'STALE' } })
     }
@@ -37,13 +38,15 @@ export async function allocationErrorResponse(error: unknown): Promise<NextRespo
 }
 
 /**
- * Named run refusals (closed period, lifecycle, missing run) stay 404/422
- * with the engine message. Unexpected defects stay a generic 500 so a
- * closed GL period never renders as "posting failed".
+ * Missing runs use the uniform 404 body so their identifiers stay private.
+ * Closed-period and lifecycle refusals retain the engine message at 422.
+ * Unexpected defects stay a generic 500 so a closed GL period never renders
+ * as "posting failed".
  */
 export async function allocationRunErrorResponse(error: unknown, _fallback: string): Promise<NextResponse> {
   if (error instanceof AllocationRunError) {
-    return apiErrorResponse(error, { safeStatus: error.code === 'NOT_FOUND' ? 404 : 422 })
+    if (error.code === 'NOT_FOUND') return notFound('record')
+    return apiErrorResponse(error, { safeStatus: 422 })
   }
   return apiErrorResponse(error)
 }
