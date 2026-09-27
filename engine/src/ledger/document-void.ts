@@ -1073,6 +1073,7 @@ export async function completeRequestedDocumentVoid(
           select id, book_id
             from journal_entries
            where org_id = ${orgId} and source_document_id = ${documentId}
+             -- Live entries only: an allocation entry already reversed must not be mirrored again.
              and origin = 'allocation' and status = 'posted'
            order by id
            for update
