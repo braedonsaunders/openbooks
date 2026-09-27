@@ -4,12 +4,7 @@ import { isTaxProvisionSelection, supportedTaxCountries } from "../tax/pack-prov
 import { COUNTRY_TAX_PACKS, packReturnCodesWithTaxCodes, packTaxCodesForReturn } from "./index.ts";
 import type { CountryTaxPackDefinition, EffectiveTaxRate, TaxReturnPackBox } from "./types.ts";
 
-/**
- * Every registered country tax pack, held to one set of registry-wide
- * invariants plus a table of the facts each pack files by. A new pack cannot
- * register without a row, and a changed box, sign, formula, band or rate era
- * shows up as a one-line diff against its row.
- */
+/** Shared tests enforce registry invariants; PACK_FACTS records each pack's filing facts. */
 
 function dayAfter(date: string): string {
   const next = new Date(`${date}T00:00:00Z`);
@@ -850,12 +845,7 @@ test("every pack sources only its own country's authority hosts or a named mirro
   assert.deepEqual([...seenExceptions].sort(), Object.keys(MIRRORED_PRIMARY_DOCUMENTS).sort(), "named exceptions must all be live");
 });
 
-/**
- * Statutory fidelity of rate bands vs return boxes: every rate a pack can
- * price must have a declared destination on its return — a real
- * box/casilla/line — and every band's window must open at a sourced
- * effective date, never at the fetch date.
- */
+/** Rate bands need return destinations, known sources, and reviewed reasons for fetch-date openings. */
 
 function governmentBoxes(pack: CountryTaxPackDefinition, returnPackCode: string): TaxReturnPackBox[] {
   const returnPack = pack.returnPacks.find((entry) => entry.code === returnPackCode);
@@ -902,18 +892,25 @@ test("statutory fidelity: every priced band on a rate-split return has a box, a 
   }
 });
 
-test("statutory fidelity: no band opens at its source's fetch date without a reviewed truncation reason", () => {
+test("statutory fidelity: rate eras cite pack sources and fetch-date openings have a reviewed truncation reason", () => {
   for (const pack of COUNTRY_TAX_PACKS) {
     const sources = new Map(pack.sources.map((source) => [source.id, source] as const));
-    for (const returnPackCode of packReturnCodesWithTaxCodes(pack)) {
-      for (const code of packTaxCodesForReturn(pack, returnPackCode)) {
-        const first = code.rates?.[0];
-        if (!first || first.effectiveFrom !== sources.get(first.sourceId)?.asOf) continue;
-        assert.ok(
-          code.truncatedScheduleReason && code.truncatedScheduleReason.length > 0,
-          `${pack.country}/${returnPackCode}/${code.code} opens ${first.effectiveFrom}, the cited source's own asOf date: ` +
-            `re-date the band from the sourced effective date or record a reviewed truncatedScheduleReason`,
-        );
+    for (const returnPack of pack.returnPacks) {
+      for (const code of packTaxCodesForReturn(pack, returnPack.code)) {
+        for (const [era, rate] of (code.rates ?? []).entries()) {
+          const source = sources.get(rate.sourceId);
+          assert.ok(
+            source,
+            `${pack.country}/${returnPack.code}/${code.code}/era ${era + 1} cites unknown source ${rate.sourceId}; ` +
+              `add it to pack.sources`,
+          );
+          if (era !== 0 || rate.effectiveFrom !== source.asOf) continue;
+          assert.ok(
+            code.truncatedScheduleReason && code.truncatedScheduleReason.length > 0,
+            `${pack.country}/${returnPack.code}/${code.code}/era ${era + 1} opens ${rate.effectiveFrom}, the cited source's own asOf date: ` +
+              `re-date the band from its sourced effective date or record a reviewed truncatedScheduleReason`,
+          );
+        }
       }
     }
   }
