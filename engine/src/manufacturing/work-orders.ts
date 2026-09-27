@@ -13,6 +13,7 @@ import { assertManufacturingFeature } from "./gate.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, compareDecimal, decimalValue, isoDate } from "./master-support.ts";
 import { getManufacturingPolicies } from "./policies.ts";
+import { backflushOperation } from "./materials.ts";
 
 export interface WorkOrderInput {
   producedItemId: string;
@@ -415,9 +416,9 @@ async function releaseMaterials(
   tx: SqlExecutor,
   orgId: string,
   order: WorkOrderRow,
-  lines: Array<{ itemId: string; itemCode: string; required: string; operationSeq: number | null }>,
+  lines: Array<{ itemId: string; itemCode: string; required: string; operationSeq: number | null; quantityPer: string; scrapPct: string | null }>,
   issueLocationId: string,
-): Promise<Array<{ itemId: string; itemCode: string; required: string; shortage: string; operationSeq: number | null; tracking: string }>> {
+): Promise<Array<{ itemId: string; itemCode: string; required: string; shortage: string; operationSeq: number | null; tracking: string; quantityPer: string; scrapPct: string | null }>> {
   const warehouse = (await tx.execute<{ warehouse_id: string | null }>(sql`
     select stock_location_warehouse(${orgId}::uuid, ${issueLocationId}::uuid) as warehouse_id`)).rows[0]?.warehouse_id ?? null;
   const itemIds = [...new Set(lines.map((line) => line.itemId))].sort();
@@ -425,7 +426,7 @@ async function releaseMaterials(
     await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:mfg-release:${order.subsidiaryId}:${itemId}`}, 0))`);
   }
   const shortages: string[] = [];
-  const result: Array<{ itemId: string; itemCode: string; required: string; shortage: string; operationSeq: number | null; tracking: string }> = [];
+  const result: Array<{ itemId: string; itemCode: string; required: string; shortage: string; operationSeq: number | null; tracking: string; quantityPer: string; scrapPct: string | null }> = [];
   for (const itemId of itemIds) {
     const item = await itemDetails(tx, orgId, itemId);
     const displayCode = item.code?.trim() || item.name;
@@ -491,13 +492,15 @@ async function releaseOne(
   await validateLocation(tx as Runner, orgId, order.subsidiaryId, receiptLocationId, "inbound");
 
   await tx.execute(sql`lock table bom_components in share mode`);
-  const explosion = await explodeBom(tx, orgId, order.producedItemId, order.quantityOrdered, asOf);
+  await explodeBom(tx, orgId, order.producedItemId, order.quantityOrdered, asOf);
   const directRows = await effectiveBomRows(tx, orgId, order.producedItemId, asOf);
   const revision = bomRevision(order.producedItemId, directRows);
   const operations = await tx.execute<{
     sequence: number; name: string; work_center_id: string; setup_minutes: string; run_minutes_per_unit: string;
+    backflush_at: string; quality_gate: string;
   }>(sql`
-    select sequence, name, work_center_id, setup_minutes::text, run_minutes_per_unit::text
+    select sequence, name, work_center_id, setup_minutes::text, run_minutes_per_unit::text,
+           backflush_at, quality_gate
       from mfg_routing_operations where org_id=${orgId} and routing_id=${routing.id}
      order by sequence for share`);
   if (!operations.rows.length) refuse(`Routing version ${routing.version} for ${produced.code?.trim() || produced.name} has no operations.`, "routing_operations_required", "Add an operation to the active routing version.");
@@ -512,9 +515,13 @@ async function releaseOne(
     await activeRouting(tx, orgId, row.component_item_id, code, asOf, null);
     directMake.add(row.component_item_id);
   }
-  const rootMaterialLines = explosion.components
-    .filter((line) => line.parentItemId === order.producedItemId && !directMake.has(line.itemId))
-    .map((line) => ({ itemId: line.itemId, itemCode: line.itemCode, required: line.requiredQuantity, operationSeq: line.operationSeq }));
+  const rootMaterialLines = directRows
+    .filter((line) => !line.is_byproduct && !directMake.has(line.component_item_id))
+    .map((line) => ({
+      itemId: line.component_item_id, itemCode: line.component_code?.trim() || line.component_item_id,
+      required: bomRequiredQuantity(order.quantityOrdered, line.quantity_per, line.scrap_pct).quantity,
+      operationSeq: line.operation_seq, quantityPer: line.quantity_per, scrapPct: line.scrap_pct,
+    }));
   const preparedMaterials = await releaseMaterials(tx, orgId, order, rootMaterialLines, issueLocationId);
   const producedProfile = (await tx.execute<{ costing_method: string; standard_cost: string | null }>(sql`
     select costing_method, standard_cost::text from item_inventory_profiles
@@ -545,7 +552,10 @@ async function releaseOne(
     if (!operationId) refuse("A work-order operation snapshot was not saved.", "write_failed", "Retry the release; contact an administrator if it continues.");
     await auditChange(tx, {
       orgId, actorId, table: "mfg_wo_operations", rowId: String(operationId), action: "insert", before: null,
-      after: { status: "pending", sequence: operation.sequence, name: operation.name, workCenterId: operation.work_center_id },
+      after: {
+        status: "pending", sequence: operation.sequence, name: operation.name, workCenterId: operation.work_center_id,
+        quantityPlanned: order.quantityOrdered, backflushAt: operation.backflush_at, qualityGate: operation.quality_gate,
+      },
     });
   }
   for (const material of preparedMaterials) {
@@ -558,7 +568,10 @@ async function releaseOne(
     if (!materialId) refuse("A work-order material snapshot was not saved.", "write_failed", "Retry the release; contact an administrator if it continues.");
     await auditChange(tx, {
       orgId, actorId, table: "mfg_wo_materials", rowId: String(materialId), action: "insert", before: null,
-      after: { componentItemId: material.itemId, requiredQty: material.required, shortageQty: material.shortage },
+      after: {
+        componentItemId: material.itemId, requiredQty: material.required, shortageQty: material.shortage,
+        operationSeq: material.operationSeq, quantityPer: material.quantityPer, scrapPct: material.scrapPct,
+      },
     });
   }
 
@@ -748,7 +761,8 @@ export async function startWorkOrderOperation(tx: SqlExecutor, orgId: string, ac
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   const { order, operation: before } = await lockOperation(tx, orgId, workOrderId, operationId);
   await heldRefusal(order);
-  if (order.status !== "in_progress") refuse(`Start work order ${order.number} before starting an operation.`, "work_order_not_started", "Start the released work order first.", 409);
+  if (order.status === "released") await startWorkOrder(tx, orgId, actorId, workOrderId);
+  else if (order.status !== "in_progress") refuse(`Start work order ${order.number} before starting an operation.`, "work_order_not_started", "Start the released work order first.", 409);
   if (before.status === "running") return before;
   if (before.status !== "pending") refuse(`Operation ${before.sequence} cannot start from ${before.status}.`, "invalid_operation_transition", "Start a pending operation or resume a paused one.", 409);
   const updated = await tx.execute(sql`
@@ -758,6 +772,7 @@ export async function startWorkOrderOperation(tx: SqlExecutor, orgId: string, ac
      returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`);
   const after = rowOrNotFound(updated.rows);
   await auditChange(tx, { orgId, actorId, table: "mfg_wo_operations", rowId: operationId, action: "update", before, after: { ...after, reason: "Operation started." } });
+  await backflushOperation(tx, orgId, actorId, workOrderId, operationId, "start");
   return after;
 }
 
