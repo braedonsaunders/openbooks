@@ -165,7 +165,7 @@ for (const key of oauthKeys) {
 test("restricted connector managers cannot list org-wide connection and run metadata", async () => {
   routeState.restricted = true;
   routeState.listReads = 0;
-  const response = await GET();
+  const response = await GET(new Request("http://openbooks.test/api/platform/connections"));
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), { error: "requires unrestricted subsidiary access" });
   assert.equal(routeState.listReads, 0, "the org-wide connector registry and run metadata are not queried");

@@ -2,7 +2,6 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
-import { z } from "zod";
 import { NextResponse } from "next/server";
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "@openbooks/engine/src/platform/db.ts";

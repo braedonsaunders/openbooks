@@ -89,7 +89,7 @@ export const PATCH = defineRoute({
   if (!subsidiaryScopeAllows(authz.allowedSubsidiaryIds, access.subjectSubsidiaryId)) {
     return notFound("record");
   }
-  const action = typeof body.action === "string" ? body.action : "";
+  const action = body.action;
   if (action === "assign" || action === "note") {
     if (action === "assign") {
       const scopeDenied = await guardRootSubsidiaryScope(authz);
