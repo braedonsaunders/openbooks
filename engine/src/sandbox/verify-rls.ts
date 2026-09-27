@@ -14,6 +14,7 @@
  *   - a table with no rows on either side proves nothing and is reported by
  *     name as unverified; a proof with no verified table is a failure
  */
+import { basename } from "node:path";
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 import { db, pool, withBypass, withOrg } from "../platform/db.ts";
@@ -318,7 +319,12 @@ async function main(): Promise<void> {
 
 function launchedAsCli(): boolean {
   const entry = process.argv[1];
-  return typeof entry === "string" && import.meta.url === pathToFileURL(entry).href;
+  // Bundlers fold imported modules into the process entry file, making the
+  // import URL equal the worker entry URL. Only the verifier's own CLI may run
+  // the standalone proof; normal imports use verifyCloneRls directly.
+  return typeof entry === "string" &&
+    basename(entry) === "verify-rls.ts" &&
+    import.meta.url === pathToFileURL(entry).href;
 }
 
 if (launchedAsCli()) {
