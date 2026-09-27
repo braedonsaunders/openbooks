@@ -1,6 +1,7 @@
 import type { Profile } from "./types.ts";
 import { generalContractor } from "./general-contractor.ts";
 import { professionalServices } from "./professional-services.ts";
+import { seasonalAdvisory } from "./seasonal-advisory.ts";
 import { saasCompany } from "./saas.ts";
 import {
   accountingFirm,
@@ -19,6 +20,7 @@ export type { Profile } from "./types.ts";
 export const PROFILES: Record<string, Profile> = {
   [generalContractor.id]: generalContractor,
   [professionalServices.id]: professionalServices,
+  [seasonalAdvisory.id]: seasonalAdvisory,
   [saasCompany.id]: saasCompany,
   [generalBusiness.id]: generalBusiness,
   [engineeringArchitecture.id]: engineeringArchitecture,

@@ -4,6 +4,8 @@
  * knobs to decide what happens, how often, and how large.
  */
 
+import type { ResourcingSimPlan } from "../resourcing-plan.ts";
+
 export interface VendorSpec {
   name: string;
   /** Payment terms in days (net-N). */
@@ -175,6 +177,8 @@ export interface Profile {
   subscribers?: SubscriberSpec[];
   /** Fraction of subscribers billed monthly for usage overages (0-1). */
   usageBillingRate?: number;
+  /** Staffing practices, seasonal demand and tentative bookings provisioned for this firm. */
+  resourcing?: ResourcingSimPlan;
   /** SaaS fixed monthly payroll/opex (R&D + S&M + G&A), booked month-end. */
   saasMonthlyPayroll?: string;
   /**
