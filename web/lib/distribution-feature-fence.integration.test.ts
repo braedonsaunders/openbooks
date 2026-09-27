@@ -22,6 +22,7 @@ Object.assign(globalThis, { __distributionFence: state })
 const AUTHZ_DOUBLE = `data:text/javascript,${encodeURIComponent(`
 const current = () => globalThis.__distributionFence.authz
 export async function getAuthz() { return current() }
+export function assertCan() {}
 export async function guardPermission() { return current() }
 export async function requirePermission() { return current() }
 export function can() { return true }
@@ -39,7 +40,7 @@ registerHooks({ resolve(specifier, context, next) {
   const parent = context.parentURL ?? ''
   const authzImport = specifier === './authz' || specifier.endsWith('/lib/authz')
   const fenced = ['/lib/api/route', '/lib/feature-gates', '/warehouse/view', '/api/admin/setup/', '/reports/',
-    '/api/reports/statement/', '/picks/view', '/shipments/view', '/sales-orders/view'].some((path) => parent.includes(path))
+    '/api/reports/statement/', '/picks/view', '/shipments/view', '/sales-orders/view', '/returns/view', '/api/returns/'].some((path) => parent.includes(path))
   if (authzImport && fenced) return { shortCircuit: true, url: AUTHZ_DOUBLE }
   const reportCopy = ['/reports/', '/lib/availability-report'].some((path) => parent.includes(path))
   if (specifier === 'next-intl/server' && reportCopy) return { shortCircuit: true, url: INTL_DOUBLE }
@@ -65,13 +66,24 @@ const { loadAvailability } = await import('../app/(app)/reports/availability/vie
 const { loadReplenishment } = await import('../app/(app)/reports/replenishment/view')
 const { loadReportsHub } = await import('../app/(app)/reports/view')
 const statementExport = await import('../app/api/reports/statement/[kind]/export/route')
+const returnsRoute = await import('../app/api/returns/route')
+const returnRoute = await import('../app/api/returns/[id]/route')
+const returnReceiveRoute = await import('../app/api/returns/[id]/receive/route')
+const returnInspectRoute = await import('../app/api/returns/[id]/inspect/route')
+const returnRejectRoute = await import('../app/api/returns/[id]/reject/route')
+const returnEmailRoute = await import('../app/api/returns/[id]/email/route')
+const returnSourcesRoute = await import('../app/api/returns/sources/route')
+const { loadReturns } = await import('../app/(app)/returns/view')
+const returnEngine = await import('@openbooks/engine/src/sales/returns.ts')
+const { RETURNS_TOOLS } = await import('./assistant/tools-returns')
 
 const FEATURES_REMEDY = /turn on Warehousing in Company Settings → Features/
 
 async function setFeature(orgId: string, key: string, on: boolean) {
-  await withBypassContext(() => db.execute(sql`
+  const result = await withBypassContext(() => db.execute(sql`
     update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || jsonb_build_object(${key}::text, ${on}::boolean))
-     where id = ${orgId}`))
+     where id = ${orgId} returning id`))
+  assert.equal(result.rows.length, 1, `feature setting for ${key} must be stored`)
 }
 
 async function withFencedOrg(run: (org: ScratchOrg, actorId: string) => Promise<void>) {
@@ -80,7 +92,7 @@ async function withFencedOrg(run: (org: ScratchOrg, actorId: string) => Promise<
     const actorId = await withBypassContext(async () => (await seedFlowActors(org.orgId)).adminId)
     state.authz = {
       user: { orgId: org.orgId, id: actorId, roles: [] },
-      permissions: new Set(['assistant.use', 'items.read', 'items.warehouses', 'items.post', 'admin.setup.manage']),
+      permissions: new Set(['assistant.use', 'items.read', 'items.warehouses', 'items.post', 'admin.setup.manage', 'orders.fulfill', 'ar.create', 'ar.read']),
       allowedSubsidiaryIds: null,
     }
     await run(org, actorId)
@@ -359,8 +371,8 @@ test('fulfillment off hides picks, shipments and backorders at every layer and p
       assert.equal(await enabledListSource(org.orgId, 'shipment'), null)
       assert.ok((await hiddenReportEntityKeys(state.authz as never)).includes('backorders'))
       assert.equal((await guardReportEntity(state.authz as never, { entity: 'backorders' }))?.status, 404)
-      assert.deepEqual(await orderFulfillmentActions(state.authz as never), { backorders: false, pickLists: false },
-        'the order drawer offers neither Backorders nor Create pick list')
+      assert.deepEqual(await orderFulfillmentActions(state.authz as never), { backorders: false, pickLists: false, returnAuthorizations: false },
+        'the order drawer offers no fulfillment actions')
       const features = await resolvedFeatureState(org.orgId)
       for (const tool of FULFILLMENT_TOOLS) {
         assert.equal(canRunTool(state.authz as never, tool, features), false, `${tool.name} is withheld`)
@@ -379,5 +391,75 @@ test('fulfillment off hides picks, shipments and backorders at every layer and p
     await setFeature(org.orgId, 'warehousing', true)
     assert.deepEqual(await fulfillmentEvidence(org.orgId), before, 'off and on again changes no carrier, pick list, shipment, cancellation or audit row')
     assert.equal(await openAfterCancel(), '7.00000000')
+  })
+})
+
+test('return authorizations are hidden while off and retain their records and audit history', { skip: !DB }, async () => {
+  await withFencedOrg(async (org, actorId) => {
+    await setFeature(org.orgId, 'warehousing', true)
+    await setFeature(org.orgId, 'fulfillment', true)
+    await setFeature(org.orgId, 'returnAuthorizations', true)
+    const sourceId = randomUUID()
+    const rmaId = randomUUID()
+    const auditId = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, currency,
+                               status, subtotal, tax_total, total, created_by)
+        values (${sourceId}, ${org.orgId}, 'customer_invoice', 'INV-RMA-FENCE', ${org.customerId}, ${org.subsidiaryId},
+                ${org.date}, 'CAD', 'draft', '0', '0', '0', ${actorId})`)
+      await db.execute(sql`
+        insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, currency,
+                               status, subtotal, tax_total, total, created_by)
+        values (${rmaId}, ${org.orgId}, 'rma', 'RMA-FENCE', ${org.customerId}, ${org.subsidiaryId},
+                ${org.date}, 'CAD', 'draft', '0', '0', '0', ${actorId})`)
+      await db.execute(sql`
+        insert into rma_documents (document_id, org_id, source_document_id, created_by, updated_by)
+        values (${rmaId}, ${org.orgId}, ${sourceId}, ${actorId}, ${actorId})`)
+      await db.execute(sql`
+        insert into audit_log (id, org_id, table_name, row_id, action, changes, actor_id)
+        values (${auditId}, ${org.orgId}, 'rma_documents', ${rmaId}, 'insert', '{"stage":"requested"}'::jsonb, ${actorId})`)
+    })
+    assert.ok((await navHrefs(org.orgId)).includes('/returns'))
+    const before = await withBypassContext(() => db.execute(sql`
+      select jsonb_build_object(
+        'authorization', (select to_jsonb(r) from rma_documents r where org_id = ${org.orgId} and document_id = ${rmaId}),
+        'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${org.orgId} and table_name = 'rma_documents')
+      ) as state`)).then((result) => result.rows[0]!.state)
+    const listed = await withBypassContext(() => returnEngine.listReturnAuthorizations(db, org.orgId, null))
+    assert.equal(listed.some((entry: { id: string }) => entry.id === rmaId), true)
+
+    await setFeature(org.orgId, 'returnAuthorizations', false)
+    assert.equal((await navHrefs(org.orgId)).includes('/returns'), false)
+    await assert.rejects(loadReturns({}), (error: unknown) => String((error as { digest?: string }).digest).includes('/feature-required?feature=returnAuthorizations'))
+    const params = { params: Promise.resolve({ id: rmaId }) }
+    const responses = [
+      await returnsRoute.GET(json('GET', '/api/returns')),
+      await returnsRoute.POST(json('POST', '/api/returns', {})),
+      await returnRoute.GET(json('GET', `/api/returns/${rmaId}`), params),
+      await returnReceiveRoute.POST(json('POST', `/api/returns/${rmaId}/receive`, { lines: [] }), params),
+      await returnInspectRoute.POST(json('POST', `/api/returns/${rmaId}/inspect`, { lines: [] }), params),
+      await returnRejectRoute.POST(json('POST', `/api/returns/${rmaId}/reject`, { reason: 'No return' }), params),
+      await returnEmailRoute.POST(json('POST', `/api/returns/${rmaId}/email`, { type: 'decision' }), params),
+      await returnSourcesRoute.GET(json('GET', '/api/returns/sources')),
+    ]
+    for (const response of responses) {
+      assert.equal(response.status, 404)
+      assert.deepEqual(await response.json(), { error: 'not_found' })
+    }
+    await assert.rejects(withBypassContext(() => returnEngine.listReturnAuthorizations(db, org.orgId, null)),
+      (error: unknown) => error instanceof returnEngine.ReturnRefusal && error.code === 'feature_disabled'
+        && /Return Authorizations/.test(error.message) && /Company Settings → Features/.test(error.remedy ?? ''))
+    const features = await resolvedFeatureState(org.orgId)
+    for (const tool of RETURNS_TOOLS) assert.equal(canRunTool(state.authz as never, tool, features), false)
+    await assert.rejects(RETURNS_TOOLS[0]!.execute({}, state.authz as never),
+      (error: unknown) => error instanceof returnEngine.ReturnRefusal && error.code === 'feature_disabled')
+    await setFeature(org.orgId, 'returnAuthorizations', true)
+    const after = await withBypassContext(() => db.execute(sql`
+      select jsonb_build_object(
+        'authorization', (select to_jsonb(r) from rma_documents r where org_id = ${org.orgId} and document_id = ${rmaId}),
+        'audit', (select jsonb_agg(to_jsonb(a) order by id) from audit_log a where org_id = ${org.orgId} and table_name = 'rma_documents')
+      ) as state`)).then((result) => result.rows[0]!.state)
+    assert.deepEqual(after, before, 'turning the feature off and on preserves authorization evidence and audit history')
   })
 })
