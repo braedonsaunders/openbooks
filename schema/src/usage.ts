@@ -31,6 +31,7 @@ export const USAGE_BAND_KINDS = [
 ] as const;
 export const USAGE_PACKAGE_ROUNDINGS = ["up", "down"] as const;
 export const USAGE_COMMIT_PERIODS = ["monthly", "annual"] as const;
+export const STRIPE_BILLING_LINK_TYPES = ["meter", "price", "customer", "subscription", "subscription_item"] as const;
 
 export const usageMeters = pgTable(
   "usage_meters",
@@ -418,5 +419,33 @@ export const usagePrepaidDraws = pgTable(
       columns: [t.orgId, t.runId],
       foreignColumns: [usageRatingRuns.orgId, usageRatingRuns.id],
     }),
+  ],
+);
+
+/** Per-account connector identities. `openbooks_id` is intentionally not an FK:
+ * each object type targets a different native table, and customer identity is
+ * an explicit connector link rather than an implicit party association. */
+export const stripeBillingLinks = pgTable(
+  "stripe_billing_links",
+  {
+    id: id(),
+    orgId: orgRef(),
+    objectType: text("object_type", { enum: STRIPE_BILLING_LINK_TYPES }).notNull(),
+    stripeId: text("stripe_id").notNull(),
+    openbooksId: uuid("openbooks_id").notNull(),
+    stripeAccount: text("stripe_account").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    createdBy: uuid("created_by"),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedBy: uuid("updated_by"),
+  },
+  (t) => [
+    uniqueIndex("stripe_billing_links_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("stripe_billing_links_external_unique").on(t.orgId, t.stripeAccount, t.objectType, t.stripeId),
+    uniqueIndex("stripe_billing_links_native_unique").on(t.orgId, t.stripeAccount, t.objectType, t.openbooksId),
+    check("stripe_billing_links_type_valid", sql`${t.objectType} in ('meter', 'price', 'customer', 'subscription', 'subscription_item')`),
+    check("stripe_billing_links_stripe_id_nonblank", sql`length(btrim(${t.stripeId})) > 0`),
+    check("stripe_billing_links_account_nonblank", sql`length(btrim(${t.stripeAccount})) > 0`),
+    foreignKey({ name: "stripe_billing_links_org_fk", columns: [t.orgId], foreignColumns: [orgs.id] }),
   ],
 );
