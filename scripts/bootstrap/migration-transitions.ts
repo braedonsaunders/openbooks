@@ -1590,4 +1590,11 @@ export const APPROVED_MIGRATION_TRANSITIONS: ReadonlyArray<{
       + "digest holds the identical catalog and data — only the digest "
       + "moves. Restamp, not reapply.",
   },
+  {
+    filename: "generated/0439_connector_replay_authorizations.sql",
+    from: "285c302418c1533e9914bd30c956917564f0cfa76e7dacc94a65fd7b67a0b0e5",
+    to: "8f628349aa094a7fc8fe7cffa7fdac11b705de876afb36afb2cf51a8971cd375",
+    strategy: "restamp",
+    reason: "0439 restored to its published bytes; the guard revision moved forward to 0440, which is idempotent over v2's state",
+  },
 ];
