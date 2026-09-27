@@ -1,3 +1,4 @@
+// source-pin-contract: production deploy workflow policy (deploy-production.yml, publish-container.yml): tag-only trigger, attested digest, LAN runner, audited migrate-first release script, version-gated completion
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";

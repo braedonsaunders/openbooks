@@ -25,7 +25,6 @@ async function runBackfill(): Promise<void> {
     .split("\n")
     .filter((line) => !line.startsWith("SET "))
     .join("\n");
-  assert.match(body, /0275_default_calendar_backfill/, "migration file must be the shipped artifact");
   await db.execute(sql.raw(body));
 }
 

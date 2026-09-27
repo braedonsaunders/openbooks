@@ -4,10 +4,9 @@
  * and AR/AP cockpits (`web/lib/cash/open-items.ts`), the formal aging and its
  * per-item detail (`web/lib/reports/aging.ts`), and the continuous-close
  * cash-alerts transcription (`engine/src/agents/cash.ts`). A kind added to
- * one reader and not the others is the P5.1 divergence class (AP tile ≠ AP
- * aging for orgs with outstanding expense reports); a source-text guard
- * (`engine/src/records/open-item-kinds.test.ts`) fails any literal kind list in
- * those readers, so the next kind joins here or nowhere.
+ * one reader and not the others makes the AP tile disagree with the AP aging
+ * (orgs with outstanding expense reports), so every reader imports these
+ * constants instead of carrying its own list.
  *
  * Deliberately NOT `web/lib/document-kinds.ts` AP_KINDS/AR_KINDS, even though
  * the memberships look alike. Those scope the bills/invoices LISTS and their

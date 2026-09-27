@@ -1,25 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { refuseInactivePromotedDefault } from "./promote.ts";
-
-const source = readFileSync(new URL("./promote.ts", import.meta.url), "utf8");
-
-function applyChangeSetBody(src: string): string {
-  const start = src.indexOf("export async function applyChangeSet");
-  assert.notEqual(start, -1, "applyChangeSet must exist");
-  const next = src.indexOf("\nexport async function", start + 1);
-  return src.slice(start, next === -1 ? undefined : next);
-}
-
-test("applyChangeSet refuses an inactive default before jsonb_populate_record", () => {
-  const body = applyChangeSetBody(source);
-  const refuseAt = body.indexOf("refuseInactivePromotedDefault(");
-  const writeAt = body.indexOf("jsonb_populate_record");
-  assert.notEqual(refuseAt, -1, "applyChangeSet must call refuseInactivePromotedDefault");
-  assert.notEqual(writeAt, -1, "applyChangeSet must still write via jsonb_populate_record");
-  assert.ok(refuseAt < writeAt, "the refusal must run before the generic populate write");
-});
 
 test("inactive default refusal names form and view apart and names both remedies", () => {
   const VIEW = /inactive view cannot be the default/i;

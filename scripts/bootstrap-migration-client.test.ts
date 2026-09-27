@@ -1,3 +1,4 @@
+// source-pin-contract: the published migration corpus is the sanitizer's input — sanitize and split run over every published file's bytes, and assertions read their output, timing and corpus size, never one file's own text
 /**
  * The migration runner's lock discipline lives in pure helpers in
  * bootstrap-migration-client.ts (bootstrap.ts runs main() on import, so it

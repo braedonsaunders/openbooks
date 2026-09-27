@@ -1,3 +1,4 @@
+// source-pin-contract: status-label coverage invariant — every HR export and document status allowed by the latest published CHECK constraint has a Me label in every locale; statuses derived from the published migrations, never hand-listed.
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'

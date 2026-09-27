@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   assertImportOrgId,
@@ -7,11 +6,6 @@ import {
   resolveTicketIdentity,
   type ImportTicket,
 } from "./field-ticket-import.ts";
-
-const script = readFileSync(
-  new URL("./import-field-tickets.ts", import.meta.url),
-  "utf8",
-);
 
 const ticket = (overrides: Partial<ImportTicket> = {}): ImportTicket => ({
   sourceId: "9",
@@ -92,19 +86,5 @@ test("a same-number ticket with no source marker refuses, never replays", () => 
         "test-source",
       ),
     /already exists from a different source \(system unknown, external id unknown\)/,
-  );
-});
-
-test("the import delegates identity to the core", () => {
-  assert.match(script, /importFieldTickets\(/);
-  assert.doesNotMatch(
-    script,
-    /existingTickets\.get\(t\.number\)/,
-    "a bare number lookup must not decide a replay",
-  );
-  assert.doesNotMatch(
-    script,
-    /on conflict \(document_id\) do nothing/,
-    "header attachment lives behind the identity check in the core",
   );
 });

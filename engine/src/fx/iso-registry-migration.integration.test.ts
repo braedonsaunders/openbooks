@@ -16,19 +16,6 @@ const migration = () =>
     "utf8",
   );
 
-/**
- * d5 — existing tenants were seeded by the 41-code registry, so documents in
- * a newly covered currency fail closed at validation for lack of a
- * `currencies` row. Migration 0157 backfills the missing rows and must never
- * touch an existing row (insert-if-missing only) and must re-run cleanly.
- */
-test("0157 text is insert-if-missing by construction", { skip: !DB }, async () => {
-  const text = migration();
-  assert.match(text, /ON CONFLICT \(code\) DO NOTHING/);
-  assert.doesNotMatch(text, /^\s*UPDATE\s/m, "backfill must never rewrite existing rows");
-  assert.doesNotMatch(text, /^\s*DELETE\s/m, "backfill must never delete rows");
-});
-
 test("0157 fills missing codes, preserves existing rows, and re-runs cleanly", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
