@@ -1,5 +1,7 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -10,9 +12,54 @@ import { isFeatureEnabled } from '../../../../../../lib/features'
 import { isUuid } from '../../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../../lib/countries'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { moneyRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 import { subsidiaryVisibleFilter } from '../../../../../../lib/subsidiaries'
 import { auditConfigChange } from '../../_lib'
 import { notFound } from "@/lib/api/responses";
+
+const countryPatchSchema = z.string().refine((value) => value.trim() === '' || normalizeCountryCode(value) !== null).nullable().optional()
+const currencyPatchSchema = z.string().regex(/^(?:[A-Za-z]{3})?$/).optional()
+const datePatchSchema = z.string().refine((value) => value === '' || isIsoCalendarDate(value)).optional()
+const scheduleAmountSchema = z.string().superRefine((value, ctx) => {
+  if (value !== '' && canonicalDecimal(value, 4) === null) {
+    ctx.addIssue({ code: 'custom', message: moneyRefusal('Payment schedule amount', value) })
+  }
+})
+const selectionCriteriaSchema = z.object({
+  dueThroughDays: z.number().int().min(0).max(3650).optional(),
+  minimumAmount: scheduleAmountSchema.optional(), maximumRunAmount: scheduleAmountSchema.optional(),
+  captureDiscounts: z.boolean().optional(), applyCredits: z.boolean().optional(),
+})
+const requestBodySchema = z.object({
+  "action": z.enum(["create_draft", "submit_for_approval"]).optional(),
+  "bankAccountId": z.string().uuid().optional(),
+  "contentType": z.string().optional(),
+  "country": countryPatchSchema,
+  "cron": z.string().optional(),
+  "currency": currencyPatchSchema,
+  "expiresOn": datePatchSchema,
+  "fileExtension": z.string().optional(),
+  "formatterScript": z.string().optional(),
+  "isActive": z.boolean().optional(),
+  "name": z.string().optional(),
+  "paymentBankProfileId": z.string().uuid().optional(),
+  "paymentFormatId": z.string().uuid().optional(),
+  "selectionCriteria": selectionCriteriaSchema.optional(),
+  "settings": z.record(z.string(), z.json()).optional(),
+  "originatorSecrets": z.record(z.string(), z.string()).nullable().optional(),
+  "sftpServerId": z.string().uuid().nullable().optional(),
+  "sftpFolder": z.string().nullable().optional(),
+  "requireRunApproval": z.boolean().optional(),
+  "requireFileApproval": z.boolean().optional(),
+  "autoRemittance": z.boolean().optional(),
+  "signedOn": datePatchSchema,
+  "status": z.enum(["pending", "active", "suspended", "revoked", "expired"]).optional(),
+  "subsidiaryId": z.string().uuid().nullable().optional(),
+  "timezone": z.string().optional(),
+  "validFrom": datePatchSchema,
+}).refine((body) => Object.keys(body).length > 0, 'At least one payment setting is required')
+
 
 
 export const runtime = 'nodejs'
@@ -23,14 +70,14 @@ const MANDATE_STATUSES = new Set(['pending', 'active', 'suspended', 'revoked', '
 /** POST coerces schedule action into this domain; the text column has no CHECK. */
 const SCHEDULE_ACTIONS = new Set(['create_draft', 'submit_for_approval'])
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ resource: string; id: string }> }) {
+async function legacyPATCH(req: Request, { params }: { params: Promise<{ resource: string; id: string }> }) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const { resource, id } = await params
   if (!isUuid(id) || !['formats', 'profiles', 'schedules', 'mandates'].includes(resource)) {
     return notFound("record")
   }
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as {
     status?: string; action?: string; country?: string | null;
@@ -40,7 +87,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ resour
     selectionCriteria?: Record<string, unknown>;
     signedOn?: string; validFrom?: string; expiresOn?: string;
     bankAccountId?: string; paymentFormatId?: string; subsidiaryId?: string;
-    settings?: Record<string, unknown>;
+    settings?: Record<string, unknown>; originatorSecrets?: Record<string, string> | null;
+    sftpServerId?: string | null; sftpFolder?: string | null; requireRunApproval?: boolean;
+    requireFileApproval?: boolean; autoRemittance?: boolean;
+  }
+  const patchFieldsByResource: Record<string, readonly string[]> = {
+    formats: ['name', 'country', 'currency', 'fileExtension', 'contentType', 'formatterScript', 'isActive'],
+    profiles: ['name', 'bankAccountId', 'paymentFormatId', 'subsidiaryId', 'country', 'currency', 'originatorSecrets', 'settings', 'sftpServerId', 'sftpFolder', 'requireRunApproval', 'requireFileApproval', 'autoRemittance', 'isActive'],
+    schedules: ['name', 'paymentBankProfileId', 'cron', 'timezone', 'selectionCriteria', 'action', 'isActive'],
+    mandates: ['status', 'signedOn', 'validFrom', 'expiresOn'],
+  }
+  const unsupportedFields = Object.keys(body).filter((field) => !patchFieldsByResource[resource]?.includes(field))
+  if (unsupportedFields.length > 0) {
+    return NextResponse.json({ error: `Unsupported ${resource} settings: ${unsupportedFields.join(', ')}` }, { status: 400 })
   }
   // POST constrains mandate status and schedule action to fixed value domains
   // while the text columns carry no CHECK constraint. PATCH must refuse what
@@ -242,3 +301,16 @@ function optionalCountry(value: unknown): string | null | undefined {
   if (value == null || (typeof value === 'string' && value.trim() === '')) return null
   return normalizeCountryCode(value) ?? undefined
 }
+
+export const PATCH = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "resource": z.string(), "id": z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});

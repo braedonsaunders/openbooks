@@ -1,9 +1,14 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { delegateGate } from '@openbooks/engine/src/flows/index.ts'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { gateErrorResponse, loadGateHeader, requireFlowsSession } from '../../_lib'
+
+const requestBodySchema = z.object({ gateId: z.string().uuid(), toUserId: z.string().uuid() });
+
 
 export const runtime = 'nodejs'
 
@@ -13,11 +18,11 @@ export const runtime = 'nodejs'
  * active in-org user, records the hand-off, and notifies the new assignee —
  * the route only session-guards, org-scopes, and maps errors.
  */
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { gateId?: string; toUserId?: string }
   if (!body.gateId || !isUuid(body.gateId) || !body.toUserId || !isUuid(body.toUserId)) {
@@ -46,3 +51,14 @@ export async function POST(req: Request) {
     return gateErrorResponse(e)
   }
 }
+
+export const POST = defineRoute({
+  public: "session",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

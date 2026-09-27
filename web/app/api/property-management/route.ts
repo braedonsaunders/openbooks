@@ -1,5 +1,7 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -50,6 +52,45 @@ import { guardPropertyManagementFeature } from "../../../lib/property-management
 import { notFound } from "@/lib/api/responses";
 import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
 
+const moneyText = (field: string) => z.string().superRefine((value, ctx) => {
+  if (canonicalDecimal(value, 4) === null) {
+    ctx.addIssue({ code: "custom", message: moneyRefusal(field, value) });
+  }
+});
+const optionalUuid = z.string().uuid().nullable().optional();
+const optionalDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional();
+const customValues = z.record(z.string(), z.json()).optional();
+const requestBodySchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("createProperty"), subsidiaryId: z.string().uuid(), code: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(200), propertyType: z.string().trim().min(1).max(80), locationId: optionalUuid, fixedAssetId: optionalUuid, currency: z.string().regex(/^[A-Z]{3}$/).nullable().optional(), address: z.record(z.string(), z.string()).optional(), rentIncomeAccountId: optionalUuid, camIncomeAccountId: optionalUuid, depositLiabilityAccountId: optionalUuid, defaultBankAccountId: optionalUuid, custom: customValues }),
+  z.object({ action: z.literal("updateProperty"), propertyId: z.string().uuid(), subsidiaryId: z.string().uuid(), code: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(200), propertyType: z.string().trim().min(1).max(80), status: z.enum(["active", "inactive"]), locationId: optionalUuid, fixedAssetId: optionalUuid, currency: z.string().regex(/^[A-Z]{3}$/).nullable().optional(), address: z.record(z.string(), z.string()).optional(), rentIncomeAccountId: optionalUuid, camIncomeAccountId: optionalUuid, depositLiabilityAccountId: optionalUuid, defaultBankAccountId: optionalUuid, custom: customValues, reason: z.string().trim().min(1).max(500).nullable().optional() }),
+  z.object({ action: z.literal("deleteProperty"), propertyId: z.string().uuid() }),
+  z.object({ action: z.literal("createUnit"), propertyId: z.string().uuid(), code: z.string().trim().min(1).max(80), name: z.string().trim().max(200).nullable().optional(), unitType: z.string().trim().max(80).nullable().optional(), rentableArea: moneyText("Rentable area").nullable().optional(), bedrooms: z.number().int().min(0).max(100).nullable().optional() }),
+  z.object({ action: z.literal("updateUnit"), unitId: z.string().uuid(), code: z.string().trim().min(1).max(80), name: z.string().trim().max(200).nullable().optional(), unitType: z.string().trim().max(80).nullable().optional(), rentableArea: moneyText("Rentable area").nullable().optional(), bedrooms: z.number().int().min(0).max(100).nullable().optional(), status: z.enum(["vacant", "occupied", "notice", "offline"]).optional(), reason: z.string().trim().min(1).max(500).nullable().optional() }),
+  z.object({ action: z.literal("deleteUnit"), unitId: z.string().uuid() }),
+  z.object({ action: z.literal("createLease"), propertyId: z.string().uuid(), unitId: optionalUuid, tenantId: z.string().uuid(), leaseNumber: z.string().trim().min(1).max(80), startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), endsOn: optionalDate, baseRent: moneyText("Base rent"), billingDay: z.number().int().min(1).max(31).optional(), paymentTermsDays: z.number().int().min(0).max(365).optional(), securityDepositRequired: moneyText("Security deposit").nullable().optional(), camMethod: z.enum(["none", "fixed", "pro_rata"]).optional(), camSharePercent: moneyText("CAM share percent").nullable().optional(), lateFeeType: z.enum(["none", "fixed", "percent"]).optional(), lateFeeValue: moneyText("Late fee").nullable().optional(), graceDays: z.number().int().min(0).max(365).optional(), autoInvoice: z.boolean().optional(), autoPost: z.boolean().optional() }),
+  z.object({ action: z.literal("updateLease"), leaseId: z.string().uuid(), propertyId: z.string().uuid(), unitId: optionalUuid, tenantId: z.string().uuid(), leaseNumber: z.string().trim().min(1).max(80), startsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), endsOn: optionalDate, baseRent: moneyText("Base rent"), billingDay: z.number().int().min(1).max(31), paymentTermsDays: z.number().int().min(0).max(365), securityDepositRequired: moneyText("Security deposit"), camMethod: z.enum(["none", "fixed", "pro_rata"]), camSharePercent: moneyText("CAM share percent").nullable().optional(), lateFeeType: z.enum(["none", "fixed", "percent"]), lateFeeValue: moneyText("Late fee"), graceDays: z.number().int().min(0).max(365), autoInvoice: z.boolean(), autoPost: z.boolean() }),
+  z.object({ action: z.literal("cancelLease"), leaseId: z.string().uuid() }),
+  z.object({ action: z.literal("activateLease"), leaseId: z.string().uuid() }),
+  z.object({ action: z.literal("terminateLease"), leaseId: z.string().uuid(), terminatedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().min(1).max(500) }),
+  z.object({ action: z.literal("addCharge"), leaseId: z.string().uuid(), chargeType: z.string().trim().min(1).max(80), description: z.string().trim().min(1).max(500), amount: moneyText("Charge amount"), frequency: z.string().trim().min(1).max(40), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), effectiveTo: optionalDate, incomeAccountId: optionalUuid, itemId: optionalUuid, taxCodeId: optionalUuid }),
+  z.object({ action: z.literal("addEscalation"), leaseId: z.string().uuid(), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), method: z.enum(["percent", "fixed", "new_amount"]), value: moneyText("Escalation value") }),
+  z.object({ action: z.literal("applyEscalation"), escalationId: z.string().uuid() }),
+  z.object({ action: z.literal("scheduleLease"), leaseId: z.string().uuid(), throughOn: optionalDate }),
+  z.object({ action: z.literal("billRent"), asOf: optionalDate, leaseId: optionalUuid, propertyId: optionalUuid }),
+  z.object({ action: z.literal("assessLateFees"), asOf: optionalDate, leaseId: optionalUuid, propertyId: optionalUuid }),
+  z.object({ action: z.literal("levelRent"), asOf: optionalDate, leaseId: optionalUuid }),
+  z.object({ action: z.literal("recordDeposit"), leaseId: z.string().uuid(), kind: z.enum(["received", "interest", "applied", "refunded", "adjustment_increase", "adjustment_decrease"]), occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), amount: moneyText("Deposit amount"), bankAccountId: optionalUuid, offsetAccountId: optionalUuid, appliedDocumentId: optionalUuid, memo: z.string().max(500).nullable().optional(), importKey: z.string().max(200).nullable().optional() }),
+  z.object({ action: z.literal("reverseDeposit"), transactionId: z.string().uuid(), occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().min(1).max(500) }),
+  z.object({ action: z.literal("createCamPool"), propertyId: z.string().uuid(), name: z.string().trim().min(1).max(200), fiscalYear: z.number().int().min(1900).max(2200), periodStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), allocationBasis: z.enum(["rentable_area", "equal", "custom"]), budgetAmount: moneyText("CAM budget"), expenseAccountIds: z.array(z.string().uuid()).min(1).max(500) }),
+  z.object({ action: z.literal("updateCamPool"), poolId: z.string().uuid(), name: z.string().trim().min(1).max(200), fiscalYear: z.number().int().min(1900).max(2200), periodStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), allocationBasis: z.enum(["rentable_area", "equal", "custom"]), budgetAmount: moneyText("CAM budget"), expenseAccountIds: z.array(z.string().uuid()).min(1).max(500) }),
+  z.object({ action: z.literal("cancelCamPool"), poolId: z.string().uuid() }),
+  z.object({ action: z.literal("reopenCamPool"), poolId: z.string().uuid(), reason: z.string().trim().min(1).max(500) }),
+  z.object({ action: z.literal("finalizeCam"), poolId: z.string().uuid() }),
+  z.object({ action: z.literal("billCam"), poolId: z.string().uuid(), invoiceDate: optionalDate }),
+]);
+
+
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -71,7 +112,7 @@ function dateOrUndefined(value: unknown): string | undefined {
   return value == null ? undefined : String(value);
 }
 
-export async function GET() {
+async function legacyGET() {
   const authz = await guardPermission("ar.read");
   if (authz instanceof NextResponse) return authz;
   const feature = await guardPropertyManagementFeature(authz.user.orgId);
@@ -337,10 +378,10 @@ async function refuseDisabledLeaseChargeInventory(
   return null;
 }
 
-export async function POST(request: Request) {
-  const parsedBody = await parseJsonBody(request, jsonObject);
+async function legacyPOST(request: Request) {
+  const parsedBody = await parseJsonBody(request, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = ((parsedBody.data));
+  const body = parsedBody.data as unknown as Record<string, unknown>;
   const action = String(body.action ?? "");
   if (!knownActions.has(action))
     return NextResponse.json({ error: "unknown action" }, { status: 400 });
@@ -691,3 +732,20 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export const GET = defineRoute({
+  permission: "ar.read",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async () => legacyGET(),
+});
+
+export const POST = defineRoute({
+  public: "session",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

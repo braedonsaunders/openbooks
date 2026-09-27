@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint } from "@openbooks/engine/src/platform/db.ts";
@@ -16,6 +18,18 @@ import { type Authz, guardPermission } from "../../../../lib/authz";
 import { listActiveExtensionContributions } from "@openbooks/engine/src/extensions/projections.ts";
 import { PERMISSION_CATALOGUE } from "../../../../lib/permissions";
 import { isUuid } from "../../../../lib/list-params";
+
+const roleWriteFields = {
+  description: z.string().nullable().optional(),
+  key: z.string().min(2).max(64).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
+  permissions: z.array(z.string()).max(500).optional(),
+  subsidiaryRestriction: z.json().optional(),
+};
+const createRoleBodySchema = z.object({ ...roleWriteFields, name: z.string().trim().min(1).max(200) });
+const updateRoleBodySchema = z.object({ id: z.string().uuid(), ...roleWriteFields });
+const deleteRoleBodySchema = z.object({ id: z.string().uuid(), replacementRoleId: z.string().uuid().optional() });
+
 
 export const runtime = "nodejs";
 
@@ -183,12 +197,12 @@ async function audit(args: {
             ${JSON.stringify(args.changes)}, ${args.actorId})`);
 }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardPermission("admin.roles.manage");
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, createRoleBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     name?: string;
@@ -260,12 +274,12 @@ export async function POST(req: Request) {
   }));
 }
 
-export async function PATCH(req: Request) {
+async function legacyPATCH(req: Request) {
   const gate = await guardPermission("admin.roles.manage");
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  const parsedBody2 = await parseJsonBody(req, updateRoleBodySchema);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as {
     id?: string;
@@ -420,12 +434,12 @@ type AffectedAssignment = {
   other_roles: number;
 };
 
-export async function DELETE(req: Request) {
+async function legacyDELETE(req: Request) {
   const gate = await guardPermission("admin.roles.manage");
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 
-  const parsedBody3 = await parseJsonBody(req, jsonObject);
+  const parsedBody3 = await parseJsonBody(req, deleteRoleBodySchema);
   if (!parsedBody3.ok) return parsedBody3.response;
   const { id, replacementRoleId } = (parsedBody3.data) as {
     id?: string;
@@ -570,9 +584,51 @@ export async function DELETE(req: Request) {
   }));
 }
 
-export async function GET() {
+async function legacyGET() {
   const gate = await guardPermission("admin.roles.manage");
   if (gate instanceof NextResponse) return gate;
   const contributions = await listActiveExtensionContributions(gate.user.orgId);
   return NextResponse.json({ permissions: contributions.flatMap((entry) => entry.contribution.kind === "permission" ? [{ extensionKey: entry.extensionKey, ...entry.contribution }] : []) });
 }
+
+export const POST = defineRoute({
+  permission: "admin.roles.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: createRoleBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});
+
+export const PATCH = defineRoute({
+  permission: "admin.roles.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: updateRoleBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never);
+  },
+});
+
+export const DELETE = defineRoute({
+  permission: "admin.roles.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: deleteRoleBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyDELETE(replayRequest as never);
+  },
+});
+
+export const GET = defineRoute({
+  permission: "admin.roles.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async () => legacyGET(),
+});

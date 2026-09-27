@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
   completeMfaLogin,
@@ -14,6 +16,12 @@ import {
   secureCookiesEnabled,
 } from "../../../lib/auth-policy";
 
+const requestBodySchema = z.union([
+  z.object({ email: z.string().trim().min(1).max(320), password: z.string().min(1).max(1024), mfaCode: z.string().optional() }),
+  z.object({ mfaCode: z.string().trim().min(1).max(32) }),
+]);
+
+
 export const runtime = "nodejs";
 
 /** Wall-clock read for the failure-timing floor below. */
@@ -21,13 +29,13 @@ function nowMs(): number {
   return Date.now();
 }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const startedAt = nowMs();
   let body: { email?: unknown; password?: unknown; mfaCode?: unknown };
   try {
-    const parsedBody = await parseJsonBody(req, jsonObject);
+    const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    body = parsedBody.data;
+    body = parsedBody.data as { email?: string; password?: string; mfaCode?: string };
   } catch {
     return NextResponse.json({ error: "invalid request" }, { status: 400 });
   }
@@ -88,7 +96,7 @@ export async function POST(req: Request) {
   return res;
 }
 
-export async function DELETE(req: Request) {
+async function legacyDELETE(req: Request) {
   const rawToken = req.headers.get("cookie")
     ?.split(";")
     .map((part) => part.trim())
@@ -102,3 +110,19 @@ export async function DELETE(req: Request) {
   res.headers.set("Cache-Control", "no-store");
   return res;
 }
+
+export const POST = defineRoute({
+  public: "token",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});
+
+export const DELETE = defineRoute({
+  public: "token",
+  handler: async ({ request }) => legacyDELETE(request as never),
+});

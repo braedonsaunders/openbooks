@@ -172,6 +172,7 @@ const mockSources = new Map<string, string>([
       export const pool = {}
       export const env = {}
       export const schema = {}
+      export function ambientTenantOrgId() { return '00000000-0000-4000-8000-00000000b001' }
       export function registerRequestOrgResolver() {}
       export function currentRequestOrgResolver() { return null }
     `,
@@ -202,6 +203,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
 ])
 
 const hooks = registerHooks({

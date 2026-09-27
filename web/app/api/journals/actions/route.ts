@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -33,7 +34,7 @@ const journalActionBody = z.object({
  * Flow configuration: no gate releases it immediately, while any authored
  * single- or multi-leg gate topology leaves it pending until Flow resolves.
  */
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const parsed = await parseJsonBody(req, journalActionBody)
   if (!parsed.ok) return parsed.response
   const { documentId } = parsed.data
@@ -131,3 +132,15 @@ export async function POST(req: Request) {
     return apiErrorResponse(e)
   }
 }
+
+export const POST = defineRoute({
+  permission: "gl.post",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: journalActionBody,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

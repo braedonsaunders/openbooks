@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -11,7 +13,7 @@ export const runtime = 'nodejs'
 
 /** DELETE — remove only scripts without execution evidence. Scripts with run
  * history must be deactivated instead so their audit trail remains intact. */
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyDELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('scripts.manage', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
@@ -45,3 +47,10 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (missing) return notFound("record")
   return NextResponse.json({ ok: true })
 }
+
+export const DELETE = defineRoute({
+  permission: "scripts.manage",
+  feature: "scripts",
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyDELETE(request as never, { params: Promise.resolve(params as never) } as never),
+});

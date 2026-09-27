@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -22,6 +24,9 @@ import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
+const requestBodySchema = z.object({ idempotencyKey: z.string().uuid().optional() });
+
+
 
 export const runtime = 'nodejs'
 
@@ -43,7 +48,7 @@ function invalidCronResponse(error: InvalidScheduledScriptCronError): Promise<Ne
  * unattributed: without an actor its material operations would be
  * indistinguishable from system automation.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('scripts.manage', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
@@ -200,3 +205,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return unexpectedServerError('admin/scripts/run', e)
   }
 }
+
+export const POST = defineRoute({
+  permission: "scripts.manage",
+  feature: "scripts",
+  params: z.object({ "id": z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});

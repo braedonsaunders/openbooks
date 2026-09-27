@@ -85,6 +85,16 @@ stubModules({
       }
       export function guardUnrestrictedScope() { return null; }
     `,
+    "@/lib/authz": `
+      export async function guardPermission() {
+        return {
+          user: { orgId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' },
+          permissions: new Set(['admin.setup.manage']),
+          allowedSubsidiaryIds: null,
+        };
+      }
+      export function guardUnrestrictedScope() { return null; }
+    `,
     "../../../../../lib/projects-gate": "export async function guardProjectsFeature() { return null }",
     "../../../../../lib/features": "export async function isFeatureEnabled() { return true }",
   },
@@ -118,7 +128,7 @@ function financialBody(overrides: Record<string, unknown> = {}): Record<string, 
 test("PATCH refuses an impossible financialEffectiveFrom before publishing", async () => {
   state.publishInputs = [];
   const response = await patch(financialBody({ financialEffectiveFrom: "2026-02-30" }));
-  assert.equal(response.status, 422);
+  assert.equal(response.status, 400);
   assert.match(String((await response.json()).error), /financialEffectiveFrom/);
   assert.deepEqual(state.publishInputs, [], "no version publish may run for an impossible date");
 });

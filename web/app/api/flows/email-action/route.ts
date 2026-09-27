@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
@@ -167,7 +168,7 @@ function alreadyHandledPage(g: GateSummary): NextResponse {
   )
 }
 
-export async function GET(req: Request) {
+async function legacyGET(req: Request) {
   const token = new URL(req.url).searchParams.get('token') ?? ''
   const claims = verifyEmailActionToken(token)
   if (!claims) return invalidTokenPage()
@@ -202,7 +203,7 @@ function confirmationPage(token: string, claims: EmailActionClaims, gate: GateSu
   )
 }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const form = await req.formData().catch(() => null)
   const token = typeof form?.get('token') === 'string' ? (form!.get('token') as string) : ''
   const reason = typeof form?.get('reason') === 'string' ? (form!.get('reason') as string).trim() : ''
@@ -254,3 +255,13 @@ export async function POST(req: Request) {
      ${documentSummaryHtml(updatedGate ?? gate)}`,
   )
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: async ({ request }) => legacyGET(request as never),
+});
+
+export const POST = defineRoute({
+  public: "token",
+  handler: async ({ request }) => legacyPOST(request as never),
+});

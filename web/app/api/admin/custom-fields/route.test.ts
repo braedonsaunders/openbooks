@@ -86,6 +86,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/flows/documents-adapter.ts', 'mock:documents-adapter'],
   ['../../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../../../lib/customization/gates', 'mock:feature-gates'],
 ])
 

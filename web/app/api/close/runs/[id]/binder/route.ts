@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { guardCloseScope } from "@/lib/close-scope";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
@@ -8,7 +10,7 @@ import { isUuid } from "../../../../../../lib/list-params";
 export const runtime = "nodejs";
 
 /** Download the immutable, hash-addressed audit binder frozen at publication. */
-export async function GET(
+async function legacyGET(
   _req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -53,3 +55,10 @@ export async function GET(
     },
   );
 }
+
+export const GET = defineRoute({
+  permission: "close.read",
+  feature: "continuousClose",
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+});

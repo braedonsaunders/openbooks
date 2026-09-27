@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { z } from "zod";
@@ -29,7 +30,7 @@ const patchBody = z.object({
  * POST syncs the mirror from the code
  * registry when a feature turns on. Ledger under the setup grant.
  */
-export async function GET() {
+async function legacyGET() {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "aiGovernanceLedger"))) {
@@ -43,7 +44,7 @@ export async function GET() {
   }
 }
 
-export async function PATCH(req: Request) {
+async function legacyPATCH(req: Request) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "aiGovernanceLedger"))) {
@@ -67,7 +68,7 @@ export async function PATCH(req: Request) {
   }
 }
 
-export async function POST() {
+async function legacyPOST() {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "aiGovernanceLedger"))) {
@@ -80,3 +81,27 @@ export async function POST() {
     return aiRailsErrorResponse(e);
   }
 }
+
+export const GET = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async () => legacyGET(),
+});
+
+export const PATCH = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: patchBody,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never);
+  },
+});
+
+export const POST = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async () => legacyPOST(),
+});

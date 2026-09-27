@@ -1,9 +1,21 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import type { PageLayoutPrefs } from "@openbooks/schema";
 import { getAuthz } from "../../../../lib/authz";
+
+const requestBodySchema = z.object({
+  page: z.enum(["banking-cash", "banking-accounts"]),
+  layout: z.object({
+    order: z.array(z.string().max(64)).max(300).optional(),
+    hidden: z.array(z.string().max(64)).max(300).optional(),
+  }),
+  expectedRevision: z.string().nullable(),
+});
+
 
 export const runtime = "nodejs";
 
@@ -74,7 +86,7 @@ async function readCurrent(
  * over a newer one. Layout {} resets to the product default. Self-service
  * like /api/me — any authenticated user, own row only.
  */
-export async function GET(req: Request) {
+async function legacyGET(req: Request) {
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { user } = authz;
@@ -94,12 +106,12 @@ export async function GET(req: Request) {
   return NextResponse.json(current);
 }
 
-export async function PUT(req: Request) {
+async function legacyPUT(req: Request) {
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { user } = authz;
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     page?: unknown;
@@ -173,3 +185,19 @@ export async function PUT(req: Request) {
   }
   return NextResponse.json({ ok: true, page, layout: outcome.layout, revision: outcome.revision });
 }
+
+export const GET = defineRoute({
+  public: "session",
+  handler: async ({ request }) => legacyGET(request as never),
+});
+
+export const PUT = defineRoute({
+  public: "session",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPUT(replayRequest as never);
+  },
+});

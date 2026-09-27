@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -26,6 +28,14 @@ import {
   type RecordStatus,
 } from '../../../../../lib/record-schema'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.object({
+  data: z.record(z.string(), z.json()).optional(),
+  expectedUpdatedAt: z.string().datetime({ offset: true }),
+  reason: z.string().trim().min(1).max(500).nullable().optional(),
+  status: z.enum(["active", "inactive"]).optional(),
+});
+
 
 
 export const runtime = 'nodejs'
@@ -112,7 +122,7 @@ function mutationReason(value: unknown): string | null | NextResponse {
   return value.trim()
 }
 
-export async function GET(
+async function legacyGET(
   _req: Request,
   { params }: { params: Promise<{ typeKey: string; id: string }> },
 ) {
@@ -145,7 +155,7 @@ export async function GET(
  * Both may be sent together; data is applied first, then the transition
  * validates the merged payload.
  */
-export async function PATCH(
+async function legacyPATCH(
   req: Request,
   { params }: { params: Promise<{ typeKey: string; id: string }> },
 ) {
@@ -163,7 +173,7 @@ export async function PATCH(
   if (!scope) return notFound("record")
   const { sections } = scope
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { data?: unknown; status?: string; reason?: unknown; expectedUpdatedAt?: unknown }
   const reason = mutationReason(body.reason)
@@ -391,7 +401,7 @@ export async function PATCH(
 }
 
 /** Drafts that never became real can be discarded. */
-export async function DELETE(
+async function legacyDELETE(
   req: Request,
   { params }: { params: Promise<{ typeKey: string; id: string }> },
 ) {
@@ -409,7 +419,7 @@ export async function DELETE(
   if (!scope) return notFound("record")
   let reason: string | null = null
   if ((req.headers.get('content-type') ?? '').includes('application/json')) {
-    const parsedBody = await parseJsonBody(req, jsonObject)
+    const parsedBody = await parseJsonBody(req, requestBodySchema)
     if (!parsedBody.ok) return parsedBody.response
     const parsedReason = mutationReason((parsedBody.data as { reason?: unknown }).reason)
     if (parsedReason instanceof NextResponse) return parsedReason
@@ -451,3 +461,36 @@ export async function DELETE(
   }
   return NextResponse.json({ ok: true })
 }
+
+export const GET = defineRoute({
+  permission: "records.read",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "typeKey": z.string(), "id": z.string() }),
+  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+});
+
+export const PATCH = defineRoute({
+  permission: "records.create",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "typeKey": z.string(), "id": z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});
+
+export const DELETE = defineRoute({
+  permission: "records.create",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "typeKey": z.string(), "id": z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyDELETE(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});

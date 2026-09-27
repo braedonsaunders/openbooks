@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -15,7 +17,7 @@ export const runtime = 'nodejs'
  * Records of one type: `?q=` searches the precomputed search text +
  * record number, `?status=` filters, `?page=/&perPage=` paginate.
  */
-export async function GET(req: Request, { params }: { params: Promise<{ typeKey: string }> }) {
+async function legacyGET(req: Request, { params }: { params: Promise<{ typeKey: string }> }) {
   const gate = await guardPermission('records.read')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
@@ -65,3 +67,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ typeKey:
     perPage,
   })
 }
+
+export const GET = defineRoute({
+  permission: "records.read",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "typeKey": z.string() }),
+  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+});

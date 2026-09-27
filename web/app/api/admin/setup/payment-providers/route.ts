@@ -1,5 +1,7 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, orgContext, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
@@ -17,6 +19,28 @@ import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";
+
+const surchargeMoney = (field: string) => z.string().superRefine((value, ctx) => {
+  if (canonicalDecimal(value, 4) === null) ctx.addIssue({ code: "custom", message: moneyRefusal(field, value) });
+});
+const acceptanceConfigSchema = z.object({
+  action: z.never().optional(),
+  provider: z.enum(["stripe", "adyen", "gocardless"]),
+  displayName: z.string().trim().min(1).max(120).optional(),
+  isEnabled: z.boolean().optional(), acceptanceEnabled: z.boolean().optional(),
+  defaultBankAccountId: z.string().uuid().nullable().optional(), surchargeRuleId: z.string().uuid().nullable().optional(),
+  publishableKey: z.string().nullable().optional(), apiKey: z.string().nullable().optional(), webhookSecret: z.string().nullable().optional(),
+  settings: z.record(z.string(), z.json()).nullable().optional(),
+});
+const requestBodySchema = z.union([
+  z.discriminatedUnion("action", [
+    z.object({ action: z.literal("saveRule"), name: z.string().trim().min(1).max(200), calculation: z.enum(["percent", "fixed", "percent_plus_fixed"]), feeIncomeAccountId: z.string().uuid(), id: z.string().uuid().optional(), provider: z.enum(["stripe", "adyen", "gocardless"]).nullable().optional(), paymentMethod: z.enum(["card", "bank_debit", "all"]).optional(), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), percent: surchargeMoney("Surcharge percent").nullable().optional(), fixedAmount: surchargeMoney("Surcharge fixed amount").nullable().optional(), capAmount: surchargeMoney("Surcharge cap amount").nullable().optional() }),
+    z.object({ action: z.literal("deleteRule"), id: z.string().uuid() }),
+    z.object({ action: z.literal("test"), provider: z.enum(["stripe", "adyen", "gocardless"]) }),
+  ]),
+  acceptanceConfigSchema,
+]);
+
 
 export const runtime = "nodejs";
 
@@ -70,7 +94,7 @@ function postgresErrorCode(error: unknown): string | undefined {
 
 /** Provider acceptance configuration. Secrets are write-only — responses only
  *  ever report their presence. */
-export async function GET() {
+async function legacyGET() {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
@@ -151,13 +175,13 @@ export async function GET() {
   });
 }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "onlinePayments"))) {
     return NextResponse.json({ error: "feature disabled" }, { status: 404 });
   }
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;
   const orgId = gate.user.orgId;
@@ -509,3 +533,22 @@ export async function POST(req: Request) {
     return apiErrorResponse(e);
   }
 }
+
+export const GET = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async () => legacyGET(),
+});
+
+export const POST = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  scope: "unrestricted",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

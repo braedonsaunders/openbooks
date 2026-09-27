@@ -61,7 +61,7 @@ const hooks = registerHooks({
     if (specifier === "@openbooks/engine/src/platform/db.ts" || specifier.endsWith("/platform/db.ts")) {
       return { url: "mock:db", shortCircuit: true };
     }
-    if (specifier === "../../../../../lib/authz") return { url: "mock:authz", shortCircuit: true };
+    if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") return { url: "mock:authz", shortCircuit: true };
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {

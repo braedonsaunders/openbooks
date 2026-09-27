@@ -61,6 +61,7 @@ const listParamsUrl = new URL("../../../../../lib/list-params.ts", import.meta.u
 
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/engine/src/backup/backup.ts", "mock:backup"],
 ]);

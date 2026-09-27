@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -12,8 +14,22 @@ import {
   lintRecordFields,
   typeKeyError,
 } from '../../../../../lib/record-schema'
-import type { FormSection } from '@openbooks/forms-core'
+import { formSectionSchema, type FormSection } from '@openbooks/forms-core'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.object({
+  "allowedRoles": z.array(z.string().min(1).max(100)).max(50).nullable().optional(),
+  "description": z.string().optional(),
+  "expectedUpdatedAt": z.string().refine(isDocumentRevisionToken),
+  "fields": z.array(formSectionSchema).max(100).optional(),
+  "iconKey": z.string().optional(),
+  "key": z.string().optional(),
+  "name": z.string().optional(),
+  "pluralName": z.string().optional(),
+  "showInNav": z.boolean().optional(),
+  "sortOrder": z.number().optional(),
+});
+
 
 
 export const runtime = 'nodejs'
@@ -30,7 +46,7 @@ function typeDeclaresSubsidiary(fields: unknown, name: string): boolean {
   return lint.success && hasSubsidiaryField(lint.sections)
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('records.manage_types')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
@@ -47,7 +63,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
  * clean definition. The `fields` body carries the full FormSection[]
  * structure; structurally invalid payloads are rejected outright.
  */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyPATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('records.manage_types')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
@@ -57,7 +73,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const type = await loadRecordTypeById(user.orgId, id)
   if (!type) return notFound("record")
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     name?: string
@@ -233,7 +249,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 /** Delete a type — drafts only, and only before any record exists. */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyDELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('records.manage_types')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
@@ -317,3 +333,30 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (outcome.kind === 'response') return outcome.response
   return NextResponse.json({ ok: true })
 }
+
+export const GET = defineRoute({
+  permission: "records.manage_types",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+});
+
+export const PATCH = defineRoute({
+  permission: "records.manage_types",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});
+
+export const DELETE = defineRoute({
+  permission: "records.manage_types",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyDELETE(request as never, { params: Promise.resolve(params as never) } as never),
+});

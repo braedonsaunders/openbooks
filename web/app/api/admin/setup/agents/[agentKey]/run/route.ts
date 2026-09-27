@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { UnrestrictedScopeError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
@@ -14,7 +16,7 @@ export const dynamic = 'force-dynamic'
  * key; a disabled Continuous Close module 404s like every other hidden-module
  * API surface.
  */
-export async function POST(_request: Request, { params }: { params: Promise<{ agentKey: string }> }) {
+async function legacyPOST(_request: Request, { params }: { params: Promise<{ agentKey: string }> }) {
   const gate = await guardFeaturePermission('admin.setup.manage', 'continuousClose')
   if (gate instanceof NextResponse) return gate
   const { agentKey } = await params
@@ -41,3 +43,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ ag
     status: result.status === 'failed' ? 500 : result.status === 'skipped' ? 409 : 200,
   })
 }
+
+export const POST = defineRoute({
+  permission: "admin.setup.manage",
+  feature: "continuousClose",
+  params: z.object({ "agentKey": z.string() }),
+  handler: async ({ request, params }) => legacyPOST(request as never, { params: Promise.resolve(params as never) } as never),
+});

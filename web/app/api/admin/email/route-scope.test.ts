@@ -12,8 +12,11 @@ const state: { allowedSubsidiaryIds: Set<string> | null; saves: unknown[] } = {
 let authzUrl = ''
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../../lib/authz' && context.parentURL?.includes('/admin/email/route')) {
-      authzUrl = nextResolve(specifier, context).url
+    if (
+      (specifier === '../../../../lib/authz' && context.parentURL?.includes('/admin/email/route')) ||
+      (specifier === '@/lib/authz' && context.parentURL?.includes('/web/lib/api/route.ts'))
+    ) {
+      authzUrl = new URL('../../../../lib/authz.ts', import.meta.url).href
       const source = `
         export { guardUnrestrictedScope } from ${JSON.stringify(authzUrl)};
         const state = globalThis[Symbol.for('openbooks.admin-email-scope-test')];
@@ -80,7 +83,8 @@ test('malformed email setting types are refused before storage', async () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ expectedUpdatedAt: '1', [field]: value }),
     }))
-    assert.equal(response.status, 422, `${field} rejects a value of the wrong type or outside its enum`)
+    assert.equal(response.status, 400, `${field} rejects a value of the wrong type or outside its enum`)
+    assert.ok((await response.json() as { issues: { path: string }[] }).issues.some((issue) => issue.path === field))
     assert.deepEqual(state.saves, [], `${field} never reaches the settings writer`)
   }
 })

@@ -1,5 +1,7 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -17,6 +19,21 @@ import {
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
+
+const scriptWriteFields = {
+  name: z.string().trim().min(1).max(200),
+  triggerPoint: z.enum(["before_submit", "before_post", "after_post", "before_void", "custom_gl_lines", "scheduled", "endpoint", "bulk", "client"]),
+  source: z.string().min(1).max(100_000),
+  documentKind: z.string().trim().min(1).nullable().optional(),
+  endpointSlug: z.string().max(80).nullable().optional(),
+  cron: z.string().max(200).nullable().optional(),
+  isActive: z.boolean().optional(),
+  timeoutMs: z.number().int().min(1).max(10_000).optional(),
+  sortOrder: z.number().int().min(-2_147_483_648).max(2_147_483_647).optional(),
+};
+const createScriptBodySchema = z.object(scriptWriteFields);
+const updateScriptBodySchema = z.object({ id: z.string().uuid(), ...scriptWriteFields });
+
 
 
 export const runtime = 'nodejs'
@@ -53,11 +70,11 @@ function validationResponse(error: ValidationError): Promise<NextResponse> {
   return apiErrorResponse(refusal, { details: { code: refusal.code, field: refusal.field } })
 }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardFeaturePermission('scripts.manage', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, createScriptBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>
   const err = validate(body)
@@ -101,11 +118,11 @@ export async function POST(req: Request) {
   return NextResponse.json({ id: String(row.id) })
 }
 
-export async function PATCH(req: Request) {
+async function legacyPATCH(req: Request) {
   const gate = await guardFeaturePermission('scripts.manage', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  const parsedBody2 = await parseJsonBody(req, updateScriptBodySchema);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as Record<string, unknown>
   if (!body.id) return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -169,3 +186,27 @@ export async function PATCH(req: Request) {
   if (missing) return notFound("record")
   return NextResponse.json({ ok: true })
 }
+
+export const POST = defineRoute({
+  permission: "scripts.manage",
+  feature: "scripts",
+  body: createScriptBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});
+
+export const PATCH = defineRoute({
+  permission: "scripts.manage",
+  feature: "scripts",
+  body: updateScriptBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never);
+  },
+});

@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { listDecisions } from "@openbooks/engine/src/hrm/ai/governance.ts";
@@ -22,7 +23,7 @@ function csvCell(value: unknown): string {
  * need the reader's own payroll/HR grant plus the subject's employer
  * scope, so a restricted setup admin never sees out-of-scope pay.
  */
-export async function GET(req: Request) {
+async function legacyGET(req: Request) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
   if (!(await isFeatureEnabled(gate.user.orgId, "aiGovernanceLedger"))) {
@@ -61,3 +62,9 @@ export async function GET(req: Request) {
     return aiRailsErrorResponse(e);
   }
 }
+
+export const GET = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async ({ request }) => legacyGET(request as never),
+});

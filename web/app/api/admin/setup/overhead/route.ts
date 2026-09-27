@@ -1,5 +1,7 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -17,6 +19,26 @@ import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiar
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts'
+import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
+
+const exactDecimalText = (field: string) => z.string().superRefine((value, ctx) => {
+  if (canonicalDecimal(value, 4) === null) ctx.addIssue({ code: "custom", message: moneyRefusal(field, value) });
+});
+const overheadProfileSchema = z.discriminatedUnion("method", [
+  z.object({ method: z.literal("none") }),
+  z.object({ method: z.literal("percent_of_labor"), ratePercent: exactDecimalText("Overhead rate") }),
+  z.object({ method: z.literal("per_labor_hour"), ratePerHour: exactDecimalText("Overhead rate") }),
+  z.object({ method: z.literal("rate_engine"), rateEngine: z.object({ rateSource: z.enum(["live", "standard"]), hoursBasis: z.enum(["billed_hours", "actual_hours", "total_hours"]), dimension: z.string().min(1), scope: z.enum(["flat", "department", "class"]) }) }),
+  z.object({ method: z.literal("posted_gl_account_group"), accountGroup: z.object({ dimension: z.string().min(1), groupKeys: z.array(z.string()).optional() }) }),
+]);
+const requestBodySchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("publish"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), rates: z.array(z.object({ departmentId: z.string().uuid(), ratePerHour: exactDecimalText("Overhead rate") })).max(500).optional() }),
+  z.object({ action: z.literal("apply"), projectTypeIds: z.array(z.string().uuid()).min(1).max(500), overhead: overheadProfileSchema, effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), reason: z.string().trim().max(500).optional() }),
+  z.object({ action: z.literal("set-lifecycle"), mode: z.enum(["manual", "scheduled", "live"]).optional(), cadence: z.enum(["monthly", "quarterly"]).optional() }),
+  z.object({ action: z.literal("set-application"), mode: z.enum(["report_only", "net_zero_pair", "off"]).optional(), accountId: z.string().uuid().nullable().optional() }),
+  z.object({ action: z.literal("backfill-overhead") }),
+]);
+
 
 export const dynamic = 'force-dynamic'
 
@@ -78,15 +100,15 @@ function postgresErrorCode(error: unknown): string | undefined {
  *                  make the P&L actually carry it (totalCost component +
  *                  layout line) — one pass, nothing left half-configured.
  */
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data
+  const body = parsedBody.data as Record<string, unknown>
   if (requiresUnrestrictedOverheadScope(body)) {
     const scopeDenied = guardUnrestrictedScope(gate)
     if (scopeDenied) return scopeDenied
@@ -359,3 +381,15 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ error: 'unknown action' }, { status: 400 })
 }
+
+export const POST = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

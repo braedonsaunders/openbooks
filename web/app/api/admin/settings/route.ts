@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../lib/authz";
@@ -8,6 +10,24 @@ import {
   SETTINGS_WRITE_PERMISSION,
   updateCompanySettings,
 } from "../../../../lib/company-settings";
+
+const requestBodySchema = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  legalName: z.string().nullable().optional(),
+  country: z.string().length(2).optional(),
+  baseCurrency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  fiscalYearStartMonth: z.number().int().min(1).max(12).optional(),
+  reportingFramework: z.enum(["us_gaap", "ifrs"]).nullable().optional(),
+  taxFramework: z.enum(["asc740", "ias12"]).optional(),
+  controlAccounts: z.record(z.string(), z.string().uuid()).optional(),
+  defaultLocale: z.string().optional(),
+  timeZone: z.string().nullable().optional(),
+  reportPdfStyle: z.enum(["modern", "formal"]).optional(),
+  fairValueRangePolicy: z.enum(["warn", "off"]).optional(),
+  requireVendorBillApproval: z.boolean().optional(),
+  requireStockCountReview: z.boolean().optional(),
+});
+
 
 export const runtime = "nodejs";
 
@@ -33,7 +53,7 @@ export const runtime = "nodejs";
 // assistant/MCP `get_company_settings` / `update_company_settings` commands
 // are the same operations; this route is the HTTP adapter.
 
-export async function GET() {
+async function legacyGET() {
   const gate = await guardPermission(SETTINGS_READ_PERMISSION);
   if (gate instanceof NextResponse) return gate;
   const result = await readCompanySettings(gate.user.orgId);
@@ -41,12 +61,30 @@ export async function GET() {
   return NextResponse.json(result.body, { status: result.status });
 }
 
-export async function PUT(req: Request) {
+async function legacyPUT(req: Request) {
   const gate = await guardPermission(SETTINGS_WRITE_PERMISSION);
   if (gate instanceof NextResponse) return gate;
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const result = await updateCompanySettings(gate.user, parsedBody.data as Record<string, unknown>);
   if (result.status === 404) return notFound("company settings");
   return NextResponse.json(result.body, { status: result.status });
 }
+
+export const GET = defineRoute({
+  permission: SETTINGS_READ_PERMISSION,
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async () => legacyGET(),
+});
+
+export const PUT = defineRoute({
+  permission: SETTINGS_WRITE_PERMISSION,
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPUT(replayRequest as never);
+  },
+});

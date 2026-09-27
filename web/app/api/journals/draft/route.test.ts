@@ -40,6 +40,15 @@ stubModules({
         }
       }
     `,
+    "@/lib/authz": `
+      const state = globalThis[Symbol.for('openbooks.journal-draft-route-test')]
+      export async function guardPermission() {
+        return {
+          user: { orgId: 'org-1', id: 'user-1' },
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+        }
+      }
+    `,
     "../../../../lib/journals": `
       const state = globalThis[Symbol.for('openbooks.journal-draft-route-test')]
       const legalIds = new Set([

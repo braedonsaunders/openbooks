@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -7,6 +9,12 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { describeIssue, lintRecordFields, typeKeyError } from '../../../../../../lib/record-schema'
 import { auditSetupChange } from '../../../../../../lib/setup/audit'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.object({
+  "action": z.enum(["archive", "publish"]).optional(),
+  "reason": z.string().trim().min(1).max(2000),
+});
+
 
 
 export const runtime = 'nodejs'
@@ -32,14 +40,14 @@ type LockedType = {
  * current status. A write that matches zero rows is a named refusal, never
  * `{ok:true}`.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyPOST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('records.manage_types')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as { action?: string; reason?: string }
   const action = body.action ?? 'publish'
@@ -184,3 +192,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (outcome.kind === 'response') return outcome.response
   return NextResponse.json({ ok: true, status: outcome.status })
 }
+
+export const POST = defineRoute({
+  permission: "records.manage_types",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});

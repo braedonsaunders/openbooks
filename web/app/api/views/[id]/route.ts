@@ -1,6 +1,8 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { validateOrgReportQuery } from '@/lib/custom-record-report-catalog'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../lib/authz'
@@ -16,11 +18,21 @@ import {
 } from '../../../../lib/views'
 import { notFound } from "@/lib/api/responses";
 
+const requestBodySchema = z.object({
+  "allowedRoles": z.array(z.string().trim().min(1).max(100)).max(50).nullable().optional(),
+  "description": z.string().nullable().optional(),
+  "layout": z.json().optional(),
+  "name": z.string().trim().min(1).max(200).optional(),
+  "query": z.json().optional(),
+  "scope": z.enum(["private", "shared"]).optional(),
+}).refine((body) => Object.keys(body).length > 0, "At least one view setting is required");
+
+
 
 export const runtime = 'nodejs'
 
 /** Load one view (respecting visibility and the report entity gate). */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { user, permissions } = gate
@@ -35,7 +47,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 /** Autosave: update name/description/query/layout/scope/allowedRoles. */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyPATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('reports.create')
   if (gate instanceof NextResponse) return gate
   const { user, permissions } = gate
@@ -49,7 +61,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return notFound("record")
   }
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     name?: string
@@ -99,7 +111,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 /** Delete (owner or admin only). */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyDELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('reports.create')
   if (gate instanceof NextResponse) return gate
   const { user, permissions } = gate
@@ -109,3 +121,30 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   if (!ok) return NextResponse.json({ error: 'You can only delete your own views.' }, { status: 403 })
   return NextResponse.json({ ok: true })
 }
+
+export const GET = defineRoute({
+  permission: "reports.read",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+});
+
+export const PATCH = defineRoute({
+  permission: "reports.create",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});
+
+export const DELETE = defineRoute({
+  permission: "reports.create",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyDELETE(request as never, { params: Promise.resolve(params as never) } as never),
+});

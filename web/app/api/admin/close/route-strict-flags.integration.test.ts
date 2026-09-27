@@ -66,7 +66,7 @@ test("close saves refuse a non-boolean isActive without writing", async () => {
         code: "flags-policy",
         name: "Flags policy",
         policyType: "materiality",
-        rules: {},
+        rules: { amount: "1000.0000", percent: 20 },
         isActive: 0,
       },
       {

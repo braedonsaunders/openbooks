@@ -1,8 +1,13 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { deriveEmailDeliveryKey, sendVia, isValidEmailAddress } from '@openbooks/emails'
 import { insertEmailLog, markEmailFailed, markEmailSent, markEmailUncertain, resolveOrgEmailTransportDetailed } from '@openbooks/engine/src/delivery/email-config.ts'
+
+const requestBodySchema = z.object({ to: z.string().trim().min(1).max(320) });
+
 
 export const runtime = 'nodejs'
 
@@ -10,7 +15,7 @@ export const runtime = 'nodejs'
  * Send a test email through the org's currently-saved transport (synchronous so
  * the admin sees the outcome immediately). Records an email_log row either way.
  */
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   // Sending through (and probing) the org transport is setup authority.
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
@@ -18,9 +23,9 @@ export async function POST(req: Request) {
 
   let to: string
   try {
-    const parsedBody = await parseJsonBody(req, jsonObject);
+    const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
-    to = String(((parsedBody.data) as { to?: unknown }).to ?? '').trim()
+    to = parsedBody.data.to
   } catch {
     return NextResponse.json({ error: 'invalid JSON' }, { status: 400 })
   }
@@ -69,3 +74,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 422 })
   }
 }
+
+export const POST = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

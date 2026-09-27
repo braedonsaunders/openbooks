@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { getAuthz } from '../../../lib/authz'
 import { globalSearch } from '../../../lib/search'
@@ -12,7 +13,7 @@ export const dynamic = 'force-dynamic'
  * lib/search.ts), org-scoped and permission-filtered. Returns grouped, ranked
  * hits for the instant results panel.
  */
-export async function GET(req: Request) {
+async function legacyGET(req: Request) {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
 
@@ -26,3 +27,8 @@ export async function GET(req: Request) {
     return unexpectedServerError('search', e)
   }
 }
+
+export const GET = defineRoute({
+  public: "session",
+  handler: async ({ request }) => legacyGET(request as never),
+});

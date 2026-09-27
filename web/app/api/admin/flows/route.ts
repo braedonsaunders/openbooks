@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
@@ -9,6 +11,13 @@ import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { filterFlowRunSubjectsToScope } from '../../flows/_lib'
 
+const FLOW_SUBJECT_KINDS = listFlowSubjectProfiles().map((profile) => profile.subjectKind) as [string, ...string[]];
+const requestBodySchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  subjectKind: z.enum(FLOW_SUBJECT_KINDS),
+});
+
+
 export const runtime = 'nodejs'
 
 /**
@@ -16,7 +25,7 @@ export const runtime = 'nodejs'
  * The graph itself is edited through PATCH /api/admin/flows/[id].
  */
 
-export async function GET() {
+async function legacyGET() {
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   if (gate.allowedSubsidiaryIds === null) {
@@ -81,13 +90,13 @@ export async function GET() {
   })
 }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   const scopeDenied = guardUnrestrictedScope(gate)
   if (scopeDenied) return scopeDenied
   const user = gate.user
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>
 
@@ -120,3 +129,22 @@ export async function POST(req: Request) {
   })
   return NextResponse.json({ id })
 }
+
+export const GET = defineRoute({
+  permission: "flows.manage",
+  feature: "flows",
+  handler: async () => legacyGET(),
+});
+
+export const POST = defineRoute({
+  permission: "flows.manage",
+  feature: "flows",
+  scope: "unrestricted",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

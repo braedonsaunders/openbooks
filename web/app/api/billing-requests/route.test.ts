@@ -53,6 +53,15 @@ stubModules({
         }
       }
     `,
+    "@/lib/authz": `
+      const state = globalThis[Symbol.for('openbooks.billing-requests-route-test')]
+      export async function guardPermission() {
+        return {
+          user: { id: 'user-1', orgId: 'org-1' },
+          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+        }
+      }
+    `,
     "../../../lib/projects-gate": `
       export async function guardProjectsFeature() { return null }
     `,

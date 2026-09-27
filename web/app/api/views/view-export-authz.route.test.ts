@@ -70,6 +70,7 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 const mockUrls = new Map<string, string>([
   ['../../../../../lib/authz', mockUrl('authz')],
+  ['@/lib/authz', mockUrl('authz')],
   ['../../../../../lib/report-authz', mockUrl('report-authz')],
   ['../../../../../lib/views', mockUrl('views')],
 ])

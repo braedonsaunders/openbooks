@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { guardPermission } from "../../../../../lib/authz";
@@ -7,8 +8,8 @@ import { parseJsonBody } from "@/lib/api/json";
 
 export const runtime = "nodejs";
 
-const aiTestBody = z.looseObject({
-  provider: z.string().optional(),
+const aiTestBody = z.object({
+  provider: z.enum(["anthropic", "openai", "google", "openrouter", "groq", "xai", "deepseek", "mistral", "custom"]).optional(),
   baseUrl: z.string().optional(),
   apiKey: z.string().optional(),
   modelFast: z.string().optional(),
@@ -21,7 +22,7 @@ const aiTestBody = z.looseObject({
  * field left blank falls back to the saved config for the same provider
  * (a saved key belongs to its own provider and never crosses over).
  */
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardPermission("admin.ai.manage");
   if (gate instanceof NextResponse) return gate;
   // One zod boundary for JSON bodies, like every other mutation route: a
@@ -46,3 +47,15 @@ export async function POST(req: Request) {
   });
   return NextResponse.json(result);
 }
+
+export const POST = defineRoute({
+  permission: "admin.ai.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: aiTestBody,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

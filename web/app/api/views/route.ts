@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
@@ -13,13 +14,13 @@ import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../lib/api
 import { auditSetupChange } from '../../../lib/setup/audit'
 import { loadViews, slugifyViewName, uniqueViewSlug, type ViewScope } from '../../../lib/views'
 
-const createViewBodySchema = z.looseObject({
-  name: z.string().optional(),
+const createViewBodySchema = z.object({
+  name: z.string().trim().min(1).max(200),
   description: z.string().nullable().optional(),
-  query: z.unknown().optional(),
-  layout: z.unknown().optional(),
-  scope: z.string().optional(),
-  allowedRoles: z.unknown().optional(),
+  query: z.json().optional(),
+  layout: z.json().optional(),
+  scope: z.enum(["private", "shared"], { error: "Invalid scope" }).optional(),
+  allowedRoles: z.array(z.string().trim().min(1).max(100)).max(50).nullable().optional(),
 })
 
 export const runtime = 'nodejs'
@@ -31,7 +32,7 @@ export const runtime = 'nodejs'
  * to a reader who cannot run it leaks the catalog (names, descriptions and the
  * stored plan itself) and hands out the id that every execution path keys on.
  */
-export async function GET() {
+async function legacyGET() {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { user, permissions } = gate
@@ -51,7 +52,7 @@ export async function GET() {
  * request returns the same view without a duplicate insert or duplicate
  * audit event. Cancel/close writes nothing.
  */
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardPermission('reports.create')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
@@ -182,3 +183,21 @@ export async function POST(req: Request) {
   }
   return NextResponse.json({ id: outcome.result.id, slug: outcome.result.slug }, { status: 201 })
 }
+
+export const GET = defineRoute({
+  permission: "reports.read",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async () => legacyGET(),
+});
+
+export const POST = defineRoute({
+  permission: "reports.create",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: createViewBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

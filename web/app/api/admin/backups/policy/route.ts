@@ -1,9 +1,39 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import { auditBackupEvent, computeNextRunAt, type BackupPolicyShape } from "@openbooks/engine/src/backup/backup.ts";
 import { guardPermission } from "../../../../../lib/authz";
+
+const requestBodySchema = z.discriminatedUnion("frequency", [
+  z.object({
+    frequency: z.literal("daily"),
+    enabled: z.boolean(),
+    hourUtc: z.number().int().min(0).max(23),
+    dayOfWeek: z.number().int().min(0).max(6),
+    dayOfMonth: z.number().int().min(1).max(28),
+    maxKeep: z.number().int().min(1).max(100),
+  }),
+  z.object({
+    frequency: z.literal("weekly"),
+    enabled: z.boolean(),
+    hourUtc: z.number().int().min(0).max(23),
+    dayOfWeek: z.number().int().min(0).max(6),
+    dayOfMonth: z.number().int().min(1).max(28),
+    maxKeep: z.number().int().min(1).max(100),
+  }),
+  z.object({
+    frequency: z.literal("monthly"),
+    enabled: z.boolean(),
+    hourUtc: z.number().int().min(0).max(23),
+    dayOfWeek: z.number().int().min(0).max(6),
+    dayOfMonth: z.number().int().min(1).max(28),
+    maxKeep: z.number().int().min(1).max(100),
+  }),
+]);
+
 
 export const runtime = "nodejs";
 
@@ -15,13 +45,13 @@ export const runtime = "nodejs";
 
 const FREQUENCIES = new Set(["daily", "weekly", "monthly"]);
 
-export async function PUT(req: Request) {
+async function legacyPUT(req: Request) {
   const gate = await guardPermission("admin.backups.manage");
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
   const { orgId } = actor;
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;
 
@@ -130,3 +160,15 @@ export async function PUT(req: Request) {
 
   return NextResponse.json({ ok: true, nextRunAt });
 }
+
+export const PUT = defineRoute({
+  permission: "admin.backups.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPUT(replayRequest as never);
+  },
+});

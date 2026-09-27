@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../lib/authz";
 import { parseJsonBody } from "../../../lib/api/json";
@@ -17,7 +18,7 @@ export const runtime = "nodejs";
  * The write itself lives in `createManualJournal` — the only first-party
  * insert path for new journals. POST /api/v1/journals is the public twin.
  */
-export async function POST(request: Request) {
+async function legacyPOST(request: Request) {
   const gate = await guardPermission("gl.post");
   if (gate instanceof NextResponse) return gate;
   const user = gate.user;
@@ -46,3 +47,15 @@ export async function POST(request: Request) {
     throw error;
   }
 }
+
+export const POST = defineRoute({
+  permission: "gl.post",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: journalCreateBody,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

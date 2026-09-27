@@ -1,5 +1,7 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -16,6 +18,55 @@ import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { notFound } from "@/lib/api/responses";
+import { canonicalDecimal } from '../../../../../lib/exact-decimal'
+import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
+
+const invoicingProfileSchema = z.object({
+  billingProcedure: z.enum(["standard", "application_for_payment"]),
+  allowedBases: z.array(z.string().min(1)).min(1), defaultBasis: z.string().min(1),
+  lineBuilder: z.enum(["tm_actual", "milestone", "draw", "cost_plus"]),
+  revenueAccount: z.enum(["item_income", "unbilled_receivable", "fixed"]),
+  itemCategories: z.array(z.string()).optional(), itemKinds: z.array(z.string()).optional(), sourceKinds: z.array(z.string()).optional(),
+});
+const backupProfileSchema = z.object({ required: z.boolean(), defaultBackupType: z.string().min(1), allowedBackupTypes: z.array(z.string().min(1)).min(1) });
+const financialProfileSchema = z.json().superRefine((value, ctx) => {
+  try { assertValidProjectFinancialProfile(value); } catch (error) {
+    ctx.addIssue({ code: "custom", message: error instanceof Error ? error.message : "Invalid financial profile" });
+    return;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const record = value as Record<string, unknown>;
+  const checkAmount = (field: string, raw: unknown) => {
+    if (raw !== undefined && (typeof raw !== "string" || canonicalDecimal(raw, 4) === null)) {
+      ctx.addIssue({ code: "custom", message: moneyRefusal(field, raw, "an exact decimal amount", 4) });
+    }
+  };
+  const overhead = record.overhead;
+  if (overhead && typeof overhead === "object" && !Array.isArray(overhead)) {
+    const item = overhead as Record<string, unknown>;
+    checkAmount("overhead.ratePercent", item.ratePercent);
+    checkAmount("overhead.ratePerHour", item.ratePerHour);
+  }
+  const totalPrice = record.totalPrice;
+  if (totalPrice && typeof totalPrice === "object" && !Array.isArray(totalPrice)) {
+    checkAmount("totalPrice.defaultMarkupPercent", (totalPrice as Record<string, unknown>).defaultMarkupPercent);
+  }
+});
+const createBodySchema = z.object({
+  key: z.string().trim().min(1).max(64), name: z.string().trim().min(1).max(200),
+  billingMethod: z.enum(["time_and_materials", "fixed_price", "cost_plus"]),
+  financialProfile: financialProfileSchema, invoicingProfile: invoicingProfileSchema, backupProfile: backupProfileSchema,
+  description: z.string().nullable().optional(), sortOrder: z.number().int().optional(),
+});
+const updateBodySchema = z.object({
+  id: z.string().uuid(), billingMethod: z.enum(["time_and_materials", "fixed_price", "cost_plus"]),
+  name: z.string().trim().min(1).max(200).optional(), description: z.string().nullable().optional(),
+  isActive: z.boolean().optional(), sortOrder: z.number().int().optional(),
+  financialProfile: financialProfileSchema.optional(), financialEffectiveFrom: z.string().refine((value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && isCalendarDate(value), "financialEffectiveFrom must be a real calendar date in YYYY-MM-DD format").optional(),
+  financialChangeReason: z.string().trim().max(500).optional(),
+  invoicingProfile: invoicingProfileSchema.optional(), backupProfile: backupProfileSchema.optional(),
+});
+
 
 export const runtime = 'nodejs'
 
@@ -55,7 +106,7 @@ function validateInvoicingProfile(profile: unknown, billingMethod: unknown): str
 /** Create / update / archive a project type. Financial policy is published as
  * an append-only effective-dated version; the other profiles remain ordinary
  * audited setup because they do not reinterpret historical profitability. */
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const scopeDenied = guardUnrestrictedScope(gate)
@@ -63,7 +114,7 @@ export async function POST(req: Request) {
   const orgId = gate.user.orgId
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, createBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const b = ((parsedBody.data))
   const key = String(b.key ?? '').trim()
@@ -105,7 +156,7 @@ export async function POST(req: Request) {
         projectTypeId: createdId,
         effectiveFrom: await businessToday(orgId),
         // The engine asserts validity on publish; failures 422 below.
-        financialProfile: b.financialProfile as FinancialProfile,
+        financialProfile: b.financialProfile as unknown as FinancialProfile,
         reason: 'Initial project type financial policy',
         actorId: gate.user.id,
       })
@@ -124,7 +175,7 @@ export async function POST(req: Request) {
   }
 }
 
-export async function PATCH(req: Request) {
+async function legacyPATCH(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const scopeDenied = guardUnrestrictedScope(gate)
@@ -133,7 +184,7 @@ export async function PATCH(req: Request) {
   const today = await businessToday(orgId)
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  const parsedBody2 = await parseJsonBody(req, updateBodySchema);
   if (!parsedBody2.ok) return parsedBody2.response;
   const b = ((parsedBody2.data))
   if (b.financialProfile) {
@@ -217,12 +268,12 @@ export async function PATCH(req: Request) {
       let financialVersion: { id: string; effectiveFrom: string; effectiveTo: string | null } | null = null
       if (b.financialProfile) {
         const comparison = (await tx.execute<{ changed: boolean }>(sql`
-          select ${JSON.stringify(canonicalizeProjectFinancialProfile(b.financialProfile as FinancialProfile))}::jsonb
+          select ${JSON.stringify(canonicalizeProjectFinancialProfile(b.financialProfile as unknown as FinancialProfile))}::jsonb
                  is distinct from
                  ${JSON.stringify(
                    before.rows[0].financial_profile
                      ? canonicalizeProjectFinancialProfile(
-                         before.rows[0].financial_profile as FinancialProfile,
+                         before.rows[0].financial_profile as unknown as FinancialProfile,
                        )
                      : null,
                  )}::jsonb as changed
@@ -232,7 +283,7 @@ export async function PATCH(req: Request) {
             orgId,
             projectTypeId: id,
             effectiveFrom: String(b.financialEffectiveFrom ?? today),
-            financialProfile: b.financialProfile as FinancialProfile,
+            financialProfile: b.financialProfile as unknown as FinancialProfile,
             reason: String(b.financialChangeReason ?? ''),
             actorId: gate.user.id,
           })
@@ -265,7 +316,7 @@ export async function PATCH(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export async function DELETE(req: Request) {
+async function legacyDELETE(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const scopeDenied = guardUnrestrictedScope(gate)
@@ -293,3 +344,36 @@ export async function DELETE(req: Request) {
   if (result === null) return notFound("record")
   return NextResponse.json({ ok: true, archived: true })
 }
+
+export const POST = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  scope: "unrestricted",
+  body: createBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});
+
+export const PATCH = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  scope: "unrestricted",
+  body: updateBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never);
+  },
+});
+
+export const DELETE = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  scope: "unrestricted",
+  handler: async ({ request }) => legacyDELETE(request as never),
+});

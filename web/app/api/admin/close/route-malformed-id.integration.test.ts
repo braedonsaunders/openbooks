@@ -97,7 +97,7 @@ test("close policy saves emit one audit event for each mutation", async () => {
       name: "Materiality policy",
       description: "Initial policy",
       policyType: "materiality",
-      rules: { threshold: "1000.0000" },
+      rules: { amount: "1000.0000", percent: 20 },
       isActive: true,
     })));
     if (create.status !== 200) throw new Error(`create policy failed: ${await create.text()}`);
@@ -108,7 +108,7 @@ test("close policy saves emit one audit event for each mutation", async () => {
       name: "Updated materiality policy",
       description: "Updated policy",
       policyType: "materiality",
-      rules: { threshold: "2000.0000" },
+      rules: { amount: "2000.0000", percent: 20 },
       isActive: true,
     })));
     if (update.status !== 200) throw new Error(`update policy failed: ${await update.text()}`);

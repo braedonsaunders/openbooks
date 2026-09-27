@@ -1,10 +1,29 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission, guardUnrestrictedScope } from '../../../../lib/authz'
 import { OrgEmailConfigConflictError, readOrgEmailConfigView, saveOrgEmailConfig } from '@openbooks/engine/src/delivery/email-config.ts'
 import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { isEmailProvider } from '@openbooks/emails'
+
+const requestBodySchema = z.object({
+  "enabled": z.boolean().optional(),
+  "expectedUpdatedAt": z.string().refine(isDocumentRevisionToken, "Reload the email settings and supply their exact revision before saving"),
+  "fromEmail": z.string().nullable().optional(),
+  "fromName": z.string().nullable().optional(),
+  "mailgunDomain": z.string().nullable().optional(),
+  "mailgunRegion": z.enum(["eu", "us"]).nullable().optional(),
+  "provider": z.enum(["resend", "sendgrid", "mailgun", "postmark", "smtp"]).nullable().optional(),
+  "replyTo": z.string().nullable().optional(),
+  "secret": z.string().nullable().optional(),
+  "smtpHost": z.string().nullable().optional(),
+  "smtpPort": z.union([z.number().int(), z.string().regex(/^\\d+$/), z.null()]).optional(),
+  "smtpSecure": z.boolean().optional(),
+  "smtpUsername": z.string().nullable().optional(),
+});
+
 
 export const runtime = 'nodejs'
 
@@ -14,21 +33,21 @@ export const runtime = 'nodejs'
 const PERMISSION = 'admin.setup.manage'
 
 /** GET — the org's email config view (never the sealed secret, only hasSecret). */
-export async function GET() {
+async function legacyGET() {
   const gate = await guardPermission(PERMISSION)
   if (gate instanceof NextResponse) return gate
   return NextResponse.json(await readOrgEmailConfigView(gate.user.orgId))
 }
 
 /** PUT — persist the org's email provider config (secret sealed on the way in). */
-export async function PUT(req: Request) {
+async function legacyPUT(req: Request) {
   const gate = await guardPermission(PERMISSION)
   if (gate instanceof NextResponse) return gate
   const scopeDenied = guardUnrestrictedScope(gate)
   if (scopeDenied) return scopeDenied
   let body: Record<string, unknown>
   try {
-    const parsedBody = await parseJsonBody(req, jsonObject);
+    const parsedBody = await parseJsonBody(req, requestBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
     body = (parsedBody.data) as Record<string, unknown>
   } catch {
@@ -82,3 +101,22 @@ export async function PUT(req: Request) {
     return apiErrorResponse(err)
   }
 }
+
+export const GET = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async () => legacyGET(),
+});
+
+export const PUT = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  scope: "unrestricted",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPUT(replayRequest as never);
+  },
+});

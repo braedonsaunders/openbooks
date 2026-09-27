@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -11,14 +13,37 @@ import { guardPermission } from '../../../../lib/authz'
 import { isCustomFieldTargetEnabled } from '../../../../lib/customization/gates'
 import { notFound } from "@/lib/api/responses";
 
+const customFieldConfigSchema = z.record(z.string(), z.json());
+const createCustomFieldBodySchema = z.object({
+  targetTable: z.string().min(1),
+  key: z.string().trim().min(1),
+  label: z.string().trim().min(1),
+  fieldType: z.enum(["text", "long_text", "number", "currency", "date", "boolean", "select", "multi_select", "reference"]),
+  config: customFieldConfigSchema.optional(),
+  targetKind: z.string().nullable().optional(),
+  isRequired: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+const updateCustomFieldBodySchema = z.object({
+  id: z.string().uuid(),
+  expectedUpdatedAt: z.string().refine(isDocumentRevisionToken, 'Reload the custom field and send its exact revision before saving'),
+  config: customFieldConfigSchema.optional(),
+  fieldType: z.enum(["text", "long_text", "number", "currency", "date", "boolean", "select", "multi_select", "reference"]).optional(),
+  isActive: z.boolean().optional(),
+  isRequired: z.boolean().optional(),
+  label: z.string().trim().min(1).optional(),
+  sortOrder: z.number().int().optional(),
+});
+
+
 
 export const runtime = 'nodejs'
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardPermission('admin.custom_fields.manage')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, createCustomFieldBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>
   const err = validateDef(body)
@@ -55,11 +80,11 @@ export async function POST(req: Request) {
   })
 }
 
-export async function PATCH(req: Request) {
+async function legacyPATCH(req: Request) {
   const gate = await guardPermission('admin.custom_fields.manage')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  const parsedBody2 = await parseJsonBody(req, updateCustomFieldBodySchema);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as Record<string, unknown>
   if (typeof body.id !== 'string' || !isUuid(body.id)) {
@@ -111,3 +136,27 @@ export async function PATCH(req: Request) {
 function revisionConflict() {
   return NextResponse.json({ error: 'The field definition has changed. Reload it before saving.' }, { status: 409 })
 }
+
+export const POST = defineRoute({
+  permission: "admin.custom_fields.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: createCustomFieldBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});
+
+export const PATCH = defineRoute({
+  permission: "admin.custom_fields.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: updateCustomFieldBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never);
+  },
+});

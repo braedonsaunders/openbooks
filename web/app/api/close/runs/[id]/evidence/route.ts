@@ -1,11 +1,24 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardCloseScope } from "@/lib/close-scope";
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { addCloseEvidence } from "@openbooks/engine/src/close/tasks.ts";
 import { CloseError } from "@openbooks/engine/src/periods/period-policy.ts";
 import { guardFeaturePermission } from "../../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../../lib/list-params";
+
+const requestBodySchema = z.object({
+  evidenceType: z.enum(["file", "report", "journal", "reconciliation", "link", "note"]),
+  taskId: z.string().uuid(),
+  label: z.string().trim().min(1).max(200),
+  fileId: z.string().uuid().optional(),
+  referenceId: z.string().uuid().optional(),
+  referenceUrl: z.string().url().optional(),
+  snapshot: z.record(z.string(), z.json()).optional(),
+});
+
 
 export const runtime = "nodejs";
 
@@ -18,7 +31,7 @@ const EVIDENCE_TYPES = new Set([
   "note",
 ]);
 
-export async function POST(
+async function legacyPOST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
@@ -27,7 +40,7 @@ export async function POST(
   if (gate instanceof NextResponse) return gate;
   const scopeDenied = guardCloseScope(gate);
   if (scopeDenied) return scopeDenied;
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;
   const taskId = typeof body.taskId === "string" ? body.taskId : "";
@@ -79,3 +92,16 @@ export async function POST(
     throw error;
   }
 }
+
+export const POST = defineRoute({
+  permission: "close.run",
+  feature: "continuousClose",
+  params: z.object({ "id": z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});

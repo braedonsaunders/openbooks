@@ -73,6 +73,7 @@ const mockSources = new Map<string, string>([
     "mock:authz",
     `
       const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
+      export async function getAuthz() { return state.authz }
       export function can() { return state.canRetry ?? false }
     `,
   ],
@@ -109,6 +110,7 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/flows/index.ts", "mock:flows"],
   ["../_lib", "mock:lib"],
   ["../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
   ["../../../../lib/flow-subject-authz", "mock:subject-authz"],
 ]);
 
