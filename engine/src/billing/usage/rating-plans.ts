@@ -650,7 +650,7 @@ export async function createSubscriptionUsageLink(
          effective_from, effective_to, commit_amount, commit_period, allow_overage,
          created_by, updated_by)
       values
-        (${orgId}, ${subscriptionId}, ${customerId}, ${planVersionId}, ${uniqueMeters},
+        (${orgId}, ${subscriptionId}, ${customerId}, ${planVersionId}, array[${sql.join(uniqueMeters.map((id) => sql`${id}`), sql`, `)}]::uuid[],
          ${effectiveFrom}, ${effectiveTo}, ${commitAmount}, ${commitPeriod}, ${input.allowOverage ?? true},
          ${actor}, ${actor})
       returning ${LINK_COLUMNS}`);
