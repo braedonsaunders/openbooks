@@ -1361,13 +1361,13 @@ function rowMatch(columns: readonly string[], left: string, right: string): stri
 }
 
 /**
- * Plain-column unique keys (primary keys excluded) per table, derived from
- * the catalog rather than a hand-kept list, so a new UNIQUE constraint can
- * never reintroduce the restore collision below. Expression indexes are
- * skipped — their key expressions cannot be matched to snapshot columns —
- * and partial-index predicates are ignored deliberately: the collider delete
- * only ever removes non-baseline rows (every one of them is deleted by the
- * passes that follow anyway), so matching on the key columns alone
+ * Plain-column unique and exclusion keys (primary keys excluded) per table,
+ * discovered from the catalog rather than a hand-kept list. Unique indexes
+ * with expressions are skipped because their keys cannot be matched to
+ * snapshot columns. Exclusion indexes retain their plain columns and drop
+ * expression members. Partial predicates are ignored deliberately: the
+ * collider delete only ever removes non-baseline rows (every one is deleted
+ * by the passes that follow anyway), so matching on the key columns alone
  * over-deletes at worst, never wrongly.
  */
 async function loadUniqueKeys(tables: readonly string[]): Promise<Map<string, string[][]>> {
@@ -1380,8 +1380,8 @@ async function loadUniqueKeys(tables: readonly string[]): Promise<Map<string, st
       join pg_namespace n on n.oid = t.relnamespace and n.nspname = 'public'
       join lateral unnest(i.indkey) with ordinality as k(attnum, ord) on true
       join pg_attribute a on a.attrelid = t.oid and a.attnum = k.attnum
-     where i.indisunique and i.indisvalid and not i.indisprimary
-       and i.indexprs is null
+     where ((i.indisunique and i.indexprs is null) or i.indisexclusion)
+       and i.indisvalid and not i.indisprimary
        and t.relname in (${sql.join(tables.map((table) => sql`${table}`), sql`, `)})
      order by "index", k.ord`);
   const byIndex = new Map<string, { table: string; columns: string[] }>();
