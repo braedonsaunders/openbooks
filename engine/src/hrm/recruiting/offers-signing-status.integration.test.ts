@@ -11,7 +11,6 @@ import {
   setupHarness,
   withHarness,
 } from "../../testing/hrm-harness.ts";
-import { RecruitingError } from "./errors.ts";
 import {
   createRequisition,
   openRequisition,

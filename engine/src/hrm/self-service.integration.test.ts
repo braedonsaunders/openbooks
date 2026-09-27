@@ -20,7 +20,6 @@ import {
 } from "../testing/hrm-harness.ts";
 import { decideGate, ReleaseError } from "../flows/gates.ts";
 import { HrmAuthorizationError } from "./authorization.ts";
-import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import {
   createChangeRequestDraft,
 } from "./change-requests.ts";

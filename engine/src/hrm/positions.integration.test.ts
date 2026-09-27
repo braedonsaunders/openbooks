@@ -19,7 +19,6 @@ import {
   setupHarness,
   withHarness,
 } from "../testing/hrm-harness.ts";
-import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { decideGate } from "../flows/gates.ts";
 import {
   closePosition,
