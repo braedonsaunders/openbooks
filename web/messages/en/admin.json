@@ -1439,6 +1439,240 @@
     }
   },
   "setup": {
+    "builder": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "saveChanges": "Save changes",
+      "saved": "Changes saved",
+      "discard": "Discard",
+      "unsaved": "Unsaved changes",
+      "discardChanges": "You have unsaved changes in the inspector. Discard them?",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "rowActions": "Row actions",
+      "dragToReorder": "Drag to reorder",
+      "errors": {
+        "duplicate": "Another record already uses that value.",
+        "inUse": "This record is still in use and cannot be deleted.",
+        "stale": "The outline changed since it was loaded. Reload the page and try again.",
+        "network": "The server could not be reached. Check your connection and try again."
+      }
+    },
+    "reviewBuilder": {
+      "navTitle": "Review templates",
+      "title": "Review templates",
+      "description": "Build the forms self and manager reviewers fill in. Each template is one page: its sections, questions and rating scale, with a live preview.",
+      "newTemplate": "New template",
+      "emptyTitle": "No review templates yet",
+      "emptyDescription": "Create a template, then add sections and questions in the builder. Review cycles open on a template.",
+      "cardSummary": "{sections, plural, one {# section} other {# sections}} · {questions, plural, one {# question} other {# questions}}",
+      "scaleSummary": "Rating scale {min}–{max}",
+      "cycleCount": "{count, plural, one {Used by # cycle} other {Used by # cycles}}",
+      "backToTemplates": "All review templates",
+      "outline": "Form outline",
+      "templateSettings": "Template settings",
+      "section": "Section",
+      "addSection": "Add section",
+      "addQuestion": "Add question",
+      "addQuestionTo": "Add a question to {section}",
+      "noSections": "No sections yet. Add a section, then add its questions.",
+      "questionCount": "{count, plural, one {# question} other {# questions}}",
+      "questionIn": "Question in {section}",
+      "weightShare": "{share}% weight",
+      "weightShareLong": "{share}% of the template’s total weight",
+      "required": "Required",
+      "ratingScale": "Rating scale",
+      "scaleLabelsPlaceholder": "Add a label and press Enter",
+      "scaleRange": "Ratings from {min} to {max}",
+      "scaleInvalid": "Enter a lowest rating below the highest rating to see the scale.",
+      "weightPlaceholder": "No weight",
+      "competencyPlaceholder": "No competency",
+      "deleteTemplateTitle": "Delete template",
+      "deleteTemplate": "Delete the review template “{name}” with all of its sections and questions?",
+      "deleteBlocked": "Review cycles were opened on this template, so it is kept as history. Deactivate it instead.",
+      "templateDeleted": "Review template deleted",
+      "deleteSectionTitle": "Delete section",
+      "deleteSection": "Delete the section “{title}”?",
+      "deleteSectionWithQuestions": "Delete the section “{title}” and its {count, plural, one {# question} other {# questions}}?",
+      "sectionDeleted": "Section deleted",
+      "deleteQuestionTitle": "Delete question",
+      "deleteQuestion": "Delete the question “{prompt}”?",
+      "questionDeleted": "Question deleted",
+      "fields": {
+        "name": "Template name",
+        "scaleMin": "Lowest rating",
+        "scaleMax": "Highest rating",
+        "scaleLabels": "Scale labels",
+        "sectionTitle": "Section title",
+        "sectionKind": "Section type",
+        "weight": "Weight",
+        "competency": "Competency",
+        "prompt": "Question",
+        "answerKind": "Answer type",
+        "required": "Required"
+      },
+      "help": {
+        "active": "Only active templates can open new review cycles.",
+        "scaleMin": "The lowest rating a reviewer can give, for example 1.",
+        "scaleMax": "The highest rating a reviewer can give, for example 5. The scale spans at most 99 points.",
+        "scaleLabels": "Optional names for the scale, lowest first. Give one per point, or just the two ends.",
+        "historyPinned": "{count, plural, one {# review cycle was} other {# review cycles were}} opened on this template. Edits apply to cycles opened from now on; open cycles keep the form they started with.",
+        "weight": "Optional relative weight of this section. The builder shows it as a share of the total weight of all sections.",
+        "competency": "The competency this section assesses. Reviews show its level expectations beside the answers.",
+        "goalsSection": "A goals section shows the reviewee’s goals for the cycle period, even when it asks no questions.",
+        "required": "Reviewers cannot submit until they answer required questions. A cycle needs at least one required question to open."
+      },
+      "errors": {
+        "nameRequired": "Enter a template name.",
+        "titleRequired": "Enter a section title.",
+        "promptRequired": "Enter the question.",
+        "weightInvalid": "Enter the weight as a number of zero or more, or leave it blank.",
+        "duplicateName": "A review template with that name already exists."
+      },
+      "issues": {
+        "noRequiredQuestion": "No question is required yet. Review cycles cannot open on this template until at least one question is required.",
+        "inactive": "This template is inactive, so no new review cycle can open on it.",
+        "emptySection": "“{section}” has no questions, so reviewers will see nothing to answer there."
+      },
+      "sectionKinds": {
+        "competency": {
+          "label": "Competency",
+          "description": "Rate a skill or behaviour."
+        },
+        "goals": {
+          "label": "Goals",
+          "description": "Review progress on the cycle’s goals."
+        },
+        "freeText": {
+          "label": "Free text",
+          "description": "Open written feedback."
+        }
+      },
+      "answerKinds": {
+        "rating": {
+          "label": "Rating",
+          "description": "A score from {min} to {max}."
+        },
+        "text": {
+          "label": "Written answer",
+          "description": "A written response."
+        },
+        "ratingAndText": {
+          "label": "Rating and comment",
+          "description": "A score from {min} to {max} with a written comment."
+        }
+      },
+      "preview": {
+        "title": "Reviewer preview",
+        "subtitle": "What self and manager reviewers fill in",
+        "eyebrow": "Performance review",
+        "empty": "Add a section to start building the form.",
+        "goalsNote": "The reviewee’s goals for the cycle period appear here.",
+        "textPlaceholder": "Written answer…"
+      }
+    },
+    "pipelineBuilder": {
+      "navTitle": "Hiring pipelines",
+      "title": "Hiring pipelines",
+      "description": "Design the stages candidates move through. Each pipeline is one page: its ordered stages and what each stage means.",
+      "newPipeline": "New pipeline",
+      "emptyTitle": "No hiring pipelines yet",
+      "emptyDescription": "Create a pipeline and lay out its stages. Requisitions open on a pipeline; the default one is used when none is chosen.",
+      "stageCount": "{count, plural, one {# stage} other {# stages}}",
+      "requisitionCount": "{count, plural, =0 {No requisitions} one {# requisition} other {# requisitions}}",
+      "default": "Default",
+      "defaultPipeline": "Default pipeline",
+      "makeDefault": "Make default",
+      "madeDefault": "“{name}” is now the default pipeline",
+      "backToPipelines": "All hiring pipelines",
+      "flow": "Candidate flow",
+      "stages": "Stages",
+      "addStage": "Add stage",
+      "pipelineSettings": "Pipeline settings",
+      "noStages": "This pipeline has no stages yet.",
+      "useStandardStages": "Add the standard stages",
+      "stageNumber": "Stage {number}",
+      "activeApplications": "{count, plural, one {# candidate in this stage} other {# candidates in this stage}}",
+      "activeApplicationsLabel": "Candidates in this stage",
+      "totalApplicationsLabel": "Applications ever in this stage",
+      "kits": "Interview kits for this stage",
+      "manageKits": "Manage interview kits",
+      "noKits": "No interview kit is pinned to this stage.",
+      "deletePipelineTitle": "Delete pipeline",
+      "deletePipeline": "Delete the hiring pipeline “{name}” and all of its stages?",
+      "deleteBlocked": "Requisitions were opened on this pipeline, so it is kept as history. Deactivate it instead.",
+      "deleteDefaultBlocked": "Make another pipeline the default before deleting this one.",
+      "pipelineDeleted": "Hiring pipeline deleted",
+      "deleteStageTitle": "Delete stage",
+      "deleteStage": "Delete the stage “{name}”?",
+      "deleteStageBlocked": "Applications have been in this stage, so it is kept as history and cannot be deleted.",
+      "stageDeleted": "Stage deleted",
+      "standardStages": {
+        "applied": "Applied",
+        "screening": "Screening",
+        "interview": "Interview",
+        "offer": "Offer",
+        "hired": "Hired",
+        "rejected": "Rejected"
+      },
+      "fields": {
+        "name": "Stage name",
+        "pipelineName": "Pipeline name",
+        "key": "Stage key",
+        "kind": "Stage type"
+      },
+      "help": {
+        "active": "Only active pipelines can be chosen for new requisitions.",
+        "defaultStaysActive": "The default pipeline stays active. Make another pipeline the default to deactivate this one.",
+        "isDefault": "New requisitions use this pipeline when none is chosen.",
+        "notDefault": "Make this the pipeline new requisitions use when none is chosen.",
+        "historyPinned": "{count, plural, one {# requisition was} other {# requisitions were}} opened on this pipeline, so it is kept as history. Deactivate it rather than deleting it.",
+        "noRequisitions": "No requisition uses this pipeline yet.",
+        "key": "A stable identifier for the stage, used in funnel reporting and the candidate’s application status. Keep it unchanged once candidates use the stage.",
+        "terminal": "This stage ends the funnel: candidates who reach it leave the pipeline."
+      },
+      "errors": {
+        "nameRequired": "Enter a pipeline name.",
+        "stageNameRequired": "Enter a stage name.",
+        "keyRequired": "Enter a stage key.",
+        "duplicateKey": "Another stage in this pipeline already uses that key.",
+        "duplicateName": "A hiring pipeline with that name already exists.",
+        "stageInUse": "Applications have been in this stage, so it cannot be deleted."
+      },
+      "issues": {
+        "noStages": "No stages yet. Requisitions cannot open on a pipeline without stages.",
+        "noHiredStage": "No stage is of type Hired, so candidates cannot be hired through this pipeline.",
+        "multipleHiredStages": "More than one stage is of type Hired. Hiring always lands on the first one.",
+        "terminalFirstStage": "The first stage ends the funnel. New applications start in the first stage, so make it a working stage.",
+        "inactive": "This pipeline is inactive, so new requisitions cannot use it."
+      },
+      "kinds": {
+        "screening": {
+          "label": "Screening",
+          "description": "Review applications and shortlist."
+        },
+        "interview": {
+          "label": "Interview",
+          "description": "Meet the candidate."
+        },
+        "assessment": {
+          "label": "Assessment",
+          "description": "Tests and work samples."
+        },
+        "offer": {
+          "label": "Offer",
+          "description": "An offer is prepared or out."
+        },
+        "hired": {
+          "label": "Hired",
+          "description": "Ends the funnel with a hire."
+        },
+        "rejected": {
+          "label": "Rejected",
+          "description": "Ends the funnel without a hire."
+        }
+      }
+    },
     "title": "Setup",
     "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
     "taxLibrary": {

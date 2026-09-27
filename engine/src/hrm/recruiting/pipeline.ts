@@ -213,7 +213,7 @@ export function firstStage(template: PipelineTemplateDTO): PipelineStageDTO {
   if (!first) {
     throw new RecruitingError(
       "REFUSED",
-      `pipeline template ${template.id} holds no stages — add stages under Company Settings before opening requisitions on it`,
+      `pipeline template ${template.id} holds no stages — add stages under Setup → Workforce → Hiring pipelines before opening requisitions on it`,
     );
   }
   return first;
@@ -225,7 +225,7 @@ export function hiredStage(template: PipelineTemplateDTO): PipelineStageDTO {
   if (!hired) {
     throw new RecruitingError(
       "REFUSED",
-      `pipeline template ${template.id} holds no hired stage — add one under Company Settings before hiring through it`,
+      `pipeline template ${template.id} holds no hired stage — add one under Setup → Workforce → Hiring pipelines before hiring through it`,
     );
   }
   return hired;

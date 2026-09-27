@@ -1439,6 +1439,240 @@
     }
   },
   "setup": {
+    "builder": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "saveChanges": "Guardar cambios",
+      "saved": "Cambios guardados",
+      "discard": "Descartar",
+      "unsaved": "Cambios sin guardar",
+      "discardChanges": "Hay cambios sin guardar en el inspector. ¿Descartarlos?",
+      "moveUp": "Subir",
+      "moveDown": "Bajar",
+      "rowActions": "Acciones de la fila",
+      "dragToReorder": "Arrastrar para reordenar",
+      "errors": {
+        "duplicate": "Otro registro ya usa ese valor.",
+        "inUse": "Este registro sigue en uso y no se puede eliminar.",
+        "stale": "El esquema cambió desde que se cargó. Recargue la página e inténtelo de nuevo.",
+        "network": "No se pudo contactar con el servidor. Compruebe su conexión e inténtelo de nuevo."
+      }
+    },
+    "reviewBuilder": {
+      "navTitle": "Plantillas de evaluación",
+      "title": "Plantillas de evaluación",
+      "description": "Diseñe los formularios que completan la autoevaluación y la evaluación del responsable. Cada plantilla es una página: secciones, preguntas y escala de calificación, con vista previa en vivo.",
+      "newTemplate": "Nueva plantilla",
+      "emptyTitle": "Todavía no hay plantillas de evaluación",
+      "emptyDescription": "Cree una plantilla y añada secciones y preguntas en el diseñador. Los ciclos de evaluación se abren sobre una plantilla.",
+      "cardSummary": "{sections, plural, one {# sección} other {# secciones}} · {questions, plural, one {# pregunta} other {# preguntas}}",
+      "scaleSummary": "Escala de calificación {min}–{max}",
+      "cycleCount": "{count, plural, one {Usada en # ciclo} other {Usada en # ciclos}}",
+      "backToTemplates": "Todas las plantillas de evaluación",
+      "outline": "Esquema del formulario",
+      "templateSettings": "Configuración de la plantilla",
+      "section": "Sección",
+      "addSection": "Añadir sección",
+      "addQuestion": "Añadir pregunta",
+      "addQuestionTo": "Añadir una pregunta a {section}",
+      "noSections": "Todavía no hay secciones. Añada una sección y después sus preguntas.",
+      "questionCount": "{count, plural, one {# pregunta} other {# preguntas}}",
+      "questionIn": "Pregunta de {section}",
+      "weightShare": "{share} % de peso",
+      "weightShareLong": "{share} % del peso total de la plantilla",
+      "required": "Obligatoria",
+      "ratingScale": "Escala de calificación",
+      "scaleLabelsPlaceholder": "Escriba una etiqueta y pulse Intro",
+      "scaleRange": "Calificaciones de {min} a {max}",
+      "scaleInvalid": "Indique una calificación mínima inferior a la máxima para ver la escala.",
+      "weightPlaceholder": "Sin peso",
+      "competencyPlaceholder": "Sin competencia",
+      "deleteTemplateTitle": "Eliminar plantilla",
+      "deleteTemplate": "¿Eliminar la plantilla de evaluación «{name}» con todas sus secciones y preguntas?",
+      "deleteBlocked": "Se abrieron ciclos de evaluación sobre esta plantilla, por lo que se conserva como historial. Desactívela en su lugar.",
+      "templateDeleted": "Plantilla de evaluación eliminada",
+      "deleteSectionTitle": "Eliminar sección",
+      "deleteSection": "¿Eliminar la sección «{title}»?",
+      "deleteSectionWithQuestions": "¿Eliminar la sección «{title}» y {count, plural, one {su # pregunta} other {sus # preguntas}}?",
+      "sectionDeleted": "Sección eliminada",
+      "deleteQuestionTitle": "Eliminar pregunta",
+      "deleteQuestion": "¿Eliminar la pregunta «{prompt}»?",
+      "questionDeleted": "Pregunta eliminada",
+      "fields": {
+        "name": "Nombre de la plantilla",
+        "scaleMin": "Calificación mínima",
+        "scaleMax": "Calificación máxima",
+        "scaleLabels": "Etiquetas de la escala",
+        "sectionTitle": "Título de la sección",
+        "sectionKind": "Tipo de sección",
+        "weight": "Peso",
+        "competency": "Competencia",
+        "prompt": "Pregunta",
+        "answerKind": "Tipo de respuesta",
+        "required": "Obligatoria"
+      },
+      "help": {
+        "active": "Solo las plantillas activas pueden abrir nuevos ciclos de evaluación.",
+        "scaleMin": "La calificación más baja que puede dar un evaluador, por ejemplo 1.",
+        "scaleMax": "La calificación más alta que puede dar un evaluador, por ejemplo 5. La escala abarca como máximo 99 puntos.",
+        "scaleLabels": "Nombres opcionales para la escala, del más bajo al más alto. Uno por punto o solo los dos extremos.",
+        "historyPinned": "Sobre esta plantilla {count, plural, one {se abrió # ciclo de evaluación} other {se abrieron # ciclos de evaluación}}. Los cambios se aplican a los ciclos que se abran a partir de ahora; los ciclos abiertos conservan su formulario original.",
+        "weight": "Peso relativo opcional de esta sección. El diseñador lo muestra como parte del peso total de todas las secciones.",
+        "competency": "La competencia que evalúa esta sección. Las evaluaciones muestran sus expectativas de nivel junto a las respuestas.",
+        "goalsSection": "Una sección de objetivos muestra los objetivos de la persona evaluada para el periodo del ciclo, aunque no haga preguntas.",
+        "required": "Los evaluadores no pueden enviar hasta responder las preguntas obligatorias. Un ciclo necesita al menos una pregunta obligatoria para abrirse."
+      },
+      "errors": {
+        "nameRequired": "Indique un nombre de plantilla.",
+        "titleRequired": "Indique un título de sección.",
+        "promptRequired": "Escriba la pregunta.",
+        "weightInvalid": "Indique el peso como un número igual o mayor que cero, o déjelo en blanco.",
+        "duplicateName": "Ya existe una plantilla de evaluación con ese nombre."
+      },
+      "issues": {
+        "noRequiredQuestion": "Ninguna pregunta es obligatoria. No se pueden abrir ciclos de evaluación sobre esta plantilla hasta que al menos una lo sea.",
+        "inactive": "Esta plantilla está inactiva, así que no se puede abrir ningún ciclo de evaluación nuevo sobre ella.",
+        "emptySection": "«{section}» no tiene preguntas, así que los evaluadores no tendrán nada que responder ahí."
+      },
+      "sectionKinds": {
+        "competency": {
+          "label": "Competencia",
+          "description": "Calificar una habilidad o conducta."
+        },
+        "goals": {
+          "label": "Objetivos",
+          "description": "Revisar el avance en los objetivos del ciclo."
+        },
+        "freeText": {
+          "label": "Texto libre",
+          "description": "Comentarios escritos abiertos."
+        }
+      },
+      "answerKinds": {
+        "rating": {
+          "label": "Calificación",
+          "description": "Una puntuación de {min} a {max}."
+        },
+        "text": {
+          "label": "Respuesta escrita",
+          "description": "Una respuesta redactada."
+        },
+        "ratingAndText": {
+          "label": "Calificación y comentario",
+          "description": "Una puntuación de {min} a {max} con un comentario escrito."
+        }
+      },
+      "preview": {
+        "title": "Vista previa del evaluador",
+        "subtitle": "Lo que completan la persona evaluada y su responsable",
+        "eyebrow": "Evaluación del desempeño",
+        "empty": "Añada una sección para empezar a construir el formulario.",
+        "goalsNote": "Aquí aparecen los objetivos de la persona evaluada para el periodo del ciclo.",
+        "textPlaceholder": "Respuesta escrita…"
+      }
+    },
+    "pipelineBuilder": {
+      "navTitle": "Procesos de contratación",
+      "title": "Procesos de contratación",
+      "description": "Diseñe las etapas por las que pasan los candidatos. Cada proceso es una página: sus etapas ordenadas y el significado de cada una.",
+      "newPipeline": "Nuevo proceso",
+      "emptyTitle": "Todavía no hay procesos de contratación",
+      "emptyDescription": "Cree un proceso y organice sus etapas. Las solicitudes de personal se abren sobre un proceso; se usa el predeterminado cuando no se elige ninguno.",
+      "stageCount": "{count, plural, one {# etapa} other {# etapas}}",
+      "requisitionCount": "{count, plural, =0 {Sin solicitudes de personal} one {# solicitud de personal} other {# solicitudes de personal}}",
+      "default": "Predeterminado",
+      "defaultPipeline": "Proceso predeterminado",
+      "makeDefault": "Establecer como predeterminado",
+      "madeDefault": "«{name}» es ahora el proceso predeterminado",
+      "backToPipelines": "Todos los procesos de contratación",
+      "flow": "Recorrido del candidato",
+      "stages": "Etapas",
+      "addStage": "Añadir etapa",
+      "pipelineSettings": "Configuración del proceso",
+      "noStages": "Este proceso todavía no tiene etapas.",
+      "useStandardStages": "Añadir las etapas estándar",
+      "stageNumber": "Etapa {number}",
+      "activeApplications": "{count, plural, one {# candidato en esta etapa} other {# candidatos en esta etapa}}",
+      "activeApplicationsLabel": "Candidatos en esta etapa",
+      "totalApplicationsLabel": "Candidaturas que pasaron por esta etapa",
+      "kits": "Guías de entrevista de esta etapa",
+      "manageKits": "Gestionar guías de entrevista",
+      "noKits": "No hay ninguna guía de entrevista asociada a esta etapa.",
+      "deletePipelineTitle": "Eliminar proceso",
+      "deletePipeline": "¿Eliminar el proceso de contratación «{name}» y todas sus etapas?",
+      "deleteBlocked": "Se abrieron solicitudes de personal sobre este proceso, por lo que se conserva como historial. Desactívelo en su lugar.",
+      "deleteDefaultBlocked": "Establezca otro proceso como predeterminado antes de eliminar este.",
+      "pipelineDeleted": "Proceso de contratación eliminado",
+      "deleteStageTitle": "Eliminar etapa",
+      "deleteStage": "¿Eliminar la etapa «{name}»?",
+      "deleteStageBlocked": "Hubo candidaturas en esta etapa, por lo que se conserva como historial y no se puede eliminar.",
+      "stageDeleted": "Etapa eliminada",
+      "standardStages": {
+        "applied": "Candidatura recibida",
+        "screening": "Preselección",
+        "interview": "Entrevista",
+        "offer": "Oferta",
+        "hired": "Contratado",
+        "rejected": "Descartado"
+      },
+      "fields": {
+        "name": "Nombre de la etapa",
+        "pipelineName": "Nombre del proceso",
+        "key": "Clave de la etapa",
+        "kind": "Tipo de etapa"
+      },
+      "help": {
+        "active": "Solo los procesos activos se pueden elegir para nuevas solicitudes de personal.",
+        "defaultStaysActive": "El proceso predeterminado sigue activo. Establezca otro como predeterminado para desactivar este.",
+        "isDefault": "Las nuevas solicitudes de personal usan este proceso cuando no se elige ninguno.",
+        "notDefault": "Usar este proceso para las nuevas solicitudes de personal sin proceso elegido.",
+        "historyPinned": "Sobre este proceso {count, plural, one {se abrió # solicitud de personal} other {se abrieron # solicitudes de personal}}, por lo que se conserva como historial. Desactívelo en lugar de eliminarlo.",
+        "noRequisitions": "Ninguna solicitud de personal usa todavía este proceso.",
+        "key": "Identificador estable de la etapa, usado en los informes del embudo y en el estado de la candidatura. No lo cambie una vez que los candidatos usen la etapa.",
+        "terminal": "Esta etapa cierra el embudo: los candidatos que llegan a ella salen del proceso."
+      },
+      "errors": {
+        "nameRequired": "Indique un nombre de proceso.",
+        "stageNameRequired": "Indique un nombre de etapa.",
+        "keyRequired": "Indique una clave de etapa.",
+        "duplicateKey": "Otra etapa de este proceso ya usa esa clave.",
+        "duplicateName": "Ya existe un proceso de contratación con ese nombre.",
+        "stageInUse": "Hubo candidaturas en esta etapa, por lo que no se puede eliminar."
+      },
+      "issues": {
+        "noStages": "Todavía no hay etapas. No se pueden abrir solicitudes de personal sobre un proceso sin etapas.",
+        "noHiredStage": "Ninguna etapa es de tipo Contratado, así que nadie puede ser contratado mediante este proceso.",
+        "multipleHiredStages": "Hay más de una etapa de tipo Contratado. La contratación siempre llega a la primera.",
+        "terminalFirstStage": "La primera etapa cierra el embudo. Las nuevas candidaturas empiezan en la primera etapa, así que conviértala en una etapa de trabajo.",
+        "inactive": "Este proceso está inactivo, así que las nuevas solicitudes de personal no pueden usarlo."
+      },
+      "kinds": {
+        "screening": {
+          "label": "Preselección",
+          "description": "Revisar candidaturas y elaborar una lista corta."
+        },
+        "interview": {
+          "label": "Entrevista",
+          "description": "Conocer al candidato."
+        },
+        "assessment": {
+          "label": "Evaluación",
+          "description": "Pruebas y ejercicios prácticos."
+        },
+        "offer": {
+          "label": "Oferta",
+          "description": "Se prepara o se envía una oferta."
+        },
+        "hired": {
+          "label": "Contratado",
+          "description": "Cierra el embudo con una contratación."
+        },
+        "rejected": {
+          "label": "Descartado",
+          "description": "Cierra el embudo sin contratación."
+        }
+      }
+    },
     "title": "Configuración",
     "description": "Configure los impuestos, las dimensiones, los plazos y los datos de referencia sobre los que opera su contabilidad.",
     "taxLibrary": {

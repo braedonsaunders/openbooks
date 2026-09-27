@@ -99,8 +99,10 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
       },
     ],
   },
-  // HRM pipeline funnels (0195): the org's own hiring funnel, managed
-  // here; deactivation preserves history, and a template that opened
+  // HRM pipeline funnels (0195): the org's own hiring funnel. Edited on
+  // the hiring-pipeline builder (one page per pipeline, stages ordered
+  // there), which writes rows through the generic Setup API below;
+  // deactivation preserves history, and a template that opened
   // requisitions cannot be deleted (retire with isActive instead).
   {
     key: 'hrm-pipeline-templates',
@@ -109,6 +111,8 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'hrm',
     iconKey: 'list-checks',
+    rehomed: true, // one builder page per pipeline
+    rehomedTo: '/admin/setup/hiring-pipelines',
     orgScoped: true,
     orderBy: 'name',
     hasActive: true,
@@ -130,6 +134,8 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'hrm',
     iconKey: 'list-checks',
+    rehomed: true, // edited inside the pipeline builder
+    rehomedTo: '/admin/setup/hiring-pipelines',
     orgScoped: true,
     orderBy: 'position',
     hasActive: false,
@@ -166,7 +172,9 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
   // Review templates (0196, HR-7): the review form per org — name, the
   // rating scale edited as structured min/max/labels fields (folded into
   // rating_scale before buildRow, never raw JSON), and ordered sections
-  // with prompts. Deactivation (isActive) preserves history; deleting a
+  // with prompts. Edited on the review-template builder (one page per
+  // template with its section/question outline), which writes rows
+  // through the generic Setup API below. Deactivation (isActive) preserves history; deleting a
   // template that opened cycles is refused by name — retire it instead.
   {
     key: 'hrm-review-templates',
@@ -175,6 +183,8 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'hrm',
     iconKey: 'star',
+    rehomed: true, // one builder page per template
+    rehomedTo: '/admin/setup/review-templates',
     orgScoped: true,
     orderBy: 'name',
     hasActive: true,
@@ -197,6 +207,8 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'hrm',
     iconKey: 'list-checks',
+    rehomed: true, // edited inside the template builder
+    rehomedTo: '/admin/setup/review-templates',
     orgScoped: true,
     orderBy: 'position',
     hasActive: false,
@@ -230,6 +242,8 @@ export const HRM_PROCESS_ENTITIES: SetupEntity[] = [
     groupKey: 'workforce',
     featureKey: 'hrm',
     iconKey: 'list-checks',
+    rehomed: true, // edited inside the template builder
+    rehomedTo: '/admin/setup/review-templates',
     orgScoped: true,
     orderBy: 'position',
     hasActive: false,

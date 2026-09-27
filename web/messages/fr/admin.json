@@ -1439,6 +1439,240 @@
     }
   },
   "setup": {
+    "builder": {
+      "active": "Actif",
+      "inactive": "Inactif",
+      "saveChanges": "Enregistrer les modifications",
+      "saved": "Modifications enregistrées",
+      "discard": "Abandonner",
+      "unsaved": "Modifications non enregistrées",
+      "discardChanges": "L’inspecteur contient des modifications non enregistrées. Les abandonner ?",
+      "moveUp": "Monter",
+      "moveDown": "Descendre",
+      "rowActions": "Actions de la ligne",
+      "dragToReorder": "Faire glisser pour réordonner",
+      "errors": {
+        "duplicate": "Un autre enregistrement utilise déjà cette valeur.",
+        "inUse": "Cet enregistrement est encore utilisé et ne peut pas être supprimé.",
+        "stale": "Le plan a changé depuis son chargement. Rechargez la page et réessayez.",
+        "network": "Le serveur est injoignable. Vérifiez votre connexion et réessayez."
+      }
+    },
+    "reviewBuilder": {
+      "navTitle": "Modèles d’évaluation",
+      "title": "Modèles d’évaluation",
+      "description": "Concevez les formulaires remplis lors des auto-évaluations et des évaluations par le responsable. Chaque modèle tient sur une page : sections, questions et échelle de notation, avec un aperçu en direct.",
+      "newTemplate": "Nouveau modèle",
+      "emptyTitle": "Aucun modèle d’évaluation",
+      "emptyDescription": "Créez un modèle, puis ajoutez des sections et des questions dans le concepteur. Les cycles d’évaluation s’ouvrent sur un modèle.",
+      "cardSummary": "{sections, plural, one {# section} other {# sections}} · {questions, plural, one {# question} other {# questions}}",
+      "scaleSummary": "Échelle de notation {min}–{max}",
+      "cycleCount": "{count, plural, one {Utilisé par # cycle} other {Utilisé par # cycles}}",
+      "backToTemplates": "Tous les modèles d’évaluation",
+      "outline": "Plan du formulaire",
+      "templateSettings": "Paramètres du modèle",
+      "section": "Section du formulaire",
+      "addSection": "Ajouter une section",
+      "addQuestion": "Ajouter une question",
+      "addQuestionTo": "Ajouter une question à {section}",
+      "noSections": "Aucune section pour l’instant. Ajoutez une section, puis ses questions.",
+      "questionCount": "{count, plural, one {# question} other {# questions}}",
+      "questionIn": "Question de {section}",
+      "weightShare": "Pondération {share} %",
+      "weightShareLong": "{share} % de la pondération totale du modèle",
+      "required": "Obligatoire",
+      "ratingScale": "Échelle de notation",
+      "scaleLabelsPlaceholder": "Saisissez un libellé puis Entrée",
+      "scaleRange": "Notes de {min} à {max}",
+      "scaleInvalid": "Saisissez une note minimale inférieure à la note maximale pour voir l’échelle.",
+      "weightPlaceholder": "Sans pondération",
+      "competencyPlaceholder": "Aucune compétence",
+      "deleteTemplateTitle": "Supprimer le modèle",
+      "deleteTemplate": "Supprimer le modèle d’évaluation « {name} » avec toutes ses sections et questions ?",
+      "deleteBlocked": "Des cycles d’évaluation ont été ouverts sur ce modèle : il est conservé comme historique. Désactivez-le plutôt.",
+      "templateDeleted": "Modèle d’évaluation supprimé",
+      "deleteSectionTitle": "Supprimer la section",
+      "deleteSection": "Supprimer la section « {title} » ?",
+      "deleteSectionWithQuestions": "Supprimer la section « {title} » et {count, plural, one {sa # question} other {ses # questions}} ?",
+      "sectionDeleted": "Section supprimée",
+      "deleteQuestionTitle": "Supprimer la question",
+      "deleteQuestion": "Supprimer la question « {prompt} » ?",
+      "questionDeleted": "Question supprimée",
+      "fields": {
+        "name": "Nom du modèle",
+        "scaleMin": "Note minimale",
+        "scaleMax": "Note maximale",
+        "scaleLabels": "Libellés de l’échelle",
+        "sectionTitle": "Titre de la section",
+        "sectionKind": "Type de section",
+        "weight": "Pondération",
+        "competency": "Compétence",
+        "prompt": "Intitulé de la question",
+        "answerKind": "Type de réponse",
+        "required": "Obligatoire"
+      },
+      "help": {
+        "active": "Seuls les modèles actifs peuvent ouvrir de nouveaux cycles d’évaluation.",
+        "scaleMin": "La note la plus basse qu’un évaluateur peut attribuer, par exemple 1.",
+        "scaleMax": "La note la plus haute qu’un évaluateur peut attribuer, par exemple 5. L’échelle couvre au plus 99 points.",
+        "scaleLabels": "Noms facultatifs de l’échelle, du plus bas au plus haut. Un par point, ou seulement les deux extrémités.",
+        "historyPinned": "{count, plural, one {# cycle d’évaluation a été ouvert} other {# cycles d’évaluation ont été ouverts}} sur ce modèle. Les modifications s’appliquent aux cycles ouverts désormais ; les cycles en cours conservent leur formulaire d’origine.",
+        "weight": "Pondération relative facultative de cette section. Le concepteur l’affiche comme part de la pondération totale des sections.",
+        "competency": "La compétence évaluée par cette section. Les évaluations affichent ses niveaux attendus à côté des réponses.",
+        "goalsSection": "Une section objectifs affiche les objectifs de la personne évaluée pour la période du cycle, même sans question.",
+        "required": "Les évaluateurs ne peuvent pas envoyer tant que les questions obligatoires sont sans réponse. Un cycle exige au moins une question obligatoire pour s’ouvrir."
+      },
+      "errors": {
+        "nameRequired": "Saisissez un nom de modèle.",
+        "titleRequired": "Saisissez un titre de section.",
+        "promptRequired": "Saisissez la question.",
+        "weightInvalid": "Saisissez la pondération sous forme de nombre positif ou nul, ou laissez vide.",
+        "duplicateName": "Un modèle d’évaluation porte déjà ce nom."
+      },
+      "issues": {
+        "noRequiredQuestion": "Aucune question n’est obligatoire. Aucun cycle d’évaluation ne peut s’ouvrir sur ce modèle tant qu’une question au moins n’est pas obligatoire.",
+        "inactive": "Ce modèle est inactif : aucun nouveau cycle d’évaluation ne peut s’ouvrir dessus.",
+        "emptySection": "« {section} » ne contient aucune question : les évaluateurs n’y auront rien à répondre."
+      },
+      "sectionKinds": {
+        "competency": {
+          "label": "Compétence",
+          "description": "Noter une compétence ou un comportement."
+        },
+        "goals": {
+          "label": "Objectifs",
+          "description": "Faire le point sur les objectifs du cycle."
+        },
+        "freeText": {
+          "label": "Texte libre",
+          "description": "Retour écrit ouvert."
+        }
+      },
+      "answerKinds": {
+        "rating": {
+          "label": "Note",
+          "description": "Une note de {min} à {max}."
+        },
+        "text": {
+          "label": "Réponse écrite",
+          "description": "Une réponse rédigée."
+        },
+        "ratingAndText": {
+          "label": "Note et commentaire",
+          "description": "Une note de {min} à {max} avec un commentaire écrit."
+        }
+      },
+      "preview": {
+        "title": "Aperçu évaluateur",
+        "subtitle": "Ce que remplissent la personne évaluée et son responsable",
+        "eyebrow": "Évaluation de la performance",
+        "empty": "Ajoutez une section pour commencer à construire le formulaire.",
+        "goalsNote": "Les objectifs de la personne évaluée pour la période du cycle apparaissent ici.",
+        "textPlaceholder": "Réponse écrite…"
+      }
+    },
+    "pipelineBuilder": {
+      "navTitle": "Parcours de recrutement",
+      "title": "Parcours de recrutement",
+      "description": "Concevez les étapes que traversent les candidats. Chaque parcours tient sur une page : ses étapes ordonnées et le sens de chacune.",
+      "newPipeline": "Nouveau parcours",
+      "emptyTitle": "Aucun parcours de recrutement",
+      "emptyDescription": "Créez un parcours et organisez ses étapes. Les demandes de recrutement s’ouvrent sur un parcours ; celui par défaut s’applique quand aucun n’est choisi.",
+      "stageCount": "{count, plural, one {# étape} other {# étapes}}",
+      "requisitionCount": "{count, plural, =0 {Aucune demande de recrutement} one {# demande de recrutement} other {# demandes de recrutement}}",
+      "default": "Par défaut",
+      "defaultPipeline": "Parcours par défaut",
+      "makeDefault": "Définir par défaut",
+      "madeDefault": "« {name} » est désormais le parcours par défaut",
+      "backToPipelines": "Tous les parcours de recrutement",
+      "flow": "Parcours des candidats",
+      "stages": "Étapes",
+      "addStage": "Ajouter une étape",
+      "pipelineSettings": "Paramètres du parcours",
+      "noStages": "Ce parcours n’a pas encore d’étapes.",
+      "useStandardStages": "Ajouter les étapes standard",
+      "stageNumber": "Étape {number}",
+      "activeApplications": "{count, plural, one {# candidat à cette étape} other {# candidats à cette étape}}",
+      "activeApplicationsLabel": "Candidats à cette étape",
+      "totalApplicationsLabel": "Candidatures passées par cette étape",
+      "kits": "Guides d’entretien de cette étape",
+      "manageKits": "Gérer les guides d’entretien",
+      "noKits": "Aucun guide d’entretien n’est rattaché à cette étape.",
+      "deletePipelineTitle": "Supprimer le parcours",
+      "deletePipeline": "Supprimer le parcours de recrutement « {name} » et toutes ses étapes ?",
+      "deleteBlocked": "Des demandes de recrutement ont été ouvertes sur ce parcours : il est conservé comme historique. Désactivez-le plutôt.",
+      "deleteDefaultBlocked": "Définissez un autre parcours par défaut avant de supprimer celui-ci.",
+      "pipelineDeleted": "Parcours de recrutement supprimé",
+      "deleteStageTitle": "Supprimer l’étape",
+      "deleteStage": "Supprimer l’étape « {name} » ?",
+      "deleteStageBlocked": "Des candidatures sont passées par cette étape : elle est conservée comme historique et ne peut pas être supprimée.",
+      "stageDeleted": "Étape supprimée",
+      "standardStages": {
+        "applied": "Candidature reçue",
+        "screening": "Présélection",
+        "interview": "Entretien",
+        "offer": "Offre",
+        "hired": "Embauché",
+        "rejected": "Refusé"
+      },
+      "fields": {
+        "name": "Nom de l’étape",
+        "pipelineName": "Nom du parcours",
+        "key": "Clé de l’étape",
+        "kind": "Type d’étape"
+      },
+      "help": {
+        "active": "Seuls les parcours actifs peuvent être choisis pour de nouvelles demandes de recrutement.",
+        "defaultStaysActive": "Le parcours par défaut reste actif. Définissez un autre parcours par défaut pour désactiver celui-ci.",
+        "isDefault": "Les nouvelles demandes de recrutement utilisent ce parcours quand aucun n’est choisi.",
+        "notDefault": "Utiliser ce parcours pour les nouvelles demandes de recrutement sans parcours choisi.",
+        "historyPinned": "{count, plural, one {# demande de recrutement a été ouverte} other {# demandes de recrutement ont été ouvertes}} sur ce parcours : il est conservé comme historique. Désactivez-le plutôt que de le supprimer.",
+        "noRequisitions": "Aucune demande de recrutement n’utilise encore ce parcours.",
+        "key": "Identifiant stable de l’étape, utilisé dans le suivi de l’entonnoir et le statut de candidature. Ne le modifiez plus une fois que des candidats utilisent l’étape.",
+        "terminal": "Cette étape clôt l’entonnoir : les candidats qui l’atteignent quittent le parcours."
+      },
+      "errors": {
+        "nameRequired": "Saisissez un nom de parcours.",
+        "stageNameRequired": "Saisissez un nom d’étape.",
+        "keyRequired": "Saisissez une clé d’étape.",
+        "duplicateKey": "Une autre étape de ce parcours utilise déjà cette clé.",
+        "duplicateName": "Un parcours de recrutement porte déjà ce nom.",
+        "stageInUse": "Des candidatures sont passées par cette étape : elle ne peut pas être supprimée."
+      },
+      "issues": {
+        "noStages": "Aucune étape. Aucune demande de recrutement ne peut s’ouvrir sur un parcours sans étapes.",
+        "noHiredStage": "Aucune étape n’est de type Embauché : personne ne peut être embauché via ce parcours.",
+        "multipleHiredStages": "Plusieurs étapes sont de type Embauché. Une embauche aboutit toujours à la première.",
+        "terminalFirstStage": "La première étape clôt l’entonnoir. Les nouvelles candidatures commencent à la première étape : faites-en une étape de travail.",
+        "inactive": "Ce parcours est inactif : les nouvelles demandes de recrutement ne peuvent pas l’utiliser."
+      },
+      "kinds": {
+        "screening": {
+          "label": "Présélection",
+          "description": "Examiner les candidatures et établir une liste restreinte."
+        },
+        "interview": {
+          "label": "Entretien",
+          "description": "Rencontrer le candidat."
+        },
+        "assessment": {
+          "label": "Évaluation",
+          "description": "Tests et mises en situation."
+        },
+        "offer": {
+          "label": "Offre",
+          "description": "Une offre est préparée ou envoyée."
+        },
+        "hired": {
+          "label": "Embauché",
+          "description": "Clôt l’entonnoir par une embauche."
+        },
+        "rejected": {
+          "label": "Refusé",
+          "description": "Clôt l’entonnoir sans embauche."
+        }
+      }
+    },
     "title": "Configuration",
     "description": "Configurez les taxes, les dimensions, les conditions et les données de référence sur lesquelles repose votre comptabilité.",
     "taxLibrary": {

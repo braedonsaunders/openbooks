@@ -1439,6 +1439,240 @@
     }
   },
   "setup": {
+    "builder": {
+      "active": "Ativo",
+      "inactive": "Inativo",
+      "saveChanges": "Salvar alterações",
+      "saved": "Alterações salvas",
+      "discard": "Descartar",
+      "unsaved": "Alterações não salvas",
+      "discardChanges": "Há alterações não salvas no inspetor. Descartá-las?",
+      "moveUp": "Mover para cima",
+      "moveDown": "Mover para baixo",
+      "rowActions": "Ações da linha",
+      "dragToReorder": "Arraste para reordenar",
+      "errors": {
+        "duplicate": "Outro registro já usa esse valor.",
+        "inUse": "Este registro ainda está em uso e não pode ser excluído.",
+        "stale": "A estrutura mudou desde que foi carregada. Recarregue a página e tente novamente.",
+        "network": "Não foi possível contatar o servidor. Verifique sua conexão e tente novamente."
+      }
+    },
+    "reviewBuilder": {
+      "navTitle": "Modelos de avaliação",
+      "title": "Modelos de avaliação",
+      "description": "Monte os formulários preenchidos na autoavaliação e na avaliação do gestor. Cada modelo é uma página: seções, perguntas e escala de notas, com pré-visualização ao vivo.",
+      "newTemplate": "Novo modelo",
+      "emptyTitle": "Ainda não há modelos de avaliação",
+      "emptyDescription": "Crie um modelo e adicione seções e perguntas no construtor. Os ciclos de avaliação são abertos sobre um modelo.",
+      "cardSummary": "{sections, plural, one {# seção} other {# seções}} · {questions, plural, one {# pergunta} other {# perguntas}}",
+      "scaleSummary": "Escala de notas {min}–{max}",
+      "cycleCount": "{count, plural, one {Usado em # ciclo} other {Usado em # ciclos}}",
+      "backToTemplates": "Todos os modelos de avaliação",
+      "outline": "Estrutura do formulário",
+      "templateSettings": "Configurações do modelo",
+      "section": "Seção",
+      "addSection": "Adicionar seção",
+      "addQuestion": "Adicionar pergunta",
+      "addQuestionTo": "Adicionar uma pergunta a {section}",
+      "noSections": "Ainda não há seções. Adicione uma seção e depois as perguntas dela.",
+      "questionCount": "{count, plural, one {# pergunta} other {# perguntas}}",
+      "questionIn": "Pergunta em {section}",
+      "weightShare": "Peso de {share}%",
+      "weightShareLong": "{share}% do peso total do modelo",
+      "required": "Obrigatória",
+      "ratingScale": "Escala de notas",
+      "scaleLabelsPlaceholder": "Digite um rótulo e pressione Enter",
+      "scaleRange": "Notas de {min} a {max}",
+      "scaleInvalid": "Informe uma nota mínima abaixo da máxima para ver a escala.",
+      "weightPlaceholder": "Sem peso",
+      "competencyPlaceholder": "Nenhuma competência",
+      "deleteTemplateTitle": "Excluir modelo",
+      "deleteTemplate": "Excluir o modelo de avaliação “{name}” com todas as seções e perguntas?",
+      "deleteBlocked": "Ciclos de avaliação foram abertos sobre este modelo, então ele é mantido como histórico. Desative-o em vez disso.",
+      "templateDeleted": "Modelo de avaliação excluído",
+      "deleteSectionTitle": "Excluir seção",
+      "deleteSection": "Excluir a seção “{title}”?",
+      "deleteSectionWithQuestions": "Excluir a seção “{title}” e {count, plural, one {sua # pergunta} other {suas # perguntas}}?",
+      "sectionDeleted": "Seção excluída",
+      "deleteQuestionTitle": "Excluir pergunta",
+      "deleteQuestion": "Excluir a pergunta “{prompt}”?",
+      "questionDeleted": "Pergunta excluída",
+      "fields": {
+        "name": "Nome do modelo",
+        "scaleMin": "Nota mínima",
+        "scaleMax": "Nota máxima",
+        "scaleLabels": "Rótulos da escala",
+        "sectionTitle": "Título da seção",
+        "sectionKind": "Tipo de seção",
+        "weight": "Peso",
+        "competency": "Competência",
+        "prompt": "Pergunta",
+        "answerKind": "Tipo de resposta",
+        "required": "Obrigatória"
+      },
+      "help": {
+        "active": "Somente modelos ativos podem abrir novos ciclos de avaliação.",
+        "scaleMin": "A menor nota que um avaliador pode dar, por exemplo 1.",
+        "scaleMax": "A maior nota que um avaliador pode dar, por exemplo 5. A escala abrange no máximo 99 pontos.",
+        "scaleLabels": "Nomes opcionais para a escala, do menor para o maior. Um por ponto ou apenas os dois extremos.",
+        "historyPinned": "{count, plural, one {# ciclo de avaliação foi aberto} other {# ciclos de avaliação foram abertos}} sobre este modelo. As alterações valem para os ciclos abertos daqui em diante; ciclos em andamento mantêm o formulário original.",
+        "weight": "Peso relativo opcional desta seção. O construtor o mostra como parte do peso total de todas as seções.",
+        "competency": "A competência avaliada por esta seção. As avaliações mostram as expectativas de nível ao lado das respostas.",
+        "goalsSection": "Uma seção de metas mostra as metas da pessoa avaliada para o período do ciclo, mesmo sem perguntas.",
+        "required": "Os avaliadores só podem enviar depois de responder as perguntas obrigatórias. Um ciclo precisa de pelo menos uma pergunta obrigatória para ser aberto."
+      },
+      "errors": {
+        "nameRequired": "Informe o nome do modelo.",
+        "titleRequired": "Informe o título da seção.",
+        "promptRequired": "Digite a pergunta.",
+        "weightInvalid": "Informe o peso como um número maior ou igual a zero, ou deixe em branco.",
+        "duplicateName": "Já existe um modelo de avaliação com esse nome."
+      },
+      "issues": {
+        "noRequiredQuestion": "Nenhuma pergunta é obrigatória. Não é possível abrir ciclos de avaliação sobre este modelo até que pelo menos uma seja.",
+        "inactive": "Este modelo está inativo, então nenhum novo ciclo de avaliação pode ser aberto sobre ele.",
+        "emptySection": "“{section}” não tem perguntas, então os avaliadores não terão nada para responder ali."
+      },
+      "sectionKinds": {
+        "competency": {
+          "label": "Competência",
+          "description": "Avaliar uma habilidade ou comportamento."
+        },
+        "goals": {
+          "label": "Metas",
+          "description": "Revisar o progresso nas metas do ciclo."
+        },
+        "freeText": {
+          "label": "Texto livre",
+          "description": "Feedback escrito aberto."
+        }
+      },
+      "answerKinds": {
+        "rating": {
+          "label": "Nota",
+          "description": "Uma nota de {min} a {max}."
+        },
+        "text": {
+          "label": "Resposta escrita",
+          "description": "Uma resposta redigida."
+        },
+        "ratingAndText": {
+          "label": "Nota e comentário",
+          "description": "Uma nota de {min} a {max} com um comentário escrito."
+        }
+      },
+      "preview": {
+        "title": "Pré-visualização do avaliador",
+        "subtitle": "O que a pessoa avaliada e o gestor preenchem",
+        "eyebrow": "Avaliação de desempenho",
+        "empty": "Adicione uma seção para começar a montar o formulário.",
+        "goalsNote": "As metas da pessoa avaliada para o período do ciclo aparecem aqui.",
+        "textPlaceholder": "Resposta escrita…"
+      }
+    },
+    "pipelineBuilder": {
+      "navTitle": "Processos seletivos",
+      "title": "Processos seletivos",
+      "description": "Desenhe as etapas pelas quais os candidatos passam. Cada processo é uma página: suas etapas ordenadas e o que cada uma significa.",
+      "newPipeline": "Novo processo",
+      "emptyTitle": "Ainda não há processos seletivos",
+      "emptyDescription": "Crie um processo e organize suas etapas. As requisições de vaga são abertas sobre um processo; o padrão é usado quando nenhum é escolhido.",
+      "stageCount": "{count, plural, one {# etapa} other {# etapas}}",
+      "requisitionCount": "{count, plural, =0 {Nenhuma requisição de vaga} one {# requisição de vaga} other {# requisições de vaga}}",
+      "default": "Padrão",
+      "defaultPipeline": "Processo padrão",
+      "makeDefault": "Definir como padrão",
+      "madeDefault": "“{name}” agora é o processo padrão",
+      "backToPipelines": "Todos os processos seletivos",
+      "flow": "Jornada do candidato",
+      "stages": "Etapas",
+      "addStage": "Adicionar etapa",
+      "pipelineSettings": "Configurações do processo",
+      "noStages": "Este processo ainda não tem etapas.",
+      "useStandardStages": "Adicionar as etapas padrão",
+      "stageNumber": "Etapa {number}",
+      "activeApplications": "{count, plural, one {# candidato nesta etapa} other {# candidatos nesta etapa}}",
+      "activeApplicationsLabel": "Candidatos nesta etapa",
+      "totalApplicationsLabel": "Candidaturas que já passaram por esta etapa",
+      "kits": "Roteiros de entrevista desta etapa",
+      "manageKits": "Gerenciar roteiros de entrevista",
+      "noKits": "Nenhum roteiro de entrevista está vinculado a esta etapa.",
+      "deletePipelineTitle": "Excluir processo",
+      "deletePipeline": "Excluir o processo seletivo “{name}” e todas as suas etapas?",
+      "deleteBlocked": "Requisições de vaga foram abertas sobre este processo, então ele é mantido como histórico. Desative-o em vez disso.",
+      "deleteDefaultBlocked": "Defina outro processo como padrão antes de excluir este.",
+      "pipelineDeleted": "Processo seletivo excluído",
+      "deleteStageTitle": "Excluir etapa",
+      "deleteStage": "Excluir a etapa “{name}”?",
+      "deleteStageBlocked": "Candidaturas já passaram por esta etapa, então ela é mantida como histórico e não pode ser excluída.",
+      "stageDeleted": "Etapa excluída",
+      "standardStages": {
+        "applied": "Inscrito",
+        "screening": "Triagem",
+        "interview": "Entrevista",
+        "offer": "Proposta",
+        "hired": "Contratado",
+        "rejected": "Reprovado"
+      },
+      "fields": {
+        "name": "Nome da etapa",
+        "pipelineName": "Nome do processo",
+        "key": "Chave da etapa",
+        "kind": "Tipo de etapa"
+      },
+      "help": {
+        "active": "Somente processos ativos podem ser escolhidos para novas requisições de vaga.",
+        "defaultStaysActive": "O processo padrão continua ativo. Defina outro processo como padrão para desativar este.",
+        "isDefault": "Novas requisições de vaga usam este processo quando nenhum é escolhido.",
+        "notDefault": "Usar este processo nas novas requisições de vaga sem processo escolhido.",
+        "historyPinned": "{count, plural, one {# requisição de vaga foi aberta} other {# requisições de vaga foram abertas}} sobre este processo, então ele é mantido como histórico. Desative-o em vez de excluí-lo.",
+        "noRequisitions": "Nenhuma requisição de vaga usa este processo ainda.",
+        "key": "Identificador estável da etapa, usado nos relatórios do funil e no status da candidatura. Não o altere depois que candidatos usarem a etapa.",
+        "terminal": "Esta etapa encerra o funil: os candidatos que chegam a ela saem do processo."
+      },
+      "errors": {
+        "nameRequired": "Informe o nome do processo.",
+        "stageNameRequired": "Informe o nome da etapa.",
+        "keyRequired": "Informe a chave da etapa.",
+        "duplicateKey": "Outra etapa deste processo já usa essa chave.",
+        "duplicateName": "Já existe um processo seletivo com esse nome.",
+        "stageInUse": "Candidaturas já passaram por esta etapa, então ela não pode ser excluída."
+      },
+      "issues": {
+        "noStages": "Ainda não há etapas. Não é possível abrir requisições de vaga sobre um processo sem etapas.",
+        "noHiredStage": "Nenhuma etapa é do tipo Contratado, então ninguém pode ser contratado por este processo.",
+        "multipleHiredStages": "Mais de uma etapa é do tipo Contratado. A contratação sempre cai na primeira.",
+        "terminalFirstStage": "A primeira etapa encerra o funil. Novas candidaturas começam na primeira etapa, então torne-a uma etapa de trabalho.",
+        "inactive": "Este processo está inativo, então novas requisições de vaga não podem usá-lo."
+      },
+      "kinds": {
+        "screening": {
+          "label": "Triagem",
+          "description": "Analisar candidaturas e montar uma lista curta."
+        },
+        "interview": {
+          "label": "Entrevista",
+          "description": "Conhecer o candidato."
+        },
+        "assessment": {
+          "label": "Avaliação técnica",
+          "description": "Testes e exercícios práticos."
+        },
+        "offer": {
+          "label": "Proposta",
+          "description": "Uma proposta está sendo preparada ou foi enviada."
+        },
+        "hired": {
+          "label": "Contratado",
+          "description": "Encerra o funil com uma contratação."
+        },
+        "rejected": {
+          "label": "Reprovado",
+          "description": "Encerra o funil sem contratação."
+        }
+      }
+    },
     "title": "Configuração",
     "description": "Configure impostos, dimensões, prazos e os dados de referência sobre os quais sua contabilidade opera.",
     "taxLibrary": {

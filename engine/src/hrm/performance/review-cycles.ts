@@ -241,13 +241,13 @@ export async function createCycle(input: CreateCycleInput): Promise<CycleDTO> {
     if (!template) {
       throw new HrmPerformanceError(
         "TEMPLATE_NOT_FOUND",
-        `review template ${templateId} is not visible in this organization — create it under /admin/setup first`,
+        `review template ${templateId} is not visible in this organization — create it under Setup → Workforce → Review templates first`,
       );
     }
     if (!template.isActive) {
       throw new HrmPerformanceError(
         "REFUSED",
-        `review template ${templateId} is deactivated — reactivate it under /admin/setup before opening a cycle on it`,
+        `review template ${templateId} is deactivated — reactivate it under Setup → Workforce → Review templates before opening a cycle on it`,
       );
     }
     const row = (await db.execute<StoredCycle>(sql`
@@ -396,13 +396,13 @@ async function loadTemplateSnapshot(
   if (!template) {
     throw new HrmPerformanceError(
       "TEMPLATE_NOT_FOUND",
-      `review template ${templateId} is not visible in this organization — create it under /admin/setup first`,
+      `review template ${templateId} is not visible in this organization — create it under Setup → Workforce → Review templates first`,
     );
   }
   if (!template.isActive) {
     throw new HrmPerformanceError(
       "REFUSED",
-      `review template ${templateId} is deactivated — reactivate it under /admin/setup before opening the cycle`,
+      `review template ${templateId} is deactivated — reactivate it under Setup → Workforce → Review templates before opening the cycle`,
     );
   }
   // The scale must parse before anything instantiates: answers submitted
@@ -472,7 +472,7 @@ export async function openCycle(args: {
     if (requiredCount === 0) {
       throw new HrmPerformanceError(
         "NO_REQUIRED_QUESTION",
-        `review template ${dto.templateId} carries no required question — add a required question to the template under /admin/setup before opening the cycle`,
+        `review template ${dto.templateId} carries no required question — add a required question to the template under Setup → Workforce → Review templates before opening the cycle`,
       );
     }
     const inService = await loadInServiceEmployments(db, orgId, dto.periodEndOn);

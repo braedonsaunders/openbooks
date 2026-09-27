@@ -1439,6 +1439,240 @@
     }
   },
   "setup": {
+    "builder": {
+      "active": "启用",
+      "inactive": "停用",
+      "saveChanges": "保存更改",
+      "saved": "更改已保存",
+      "discard": "放弃",
+      "unsaved": "未保存的更改",
+      "discardChanges": "检查器中有未保存的更改。要放弃吗？",
+      "moveUp": "上移",
+      "moveDown": "下移",
+      "rowActions": "行操作",
+      "dragToReorder": "拖动以重新排序",
+      "errors": {
+        "duplicate": "其他记录已使用该值。",
+        "inUse": "此记录仍在使用中，无法删除。",
+        "stale": "加载后结构已发生变化。请重新加载页面后重试。",
+        "network": "无法连接服务器。请检查网络连接后重试。"
+      }
+    },
+    "reviewBuilder": {
+      "navTitle": "考评模板",
+      "title": "考评模板",
+      "description": "设计自评和上级考评所填写的表单。每个模板一页：分节、问题和评分量表，并带实时预览。",
+      "newTemplate": "新建模板",
+      "emptyTitle": "暂无考评模板",
+      "emptyDescription": "创建模板后，在构建器中添加分节和问题。考评周期基于模板开启。",
+      "cardSummary": "{sections, plural, other {# 个分节}} · {questions, plural, other {# 个问题}}",
+      "scaleSummary": "评分量表 {min}–{max}",
+      "cycleCount": "{count, plural, other {已用于 # 个周期}}",
+      "backToTemplates": "全部考评模板",
+      "outline": "表单大纲",
+      "templateSettings": "模板设置",
+      "section": "分节",
+      "addSection": "添加分节",
+      "addQuestion": "添加问题",
+      "addQuestionTo": "向 {section} 添加问题",
+      "noSections": "暂无分节。请先添加分节，再添加其中的问题。",
+      "questionCount": "{count, plural, other {# 个问题}}",
+      "questionIn": "{section} 中的问题",
+      "weightShare": "权重 {share}%",
+      "weightShareLong": "占模板总权重的 {share}%",
+      "required": "必答",
+      "ratingScale": "评分量表",
+      "scaleLabelsPlaceholder": "输入标签后按回车",
+      "scaleRange": "评分范围 {min} 至 {max}",
+      "scaleInvalid": "请使最低评分小于最高评分以查看量表。",
+      "weightPlaceholder": "无权重",
+      "competencyPlaceholder": "无胜任力",
+      "deleteTemplateTitle": "删除模板",
+      "deleteTemplate": "要删除考评模板“{name}”及其全部分节和问题吗？",
+      "deleteBlocked": "已有考评周期基于此模板开启，因此会作为历史保留。请改为停用。",
+      "templateDeleted": "考评模板已删除",
+      "deleteSectionTitle": "删除分节",
+      "deleteSection": "要删除分节“{title}”吗？",
+      "deleteSectionWithQuestions": "要删除分节“{title}”及其 {count, plural, other {# 个问题}}吗？",
+      "sectionDeleted": "分节已删除",
+      "deleteQuestionTitle": "删除问题",
+      "deleteQuestion": "要删除问题“{prompt}”吗？",
+      "questionDeleted": "问题已删除",
+      "fields": {
+        "name": "模板名称",
+        "scaleMin": "最低评分",
+        "scaleMax": "最高评分",
+        "scaleLabels": "量表标签",
+        "sectionTitle": "分节标题",
+        "sectionKind": "分节类型",
+        "weight": "权重",
+        "competency": "胜任力",
+        "prompt": "问题",
+        "answerKind": "回答类型",
+        "required": "必答"
+      },
+      "help": {
+        "active": "只有启用的模板才能开启新的考评周期。",
+        "scaleMin": "考评人可给出的最低评分，例如 1。",
+        "scaleMax": "考评人可给出的最高评分，例如 5。量表跨度最多 99 分。",
+        "scaleLabels": "量表的可选名称，从低到高。可每个分值一个，或只标两端。",
+        "historyPinned": "已有 {count, plural, other {# 个考评周期}}基于此模板开启。编辑只影响此后开启的周期；进行中的周期保留开启时的表单。",
+        "weight": "此分节的可选相对权重。构建器将其显示为全部分节总权重中的占比。",
+        "competency": "此分节考评的胜任力。考评时会在回答旁显示其等级要求。",
+        "goalsSection": "目标分节会显示被考评人在周期内的目标，即使没有提问。",
+        "required": "回答全部必答问题后考评人才能提交。周期至少需要一个必答问题才能开启。"
+      },
+      "errors": {
+        "nameRequired": "请输入模板名称。",
+        "titleRequired": "请输入分节标题。",
+        "promptRequired": "请输入问题。",
+        "weightInvalid": "权重须为大于或等于零的数字，或留空。",
+        "duplicateName": "已存在同名的考评模板。"
+      },
+      "issues": {
+        "noRequiredQuestion": "尚无必答问题。至少将一个问题设为必答后，才能基于此模板开启考评周期。",
+        "inactive": "此模板已停用，无法开启新的考评周期。",
+        "emptySection": "“{section}”没有问题，考评人在此处无需回答任何内容。"
+      },
+      "sectionKinds": {
+        "competency": {
+          "label": "胜任力",
+          "description": "评价一项技能或行为。"
+        },
+        "goals": {
+          "label": "目标",
+          "description": "回顾周期目标的进展。"
+        },
+        "freeText": {
+          "label": "自由文本",
+          "description": "开放式书面反馈。"
+        }
+      },
+      "answerKinds": {
+        "rating": {
+          "label": "评分",
+          "description": "{min} 至 {max} 的分数。"
+        },
+        "text": {
+          "label": "书面回答",
+          "description": "一段文字回答。"
+        },
+        "ratingAndText": {
+          "label": "评分和评语",
+          "description": "{min} 至 {max} 的分数并附书面评语。"
+        }
+      },
+      "preview": {
+        "title": "考评人预览",
+        "subtitle": "本人和上级需要填写的内容",
+        "eyebrow": "绩效考评",
+        "empty": "添加分节即可开始构建表单。",
+        "goalsNote": "被考评人在周期内的目标会显示在这里。",
+        "textPlaceholder": "书面回答…"
+      }
+    },
+    "pipelineBuilder": {
+      "navTitle": "招聘流程",
+      "title": "招聘流程",
+      "description": "设计候选人经历的阶段。每个流程一页：有序的阶段以及每个阶段的含义。",
+      "newPipeline": "新建流程",
+      "emptyTitle": "暂无招聘流程",
+      "emptyDescription": "创建流程并排列其阶段。招聘需求基于流程开启；未指定时使用默认流程。",
+      "stageCount": "{count, plural, other {# 个阶段}}",
+      "requisitionCount": "{count, plural, =0 {无招聘需求} other {# 个招聘需求}}",
+      "default": "默认",
+      "defaultPipeline": "默认流程",
+      "makeDefault": "设为默认",
+      "madeDefault": "“{name}”现在是默认流程",
+      "backToPipelines": "全部招聘流程",
+      "flow": "候选人流转",
+      "stages": "阶段",
+      "addStage": "添加阶段",
+      "pipelineSettings": "流程设置",
+      "noStages": "此流程还没有阶段。",
+      "useStandardStages": "添加标准阶段",
+      "stageNumber": "第 {number} 阶段",
+      "activeApplications": "{count, plural, other {此阶段有 # 名候选人}}",
+      "activeApplicationsLabel": "此阶段的候选人",
+      "totalApplicationsLabel": "曾处于此阶段的申请",
+      "kits": "此阶段的面试工具包",
+      "manageKits": "管理面试工具包",
+      "noKits": "此阶段未关联面试工具包。",
+      "deletePipelineTitle": "删除流程",
+      "deletePipeline": "要删除招聘流程“{name}”及其全部阶段吗？",
+      "deleteBlocked": "已有招聘需求基于此流程开启，因此会作为历史保留。请改为停用。",
+      "deleteDefaultBlocked": "删除前请先将其他流程设为默认。",
+      "pipelineDeleted": "招聘流程已删除",
+      "deleteStageTitle": "删除阶段",
+      "deleteStage": "要删除阶段“{name}”吗？",
+      "deleteStageBlocked": "此阶段曾有申请，因此会作为历史保留，无法删除。",
+      "stageDeleted": "阶段已删除",
+      "standardStages": {
+        "applied": "已申请",
+        "screening": "筛选",
+        "interview": "面试",
+        "offer": "录用通知",
+        "hired": "已录用",
+        "rejected": "未录用"
+      },
+      "fields": {
+        "name": "阶段名称",
+        "pipelineName": "流程名称",
+        "key": "阶段键",
+        "kind": "阶段类型"
+      },
+      "help": {
+        "active": "只有启用的流程才能用于新的招聘需求。",
+        "defaultStaysActive": "默认流程保持启用。要停用它，请先将其他流程设为默认。",
+        "isDefault": "未指定流程的新招聘需求将使用此流程。",
+        "notDefault": "将此流程用于未指定流程的新招聘需求。",
+        "historyPinned": "已有 {count, plural, other {# 个招聘需求}}基于此流程开启，因此会作为历史保留。请停用而非删除。",
+        "noRequisitions": "尚无招聘需求使用此流程。",
+        "key": "阶段的固定标识，用于漏斗统计和申请状态。候选人开始使用该阶段后请勿更改。",
+        "terminal": "此阶段结束漏斗：到达此阶段的候选人将离开流程。"
+      },
+      "errors": {
+        "nameRequired": "请输入流程名称。",
+        "stageNameRequired": "请输入阶段名称。",
+        "keyRequired": "请输入阶段键。",
+        "duplicateKey": "此流程中的其他阶段已使用该键。",
+        "duplicateName": "已存在同名的招聘流程。",
+        "stageInUse": "此阶段曾有申请，因此无法删除。"
+      },
+      "issues": {
+        "noStages": "尚无阶段。没有阶段的流程无法开启招聘需求。",
+        "noHiredStage": "没有类型为“已录用”的阶段，因此无法通过此流程录用。",
+        "multipleHiredStages": "有多个类型为“已录用”的阶段。录用始终落在第一个。",
+        "terminalFirstStage": "第一个阶段会结束漏斗。新申请从第一个阶段开始，请将其设为工作阶段。",
+        "inactive": "此流程已停用，新的招聘需求无法使用。"
+      },
+      "kinds": {
+        "screening": {
+          "label": "筛选",
+          "description": "审阅申请并确定候选名单。"
+        },
+        "interview": {
+          "label": "面试",
+          "description": "与候选人会面。"
+        },
+        "assessment": {
+          "label": "测评",
+          "description": "测试和工作样本。"
+        },
+        "offer": {
+          "label": "录用通知",
+          "description": "录用通知已在准备或已发出。"
+        },
+        "hired": {
+          "label": "已录用",
+          "description": "以录用结束漏斗。"
+        },
+        "rejected": {
+          "label": "未录用",
+          "description": "以未录用结束漏斗。"
+        }
+      }
+    },
     "title": "设置",
     "description": "配置税务、维度、条款，以及你的账目运行所依赖的参考数据。",
     "taxLibrary": {

@@ -1439,6 +1439,240 @@
     "manageAgentsTitle": "バックグラウンドエージェント"
   },
   "setup": {
+    "builder": {
+      "active": "有効",
+      "inactive": "無効",
+      "saveChanges": "変更を保存",
+      "saved": "変更を保存しました",
+      "discard": "破棄",
+      "unsaved": "未保存の変更",
+      "discardChanges": "インスペクターに未保存の変更があります。破棄しますか？",
+      "moveUp": "上へ移動",
+      "moveDown": "下へ移動",
+      "rowActions": "行の操作",
+      "dragToReorder": "ドラッグして並べ替え",
+      "errors": {
+        "duplicate": "この値は別のレコードで既に使われています。",
+        "inUse": "このレコードは使用中のため削除できません。",
+        "stale": "読み込み後に構成が変更されました。ページを再読み込みしてもう一度お試しください。",
+        "network": "サーバーに接続できません。接続を確認してもう一度お試しください。"
+      }
+    },
+    "reviewBuilder": {
+      "navTitle": "評価テンプレート",
+      "title": "評価テンプレート",
+      "description": "自己評価と上長評価で記入するフォームを作成します。各テンプレートは 1 ページで、セクション・質問・評価尺度をライブプレビュー付きで編集できます。",
+      "newTemplate": "新しいテンプレート",
+      "emptyTitle": "評価テンプレートはまだありません",
+      "emptyDescription": "テンプレートを作成し、ビルダーでセクションと質問を追加します。評価サイクルはテンプレートに基づいて開始されます。",
+      "cardSummary": "{sections, plural, other {# セクション}} · {questions, plural, other {# 問}}",
+      "scaleSummary": "評価尺度 {min}–{max}",
+      "cycleCount": "{count, plural, other {# サイクルで使用}}",
+      "backToTemplates": "すべての評価テンプレート",
+      "outline": "フォームの構成",
+      "templateSettings": "テンプレート設定",
+      "section": "セクション",
+      "addSection": "セクションを追加",
+      "addQuestion": "質問を追加",
+      "addQuestionTo": "{section} に質問を追加",
+      "noSections": "セクションはまだありません。セクションを追加してから質問を追加してください。",
+      "questionCount": "{count, plural, other {# 問}}",
+      "questionIn": "{section} の質問",
+      "weightShare": "ウェイト {share}%",
+      "weightShareLong": "テンプレート全体のウェイトの {share}%",
+      "required": "必須",
+      "ratingScale": "評価尺度",
+      "scaleLabelsPlaceholder": "ラベルを入力して Enter",
+      "scaleRange": "{min} から {max} までの評価",
+      "scaleInvalid": "尺度を表示するには、最低評価を最高評価より小さくしてください。",
+      "weightPlaceholder": "ウェイトなし",
+      "competencyPlaceholder": "コンピテンシーなし",
+      "deleteTemplateTitle": "テンプレートを削除",
+      "deleteTemplate": "評価テンプレート「{name}」とそのすべてのセクション・質問を削除しますか？",
+      "deleteBlocked": "このテンプレートで評価サイクルが開始されているため、履歴として保持されます。代わりに無効にしてください。",
+      "templateDeleted": "評価テンプレートを削除しました",
+      "deleteSectionTitle": "セクションを削除",
+      "deleteSection": "セクション「{title}」を削除しますか？",
+      "deleteSectionWithQuestions": "セクション「{title}」と {count, plural, other {# 問の質問}}を削除しますか？",
+      "sectionDeleted": "セクションを削除しました",
+      "deleteQuestionTitle": "質問を削除",
+      "deleteQuestion": "質問「{prompt}」を削除しますか？",
+      "questionDeleted": "質問を削除しました",
+      "fields": {
+        "name": "テンプレート名",
+        "scaleMin": "最低評価",
+        "scaleMax": "最高評価",
+        "scaleLabels": "尺度ラベル",
+        "sectionTitle": "セクション名",
+        "sectionKind": "セクションの種類",
+        "weight": "ウェイト",
+        "competency": "コンピテンシー",
+        "prompt": "質問",
+        "answerKind": "回答の種類",
+        "required": "必須"
+      },
+      "help": {
+        "active": "有効なテンプレートだけが新しい評価サイクルを開始できます。",
+        "scaleMin": "評価者が付けられる最低の評価（例: 1）。",
+        "scaleMax": "評価者が付けられる最高の評価（例: 5）。尺度の幅は最大 99 ポイントです。",
+        "scaleLabels": "尺度の任意のラベル（低い順）。ポイントごとに 1 つ、または両端のみを指定します。",
+        "historyPinned": "このテンプレートで {count, plural, other {# 件の評価サイクル}}が開始されています。編集は今後開始するサイクルに適用され、進行中のサイクルは開始時のフォームのままです。",
+        "weight": "このセクションの任意の相対ウェイト。ビルダーでは全セクションの合計ウェイトに対する割合として表示されます。",
+        "competency": "このセクションで評価するコンピテンシー。評価画面では回答の横に期待レベルが表示されます。",
+        "goalsSection": "目標セクションは、質問がなくてもサイクル期間中の被評価者の目標を表示します。",
+        "required": "必須の質問に回答するまで評価者は提出できません。サイクルを開始するには必須の質問が 1 問以上必要です。"
+      },
+      "errors": {
+        "nameRequired": "テンプレート名を入力してください。",
+        "titleRequired": "セクション名を入力してください。",
+        "promptRequired": "質問を入力してください。",
+        "weightInvalid": "ウェイトは 0 以上の数値で入力するか、空欄にしてください。",
+        "duplicateName": "同じ名前の評価テンプレートが既に存在します。"
+      },
+      "issues": {
+        "noRequiredQuestion": "必須の質問がありません。質問を 1 問以上必須にするまで、このテンプレートで評価サイクルを開始できません。",
+        "inactive": "このテンプレートは無効のため、新しい評価サイクルを開始できません。",
+        "emptySection": "「{section}」には質問がないため、評価者が回答する項目がありません。"
+      },
+      "sectionKinds": {
+        "competency": {
+          "label": "コンピテンシー",
+          "description": "スキルや行動を評価します。"
+        },
+        "goals": {
+          "label": "目標",
+          "description": "サイクルの目標の進捗を振り返ります。"
+        },
+        "freeText": {
+          "label": "自由記述",
+          "description": "自由形式の記述フィードバック。"
+        }
+      },
+      "answerKinds": {
+        "rating": {
+          "label": "評価",
+          "description": "{min} から {max} までのスコア。"
+        },
+        "text": {
+          "label": "記述回答",
+          "description": "文章による回答。"
+        },
+        "ratingAndText": {
+          "label": "評価とコメント",
+          "description": "{min} から {max} までのスコアと記述コメント。"
+        }
+      },
+      "preview": {
+        "title": "評価者向けプレビュー",
+        "subtitle": "本人と上長が記入する内容",
+        "eyebrow": "業績評価",
+        "empty": "セクションを追加してフォームの作成を始めましょう。",
+        "goalsNote": "サイクル期間中の被評価者の目標がここに表示されます。",
+        "textPlaceholder": "記述回答…"
+      }
+    },
+    "pipelineBuilder": {
+      "navTitle": "採用パイプライン",
+      "title": "採用パイプライン",
+      "description": "候補者が進むステージを設計します。各パイプラインは 1 ページで、順序付きのステージとそれぞれの意味を編集できます。",
+      "newPipeline": "新しいパイプライン",
+      "emptyTitle": "採用パイプラインはまだありません",
+      "emptyDescription": "パイプラインを作成してステージを並べます。求人要求はパイプラインに基づいて開始され、指定がない場合は既定のパイプラインが使われます。",
+      "stageCount": "{count, plural, other {# ステージ}}",
+      "requisitionCount": "{count, plural, =0 {求人要求なし} other {# 件の求人要求}}",
+      "default": "既定",
+      "defaultPipeline": "既定のパイプライン",
+      "makeDefault": "既定に設定",
+      "madeDefault": "「{name}」が既定のパイプラインになりました",
+      "backToPipelines": "すべての採用パイプライン",
+      "flow": "候補者の流れ",
+      "stages": "ステージ",
+      "addStage": "ステージを追加",
+      "pipelineSettings": "パイプライン設定",
+      "noStages": "このパイプラインにはまだステージがありません。",
+      "useStandardStages": "標準ステージを追加",
+      "stageNumber": "ステージ {number}",
+      "activeApplications": "{count, plural, other {このステージの候補者 # 名}}",
+      "activeApplicationsLabel": "このステージの候補者",
+      "totalApplicationsLabel": "このステージを通過した応募",
+      "kits": "このステージの面接キット",
+      "manageKits": "面接キットを管理",
+      "noKits": "このステージに紐づく面接キットはありません。",
+      "deletePipelineTitle": "パイプラインを削除",
+      "deletePipeline": "採用パイプライン「{name}」とそのすべてのステージを削除しますか？",
+      "deleteBlocked": "このパイプラインで求人要求が開始されているため、履歴として保持されます。代わりに無効にしてください。",
+      "deleteDefaultBlocked": "削除する前に、別のパイプラインを既定に設定してください。",
+      "pipelineDeleted": "採用パイプラインを削除しました",
+      "deleteStageTitle": "ステージを削除",
+      "deleteStage": "ステージ「{name}」を削除しますか？",
+      "deleteStageBlocked": "このステージには応募が存在したため、履歴として保持され削除できません。",
+      "stageDeleted": "ステージを削除しました",
+      "standardStages": {
+        "applied": "応募",
+        "screening": "書類選考",
+        "interview": "面接",
+        "offer": "内定",
+        "hired": "採用",
+        "rejected": "不採用"
+      },
+      "fields": {
+        "name": "ステージ名",
+        "pipelineName": "パイプライン名",
+        "key": "ステージキー",
+        "kind": "ステージの種類"
+      },
+      "help": {
+        "active": "有効なパイプラインだけを新しい求人要求に選択できます。",
+        "defaultStaysActive": "既定のパイプラインは有効のままです。無効にするには、別のパイプラインを既定に設定してください。",
+        "isDefault": "パイプラインが指定されていない新しい求人要求はこのパイプラインを使用します。",
+        "notDefault": "パイプライン未指定の新しい求人要求でこのパイプラインを使用します。",
+        "historyPinned": "このパイプラインで {count, plural, other {# 件の求人要求}}が開始されているため、履歴として保持されます。削除せずに無効にしてください。",
+        "noRequisitions": "このパイプラインを使用している求人要求はまだありません。",
+        "key": "ステージの固定識別子で、ファネル集計と応募ステータスに使われます。候補者がこのステージを使い始めたら変更しないでください。",
+        "terminal": "このステージでファネルが終了し、到達した候補者はパイプラインを離れます。"
+      },
+      "errors": {
+        "nameRequired": "パイプライン名を入力してください。",
+        "stageNameRequired": "ステージ名を入力してください。",
+        "keyRequired": "ステージキーを入力してください。",
+        "duplicateKey": "このパイプラインの別のステージが同じキーを使用しています。",
+        "duplicateName": "同じ名前の採用パイプラインが既に存在します。",
+        "stageInUse": "このステージには応募が存在したため、削除できません。"
+      },
+      "issues": {
+        "noStages": "ステージがありません。ステージのないパイプラインでは求人要求を開始できません。",
+        "noHiredStage": "種類が「採用」のステージがないため、このパイプラインでは採用できません。",
+        "multipleHiredStages": "種類が「採用」のステージが複数あります。採用は常に最初のステージに入ります。",
+        "terminalFirstStage": "最初のステージでファネルが終了します。新しい応募は最初のステージから始まるため、作業用のステージにしてください。",
+        "inactive": "このパイプラインは無効のため、新しい求人要求では使用できません。"
+      },
+      "kinds": {
+        "screening": {
+          "label": "書類選考",
+          "description": "応募を確認して候補を絞り込みます。"
+        },
+        "interview": {
+          "label": "面接",
+          "description": "候補者と面談します。"
+        },
+        "assessment": {
+          "label": "適性評価",
+          "description": "テストや実技課題。"
+        },
+        "offer": {
+          "label": "内定",
+          "description": "内定を準備中または送付済み。"
+        },
+        "hired": {
+          "label": "採用",
+          "description": "採用でファネルを終了します。"
+        },
+        "rejected": {
+          "label": "不採用",
+          "description": "採用せずにファネルを終了します。"
+        }
+      }
+    },
     "title": "セットアップ",
     "description": "税、ディメンション、条件、および帳簿の基礎となる参照データを設定します。",
     "laborCosting": {

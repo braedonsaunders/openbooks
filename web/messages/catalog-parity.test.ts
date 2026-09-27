@@ -252,6 +252,9 @@ const COGNATES = new Set<string>([
   'fr:admin.features.scripts.title|Scripts',
   'fr:admin.sandboxes.changeSets.tables.user_scripts|Scripts',
   'fr:admin.setup.wizard.payroll.packs.ca.title|Canada',
+  // French spells section/question and their plurals exactly like English.
+  'fr:admin.setup.reviewBuilder.cardSummary|{sections, plural, one {# section} other {# sections}} · {questions, plural, one {# question} other {# questions}}',
+  'fr:admin.setup.reviewBuilder.questionCount|{count, plural, one {# question} other {# questions}}',
   'ja:admin.features.apiAccess.title|REST API',
   'pt-BR:admin.features.scripts.title|Scripts',
   'pt-BR:admin.sandboxes.changeSets.tables.user_scripts|Scripts',
