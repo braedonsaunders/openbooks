@@ -28,9 +28,9 @@ for (const change of [
       try {
         const first = randomUUID(),
           second = randomUUID();
-        await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,is_default)
-          values(${first},${fx.orgId},'CA','ca_rp','123456789RP0001','First payroll account',true),
-          (${second},${fx.orgId},'CA','ca_rp','123456789RP0002','Second payroll account',false)`);
+        await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,remitter_type,is_default)
+          values(${first},${fx.orgId},'CA','ca_rp','123456789RP0001','First payroll account','regular',true),
+          (${second},${fx.orgId},'CA','ca_rp','123456789RP0002','Second payroll account','regular',false)`);
         if (change === "profile" || change === "delete-profile")
           await db.execute(sql`update employee_payroll_profiles set filing_account_id=${first}
           where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
@@ -108,17 +108,12 @@ test(
       ).rows[0]!;
       assert.equal(stub.filing_account_source, "calculation");
       const account = randomUUID();
-      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,is_default)
-      values(${account},${fx.orgId},'CA','ca_rp','123456789RP0001','Later account',true)`);
+      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,remitter_type,is_default)
+      values(${account},${fx.orgId},'CA','ca_rp','123456789RP0001','Later account','regular',true)`);
       assert.deepEqual(await t4Slips(fx.orgId, 2026), before);
-      assert.equal(
-        (
-          await payrollRemittanceSummary(fx.orgId, {
-            from: "2026-07-01",
-            to: "2026-07-31",
-          })
-        )[0]?.filingAccount.id,
-        null,
+      await assert.rejects(
+        payrollRemittanceSummary(fx.orgId, { from: "2026-07-01", to: "2026-07-31" }),
+        /no filing account with a declared remitter type/,
       );
       await assert.rejects(
         db.execute(
@@ -278,10 +273,10 @@ test(
       const account = randomUUID(),
         foreign = randomUUID(),
         us = randomUUID();
-      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,is_default)
-      values(${account},${fx.orgId},'CA','ca_rp','123456789RP0001','Original account',true),
-        (${foreign},${other.orgId},'CA','ca_rp','123456789RP0001','Other tenant',true),
-        (${us},${fx.orgId},'US','us_ein','12-3456789','Other country',false)`);
+      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,remitter_type,is_default)
+      values(${account},${fx.orgId},'CA','ca_rp','123456789RP0001','Original account','regular',true),
+        (${foreign},${other.orgId},'CA','ca_rp','123456789RP0001','Other tenant','regular',true),
+        (${us},${fx.orgId},'US','us_ein','12-3456789','Other country','regular',false)`);
       const { input } = await calculatedRun(fx);
       await commitPayRun(input);
       const before = await t4Slips(fx.orgId, 2026);

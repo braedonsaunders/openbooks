@@ -12,6 +12,8 @@ import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
 import { seedUsSuiAccount } from "./filing-test-fixtures.ts";
+import { US_PACK_RATES } from "./us/rates.ts";
+import { upsertStatutoryRate } from "./statutory-rates.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -60,20 +62,12 @@ async function usPayrollOrg(): Promise<Fixture> {
         netPayAccountId: netPayable,
         wagesTo: "expense",
         countries: ["US"],
-        // Presence-only SUI for every work state below: a live-but-
-        // unconfigured SUI refuses by name at calculate, and these tests
-        // assert W-2 boxes, never SUI amounts.
         us: {
           // Presence-only FUTA the same way: the 2026 Schedule A is not
           // transcribed, so an unconfigured FUTA refuses by name; the
           // ordinary 0.6% full-credit figure is the TEST entering a number
           // as an employer would, and no expectation asserts a FUTA amount.
           futaRate: "0.006",
-          sui: Object.fromEntries(
-            ["NY", "AZ", "CA", "TX"].map((state) => [
-              state, { rate: "0.03", wageBase: "7000" },
-            ]),
-          ),
         },
       },
     })}::jsonb where id = ${org.orgId}`);
@@ -142,10 +136,11 @@ async function usEmployee(fx: Fixture, subsidiaryId: string, name: string, opts:
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
   const employmentId = await seedWorkerEmployment(fx.orgId, id, subsidiaryId);
-  // Every hire works under the work state's contributory SUI account —
-  // reusing the test's own account where it created one, so box 15 keeps
-  // its exact asserted number. A run with no recorded method refuses.
+  // Reuse the work state's account so box 15 keeps the asserted number.
   const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, opts.state);
+  await upsertStatutoryRate({ orgId: fx.orgId, actorId: fx.actorId, rates: US_PACK_RATES,
+    rateKey: "us_sui", region: opts.state, filingAccountId: suiAccountId, taxYear: 2026,
+    values: { rate: "0.03", wageBase: "7000" } });
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            country, province, pay_basis, filing_status,
@@ -275,6 +270,9 @@ test(
         .subsidiary_id;
       const employee = await usEmployee(fx, subsidiary, "Mover Max", { state: "AZ" });
       await runAndCommit(fx, "2026-07-05", "2026-07-18");
+      await upsertStatutoryRate({ orgId: fx.orgId, actorId: fx.actorId, rates: US_PACK_RATES,
+        rateKey: "us_sui", region: "CA", filingAccountId: null, taxYear: 2026,
+        values: { rate: "0.03", wageBase: "7000" } });
       await db.execute(sql`
         update employee_payroll_profiles set province = 'CA', updated_by = ${fx.actorId}
          where org_id = ${fx.orgId} and employee_party_id = ${employee}`);
