@@ -34,7 +34,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?payment-links-boundary-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-test.after(() => hooks.deregister())
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sealJson } = await import("@openbooks/engine/src/platform/secrets.ts");
@@ -50,6 +49,7 @@ function request(body: unknown): Request {
   });
 }
 
+test.after(() => hooks.deregister())
 test("payment-link API rejects a malformed bank reference before any link write", async () => {
   const { org, actorId } = await withBypassContext(async () => {
     const seeded = await createScratchOrg();

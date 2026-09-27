@@ -58,7 +58,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?bom-route-concurrency-test";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-test.after(() => hooks.deregister())
 
 const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
@@ -110,6 +109,7 @@ async function emptyBom(orgId: string, assemblyItemId: string) {
     delete from bom_components where org_id = ${orgId} and assembly_item_id = ${assemblyItemId}`);
 }
 
+test.after(() => hooks.deregister())
 test("two concurrent empty-BOM replacements serialize: one recipe, one 409", async () => {
   const org = await createScratchOrg();
   try {

@@ -42,7 +42,6 @@ const hooks = registerHooks({
 const routeUrl = './route.ts?item-price-history'
 const { POST, PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
 const { resolveItemPrice } = await import('../../../../../lib/item-pricing.ts')
-test.after(() => hooks.deregister())
 
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
@@ -125,6 +124,7 @@ async function breakPrices(f: Fixture, scheduleId: string) {
   return (await db.execute<{ unit_price: string }>(sql`select unit_price::text from item_price_breaks where org_id=${f.orgId} and schedule_id=${scheduleId}`)).rows.map((row) => row.unit_price)
 }
 
+test.after(() => hooks.deregister())
 test('a retroactive price change without a reason is refused and changes nothing', async () => {
   const f = await fixture()
   try {

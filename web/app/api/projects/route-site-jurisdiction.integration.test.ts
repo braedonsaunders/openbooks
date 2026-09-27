@@ -45,7 +45,6 @@ const hooks = registerHooks({
 
 const { POST } = await import("./route.ts");
 const { PATCH } = await import("./[id]/route.ts");
-test.after(() => hooks.deregister())
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
@@ -78,6 +77,7 @@ const siteOf = async (id: string) =>
     )
   ).rows[0]!.site_jurisdiction;
 
+test.after(() => hooks.deregister())
 test("project creation refuses an unknown site jurisdiction without writing", async () => {
   const org = await fixture();
   try {
