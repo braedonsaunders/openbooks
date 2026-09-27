@@ -9,7 +9,10 @@ import { BUDGET_KINDS, loadBudgetScenario } from '../../../../lib/budgets'
 import { BudgetMutationError } from '../../../../lib/budget-mutations'
 import { scenarioOutOfScopeSubsidiaryNames } from '../../../../lib/budget-scope'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "bookId": z.string().optional(), "description": z.string().optional(), "expectedRevision": z.unknown().optional(), "fiscalYear": z.unknown().optional(), "kind": z.string().optional(), "name": z.string().optional() }).passthrough();
+const PATCHBodySchema1 = z.object({
+  bookId: z.string().uuid().optional(), description: z.string().nullable().optional(), expectedRevision: z.number().int().positive(),
+  fiscalYear: z.number().int().optional(), kind: z.enum(['budget', 'forecast']).optional(), name: z.string().trim().min(1).optional(),
+});
 
 
 
@@ -32,7 +35,7 @@ export const PATCH = defineRoute({
   permission: 'budgets.manage',
   feature: 'budgets',
   body: PATCHBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const user = gate.user

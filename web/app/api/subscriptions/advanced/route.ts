@@ -23,7 +23,18 @@ import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ "action": z.unknown().optional(), "billFromUnbilledBoundary": z.boolean().optional(), "billingTiming": z.unknown().optional(), "changeSummary": z.unknown().optional(), "components": z.array(z.unknown()).optional(), "currency": z.unknown().optional(), "description": z.unknown().optional(), "effectiveFrom": z.unknown().optional(), "effectiveOn": z.string().optional(), "idempotencyKey": z.string().optional(), "interval": z.unknown().optional(), "intervalCount": z.unknown().optional(), "name": z.unknown().optional(), "planId": z.unknown().optional(), "planVersionId": z.unknown().optional(), "quantity": z.unknown().optional(), "renewalPolicy": z.unknown().optional(), "renewalTermMonths": z.unknown().optional(), "subscriptionId": z.string().optional(), "termEndsOn": z.string().optional(), "termStartsOn": z.unknown().optional(), "trialEndsOn": z.string().optional(), "type": z.string().optional(), "unitPrice": z.unknown().optional(), "versionId": z.unknown().optional() }).passthrough();
+const planComponentSchema = z.object({
+  componentKey: z.string().min(1), name: z.string().min(1), description: z.string().nullable().optional(),
+  quantity: z.string().optional(), unitPrice: z.string(), incomeAccountId: z.string().uuid().nullable().optional(),
+  itemId: z.string().uuid().nullable().optional(), taxCodeId: z.string().uuid().nullable().optional(), isOptional: z.boolean().optional(),
+});
+const periodCountSchema = z.union([z.number().int().positive(), z.string().regex(/^[1-9]\d*$/)]).nullable().optional();
+const POSTBodySchema1 = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('createVersion'), planId: z.string().uuid(), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), components: z.array(planComponentSchema).optional(), currency: z.string().nullable().optional(), interval: z.enum(['weekly', 'monthly', 'quarterly', 'annually']).optional(), intervalCount: z.union([z.number().int().positive(), z.string().regex(/^[1-9]\d*$/)]).optional(), billingTiming: z.enum(['advance', 'arrears']).optional(), changeSummary: z.string().nullable().optional(), name: z.string().nullable().optional(), description: z.string().nullable().optional() }),
+  z.object({ action: z.literal('publishVersion'), versionId: z.string().uuid() }),
+  z.object({ action: z.literal('activateLifecycle'), subscriptionId: z.string().uuid(), planVersionId: z.string().uuid(), termStartsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), termEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), trialEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), renewalPolicy: z.enum(['auto', 'manual', 'none']).optional(), renewalTermMonths: periodCountSchema, billFromUnbilledBoundary: z.boolean().nullable().optional() }),
+  z.object({ action: z.literal('amend'), subscriptionId: z.string().uuid(), type: z.enum(['add_component', 'remove_component', 'change_component', 'change_term', 'change_timing', 'renew', 'coterm']), effectiveOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), idempotencyKey: z.string().uuid(), quantity: z.string().nullable().optional(), unitPrice: z.string().nullable().optional(), renewalTermMonths: periodCountSchema, reason: z.string().nullable().optional(), componentKey: z.string().nullable().optional(), name: z.string().nullable().optional(), description: z.string().nullable().optional(), incomeAccountId: z.string().uuid().nullable().optional(), itemId: z.string().uuid().nullable().optional(), taxCodeId: z.string().uuid().nullable().optional(), termEndsOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), billingTiming: z.enum(['advance', 'arrears']).nullable().optional(), anchorSubscriptionId: z.string().uuid().nullable().optional() }),
+]);
 
 
 
@@ -56,7 +67,7 @@ export const POST = defineRoute({
   permission: 'ar.create',
   feature: 'advancedSubscriptions',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const authz = routeAuthz;
 
     const body = routeBody;

@@ -13,11 +13,14 @@ import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../../lib/
 import { isUuid } from '../../../../lib/list-params'
 import { auditSetupChange } from '../../../../lib/setup/audit'
 
-const createReportBodySchema = z.looseObject({
-  name: z.string().optional(),
-  description: z.string().nullable().optional(),
-  query: z.unknown().optional(),
-  layout: z.unknown().optional(),
+const reportLayoutSchema = z.object({
+  paperSize: z.enum(['letter', 'legal', 'a4']).optional(),
+  orientation: z.enum(['portrait', 'landscape']).optional(), marginMm: z.number().finite().optional(),
+  showSummary: z.boolean().optional(), density: z.enum(['compact', 'standard']).optional(),
+}).nullable().optional();
+const createReportBodySchema = z.object({
+  name: z.string().trim().min(1), description: z.string().nullable().optional(),
+  query: z.json(), layout: reportLayoutSchema,
 })
 
 export const runtime = 'nodejs'

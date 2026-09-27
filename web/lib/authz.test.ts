@@ -203,7 +203,7 @@ test("API routes never use the redirecting page authorization gate", async () =>
 test("a signed-out GET returns a 401 JSON response without reaching the database", async () => {
   reset("unauthorized");
 
-  const response = await GET();
+  const response = await GET(new Request("http://openbooks.test/api/dunning"));
 
   await assertJsonError(response, 401, "unauthorized");
   assert.deepEqual(routeState.gateCalls, ["documents.manage"]);
@@ -228,7 +228,7 @@ test("a forbidden write returns a 403 JSON response without parsing or writing",
 test("an allowed GET continues through the handler", async () => {
   reset("allowed");
 
-  const response = await GET();
+  const response = await GET(new Request("http://openbooks.test/api/dunning"));
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { policies: [] });

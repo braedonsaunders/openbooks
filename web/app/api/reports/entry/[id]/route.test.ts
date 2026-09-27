@@ -29,6 +29,31 @@ const routeState: RouteState = {
   globalThis as typeof globalThis & Record<string, unknown>
 ).openbooksReportsEntryNextResponse = NextResponse;
 
+const reportsEntryAuthzStub = `
+  const state = globalThis[Symbol.for('openbooks.reports-entry-route-test')]
+  const NextResponse = globalThis.openbooksReportsEntryNextResponse
+  function grants(permission) {
+    if (state.permissions === null) return true
+    const held = new Set(state.permissions)
+    return held.has('*') || held.has(permission) || held.has(permission.split('.')[0] + '.*')
+  }
+  function authz() {
+    return { user: { orgId: 'org-1', id: 'user-1' }, permissions: new Set(state.permissions ?? ['*']), allowedSubsidiaryIds: state.allowedSubsidiaryIds }
+  }
+  export async function guardPermission(permission) {
+    return grants(permission) ? authz() : NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
+  }
+  export async function getAuthz() { return authz() }
+  export function can(gate, permission) {
+    return gate.permissions.has('*') || gate.permissions.has(permission) || gate.permissions.has(permission.split('.')[0] + '.*')
+  }
+  export function unauthorized() { return NextResponse.json({ error: 'unauthorized' }, { status: 401 }) }
+  export function guardUnrestrictedScope() { return null }
+  export async function guardRootSubsidiaryScope() { return null }
+  export function guardSubsidiaryScope() { return null }
+  export function subsidiariesInScope() { return [] }
+`;
+
 /** Flatten a drizzle SQL chunk into its template text for scripted DB replies. */
 function sqlText(query: unknown): string {
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks;
@@ -51,87 +76,18 @@ function sqlText(query: unknown): string {
 stubModules({
   navigation: false,
   intl: false,
-  authz: false,
+  authz: reportsEntryAuthzStub,
   features: false,
   extra: {
-    "../../../../../lib/authz": `
+    "./authz": reportsEntryAuthzStub,
+    "@/lib/feature-gates": `
       const state = globalThis[Symbol.for('openbooks.reports-entry-route-test')]
       const NextResponse = globalThis.openbooksReportsEntryNextResponse
-      function grants(permission) {
-        // Null permissions = legacy unrestricted caller. Otherwise the role
-        // holds exactly the listed grants (plus '*' wildcard holders).
-        if (state.permissions === null) return true
-        const held = new Set(state.permissions)
-        if (held.has('*')) return true
-        if (held.has(permission)) return true
-        const [scope] = permission.split('.')
-        return held.has(scope + '.*')
-      }
-      function authz() {
-        return {
-          user: { orgId: 'org-1', id: 'user-1' },
-          permissions: new Set(state.permissions ?? ['*']),
-          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
+      export async function guardFeaturePermission(permission) {
+        if (state.permissions === null || state.permissions.includes('*') || state.permissions.includes(permission) || state.permissions.includes(permission.split('.')[0] + '.*')) {
+          return { user: { orgId: 'org-1', id: 'user-1' }, permissions: new Set(state.permissions ?? ['*']), allowedSubsidiaryIds: state.allowedSubsidiaryIds }
         }
-      }
-      export async function guardPermission(permission) {
-        if (!grants(permission)) {
-          return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
-        }
-        return authz()
-      }
-      export async function getAuthz() {
-        return authz()
-      }
-      export function can(gate, permission) {
-        const held = gate.permissions
-        if (held.has('*')) return true
-        if (held.has(permission)) return true
-        const [scope] = permission.split('.')
-        return held.has(scope + '.*')
-      }
-      export function unauthorized() {
-        return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-      }
-    `,
-    "./authz": `
-      const state = globalThis[Symbol.for('openbooks.reports-entry-route-test')]
-      const NextResponse = globalThis.openbooksReportsEntryNextResponse
-      function grants(permission) {
-        // Null permissions = legacy unrestricted caller. Otherwise the role
-        // holds exactly the listed grants (plus '*' wildcard holders).
-        if (state.permissions === null) return true
-        const held = new Set(state.permissions)
-        if (held.has('*')) return true
-        if (held.has(permission)) return true
-        const [scope] = permission.split('.')
-        return held.has(scope + '.*')
-      }
-      function authz() {
-        return {
-          user: { orgId: 'org-1', id: 'user-1' },
-          permissions: new Set(state.permissions ?? ['*']),
-          allowedSubsidiaryIds: state.allowedSubsidiaryIds,
-        }
-      }
-      export async function guardPermission(permission) {
-        if (!grants(permission)) {
-          return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
-        }
-        return authz()
-      }
-      export async function getAuthz() {
-        return authz()
-      }
-      export function can(gate, permission) {
-        const held = gate.permissions
-        if (held.has('*')) return true
-        if (held.has(permission)) return true
-        const [scope] = permission.split('.')
-        return held.has(scope + '.*')
-      }
-      export function unauthorized() {
-        return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+        return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
       }
     `,
     "@openbooks/engine/src/platform/db.ts": `
@@ -229,6 +185,7 @@ stubModules({
           throw new Error('unexpected database query: ' + text)
         },
       }
+      export async function withBypassContext(work) { return work() }
     `,
   },
 });

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '../../../../../testing/stub-modules'
 
 interface ReconciliationValues {
   throughDate: string
@@ -21,6 +22,7 @@ interface RouteState {
 }
 
 const stateKey = Symbol.for('openbooks.reconciliation-route-test')
+stubModules({ authz: true })
 const routeState: RouteState = {
   committed: {
     throughDate: '2026-08-20',
@@ -188,10 +190,11 @@ const mockUrls = new Map<string, string>([
   ['drizzle-orm', 'mock:drizzle'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
+  ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../util', 'mock:util'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     // Exercise the extracted native adjustment service against the original
     // serialized SQL fake; directory-scoped so module splits keep using it.
@@ -211,7 +214,6 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?reconciliation-concurrency-test'
 const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
 
 const RECONCILIATION_ID = '00000000-0000-4000-8000-000000000001'
 

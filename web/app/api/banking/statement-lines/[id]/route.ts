@@ -5,7 +5,10 @@ import { NextResponse } from 'next/server'
 import { clearPossibleDuplicateFlag, excludeStatementLine, restoreStatementLine } from '@openbooks/engine/src/banking/banking.ts'
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "action": z.string().optional(), "reason": z.string().optional() }).passthrough();
+const PATCHBodySchema1 = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('exclude'), reason: z.string().trim().min(1) }),
+  z.object({ action: z.literal('restore') }), z.object({ action: z.literal('clear-duplicate') }),
+]);
 
 
 
@@ -16,7 +19,7 @@ export const PATCH = defineRoute({
   permission: 'banking.reconcile',
   feature: 'banking',
   body: PATCHBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { user } = gate

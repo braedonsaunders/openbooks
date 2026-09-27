@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
+import { stubModules } from "../../../../../../testing/stub-modules";
+stubModules({ authz: true });
 
 interface SignOffState {
   calls: string[];
@@ -48,12 +50,13 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/feature-gates", "mock:feature-gates"],
+  ["@/lib/feature-gates", "mock:feature-gates"],
   ["@openbooks/engine/src/banking/banking.ts", "mock:banking"],
 ]);
 
 let postRoute: typeof import("./route.ts").POST | undefined;
 if (!isVitest) {
-  const hooks = registerHooks({
+  registerHooks({
     resolve(specifier, _context, nextResolve) {
       const mocked = mockUrls.get(specifier);
       if (mocked) return { url: mocked, shortCircuit: true };
@@ -68,7 +71,6 @@ if (!isVitest) {
 
   const routeUrl = "./route.ts?signoff-typed-body";
   postRoute = (await import(routeUrl) as typeof import("./route.ts")).POST;
-  hooks.deregister();
 }
 
 const RECON_ID = "01a0ad1a-5e43-768c-a165-c7c2ff7ba17a";
@@ -98,7 +100,8 @@ test("a sign-off crash stays a typed 500, never an empty body", async () => {
   const res = (await post(RECON_ID)) as NextResponse;
   assert.equal(res.status, 500);
   const body = (await res.json()) as { error?: string };
-  assert.equal(body.error, "Internal error");
+  assert.match(body.error ?? "", /^An unexpected error occurred\./);
+  assert.equal(body.error?.includes("db exploded"), false);
 });
 
 test("sign-off refuses a malformed id without touching the engine", async () => {

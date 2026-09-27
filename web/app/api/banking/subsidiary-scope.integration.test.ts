@@ -378,7 +378,7 @@ test('bank feeds hide and refuse out-of-scope connections', { skip: !enabled }, 
   try {
     authorize(fx, 'A')
     const base = 'https://openbooks.test/api/banking/bank-feeds'
-    const listed = (await (await feeds.GET()).json()) as { connections: { id: string }[] }
+    const listed = (await (await feeds.GET(new Request(base))).json()) as { connections: { id: string }[] }
     assert.ok(!listed.connections.some((c) => c.id === fx.feedB), 'other entity connection is hidden')
     const created = await errorOf(await feeds.POST(postJson(base, {
       name: 'Cross feed', provider: 'manual', accountId: fx.bankB,
@@ -402,7 +402,7 @@ test('bank feeds hide and refuse out-of-scope connections', { skip: !enabled }, 
     assert.equal(row, 'B feed')
     // In-scope connections still manage end to end.
     authorize(fx, 'all')
-    const listedAll = (await (await feeds.GET()).json()) as { connections: { id: string }[] }
+    const listedAll = (await (await feeds.GET(new Request(base))).json()) as { connections: { id: string }[] }
     assert.ok(listedAll.connections.some((c) => c.id === fx.feedB))
   } finally { state.gate = null; await dropScratchOrg(fx.orgId) }
 })
@@ -412,7 +412,7 @@ test('sftp servers require unrestricted scope', { skip: !enabled }, async () => 
   try {
     authorize(fx, 'A')
     const base = 'https://openbooks.test/api/banking/sftp'
-    const listed = (await (await sftpServers.GET()).json()) as { servers: unknown[] }
+    const listed = (await (await sftpServers.GET(new Request(base))).json()) as { servers: unknown[] }
     assert.deepEqual(listed.servers, [])
     const created = await errorOf(await sftpServers.POST(postJson(base, { name: 'Scope host' })))
     assert.equal(created.status, 403)
@@ -435,7 +435,7 @@ test('sftp schedules hide and refuse out-of-scope bindings', { skip: !enabled },
   try {
     authorize(fx, 'A')
     const base = 'https://openbooks.test/api/banking/sftp/schedules'
-    const listed = (await (await sftpSchedules.GET()).json()) as { schedules: { id: string }[] }
+    const listed = (await (await sftpSchedules.GET(new Request(base))).json()) as { schedules: { id: string }[] }
     const ids = listed.schedules.map((s) => s.id)
     assert.ok(ids.includes(fx.scheduleA), 'own schedule is listed')
     assert.ok(!ids.includes(fx.scheduleB), 'other entity schedule is hidden')

@@ -21,7 +21,36 @@ import { canReadDocumentKind } from "../../../../lib/flow-subject-authz.ts";
 import { lockedDocumentScopeDenied } from "../../../../lib/document-scope.ts";
 import { type DocumentEditCurrent, type DocumentEditInput } from "../../../../../engine/src/ledger/document-input.ts";
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "expectedUpdatedAt": z.unknown().optional(), "lines": z.array(z.unknown()).optional(), "subsidiaryId": z.unknown().optional() }).passthrough();
+const jsonObjectSchema = z.record(z.string(), z.json());
+const documentLineSchema = z.object({
+  lineId: z.string().uuid().nullable().optional(), accountId: z.string().uuid(),
+  amount: z.string(), description: z.string().nullable().optional(),
+  taxCodeId: z.string().uuid().nullable().optional(), taxGroupId: z.string().uuid().nullable().optional(),
+  taxOverridden: z.boolean().optional(), taxAmount: z.string().nullable().optional(),
+  itemId: z.string().uuid().nullable().optional(), quantity: z.string().nullable().optional(),
+  unit: z.string().nullable().optional(), unitPrice: z.string().nullable().optional(),
+  partyId: z.string().uuid().nullable().optional(), departmentId: z.string().uuid().nullable().optional(),
+  projectId: z.string().uuid().nullable().optional(), locationId: z.string().uuid().nullable().optional(),
+  classId: z.string().uuid().nullable().optional(), stockLocationId: z.string().uuid().nullable().optional(),
+  inventoryReturnSource: z.object({ movementId: z.string().uuid(), lotId: z.string().uuid().nullable().optional(), serialId: z.string().uuid().nullable().optional() }).nullable().optional(),
+  extraDims: z.record(z.string(), z.string().nullable()).optional(), custom: jsonObjectSchema.optional(),
+  distributionKey: z.string().uuid().nullable().optional(), distributionGroupId: z.string().uuid().nullable().optional(),
+  distributionLocked: z.boolean().nullable().optional(),
+});
+const PATCHBodySchema1 = z.object({
+  expectedUpdatedAt: z.string().min(1).optional(), lines: z.array(documentLineSchema).optional(),
+  subsidiaryId: z.string().uuid().nullable().optional(),
+  partyId: z.string().uuid().nullable().optional(), paymentCardId: z.string().uuid().nullable().optional(),
+  documentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(), dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  referenceNumber: z.string().nullable().optional(), memo: z.string().nullable().optional(),
+  postingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  departmentId: z.string().uuid().nullable().optional(), projectId: z.string().uuid().nullable().optional(),
+  locationId: z.string().uuid().nullable().optional(), classId: z.string().uuid().nullable().optional(),
+  extraDims: z.record(z.string(), z.string().nullable()).optional(), expectedPayDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  paymentHoldReason: z.string().nullable().optional(), internalNotes: z.string().nullable().optional(),
+  billingMethod: z.string().nullable().optional(), isFinalInvoice: z.boolean().optional(), currency: z.string().optional(),
+  custom: jsonObjectSchema.optional(), unsplitDistributionGroups: z.array(z.string().uuid()).optional(),
+});
 
 
 
@@ -70,7 +99,7 @@ export const GET = defineRoute({
 export const PATCH = defineRoute({
   public: 'session',
   body: PATCHBodySchema1,
-  handler: async ({ request: req, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const authz = await getAuthz()
     if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
@@ -223,7 +252,7 @@ export const DELETE = defineRoute({
         }
       }
     try {
-        const routeBodySchema2 = z.object({ "reason": z.string().optional(), "expectedUpdatedAt": z.string().optional() }).passthrough();
+        const routeBodySchema2 = z.object({ reason: z.string().optional(), expectedUpdatedAt: z.string().min(1) });
     const parsedBody2 = await parseJsonBody(req, routeBodySchema2);
         if (!parsedBody2.ok) return parsedBody2.response;
         const body = (parsedBody2.data) as { reason?: string; expectedUpdatedAt?: string }

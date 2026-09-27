@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
+import { stubModules } from "../../../../../../testing/stub-modules";
+stubModules({ authz: true });
 import { test } from "node:test";
 const state = { allowed: true, calls: [] as unknown[][], refusal: "" };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[
   Symbol.for("control-loss-route")
 ] = state;
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, next) {
     // Resolve framework imports against this real file, not the virtual auth URL.
     if (specifier === "next/server" && context.parentURL?.startsWith("mock:"))
@@ -17,7 +19,7 @@ const hooks = registerHooks({
     if (specifier === "@openbooks/engine/src/platform/db.ts")
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export const db={execute:async()=>({rows:[]})}",
+        url: "data:text/javascript,export const db={execute:async()=>({rows:[]})};export async function withBypassContext(work){return work()};export async function withOrgTransaction(_orgId,work){return work()}",
       };
     if (specifier === "@/lib/api/json")
       return next(
@@ -48,7 +50,6 @@ const hooks = registerHooks({
   },
 });
 const route = await import("./route.ts");
-hooks.deregister();
 const id = "00000000-0000-4000-8000-000000000001";
 const context = { params: Promise.resolve({ id }) };
 const request = (body: unknown) =>

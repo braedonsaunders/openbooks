@@ -49,7 +49,7 @@ const { GET: getDefinition } = await import("./[id]/route.ts");
 type Definition = { id: string; slug: string; report_type: string };
 
 async function list(): Promise<Definition[]> {
-  const response = await withOrgContext(state.orgId, () => listDefinitions());
+  const response = await withOrgContext(state.orgId, () => listDefinitions(new Request("http://reports.test/api/reports/definitions")));
   assert.equal(response.status, 200);
   const body = (await response.json()) as { definitions: Definition[] };
   return body.definitions;

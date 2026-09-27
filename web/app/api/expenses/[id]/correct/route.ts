@@ -14,7 +14,9 @@ import { DocumentEditError, requireDocumentEditRevision, validateCorrectionReaso
 import { type ExpenseCorrectionBody, createExpenseCorrectionDraft } from '../../../../../lib/expense-edit'
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ "amendmentReason": z.unknown().optional(), "expectedUpdatedAt": z.unknown().optional() }).passthrough();
+const POSTBodySchema1 = z.object({
+  amendmentReason: z.string().trim().min(1), expectedUpdatedAt: z.string().min(1),
+});
 
 
 
@@ -37,7 +39,7 @@ export const POST = defineRoute({
   permission: 'expenses.create',
   feature: 'expenses',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const user = gate.user

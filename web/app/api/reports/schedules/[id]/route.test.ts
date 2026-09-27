@@ -92,9 +92,20 @@ const updatedSchedule = { ...existingSchedule, active: false, updated_by: USER_I
 stubModules({
   navigation: false,
   intl: false,
-  authz: false,
+  authz: `
+    export async function getAuthz() {
+      return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, permissions: new Set(['reports.create', 'reports.read', 'reports.schedule']), allowedSubsidiaryIds: null }
+    }
+    export async function guardPermission() { return getAuthz() }
+    export function guardUnrestrictedScope() { return null }
+    export async function guardRootSubsidiaryScope() { return null }
+    export function can() { return true }
+  `,
   features: false,
   extra: {
+    "@/lib/feature-gates": `export async function guardFeaturePermission() {
+      return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
+    }`,
     "@openbooks/engine/src/platform/db.ts": `
       const state = globalThis[Symbol.for('openbooks.report-schedule-route-test')]
       const sqlText = globalThis.openbooksSqlTextReportSchedule
@@ -130,6 +141,7 @@ stubModules({
           state.pending = []
         }
       }
+      export async function withBypassContext(work) { return work() }
       export const schema = {}
       export const pool = {}
       export const env = {}

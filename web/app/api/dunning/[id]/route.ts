@@ -10,7 +10,17 @@ import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal"
 import { isUuid } from "../../../../lib/list-params";
 import { isValidEmailAddress } from "@openbooks/emails";
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "appliesToKind": z.string().optional(), "gracePeriodDays": z.unknown().optional(), "isActive": z.boolean().optional(), "minBalance": z.unknown().optional(), "name": z.string().optional(), "replyTo": z.string().optional(), "stages": z.unknown().optional() }).passthrough();
+const stageSchema = z.object({
+  sequence: z.number().int(), name: z.string().min(1), offsetDays: z.number().int(),
+  subjectTemplate: z.string(), bodyTemplate: z.string(), escalate: z.boolean().optional(),
+});
+const gracePeriodDaysSchema = z.union([z.number().int().nonnegative(), z.string().regex(/^\d+$/), z.null()]);
+const PATCHBodySchema1 = z.object({
+  appliesToKind: z.literal('customer_invoice').optional(),
+  gracePeriodDays: gracePeriodDaysSchema.optional(), isActive: z.boolean().optional(),
+  minBalance: z.string().nullable().optional(), name: z.string().trim().min(1).optional(),
+  replyTo: z.string().email().nullable().optional(), stages: z.array(stageSchema).optional(),
+});
 
 
 
@@ -95,7 +105,7 @@ export const PATCH = defineRoute({
   permission: 'documents.manage',
   feature: { none: "This always-on route is governed by documents.manage; the existing route has no separate feature gate." },
   body: PATCHBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const authz = routeAuthz;
     const scopeDenied = guardUnrestrictedScope(authz);

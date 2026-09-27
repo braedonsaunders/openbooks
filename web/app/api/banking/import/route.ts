@@ -75,7 +75,15 @@ export const POST = defineRoute({
   handler: async ({ request: req, authz: routeAuthz }) => {
     const gate = routeAuthz;
     const { user } = gate
-    const routeBodySchema1 = z.object({ "accountId": z.string().optional(), "source": z.union([z.literal("ofx"), z.literal("csv"), z.literal("camt053"), z.literal("bai2"), z.literal("mt940")]).optional(), "text": z.string().optional(), "sourceBytesBase64": z.unknown().optional(), "filename": z.unknown().optional(), "contentType": z.unknown().optional(), "mapping": z.unknown().optional(), "mode": z.union([z.literal("decode"), z.literal("columns"), z.literal("preview"), z.literal("import")]).optional(), "statementDate": z.unknown().optional(), "openingBalance": z.unknown().optional(), "closingBalance": z.unknown().optional() }).passthrough();
+    const routeBodySchema1 = z.object({
+      accountId: z.string().uuid().optional(), source: z.enum(['ofx', 'csv', 'camt053', 'bai2', 'mt940']).optional(),
+      text: z.string().optional(), sourceBytesBase64: z.string().nullable().optional(),
+      filename: z.string().nullable().optional(), contentType: z.string().nullable().optional(),
+      mapping: z.object({ date: z.number().int().nonnegative(), amount: z.number().int().nonnegative(), description: z.number().int().nonnegative(), counterpartyRef: z.number().int().nonnegative().optional(), bankTransactionId: z.number().int().nonnegative().optional(), debitAmount: z.number().int().nonnegative().optional() }).optional(),
+      mode: z.enum(['decode', 'columns', 'preview', 'import'], { error: 'mode must be decode, columns, preview or import' }).optional(),
+      statementDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+      openingBalance: z.string().nullable().optional(), closingBalance: z.string().nullable().optional(),
+    });
     const parsedBody = await parseJsonBody(req, routeBodySchema1, { maxBodyBytes: 10 * 1024 * 1024 });
     if (!parsedBody.ok) return parsedBody.response;
     const body = (parsedBody.data) as ImportBody

@@ -13,7 +13,9 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { guardSubsidiaryScope, type Authz } from '../../../../../../lib/authz'
 import { lockScheduleAccount } from '../_lib'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "action": z.string().optional(), "isActive": z.boolean().optional(), "expectedExternalAccountId": z.unknown().optional() }).passthrough();
+const PATCHBodySchema1 = z.object({
+  action: z.enum(['run', 'toggle']).optional(), isActive: z.boolean().optional(), expectedExternalAccountId: z.string().nullable().optional(),
+});
 
 
 

@@ -184,7 +184,7 @@ async function postStatus(
 
 async function listSchedules(fixture: Fixture): Promise<unknown> {
   const res = (await withOrgContext(fixture.orgId, () =>
-    GET(),
+    GET(new Request("http://openbooks.test/api/banking/sftp/schedules")),
   )) as NextResponse;
   assert.equal(res.status, 200);
   return res.json();

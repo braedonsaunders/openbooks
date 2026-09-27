@@ -16,7 +16,11 @@ import { lockedDocumentScopeDenied } from "../../../../../lib/document-scope.ts"
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ "reason": z.string().optional(), "reversalDate": z.unknown().optional(), "reversalPeriodId": z.unknown().optional(), "expectedUpdatedAt": z.string().optional() }).passthrough();
+const POSTBodySchema1 = z.object({
+  reason: z.string().optional(),
+  reversalDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  reversalPeriodId: z.string().uuid().nullable().optional(), expectedUpdatedAt: z.string().min(1),
+});
 
 
 
@@ -108,7 +112,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: 'session',
   body: POSTBodySchema1,
-  handler: async ({ request: req, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const { id } = await params
     const gate = await guardVoidDocument(id)

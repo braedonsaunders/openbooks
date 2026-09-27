@@ -6,7 +6,8 @@ import { guardPermission } from '../../../../lib/authz'
 import { createDocumentDraft, DocumentDraftError, isDocKindEnabled } from "../../../../lib/documents.ts";
 import { DOC_KINDS, createPermission } from "../../../../lib/document-kinds.ts";
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ "kind": z.string().optional() }).passthrough();
+const documentKindSchema = z.enum(Object.keys(DOC_KINDS) as [string, ...string[]]);
+const POSTBodySchema1 = z.object({ kind: documentKindSchema });
 
 
 
@@ -16,7 +17,7 @@ export const runtime = 'nodejs'
 export const POST = defineRoute({
   public: 'session',
   body: POSTBodySchema1,
-  handler: async ({ request: req , body: routeBody }) => {
+  handler: async ({ request: _req , body: routeBody }) => {
 
     const body = (routeBody) as { kind?: string }
     if (!body.kind || !DOC_KINDS[body.kind]) {

@@ -13,7 +13,13 @@ import {
 import { can } from '../../../../lib/authz'
 import { canAccessReportArtifact, canAccessReportDefinition, snapshotReportAuthorization } from '../../../../lib/report-execution-context'
 import { loadReportDefinition } from '../../../../lib/custom-reports'
-const POSTBodySchema1 = z.object({ "definitionId": z.string().optional(), "cadence": z.unknown().optional(), "dayOfWeek": z.unknown().optional(), "dayOfMonth": z.unknown().optional(), "hour": z.unknown().optional(), "minute": z.unknown().optional(), "timezone": z.unknown().optional(), "recipientEmails": z.unknown().optional(), "active": z.boolean().optional(), "statementParams": z.unknown().optional() }).passthrough();
+const POSTBodySchema1 = z.object({
+  definitionId: z.string().uuid(), cadence: z.enum(['daily', 'weekly', 'monthly']),
+  dayOfWeek: z.number().int().min(0).max(6).nullable().optional(), dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  hour: z.number().int().min(0).max(23).optional(), minute: z.number().int().min(0).max(59).optional(),
+  timezone: z.string().min(1), recipientEmails: z.array(z.string().email()), active: z.boolean().optional(),
+  statementParams: z.record(z.string(), z.json()).optional(),
+});
 
 
 export const runtime = 'nodejs'

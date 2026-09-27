@@ -17,7 +17,9 @@ import { DocumentEditError } from "../../../../../../engine/src/records/document
 import { type DocumentEditInput } from "../../../../../../engine/src/ledger/document-input.ts";
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ "amendmentReason": z.unknown().optional(), "subsidiaryId": z.unknown().optional() }).passthrough();
+const POSTBodySchema1 = z.object({
+  amendmentReason: z.string().trim().min(1), subsidiaryId: z.string().uuid().nullable().optional(),
+});
 
 
 
@@ -26,7 +28,7 @@ export const runtime = 'nodejs'
 export const POST = defineRoute({
   public: 'session',
   body: POSTBodySchema1,
-  handler: async ({ request: req, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const authz = await getAuthz()
     if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })

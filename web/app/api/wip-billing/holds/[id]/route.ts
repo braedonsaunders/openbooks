@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { isUuid } from '../../../../../lib/list-params'
 import { releaseWipHold } from '../../../../../lib/wip-billing'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "reason": z.unknown().optional() }).passthrough();
+const PATCHBodySchema1 = z.object({ reason: z.string().trim().min(1) });
 
 
 
@@ -15,7 +15,7 @@ export const PATCH = defineRoute({
   permission: 'projects.manage',
   feature: 'wipBilling',
   body: PATCHBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { id } = await params

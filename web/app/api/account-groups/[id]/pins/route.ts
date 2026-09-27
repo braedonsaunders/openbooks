@@ -7,7 +7,7 @@ import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/src/organiza
 import { guardSubsidiaryScope, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ "accountId": z.string().optional() }).passthrough();
+const POSTBodySchema1 = z.object({ accountId: z.string().uuid() });
 
 
 
@@ -30,7 +30,7 @@ export const POST = defineRoute({
   permission: 'admin.setup.manage',
   feature: { none: "This always-on route is governed by admin.setup.manage; the existing route has no separate feature gate." },
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { id } = await params;

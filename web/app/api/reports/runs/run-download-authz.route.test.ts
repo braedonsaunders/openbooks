@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { stubModules } from '../../../../testing/stub-modules'
+stubModules({ authz: true })
 
 /**
  * Recorded-run downloads: another organization's run id must not resolve,
@@ -56,6 +58,10 @@ const mockSources = new Map<string, string>([
           permissions: new Set(['reports.read']),
         }
       }
+      export async function getAuthz() { return guardPermission() }
+      export function guardRootSubsidiaryScope() { return null }
+      export function guardUnrestrictedScope() { return null }
+      export async function guardFeaturePermission() { return guardPermission() }
     `,
   ],
   [
@@ -82,6 +88,7 @@ const mockSources = new Map<string, string>([
           return { rows: [] }
         },
       }
+      export async function withBypassContext(work) { return work() }
     `,
   ],
   [
@@ -93,11 +100,13 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/platform/business-date.ts', 'mock:date'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../../../../../lib/authz', 'mock:authz'],
+  ['@/lib/feature-gates', 'mock:authz'],
   ['../../../../../../lib/report-execution-context', 'mock:artifact'],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
@@ -114,7 +123,6 @@ const run_download_csvUrl = './[id]/csv/route.ts?run-download-csv'
 const { GET: csv } = (await import(run_download_csvUrl)) as typeof import('./[id]/csv/route.ts')
 const run_download_artifactUrl = './[id]/artifact/route.ts?run-download-artifact'
 const { GET: artifact } = (await import(run_download_artifactUrl)) as typeof import('./[id]/artifact/route.ts')
-hooks.deregister()
 
 const params = { params: Promise.resolve({ id: RUN_ID }) }
 

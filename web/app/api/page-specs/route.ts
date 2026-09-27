@@ -15,7 +15,11 @@ import {
 } from '../../../lib/page-specs'
 import { validateAgainstRegistries } from '../../../lib/page-spec-validate'
 import { AUTHORING_REGISTRIES, RENDER_REGISTRIES } from '../../../components/viewspec/registries'
-const POSTBodySchema1 = z.object({ "route": z.unknown().optional(), "spec": z.unknown().optional(), "note": z.unknown().optional() }).passthrough();
+const POSTBodySchema1 = z.object({
+  route: z.string().min(1).optional(),
+  spec: z.json().optional(),
+  note: z.string().nullable().optional(),
+});
 
 
 export const runtime = 'nodejs'

@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
 import { isUuid } from '../../../../../lib/list-params'
 import { applyRuleToLine, JournalPostingDeniedError } from '../../../../../lib/banking-rules'
-const POSTBodySchema1 = z.object({ "statementLineId": z.string().optional(), "ruleId": z.string().optional(), "reconciliationId": z.string().optional() }).passthrough();
+const POSTBodySchema1 = z.object({ statementLineId: z.string().uuid(), ruleId: z.string().uuid(), reconciliationId: z.string().uuid().optional() });
 
 
 export const runtime = 'nodejs'
@@ -15,7 +15,7 @@ export const POST = defineRoute({
   permission: 'banking.reconcile',
   feature: 'banking',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
     const { user } = gate
 

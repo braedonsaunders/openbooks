@@ -29,7 +29,16 @@ export const POST = defineRoute({
   feature: 'apps',
   handler: async ({ request: request, authz: routeAuthz }) => {
     const gate = routeAuthz;
-    const routeBodySchema1 = z.object({ "action": z.unknown().optional(), "bundle": z.unknown().optional(), "contentHash": z.string().optional(), "draftId": z.string().optional(), "expectedBaseVersionId": z.string().optional(), "reason": z.string().optional(), "route": z.string().optional(), "sourceDraft": z.unknown().optional() }).passthrough();
+    const routeBodySchema1 = z.discriminatedUnion('action', [
+      z.object({ action: z.literal('preview-page'), draftId: z.string().uuid(), route: z.string().min(1) }),
+      z.object({
+        action: z.literal('draft'), bundle: z.json(), reason: z.string().min(1),
+        expectedBaseVersionId: z.string().uuid().nullable().optional(),
+        sourceDraft: z.object({ id: z.string().uuid(), contentHash: z.string().min(1) }).optional(),
+      }),
+      z.object({ action: z.literal('discard'), draftId: z.string().uuid(), contentHash: z.string().min(1) }),
+      z.object({ action: z.literal('activate'), draftId: z.string().uuid(), contentHash: z.string().min(1) }),
+    ]);
     const parsed = await parseJsonBody(request, routeBodySchema1, { maxBodyBytes: MAX_DRAFT_BODY_BYTES })
     if (!parsed.ok) return parsed.response
     const body = parsed.data

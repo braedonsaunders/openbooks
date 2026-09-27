@@ -11,7 +11,7 @@ import { appStorageKind, appBucket, assertTenantRootPrefix } from '@openbooks/en
 import { findRootOverlap, rootOverlapRefusal } from '@openbooks/engine/src/sftp/roots.ts'
 import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { auditSetupChange } from '../../../../lib/setup/audit'
-const POSTBodySchema1 = z.object({ "name": z.string().optional(), "rootPrefix": z.string().optional(), "authorizedKeys": z.string().optional() }).passthrough();
+const POSTBodySchema1 = z.object({ name: z.string().trim().min(1), rootPrefix: z.string().optional(), authorizedKeys: z.string().optional() });
 
 
 export const runtime = 'nodejs'
@@ -61,7 +61,7 @@ export const POST = defineRoute({
   permission: 'admin.setup.manage',
   feature: 'bankFeeds',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
     const unrestricted = guardUnrestrictedScope(gate)
     if (unrestricted) return unrestricted

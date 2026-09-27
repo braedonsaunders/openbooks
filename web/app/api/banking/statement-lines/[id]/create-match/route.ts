@@ -7,7 +7,7 @@ import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts
 import { isUuid } from '../../../../../../lib/list-params'
 import { addJournalMatchFromLine, JournalPostingDeniedError } from '../../../../../../lib/banking-rules'
 import { notFound } from "@/lib/api/responses";
-const POSTBodySchema1 = z.object({ "reconciliationId": z.string().optional(), "offsetAccountId": z.string().optional() }).passthrough();
+const POSTBodySchema1 = z.object({ reconciliationId: z.string().uuid(), offsetAccountId: z.string().uuid() });
 
 
 
@@ -18,7 +18,7 @@ export const POST = defineRoute({
   permission: 'banking.reconcile',
   feature: 'banking',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const { user } = gate

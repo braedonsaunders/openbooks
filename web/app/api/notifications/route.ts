@@ -7,7 +7,9 @@ import { markNotificationsRead } from '@openbooks/engine/src/inbox/adapters/noti
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { getAuthz } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
-const PATCHBodySchema1 = z.object({ "ids": z.array(z.string()).optional(), "all": z.boolean().optional() }).passthrough();
+const PATCHBodySchema1 = z.object({
+  ids: z.array(z.string().uuid()).min(1).optional(), all: z.boolean().optional(),
+}).refine((body) => body.all === true || (body.ids !== undefined && body.ids.length > 0), { message: 'ids or all is required' });
 
 
 export const runtime = 'nodejs'
@@ -47,7 +49,7 @@ export const GET = defineRoute({
 export const PATCH = defineRoute({
   public: 'session',
   body: PATCHBodySchema1,
-  handler: async ({ request: req , body: routeBody }) => {
+  handler: async ({ request: _req , body: routeBody }) => {
     const authz = await getAuthz()
     if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     const { id: userId, orgId } = authz.user

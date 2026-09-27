@@ -80,7 +80,7 @@ test('a restricted expense draft lands in their own subsidiary', async () => {
   const { org, gate } = await setup()
   try {
     gate(new Set([org.subsidiaryId]))
-    const res = await POST()
+    const res = await POST(new Request('http://openbooks.test/api/expenses/draft', { method: 'POST' }))
     assert.equal(res.status, 200)
     const created = (await res.json()) as { id: string }
     const drafts = await expenseDrafts(org.orgId)
@@ -97,7 +97,7 @@ test('an expense draft with no assignable subsidiary refuses by name and stores 
   const { org, other, gate } = await setup()
   try {
     gate(new Set([org.subsidiaryId, other]))
-    const res = await POST()
+    const res = await POST(new Request('http://openbooks.test/api/expenses/draft', { method: 'POST' }))
     assert.equal(res.status, 422)
     assert.deepEqual(await res.json(), { error: 'subsidiary_required' })
     assert.deepEqual(await expenseDrafts(org.orgId), [])

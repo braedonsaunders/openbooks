@@ -9,7 +9,18 @@ import { guardUnrestrictedScope } from "../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
 import { isValidEmailAddress } from "@openbooks/emails";
-const POSTBodySchema1 = z.object({ "appliesToKind": z.unknown().optional(), "gracePeriodDays": z.unknown().optional(), "isActive": z.boolean().optional(), "minBalance": z.unknown().optional(), "name": z.string().optional(), "replyTo": z.string().optional(), "stages": z.unknown().optional() }).passthrough();
+const stageSchema = z.object({
+  sequence: z.number().int(), name: z.string().min(1), offsetDays: z.number().int(),
+  subjectTemplate: z.string(), bodyTemplate: z.string(), escalate: z.boolean().optional(),
+});
+const gracePeriodDaysSchema = z.union([z.number().int().nonnegative(), z.string().regex(/^\d+$/), z.null()]);
+const POSTBodySchema1 = z.object({
+  appliesToKind: z.literal('customer_invoice').optional(),
+  gracePeriodDays: gracePeriodDaysSchema.optional(),
+  isActive: z.boolean().optional(), minBalance: z.string().nullable().optional(),
+  name: z.string().trim().min(1), replyTo: z.string().email().nullable().optional(),
+  stages: z.array(stageSchema).optional(),
+});
 
 
 export const runtime = "nodejs";
@@ -124,7 +135,7 @@ export const POST = defineRoute({
   permission: 'documents.manage',
   feature: { none: "This always-on route is governed by documents.manage; the existing route has no separate feature gate." },
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const authz = routeAuthz;
     const scopeDenied = guardUnrestrictedScope(authz);
     if (scopeDenied) return scopeDenied;

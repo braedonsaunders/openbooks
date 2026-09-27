@@ -12,7 +12,12 @@ import {
 } from '@openbooks/engine/src/consolidation/consolidation.ts'
 import { withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
 import { isUuid } from '../../../lib/list-params'
-const POSTBodySchema1 = z.object({ "action": z.string().optional(), "periodId": z.string().optional() }).passthrough();
+const POSTBodySchema1 = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('derive-rates'), periodId: z.string().uuid() }),
+  z.object({ action: z.literal('ownership'), periodId: z.string().uuid() }),
+  z.object({ action: z.literal('eliminate'), periodId: z.string().uuid() }),
+  z.object({ action: z.literal('consolidate'), periodId: z.string().uuid() }),
+]);
 
 
 export const runtime = 'nodejs'
@@ -31,7 +36,7 @@ export const POST = defineRoute({
   permission: 'close.run',
   feature: 'multiSubsidiary',
   body: POSTBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, body: routeBody }) => {
     const gate = routeAuthz;
     const scopeDenied = guardSubsidiaryScope(gate, null)
     if (scopeDenied) return scopeDenied

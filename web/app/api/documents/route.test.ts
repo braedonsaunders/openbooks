@@ -20,9 +20,9 @@ Object.assign(globalThis, { __documentCreateUnit: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '../../../lib/authz') {
+    if (specifier === '../../../lib/authz' || specifier === '@/lib/authz') {
       return virtual(`
-      export { can, subsidiariesInScope, subsidiaryScopeAllows, guardSubsidiaryScope, guardUnrestrictedScope, guardRootSubsidiaryScope } from '${root}web/lib/authz.ts'
+      export { can, subsidiariesInScope, subsidiaryScopeAllows, guardPermission, guardSubsidiaryScope, guardUnrestrictedScope, guardRootSubsidiaryScope } from '${root}web/lib/authz.ts'
       export async function getAuthz() {
         return {
           user: { id: 'user-1', orgId: 'org-1', name: 'Tester', roles: [], isSuperAdmin: false },
@@ -65,7 +65,9 @@ test('unknown document kind is refused by name', async () => {
   for (const kind of [undefined, null, 42, 'sales_order', 'mystery_kind']) {
     const response = await post({ kind }, { 'Idempotency-Key': KEY })
     assert.equal(response.status, 400, JSON.stringify(kind))
-    assert.deepEqual(await response.json(), { error: 'unknown document kind' })
+    const body = await response.json() as { error: string; issues: Array<{ path: string }> }
+    assert.equal(body.error, 'unknown document kind')
+    assert.deepEqual(body.issues.map((issue) => issue.path), ['kind'])
   }
 })
 
@@ -73,7 +75,9 @@ test('non-document kinds keep their own writers', async () => {
   for (const kind of ['project_charge', 'pay_run', 'journal', 'customer_payment', 'expense_report']) {
     const response = await post({ kind }, { 'Idempotency-Key': KEY })
     assert.equal(response.status, 400, JSON.stringify(kind))
-    assert.deepEqual(await response.json(), { error: 'unknown document kind' })
+    const body = await response.json() as { error: string; issues: Array<{ path: string }> }
+    assert.equal(body.error, 'unknown document kind')
+    assert.deepEqual(body.issues.map((issue) => issue.path), ['kind'])
   }
 })
 

@@ -9,7 +9,10 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { holdPrebillLine, updatePrebillLine } from '../../../../../../lib/wip-billing'
 import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
 import { notFound } from "@/lib/api/responses";
-const PATCHBodySchema1 = z.object({ "action": z.unknown().optional(), "adjustmentEvidence": z.array(z.unknown()).optional(), "adjustmentReason": z.unknown().optional(), "evidence": z.array(z.unknown()).optional(), "expectedUpdatedAt": z.unknown().optional(), "proposedBillAmount": z.unknown().optional(), "reason": z.unknown().optional() }).passthrough();
+const PATCHBodySchema1 = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('hold'), reason: z.string().trim().min(1), evidence: z.array(z.string()).optional() }),
+  z.object({ action: z.literal('update').default('update'), proposedBillAmount: z.string(), expectedUpdatedAt: z.string().min(1), adjustmentReason: z.string().nullable().optional(), adjustmentEvidence: z.array(z.string()).optional() }),
+]);
 
 
 
@@ -30,7 +33,7 @@ export const PATCH = defineRoute({
   permission: 'projects.manage',
   feature: 'wipBilling',
   body: PATCHBodySchema1,
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
+  handler: async ({ request: _req, authz: routeAuthz, params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { id: string; lineId: string });
     const gate = routeAuthz;
     const { id, lineId } = await params
