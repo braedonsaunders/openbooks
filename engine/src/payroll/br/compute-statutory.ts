@@ -281,8 +281,8 @@ export async function computeBrStatutoryWithRates(
   // Patronal 20% and FGTS 8% every transcribed year (Lei 8.212/1991 art. 22,
   // I; Lei 8.036/1990 art. 15) — read off the year's own module, never
   // borrowed across years.
-  const patronalRate = percentParts(priorTables?.patronal ?? BR_2026_PATRONAL, "patronal");
-  const fgtsRate = percentParts(priorTables?.fgts ?? BR_2026_FGTS, "FGTS");
+  const patronalRate = percentParts(tables.patronal, "patronal");
+  const fgtsRate = percentParts(tables.fgts, "FGTS");
 
   const patronal = cppInDas ? 0n : truncCents(remuneracao * patronalRate.num, patronalRate.den);
   const ratEr = cppInDas ? 0n : truncCents(remuneracao * rat.num * fap.num, rat.den * fap.den);
