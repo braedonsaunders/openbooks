@@ -97,7 +97,7 @@ const mockSources = new Map<string, string>([
 // the real modules enforce, so every bad-body and bad-amount case behind
 // them reported green untested.
 const mockUrls = new Map<string, string>([
-  ['../../../../../lib/feature-gates', 'mock:gates'],
+  ['@/lib/feature-gates', 'mock:gates'],
   ['../../../../../lib/analytics/true-cost-data', 'mock:data'],
   ['../../../../../lib/analytics/true-cost-engine', 'mock:engine'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
