@@ -6,23 +6,8 @@ import { readingPagePairs } from './page-source'
 import test from 'node:test'
 import { FEATURES } from '@openbooks/engine/src/organization/feature-registry.ts'
 
-/**
- * The feature registry states a contract: "a feature that's off disappears from
- * nav, its routes 404, and its setup surfaces hide." Feature dependencies are
- * enforced at the domain/service and API boundaries, not only by hiding UI.
- *
- * An earlier version of this test asked only whether a feature key appeared in
- * SOME gate call anywhere under web/. That is far too weak, and it produced
- * exactly the false confidence it was written to prevent: `apps` counted as
- * gated because /apps had a layout gate, while /admin/apps and all nine
- * /api/apps routes stayed permission-only. A test that reports "gated" for an
- * ungated surface is worse than no test.
- *
- * So coverage is checked PER SURFACE:
- *   - every route a feature's nav modules link to must be gated by its own
- *     page/layout or by an ancestor layout inside the (app) segment;
- *   - every API route handler serving a feature must consult a gate.
- */
+/** Feature gates are verified per exposed surface, because a gate on one
+ * route does not prove that another page or API is protected. */
 
 const WEB = new URL('../', import.meta.url)
 const APP_SEGMENT = 'app/(app)'
@@ -53,19 +38,16 @@ function navHrefs(): Record<string, string> {
   return Object.fromEntries(NAV_MODULES.map((module) => [module.key, module.href]))
 }
 
-/**
- * Is the route this href resolves to gated — by its own page/layout, or by any
- * ancestor layout still inside the (app) segment? Returns null when the href
- * has no directory (external or dynamic), which the caller reports separately.
- */
-function routeGateState(href: string): 'gated' | 'ungated' | null {
+/** Check the href's page and ancestor layouts for a feature gate; callers
+ * report missing page routes separately. */
+function routeGateState(href: string): 'gated' | 'ungated' | 'missing' {
   const segments = href.split('?')[0]!.split('/').filter(Boolean)
   let dir = `${APP_SEGMENT}/`
-  if (!exists(dir)) return null
+  if (!exists(dir)) return 'missing'
   const candidates: string[] = []
   for (const segment of segments) {
     const next = `${dir}${segment}/`
-    if (!exists(next)) return null
+    if (!exists(next)) return 'missing'
     dir = next
     candidates.push(`${dir}layout.tsx`)
   }
@@ -74,14 +56,10 @@ function routeGateState(href: string): 'gated' | 'ungated' | null {
   for (const file of candidates) {
     if (exists(file) && GATE.test(read(file))) return 'gated'
   }
-  return exists(`${dir}page.tsx`) ? 'ungated' : null
+  return exists(`${dir}page.tsx`) ? 'ungated' : 'missing'
 }
 
-/**
- * API surfaces per feature. Not derivable from nav, so it is explicit — and
- * being explicit is the point: adding a module's API without listing it here is
- * the omission that let /api/apps ship ungated.
- */
+/** API surfaces are listed explicitly because they cannot be derived from nav. */
 const FEATURE_API_DIRS: Record<string, string[]> = {
   apps: ['app/api/apps'],
   // app/api/close/run-revaluation is deliberately absent: it already consults
@@ -154,15 +132,35 @@ const UNGATED_BY_DESIGN: Record<string, string> = {
   banking: 'nav grouping only — capabilities gate individually (bankFeeds)',
 }
 
+const NAV_ARM_PENDING: Record<string, { pack: string; since: string }> = {
+  resourcing: { pack: 'PS-09', since: '2026-09-27' },
+  returns: { pack: 'DS-06', since: '2026-09-27' },
+  manufacturing: { pack: 'MF-09', since: '2026-09-27' },
+}
+
 test('every route a feature links to is gated by its own page or an ancestor layout', () => {
   const hrefs = navHrefs()
   const ungated: string[] = []
   for (const { key, navModules } of featuresWithNav()) {
-    if (key in UNGATED_BY_DESIGN) continue
     for (const moduleKey of navModules) {
       const href = hrefs[moduleKey]
-      if (!href || !href.startsWith('/')) continue
-      if (routeGateState(href) === 'ungated') ungated.push(`${key} → ${href}`)
+      if (!href) {
+        assert.ok(
+          NAV_ARM_PENDING[moduleKey],
+          `${key}: nav module "${moduleKey}" is missing; register the nav module or remove it from navModules`,
+        )
+        continue
+      }
+      assert.equal(
+        NAV_ARM_PENDING[moduleKey],
+        undefined,
+        `${key}: nav module "${moduleKey}" arm landed — delete ${moduleKey} from NAV_ARM_PENDING`,
+      )
+      assert.ok(href.startsWith('/'), `${key}: nav module "${moduleKey}" has non-route href "${href}"`)
+      if (key in UNGATED_BY_DESIGN) continue
+      const state = routeGateState(href)
+      assert.notEqual(state, 'missing', `${key}: nav module "${moduleKey}" has no app page for "${href}"`)
+      if (state === 'ungated') ungated.push(`${key} → ${href}`)
     }
   }
   assert.deepEqual(

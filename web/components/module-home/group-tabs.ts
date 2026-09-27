@@ -51,6 +51,7 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
   banking: [
     { href: '/banking', ns: 'banking', key: 'home.title' },
     { href: '/banking/cash', ns: 'nav', key: 'modules.banking-cash' },
+    { href: '/banking/psp-settlements', ns: 'nav', key: 'modules.banking-psp-settlements' },
   ],
   accounting: [
     { href: '/accounting', ns: 'accounting', key: 'home.title' },
@@ -121,6 +122,7 @@ const TAB_FEATURE: Record<string, string> = {
   '/expenses': 'expenses',
   '/banking': 'banking',
   '/banking/cash': 'banking',
+  '/banking/psp-settlements': 'banking',
   '/payroll': 'payroll',
   '/payroll/runs': 'payroll',
   '/payroll/anomalies': 'payroll',
