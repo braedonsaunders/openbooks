@@ -739,6 +739,10 @@ export async function payrollRemittanceSummary(
   // the bill is dated.
   const schedules = allRemittanceSchedules();
   for (const group of groups.values()) {
+    if (group.hasUnknownFilingAccount) {
+      group.schedule = null;
+      continue;
+    }
     group.schedule = scheduleForRemittanceGroup({
       vendorKeys: group.vendorKeys,
       partyId: group.partyId,
