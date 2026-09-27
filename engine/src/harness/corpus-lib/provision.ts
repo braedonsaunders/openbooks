@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypass } from "../../platform/db.ts";
-import { daysInCivilMonth } from "../../platform/business-date.ts";
+import { civilDateFromParts, endOfMonth } from "../../platform/business-date.ts";
 import { provisionOrganizationDefaults } from "../../provisioning/organization-provisioning.ts";
 import { SIM_ORG_PREFIX } from "../../sim/db-guard.ts";
 import type { SimOrg, SimPeriod } from "../../sim/world.ts";
@@ -27,14 +27,6 @@ export interface CorpusWorld {
   partyIds: Record<string, string>;
   /** Semantic project key → project id (when the corpus declares projects). */
   projectIds: Record<string, string>;
-}
-
-function lastDayOfMonth(year: number, month: number): string {
-  // daysInCivilMonth keeps literal years 0001-0099 that Date.UTC would remap
-  // onto 1900-1999; the year renders zero-padded so the YYYY-MM-DD contract
-  // holds below year 1000 too.
-  const day = daysInCivilMonth(year, month);
-  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 function monthsInWindow(startDate: string, endDate: string): { year: number; month: number }[] {
@@ -95,7 +87,7 @@ export async function provisionCorpusOrg(
     for (const { year, month } of monthsInWindow(corpus.startDate, corpus.endDate)) {
       const id = randomUUID();
       const startsOn = `${year}-${String(month).padStart(2, "0")}-01`;
-      const endsOn = lastDayOfMonth(year, month);
+      const endsOn = endOfMonth(civilDateFromParts(year, month, 1));
       const name = `${year}-${String(month).padStart(2, "0")}`;
       await db.execute(sql`
         insert into accounting_periods (id, org_id, fiscal_year, period_number, name, starts_on, ends_on, is_adjustment, fiscal_calendar_id)

@@ -39,6 +39,7 @@ import type {
   CreateScriptJournalOptions,
   ScriptJournalResult,
 } from "../journal/script-journal-contract.ts";
+import { isUuid } from "../platform/uuid.ts";
 export type {
   ScriptJournalLine,
   ScriptJournalInput,
@@ -75,7 +76,6 @@ function persistJournalLineAmount(value: unknown, line: number): Money {
 
 const MAX_LINES = 200;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Provenance markers stamped onto documents.custom when a script journal is
@@ -133,11 +133,11 @@ export function validateJournalInput(input: ScriptJournalInput): {
       throw new JournalWriteError(`line ${i + 1}: amount is out of range — at most 15 whole digits fit the ledger`);
     }
     if (!l.accountId && !l.accountCode) throw new JournalWriteError(`line ${i + 1}: accountId or accountCode required`);
-    if (l.accountId && !UUID_RE.test(l.accountId)) throw new JournalWriteError(`line ${i + 1}: invalid accountId`);
+    if (l.accountId && !isUuid(l.accountId)) throw new JournalWriteError(`line ${i + 1}: invalid accountId`);
     // Dimensions are fail-closed like accountId: a malformed id must never
     // silently post without its dimension. Absent/empty stays null.
-    if (l.departmentId && !UUID_RE.test(l.departmentId)) throw new JournalWriteError(`line ${i + 1}: invalid departmentId`);
-    if (l.projectId && !UUID_RE.test(l.projectId)) throw new JournalWriteError(`line ${i + 1}: invalid projectId`);
+    if (l.departmentId && !isUuid(l.departmentId)) throw new JournalWriteError(`line ${i + 1}: invalid departmentId`);
+    if (l.projectId && !isUuid(l.projectId)) throw new JournalWriteError(`line ${i + 1}: invalid projectId`);
     amounts.push(amount);
     return {
       accountId: l.accountId,
@@ -333,7 +333,7 @@ async function resolveScriptJournalSubsidiary(
   };
 
   if (requested !== undefined && requested !== null) {
-    if (typeof requested !== "string" || !UUID_RE.test(requested)) {
+    if (!isUuid(requested)) {
       throw new JournalWriteError("invalid subsidiary", "invalid_subsidiary");
     }
     const normalized = requested.toLowerCase();
@@ -350,7 +350,7 @@ async function resolveScriptJournalSubsidiary(
   }
 
   if (scope !== null) {
-    const ids = [...scope].filter((id) => UUID_RE.test(id));
+    const ids = [...scope].filter((id) => isUuid(id));
     if (ids.length === 0) {
       throw new JournalWriteError("no available subsidiary", "no_available_subsidiary");
     }

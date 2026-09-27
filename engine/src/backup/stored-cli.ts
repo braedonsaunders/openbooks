@@ -13,6 +13,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { executeBackupRun } from "./backup.ts";
 import { s3Enabled } from "../platform/file-storage.ts";
+import { isUuid } from "../platform/uuid.ts";
 
 const args = new Map(
   process.argv
@@ -26,10 +27,8 @@ const args = new Map(
 const orgId = args.get("org");
 const actorId = args.get("actor");
 const out = args.get("out");
-const uuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-if (!orgId || !uuid.test(orgId)) throw new Error("--org=<uuid> is required");
-if (!actorId || !uuid.test(actorId)) throw new Error("--actor=<uuid> is required");
+if (!orgId || !isUuid(orgId)) throw new Error("--org=<uuid> is required");
+if (!actorId || !isUuid(actorId)) throw new Error("--actor=<uuid> is required");
 if (!out?.startsWith("/")) throw new Error("--out=<absolute-path> is required");
 if (existsSync(out)) throw new Error(`refusing to overwrite ${out}`);
 if (!s3Enabled) {
