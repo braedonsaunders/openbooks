@@ -629,7 +629,7 @@ export async function resumeWorkOrder(tx: SqlExecutor, orgId: string, actorId: s
   const held = (await tx.execute<{ before: { status?: string } | null }>(sql`
     select changes->'before' as before from audit_log where org_id=${orgId} and table_name='mfg_work_orders'
       and row_id=${id} and action='update' and changes->'after'->>'status'='on_hold'
-     order by created_at desc, id desc limit 1`)).rows[0];
+     order by at desc, id desc limit 1`)).rows[0];
   const prior = held?.before?.status;
   if (prior !== "released" && prior !== "in_progress") {
     refuse(`Work order ${before.number} has no valid prior state for its hold.`, "hold_history_missing", "Review the work-order audit history before resuming.", 409);
