@@ -7,7 +7,8 @@ import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { clearBalancingLegProviders, registerBalancingLegProvider } from "../journal/balancing-hooks.ts";
 import { postEntry, type PostEntryInput } from "../journal/post-entry.ts";
-import { db, withBypass, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { reverseProjectGlEntry } from "../journal/origin-entry.ts";
+import { db, withBypass, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { budgetaryControlProvider, budgetaryControlWarnings, closeEncumbrance, createEncumbrance, encumbranceOpenBalance, linkEncumbranceDocumentLine, readBudgetCellFigures } from "./encumbrances.ts";
 import { NonprofitError, NonprofitPostingError } from "./errors.ts";
 import { provisionFundAccounting } from "./provision.ts";
@@ -206,6 +207,24 @@ test("commitments and budget control preserve posting policy and derived balance
     assert.equal(figures?.scenarioId, scenarioId);
     assert.equal(figures?.actuals, "1121.0000");
     assert.equal(figures?.available, "-121.0000");
+
+    const expense = await tenantPost(posting(org, "REVERSED-BUDGET-ACTUAL", "25.0000"));
+    const afterExpense = await withOrgContext(org.orgId, () => readBudgetCellFigures(db, {
+      orgId: org.orgId, bookId: null, postingDate: org.date,
+      cell: { accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, fundId: org.fundId,
+        extraDims: { fund: org.fundId } },
+    }));
+    assert.equal(afterExpense?.actuals, "1146.0000");
+    const reversalId = await withOrgTransaction(org.orgId, () => reverseProjectGlEntry(
+      org.orgId, actorId, expense.entryId, "Correct the budget actual", org.date,
+    ));
+    assert.ok(reversalId);
+    const afterReversal = await withOrgContext(org.orgId, () => readBudgetCellFigures(db, {
+      orgId: org.orgId, bookId: null, postingDate: org.date,
+      cell: { accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, fundId: org.fundId,
+        extraDims: { fund: org.fundId } },
+    }));
+    assert.equal(afterReversal?.actuals, figures?.actuals);
 
     await withOrgContext(org.orgId, () => db.execute(sql`
       update funds set budgetary_control = 'hard' where org_id = ${org.orgId} and id = ${org.fundId}

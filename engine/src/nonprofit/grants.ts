@@ -738,7 +738,7 @@ async function grantExpenseTotal(runner: SqlExecutor, grant: GrantRow): Promise<
       join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
       join accounts a on a.org_id = jl.org_id and a.id = jl.account_id
      where jl.org_id = ${grant.org_id} and je.book_id = ${primaryBook.rows[0].id}
-       and je.status = 'posted' and a.type in ('cogs', 'expense', 'expense_other')
+       and je.status in ('posted', 'reversed') and a.type in ('cogs', 'expense', 'expense_other')
        and jl.account_id = any(${uuidArray(accountIds)}::uuid[])
        and coalesce(jl.extra_dims->>'fund', ${defaultFund.rows[0]?.id ?? null}) = ${grant.fund_id}
   `);

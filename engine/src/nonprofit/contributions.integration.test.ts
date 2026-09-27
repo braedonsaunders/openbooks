@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrgContext } from "../platform/db.ts";
+import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
+import { reverseProjectGlEntry } from "../journal/origin-entry.ts";
+import { addCalendarDays } from "../platform/civil-date.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { toUnits } from "../money/money.ts";
 import { createFund } from "./funds.ts";
 import { provisionFundAccounting } from "./provision.ts";
-import { bookPledge, cancelPledge, createPledge, writeOffPledge } from "./pledges.ts";
+import { bookPledge, cancelPledge, collectPledgeInstallments, createPledge, getPledgeSchedule, writeOffPledge } from "./pledges.ts";
 import { createGift, receiptGift } from "./gifts.ts";
 import { NonprofitError } from "./errors.ts";
 
@@ -146,6 +148,41 @@ test("pledges book and reverse through the ledger while gifts receive engine num
         error.message.includes("allowance balance of 0.0000") &&
         error.remedy.includes("allowance top-up"),
     );
+
+    const activityPledge = await createPledge({ ...pledgeInput, totalAmount: "1000.0000", installments: [{ dueOn: "2027-07-15", amount: "1000.0000" }] });
+    await bookPledge({ orgId: org.orgId, pledgeId: activityPledge.id, postingDate: org.date,
+      receivableAccountId: accounts.receivable, discountAccountId: accounts.discount,
+      contributionsAccountId: org.accounts.revenue, reason: "Recognize the collection test promise", actorId });
+    const scheduleBeforeCollection = await getPledgeSchedule({
+      orgId: org.orgId, pledgeId: activityPledge.id, asOfDate: org.date,
+    });
+    const firstInstallment = scheduleBeforeCollection.installments[0]!;
+    const betweenCollectionAndReversal = addCalendarDays(org.date, 2);
+    const reversalDate = addCalendarDays(org.date, 3);
+    assert.equal(firstInstallment.collectedAmount, "0.0000");
+    const collection = await collectPledgeInstallments({
+      orgId: org.orgId, pledgeId: activityPledge.id,
+      allocations: [{ installmentId: firstInstallment.id, amount: "100.0000" }],
+      postingDate: org.date, bankAccountId: org.accounts.bank,
+      receivableAccountId: accounts.receivable, idempotencyKey: randomUUID(),
+      reason: "Record the donor receipt", actorId,
+    });
+    const scheduleAfterCollection = await getPledgeSchedule({
+      orgId: org.orgId, pledgeId: activityPledge.id, asOfDate: org.date,
+    });
+    assert.equal(scheduleAfterCollection.installments[0]!.collectedAmount, "100.0000");
+    const reversalId = await withOrgTransaction(org.orgId, () => reverseProjectGlEntry(
+      org.orgId, actorId, collection.entryId, "Correct the recorded receipt", reversalDate,
+    ));
+    assert.ok(reversalId);
+    const scheduleBetween = await getPledgeSchedule({
+      orgId: org.orgId, pledgeId: activityPledge.id, asOfDate: betweenCollectionAndReversal,
+    });
+    assert.equal(scheduleBetween.installments[0]!.collectedAmount, "100.0000");
+    const scheduleOnReversal = await getPledgeSchedule({
+      orgId: org.orgId, pledgeId: activityPledge.id, asOfDate: reversalDate,
+    });
+    assert.equal(scheduleOnReversal.installments[0]!.collectedAmount, "0.0000");
 
     const cancelled = await cancelPledge({
       orgId: org.orgId,

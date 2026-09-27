@@ -598,7 +598,7 @@ async function cellFiguresForScenario(input: {
       join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
       join accounting_periods p on p.org_id = je.org_id and p.id = je.period_id
      where jl.org_id = ${orgId} and je.book_id = ${bookId}
-       and je.status = 'posted' and p.fiscal_year = ${scenario.fiscalYear}
+       and je.status in ('posted', 'reversed') and p.fiscal_year = ${scenario.fiscalYear}
        and je.posting_date <= ${postingDate}::date
        and jl.account_id = ${cell.accountId}
        and jl.subsidiary_id = ${cell.subsidiaryId}
