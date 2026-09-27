@@ -3,7 +3,9 @@ import type { WarehouseStatus } from "@openbooks/schema";
 import { db, type SqlExecutor } from "../platform/db.ts";
 import { add, isZero, neg, sum } from "../money/money.ts";
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
+import { uuidArray } from "../organization/subsidiaries.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
+import { pickReservationsCte } from "./pick-reservations.ts";
 import { getOnHandWith, lockInventoryPosition } from "./position.ts";
 
 export type { WarehouseStatus };
@@ -512,6 +514,108 @@ export async function warehousePositions(
       ) p
      order by 1, 2, 3`);
   return r.rows;
+}
+
+type StockLocationTreeRow = { id: string; parent_id: string | null; code: string; depth: number };
+type PickLocationReservation = { pick_list_number: string; bin_code: string };
+type StockLocationHistory = { code: string; blocker: string };
+
+/** Refuse to remove a location while its tree has stock, reservations, or immutable operational history. */
+export async function assertStockLocationDeletionAllowed(
+  tx: Runner,
+  orgId: string,
+  stockLocationId: string,
+): Promise<void> {
+  const locations = (await tx.execute<StockLocationTreeRow>(sql`
+    with recursive subtree as (
+      select id, parent_id, code, 0 as depth
+        from stock_locations where org_id = ${orgId} and id = ${stockLocationId}
+      union all
+      select child.id, child.parent_id, child.code, parent.depth + 1
+        from stock_locations child join subtree parent on child.parent_id = parent.id
+       where child.org_id = ${orgId} and parent.depth < 64
+    )
+    select location.id, location.parent_id, location.code, subtree.depth
+      from subtree join stock_locations location on location.id = subtree.id and location.org_id = ${orgId}
+     order by location.id
+     for update of location`)).rows;
+  if (locations.length === 0) {
+    throw new WarehouseRefusal("stock location was not found", "stock_location_not_found", "choose an existing stock location", 422);
+  }
+
+  const root = locations.find((location) => location.id === stockLocationId)!;
+  const locationById = new Map(locations.map((location) => [location.id, location]));
+  const ids = uuidArray(locations.map((location) => location.id));
+
+  const reservation = (await tx.execute<PickLocationReservation>(sql`
+    with ${pickReservationsCte(orgId)}
+    select reservations.pick_list_number, location.code as bin_code
+      from pick_reservations reservations
+      join stock_locations location on location.id = reservations.bin_id and location.org_id = ${orgId}
+     where reservations.reserved > 0 and reservations.bin_id = any(${ids}::uuid[])
+     order by reservations.pick_list_number, location.code
+     limit 1`)).rows[0];
+  if (reservation) {
+    const remedy = `ship or void pick list ${reservation.pick_list_number} first`;
+    throw new WarehouseRefusal(
+      `Stock location ${root.code} cannot be deleted because open pick list ${reservation.pick_list_number} reserves bin ${reservation.bin_code}.`,
+      "stock_location_in_use",
+      remedy,
+    );
+  }
+
+  const positions = await warehousePositions(tx, orgId, stockLocationId);
+  for (const position of positions) {
+    const onHand = await getOnHandWith(tx, orgId, position.itemId, position.stockLocationId, {
+      subsidiaryId: position.subsidiaryId,
+    });
+    if (isZero(onHand.quantity)) continue;
+    const blockerLocation = locationById.get(position.stockLocationId)?.code ?? position.stockLocationId;
+    const remedy = "transfer or issue the remaining stock first";
+    throw new WarehouseRefusal(
+      `Stock location ${root.code} cannot be deleted because ${onHand.quantity} remains on hand at ${blockerLocation}.`,
+      "stock_location_in_use",
+      remedy,
+    );
+  }
+
+  const history = (await tx.execute<StockLocationHistory>(sql`
+    select location.code, refs.blocker
+      from (
+        select stock_location_id as location_id, 'inventory movement history' as blocker from inventory_movements where org_id = ${orgId}
+        union all
+        select stock_location_id, 'inventory cost history' from cost_layers where org_id = ${orgId}
+        union all
+        select stock_location_id, 'provisional inventory history' from inventory_provisional_costs where org_id = ${orgId}
+        union all
+        select line.stock_location_id, 'document history' from document_lines line
+         where line.org_id = ${orgId} and line.stock_location_id is not null
+        union all
+        select stock_location_id, 'stock-count history' from stock_count_lines where org_id = ${orgId}
+        union all
+        select current_stock_location_id, 'serial stock history' from serials
+         where org_id = ${orgId} and current_stock_location_id is not null
+      ) refs
+      join stock_locations location on location.id = refs.location_id and location.org_id = ${orgId}
+     where location.id = any(${ids}::uuid[])
+     order by location.code, refs.blocker
+     limit 1`)).rows[0];
+  if (history) {
+    throw new WarehouseRefusal(
+      `Stock location ${root.code} cannot be deleted because ${history.blocker} at ${history.code} preserves its audit history.`,
+      "stock_location_in_use",
+      "keep the location for audit history and clear Active instead",
+    );
+  }
+
+  const child = locations.find((location) => location.depth > 0);
+  if (child) {
+    throw new WarehouseRefusal(
+      `Stock location ${root.code} cannot be deleted because child location ${child.code} remains beneath it.`,
+      "stock_location_in_use",
+      "delete or reparent the child location first",
+    );
+  }
 }
 
 /** Retirement refuses while anything is on hand, naming each item and quantity. */
