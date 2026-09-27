@@ -23,6 +23,7 @@ async function seedTwoCurrencySpend() {
   const org = await withBypass(() => createScratchOrg())
   const usSub = randomUUID()
   const usVend = randomUUID()
+  let cadBillDocumentId = ''
   await withBypass(async () => {
     await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
       values (${usSub}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb)`)
@@ -47,7 +48,6 @@ async function seedTwoCurrencySpend() {
       ['BILL-PRIOR', usSub, usVend, 'USD', '100', '1', '2025-07-15', priorPeriod, null],
     ] as const
     let usBillLine = ''
-    let cadBillDocumentId = ''
     for (const [num, sub, party, cur, total, fx, date, period, due] of bills) {
       const docId = randomUUID()
       const entryId = randomUUID()
