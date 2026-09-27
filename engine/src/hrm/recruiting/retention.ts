@@ -366,10 +366,10 @@ export interface EvaluateRuleOptions {
   readonly claimBusinessDay?: string;
 }
 
-/** Active rule ids for the worker scanner, read under explicit bypass and org scope. */
+/** Active rule ids for the worker scanner, read inside the organization's scope. */
 export async function activeRetentionRuleIdsForDuty(orgId: string): Promise<string[]> {
   const scopedOrgId = requireOrgId(orgId);
-  return withBypassContext(async () => (await db.execute<{ id: string }>(sql`
+  return withOrgTransaction(scopedOrgId, async () => (await db.execute<{ id: string }>(sql`
     select id from hrm_retention_rules where org_id = ${scopedOrgId} and is_active order by id
   `)).rows.map((row) => row.id));
 }

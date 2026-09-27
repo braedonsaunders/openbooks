@@ -65,6 +65,7 @@ export async function provisionCorpusOrg(
     }
   }
 
+  // bypass: cross-org-by-design — corpus replay creates a fresh isolated organization before its id can be scoped.
   return withBypass(async () => {
     const orgId = randomUUID();
     await db.execute(sql`

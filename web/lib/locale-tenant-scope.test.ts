@@ -3,13 +3,13 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 
 const stateKey = Symbol.for('openbooks.locale-tenant-scope-test')
-const state = { orgReads: 0, activeUser: null as { id: string; orgId: string } | null, locale: null as string | null, timeZone: null as string | null }
+const state = { orgReads: 0, orgScopes: [] as string[], activeUser: null as { id: string; orgId: string } | null, locale: null as string | null, timeZone: null as string | null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 const mocks = new Map([
   ['mock:headers', `export async function cookies() { throw new Error('no request context') }`],
   ['mock:auth', `export const SESSION_COOKIE='session'; export async function validateSessionToken(){return null}; export async function currentUser(){return globalThis[Symbol.for('openbooks.locale-tenant-scope-test')].activeUser}`],
-  ['mock:db', `const state=globalThis[Symbol.for('openbooks.locale-tenant-scope-test')]; export async function withBypassContext(work){return work()}; export const db={async execute(){state.orgReads++;return{rows:[{user_locale:state.locale,org_default:'fr',time_zone:state.timeZone}]}}}`],
+  ['mock:db', `const state=globalThis[Symbol.for('openbooks.locale-tenant-scope-test')]; export async function withBypassContext(work){return work()}; export async function withOrgContext(orgId,work){state.orgScopes.push(orgId);return work()}; export const db={async execute(){state.orgReads++;return{rows:[{user_locale:state.locale,org_default:'fr',time_zone:state.timeZone}]}}}`],
 ])
 
 registerHooks({
@@ -29,8 +29,7 @@ const { resolveLocale, resolveTimeZone } = await import('./locale.ts')
 const { DEFAULT_LOCALE } = await import('../i18n/config')
 
 test('locale resolution without an authenticated tenant never reads an arbitrary org setting', async () => {
-  assert.equal(await resolveLocale(), DEFAULT_LOCALE)
-  assert.equal(await resolveTimeZone(), 'UTC')
+  assert.deepEqual([await resolveLocale(), await resolveTimeZone()], [DEFAULT_LOCALE, 'UTC'])
   assert.equal(state.orgReads, 0)
 })
 
@@ -39,5 +38,5 @@ test('locale and time zone follow the verified active tenant', async () => {
   state.locale = null; state.timeZone = 'Asia/Tokyo'
   assert.equal(await resolveLocale(), 'fr')
   assert.equal(await resolveTimeZone(), 'Asia/Tokyo')
-  assert.equal(state.orgReads, 2)
+  assert.deepEqual([state.orgReads, state.orgScopes], [2, ['switched-tenant']])
 })

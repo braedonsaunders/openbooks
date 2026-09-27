@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
 import { isFeatureEnabled } from '../../../lib/features'
 import { orgSlugFor, resolveOrgBySlug } from '../../../lib/recruiting-public'
 import { CareersApplyForm } from './CareersApplyForm'
@@ -31,7 +31,7 @@ export default async function CareersPage({
   if (!(await isFeatureEnabled(org.orgId, 'hrmRecruiting'))) notFound()
   if (!(await isFeatureEnabled(org.orgId, 'hrmJobBoards'))) notFound()
 
-  const postings = await withBypassContext(async () => {
+  const postings = await withOrgContext(org.orgId, async () => {
     const rows = (
       await db.execute<{ postingId: string; requisitionNumber: string; title: string; publishedAt: string | null }>(sql`
         select p.id as "postingId", r.requisition_number as "requisitionNumber",

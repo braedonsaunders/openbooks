@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { DeleteObjectsCommand } from "@aws-sdk/client-s3";
-import { db, withBypassContext, type SqlExecutor } from "./db.ts";
+import { db, withBypassContext, withOrgContext, type SqlExecutor } from "./db.ts";
 import {
   deleteS3Blobs,
   emailAttachmentsKeyPrefix,
@@ -90,7 +90,7 @@ export async function enqueueStorageCleanup(
 /**
  * Record a cleanup intent outside any caller transaction (rowless paths:
  * staging rollback, clone compensation, post-commit sweeps). Runs its own
- * bypass transaction — call ONLY on failure paths or after the owner's
+ * scoped transaction — call ONLY on failure paths or after the owner's
  * commit, never where a surrounding transaction may still roll back (see
  * enqueueStorageCleanup). A failed enqueue here is logged, never thrown:
  * this runs on catch paths where masking the original error would destroy
@@ -98,7 +98,7 @@ export async function enqueueStorageCleanup(
  */
 export async function enqueueStorageCleanupStandalone(intent: StorageCleanupIntent): Promise<void> {
   try {
-    await withBypassContext(async () => {
+    await withOrgContext(intent.orgId, async () => {
       await enqueueStorageCleanup(db, intent);
     });
   } catch (error) {

@@ -250,6 +250,7 @@ export async function provisionOrg(
   const orgId = randomUUID();
   const attemptId = randomUUID();
   const attemptedAt = new Date().toISOString();
+  // bypass: cross-org-by-design — simulation provisioning creates a fresh organization before its id can be scoped.
   const world = await withBypass(async () => {
     const cur = profile.baseCurrency;
 
@@ -588,7 +589,7 @@ export async function provisionOrg(
         { post: true },
       ),
     );
-    const finalized = await withBypassContext(() => db.execute<{ id: string }>(sql`
+    const finalized = await withOrgContext(world.orgId, () => db.execute<{ id: string }>(sql`
       update orgs
          set settings = settings - 'simProvisioningAttempt', updated_at = now()
        where id = ${world.orgId}

@@ -29,7 +29,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, schema, withBypass, withOrgContext } from "../platform/db.ts";
+import { db, schema, withOrgContext } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
 import { Rng } from "../sim/rng.ts";
 import { getProfile } from "../sim/profiles/index.ts";
@@ -160,7 +160,7 @@ async function main(): Promise<void> {
   };
 
   // -- Subsidiaries, currencies, features -----------------------------------
-  const subs = await withBypass(async () => {
+  const subs = await withOrgContext(orgId, async () => {
     // currencies is a GLOBAL table: conflicts across reruns are expected and
     // benign (ISO rows are identical), so upsert without clobbering.
     for (const [code, name, minor] of [
@@ -209,7 +209,7 @@ async function main(): Promise<void> {
     "2026-03-15", "2026-03-31", "2026-04-15", "2026-04-30", "2026-05-15", "2026-05-31",
     "2026-06-15", "2026-06-30"];
   const spotOf = new Map<string, string>();
-  await withBypass(async () => {
+  await withOrgContext(orgId, async () => {
     for (const [from, to, base] of pairs) {
       const drift = rng.stream(`fx-${from}-${to}`);
       for (const asOf of spotDates) {

@@ -2,7 +2,7 @@ import "server-only";
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import { currentUser, validateSessionToken, SESSION_COOKIE } from "./auth";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/config";
 import { canonicalTimeZone } from "@openbooks/engine/src/platform/time-zone.ts";
@@ -77,7 +77,7 @@ export const userLocalePreference = cache(async (): Promise<Locale | null> => {
 export const resolveTimeZone = cache(async (): Promise<string> => {
   const activeUser = await requestUser();
   if (!activeUser) return "UTC";
-  const r = await withBypassContext(async () => (await db.execute(sql`
+  const r = await withOrgContext(activeUser.orgId, async () => (await db.execute(sql`
       select settings ->> 'timeZone' as time_zone
         from orgs
        where id = ${activeUser.orgId}

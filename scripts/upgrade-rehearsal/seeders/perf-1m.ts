@@ -40,7 +40,7 @@
  */
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, schema, withBypass } from "../platform/db.ts";
+import { db, schema, withMaintenanceTransaction, withOrgContext } from "../platform/db.ts";
 import { Rng } from "../sim/rng.ts";
 import { getProfile } from "../sim/profiles/index.ts";
 import { provisionOrg } from "../sim/world.ts";
@@ -217,11 +217,11 @@ async function main(): Promise<void> {
   }
   log(`provisioned org ${orgId} (${((Date.now() - started) / 1000).toFixed(1)}s)`);
 
-  await withBypass(assertBulkColumns);
+  await withOrgContext(orgId, assertBulkColumns);
   log("bulk-path columns asserted");
 
   // -- Extra master data ------------------------------------------------------
-  const extra = await withBypass(async () => {
+  const extra = await withMaintenanceTransaction(orgId, async () => {
     const customerIds: string[] = world.customers.map((c) => c.id);
     const vendorIds: string[] = world.vendors.map((v) => v.id);
     for (let i = 0; i < 60; i++) {
@@ -434,9 +434,9 @@ async function main(): Promise<void> {
     // withBypass (the timeout-free maintenance transaction) rather than
     // withBypassContext + request-pool db.transaction: one month fires ~85k
     // deferred per-row kernel checks at commit, far past the request pool's
-    // 120s query_timeout. Same bypass semantics and the same runtime login;
+    // 120s query_timeout. Keep this inside the org-scoped maintenance boundary;
     // db.transaction participates in the pinned maintenance unit.
-    await withBypass(async () => {
+    await withMaintenanceTransaction(orgId, async () => {
       await db.transaction(async (tx) => {
         await tx.execute(sql`set constraints all deferred`);
         for (let s = 0; s < entries.length; s += 1500) {
@@ -539,9 +539,9 @@ async function main(): Promise<void> {
   log(`ledger bulk done: ${totalLines} journal_lines in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 
   // -- Payroll runs/stubs/lines for 0296 (24 monthly runs x 40 employees) -----
-  // withBypass for the same timeout reason as the month loop: ~6k stub lines
-  // fire their deferred checks at this transaction's commit.
-  await withBypass(async () => {
+  // The org-scoped maintenance boundary is needed for the same timeout reason
+  // as the month loop: ~6k stub lines fire deferred checks at commit.
+  await withMaintenanceTransaction(orgId, async () => {
     await db.transaction(async (tx) => {
       await tx.execute(sql`set constraints all deferred`);
       const runRng = rng.stream("payruns");
@@ -645,7 +645,7 @@ async function main(): Promise<void> {
   log("payroll volume done");
 
   // -- Inventory volume for 0293/0299 ------------------------------------------
-  await withBypass(async () => {
+  await withMaintenanceTransaction(orgId, async () => {
     const invRng = rng.stream("inventory");
     const itemIds: string[] = [];
     for (let i = 0; i < 2000; i++) {
@@ -723,7 +723,7 @@ async function main(): Promise<void> {
   log("inventory volume done");
 
   // -- Small realistic volumes for the remaining rewrite/validate tables ------
-  await withBypass(async () => {
+  await withMaintenanceTransaction(orgId, async () => {
     // 0251 payment_links (token globally unique; bank must be asset_bank).
     const invDocs = await db.execute<{ id: string; party_id: string; total: string }>(sql`
       select id, party_id, total from documents
