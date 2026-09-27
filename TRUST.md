@@ -221,6 +221,24 @@ missing from any organisation-scoped table.
 *Checked by:* **kernel**, `scripts/bootstrap.ts`,
 `engine/src/platform/db-rls.integration.test.ts`.
 
+### 13. Stranded posting effects are refused, not silent
+
+> No posted document is left with its cost side stranded: the golden harness
+> refuses a fixture with a posting effect still pending past 15 minutes or
+> parked `terminal_failed`.
+
+The journal commits before its downstream projections run (inventory issues
+for invoices, receipts for bills, returns for credits, revenue-recognition
+obligations), so a poison effect at the attempt ceiling means an invoice is
+posted while its cost side never ran. That transition raises a named
+operator notice stating the document, the effect kind, the last error, and
+the retry, and the retry is an authorized document action — never a silent
+zero.
+
+*Checked by:* harness (`posting-effects-drained`),
+`engine/src/harness/scenario-posting-effects-red.integration.test.ts`,
+`web/app/api/documents/actions/route-retry-effects.integration.test.ts`.
+
 ---
 
 ## The conformance corpus

@@ -1048,6 +1048,27 @@ export async function runScenario(
     detail: `${monthAgg.rows_} aggregate rows; ${monthAgg.bad} drifted from a direct sum over journal lines (want 0)`,
   });
 
+  // -- Posting-effects outbox drains: a posted document's cost side -------
+  // (inventory issues for invoices, receipts for bills, returns for credits)
+  // and its revenue-recognition obligations commit AFTER the journal through
+  // the durable posting_effects outbox. A fresh pending row is normal
+  // work-in-flight; a row still pending past the lease horizon, or parked
+  // terminal_failed at the attempt ceiling, is a stranded cost side on an
+  // already-posted document. The terminal transition raises a named
+  // operator notice and the retry is an authorized document action — this
+  // gate refuses a fixture that leaves either behind.
+  const stranded = await one<{ stale: string; terminal: string }>(sql`
+    select (select count(*) from posting_effects
+             where org_id = ${orgId} and status = 'pending'
+               and created_at < now() - interval '15 minutes')::text as stale,
+           (select count(*) from posting_effects
+             where org_id = ${orgId} and status = 'terminal_failed')::text as terminal`);
+  checks.push({
+    name: "posting-effects-drained",
+    ok: Number(stranded.stale) === 0 && Number(stranded.terminal) === 0,
+    detail: `${stranded.stale} posting effects still pending past 15 minutes and ${stranded.terminal} terminal-failed (want 0 each — retry the stranded effect from the document actions so the worker can redrain)`,
+  });
+
   // -- CHECK 6: org isolation (RLS), catalog + live probe --------------------
   // "An org's data is never readable from another org, by any reader." Two
   // layers, both non-destructive:

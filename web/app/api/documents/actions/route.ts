@@ -20,12 +20,15 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = 'nodejs'
 
 /**
- * Submit a draft for approval, or post an approved/draft document.
+ * Submit a draft for approval, post an approved/draft document, or retry a
+ * stranded posting effect on a posted document.
  *
  * Approvals are owned by the Flows engine: submit fires the record's on_submit
  * flows. When a flow gates the document it goes pending_approval; when none
  * does, the engine records that no tenant approval policy applies and releases
  * the document to approved. Posting remains a separately permissioned action.
+ * Retrying a terminal-failed posting effect reuses that same posting
+ * permission: no new grant, so no role re-seed.
  */
 
 /**
@@ -56,12 +59,12 @@ export async function POST(req: Request) {
 
   const parsedBody = await parseJsonBody(req, jsonObject);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data as { action?: unknown; documentId?: unknown }
+  const body = parsedBody.data as { action?: unknown; documentId?: unknown; reason?: unknown }
   // The verb decides which permission is checked and which lifecycle path
   // runs, so it is validated as a closed set: an unrecognized action must
   // never fall through to the posting path.
-  const action = body.action === 'submit' || body.action === 'post' ? body.action : null
-  if (!action) return NextResponse.json({ error: "action must be 'submit' or 'post'" }, { status: 400 })
+  const action = body.action === 'submit' || body.action === 'post' || body.action === 'retry-effects' ? body.action : null
+  if (!action) return NextResponse.json({ error: "action must be 'submit', 'post' or 'retry-effects'" }, { status: 400 })
   if (typeof body.documentId !== 'string' || !body.documentId) {
     return NextResponse.json({ error: 'documentId required' }, { status: 400 })
   }
@@ -96,7 +99,9 @@ export async function POST(req: Request) {
   if (!canReadDocumentKind(authz, doc.kind)) {
     return notFound("record")
   }
-  const perm = action === 'post' ? postPermission(doc.kind) : createPermission(doc.kind)
+  // Retrying a stranded effect reuses the posting grant: the operator who
+  // could post the document can re-queue its cost side, and nobody new can.
+  const perm = action === 'submit' ? createPermission(doc.kind) : postPermission(doc.kind)
   if (!can(authz, perm)) {
     return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 })
   }
@@ -182,6 +187,76 @@ export async function POST(req: Request) {
       // A refused routing throws inside the transaction above (fail closed,
       // never auto-approve), so reaching here means the release succeeded.
       return NextResponse.json({ ok: true, requestId: null, autoApproved: submission.autoApproved })
+    }
+    if (action === 'retry-effects') {
+      // The replay authorizes itself (active actor, terminal-only row) and
+      // evidences the reason in audit_log, so the reason is validated before
+      // any database work: a missing reason names what to supply.
+      const reason = typeof body.reason === 'string' ? body.reason : ''
+      if (reason.trim().length < 10 || reason.length > 1000) {
+        return NextResponse.json({ error: 'a review reason of 10–1000 characters is required to retry posting effects; it is stored as the audit evidence for the replay' }, { status: 400 })
+      }
+      // The document gate runs under the row lock first (same shape as the
+      // posting branch): the replay itself runs after, in its own
+      // transaction, so the two never nest and deadlock on the same row.
+      const gate = await withOrgTransaction(user.orgId, async () => {
+        const locked = (await db.execute<{ status: string; subsidiaryId: string | null }>(sql`
+          select status, subsidiary_id as "subsidiaryId" from documents
+           where id = ${doc.id} and org_id = ${user.orgId}
+           for update
+        `))
+        // Locked scope recheck: a rehome that landed after the precheck
+        // must not let this transaction retry another subsidiary's record.
+        if (guardSubsidiaryScope(authz, locked.rows[0]?.subsidiaryId)) {
+          return { kind: 'scope_revoked' as const }
+        }
+        const current = locked.rows[0]
+        if (!current) return { kind: 'not_found' as const }
+        if (current.status !== 'posted') return { kind: 'invalid_status' as const, status: current.status }
+        const effect = (await db.execute<{ id: string; status: string }>(sql`
+          select id, status from posting_effects
+           where document_id = ${doc.id} and org_id = ${user.orgId}
+        `)).rows[0]
+        // No row, or a row the worker still owns, is a refusal by name —
+        // never a success for work no read can observe.
+        if (!effect) return { kind: 'no_effect' as const }
+        if (effect.status !== 'terminal_failed') {
+          return { kind: 'not_terminal' as const, status: effect.status }
+        }
+        return { kind: 'replayable' as const, effectId: effect.id }
+      })
+      if (gate.kind === 'scope_revoked' || gate.kind === 'not_found') {
+        return NextResponse.json({ error: 'not found' }, { status: 404 })
+      }
+      if (gate.kind === 'invalid_status') {
+        return NextResponse.json(
+          { error: `document is ${gate.status}; only a posted document's effects can be retried` },
+          { status: 422 },
+        )
+      }
+      if (gate.kind === 'no_effect') {
+        return NextResponse.json({ error: 'no posting effect is recorded for this document' }, { status: 404 })
+      }
+      if (gate.kind === 'not_terminal') {
+        return NextResponse.json(
+          { error: `posting effects for this document are ${gate.status}; only a terminal-failed effect can be retried — earlier attempts still drain through the worker` },
+          { status: 422 },
+        )
+      }
+      const { replayTerminalPostingEffect, PostingEffectsReplayError } = await import('@openbooks/engine/src/ledger/posting-effects.ts')
+      try {
+        await replayTerminalPostingEffect({ orgId: user.orgId, id: gate.effectId, actorId: user.id, reason })
+      } catch (e) {
+        // The engine names the refusal (foreign row, non-terminal row,
+        // inactive actor, concurrent reset); its message stays intact and
+        // only the status is mapped.
+        if (e instanceof PostingEffectsReplayError) {
+          const missing = /was not found/.test(e.message)
+          return NextResponse.json({ error: e.message }, { status: missing ? 404 : 422 })
+        }
+        throw e
+      }
+      return NextResponse.json({ ok: true })
     }
     // Posting a draft submits it first, so the same evidence rule applies —
     // assembled BEFORE the transaction opens (rendering three reports inside a

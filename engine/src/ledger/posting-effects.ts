@@ -23,6 +23,97 @@ import {
 export const MAX_POSTING_EFFECTS_ATTEMPTS = 8;
 export const STALE_POSTING_EFFECTS_MS = 15 * 60_000;
 
+/**
+ * Named notice kind for a stranded posting effect. Written as a plain
+ * notifications row (the same columns the shared inbox insert path uses),
+ * so the notice surfaces in /notifications AND as an inbox item through
+ * the existing notification adapter with zero extra plumbing. Raw SQL,
+ * not the inbox helper, so the ledger module gains no inbox edge.
+ */
+export const POSTING_EFFECT_TERMINAL_NOTICE_KIND = "posting_effect_terminal_failed";
+
+const POSTING_EFFECT_STRANDED_IMPACT: Record<string, string> = {
+  customer_invoice: "inventory issues (cost of sales) and revenue-recognition obligations",
+  vendor_bill: "inventory receipts",
+  vendor_credit: "inventory returns",
+  customer_credit: "inventory returns",
+};
+
+export function postingEffectTerminalNotice(input: {
+  documentNumber: string;
+  documentId: string;
+  kind: string;
+  attemptCount: number;
+  error: string;
+}): { kind: string; title: string; body: string; href: string } {
+  const impact = POSTING_EFFECT_STRANDED_IMPACT[input.kind]
+    ?? "post-commit inventory and recognition projections";
+  return {
+    kind: POSTING_EFFECT_TERMINAL_NOTICE_KIND,
+    title: `Posting effects stranded for ${input.documentNumber} (${input.kind})`,
+    body:
+      `Posting effects for document ${input.documentNumber} (${input.kind}) failed after ` +
+      `${input.attemptCount} attempts and will not retry on their own. ` +
+      `Last error: ${input.error.slice(0, 500)}. ` +
+      `The document stays posted with its ${impact} stranded. ` +
+      `Remedy: retry the effect from the document actions (POST /api/documents/actions ` +
+      `with action "retry-effects", document id ${input.documentId}, and a review reason — ` +
+      `holding the same posting permission used to post the document) or replay it ` +
+      `with the posting-effects:ops replay command and a reason.`,
+    href: "/inbox",
+  };
+}
+
+/**
+ * Raise the named terminal notice for one stranded effect. Recipients are
+ * the operators who can act on it: active super-admins and holders of any
+ * posting grant (the retry reuses the document's posting permission, so
+ * every posting grant covers some kind). Idempotent per document: a second
+ * pass finds the unread notice and writes nothing. Best-effort by design —
+ * the stamped posting_effects row is the durable record, and a notice that
+ * cannot be stored is logged, never fatal.
+ */
+async function notifyPostingEffectTerminalFailed(row: TerminalizedPostingEffectsRow): Promise<void> {
+  await withBypassContext(async () => {
+    const doc = (await db.execute<{ document_number: string; kind: string }>(sql`
+      select document_number, kind from documents
+       where id = ${row.document_id} and org_id = ${row.org_id}
+    `)).rows[0];
+    const notice = postingEffectTerminalNotice({
+      documentNumber: doc?.document_number ?? row.document_id,
+      documentId: row.document_id,
+      kind: row.kind,
+      attemptCount: row.attempt_count,
+      error: row.terminal_failure_reason,
+    });
+    const recipients = (await db.execute<{ id: string }>(sql`
+      select distinct u.id::text as id
+        from users u
+        left join role_assignments a on a.user_id = u.id and a.org_id = u.org_id
+        left join app_roles r on r.id = a.role_id and r.org_id = a.org_id
+       where u.org_id = ${row.org_id} and u.is_active
+         and (u.is_super_admin or r.permissions ? 'gl.post' or r.permissions ? 'ap.post' or r.permissions ? 'ar.post')
+    `)).rows;
+    for (const recipient of recipients) {
+      const existing = (await db.execute(sql`
+        select 1 as one from notifications
+         where org_id = ${row.org_id} and user_id = ${recipient.id}::uuid
+           and kind = ${notice.kind} and title = ${notice.title} and read_at is null
+        limit 1
+      `)).rows[0];
+      if (existing) continue;
+      const inserted = (await db.execute<{ id: string }>(sql`
+        insert into notifications (org_id, user_id, kind, title, body, href)
+        values (${row.org_id}, ${recipient.id}::uuid, ${notice.kind}, ${notice.title}, ${notice.body}, ${notice.href})
+        returning id
+      `)).rows[0]?.id;
+      if (!inserted) {
+        throw new Error("the posting-effect terminal notice was not stored — no row was written; retry the action");
+      }
+    }
+  });
+}
+
 export type PostingEffectsRow = {
   id: string;
   org_id: string;
@@ -179,7 +270,13 @@ export async function recoverStalePostingEffects(now = new Date()): Promise<numb
     return result;
   });
   for (const row of recovered.rows) {
-    if (row.becameTerminal) emitTerminalFailure(row);
+    if (!row.becameTerminal) continue;
+    emitTerminalFailure(row);
+    try {
+      await notifyPostingEffectTerminalFailed(row);
+    } catch (error) {
+      console.error(`[posting-effects] terminal notice for ${row.document_id} was not stored:`, error);
+    }
   }
   return recovered.rowCount ?? 0;
 }
@@ -305,7 +402,14 @@ export async function markPostingEffectsFailed(
     return terminalRow;
   });
   if (!marked) throw new PostingEffectsLeaseFencedError(row.id);
-  if (marked?.becameTerminal) emitTerminalFailure(marked);
+  if (marked?.becameTerminal) {
+    emitTerminalFailure(marked);
+    try {
+      await notifyPostingEffectTerminalFailed(marked);
+    } catch (error) {
+      console.error(`[posting-effects] terminal notice for ${marked.document_id} was not stored:`, error);
+    }
+  }
 }
 
 export type PostingEffectsRunner = (row: PostingEffectsRow) => Promise<void>;
@@ -458,7 +562,7 @@ export async function replayTerminalPostingEffect(input: {
     if (before.status !== "terminal_failed") {
       throw new PostingEffectsReplayError("only terminal-failed posting effects can be replayed");
     }
-    await tx.execute(sql`
+    const reset = await tx.execute(sql`
       update posting_effects
          set status='pending', attempt_count=0, next_attempt_at=${now},
              locked_at=null, lease_token=null, last_attempt_at=null, finished_at=null, error=null,
@@ -466,6 +570,12 @@ export async function replayTerminalPostingEffect(input: {
              terminal_failed_by=null, updated_at=now(), updated_by=${input.actorId}
        where id=${input.id} and org_id=${input.orgId} and status='terminal_failed'
     `);
+    // The locked pre-read above saw terminal_failed, but a concurrent replay
+    // could have reset it first: a reset that matches zero rows never
+    // succeeded, so it refuses instead of evidencing a replay that happened.
+    if (reset.rowCount !== 1) {
+      throw new PostingEffectsReplayError("posting effect changed while authorizing replay — reload it and retry");
+    }
     await tx.execute(sql`
       insert into audit_log
         (org_id, table_name, row_id, action, changes, actor_id, request_id, at)
