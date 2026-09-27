@@ -28,7 +28,7 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const entityRoute = context.parentURL?.includes("%5Bentity%5D")
       ?? context.parentURL?.includes("[entity]");
@@ -47,8 +47,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?bom-generic-refusal-route-test";
 const { DELETE, PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"

@@ -75,7 +75,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/views', mockUrl('views')],
 ])
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
@@ -92,8 +92,6 @@ const hooks = registerHooks({
 
 const view_export_authzUrl = './[id]/export/route.ts?view-export-authz'
 const { GET } = (await import(view_export_authzUrl)) as typeof import('./[id]/export/route.ts')
-hooks.deregister()
-
 test('view export refuses a payroll plan when the caller lacks payroll.read', async () => {
   state.granted = new Set(['reports.read'])
   state.ran = false

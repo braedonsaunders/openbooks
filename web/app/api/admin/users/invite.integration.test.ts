@@ -24,7 +24,7 @@ const state: {
 } = { authz: null, deliveries: [], emailLogs: [], sentMarks: [] };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, next) {
     const virtual = (source: string) => ({
       shortCircuit: true,
@@ -87,7 +87,6 @@ const hooks = registerHooks({
 const { POST } = await import("./route");
 const { loadAdminUsers } = await import("../../../(app)/admin/users/view");
 const { completePasswordReset } = await import("../../../../lib/auth-reset");
-hooks.deregister();
 const NEW_EMAIL = "new.member@scratch.test";
 
 async function seed(rolePermissions: string[] = []) {

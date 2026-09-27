@@ -28,7 +28,7 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       specifier === "../../../../lib/feature-gates"
@@ -58,8 +58,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?close-posting-periods-route-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db } = await import("../../../../../engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
   await import("../../../../../engine/src/testing/fixtures.ts");

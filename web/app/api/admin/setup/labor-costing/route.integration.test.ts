@@ -107,7 +107,7 @@ const mockDbWrapper = (realUrl: string) => `
   export const orgContext = real.orgContext
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as platform.test.ts).
     // Forward Next.js-style aliases to the real modules they point at.
@@ -147,8 +147,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?labor-costing-boundary-test";
 const { GET, PUT, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"

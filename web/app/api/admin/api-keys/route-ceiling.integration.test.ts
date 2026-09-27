@@ -20,7 +20,7 @@ import type { SessionUser } from "../../../../lib/auth";
 
 const session: { user: SessionUser | null } = { user: null };
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) {
       return {
@@ -37,8 +37,6 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?api-keys-ceiling";
 const { POST, PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 const { canApi, generateApiKey, resolveApiKeyAuth } = await import("../../../../lib/api-auth");
-hooks.deregister();
-
 function become(userId: string, orgId: string): void {
   session.user = {
     id: userId,

@@ -92,7 +92,7 @@ const mockDb = `
   export async function connectGovernedReadClient() { throw new Error('no database in the idempotency test') }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const parent = context.parentURL ?? "";
     const isEntityRoute = parent.includes("%5Bentity%5D") || parent.includes("[entity]");
@@ -113,8 +113,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?setup-idempotency-test";
 const { PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 // ---------------------------------------------------------------------------
 // Flatten real drizzle SQL objects into { text, values } for the fake.
 // ---------------------------------------------------------------------------

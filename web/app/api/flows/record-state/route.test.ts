@@ -116,7 +116,7 @@ const mockUrls = new Map<string, string>([
 
 const selfUrl = new URL(import.meta.url).href;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, _context, nextResolve) {
     const mocked = mockUrls.get(specifier);
     // Serve the _lib double under a file URL: its lock stub imports the real
@@ -134,8 +134,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?record-state-subsidiary-scope";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 function reset(allowedSubsidiaryIds: Set<string> | null): void {
   routeState.authz.allowedSubsidiaryIds = allowedSubsidiaryIds;
   routeState.subjectSubsidiaryId = "sub-hidden";

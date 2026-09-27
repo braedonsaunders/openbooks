@@ -108,7 +108,7 @@ const mockUrls = new Map<string, string>([
 
 let postRoute: typeof import("./route.ts").POST | undefined;
 if (!isVitest) {
-  const hooks = registerHooks({
+  registerHooks({
     resolve(specifier, _context, nextResolve) {
       const mocked = mockUrls.get(specifier);
       if (mocked) return { url: mocked, shortCircuit: true };
@@ -123,7 +123,6 @@ if (!isVitest) {
 
   const routeUrl = "./route.ts?flow-decide-subsidiary-scope";
   postRoute = (await import(routeUrl) as typeof import("./route.ts")).POST;
-  hooks.deregister();
 }
 
 const GATE_ID = "00000000-0000-4000-8000-000000000012";

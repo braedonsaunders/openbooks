@@ -28,7 +28,7 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     const entityRoute = context.parentURL?.includes("%5Bentity%5D") ?? context.parentURL?.includes("[entity]");
     if (specifier === "../../../../../lib/authz" && entityRoute) {
@@ -46,8 +46,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?hrm-review-template-labels-route-test";
 const { PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"

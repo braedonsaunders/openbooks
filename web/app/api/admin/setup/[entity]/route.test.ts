@@ -27,7 +27,7 @@ const mockAuthz = `
   export function can() { return true }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as setup-route-contract.test.ts).
     if (specifier === "next-intl/server") return { shortCircuit: true, format: "module", url: "mock:setup-intl" };
@@ -55,8 +55,6 @@ const { DELETE, PATCH, POST } = (await import(routeUrl)) as typeof import("./rou
 const { loadEntityOptions } = await import("../../../../../lib/setup/ref-options.ts");
 const { setupEntitySubsidiaryFilter } = await import("../../../../../lib/setup/subsidiary-scope.ts");
 const { SETUP_ENTITY_BY_KEY } = await import("../../../../../lib/setup/registry.ts");
-hooks.deregister();
-
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"

@@ -47,7 +47,7 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (
       specifier === "../../../../lib/authz" &&
@@ -67,8 +67,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?accounting-policy-boundary-test";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db, withBypass, withBypassContext, withOrgContext } =
   await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =

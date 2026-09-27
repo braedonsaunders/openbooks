@@ -31,7 +31,7 @@ const mockAuthz = `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../../lib/authz" && context.parentURL?.includes("setup/overhead/route")) {
       return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(mockAuthz)}` };
@@ -47,8 +47,6 @@ const hooks = registerHooks({
 });
 
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(

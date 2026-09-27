@@ -81,7 +81,7 @@ const mockSources = new Map<string, string>([
   ],
 ]);
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "@openbooks/engine/src/platform/db.ts") {
       return { url: "mock:db", shortCircuit: true };
@@ -106,8 +106,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?backup-enqueue-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 function reset(): void {
   routeState.calls = []; routeState.enqueueCalls = 0; routeState.enqueueError = undefined; routeState.raceStatus = undefined;
 }

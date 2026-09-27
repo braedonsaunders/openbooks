@@ -16,7 +16,7 @@ const stateKey = Symbol.for("openbooks.password-reset-redeem-integration");
 const state: { transport: boolean } = { transport: false };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, next) {
     const virtual = (source: string) => ({
       shortCircuit: true,
@@ -48,7 +48,6 @@ const hooks = registerHooks({
 });
 const { PUT } = await import("./route");
 const { issueInviteSetPasswordLink } = await import("../../../lib/auth-reset");
-hooks.deregister();
 test("a live token redeems through the route from a cross-loopback Origin", async () => {
   const seeded = await withBypassContext(async () => {
     const org = await createScratchOrg();

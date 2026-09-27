@@ -12,7 +12,6 @@ import {
 } from '@openbooks/engine/src/projects/financial-profile-versions.ts'
 import type { FinancialProfile } from '@openbooks/schema'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts'
 import { guardPermission, guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
@@ -62,7 +61,7 @@ const updateBodySchema = z.object({
   id: z.string().uuid(), billingMethod: z.enum(["time_and_materials", "fixed_price", "cost_plus"]),
   name: z.string().trim().min(1).max(200).optional(), description: z.string().nullable().optional(),
   isActive: z.boolean().optional(), sortOrder: z.number().int().optional(),
-  financialProfile: financialProfileSchema.optional(), financialEffectiveFrom: z.string().refine((value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && isCalendarDate(value), "financialEffectiveFrom must be a real calendar date in YYYY-MM-DD format").optional(),
+  financialProfile: financialProfileSchema.optional(), financialEffectiveFrom: z.iso.date({ error: "financialEffectiveFrom must be a real calendar date in YYYY-MM-DD format" }).optional(),
   financialChangeReason: z.string().trim().max(500).optional(),
   invoicingProfile: invoicingProfileSchema.optional(), backupProfile: backupProfileSchema.optional(),
 });
@@ -205,15 +204,6 @@ async function legacyPATCH(req: Request) {
   if (b.invoicingProfile) {
     const profileError = validateInvoicingProfile(b.invoicingProfile, b.billingMethod)
     if (profileError) return NextResponse.json({ error: profileError }, { status: 422 })
-  }
-  // An impossible date ('2026-02-30') would otherwise reach the version
-  // queries, whose ::date casts throw a raw driver error surfaced as a 422
-  // with a Postgres message instead of a field error.
-  if (b.financialProfile && b.financialEffectiveFrom !== undefined) {
-    const financialEffectiveFrom = String(b.financialEffectiveFrom)
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(financialEffectiveFrom) || !isIsoCalendarDate(financialEffectiveFrom)) {
-      return NextResponse.json({ error: 'financialEffectiveFrom (YYYY-MM-DD) required' }, { status: 422 })
-    }
   }
   const fieldTicketsEnabled = b.invoicingProfile
     ? await isFeatureEnabled(orgId, 'fieldTickets')

@@ -33,7 +33,7 @@ const mockAuthz = (realUrl: string): string => `
   }
 `;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     // load under the plain runner (same seam as platform.test.ts).
     // Forward Next.js-style aliases to the real modules they point at.
@@ -66,8 +66,6 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?payment-providers-boundary-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
-
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
   "@openbooks/engine/src/testing/fixtures.ts"

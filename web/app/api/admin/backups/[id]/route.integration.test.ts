@@ -14,7 +14,7 @@ const storageState: StorageState = { actor: null, deletedKeys: [] };
 const storageStateKey = Symbol.for("openbooks.backup-delete-route-test");
 (globalThis as Record<symbol, unknown>)[storageStateKey] = storageState;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../../lib/authz") {
       return {
@@ -63,9 +63,6 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?backup-delete-integration";
 const { DELETE } = await import(routeUrl) as typeof import("./route.ts");
 const { backupObjectKey } = await import("@openbooks/engine/src/backup/backup.ts");
-hooks.deregister();
-
-
 test("manual deletion purges the stored object and retains actor-attributed ledger evidence", async () => {
   const org = await createScratchOrg();
   const actorId = await createScratchUser(org.orgId, "Backup Administrator", "admin");
