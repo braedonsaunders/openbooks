@@ -19,6 +19,8 @@ function runIntegrationSource(source: string): void {
       "--import",
       "tsx",
       "--import",
+      "./scripts/test-hooks.mjs",
+      "--import",
       "./engine/src/testing/database-bypass.ts",
       "--input-type=module",
       "-e",
