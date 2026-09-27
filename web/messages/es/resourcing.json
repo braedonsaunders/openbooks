@@ -139,5 +139,40 @@
     "release": "Liberar",
     "saving": "Guardando…",
     "save": "Guardar"
+  },
+  "demandLines": {
+    "title": "Demanda de personal",
+    "description": "Planifique las necesidades por departamento, puesto y semana; la ponderación de oportunidades se mantiene actualizada.",
+    "actions": { "new": "Nueva línea de demanda" },
+    "tabs": { "aria": "Secciones de la línea de demanda", "details": "Detalles", "weighting": "Ponderación" },
+    "fields": {
+      "department": "Departamento",
+      "jobTitle": "Puesto de trabajo",
+      "firstWeek": "Primera semana (domingo)",
+      "lastWeek": "Última semana (domingo)",
+      "hoursPerWeek": "Horas por semana",
+      "note": "Nota",
+      "opportunity": "Oportunidad",
+      "manual": "Demanda manual"
+    },
+    "departmentInactive": "inactivo",
+    "drawer": {
+      "newTitle": "Nueva demanda de personal",
+      "deleteConfirm": "¿Eliminar esta línea de demanda? Se conservará su historial de auditoría.",
+      "unsavedChanges": "Cambios de demanda de personal sin guardar"
+    },
+    "weighting": {
+      "week": "Semana",
+      "storedHours": "Horas guardadas",
+      "basis": "Base",
+      "exclusion": "Motivo de exclusión",
+      "liveDescription": "La probabilidad y la inclusión en la previsión de la oportunidad se consultan en tiempo real. Esta vista no modifica la demanda guardada.",
+      "empty": "No hay filas de demanda semanal disponibles."
+    },
+    "errors": {
+      "saveFailed": "No se pudo guardar la línea de demanda. Inténtelo de nuevo.",
+      "deleteFailed": "No se pudo eliminar la línea de demanda. Inténtelo de nuevo.",
+      "customFields": "Corrija los campos personalizados marcados."
+    }
   }
 }

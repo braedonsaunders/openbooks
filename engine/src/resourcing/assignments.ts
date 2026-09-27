@@ -11,13 +11,10 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { add, cmp, neg, sum } from "../money/money.ts";
 import { assertPlannableCapacity, type AvailabilityFigure } from "./availability.ts";
 import { ResourcingRefusal } from "./errors.ts";
-import {
-  acquireOrgFeatureGateLock,
-  lockAndCheckOrgFeature,
-} from "../organization/org-feature-lock.ts";
 import { lockProjectForScope } from "../organization/subsidiary-scope.ts";
 import { weekStartOf } from "./weeks.ts";
 import { readAvailability } from "./availability-read.ts";
+import { lockAndRequireResourcing } from "./feature.ts";
 
 type AssignmentRow = typeof resAssignments.$inferSelect;
 type Booking = (typeof RES_ASSIGNMENT_BOOKING_VALUES)[number];
@@ -77,15 +74,7 @@ async function inAssignmentWrite<T>(
   work: (tx: SqlExecutor) => Promise<T>,
 ): Promise<T> {
   return withOrgTransaction(context.orgId, () => db.transaction(async (tx) => {
-    await acquireOrgFeatureGateLock(tx, context.orgId);
-    if (!(await lockAndCheckOrgFeature(tx, context.orgId, "resourcing"))) {
-      throw new ResourcingRefusal(
-        409,
-        "resourcing_feature_disabled",
-        "Resourcing is disabled for this organization",
-        "turn on Resourcing in Company Settings → Features",
-      );
-    }
+    await lockAndRequireResourcing(tx, context.orgId);
     return work(tx);
   }));
 }

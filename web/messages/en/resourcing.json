@@ -139,5 +139,40 @@
     "release": "Release",
     "saving": "Saving…",
     "save": "Save"
+  },
+  "demandLines": {
+    "title": "Staffing demand",
+    "description": "Plan department needs by role and week, with opportunity weighting kept current.",
+    "actions": { "new": "New demand line" },
+    "tabs": { "aria": "Demand line sections", "details": "Details", "weighting": "Weighting" },
+    "fields": {
+      "department": "Department",
+      "jobTitle": "Job title",
+      "firstWeek": "First week (Sunday)",
+      "lastWeek": "Last week (Sunday)",
+      "hoursPerWeek": "Hours per week",
+      "note": "Note",
+      "opportunity": "Opportunity",
+      "manual": "Manual demand"
+    },
+    "departmentInactive": "inactive",
+    "drawer": {
+      "newTitle": "New staffing demand",
+      "deleteConfirm": "Delete this demand line? Its audit history will be retained.",
+      "unsavedChanges": "Unsaved demand line changes"
+    },
+    "weighting": {
+      "week": "Week",
+      "storedHours": "Stored hours",
+      "basis": "Basis",
+      "exclusion": "Exclusion reason",
+      "liveDescription": "Opportunity probability and forecast eligibility are read live. This view does not change the stored staffing ask.",
+      "empty": "No weekly demand rows are available."
+    },
+    "errors": {
+      "saveFailed": "The demand line could not be saved. Try again.",
+      "deleteFailed": "The demand line could not be deleted. Try again.",
+      "customFields": "Correct the highlighted custom fields."
+    }
   }
 }

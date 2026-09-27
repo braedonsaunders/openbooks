@@ -139,5 +139,40 @@
     "release": "Libérer",
     "saving": "Enregistrement…",
     "save": "Enregistrer"
+  },
+  "demandLines": {
+    "title": "Besoin en personnel",
+    "description": "Planifiez les besoins par service, métier et semaine ; la pondération des opportunités reste à jour.",
+    "actions": { "new": "Nouvelle ligne de besoin" },
+    "tabs": { "aria": "Sections de la ligne de besoin", "details": "Détails", "weighting": "Pondération" },
+    "fields": {
+      "department": "Service",
+      "jobTitle": "Intitulé du poste",
+      "firstWeek": "Première semaine (dimanche)",
+      "lastWeek": "Dernière semaine (dimanche)",
+      "hoursPerWeek": "Heures par semaine",
+      "note": "Remarque",
+      "opportunity": "Opportunité",
+      "manual": "Besoin manuel"
+    },
+    "departmentInactive": "inactif",
+    "drawer": {
+      "newTitle": "Nouveau besoin en personnel",
+      "deleteConfirm": "Supprimer cette ligne de besoin ? Son historique d’audit sera conservé.",
+      "unsavedChanges": "Modifications du besoin en personnel non enregistrées"
+    },
+    "weighting": {
+      "week": "Semaine",
+      "storedHours": "Heures enregistrées",
+      "basis": "Origine",
+      "exclusion": "Motif d’exclusion",
+      "liveDescription": "La probabilité et l’admissibilité de l’opportunité aux prévisions sont lues en temps réel. Cette vue ne modifie pas le besoin enregistré.",
+      "empty": "Aucune ligne de besoin hebdomadaire disponible."
+    },
+    "errors": {
+      "saveFailed": "Impossible d’enregistrer la ligne de besoin. Réessayez.",
+      "deleteFailed": "Impossible de supprimer la ligne de besoin. Réessayez.",
+      "customFields": "Corrigez les champs personnalisés signalés."
+    }
   }
 }

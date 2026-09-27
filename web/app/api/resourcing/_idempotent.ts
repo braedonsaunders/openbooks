@@ -4,7 +4,7 @@ import { db } from "@openbooks/engine/src/platform/db.ts";
 import { claimIdempotentCreate, resolveIdempotentReplay } from "@/lib/api/idempotency";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type CreateTable = "res_requests" | "res_retainers";
+type CreateTable = "res_demand_lines" | "res_requests" | "res_retainers";
 
 /** Call inside withOrgTransaction so the lock, create, and audit commit together. */
 export async function idempotentResourcingCreate<T>(input: {
