@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
+import { jsonObject, parseJsonBody, validateJsonBody } from "@/lib/api/json";
 
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -97,8 +98,7 @@ export const PATCH = defineRoute({
   feature: "flows",
   scope: "unrestricted",
   params: z.object({ "id": z.string() }),
-  body: requestBodySchema,
-  handler: async ({ request, body, params, authz: routeAuthz }) => {
+  handler: async ({ request, params, authz: routeAuthz }) => {
 
     const gate = routeAuthz
 
@@ -107,6 +107,13 @@ export const PATCH = defineRoute({
     const user = gate.user
     const { id } = params
     if (!isUuid(id)) return notFound("record")
+    const rawBody = await parseJsonBody(request, jsonObject)
+    if (!rawBody.ok) return rawBody.response
+    const expectedUpdatedAt = rawBody.data.expectedUpdatedAt
+    if (!isDocumentRevisionToken(expectedUpdatedAt)) return revisionConflict()
+    const parsedBody = validateJsonBody(rawBody.data, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.data
 
 
 
@@ -119,15 +126,13 @@ export const PATCH = defineRoute({
     if (body.description !== undefined && body.description !== null && typeof body.description !== 'string') {
       return NextResponse.json({ error: 'description must be a string or null' }, { status: 400 })
     }
-    if (!isDocumentRevisionToken(body.expectedUpdatedAt)) return revisionConflict()
-
     return db.transaction(async (tx) => {
       const flow = (await tx.execute<Record<string, unknown>>(sql`
         select flows.*, ${documentRevisionSql(sql`updated_at`)} as updated_at
           from flows where id = ${id} and org_id = ${user.orgId} for update
       `)).rows[0]
       if (!flow) return notFound("record")
-      if (flow.updated_at !== body.expectedUpdatedAt) return revisionConflict()
+      if (flow.updated_at !== expectedUpdatedAt) return revisionConflict()
       const sets = [sql`updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond')`, sql`updated_by = ${user.id}`]
       if (typeof body.name === 'string') sets.push(sql`name = ${body.name.trim()}`)
       if (body.description !== undefined) sets.push(sql`description = ${body.description}`)
@@ -192,8 +197,7 @@ export const DELETE = defineRoute({
   feature: "flows",
   scope: "unrestricted",
   params: z.object({ "id": z.string() }),
-  body: requestBodySchema,
-  handler: async ({ request, body, params, authz: routeAuthz }) => {
+  handler: async ({ request, params, authz: routeAuthz }) => {
 
     const gate = routeAuthz
 
@@ -202,9 +206,13 @@ export const DELETE = defineRoute({
     const orgId = gate.user.orgId
     const { id } = params
     if (!isUuid(id)) return notFound("record")
-
-
-    if (!isDocumentRevisionToken(body.expectedUpdatedAt)) return revisionConflict()
+    const rawBody = await parseJsonBody(request, jsonObject)
+    if (!rawBody.ok) return rawBody.response
+    const expectedUpdatedAt = rawBody.data.expectedUpdatedAt
+    if (!isDocumentRevisionToken(expectedUpdatedAt)) return revisionConflict()
+    const parsedBody = validateJsonBody(rawBody.data, requestBodySchema)
+    if (!parsedBody.ok) return parsedBody.response
+    const body = parsedBody.data
 
     return db.transaction(async (tx) => {
       // Lock the parent before checking children. Run/gate inserts take a foreign-key
@@ -214,7 +222,7 @@ export const DELETE = defineRoute({
           from flows where id = ${id} and org_id = ${orgId} for update
       `)).rows[0]
       if (!flow) return notFound("record")
-      if (flow.updated_at !== body.expectedUpdatedAt) return revisionConflict()
+      if (flow.updated_at !== expectedUpdatedAt) return revisionConflict()
       const history = (await tx.execute<{ used: boolean }>(sql`
         select exists(select 1 from flow_runs where flow_id = ${id} and org_id = ${orgId})
             or exists(select 1 from flow_gates where flow_id = ${id} and org_id = ${orgId}) as used

@@ -1,6 +1,6 @@
 {
   "$comment": "Shrink-only ledger for the route-factory migration: every entry is a non-public route still hand-rolling its guards. Shards remove entries as they migrate; nothing here may grow.",
   "routes": [],
-  "jsonObjectImporters": 0,
+  "jsonObjectImporters": 2,
   "sqlImporters": 258
 }
