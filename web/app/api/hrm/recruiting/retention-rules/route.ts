@@ -1,12 +1,13 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { createRetentionRule, listRetentionRules } from "@openbooks/engine/src/hrm/recruiting/retention.ts";
-import { guardPermission } from "../../../../../lib/authz";
+import {
+  createRetentionRule,
+  listRetentionRules,
+} from "@openbooks/engine/src/hrm/recruiting/retention.ts";
+
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { recruitingErrorResponse } from "../_lib";
 import { createRetentionRuleBody } from "./bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -20,47 +21,44 @@ async function depthGate(orgId: string) {
   return isFeatureEnabled(orgId, "hrmCandidateRetention");
 }
 
-export async function GET(req: Request) {
-  const gate = await guardPermission("hrm.recruiting.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  try {
-    const includeInactive = new URL(req.url).searchParams.get("includeInactive") === "1";
-    const rules = await listRetentionRules({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      includeInactive,
-    });
-    return NextResponse.json({ rules });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.recruiting.read",
+  feature: "hrmCandidateRetention",
+  handler: async ({ request: req, authz: gate }) => {
+    try {
+      const includeInactive =
+        new URL(req.url).searchParams.get("includeInactive") === "1";
+      const rules = await listRetentionRules({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        includeInactive,
+      });
+      return NextResponse.json({ rules });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});
 
-export async function POST(req: Request) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await depthGate(gate.user.orgId))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, createRetentionRuleBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const rule = await createRetentionRule({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      name: body.name,
-      regionScope: body.regionScope,
-      basis: body.basis,
-      retainMonths: body.retainMonths,
-      action: body.action,
-      consentExtensionLeadDays: body.consentExtensionLeadDays,
-    });
-    return NextResponse.json({ rule }, { status: 201 });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmCandidateRetention",
+  body: createRetentionRuleBody,
+  handler: async ({ request: req, authz: gate, body: body }) => {
+    try {
+      const rule = await createRetentionRule({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        name: body.name,
+        regionScope: body.regionScope,
+        basis: body.basis,
+        retainMonths: body.retainMonths,
+        action: body.action,
+        consentExtensionLeadDays: body.consentExtensionLeadDays,
+      });
+      return NextResponse.json({ rule }, { status: 201 });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});

@@ -1,4 +1,6 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import {
   closeCycle,
@@ -6,13 +8,11 @@ import {
   openCycle,
 } from "@openbooks/engine/src/hrm/performance/review-cycles.ts";
 import { getCycleDetail } from "@openbooks/engine/src/hrm/performance/performance-read.ts";
-import { getAuthz, guardPermission } from "../../../../../lib/authz";
+
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { performanceErrorResponse } from "../_lib";
 import { patchCycleBody } from "../bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -24,51 +24,77 @@ export const runtime = "nodejs";
  * client checks res.ok before parsing: whole-call denials are HTTP errors
  * with `{ error }` bodies.
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!(await isFeatureEnabled(authz.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid review cycle" }, { status: 400 });
-  try {
-    const cycle = await getCycleDetail({ orgId: authz.user.orgId, actorId: authz.user.id, cycleId: id });
-    return NextResponse.json({ cycle });
-  } catch (e) {
-    return performanceErrorResponse(e);
-  }
-}
-
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.performance.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid review cycle" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, patchCycleBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    if (body.action === "open") {
-      const opened = await openCycle({ orgId: gate.user.orgId, actorId: gate.user.id, cycleId: id });
-      return NextResponse.json(opened);
+export const GET = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: authz, params: routeParams }) => {
+      if (!(await isFeatureEnabled(authz.user.orgId, "hrmPerformance"))) {
+      return notFound("record");
     }
-    if (body.action === "to-calibrating") {
-      const cycle = await moveToCalibrating({
+    const { id } = routeParams;
+    if (!isUuid(id))
+      return NextResponse.json(
+        { error: "invalid review cycle" },
+        { status: 400 },
+      );
+    try {
+      const cycle = await getCycleDetail({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        cycleId: id,
+      });
+      return NextResponse.json({ cycle });
+    } catch (e) {
+      return performanceErrorResponse(e);
+    }
+  },
+});
+
+export const PATCH = defineRoute({
+  permission: "hrm.performance.manage",
+  feature: "hrmPerformance",
+  params: z.object({ id: z.string().min(1) }),
+  body: patchCycleBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+    if (!isUuid(id))
+      return NextResponse.json(
+        { error: "invalid review cycle" },
+        { status: 400 },
+      );
+
+    try {
+      if (body.action === "open") {
+        const opened = await openCycle({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          cycleId: id,
+        });
+        return NextResponse.json(opened);
+      }
+      if (body.action === "to-calibrating") {
+        const cycle = await moveToCalibrating({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          cycleId: id,
+          force: body.force ?? false,
+          forceReason: body.forceReason,
+        });
+        return NextResponse.json({ cycle });
+      }
+      const cycle = await closeCycle({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         cycleId: id,
-        force: body.force ?? false,
-        forceReason: body.forceReason,
       });
       return NextResponse.json({ cycle });
+    } catch (e) {
+      return performanceErrorResponse(e);
     }
-    const cycle = await closeCycle({ orgId: gate.user.orgId, actorId: gate.user.id, cycleId: id });
-    return NextResponse.json({ cycle });
-  } catch (e) {
-    return performanceErrorResponse(e);
-  }
-}
+  },
+});

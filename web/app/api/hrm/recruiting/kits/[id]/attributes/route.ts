@@ -1,12 +1,10 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { addKitAttribute } from "@openbooks/engine/src/hrm/recruiting/kits.ts";
-import { guardPermission } from "../../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../../lib/features";
+
 import { recruitingErrorResponse } from "../../../_lib";
 import { createAttributeBody } from "../../bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -15,32 +13,33 @@ export const runtime = "nodejs";
  * (manage gate in the service). 404s while hrm, hrmRecruiting, or
  * hrmStructuredInterviews is off.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (
-    !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
-    !(await isFeatureEnabled(gate.user.orgId, "hrmStructuredInterviews"))
-  ) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  const parsedBody = await parseJsonBody(req, createAttributeBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const attribute = await addKitAttribute({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      kitId: id,
-      category: body.category,
-      attribute: body.attribute,
-      description: body.description,
-      position: body.position,
-      isFocusDefault: body.isFocusDefault,
-    });
-    return NextResponse.json({ attribute }, { status: 201 });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmStructuredInterviews",
+  params: z.object({ id: z.string().min(1) }),
+  body: createAttributeBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+
+    try {
+      const attribute = await addKitAttribute({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        kitId: id,
+        category: body.category,
+        attribute: body.attribute,
+        description: body.description,
+        position: body.position,
+        isFocusDefault: body.isFocusDefault,
+      });
+      return NextResponse.json({ attribute }, { status: 201 });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});

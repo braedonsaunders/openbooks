@@ -1,17 +1,19 @@
-import { apiErrorResponse } from '@/lib/api/error-response'
-import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from "@/lib/api/error-response";
+import { NextResponse } from "next/server";
+import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import {
   EmploymentReadError,
   getEmploymentRecord,
-} from '@openbooks/engine/src/hrm/employment-read.ts'
-import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
-import { TemporalError } from '@openbooks/engine/src/hrm/temporal.ts'
-import { guardFeaturePermission } from '../../../../../lib/feature-gates'
-import { isUuid } from '../../../../../lib/list-params'
-import { hrmAuthorizationResponse } from '../../../../../lib/api/record-not-found'
+} from "@openbooks/engine/src/hrm/employment-read.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
+import { guardFeaturePermission } from "../../../../../lib/feature-gates";
+import { isUuid } from "../../../../../lib/list-params";
+import { hrmAuthorizationResponse } from "../../../../../lib/api/record-not-found";
 
-export const dynamic = 'force-dynamic'
+export const dynamic = "force-dynamic";
 
 /**
  * One employment's HRM record: episodes, the as-of resolution at the
@@ -28,42 +30,63 @@ export const dynamic = 'force-dynamic'
  * resolves the team and refuses strangers with the employment remedy
  * intact — a widened gate with an unchanged refusal.
  */
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const employmentGate = await guardFeaturePermission('hrm.employment.read', 'hrm')
-  const gate = employmentGate instanceof NextResponse
-    ? await guardFeaturePermission('hrm.self.read', 'hrm')
-    : employmentGate
-  if (gate instanceof NextResponse) return gate
-  const { id } = await params
-  if (!isUuid(id)) return NextResponse.json({ error: 'invalid employment' }, { status: 422 })
+export const GET = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: req, params: routeParams }) => {
+    const employmentGate = await guardFeaturePermission(
+      "hrm.employment.read",
+      "hrm",
+    );
+    const gate =
+      employmentGate instanceof NextResponse
+        ? await guardFeaturePermission("hrm.self.read", "hrm")
+        : employmentGate;
+    if (gate instanceof NextResponse) return gate;
+    const { id } = routeParams;
+    if (!isUuid(id))
+      return NextResponse.json(
+        { error: "invalid employment" },
+        { status: 422 },
+      );
 
-  const { searchParams } = new URL(req.url)
-  const rawDate = searchParams.get('effectiveDate')
-  const effectiveDate = rawDate ?? (await businessToday(gate.user.orgId))
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) {
-    return NextResponse.json({ error: 'effectiveDate must be YYYY-MM-DD' }, { status: 422 })
-  }
+    const { searchParams } = new URL(req.url);
+    const rawDate = searchParams.get("effectiveDate");
+    const effectiveDate = rawDate ?? (await businessToday(gate.user.orgId));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)) {
+      return NextResponse.json(
+        { error: "effectiveDate must be YYYY-MM-DD" },
+        { status: 422 },
+      );
+    }
 
-  try {
-    const record = await getEmploymentRecord({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      employmentId: id,
-      effectiveDate,
-      knownAt: new Date().toISOString(),
-    })
-    return NextResponse.json({ record })
-  } catch (error) {
-    // Authorization denial is uniform and safe to surface: it names the
-    // permission and the remedy, never the record.
-    if (error instanceof HrmAuthorizationError) {
-      return hrmAuthorizationResponse(error)
+    try {
+      const record = await getEmploymentRecord({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        employmentId: id,
+        effectiveDate,
+        knownAt: new Date().toISOString(),
+      });
+      return NextResponse.json({ record });
+    } catch (error) {
+      // Authorization denial is uniform and safe to surface: it names the
+      // permission and the remedy, never the record.
+      if (error instanceof HrmAuthorizationError) {
+        return hrmAuthorizationResponse(error);
+      }
+      // Computed domain refusals (gate off, malformed as-of, missing or
+      // ambiguous revision) reach the caller with their code and remedy.
+      if (
+        error instanceof EmploymentReadError ||
+        error instanceof TemporalError
+      ) {
+        return apiErrorResponse(error, {
+          safeStatus: 422,
+          details: { code: error.name },
+        });
+      }
+      throw error;
     }
-    // Computed domain refusals (gate off, malformed as-of, missing or
-    // ambiguous revision) reach the caller with their code and remedy.
-    if (error instanceof EmploymentReadError || error instanceof TemporalError) {
-      return apiErrorResponse(error, { safeStatus: 422, details: { code: error.name } })
-    }
-    throw error
-  }
-}
+  },
+});

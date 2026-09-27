@@ -1,4 +1,5 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { fileLeaveRequest } from "@openbooks/engine/src/hrm/leave.ts";
 import {
@@ -10,8 +11,6 @@ import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import { leaveErrorResponse } from "./_lib";
 import { fileLeaveRequestBody } from "./bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -36,68 +35,89 @@ async function guardSelfServiceRead() {
   return read;
 }
 
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const employmentId = url.searchParams.get("employmentId");
-  const gate =
-    employmentId === "mine" || employmentId === null
-      ? await guardSelfServiceRead()
-      : await guardPermission("hrm.leave.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const status = url.searchParams.get("status");
-  const statuses = ["draft", "submitted", "approved", "rejected", "withdrawn", "cancelled"];
-  if (status !== null && !statuses.includes(status)) {
-    return NextResponse.json({ error: "unknown status" }, { status: 400 });
-  }
-  try {
-    if (employmentId === "mine" || employmentId === null) {
-      if (status !== null) {
-        return NextResponse.json({ error: "status filtering on the self-service inbox is not supported" }, { status: 400 });
-      }
-      const requests = await myLeaveRequests({ orgId: gate.user.orgId, actorId: gate.user.id });
-      return NextResponse.json({ requests });
+export const GET = defineRoute({
+  public: "session",
+  handler: async ({ request: req }) => {
+    const url = new URL(req.url);
+    const employmentId = url.searchParams.get("employmentId");
+    const gate =
+      employmentId === "mine" || employmentId === null
+        ? await guardSelfServiceRead()
+        : await guardPermission("hrm.leave.read");
+    if (gate instanceof NextResponse) return gate;
+    if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
+      return notFound("record");
     }
-    if (!isUuid(employmentId)) return NextResponse.json({ error: "employment id must be a uuid" }, { status: 400 });
-    const requests = await listLeaveRequests({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      employmentId,
-      ...(status ? { status } : {}),
-    });
-    return NextResponse.json({ requests });
-  } catch (e) {
-    return leaveErrorResponse(e);
-  }
-}
+    const status = url.searchParams.get("status");
+    const statuses = [
+      "draft",
+      "submitted",
+      "approved",
+      "rejected",
+      "withdrawn",
+      "cancelled",
+    ];
+    if (status !== null && !statuses.includes(status)) {
+      return NextResponse.json({ error: "unknown status" }, { status: 400 });
+    }
+    try {
+      if (employmentId === "mine" || employmentId === null) {
+        if (status !== null) {
+          return NextResponse.json(
+            {
+              error:
+                "status filtering on the self-service inbox is not supported",
+            },
+            { status: 400 },
+          );
+        }
+        const requests = await myLeaveRequests({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+        });
+        return NextResponse.json({ requests });
+      }
+      if (!isUuid(employmentId))
+        return NextResponse.json(
+          { error: "employment id must be a uuid" },
+          { status: 400 },
+        );
+      const requests = await listLeaveRequests({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        employmentId,
+        ...(status ? { status } : {}),
+      });
+      return NextResponse.json({ requests });
+    } catch (e) {
+      return leaveErrorResponse(e);
+    }
+  },
+});
 
-export async function POST(req: Request) {
-  // Filing needs the request grant; on-behalf filing additionally needs
-  // hrm.leave.manage, enforced inside the engine per employment.
-  const gate = await guardPermission("hrm.leave.request");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, fileLeaveRequestBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const request = await fileLeaveRequest({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      employmentId: body.employmentId,
-      leaveTypeId: body.leaveTypeId,
-      startsOn: body.startsOn,
-      endsOn: body.endsOn,
-      hours: body.hours,
-      reason: body.reason ?? null,
-      onBehalf: body.onBehalf,
-    });
-    return NextResponse.json({ request });
-  } catch (e) {
-    return leaveErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.leave.request",
+  feature: "hrm",
+  body: fileLeaveRequestBody,
+  handler: async ({ request: req, authz: gate, body: body }) => {
+    // Filing needs the request grant; on-behalf filing additionally needs
+    // hrm.leave.manage, enforced inside the engine per employment.
+
+    try {
+      const request = await fileLeaveRequest({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        employmentId: body.employmentId,
+        leaveTypeId: body.leaveTypeId,
+        startsOn: body.startsOn,
+        endsOn: body.endsOn,
+        hours: body.hours,
+        reason: body.reason ?? null,
+        onBehalf: body.onBehalf,
+      });
+      return NextResponse.json({ request });
+    } catch (e) {
+      return leaveErrorResponse(e);
+    }
+  },
+});

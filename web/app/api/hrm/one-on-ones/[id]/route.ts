@@ -1,4 +1,6 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import {
   cancelOneOnOne,
@@ -6,12 +8,10 @@ import {
   holdOneOnOne,
   skipOneOnOne,
 } from "@openbooks/engine/src/hrm/performance/one-on-ones.ts";
-import { getAuthz } from "../../../../../lib/authz";
+
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { performanceErrorResponse } from "../../review-cycles/_lib";
 import { patchOneOnOneBody } from "../bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -28,43 +28,68 @@ async function gated(orgId: string): Promise<boolean> {
  * PATCH holds (carries open items forward), skips with a reason, or
  * cancels. The client checks res.ok before parsing.
  */
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!(await gated(authz.user.orgId))) {
-    return notFound("record");
-  }
-  const { id } = await ctx.params;
-  try {
-    const one = await getOneOnOne({ orgId: authz.user.orgId, actorId: authz.user.id, id });
-    return NextResponse.json({ oneOnOne: one });
-  } catch (e) {
-    return performanceErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: authz, params: routeParams }) => {
+    if (!(await gated(authz.user.orgId))) {
+      return notFound("record");
+    }
+    const { id } = routeParams;
+    try {
+      const one = await getOneOnOne({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        id,
+      });
+      return NextResponse.json({ oneOnOne: one });
+    } catch (e) {
+      return performanceErrorResponse(e);
+    }
+  },
+});
 
-export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }> }) {
-  const authz = await getAuthz();
-  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!(await gated(authz.user.orgId))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, patchOneOnOneBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  const { id } = await ctx.params;
-  try {
-    if (body.action === "hold") {
-      const one = await holdOneOnOne({ orgId: authz.user.orgId, actorId: authz.user.id, id });
-      return NextResponse.json({ oneOnOne: one });
+export const PATCH = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string().min(1) }),
+  body: patchOneOnOneBody,
+  handler: async ({
+    request: req,
+    authz: authz,
+    params: routeParams,
+    body: body,
+  }) => {
+    if (!(await gated(authz.user.orgId))) {
+      return notFound("record");
     }
-    if (body.action === "skip") {
-      const one = await skipOneOnOne({ orgId: authz.user.orgId, actorId: authz.user.id, id, reason: body.reason });
-      return NextResponse.json({ oneOnOne: one });
+
+    const { id } = routeParams;
+    try {
+      if (body.action === "hold") {
+        const one = await holdOneOnOne({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          id,
+        });
+        return NextResponse.json({ oneOnOne: one });
+      }
+      if (body.action === "skip") {
+        const one = await skipOneOnOne({
+          orgId: authz.user.orgId,
+          actorId: authz.user.id,
+          id,
+          reason: body.reason,
+        });
+        return NextResponse.json({ oneOnOne: one });
+      }
+      await cancelOneOnOne({
+        orgId: authz.user.orgId,
+        actorId: authz.user.id,
+        id,
+      });
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      return performanceErrorResponse(e);
     }
-    await cancelOneOnOne({ orgId: authz.user.orgId, actorId: authz.user.id, id });
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    return performanceErrorResponse(e);
-  }
-}
+  },
+});

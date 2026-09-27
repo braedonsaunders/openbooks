@@ -1,12 +1,10 @@
-import { isFeatureEnabled } from "../../../../../lib/features";
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+
 import { NextResponse } from "next/server";
 import { createOffer } from "@openbooks/engine/src/hrm/recruiting/offers.ts";
-import { guardPermission } from "../../../../../lib/authz";
+
 import { recruitingErrorResponse } from "../_lib";
 import { createOfferBody } from "./bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -15,33 +13,30 @@ export const runtime = "nodejs";
  * gate in the service). At most one live offer stands per application — a
  * second drafts only after the first is sent past, withdrawn, or expired.
  */
-export async function POST(req: Request) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return notFound("record");
-  }
-  const parsedBody = await parseJsonBody(req, createOfferBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const offer = await createOffer({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      applicationId: body.applicationId,
-      positionId: body.positionId,
-      employerSubsidiaryId: body.employerSubsidiaryId,
-      departmentId: body.departmentId,
-      jobTitle: body.jobTitle,
-      employmentKind: body.employmentKind,
-      proposedStartOn: body.proposedStartOn,
-      compensationAmount: body.compensationAmount,
-      compensationCurrency: body.compensationCurrency,
-      compensationBasis: body.compensationBasis,
-      expiresOn: body.expiresOn,
-    });
-    return NextResponse.json({ offer }, { status: 201 });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmRecruiting",
+  body: createOfferBody,
+  handler: async ({ request: req, authz: gate, body: body }) => {
+    try {
+      const offer = await createOffer({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        applicationId: body.applicationId,
+        positionId: body.positionId,
+        employerSubsidiaryId: body.employerSubsidiaryId,
+        departmentId: body.departmentId,
+        jobTitle: body.jobTitle,
+        employmentKind: body.employmentKind,
+        proposedStartOn: body.proposedStartOn,
+        compensationAmount: body.compensationAmount,
+        compensationCurrency: body.compensationCurrency,
+        compensationBasis: body.compensationBasis,
+        expiresOn: body.expiresOn,
+      });
+      return NextResponse.json({ offer }, { status: 201 });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});

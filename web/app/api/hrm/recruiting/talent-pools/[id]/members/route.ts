@@ -1,4 +1,4 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import {
   addPoolMember,
@@ -6,81 +6,88 @@ import {
   removePoolMember,
   tagCandidate,
 } from "@openbooks/engine/src/hrm/recruiting/pools.ts";
-import { guardPermission } from "../../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../../lib/features";
-import { recruitingErrorResponse } from "../../../_lib";
-import { addPoolMemberBody, removePoolMemberBody, tagCandidateBody } from "../../bodies";
-import { z } from "zod";
-import { notFound } from "@/lib/api/responses";
 
+import { recruitingErrorResponse } from "../../../_lib";
+import {
+  addPoolMemberBody,
+  removePoolMemberBody,
+  tagCandidateBody,
+} from "../../bodies";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 
-const memberActionBody = z.union([removePoolMemberBody, tagCandidateBody, addPoolMemberBody]);
+const memberActionBody = z.union([
+  removePoolMemberBody,
+  tagCandidateBody,
+  addPoolMemberBody,
+]);
 
 /**
  * Pool members: GET lists, POST adds / removes / tags (manage gates in the
  * service). 404s while hrm, hrmRecruiting, or hrmTalentPool is off.
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.read");
-  if (gate instanceof NextResponse) return gate;
-  if (
-    !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
-    !(await isFeatureEnabled(gate.user.orgId, "hrmTalentPool"))
-  ) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  try {
-    const members = await listPoolMembers({ orgId: gate.user.orgId, actorId: gate.user.id, poolId: id });
-    return NextResponse.json({ members });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.recruiting.read",
+  feature: "hrmTalentPool",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const { id } = routeParams;
+    try {
+      const members = await listPoolMembers({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        poolId: id,
+      });
+      return NextResponse.json({ members });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (
-    !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
-    !(await isFeatureEnabled(gate.user.orgId, "hrmTalentPool"))
-  ) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  const parsedBody = await parseJsonBody(req, memberActionBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    if ("action" in body && body.action === "remove") {
-      await removePoolMember({
+export const POST = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmTalentPool",
+  params: z.object({ id: z.string().min(1) }),
+  body: memberActionBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+
+    try {
+      if ("action" in body && body.action === "remove") {
+        await removePoolMember({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          poolId: id,
+          candidateId: body.candidateId,
+        });
+        return NextResponse.json({ removed: body.candidateId });
+      }
+      if ("action" in body && body.action === "tag") {
+        const tags = await tagCandidate({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          candidateId: body.candidateId,
+          tags: body.tags,
+        });
+        return NextResponse.json({ tags });
+      }
+      const member = await addPoolMember({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         poolId: id,
         candidateId: body.candidateId,
+        note: "note" in body ? body.note : undefined,
       });
-      return NextResponse.json({ removed: body.candidateId });
+      return NextResponse.json({ member }, { status: 201 });
+    } catch (e) {
+      return recruitingErrorResponse(e);
     }
-    if ("action" in body && body.action === "tag") {
-      const tags = await tagCandidate({
-        orgId: gate.user.orgId,
-        actorId: gate.user.id,
-        candidateId: body.candidateId,
-        tags: body.tags,
-      });
-      return NextResponse.json({ tags });
-    }
-    const member = await addPoolMember({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      poolId: id,
-      candidateId: body.candidateId,
-      note: "note" in body ? body.note : undefined,
-    });
-    return NextResponse.json({ member }, { status: 201 });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+  },
+});

@@ -1,4 +1,5 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { canonicalDecimal } from "@/lib/exact-decimal";
@@ -12,8 +13,6 @@ import { guardPermission } from "../../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { isUuid } from "../../../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../../../compensation/_lib";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -24,8 +23,10 @@ export const runtime = "nodejs";
  * the one the reviewer reads, so it is declared here rather than left
  * to a generic "expected number".
  */
-const PCT_MESSAGE = "proposedPct must be a non-negative percent supplied as a decimal string";
-const RATE_MESSAGE = "proposedRate must be a positive amount with at most 4 decimals";
+const PCT_MESSAGE =
+  "proposedPct must be a non-negative percent supplied as a decimal string";
+const RATE_MESSAGE =
+  "proposedRate must be a positive amount with at most 4 decimals";
 
 function exactProposedPct(value: string): string | null {
   const exact = canonicalDecimal(value, 6);
@@ -56,56 +57,73 @@ const cycleLineBody = z.object({
  * reopen. The action rides the query string; the body carries the
  * proposal or reason. The client checks res.ok before parsing.
  */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string; lineId: string }> }) {
-  const { id, lineId } = await params;
-  if (!isUuid(id) || !isUuid(lineId)) return NextResponse.json({ error: "invalid cycle line" }, { status: 400 });
-  const action = new URL(req.url).searchParams.get("action");
-  const parsedBody = await parseJsonBody(req, cycleLineBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  if (action === "propose") {
-    // Proposing is the manager's structural scope (or comp.manage in the
-    // service) — the route needs only the read grant; the service fences.
-    const gate = await guardPermission("hrm.compensation.read");
+export const PATCH = defineRoute({
+  public: "session",
+  params: z.object({ id: z.string().min(1), lineId: z.string().min(1) }),
+  body: cycleLineBody,
+  handler: async ({ request: req, params: routeParams, body: body }) => {
+    const { id, lineId } = routeParams;
+    if (!isUuid(id) || !isUuid(lineId))
+      return NextResponse.json(
+        { error: "invalid cycle line" },
+        { status: 400 },
+      );
+    const action = new URL(req.url).searchParams.get("action");
+
+    if (action === "propose") {
+      // Proposing is the manager's structural scope (or comp.manage in the
+      // service) — the route needs only the read grant; the service fences.
+      const gate = await guardPermission("hrm.compensation.read");
+      if (gate instanceof NextResponse) return gate;
+      if (!(await isFeatureEnabled(gate.user.orgId, "hrmMeritCycles"))) {
+        return notFound("record");
+      }
+      const proposedPct = body.proposedPct ?? null;
+      const proposedRate = body.proposedRate ?? null;
+      try {
+        const line = await proposeLine({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          lineId,
+          proposedPct,
+          proposedRate,
+          reason: body.reason ?? null,
+        });
+        return NextResponse.json({ line });
+      } catch (e) {
+        return compensationErrorResponse(e);
+      }
+    }
+    const gate = await guardPermission("hrm.compensation.approve");
     if (gate instanceof NextResponse) return gate;
     if (!(await isFeatureEnabled(gate.user.orgId, "hrmMeritCycles"))) {
       return notFound("record");
     }
-    const proposedPct = body.proposedPct ?? null;
-    const proposedRate = body.proposedRate ?? null;
+    const reason = body.reason?.trim() ? body.reason : null;
     try {
-      const line = await proposeLine({
-        orgId: gate.user.orgId,
-        actorId: gate.user.id,
-        lineId,
-        proposedPct,
-        proposedRate,
-        reason: body.reason ?? null,
-      });
-      return NextResponse.json({ line });
+      const q = { orgId: gate.user.orgId, actorId: gate.user.id, lineId };
+      if (action === "approve") {
+        const line = await approveLine({ ...q, reason });
+        return NextResponse.json({ line });
+      }
+      if (action === "reject" || action === "reopen") {
+        if (!reason)
+          return NextResponse.json(
+            { error: "reason required" },
+            { status: 400 },
+          );
+        const line =
+          action === "reject"
+            ? await rejectLine({ ...q, reason })
+            : await reopenLine({ ...q, reason });
+        return NextResponse.json({ line });
+      }
+      return NextResponse.json(
+        { error: "unknown action (propose, approve, reject, reopen)" },
+        { status: 400 },
+      );
     } catch (e) {
       return compensationErrorResponse(e);
     }
-  }
-  const gate = await guardPermission("hrm.compensation.approve");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmMeritCycles"))) {
-    return notFound("record");
-  }
-  const reason = body.reason?.trim() ? body.reason : null;
-  try {
-    const q = { orgId: gate.user.orgId, actorId: gate.user.id, lineId };
-    if (action === "approve") {
-      const line = await approveLine({ ...q, reason });
-      return NextResponse.json({ line });
-    }
-    if (action === "reject" || action === "reopen") {
-      if (!reason) return NextResponse.json({ error: "reason required" }, { status: 400 });
-      const line = action === "reject" ? await rejectLine({ ...q, reason }) : await reopenLine({ ...q, reason });
-      return NextResponse.json({ line });
-    }
-    return NextResponse.json({ error: "unknown action (propose, approve, reject, reopen)" }, { status: 400 });
-  } catch (e) {
-    return compensationErrorResponse(e);
-  }
-}
+  },
+});

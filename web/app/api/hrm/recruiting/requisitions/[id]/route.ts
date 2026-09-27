@@ -1,5 +1,6 @@
-import { isFeatureEnabled } from "../../../../../../lib/features";
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+
 import { NextResponse } from "next/server";
 import {
   cancelRequisition,
@@ -8,12 +9,10 @@ import {
   resumeRequisition,
 } from "@openbooks/engine/src/hrm/recruiting/requisitions.ts";
 import { getRequisitionDetail } from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
-import { guardPermission } from "../../../../../../lib/authz";
+
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";
 import { patchRequisitionBody } from "../bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -24,74 +23,86 @@ export const runtime = "nodejs";
  * openings; PATCH opens, holds, resumes, or cancels through an
  * action-discriminated body (the fill rides hire, never this endpoint).
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid requisition" }, { status: 400 });
-  try {
-    const requisition = await getRequisitionDetail({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      requisitionId: id,
-    });
-    return NextResponse.json({ requisition });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const GET = defineRoute({
+  permission: "hrm.recruiting.read",
+  feature: "hrmRecruiting",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const { id } = routeParams;
+    if (!isUuid(id))
+      return NextResponse.json(
+        { error: "invalid requisition" },
+        { status: 400 },
+      );
+    try {
+      const requisition = await getRequisitionDetail({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        requisitionId: id,
+      });
+      return NextResponse.json({ requisition });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});
 
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid requisition" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, patchRequisitionBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    if (body.action === "open") {
-      const requisition = await openRequisition({
-        orgId: gate.user.orgId,
-        actorId: gate.user.id,
-        requisitionId: id,
-        targetStartOn: body.targetStartOn,
-        overEstablishment: body.overEstablishment,
-      });
-      return NextResponse.json({ requisition });
-    }
-    if (body.action === "hold") {
-      const requisition = await holdRequisition({
+export const PATCH = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmRecruiting",
+  params: z.object({ id: z.string().min(1) }),
+  body: patchRequisitionBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+    if (!isUuid(id))
+      return NextResponse.json(
+        { error: "invalid requisition" },
+        { status: 400 },
+      );
+
+    try {
+      if (body.action === "open") {
+        const requisition = await openRequisition({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          requisitionId: id,
+          targetStartOn: body.targetStartOn,
+          overEstablishment: body.overEstablishment,
+        });
+        return NextResponse.json({ requisition });
+      }
+      if (body.action === "hold") {
+        const requisition = await holdRequisition({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          requisitionId: id,
+          reason: body.reason,
+        });
+        return NextResponse.json({ requisition });
+      }
+      if (body.action === "resume") {
+        const requisition = await resumeRequisition({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          requisitionId: id,
+          reason: body.reason,
+        });
+        return NextResponse.json({ requisition });
+      }
+      const requisition = await cancelRequisition({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         requisitionId: id,
         reason: body.reason,
       });
       return NextResponse.json({ requisition });
+    } catch (e) {
+      return recruitingErrorResponse(e);
     }
-    if (body.action === "resume") {
-      const requisition = await resumeRequisition({
-        orgId: gate.user.orgId,
-        actorId: gate.user.id,
-        requisitionId: id,
-        reason: body.reason,
-      });
-      return NextResponse.json({ requisition });
-    }
-    const requisition = await cancelRequisition({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      requisitionId: id,
-      reason: body.reason,
-    });
-    return NextResponse.json({ requisition });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+  },
+});

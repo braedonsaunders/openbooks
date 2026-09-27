@@ -1,5 +1,6 @@
-import { isFeatureEnabled } from "../../../../../../lib/features";
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+
 import { NextResponse } from "next/server";
 import {
   declineOffer,
@@ -8,12 +9,10 @@ import {
 } from "@openbooks/engine/src/hrm/recruiting/offers.ts";
 import { acceptOfferAsHire } from "@openbooks/engine/src/hrm/recruiting/hire.ts";
 import { getOfferDetail } from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
-import { guardPermission } from "../../../../../../lib/authz";
+
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";
 import { patchOfferBody } from "../bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -25,63 +24,77 @@ export const runtime = "nodejs";
  * through Flows, and filling the requisition — any refusal rolls the whole
  * hire back.
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.read");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid offer" }, { status: 400 });
-  try {
-    const offer = await getOfferDetail({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      offerId: id,
-    });
-    return NextResponse.json({ offer });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
-
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.manage");
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting"))) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid offer" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, patchOfferBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    if (body.action === "send") {
-      const offer = await sendOffer({ orgId: gate.user.orgId, actorId: gate.user.id, offerId: id });
+export const GET = defineRoute({
+  permission: "hrm.recruiting.read",
+  feature: "hrmRecruiting",
+  params: z.object({ id: z.string().min(1) }),
+  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+    const { id } = routeParams;
+    if (!isUuid(id))
+      return NextResponse.json({ error: "invalid offer" }, { status: 400 });
+    try {
+      const offer = await getOfferDetail({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        offerId: id,
+      });
       return NextResponse.json({ offer });
+    } catch (e) {
+      return recruitingErrorResponse(e);
     }
-    if (body.action === "accept") {
-      const hire = await acceptOfferAsHire({ orgId: gate.user.orgId, actorId: gate.user.id, offerId: id });
-      return NextResponse.json({ hire });
-    }
-    if (body.action === "decline") {
-      const offer = await declineOffer({
+  },
+});
+
+export const PATCH = defineRoute({
+  permission: "hrm.recruiting.manage",
+  feature: "hrmRecruiting",
+  params: z.object({ id: z.string().min(1) }),
+  body: patchOfferBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+    if (!isUuid(id))
+      return NextResponse.json({ error: "invalid offer" }, { status: 400 });
+
+    try {
+      if (body.action === "send") {
+        const offer = await sendOffer({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          offerId: id,
+        });
+        return NextResponse.json({ offer });
+      }
+      if (body.action === "accept") {
+        const hire = await acceptOfferAsHire({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          offerId: id,
+        });
+        return NextResponse.json({ hire });
+      }
+      if (body.action === "decline") {
+        const offer = await declineOffer({
+          orgId: gate.user.orgId,
+          actorId: gate.user.id,
+          offerId: id,
+          reason: body.reason,
+        });
+        return NextResponse.json({ offer });
+      }
+      const offer = await withdrawOffer({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         offerId: id,
         reason: body.reason,
       });
       return NextResponse.json({ offer });
+    } catch (e) {
+      return recruitingErrorResponse(e);
     }
-    const offer = await withdrawOffer({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      offerId: id,
-      reason: body.reason,
-    });
-    return NextResponse.json({ offer });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+  },
+});

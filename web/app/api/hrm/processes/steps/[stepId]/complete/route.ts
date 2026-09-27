@@ -1,4 +1,6 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { completeProcessStep } from "@openbooks/engine/src/hrm/processes.ts";
 import { guardPermission } from "../../../../../../../lib/authz";
@@ -6,8 +8,6 @@ import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { isUuid } from "../../../../../../../lib/list-params";
 import { processErrorResponse } from "../../../_lib";
 import { completeStepBody } from "../../../bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -20,26 +20,39 @@ export const runtime = "nodejs";
  * endpoint, and the service's ownership check (not this gate) is what
  * refuses a stranger — a widened gate with an unchanged refusal.
  */
-export async function POST(req: Request, ctx: { params: Promise<{ stepId: string }> }) {
-  const processGate = await guardPermission("hrm.process.read");
-  const gate = processGate instanceof NextResponse ? await guardPermission("hrm.self.read") : processGate;
-  if (gate instanceof NextResponse) return gate;
-  if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
-    return notFound("record");
-  }
-  const { stepId } = await ctx.params;
-  if (!isUuid(stepId)) return NextResponse.json({ error: "step id must be a uuid" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, completeStepBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  try {
-    await completeProcessStep({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      stepId,
-      ...(parsedBody.data.attachmentId === undefined ? {} : { attachmentId: parsedBody.data.attachmentId }),
-    });
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    return processErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  public: "session",
+  params: z.object({ stepId: z.string().min(1) }),
+  body: completeStepBody,
+  handler: async ({ request: req, params: routeParams, body: body }) => {
+    const processGate = await guardPermission("hrm.process.read");
+    const gate =
+      processGate instanceof NextResponse
+        ? await guardPermission("hrm.self.read")
+        : processGate;
+    if (gate instanceof NextResponse) return gate;
+    if (!(await isFeatureEnabled(gate.user.orgId, "hrm"))) {
+      return notFound("record");
+    }
+    const { stepId } = routeParams;
+    if (!isUuid(stepId))
+      return NextResponse.json(
+        { error: "step id must be a uuid" },
+        { status: 400 },
+      );
+
+    try {
+      await completeProcessStep({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        stepId,
+        ...(body.attachmentId === undefined
+          ? {}
+          : { attachmentId: body.attachmentId }),
+      });
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      return processErrorResponse(e);
+    }
+  },
+});

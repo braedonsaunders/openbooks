@@ -1,12 +1,10 @@
-import { parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { rediscoverForRequisition } from "@openbooks/engine/src/hrm/recruiting/pools.ts";
-import { guardPermission } from "../../../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../../../lib/features";
+
 import { recruitingErrorResponse } from "../../../_lib";
 import { rediscoverBody } from "../../bodies";
-import { notFound } from "@/lib/api/responses";
-
 
 export const runtime = "nodejs";
 
@@ -15,29 +13,30 @@ export const runtime = "nodejs";
  * declared tags — a read returning names + matched tags only (no PII, no
  * AI). 404s while hrm, hrmRecruiting, or hrmTalentPool is off.
  */
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission("hrm.recruiting.read");
-  if (gate instanceof NextResponse) return gate;
-  if (
-    !(await isFeatureEnabled(gate.user.orgId, "hrmRecruiting")) ||
-    !(await isFeatureEnabled(gate.user.orgId, "hrmTalentPool"))
-  ) {
-    return notFound("record");
-  }
-  const { id } = await params;
-  const parsedBody = await parseJsonBody(req, rediscoverBody);
-  if (!parsedBody.ok) return parsedBody.response;
-  const body = parsedBody.data;
-  try {
-    const matches = await rediscoverForRequisition({
-      orgId: gate.user.orgId,
-      actorId: gate.user.id,
-      poolId: id,
-      requisitionId: body.requisitionId,
-      requisitionTags: body.requisitionTags,
-    });
-    return NextResponse.json({ matches });
-  } catch (e) {
-    return recruitingErrorResponse(e);
-  }
-}
+export const POST = defineRoute({
+  permission: "hrm.recruiting.read",
+  feature: "hrmTalentPool",
+  params: z.object({ id: z.string().min(1) }),
+  body: rediscoverBody,
+  handler: async ({
+    request: req,
+    authz: gate,
+    params: routeParams,
+    body: body,
+  }) => {
+    const { id } = routeParams;
+
+    try {
+      const matches = await rediscoverForRequisition({
+        orgId: gate.user.orgId,
+        actorId: gate.user.id,
+        poolId: id,
+        requisitionId: body.requisitionId,
+        requisitionTags: body.requisitionTags,
+      });
+      return NextResponse.json({ matches });
+    } catch (e) {
+      return recruitingErrorResponse(e);
+    }
+  },
+});

@@ -418,6 +418,13 @@ export async function renderStatementPdf(query: {
   });
 }
 
+/** Organization label used when rendering the operator-facing statement PDF. */
+export async function getStatementOrganizationName(orgId: string): Promise<string> {
+  const row = (await db.execute<{ name: string }>(sql`
+    select name from orgs where id = ${orgId}`)).rows[0];
+  return row?.name ?? "Organization";
+}
+
 /** Store rendered PDF bytes in the File Cabinet (private comp-statements folder) and link the statement. */
 export async function attachStatementPdf(query: {
   orgId: string;
