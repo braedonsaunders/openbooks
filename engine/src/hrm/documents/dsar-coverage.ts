@@ -134,6 +134,10 @@ export interface DsarExcludedTable {
 
 export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   {
+    table: "customer_item_refs",
+    reason: "customer product codes and item mappings are business reference data, not personal records.",
+  },
+  {
     table: "worker_clock_pins",
     reason:
       "salted one-way PIN credential hashes: authentication material, unusable " +

@@ -2942,6 +2942,17 @@
         "singularTitle": "Regra de retenção",
         "title": "Regras de retenção"
       }
+    ,
+      "item-identifiers": {
+        "title": "Identificadores de itens",
+        "singular": "Identificador de item",
+        "description": "Valores GTIN, UPC, EAN e internos exatos para identificar itens durante a leitura."
+      },
+      "customer-item-refs": {
+        "title": "Códigos de produto do cliente",
+        "singular": "Código de produto do cliente",
+        "description": "Códigos específicos do cliente associados aos itens que ele encomenda."
+      }
     },
     "fields": {
       "aggregation": "Agregação",
@@ -3354,6 +3365,8 @@
       "cohortKey": "Coorte",
       "biasTerms": "Termos sensíveis",
       "reviewMonths": "Cadência (meses)"
+    ,
+      "customerSku": "Código de produto do cliente"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count conta os valores distintos da chave distinta de cada registro.",
@@ -3962,6 +3975,13 @@
         "department": "Departamento",
         "paySchedule": "Calendário da folha",
         "jobLevel": "Nível"
+      }
+    ,
+      "identifierKind": {
+        "gtin": "GTIN",
+        "upc": "UPC",
+        "ean": "EAN",
+        "internal": "Interno"
       }
     },
     "payroll": {

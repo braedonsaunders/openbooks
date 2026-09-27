@@ -141,7 +141,7 @@ export function PickListDrawer({ data }: { data: FulfillmentDrawerData }) {
       description={pick.customer?.name ?? undefined}
       actions={actions}
       detailTabs={[
-        { key: 'lines', label: tCommon('labels.lines'), content: <FulfillmentLines lines={pick.lines} layout={data.layout} /> },
+        { key: 'lines', label: tCommon('labels.lines'), content: <FulfillmentLines lines={pick.lines} layout={data.layout} barcodeScanningEnabled={data.barcodeScanningEnabled} customerId={pick.customer?.id} /> },
         { key: 'related', label: t('related.tab'), content: <FulfillmentRelated document={pick} /> },
         {
           key: 'approvals',

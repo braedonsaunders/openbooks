@@ -24,7 +24,7 @@ export const runtime = 'nodejs'
 const PERMISSION = 'admin.setup.manage'
 
 function setupWriteResponse(result: { status: number; body: Record<string, unknown> }) {
-  if (result.status === 404 && (result.body.error === 'not_found' || result.body.error === 'not found')) {
+  if (result.status === 404) {
     return notFound("setup record");
   }
   return NextResponse.json(result.body, { status: result.status });

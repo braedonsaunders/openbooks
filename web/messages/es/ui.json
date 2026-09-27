@@ -32,7 +32,15 @@
     "placeholder": "Seleccionar…",
     "searchPlaceholder": "Buscar…",
     "noMatches": "Sin coincidencias",
-    "searching": "Buscando…"
+    "searching": "Buscando…",
+    "scan": "Escanear código de barras",
+    "scanCamera": "Escanear con la cámara",
+    "scanResolving": "Resolviendo el escaneo…",
+    "cameraUnavailable": "El escaneo con cámara no está disponible en este navegador.",
+    "scanUnavailable": "El registro escaneado no está disponible para esta línea.",
+    "scanNetworkError": "No se pudo resolver el escaneo. Comprueba la conexión e inténtalo de nuevo.",
+    "scanNotFound": "No hay ningún registro que coincida exactamente con este escaneo. Comprueba el valor o elige un registro de la lista.",
+    "scanAmbiguous": "Este escaneo coincide con varios registros. Elige el registro deseado entre los candidatos."
   },
   "sparkline": {
     "noTrend": "Sin datos de tendencia",

@@ -20,7 +20,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Copy, GripVertical, Lock, LockOpen, Plus, RotateCcw, Split, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, ContextMenu, FieldLabel, Popover, SearchSelect, Select, cn, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
+import { Badge, Button, ContextMenu, FieldLabel, Popover, SearchSelect, Select, cn, useContextMenu, type ContextMenuEntry, type SearchSelectScanResult } from '@openbooks/ui'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
 import {
   displayLineDecimal,
@@ -46,6 +46,14 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
   decimalScale?: number
   align?: 'left' | 'right'
   options?: LineGridOption[]
+  /** Optional exact item/bin scan resolver; absent while Barcode scanning is off. */
+  scanResolver?: (value: string, row: Row, index: number) => Promise<SearchSelectScanResult>
+  /** Additional line fields supplied by a successful scan, such as an identifier unit. */
+  onScanResolved?: (
+    row: Row,
+    index: number,
+    result: Extract<SearchSelectScanResult, { ok: true }>,
+  ) => Partial<Row> | void
   /**
    * Per-row choices for `select` / `search-select` columns whose valid values
    * depend on the line (the bins that hold a line's item). When present it
@@ -259,7 +267,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
     ? columns.map((c) => c.width).join(' ')
     : `34px ${columns.map((c) => c.width).join(' ')}${showDist ? ' 150px' : ''}`
 
-  const clone = cloneRow ?? ((row: Row) => ({ ...row }))
+  const clone: (row: Row) => Row = cloneRow ?? ((row: Row): Row => ({ ...row }))
   const resolveKey = useCallback(
     (row: Row, index: number) => getRowKey?.(row, index) ?? String(index),
     [getRowKey],
@@ -310,6 +318,15 @@ export function LineGrid<Row extends Record<string, unknown>>({
       const index = current.findIndex((row, i) => resolveKey(row, i) === rowKey)
       if (index === -1) return
       onRowsChange(current.map((r, j) => (j === index ? applyRowFields(r, { [key]: value }) : r)))
+    },
+    [resolveKey, onRowsChange],
+  )
+  const commitRowPatch = useCallback(
+    (rowKey: string, patch: Partial<Row>) => {
+      const current = rowsRef.current
+      const index = current.findIndex((row, i) => resolveKey(row, i) === rowKey)
+      if (index === -1) return
+      onRowsChange(current.map((row, i) => i === index ? applyRowFields(row, patch as Record<string, unknown>) : row))
     },
     [resolveKey, onRowsChange],
   )
@@ -561,6 +578,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
               cellBase={cellBase}
               inputBase={inputBase}
               commitCell={commitCell}
+              commitRowPatch={commitRowPatch}
               commitTax={commitTax}
               registerDraft={registerDraft}
               handleKeyDown={handleKeyDown}
@@ -747,6 +765,7 @@ function RowCells<Row extends Record<string, unknown>>({
   cellBase,
   inputBase,
   commitCell,
+  commitRowPatch,
   commitTax,
   registerDraft,
   handleKeyDown,
@@ -775,6 +794,7 @@ function RowCells<Row extends Record<string, unknown>>({
   cellBase: string
   inputBase: string
   commitCell: (rowKey: string, key: string, value: unknown) => void
+  commitRowPatch: (rowKey: string, patch: Partial<Row>) => void
   commitTax: (rowKey: string, column: LineGridColumn<Row>, next: { taxAmount: string; overridden: boolean }) => void
   registerDraft: (rowKey: string, colKey: string, apply: LineGridDraftApplier<Row> | null) => void
   handleKeyDown: (e: React.KeyboardEvent, i: number, col: number) => void
@@ -800,6 +820,7 @@ function RowCells<Row extends Record<string, unknown>>({
 }) {
   const t = useTranslations('ui.lineGrid')
   const tCommon = useTranslations('common')
+  const tScan = useTranslations('ui.select')
   return (
     <>
       {groupHeader ? (
@@ -922,7 +943,19 @@ function RowCells<Row extends Record<string, unknown>>({
                 options={c.optionsFor?.(row, i) ?? c.options ?? []}
                 ariaLabelledBy={ariaLabelledBy}
                 value={(value as string) ?? ''}
-                onChange={(v) => commitCell(rowKey, c.key, v ?? '')}
+                onChange={(v, scan) => {
+                  const patch = scan ? c.onScanResolved?.(row, i, scan) : undefined
+                  if (patch) commitRowPatch(rowKey, { ...patch, [c.key]: v ?? '' } as Partial<Row>)
+                  else commitCell(rowKey, c.key, v ?? '')
+                }}
+                searchable={c.scanResolver ? true : undefined}
+                scanResolver={c.scanResolver ? async (scanned) => {
+                  const result = await c.scanResolver!(scanned, row, i)
+                  if (!result.ok) return result
+                  const choices = c.optionsFor?.(row, i) ?? c.options ?? []
+                  if (choices.some((option) => option.value === result.value)) return result
+                  return { ok: false, message: tScan('scanUnavailable'), candidates: choices.map((option) => option.label) }
+                } : undefined}
                 placeholder={c.placeholder ?? '—'}
                 className="w-full"
                 triggerClassName="h-auto min-h-0 rounded-sm border-0 bg-transparent px-1.5 py-1 shadow-none focus:ring-0"

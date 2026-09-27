@@ -28,6 +28,8 @@ export interface FulfillmentDrawerData {
   canManage: boolean
   /** items.post: completing a shipment moves stock. */
   canPost: boolean
+  /** Barcode controls appear only when the organization enabled scanning. */
+  barcodeScanningEnabled: boolean
   /** List URL the drawer closes to. */
   closeHref: string
 }
@@ -39,5 +41,6 @@ export interface NewPickListData {
   /** Header custom-field definitions for the pick-list record type. */
   headerDefs: CustomFieldDefClient[]
   today: string
+  barcodeScanningEnabled: boolean
   closeHref: string
 }

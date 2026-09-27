@@ -32,7 +32,15 @@
     "placeholder": "Auswählen…",
     "searchPlaceholder": "Suchen…",
     "noMatches": "Keine Treffer",
-    "searching": "Wird gesucht…"
+    "searching": "Wird gesucht…",
+    "scan": "Barcode scannen",
+    "scanCamera": "Mit der Kamera scannen",
+    "scanResolving": "Scan wird aufgelöst…",
+    "cameraUnavailable": "Kamerascannen ist in diesem Browser nicht verfügbar.",
+    "scanUnavailable": "Der gescannte Datensatz ist für diese Zeile keine verfügbare Auswahl.",
+    "scanNetworkError": "Der Scan konnte nicht aufgelöst werden. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
+    "scanNotFound": "Für diesen Scan wurde kein exakter Datensatz gefunden. Prüfen Sie den Wert oder wählen Sie einen Datensatz aus der Liste.",
+    "scanAmbiguous": "Dieser Scan passt zu mehreren Datensätzen. Wählen Sie den gewünschten Datensatz aus den Kandidaten."
   },
   "sparkline": {
     "noTrend": "Keine Trenddaten",

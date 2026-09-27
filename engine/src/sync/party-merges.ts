@@ -240,6 +240,14 @@ interface GuardedPartyRef {
  */
 const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
   {
+    // A customer can have only one row per SKU and one row per item. Keep a
+    // conflicting mapping with the absorbed party instead of dropping either.
+    table: "customer_item_refs",
+    column: "customer_id",
+    conflict:
+      "s.org_id = d.org_id and (s.customer_sku = d.customer_sku or s.item_id = d.item_id)",
+  },
+  {
     table: "employee_payroll_profiles",
     column: "employee_party_id",
     conflict: "s.org_id = d.org_id",

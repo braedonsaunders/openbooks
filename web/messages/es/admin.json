@@ -2897,6 +2897,17 @@
         "singularTitle": "Regla de conservación",
         "title": "Reglas de conservación"
       }
+    ,
+      "item-identifiers": {
+        "title": "Identificadores de artículos",
+        "singular": "Identificador de artículo",
+        "description": "Valores GTIN, UPC, EAN e internos exactos para identificar artículos al escanear."
+      },
+      "customer-item-refs": {
+        "title": "Números de pieza del cliente",
+        "singular": "Número de pieza del cliente",
+        "description": "Códigos de producto específicos del cliente asociados a los artículos que pide."
+      }
     },
     "fields": {
       "aggregation": "Agregación",
@@ -3309,6 +3320,8 @@
       "cohortKey": "Cohorte",
       "biasTerms": "Términos sensibles",
       "reviewMonths": "Cadencia (meses)"
+    ,
+      "customerSku": "Número de pieza del cliente"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count cuenta los valores distintos de la clave distinta de cada registro.",
@@ -3917,6 +3930,13 @@
         "department": "Departamento",
         "paySchedule": "Calendario de nómina",
         "jobLevel": "Nivel"
+      }
+    ,
+      "identifierKind": {
+        "gtin": "GTIN",
+        "upc": "UPC",
+        "ean": "EAN",
+        "internal": "Interno"
       }
     },
     "laborCosting": {

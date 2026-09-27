@@ -13,6 +13,7 @@ import { useAppAction } from '@/lib/use-app-action'
 import { basisForResolvedRow, parsePriceBasis, type PriceBasis } from '@/lib/price-basis'
 import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
+import { optionalScanResolver } from '../../../lib/scan'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
@@ -59,6 +60,8 @@ interface LineRow extends Record<string, unknown> {
   description: string
   quantity: string
   unit: string
+  /** Item id whose alternate unit came from a barcode identifier. */
+  scanUnitItemId?: string
   unitPrice: string
   taxProfileId: string
   departmentId: string
@@ -434,6 +437,8 @@ export function OrderDrawer({
   canCreateDropShipPurchaseOrder = false,
   canConfirmDropShip = false,
   isDropShipPurchaseOrder = false,
+  barcodeScanningEnabled = false,
+  customerItemRefs = [],
 }: {
   order: OrderPayload
   initialMode?: DrawerMode
@@ -479,6 +484,8 @@ export function OrderDrawer({
   canCreateDropShipPurchaseOrder?: boolean
   canConfirmDropShip?: boolean
   isDropShipPurchaseOrder?: boolean
+  barcodeScanningEnabled?: boolean
+  customerItemRefs?: { customerId: string; itemId: string; customerSku: string }[]
 }) {
   const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
@@ -734,7 +741,7 @@ export function OrderDrawer({
             accountId:
               (kind === 'purchase_order' ? it.expense_account_id : it.income_account_id) ?? row.accountId,
             taxProfileId: it.tax_code_id ? `code:${it.tax_code_id}` : row.taxProfileId,
-            unit: it.unit ?? row.unit,
+            unit: row.scanUnitItemId === row.itemId ? row.unit : it.unit ?? row.unit,
             quantity: row.quantity || '1',
           }
         }
@@ -1279,6 +1286,9 @@ export function OrderDrawer({
     () => new Set(items.filter((item) => item.has_inventory_profile === true).map((item) => item.id)),
     [items],
   )
+  const customerSkuByItem = useMemo(() => new Map(
+    customerItemRefs.filter((ref) => ref.customerId === partyId).map((ref) => [ref.itemId, ref.customerSku]),
+  ), [customerItemRefs, partyId])
   const warehouseColumn = useMemo<LineGridColumn<LineRow> | null>(() => {
     if (stockLocations.length < 2) return null
     if (!rows.some((row) => row.itemId !== '' && stockedItemIds.has(row.itemId))) return null
@@ -1302,7 +1312,17 @@ export function OrderDrawer({
         label: t('columns.item'),
         width: 'minmax(170px,1.6fr)',
         type: 'search-select',
-        options: items.map((i) => ({ value: i.id, label: `${i.code ? i.code + ' · ' : ''}${i.name ?? ''}`.trim() })),
+        options: items.map((i) => {
+          const base = `${i.code ? i.code + ' · ' : ''}${i.name ?? ''}`.trim()
+          const customerSku = customerSkuByItem.get(i.id)
+          return { value: i.id, label: customerSku ? `${base} · ${customerSku}` : base }
+        }),
+        scanResolver: optionalScanResolver(barcodeScanningEnabled, (value) => ({
+          field: 'item', value, customerId: partyId || undefined,
+        })),
+        onScanResolved: (_row, _index, result) => result.unit
+          ? { unit: result.unit, scanUnitItemId: result.value }
+          : undefined,
         placeholder: '—',
       },
       account_id: {
@@ -1377,7 +1397,7 @@ export function OrderDrawer({
       ]
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, items, taxProfiles, departments, projects, segments, kind, layout, t, tCommon, warehouseColumn],
+    [accounts, items, taxProfiles, departments, projects, segments, kind, layout, t, tCommon, warehouseColumn, customerSkuByItem, barcodeScanningEnabled, partyId],
   )
 
   const field = 'space-y-1.5'

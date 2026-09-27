@@ -46,11 +46,12 @@ export async function loadFulfillmentDrawerData({
   const document = await getFulfillmentDocument(db, orgId, id, authz.allowedSubsidiaryIds)
   if (!document || document.kind !== kind) return null
 
-  const [headerDefs, customRow, carriers] = await Promise.all([
+  const [headerDefs, customRow, carriers, barcodeScanningEnabled] = await Promise.all([
     loadFieldDefs('documents', kind),
     db.execute<{ custom: Record<string, unknown> | null }>(sql`
       select custom from documents where org_id = ${orgId} and id = ${document.id}`),
     kind === 'shipment' && document.status === 'draft' ? listActiveCarriers(orgId) : Promise.resolve([]),
+    isFeatureEnabled(orgId, 'barcodeScanning'),
   ])
   const resolved = await resolveFormLayout({
     orgId,
@@ -69,6 +70,7 @@ export async function loadFulfillmentDrawerData({
     carriers,
     canManage: can(authz, 'orders.fulfill'),
     canPost: can(authz, 'items.post'),
+    barcodeScanningEnabled,
     closeHref: closeHref ?? FULFILLMENT_DRAWER_ROUTE[kind].base,
   }
 }
@@ -104,7 +106,7 @@ export async function loadNewPickListData({
      where d.org_id = ${orgId} and d.id = ${scope.id}`)).rows[0]
   if (!order) return null
   const headerDefs = await loadFieldDefs('documents', 'pick_list')
-  const [resolved, today] = await Promise.all([
+  const [resolved, today, barcodeScanningEnabled] = await Promise.all([
     resolveFormLayout({
       orgId,
       userId: authz.user.id,
@@ -115,12 +117,14 @@ export async function loadNewPickListData({
       explicitLayoutId: formLayoutId,
     }),
     businessToday(orgId),
+    isFeatureEnabled(orgId, 'barcodeScanning'),
   ])
   return {
     salesOrder: { id: scope.id, number: order.document_number, customerName: order.party_name },
     layout: resolved.layout,
     headerDefs: headerDefs as CustomFieldDefClient[],
     today,
+    barcodeScanningEnabled,
     closeHref,
   }
 }

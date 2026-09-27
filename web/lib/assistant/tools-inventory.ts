@@ -2,6 +2,8 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
+import { resolveScan, type ScanField } from "@openbooks/engine/src/inventory/item-identifiers.ts";
+import { listCustomerItemRefs } from "@openbooks/engine/src/sales/customer-item-refs.ts";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { loadItem } from "../../app/api/items/_lib";
@@ -315,10 +317,46 @@ const inventoryWritedowns: AssistantToolDef = {
   },
 };
 
+const resolveScanValue: AssistantToolDef = {
+  name: "resolve_scan_value",
+  description: "Resolve one exact item, bin, lot, or serial scan value inside the current organization. Refuses ambiguous and unknown values. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["items.read"] },
+  feature: "barcodeScanning",
+  inputSchema: z.object({
+    field: z.enum(["item", "bin", "lot", "serial"]),
+    value: z.string().max(200),
+    customerId: uuidInput.optional(),
+    itemId: uuidInput.optional(),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => ({
+    ok: true,
+    data: await resolveScan(db, authz.user.orgId, {
+      ...(raw as { field: ScanField; value: string; customerId?: string; itemId?: string }),
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    }),
+  }),
+};
+
+const customerItemNumbers: AssistantToolDef = {
+  name: "list_customer_item_numbers",
+  description: "List the exact customer part numbers mapped to items for one customer. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["items.read"] },
+  feature: "customerPartNumbers",
+  inputSchema: z.object({ customerId: uuidInput }),
+  execute: async (raw, authz): Promise<ToolResult> => ({
+    ok: true,
+    data: await listCustomerItemRefs(db, authz.user.orgId, (raw as { customerId: string }).customerId, authz.allowedSubsidiaryIds),
+  }),
+};
+
 export const INVENTORY_TOOLS: AssistantToolDef[] = [
   searchItems,
   getItem,
   inventoryLevels,
   inventoryMovements,
   inventoryWritedowns,
+  resolveScanValue,
+  customerItemNumbers,
 ];

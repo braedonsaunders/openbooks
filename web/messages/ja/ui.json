@@ -32,7 +32,15 @@
     "placeholder": "選択…",
     "searchPlaceholder": "検索…",
     "noMatches": "一致するものがありません",
-    "searching": "検索中…"
+    "searching": "検索中…",
+    "scan": "バーコードをスキャン",
+    "scanCamera": "カメラでスキャン",
+    "scanResolving": "スキャンを照合中…",
+    "cameraUnavailable": "このブラウザーではカメラスキャンを利用できません。",
+    "scanUnavailable": "スキャンしたレコードはこの明細で選択できません。",
+    "scanNetworkError": "スキャンを照合できませんでした。接続を確認してもう一度お試しください。",
+    "scanNotFound": "このスキャンに完全一致するレコードがありません。値を確認するか、一覧からレコードを選択してください。",
+    "scanAmbiguous": "このスキャンは複数のレコードに一致します。候補から対象のレコードを選択してください。"
   },
   "sparkline": {
     "noTrend": "トレンドデータがありません",

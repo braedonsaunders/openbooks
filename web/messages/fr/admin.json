@@ -2897,6 +2897,17 @@
         "singularTitle": "Règle de conservation",
         "title": "Règles de conservation"
       }
+    ,
+      "item-identifiers": {
+        "title": "Identifiants d’article",
+        "singular": "Identifiant d’article",
+        "description": "Valeurs GTIN, UPC, EAN et internes exactes pour identifier les articles par scan."
+      },
+      "customer-item-refs": {
+        "title": "Références client",
+        "singular": "Référence client",
+        "description": "Codes produit propres au client associés aux articles commandés."
+      }
     },
     "fields": {
       "aggregation": "Agrégation",
@@ -3309,6 +3320,8 @@
       "cohortKey": "Cohorte",
       "biasTerms": "Termes sensibles",
       "reviewMonths": "Cadence (mois)"
+    ,
+      "customerSku": "Référence client"
     },
     "fieldHelp": {
       "usageAggregation": "unique_count compte les valeurs distinctes de la clé distincte de chaque enregistrement.",
@@ -3917,6 +3930,13 @@
         "department": "Service",
         "paySchedule": "Calendrier de paie",
         "jobLevel": "Niveau"
+      }
+    ,
+      "identifierKind": {
+        "gtin": "GTIN",
+        "upc": "UPC",
+        "ean": "EAN",
+        "internal": "Interne"
       }
     },
     "laborCosting": {

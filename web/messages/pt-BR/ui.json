@@ -32,7 +32,15 @@
     "placeholder": "Selecionar…",
     "searchPlaceholder": "Buscar…",
     "noMatches": "Nenhuma correspondência",
-    "searching": "Buscando…"
+    "searching": "Buscando…",
+    "scan": "Ler código de barras",
+    "scanCamera": "Ler com a câmera",
+    "scanResolving": "Resolvendo leitura…",
+    "cameraUnavailable": "A leitura pela câmera não está disponível neste navegador.",
+    "scanUnavailable": "O registro lido não está disponível para esta linha.",
+    "scanNetworkError": "Não foi possível resolver a leitura. Verifique a conexão e tente novamente.",
+    "scanNotFound": "Nenhum registro corresponde exatamente a esta leitura. Confira o valor ou escolha um registro na lista.",
+    "scanAmbiguous": "Esta leitura corresponde a vários registros. Escolha o registro correto entre os candidatos."
   },
   "sparkline": {
     "noTrend": "Sem dados de tendência",

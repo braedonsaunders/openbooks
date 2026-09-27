@@ -36,7 +36,9 @@
     "lot": "批次 {lot}",
     "serial": "序列号 {serial}",
     "actionsFor": "第 {line} 行的操作",
-    "empty": "此单据没有明细行。"
+    "empty": "此单据没有明细行。",
+    "scanItem": "扫描第 {line} 行商品",
+    "scanWrongItem": "扫描的商品与此发货明细不匹配。"
   },
   "related": {
     "tab": "相关单据",

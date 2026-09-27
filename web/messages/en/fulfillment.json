@@ -36,7 +36,9 @@
     "lot": "Lot {lot}",
     "serial": "Serial {serial}",
     "actionsFor": "Actions for line {line}",
-    "empty": "This document has no lines."
+    "empty": "This document has no lines.",
+    "scanItem": "Scan item for line {line}",
+    "scanWrongItem": "The scanned item does not match this shipment line."
   },
   "related": {
     "tab": "Related",

@@ -36,7 +36,9 @@
     "lot": "N° de lot {lot}",
     "serial": "N° de série {serial}",
     "actionsFor": "Actions de la ligne {line}",
-    "empty": "Ce document n’a aucune ligne."
+    "empty": "Ce document n’a aucune ligne.",
+    "scanItem": "Scanner l’article de la ligne {line}",
+    "scanWrongItem": "L’article scanné ne correspond pas à cette ligne d’expédition."
   },
   "related": {
     "tab": "Documents liés",

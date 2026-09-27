@@ -36,7 +36,9 @@
     "lot": "Charge {lot}",
     "serial": "Seriennummer {serial}",
     "actionsFor": "Aktionen für Zeile {line}",
-    "empty": "Dieser Beleg hat keine Zeilen."
+    "empty": "Dieser Beleg hat keine Zeilen.",
+    "scanItem": "Artikel für Zeile {line} scannen",
+    "scanWrongItem": "Der gescannte Artikel stimmt nicht mit dieser Versandposition überein."
   },
   "related": {
     "tab": "Verknüpft",

@@ -64,6 +64,7 @@ export async function loadPurchaseOrders(
   await requireFeatureEnabled(authz.user.orgId, 'orders')
   const inventoryEnabled = await isFeatureEnabled(authz.user.orgId, 'inventory')
   const dropShipping = await isFeatureEnabled(authz.user.orgId, 'dropShipping')
+  const barcodeScanningEnabled = await isFeatureEnabled(authz.user.orgId, 'barcodeScanning')
   const canManage = can(authz, 'ap.create')
   const t = await getTranslations('purchaseOrders')
   const openId = pickString(sp[PARAM])
@@ -207,6 +208,7 @@ export async function loadPurchaseOrders(
             dropShipLines,
             canConfirmDropShip: dropShipping && can(authz, 'items.post'),
             isDropShipPurchaseOrder: linkedSalesOrderId !== null,
+            barcodeScanningEnabled,
           }
         : null,
   }
