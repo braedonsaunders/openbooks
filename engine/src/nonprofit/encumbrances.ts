@@ -3,6 +3,7 @@ import { addMoney, cmpMoney, negMoney, parseMoney, subMoney, type Money } from "
 import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { db, type SqlExecutor, withOrgTransaction } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { fundPostingRefusal, NonprofitError, type NonprofitStatus } from "./errors.ts";
 import type { BalancingContext, BalancingLeg, BalancingLegProvider, BalancingLineView } from "../journal/balancing-hooks.ts";
 
@@ -466,7 +467,7 @@ async function fundModes(
 ): Promise<{ defaultFundId: string | null; modes: Map<string, BudgetaryControlMode> }> {
   const explicitIds = [...new Set(lines.flatMap((line) => {
     const value = line.extraDims?.fund;
-    return typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value) ? [value] : [];
+    return isUuid(value) ? [value] : [];
   }))];
   const result = await runner.execute<{
     defaultFundId: string | null;
