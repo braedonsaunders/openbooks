@@ -7,7 +7,7 @@ import { stubModules } from '../../testing/stub-modules.ts'
 // createDocumentDraft + applyDocumentEdit path the drawer uses (including
 // the create-path totals preflight), so a distributionKey on an API line
 // must explode exactly like an interactive save.
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 const { sql } = await import("drizzle-orm");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");

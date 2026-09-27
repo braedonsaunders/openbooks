@@ -22,7 +22,7 @@ const mockMoney = `
   export async function getMoneyFormatter() { return { money: String, moneyCompact: String } }
 `;
 
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 // Scoped doubles stay conditioned: the authz and money doubles answer only
 // the inbox loader's own imports, which no shared stub shape matches.

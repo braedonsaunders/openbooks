@@ -73,7 +73,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../../../lib/report-pdf', mockUrl('report-pdf')],
 ])
 
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {

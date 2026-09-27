@@ -47,7 +47,7 @@ const reportRunMock = "data:text/javascript," + encodeURIComponent(`
     return { title: 'mock-evidence', dateRangeLabel: '', summary: [], groups: [] };
   }
 `);
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === "@/lib/api/json") return { shortCircuit: true, url: apiJsonUrl };

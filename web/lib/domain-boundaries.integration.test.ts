@@ -11,7 +11,7 @@ const virtual = (source: string) => ({
   shortCircuit: true as const,
   url: 'data:text/javascript,' + encodeURIComponent(source),
 })
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({
   resolve(specifier, context, next) {

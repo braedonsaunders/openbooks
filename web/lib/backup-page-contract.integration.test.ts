@@ -8,7 +8,7 @@ import { stubModules } from '../testing/stub-modules.ts'
 // before serialization, so no Date object crosses into client props. Only
 // the page gate and the translation framework are seammed; the loader, the
 // timestamp normalization, and the database are real.
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({
   resolve(specifier, context, nextResolve) {

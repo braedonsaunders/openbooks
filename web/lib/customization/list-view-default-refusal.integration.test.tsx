@@ -4,7 +4,7 @@ import test from 'node:test'
 import { registerHooks } from 'node:module'
 import { stubModules } from '../../testing/stub-modules.ts'
 
-stubModules({ navigation: false, authz: false, features: false, extra: {
+stubModules({ intl: true, navigation: false, authz: false, features: false, extra: {
     '../../../lib/authz': 'export async function requirePermission(){return globalThis.__listDefaultAuthz}export function can(){return true}',
   } });
 

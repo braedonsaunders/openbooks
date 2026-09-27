@@ -12,7 +12,7 @@ import { stubModules } from '../testing/stub-modules.ts'
 // subsidiary-restricted caller: another entity's line wearing one of your
 // dimensions leaked in, while your own undimensioned lines were denied —
 // even though the report and the list right beside the drill showed them.
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({ resolve(specifier, context, next) {
   if (specifier === './money-server' || specifier.endsWith('/money-server')) {

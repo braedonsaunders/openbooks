@@ -14,7 +14,7 @@ import { stubModules } from '../testing/stub-modules.ts'
 // orders. next-intl has no request scope in plain node, so translations
 // resolve to the key (labels are never asserted).
 
-stubModules({ navigation: {}, authz: false, features: false });
+stubModules({ intl: true, navigation: {}, authz: false, features: false });
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {

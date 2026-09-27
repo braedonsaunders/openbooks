@@ -6,7 +6,7 @@ import { stubModules } from '../testing/stub-modules.ts'
 // status-facet query groups by the status expression, which is the constant
 // 'customer' when CRM is off — `group by 'customer'` is a Postgres 42601, so
 // the whole page throws. CRM-on orgs group by a real column and never notice.
-stubModules({ navigation: false, authz: false, features: false });
+stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 const { sql } = await import('drizzle-orm')
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
