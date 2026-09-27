@@ -234,6 +234,7 @@ async function createPaymentRunWithinTransaction(
       join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join vendor_roles vr on vr.party_id = d.party_id and vr.org_id = d.org_id
       left join payment_terms pt on pt.id = vr.payment_terms_id and pt.org_id = d.org_id and pt.is_active
+      -- Live entries only: a voided bill is never paid.
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount < 0
       left join lateral (
@@ -460,6 +461,7 @@ async function createPaymentRunWithinTransaction(
       select d.id as document_id, jl.id as open_line_id,
              abs(jl.amount) - coalesce(ap.applied, 0) as open_base
         from documents d
+        -- Live entries only: a voided credit is never applied.
         join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount > 0
         join subsidiaries credit_sub on credit_sub.id = jl.subsidiary_id and credit_sub.org_id = jl.org_id

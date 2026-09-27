@@ -19,6 +19,7 @@ import {
   unmatchStatementLine,
 } from "./banking.ts";
 import { db } from "../platform/db.ts";
+import { reverseProjectGlEntry } from "../journal/origin-entry.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import {
   createScratchOrg,
@@ -1387,3 +1388,25 @@ test(
     }
   },
 );
+
+test("a cleared line whose entry is later reversed stays in every later cleared balance", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = (await seedFlowActors(org.orgId)).adminId;
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null };
+    await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where id = ${org.accounts.bank} and org_id = ${org.orgId}`);
+    await importStatement({ accountId: org.accounts.bank, source: "manual", statementDate: org.date, currency: "CAD", openingBalance: "0", closingBalance: "100", lines: [{ postedOn: org.date, amount: "100.0000", description: "DEPOSIT" }] }, ctx);
+    const [lineId] = await postBankJournal(org, actor, ["100.0000"], "cleared-deposit");
+    const first = await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: "100" }, ctx);
+    assert.equal((await autoMatch(first.id, ctx)).matched, 1);
+    await markReconciled(first.id, ctx);
+    const { rows: [entry] } = await db.execute<{ entry_id: string }>(sql`select entry_id from journal_lines where id = ${lineId!} and org_id = ${org.orgId}`);
+    await reverseProjectGlEntry(org.orgId, actor, entry!.entry_id, "Deposit recorded twice", "2026-07-20");
+    const second = await startReconciliation({ accountId: org.accounts.bank, throughDate: "2026-07-31", statementBalance: "100" }, ctx);
+    const totals = await reconciliationTotals(second.id, ctx);
+    assert.deepEqual([totals.clearedBalance, totals.difference], ["100.0000", "0.0000"], "the bank cleared the original deposit; reversing it later must not un-clear it");
+    await markReconciled(second.id, ctx);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

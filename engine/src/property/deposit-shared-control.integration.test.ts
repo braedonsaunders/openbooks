@@ -9,6 +9,7 @@ import {
   securityDepositReconciliation,
   recordSecurityDeposit,
 } from "./management.ts";
+import { reverseProjectGlEntry } from "../journal/origin-entry.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -57,7 +58,7 @@ async function seedSharedControl() {
 }
 
 /** A manual GL posting straight to the shared deposit-liability account/location. */
-async function postManualLiability(orgId: string, bookId: string, subsidiaryId: string, locationId: string, accountId: string, offsetAccountId: string, amount: string, postingDate: string, periodId: string): Promise<void> {
+async function postManualLiability(orgId: string, bookId: string, subsidiaryId: string, locationId: string, accountId: string, offsetAccountId: string, amount: string, postingDate: string, periodId: string): Promise<string> {
   const entryId = randomUUID();
   await db.execute(sql`
     insert into journal_entries
@@ -75,6 +76,7 @@ async function postManualLiability(orgId: string, bookId: string, subsidiaryId: 
   await db.execute(sql`
     update journal_entries set status = 'posted', posted_at = now(), updated_at = now(), updated_by = null
      where org_id = ${orgId} and id = ${entryId}`);
+  return entryId;
 }
 
 test("PM1: properties sharing one location control reconcile together with zero false discrepancy", { skip: !DB }, async () => {
@@ -127,6 +129,23 @@ test("PM1: a genuine imbalance on a shared control still reports a group discrep
       assert.equal(row.controlShared, true);
       assert.equal(row.controlGroupVariance, "-10.0000");
     }
+  } finally {
+    await dropScratchOrg(fx.org.orgId);
+  }
+});
+
+test("PM1: a reversed control adjustment still reads on dates before its reversal", { skip: !DB }, async () => {
+  const fx = await seedSharedControl();
+  try {
+    const o = fx.org;
+    const entryId = await postManualLiability(o.orgId, o.bookId, o.subsidiaryId, o.locationId, o.accounts.deferred, o.accounts.bank, "10", "2026-07-10", o.periodId);
+    const deposit = await recordSecurityDeposit({ orgId: o.orgId, actorId: fx.actorId, allowedSubsidiaryIds: null, leaseId: fx.leaseIds[0]!, kind: "received", occurredOn: "2026-07-10", amount: "100" });
+    for (const id of [entryId, deposit.entryId]) await reverseProjectGlEntry(o.orgId, fx.actorId, id, "Posted in error", "2026-07-20");
+    const before = await securityDepositReconciliation(o.orgId, null, "2026-07-15");
+    const after = await securityDepositReconciliation(o.orgId, null, "2026-07-31");
+    assert.deepEqual(before.rows.map((row) => [row.linkedGlBalance, row.locationControlBalance]).sort(), [["0.0000", "90.0000"], ["100.0000", "90.0000"]],
+      "a reversed original still sits in the ledger until its reversal date");
+    assert.deepEqual(after.rows.map((row) => row.locationControlBalance), ["0.0000", "0.0000"]);
   } finally {
     await dropScratchOrg(fx.org.orgId);
   }

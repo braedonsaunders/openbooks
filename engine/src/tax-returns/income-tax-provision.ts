@@ -1988,6 +1988,7 @@ export async function postProvisionRun(
       const prefix = `ITX-FY${run.fiscalYear}-v${priorRun.version}`;
       const priorEntries = (await db.execute<{ id: string; subsidiary_id: string }>(sql`
         select id, subsidiary_id from journal_entries
+         -- Live entries only: an entry already reversed must not be reversed again.
          where org_id = ${orgId} and origin = 'tax_provision' and status = 'posted'
            and (entry_number = ${prefix} or entry_number like ${`${prefix}-%`})
          order by entry_number

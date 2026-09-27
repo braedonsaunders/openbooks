@@ -32,6 +32,7 @@ export async function invoiceDeferredCredit(
      where app.org_id=credit.org_id and app.unapplied_at is null and app.target_transaction_currency=${source.currency} and fl.entry_id=credit.posted_entry_id and tl.entry_id=inv.posted_entry_id) as applied,
    (select coalesce(sum(abs(fl.txn_amount)),0)::text from journal_lines fl where fl.org_id=credit.org_id and fl.entry_id=credit.posted_entry_id and fl.is_open_item and fl.currency=cl.currency) as principal
  from documents inv join documents credit on credit.org_id=inv.org_id and credit.kind='customer_credit' and credit.status='posted'
+ -- Live entries only: a voided credit no longer draws on the deferred pool.
  join journal_entries ce on ce.id=credit.posted_entry_id and ce.org_id=credit.org_id and ce.status='posted'
  join journal_lines cl on cl.entry_id=ce.id and cl.org_id=ce.org_id and cl.account_id=${source.deferredAccountId} and cl.amount>0
  where inv.org_id=${orgId} and inv.id=${source.invoiceId}

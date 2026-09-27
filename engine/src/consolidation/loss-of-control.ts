@@ -206,6 +206,7 @@ export async function loadLossOfControlProposalData(
       ? []
       : (
           await runner.execute<LossOfControlProposalData["adjustmentLines"][number]>(
+            // Live entries only: a reversed adjustment is not outstanding evidence to offer.
             sql`${consolidationHistory(orgId)} select l.id,e.entry_number,e.posting_date::text,a.name as account_name,l.amount::text,l.memo from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.subsidiary_id in(select jsonb_array_elements_text(${JSON.stringify(eliminations.map((s) => s.id))}::jsonb)::uuid) and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status='posted') and not exists(select 1 from history h where h.id=e.id) order by e.posting_date desc,e.entry_number,l.line_number`,
           )
         ).rows;
@@ -509,6 +510,7 @@ async function scope(
     .map((p) => p.id);
   const late = (
     await tx.execute(
+      // Live entries only: a reversed later generation no longer blocks the disposal date.
       sql`select 1 from ownership_consolidation_entries c join subsidiary_ownership_interests p on p.org_id=c.org_id and p.id=c.interest_id join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and p.subsidiary_id=any(${uuidArray(family)}::uuid[]) and e.posting_date>${input.effectiveOn} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status='posted') limit 1`,
     )
   ).rows[0];
@@ -667,6 +669,7 @@ async function measure(
         name: string;
         amount: string;
       }>(
+        // Live entries only: a reversed line cannot be attributed to a disposal.
         sql`${consolidationHistory(orgId)} select e.id as entry_id,e.entry_number,l.account_id,a.type,a.name,l.amount::text from journal_lines l join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id join accounts a on a.org_id=l.org_id and a.id=l.account_id where l.org_id=${orgId} and l.id=${inputLine.lineId} and e.book_id=${s.bookId} and e.subsidiary_id=${s.elimination.id} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status='posted') and e.posting_date<=${input.effectiveOn} and not exists(select 1 from history h where h.id=e.id)`,
       )
     ).rows[0];
@@ -739,7 +742,7 @@ async function measure(
     let attributable = "0";
     const familyBooks = (
       await tx.execute<{ subsidiary_id: string; amount: string }>(
-        sql`select l.subsidiary_id,sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.org_id=${orgId} and e.book_id=${s.bookId} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status='posted') and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(s.family)}::uuid[]) and l.account_id=${o.accountId} group by l.subsidiary_id`,
+        sql`select l.subsidiary_id,sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.org_id=${orgId} and e.book_id=${s.bookId} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(s.family)}::uuid[]) and l.account_id=${o.accountId} group by l.subsidiary_id`,
       )
     ).rows;
     for (const row of familyBooks)
@@ -1277,6 +1280,7 @@ async function reversalState(
     loss.retained_interest_id &&
     (
       await tx.execute(
+        // Live entries only: reversed later history no longer blocks correcting this disposal.
         sql`select 1 from ownership_consolidation_entries c join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and c.interest_id=${loss.retained_interest_id} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) limit 1`,
       )
     ).rows.length

@@ -191,6 +191,7 @@ export async function trueUpResidualGl(
         }
         const existing = (await db.execute<{ id: string }>(sql`
           select id from journal_entries
+           -- Live entries only: a reversed opening journal no longer stands, so a re-sync may post its replacement.
            where org_id = ${orgId} and status = 'posted'
              and custom->'sourceProjection'->>'kind' = 'connector_trueup'
              and custom->'sourceProjection'->>'sourceName' = ${source.name}

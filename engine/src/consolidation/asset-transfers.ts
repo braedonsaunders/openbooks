@@ -272,6 +272,7 @@ export async function consolidateAssetTransfers(
 
     const later = (
       await tx.execute(
+        // Live entries only: a reversed later consolidation no longer blocks recalculating this period.
         sql`select 1 from asset_transfer_consolidation_entries c join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and c.transfer_id=${transfer.id} and e.posting_date>${cutoff} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) limit 1`,
       )
     ).rows[0];

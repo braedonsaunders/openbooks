@@ -71,6 +71,7 @@ export async function createDirectDebitRun(opts: {
       from documents d
       join parties party on party.id = d.party_id and party.org_id = d.org_id
        and party.is_active
+      -- Live entries only: a voided invoice is never collected.
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount > 0
       left join lateral (select sum(a.amount) as applied, sum(a.target_transaction_amount) as transaction_applied from applications a where a.to_line_id = jl.id and a.org_id = ${opts.orgId} and a.unapplied_at is null) ap on true

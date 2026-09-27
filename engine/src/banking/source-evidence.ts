@@ -147,7 +147,7 @@ export async function refreshSourceReconciliationState(
       join journal_lines jl on jl.account_id = a.id and jl.org_id = a.org_id
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
      where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
-       and je.book_id = ${bookId} and je.status = 'posted'
+       and je.book_id = ${bookId} and je.status in ('posted', 'reversed')
      group by a.id, a.number, a.name
     having count(*) > 0
      order by a.number nulls last, a.name
@@ -244,7 +244,7 @@ export async function signOffFromSourceEvidence(
         ) as open,
         coalesce(sum(jl.txn_amount), 0) as balance
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
        where jl.account_id = ${account.id} and jl.org_id = ${ctx.orgId}
          and je.book_id = ${bookId}
          and jl.currency = ${account.currency}
@@ -306,7 +306,7 @@ export async function signOffFromSourceEvidence(
          and jl.currency = ${account.currency}
          and exists (
            select 1 from journal_entries je
-            where je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+            where je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
               and je.book_id = ${bookId} and je.posting_date <= ${state.reconciled_through}
          )
       returning jl.id

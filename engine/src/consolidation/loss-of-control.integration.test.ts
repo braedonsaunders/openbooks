@@ -25,6 +25,7 @@ import {
   type LossOfControlInput,
 } from "./loss-of-control.ts";
 import { runOwnershipConsolidation } from "./consolidation.ts";
+import { reverseProjectGlEntry } from "../journal/origin-entry.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 type Fixture = {
   org: ScratchOrg;
@@ -763,6 +764,14 @@ test(
       );
     }),
 );
+test("L4: a reserve reversed after the disposal date still backs the OCI release", { skip: !DB }, async () =>
+  fixture(async (f) => {
+    const reserve = (amount: string, date: string) => post(f, f.child, date, [{ accountId: f.accounts.cta!, amount: `-${amount}` }, { accountId: f.org.accounts.bank, amount }]);
+    await reserve("200", "2026-07-10");
+    await reverseProjectGlEntry(f.org.orgId, f.actors.adminId, await reserve("300", "2026-07-12"), "Reserve reclassified", "2026-07-25");
+    const release = { accountId: f.accounts.cta!, balance: "-500", treatment: "profit_loss" as const, destinationAccountId: f.accounts.gain!, description: "CTA release" };
+    assert.ok(await proposeLossOfControl(f.org.orgId, f.interest, f.actors.submitterId, input(f, { oci: [release] })), "the reserve stood at -500 on the 2026-07-20 disposal date");
+  }));
 test(
   "L5: a fully reversed manual journal can no longer be selected or measured",
   { skip: !DB },

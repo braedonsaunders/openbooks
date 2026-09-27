@@ -902,6 +902,7 @@ async function snapshot(
   for (const predecessor of predecessors) {
     const unresolved = (
       await tx.execute(
+        // Live entries only: a reversed remeasurement needs no transfer measurement.
         sql`select 1 from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and e.book_id=${predecessor.book_id} and v.kind in('impaired','revalued') and e.status='posted' and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) and not exists(select 1 from asset_transfer_measurements m where m.org_id=v.org_id and m.source_event_id=v.id) limit 1`,
       )
     ).rows;

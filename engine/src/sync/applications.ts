@@ -416,6 +416,7 @@ export async function reconcileApplications(
            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
            join documents d on d.id = e.source_document_id and d.org_id = e.org_id
           where l.org_id = $1
+            -- Live entries only: lock exactly the endpoint set the hydration below reads.
             and e.status = 'posted'
             and d.custom->>$2 = any($3)`,
         [orgId, refKey, batchRefs],
@@ -442,6 +443,7 @@ export async function reconcileApplications(
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id and l.is_open_item
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
         join subsidiaries s on s.id = l.subsidiary_id and s.org_id = l.org_id
+       -- Live entries only: a reversed entry no longer carries a settleable open item.
        where e.status = 'posted' and d.org_id = $1
          and a.type in ('liability_payable', 'asset_receivable')
          and d.custom->>$2 is not null`, [orgId, refKey]);
@@ -571,6 +573,7 @@ export async function reconcileApplications(
       )].filter((id): id is string => !!id);
       const live = await client.query<{ id: string }>(
         `select e.id from journal_entries e
+          -- Live entries only: an endpoint reversed since hydration fails the batch.
           where e.org_id = $1 and e.id = any($2::uuid[]) and e.status = 'posted'`,
         [orgId, involvedEntries],
       );
