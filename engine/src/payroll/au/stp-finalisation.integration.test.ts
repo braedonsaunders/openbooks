@@ -14,9 +14,11 @@ import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { normalizeMoney, sum } from "../../money/money.ts";
 import { auPackFilings } from "./filings.ts";
+import { AU_PACK_RATES } from "./rates.ts";
 import { parseStpFinalisationRowId, stpReportableGross } from "./stp-figures.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import { setPackSlotAccount } from "../packs.ts";
+import { upsertStatutoryRate } from "../statutory-rates.ts";
 import { calculatePayRun } from "../run-calculation.ts";
 import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
@@ -67,6 +69,10 @@ test(
       await seedPayrollComponents(org.orgId, actorId, "AU");
       await setPackSlotAccount(org.orgId, actorId, "AU", "payg", paygPayable);
       await setPackSlotAccount(org.orgId, actorId, "AU", "super", superPayable);
+      for (const region of ["NSW", "VIC"]) await upsertStatutoryRate({
+        orgId: org.orgId, actorId, rates: AU_PACK_RATES, rateKey: "au_workers_comp", region,
+        filingAccountId: null, taxYear: 2027, values: { rate: "0" },
+      });
 
       const auSubId = randomUUID();
       await db.execute(sql`

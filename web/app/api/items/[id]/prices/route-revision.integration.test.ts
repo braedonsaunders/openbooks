@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { sql } from 'drizzle-orm'
 
 const stateKey = Symbol.for('openbooks.item-price-revision-test')
@@ -41,7 +41,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?item-price-revision'
 const { POST, PATCH, DELETE, GET } = (await import(routeUrl)) as typeof import('./route.ts')
-test.after(() => hooks.deregister())
+after(() => hooks.deregister())
 
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
