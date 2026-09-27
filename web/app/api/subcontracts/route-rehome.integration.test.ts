@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { Pool } from "pg";
 import test from "node:test";

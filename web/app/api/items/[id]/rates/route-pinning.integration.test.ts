@@ -2,10 +2,8 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { pathToFileURL } from 'node:url'
 import { sql } from 'drizzle-orm'
 
-const webRoot = `${pathToFileURL(`${process.cwd()}/web/`).href}`
 
 const stateKey = Symbol.for('openbooks.item-rates-pin-route-test')
 const routeState: {

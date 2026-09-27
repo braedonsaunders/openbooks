@@ -9,7 +9,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 // and any handler that touched I/O first would throw (no database, no
 // session) instead of answering the gate's 401.
 
-const webRoot = fileURLToPath(new URL('../../..', import.meta.url))
 const repoRoot = fileURLToPath(new URL('../../../..', import.meta.url))
 
 const hooks = registerHooks({

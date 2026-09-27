@@ -41,7 +41,6 @@ const mockFeatureGates = `
 `;
 
 // This file lives at web/app/api/payroll/runs/[id]/ — five levels up is web/.
-const webRoot = new URL("../../../../../", import.meta.url);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {

@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
 import { join } from "node:path";
 import test from "node:test";
-import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
 
 // One default template per (org, record type): migration 0277 refuses

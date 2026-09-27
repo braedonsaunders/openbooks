@@ -2,7 +2,6 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { pathToFileURL } from 'node:url'
 import { sql } from 'drizzle-orm'
 
 const stateKey = Symbol.for('openbooks.item-rates-precision-route-test')
@@ -11,7 +10,6 @@ const routeState: {
 } = { gate: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
-const webRoot = `${pathToFileURL(`${process.cwd()}/web/`).href}`
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier.endsWith('/lib/feature-gates')) return { shortCircuit: true, url: 'mock:item-rates-precision-gates' }
