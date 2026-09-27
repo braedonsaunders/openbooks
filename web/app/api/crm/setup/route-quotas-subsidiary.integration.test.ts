@@ -135,7 +135,7 @@ test('a subsidiary-restricted caller reads no quotas but keeps the rest of setup
   const { org, scopedUser, close } = await fixture()
   try {
     asUser(scopedUser)
-    const response = await withOrgContext(org.orgId, () => GET())
+    const response = await withOrgContext(org.orgId, () => GET(new Request('http://test.local/')))
     assert.equal(response.status, 200)
     const body = await response.json()
     assert.deepEqual(body.quotas, [])
@@ -150,7 +150,7 @@ test('an unrestricted caller still reads quotas with no notice', async () => {
   const { org, ownerUser, close } = await fixture()
   try {
     asUser(ownerUser)
-    const response = await withOrgContext(org.orgId, () => GET())
+    const response = await withOrgContext(org.orgId, () => GET(new Request('http://test.local/')))
     assert.equal(response.status, 200)
     const body = await response.json()
     assert.equal(body.quotas.length, 1)

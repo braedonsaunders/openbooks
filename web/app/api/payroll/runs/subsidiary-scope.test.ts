@@ -100,7 +100,7 @@ function scoped<T>(fn: () => Promise<T>): Promise<T> {
   return withOrgContext(authz.user.orgId, fn);
 }
 function get(): Promise<Response> {
-  return scoped(() => getRuns());
+  return scoped(() => getRuns(new Request("http://openbooks.test/api/payroll/runs")));
 }
 function runGet(id: string, url = `/api/payroll/runs/${id}`): Promise<Response> {
   return scoped(() => getRun(new Request(`http://openbooks.test${url}`), { params: Promise.resolve({ id }) }));

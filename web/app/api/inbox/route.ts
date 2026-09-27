@@ -28,7 +28,7 @@ const FILTERS = ["all", "approvals", "my_tasks", "signatures", "notices", "overd
  */
 export const GET = defineRoute({
   public: 'session',
-  handler: async ({ request: req }) => {
+  handler: async ({ request: req, authz }) => {
     const sp = new URL(req.url).searchParams;
     const filter = pickString(sp.get("filter") ?? undefined) ?? "all";
     if (!(FILTERS as readonly string[]).includes(filter)) {

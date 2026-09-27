@@ -100,7 +100,7 @@ async function fixture() {
   return { org, branchId, empA, empB, scheduleA, scheduleB, scheduleSubB, scheduleOrg };
 }
 
-const get = () => withOrgContext(state.orgId, () => GET());
+const get = () => withOrgContext(state.orgId, () => GET(new Request("http://schedules.test/api/work-schedules")));
 
 const post = (body: unknown) =>
   withOrgContext(state.orgId, () =>

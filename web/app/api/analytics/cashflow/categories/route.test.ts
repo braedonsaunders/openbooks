@@ -303,7 +303,7 @@ test('replacement persists every valid row with exact money and complete audit e
 
 test('GET returns the list with its revision', async () => {
   reset()
-  const response = await GET()
+  const response = await GET(new Request('http://test.local/'))
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), { categories: state.priorCategories, revision: 7 })
 })
@@ -312,7 +312,7 @@ test('restricted reader cannot inspect org-wide cashflow configuration', async (
   reset()
   state.allowedSubs = new Set(['sub-a'])
 
-  const response = await GET()
+  const response = await GET(new Request('http://test.local/'))
 
   assert.equal(response.status, 403)
   assert.deepEqual(await response.json(), { error: 'requires unrestricted subsidiary access' })
