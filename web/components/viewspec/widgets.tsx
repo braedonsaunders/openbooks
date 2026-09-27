@@ -28,6 +28,7 @@ import { RECORDS_WIDGETS } from './widgets-records'
 import { CONTROLS_WIDGETS } from './widgets-controls'
 import { WAREHOUSE_WIDGETS } from './widgets-warehouse'
 import { RESOURCING_BOARD_WIDGETS } from './widgets-resourcing-board'
+import { RESOURCING_DEMAND_WIDGETS } from './widgets-resourcing-demand'
 import { RESOURCING_REQUEST_WIDGETS } from './widgets-resourcing-requests'
 import { str, type WidgetRenderer } from './widget-props'
 
@@ -196,6 +197,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ...CONTROLS_WIDGETS,
   ...WAREHOUSE_WIDGETS,
   ...RESOURCING_BOARD_WIDGETS,
+  ...RESOURCING_DEMAND_WIDGETS,
   ...RESOURCING_REQUEST_WIDGETS,
 }
 
