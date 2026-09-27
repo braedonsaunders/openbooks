@@ -33,7 +33,7 @@ export const GET = defineRoute({
 export const POST = defineRoute({
   public: 'token',
   body: bookSlotBody,
-  handler: async ({ request: req, params: routeParams, body: routeBody }) => {
+  handler: async ({ params: routeParams, body: routeBody }) => {
     const params = Promise.resolve(routeParams as { token: string });
     const { token } = await params;
 

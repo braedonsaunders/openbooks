@@ -13,7 +13,7 @@ export const runtime = 'nodejs'
 export const DELETE = defineRoute({
   permission: 'banking.reconcile',
   feature: 'banking',
-  handler: async ({ request: req, authz: routeAuthz, params: routeParams }) => {
+  handler: async ({ authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
     const gate = routeAuthz;
     const unrestricted = guardUnrestrictedScope(gate)
