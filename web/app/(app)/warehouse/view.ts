@@ -140,7 +140,6 @@ export async function loadWarehouse(
   // line in a unit the item cannot convert) is shown in place of the figures,
   // naming its remedy, and links to the report that refuses the same way.
   const entity = await availabilityEntityScope(authz, undefined)
-  const fulfillmentOn = await isFeatureEnabled(orgId, 'fulfillment')
   let supply: { stocked: number; short: number; releasable: number | null; reorder: number; unset: number; onOrder: number } | null = null
   let supplyRefusal: string | null = null
   if (entity.selectedId) {

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrg } from "../platform/db.ts";
+import { getAvailableToPromise } from "../inventory/availability.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, type ScratchOrg } from "../testing/fixtures.ts";
 import {
@@ -81,6 +82,11 @@ test("pick lists hold bins by name, release through Flows, and stay in their org
       [candidate!.open, candidate!.heldByPickLists, candidate!.pickable, candidate!.bins.map((b) => [b.binCode, b.onHand])].map(String),
       ["8.00000000", "6.00000000", "2.00000000", "A1,10.0000"],
     );
+    // The released pick list's 6 is part of the 14 committed: reported as
+    // reserved, never subtracted from available a second time.
+    const atp = await withOrg(org.orgId, () =>
+      getAvailableToPromise(db, org.orgId, { subsidiaryId: org.subsidiaryId, itemId: org.items.fifo }));
+    assert.deepEqual([atp.onHand, atp.committed, atp.reserved, atp.available], ["10.0000", "14.0000", "6.0000", "-4.0000"]);
 
     // A second pick list on the same bin is refused at release, naming the
     // bin, the stock, the pick list holding it and what was requested.

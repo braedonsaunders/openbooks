@@ -7,6 +7,7 @@ import { salesOrderLineRemainders } from "../records/order-line-remainders.ts";
 import { InventoryError, type Runner } from "./contracts.ts";
 import { toBaseQuantity } from "./costing.ts";
 import { isJsonRecord } from "./document-lines.ts";
+import { activePickReservations } from "./pick-reservations.ts";
 import { getOnHandWith } from "./position.ts";
 import { assertWarehousingFeature, listWarehouseLocations, warehouseOf } from "./warehouses.ts";
 
@@ -24,6 +25,11 @@ import { assertWarehousingFeature, listWarehouseLocations, warehouseOf } from ".
  * against any location's stock; it is reported as `unallocated` rather than
  * dropped. An order line raised in another unit is converted exactly as
  * posting converts it, and a unit the item cannot convert is refused by name.
+ *
+ * `reserved` is informational: the part of `committed` that released, not
+ * yet completed pick lists have already allocated to bins. It is a subset of
+ * `committed`, never subtracted a second time, so `available` stays
+ * `onHand − committed` whether or not the demand has been picked.
  */
 
 export type AvailabilityRefusalCode =
@@ -258,6 +264,8 @@ export async function onHandByItem(
 export interface DemandTerms {
   onHand: string;
   committed: string;
+  /** The part of `committed` held on bins by released, open pick lists. */
+  reserved: string;
   unallocated: string;
 }
 
@@ -279,20 +287,32 @@ export async function demandTermsByItem(
   const itemIds = [...scope.items.keys()];
   const onHand = await onHandByItem(runner, orgId, scope.subsidiaryId, itemIds, scope.locations);
   const terms = new Map<string, DemandTerms>(
-    itemIds.map((id) => [id, { onHand: onHand.get(id)!, committed: "0.0000", unallocated: "0.0000" }]),
+    itemIds.map((id) => [id, { onHand: onHand.get(id)!, committed: "0.0000", reserved: "0.0000", unallocated: "0.0000" }]),
   );
   const lines = await salesOrderLineRemainders(runner as SqlExecutor, orgId, {
     openOnly: true,
     ...(itemIds.length === 1 ? { itemId: itemIds[0] } : {}),
   });
+  // Released pick lists hold part of a line's open quantity on bins. The
+  // reservation rule already caps it at the line's open quantity, so it is
+  // always inside the line's committed demand.
+  const held = await activePickReservations(runner as SqlExecutor, orgId, {
+    releasedOnly: true,
+    salesOrderLineIds: lines.map((line) => line.lineId),
+  });
   for (const line of lines) {
     const item = scope.items.get(line.itemId);
     if (!item || (line.subsidiaryId ?? scope.rootId) !== scope.subsidiaryId) continue;
     const entry = terms.get(line.itemId)!;
+    const label = `${line.documentNumber} line ${line.lineNumber}`;
     if (line.stockLocationId === null) {
-      entry.unallocated = add(entry.unallocated, openBaseQuantity(line.open, line.unit, item, `${line.documentNumber} line ${line.lineNumber}`));
+      entry.unallocated = add(entry.unallocated, openBaseQuantity(line.open, line.unit, item, label));
     } else if (!scope.locations || scope.locations.has(line.stockLocationId)) {
-      entry.committed = add(entry.committed, openBaseQuantity(line.open, line.unit, item, `${line.documentNumber} line ${line.lineNumber}`));
+      entry.committed = add(entry.committed, openBaseQuantity(line.open, line.unit, item, label));
+      for (const reservation of held) {
+        if (reservation.salesOrderLineId !== line.lineId) continue;
+        entry.reserved = add(entry.reserved, openBaseQuantity(reservation.reserved, line.unit, item, label));
+      }
     }
   }
   return terms;
@@ -307,6 +327,8 @@ export interface AvailableToPromise {
   baseUnit: string;
   onHand: string;
   committed: string;
+  /** Informational: the part of `committed` already picked to bins. */
+  reserved: string;
   available: string;
   unallocated: string;
 }
@@ -339,6 +361,7 @@ export async function listAvailableToPromise(
       baseUnit: item.baseUnit,
       onHand: entry.onHand,
       committed: entry.committed,
+      reserved: entry.reserved,
       available: add(entry.onHand, neg(entry.committed)),
       unallocated: entry.unallocated,
     };
