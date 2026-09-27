@@ -39,6 +39,7 @@ const { POST: setupPost } = await import("../../api/admin/setup/[entity]/route")
 const { POST: manufacturingPost } = await import("../../api/manufacturing/work-centers/route");
 const { POST: workOrderPost } = await import("../../api/manufacturing/work-orders/route");
 const { POST: issueWorkOrderPost } = await import("../../api/manufacturing/work-orders/[id]/issue/route");
+const { POST: completeWorkOrderPost } = await import("../../api/manufacturing/work-orders/[id]/complete/route");
 const { loadManufacturingSetup } = await import("../admin/setup/manufacturing/view");
 
 async function features(orgId: string, state: Record<string, boolean>) {
@@ -68,6 +69,11 @@ function issueWorkOrderWrite(id: string) {
   return issueWorkOrderPost(new Request(`http://audit.local/api/manufacturing/work-orders/${id}/issue`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ lines: [{ materialId: randomUUID(), quantity: "1" }] }),
+  }), { params: Promise.resolve({ id }) });
+}
+function completeWorkOrderWrite(id: string) {
+  return completeWorkOrderPost(new Request(`http://audit.local/api/manufacturing/work-orders/${id}/complete`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quantity: "1" }),
   }), { params: Promise.resolve({ id }) });
 }
 
@@ -111,6 +117,9 @@ test("manufacturing is off by default, parent-fenced, and preserves posted histo
     const fencedIssue = await issueWorkOrderWrite(workOrderId);
     assert.equal(fencedIssue.status, 404);
     assert.doesNotMatch(await fencedIssue.clone().text(), /manufacturing/i);
+    const fencedCompletion = await completeWorkOrderWrite(workOrderId);
+    assert.equal(fencedCompletion.status, 404);
+    assert.doesNotMatch(await fencedCompletion.clone().text(), /manufacturing/i);
     const offFlow = await withOrgTransaction(org.orgId, () => runRecordFlows(
       { kind: "on_submit" }, "work_order", workOrderId, { orgId: org.orgId, userId: actorId },
     ));
