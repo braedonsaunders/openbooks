@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { addCalendarDays, calendarDaysBetween } from "../platform/business-date.ts";
+import { addCalendarDays } from "../platform/business-date.ts";
 import { laborCostingSettings } from "../projects/labor-costing.ts";
 import { PayrollError } from "../payroll/error.ts";
 import {
@@ -17,7 +17,7 @@ import {
   type AvailabilityAbsence,
   type AvailabilityFigure,
 } from "./availability.ts";
-import { weekStartOf, weeksBetween } from "./weeks.ts";
+import { assertSundayWindow, weeksBetween } from "./weeks.ts";
 
 interface EmployeeAvailabilityScope {
   partyId: string;
@@ -38,29 +38,6 @@ interface AbsenceRow extends AvailabilityAbsence {
 
 function list(values: readonly string[]) {
   return sql.join(values.map((value) => sql`${value}`), sql`, `);
-}
-
-function assertSundayRange(firstSunday: string, lastSunday: string): number {
-  if (weekStartOf(firstSunday) !== firstSunday || weekStartOf(lastSunday) !== lastSunday) {
-    throw new ResourcingRefusal(
-      422,
-      "invalid_week_range",
-      "availability dates must start and end on Sunday week boundaries",
-      "choose Sunday dates for the first and last weeks",
-      "firstSunday",
-    );
-  }
-  const dayCount = calendarDaysBetween(firstSunday, lastSunday);
-  if (dayCount < 0 || dayCount % 7 !== 0) {
-    throw new ResourcingRefusal(
-      422,
-      "invalid_week_range",
-      "the last availability week must be on or after the first week",
-      "choose a last Sunday on or after the first Sunday",
-      "lastSunday",
-    );
-  }
-  return dayCount / 7 + 1;
 }
 
 function scopePredicate(allowedSubsidiaryIds: ReadonlySet<string> | null) {
@@ -116,7 +93,7 @@ export async function readAvailability(
   lastSunday: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<AvailabilityFigure[]> {
-  const weekCount = assertSundayRange(firstSunday, lastSunday);
+  const weekCount = assertSundayWindow(firstSunday, lastSunday);
   const employeeIds = [...new Set(partyIds)];
   const personWeeks = employeeIds.length * weekCount;
   if (personWeeks > 520) {
