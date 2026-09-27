@@ -408,6 +408,7 @@ async function transferShipmentBook(tx: Runner, orgId: string, order: TransferOr
     select j.book_id, min(l.currency) as currency from journal_entries j
     join journal_lines l on l.org_id=j.org_id and l.entry_id=j.id
     where j.org_id=${orgId} and j.id=${order.ship_journal_entry_id}
+      -- Live entries only: a reversed shipment has no book for the receipt to clear.
       and j.subsidiary_id=${order.subsidiary_id} and j.status='posted' and j.origin='inventory'
     group by j.book_id having count(distinct l.currency)=1`)).rows[0];
   if (!source || source.currency !== await subsidiaryCurrency(orgId, order.subsidiary_id, tx)) {

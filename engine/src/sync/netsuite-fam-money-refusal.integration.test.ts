@@ -4,7 +4,9 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { withSimClock } from "../platform/clock.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { postEntry } from "../journal/post-entry.ts";
+import { reverseProjectGlEntry } from "../journal/origin-entry.ts";
 import { syncNetSuiteFixedAssets } from "./netsuite-fixed-assets.ts";
 import type { NetSuiteSource, NetSuiteFixedAssetSnapshot } from "./netsuite-source.ts";
 import type { NativeDocument } from "./native.ts";
@@ -116,6 +118,24 @@ test(
     }
   },
 );
+
+test("the FAM ledger tie keeps a reversed original beside its mirror", { skip: !DB, timeout: 180_000 }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Migration operator", "admin");
+    await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', coalesce(settings -> 'features', '{}'::jsonb) || '{"fixedAssets": true}'::jsonb) where id = ${org.orgId}`);
+    for (const [ref, id] of [["FA-COST", org.accounts.invAsset], ["FA-ACCUM", org.accounts.adjustment], ["FA-EXP", org.accounts.cogs]]) await db.execute(sql`update accounts set custom = custom || jsonb_build_object('nsId', ${ref}::text, 'nsFamMoneyTest', ${ref}::text) where id = ${id} and org_id = ${org.orgId}`);
+    const { entryId } = await postEntry(db, { orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId, entryNumber: "FA-DELETED", postingDate: org.date, periodId: org.periodId, origin: "migration", currency: "CAD", lines: [{ accountId: org.accounts.invAsset, amount: "100" }, { accountId: org.accounts.clearing, amount: "-100" }] });
+    await reverseProjectGlEntry(org.orgId, actor, entryId, "Source transaction deleted", "2026-07-20");
+    await db.execute(sql`update subsidiaries set custom = coalesce(custom, '{}'::jsonb) || '{"nsId":"SUB"}'::jsonb where id = ${org.subsidiaryId} and org_id = ${org.orgId}`);
+    const accounts = { custrecord_assettypeassetacc: "FA-COST", custrecord_assettypedepracc: "FA-ACCUM", custrecord_assettypedeprchargeacc: "FA-EXP" };
+    const assets = [{ id: "A1", custrecord_assettype: "7", custrecord_assetsubsidiary: "SUB", custrecord_assetcost: "0", custrecord_assetmainacc: "FA-COST", custrecord_assetdepracc: "FA-ACCUM", custrecord_assetdeprchargeacc: "FA-EXP" }];
+    const result = await syncNetSuiteFixedAssets(Object.assign(stubSource([], { ...EMPTY_SNAPSHOT, assetTypes: [{ id: "7", name: "Equipment", ...accounts }], assets }), { fixedAssetAccountBalances: async () => new Map() }), { orgId: org.orgId, connectionId: randomUUID() });
+    assert.equal(result.fixedAssetLedger.balances.find((b) => b.accountRef === "FA-COST")?.target, "0.0000");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
 
 /**
  * FAM-sourced money fails closed at the document boundary.

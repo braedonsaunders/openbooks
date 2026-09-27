@@ -78,6 +78,7 @@ export async function creditSettlementState(
     select jl.id, abs(jl.amount)::text as amount, jl.currency,
            coalesce(ap.applied, 0)::numeric(19,4)::text as applied
       from journal_lines jl
+      -- Live entries only: a voided credit has nothing left to apply.
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
       join documents source_document on source_document.id = je.source_document_id and source_document.org_id = je.org_id
       left join lateral (

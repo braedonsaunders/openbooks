@@ -813,6 +813,7 @@ export async function postPayrollVariance(opts: {
     const prior = (await tx.execute<{ id: string }>(sql`
       select id
         from journal_entries
+       -- Live entries only: a reversed variance entry is already undone.
        where org_id = ${orgId} and origin = 'payroll_variance' and status = 'posted'
          and book_id = ${bookId}
          and reverses_entry_id is null

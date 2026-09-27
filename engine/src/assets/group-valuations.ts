@@ -94,6 +94,7 @@ async function subject(
       occurred_on: string;
       kind: string;
     }>(
+      // Live entries only: a reversed remeasurement is not a valuation source.
       sql`select v.id,e.book_id,v.amount::text,a.subsidiary_id,a.acquisition_cost::text,s.base_currency as currency,v.occurred_on::text,v.kind from asset_events v join fixed_assets a on a.org_id=v.org_id and a.id=v.asset_id join subsidiaries s on s.org_id=a.org_id and s.id=a.subsidiary_id join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and v.id=${input.sourceEventId} and v.kind in('impaired','revalued') and e.status='posted' and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) for share of v,e,s`,
     )
   ).rows[0];
@@ -180,6 +181,7 @@ async function snapshot(
   });
   const later = (
     await tx.execute(
+      // Live entries only: only live later activity blocks a backdated valuation.
       sql`select 1 from asset_basis_changes where org_id=${orgId} and asset_id=${assetId} and book_id=${s.row.book_id} and effective_on>${input.effectiveOn} union all select 1 from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and e.book_id=${s.row.book_id} and v.occurred_on>${input.effectiveOn} and v.kind in('impaired','revalued','disposed','written_off') and e.status='posted' union all select 1 from asset_transfer_consolidation_entries c join journal_entries e on e.org_id=c.org_id and e.id=c.journal_entry_id where c.org_id=${orgId} and c.transfer_id=${s.transfer.id} and e.posting_date>${input.effectiveOn} and e.status='posted' and not exists(select 1 from journal_entries r where r.org_id=e.org_id and r.reverses_entry_id=e.id and r.status in('posted','reversed')) limit 1`,
     )
   ).rows;
@@ -197,6 +199,7 @@ async function snapshot(
     throw new AssetValidationError("a disposed asset has no remaining group valuation");
   const earlierMissing = (
     await tx.execute(
+      // Live entries only: a reversed remeasurement needs no transfer measurement.
       sql`select 1 from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${orgId} and v.asset_id=${assetId} and e.book_id=${s.row.book_id} and e.status='posted' and v.kind in('impaired','revalued') and v.occurred_on<${input.effectiveOn} and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id) and not exists(select 1 from asset_transfer_measurements m where m.org_id=v.org_id and m.source_event_id=v.id) limit 1`,
     )
   ).rows;

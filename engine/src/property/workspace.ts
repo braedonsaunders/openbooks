@@ -24,12 +24,12 @@ export async function securityDepositReconciliation(orgId: string, allowedSubsid
         where d.org_id=p.org_id and l.property_id=p.id and d.occurred_on<=${throughOn}),0)::text as "subledgerBalance",
       coalesce((select -sum(jl.amount) from security_deposit_transactions d
         join property_leases l on l.id=d.lease_id and l.org_id=d.org_id
-        join journal_entries je on je.id=d.journal_entry_id and je.org_id=d.org_id and je.status='posted'
+        join journal_entries je on je.id=d.journal_entry_id and je.org_id=d.org_id and je.status in ('posted','reversed')
         join journal_lines jl on jl.entry_id=je.id and jl.org_id=je.org_id and jl.account_id=p.deposit_liability_account_id
         where d.org_id=p.org_id and l.property_id=p.id and d.occurred_on<=${throughOn}),0)::text as "linkedGlBalance",
       case when p.location_id is null or p.deposit_liability_account_id is null then null else
         coalesce((select -sum(jl.amount) from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
-          where jl.org_id=p.org_id and je.status='posted' and je.posting_date<=${throughOn}
+          where jl.org_id=p.org_id and je.status in ('posted','reversed') and je.posting_date<=${throughOn}
             and jl.account_id=p.deposit_liability_account_id and jl.location_id=p.location_id),0)::text end as "locationControlBalance",
       coalesce((select sum(case when d.kind='received' then d.amount when d.kind='refunded' then -d.amount else 0 end)
         from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id

@@ -425,6 +425,7 @@ export async function postPaymentWithApplications(
              abs(jl.amount) - coalesce(sum(a.amount) filter (where a.unapplied_at is null), 0) as open_base,
              abs(jl.txn_amount) - coalesce(sum(a.target_transaction_amount) filter (where a.unapplied_at is null), 0) as open_transaction
         from journal_lines jl
+        -- Live entries only: a reversed entry no longer carries a settleable open item.
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
         left join applications a on a.to_line_id = jl.id and a.org_id = jl.org_id
        where jl.org_id = ${doc.orgId} and jl.id in ${allocs.map((a) => a.openLineId)}

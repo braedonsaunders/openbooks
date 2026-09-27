@@ -62,6 +62,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
     const glRes = (await tx.execute<{ id: string; posting_date: string; amount: string }>(sql`
       select jl.id, je.posting_date, jl.txn_amount as amount
         from journal_lines jl
+        -- Live entries only: a reversed original is no longer an item to clear, so it is never a candidate.
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
        where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
          and je.book_id = ${bookId}
@@ -226,6 +227,7 @@ async function createMatchInTransaction(
   const gl = (await tx.execute<{ id: string; amount: string; posting_date: string }>(sql`
     select jl.id, jl.txn_amount as amount, je.posting_date
       from journal_lines jl
+      -- Live entries only: a reversed original is no longer an item to clear, so it cannot be matched.
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
      where jl.id = any(${sql.param(journalLineIds)}::uuid[])
        and jl.org_id = ${ctx.orgId}

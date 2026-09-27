@@ -189,6 +189,7 @@ export async function recordDepreciationInput(
       currentSalvage = add(row.salvage_value, basisChange.salvage);
     const valuation = (
       await tx.execute<{ delta: string; cutoff: string | null }>(
+        // Live entries only: the carrying delta is the sum of standing remeasurements, not their history.
         sql`select coalesce(sum(v.amount),0)::text as delta,max(v.occurred_on)::text as cutoff from asset_events v join journal_entries e on e.org_id=v.org_id and e.id=v.journal_entry_id where v.org_id=${args.orgId} and v.asset_id=${args.assetId} and e.book_id=${row.book_id} and e.status='posted' and v.kind in('impaired','revalued') and not exists(select 1 from asset_events r where r.org_id=v.org_id and r.reverses_event_id=v.id)`,
       )
     ).rows[0]!;

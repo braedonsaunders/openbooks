@@ -425,6 +425,7 @@ export async function runOwnershipConsolidationIn(
     select oce.interest_id, je.id, je.entry_number
       from ownership_consolidation_entries oce
       join ownership_consolidation_runs r on r.id=oce.run_id and r.org_id=oce.org_id and r.period_id=${periodId}
+      -- Live entries only: a generation already reversed must not be reversed again.
       join journal_entries je on je.id=oce.journal_entry_id and je.org_id=oce.org_id and je.status='posted'
      where oce.org_id=${orgId} and je.book_id=${bookId} and oce.kind<>'reversal'
        ${options.interestIds ? sql`and oce.interest_id in(select jsonb_array_elements_text(${JSON.stringify(options.interestIds)}::jsonb)::uuid)` : sql``}
@@ -1252,6 +1253,7 @@ async function runAutoEliminationIn(
   // Prior effective elimination entries are reversed on a re-run. Posted
   // ledger rows are never deleted or rewritten.
   const prior = await tx.execute<{ id: string; entryNumber: string }>(sql`
+    -- Live entries only: an elimination already reversed must not be reversed again.
     select original.id, original.entry_number as "entryNumber"
       from journal_entries original
      where original.org_id = ${orgId} and original.period_id = ${periodId}

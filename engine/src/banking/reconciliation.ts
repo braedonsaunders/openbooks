@@ -219,7 +219,7 @@ async function reconciliationTotalsUsing(
       coalesce((
         select sum(jl.txn_amount)
           from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+          join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
          where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
            and je.book_id = ${bookId}
            and jl.currency = ${recon.currency}
@@ -536,6 +536,7 @@ export async function markReconciled(
           or bool_or(jl.account_id <> ${recon.account_id})
           or bool_or(jl.currency <> ${recon.currency})
           or bool_or(je.book_id <> ${bookId})
+          -- Live entries only: a match whose entry has since been reversed is stale.
           or bool_or(je.status <> 'posted')
           or bool_or(je.posting_date > ${recon.through_date})
           or bool_or(jl.reconciled_at is not null)
@@ -557,7 +558,7 @@ export async function markReconciled(
     const bal = (await tx.execute<{ cleared: string }>(sql`
       select coalesce(sum(jl.txn_amount), 0) as cleared
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
        where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
          and je.book_id = ${bookId}
          and jl.currency = ${recon.currency}

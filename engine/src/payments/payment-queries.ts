@@ -100,6 +100,7 @@ export async function openItemsForParty(partyId: string, side: OpenItemSide, org
            coalesce(ap.applied, 0) as applied,
            coalesce(ap.transaction_applied, 0) as transaction_applied
       from journal_lines jl
+      -- Live entries only: a reversed entry no longer carries a settleable open item.
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
       left join documents d on d.id = je.source_document_id and d.org_id = je.org_id
       left join lateral (
@@ -182,6 +183,7 @@ export async function creditItemsForParty(
            coalesce(ap.applied, 0) as applied,
            coalesce(ap.transaction_applied, 0) as transaction_applied
       from journal_lines jl
+      -- Live entries only: a voided credit is never offered for application.
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
       join documents d on d.id = je.source_document_id and d.org_id = je.org_id and d.kind = ${creditKind}
       left join lateral (

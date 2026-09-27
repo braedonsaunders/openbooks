@@ -12,6 +12,7 @@ import {
 } from "./banking.ts";
 import { ensureCloseDefaults } from "../close/defaults.ts";
 import { db } from "../platform/db.ts";
+import { reverseProjectGlEntry } from "../journal/origin-entry.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting, type ScratchOrg } from "../testing/fixtures.ts";
 
@@ -253,6 +254,23 @@ test("partially-cleared accounts stay open with exact counts", { skip: !process.
       Number((await db.execute<{ n: string }>(sql`select count(*) as n from reconciliations where org_id = ${org.orgId}`)).rows[0]!.n),
       0,
     );
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("a source-cleared entry reversed later signs off with both legs and a net balance", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actor = await createScratchUser(org.orgId, "Evidence reviewer", "admin");
+    await db.execute(sql`update accounts set reconcilable = true, currency_restriction = 'CAD' where org_id = ${org.orgId} and id = ${org.accounts.bank}`);
+    const entry = await postBankJournal(org, actor, ["100"], "reversed");
+    const mirror = (await reverseProjectGlEntry(org.orgId, actor, entry, "Deposit returned by the bank", "2026-07-20"))!;
+    await applySourceLineEvidence(org.orgId, "test-connector", [entry, mirror].map((entryId) => ({ entryId, lines: [{ accountId: org.accounts.bank, cleared: true, clearedDate: "2026-07-20" }] })));
+    await refreshSourceReconciliationState(org.orgId, "test-connector");
+    const out = await signOffFromSourceEvidence({ accountId: org.accounts.bank }, { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null });
+    const { rows: [recon] } = await db.execute<{ statement_balance: string }>(sql`select statement_balance::text from reconciliations where org_id = ${org.orgId}`);
+    assert.deepEqual([out.signed && out.clearedLines, recon?.statement_balance], [2, "0.0000"], "the deposit and its reversal both cleared at the source and net to zero");
   } finally {
     await dropScratchOrgReporting(org.orgId);
   }

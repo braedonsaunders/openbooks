@@ -209,6 +209,7 @@ export async function netRemeasurementDelta(
       from asset_events event
       join journal_entries entry on entry.id = event.journal_entry_id and entry.org_id = event.org_id
      where event.org_id = ${orgId} and event.asset_id = ${assetId}
+       -- Live entries only: the carrying delta is the sum of standing remeasurements, not their history.
        and entry.book_id = ${bookId} and entry.status = 'posted'
        and event.kind in ('impaired', 'revalued')
        and not exists (

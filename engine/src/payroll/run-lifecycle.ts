@@ -396,6 +396,7 @@ export async function attributePayRunEntity(input: {
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where l.org_id = ${orgId} and e.source_document_id = ${documentId}
+         -- Live entries only: reversed lines are no longer books in any entity.
          and e.status = 'posted'
        for update of l
     `));

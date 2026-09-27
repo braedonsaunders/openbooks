@@ -345,6 +345,7 @@ async function templateRowForOrg(orgId: string): Promise<(TemplateRow & { envKin
       select o.id, o.name, o.env_kind as "envKind",
              (select count(*)::int from documents d where d.org_id = o.id) as documents,
              (select count(*)::int from journal_entries j
+               -- Live entries only: coverage counts standing entries, and promotion compares the same measure.
                where j.org_id = o.id and j.status = 'posted') as "postedEntries",
              (select count(*)::int from parties p where p.org_id = o.id) as parties,
              (select count(*)::int from accounting_periods p where p.org_id = o.id) as periods,

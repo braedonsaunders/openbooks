@@ -325,6 +325,7 @@ async function overheadRecomputes(orgId: string): Promise<Check> {
           and al.journal_entry_id = e.entry_id
         join journal_lines l on l.org_id = al.org_id and l.id = al.journal_line_id and l.entry_id = e.entry_id
         join journal_entries je on je.org_id = l.org_id and je.id = l.entry_id
+       -- Live entries only: a reversed overhead entry is no longer applied overhead to recompute.
        where je.origin = 'overhead_applied' and je.status = 'posted'
     )
     select e.entry_id, a.line_number, e.amount::text as expected, a.amount as actual,
