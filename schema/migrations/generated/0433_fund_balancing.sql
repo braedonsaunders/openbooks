@@ -61,6 +61,25 @@ CREATE TRIGGER segment_definitions_guard
   BEFORE INSERT OR UPDATE ON public.segment_definitions
   FOR EACH ROW EXECUTE FUNCTION public.segment_definitions_guard();
 
+-- Tenant teardown removes segment values before their definitions. Clear a
+-- default link only during an explicitly authorized sandbox wipe; ordinary
+-- deletes remain protected by the restrictive foreign key.
+CREATE OR REPLACE FUNCTION public.segment_values_clear_default_for_wipe() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  if public.openbooks_sandbox_wipe_allowed(old.org_id) then
+    update public.segment_definitions
+       set default_value_id = null, updated_at = now()
+     where org_id = old.org_id and default_value_id = old.id;
+  end if;
+  return old;
+end $$;
+
+CREATE TRIGGER segment_values_clear_default_for_wipe
+  BEFORE DELETE ON public.segment_values
+  FOR EACH ROW EXECUTE FUNCTION public.segment_values_clear_default_for_wipe();
+
 CREATE OR REPLACE FUNCTION public.validate_extra_dims(
   p_org_id uuid,
   p_dims jsonb,
