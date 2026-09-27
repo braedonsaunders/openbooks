@@ -115,7 +115,7 @@ test("an unrestricted caller writes it; restricted callers still read it", async
     assert.equal(saved.status, 200, JSON.stringify(await saved.json().catch(() => null)));
     assert.deepEqual(await storedCompensation(org.orgId), { gapThresholdPct: "9007199254.000001", burdenRate: "1.25" });
     state.allowedSubsidiaryIds = new Set([org.subsidiaryId]);
-    const response = await GET();
+    const response = await GET(new Request("http://comp.test/api/hrm/compensation-settings"));
     assert.equal(response.status, 200);
     assert.deepEqual((await response.json()) as unknown, {
       settings: { gapThresholdPct: "9007199254.000001", burdenRate: "1.25" },

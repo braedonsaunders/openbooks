@@ -126,6 +126,7 @@ const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000033";
 const PLAN_ID = "00000000-0000-4000-8000-000000000034";
 const WINDOW_ID = "00000000-0000-4000-8000-000000000035";
 const ENROLLMENT_ID = "00000000-0000-4000-8000-000000000036";
+const readRequest = () => new Request("http://openbooks.test/api/hrm/me/work");
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
@@ -146,8 +147,8 @@ function post(body: unknown): Request {
 test("a missing feature flag 404s before any service runs", async () => {
     reset();
     routeState.featureOn = false;
-    assert.equal((await reviewsRoute!.GET()).status, 404);
-    assert.equal((await benefitsRoute!.GET()).status, 404);
+    assert.equal((await reviewsRoute!.GET(readRequest())).status, 404);
+    assert.equal((await benefitsRoute!.GET(readRequest())).status, 404);
     assert.equal((await acknowledgeRoute!.POST(post({ reviewId: REVIEW_ID }))).status, 404);
     assert.equal((await submitRoute!.POST(post({ reviewId: REVIEW_ID, answers: [] }))).status, 404);
     assert.equal((await progressRoute!.POST(post({ goalId: GOAL_ID, progressPercent: 10 }))).status, 404);
@@ -159,8 +160,8 @@ test("a missing feature flag 404s before any service runs", async () => {
   test("an unauthenticated caller never reaches a service", async () => {
     reset();
     routeState.gate = { status: 401 };
-    assert.equal((await reviewsRoute!.GET()).status, 401);
-    assert.equal((await benefitsRoute!.GET()).status, 401);
+    assert.equal((await reviewsRoute!.GET(readRequest())).status, 401);
+    assert.equal((await benefitsRoute!.GET(readRequest())).status, 401);
     assert.equal((await acknowledgeRoute!.POST(post({ reviewId: REVIEW_ID }))).status, 401);
     assert.equal((await changeRoute!.POST(post({ enrollmentId: ENROLLMENT_ID, changeDate: "2026-04-01", reason: "x" }))).status, 401);
     assert.deepEqual(routeState.calls, []);
@@ -168,10 +169,10 @@ test("a missing feature flag 404s before any service runs", async () => {
 
   test("reads forward org and actor and return the service payload", async () => {
     reset();
-    const reviews = await reviewsRoute!.GET();
+    const reviews = await reviewsRoute!.GET(readRequest());
     assert.equal(reviews.status, 200);
     assert.deepEqual((await reviews.json()).workspace, { fn: "reviews", ok: true, id: "row-1", status: "active" });
-    const benefits = await benefitsRoute!.GET();
+    const benefits = await benefitsRoute!.GET(readRequest());
     assert.equal(benefits.status, 200);
     assert.deepEqual(routeState.calls, [
       { fn: "reviews", args: { orgId: "org-1", actorId: "user-1" } },
@@ -221,7 +222,7 @@ test("a missing feature flag 404s before any service runs", async () => {
       "NO_LINK",
       "no person is linked to this login — ask an administrator to link your person in Admin → Users → Link person before using self-service",
     );
-    const reviews = await reviewsRoute!.GET();
+    const reviews = await reviewsRoute!.GET(readRequest());
     assert.equal(reviews.status, 403);
     assert.match((await reviews.json()).error as string, /Admin → Users → Link person/);
     const elect = await electRoute!.POST(post({ employmentId: EMPLOYMENT_ID, planId: PLAN_ID, effectiveFrom: "2026-03-01" }));

@@ -126,6 +126,7 @@ const mockUrls = new Map<string, string>([
 
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";
+const readRequest = () => new Request("http://openbooks.test/api/hrm/me");
 
 function reset(): void {
   routeState.gate = { user: { id: "user-1", orgId: "org-1" } };
@@ -146,10 +147,10 @@ function postFile(body: unknown): Request {
 test("a missing feature flag 404s before any service runs", async () => {
   reset();
   routeState.featureOn = false;
-  assert.equal((await profileRoute!.GET()).status, 404);
-  assert.equal((await stepsRoute!.GET()).status, 404);
-  assert.equal((await requestsRoute!.GET()).status, 404);
-  assert.equal((await teamRoute!.GET()).status, 404);
+  assert.equal((await profileRoute!.GET(readRequest())).status, 404);
+  assert.equal((await stepsRoute!.GET(readRequest())).status, 404);
+  assert.equal((await requestsRoute!.GET(readRequest())).status, 404);
+  assert.equal((await teamRoute!.GET(readRequest())).status, 404);
   assert.equal(
     (await fileRoute!.POST(postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change" }, reason: "x" }))).status,
     404,
@@ -160,8 +161,8 @@ test("a missing feature flag 404s before any service runs", async () => {
 test("an unauthenticated caller never reaches a service", async () => {
   reset();
   routeState.gate = { status: 401 };
-  assert.equal((await profileRoute!.GET()).status, 401);
-  assert.equal((await teamRoute!.GET()).status, 401);
+  assert.equal((await profileRoute!.GET(readRequest())).status, 401);
+  assert.equal((await teamRoute!.GET(readRequest())).status, 401);
   assert.equal(
     (await fileRoute!.POST(postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change" }, reason: "x" }))).status,
     401,
@@ -171,10 +172,10 @@ test("an unauthenticated caller never reaches a service", async () => {
 
 test("reads forward org and actor and return the service payload", async () => {
   reset();
-  const profile = await profileRoute!.GET();
+  const profile = await profileRoute!.GET(readRequest());
   assert.equal(profile.status, 200);
   assert.deepEqual(await profile.json(), { profile: { fn: "profile", ok: true } });
-  const team = await teamRoute!.GET();
+  const team = await teamRoute!.GET(readRequest());
   assert.equal(team.status, 200);
   assert.deepEqual((await team.json()).team.asOf, "2026-09-20");
   assert.deepEqual(routeState.calls, [
@@ -213,7 +214,7 @@ test("a no-link refusal reaches the caller as a 403 with the remedy intact", asy
     "NO_LINK",
     "no person is linked to this login — ask an administrator to link your person in Admin → Users → Link person before using self-service",
   );
-  const response = await profileRoute!.GET();
+  const response = await profileRoute!.GET(readRequest());
   assert.equal(response.status, 403);
   assert.match((await response.json()).error as string, /Admin → Users → Link person/);
 });
@@ -224,7 +225,7 @@ test("a report-less team refusal reaches the caller as a 403", async () => {
     "@openbooks/engine/src/hrm/self-service/actor.ts"
   );
   routeState.serviceThrow = new SelfServiceError("NO_TEAM", "no direct reports as of 2026-09-20 — team visibility follows the current line");
-  const response = await teamRoute!.GET();
+  const response = await teamRoute!.GET(readRequest());
   assert.equal(response.status, 403);
   assert.match((await response.json()).error as string, /no direct reports/);
 });
@@ -235,9 +236,9 @@ test("malformed proposals map to 400 and unknown rows to 404", async () => {
     "@openbooks/engine/src/hrm/self-service/actor.ts"
   );
   routeState.serviceThrow = new SelfServiceError("REFUSED", "profile change refused: phone must not be blank");
-  assert.equal((await stepsRoute!.GET()).status, 400);
+  assert.equal((await stepsRoute!.GET(readRequest())).status, 400);
   routeState.serviceThrow = new SelfServiceError("NOT_FOUND", "the person linked to this login has no party record in this organization");
-  assert.equal((await profileRoute!.GET()).status, 404);
+  assert.equal((await profileRoute!.GET(readRequest())).status, 404);
 });
 
 test("a nested change-request refusal keeps the shared mapping", async () => {

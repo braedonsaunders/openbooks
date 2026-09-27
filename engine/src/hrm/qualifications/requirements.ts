@@ -279,7 +279,7 @@ export interface ListRequirementsInput {
   readonly subjectId?: string;
 }
 
-export interface RequirementSubjectOption {
+export interface RequirementSubjectOption extends Record<string, unknown> {
   readonly id: string;
   readonly label: string;
 }

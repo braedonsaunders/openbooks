@@ -60,16 +60,16 @@ export const POST = defineRoute({
         { safeStatus: 400 },
       );
     }
-    const body = parsedBody.data;
+    const competencyBody = parsedBody.data;
     try {
       const competency = await createCompetency({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
-        frameworkId: body.frameworkId,
-        code: body.code,
-        name: body.name,
-        description: body.description ?? null,
-        category: body.category ?? null,
+        frameworkId: competencyBody.frameworkId,
+        code: competencyBody.code,
+        name: competencyBody.name,
+        description: competencyBody.description ?? null,
+        category: competencyBody.category ?? null,
       });
       return NextResponse.json({ competency }, { status: 201 });
     } catch (e) {
