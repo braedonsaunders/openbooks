@@ -106,7 +106,7 @@ async function withOrgClaim(
 ): Promise<void> {
   // Session locks belong to the checked-out connection. Keep this client
   // pinned through the duty so the unlock cannot land on another pool session.
-  const client = await withBypassContext(() => pool.connect());
+  const client = await pool.connect();
   let acquired = false;
   try {
     const row = (await client.query<{ locked: boolean }>(

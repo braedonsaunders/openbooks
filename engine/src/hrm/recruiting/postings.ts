@@ -391,6 +391,7 @@ export async function resolveFeedOrg(feedToken: string): Promise<string> {
   if (!claims) {
     throw new RecruitingError("REFUSED", "this feed token is invalid or expired — reissue it from the posting surface");
   }
+  // bypass: connector-token — the signed feed credential identifies its organization before any scoped work begins.
   const row = await withBypassContext(async () => {
     const found = (await db.execute<{ orgId: string }>(sql`
       select id as "orgId" from orgs where id = ${claims.rowId}

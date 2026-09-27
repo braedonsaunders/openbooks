@@ -53,6 +53,7 @@ export function orgSlugFor(name: string): string {
  * so this is where the environment has to be checked.
  */
 export async function resolveOrgBySlug(slug: string): Promise<{ orgId: string; name: string } | null> {
+  // bypass: cross-org-by-design — matching a public slug requires checking all production organization names for ambiguity.
   const orgs = await withBypassContext(async () => {
     const rows = (
       await db.execute<{ orgId: string; name: string }>(sql`

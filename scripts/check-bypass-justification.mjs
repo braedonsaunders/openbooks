@@ -55,7 +55,7 @@ const OUT_OF_SCOPE = /\.(?:test|spec)\.[cm]?[jt]sx?$|\.d\.[cm]?ts$|^engine\/src\
  * Untagged calls the allowlist may hold. Lower it as entries are converted;
  * never raise it.
  */
-export const ALLOWLIST_CEILING = 25
+export const ALLOWLIST_CEILING = 1
 
 /** The helpers whose callbacks run with tenant RLS lifted. */
 export const BYPASS_HELPERS = new Set(['withBypass', 'withBypassContext'])

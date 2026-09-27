@@ -577,7 +577,7 @@ function sampleCompanyBirthMarker(args: {
 
 /** Flip the provisioning marker after a stage whose own writes committed. */
 async function setSampleCompanyStage(orgId: string, stage: SampleCompanyOrgStage): Promise<void> {
-  const stamped = (await withBypassContext(() => db.execute(sql`
+  const stamped = (await withOrgContext(orgId, () => db.execute(sql`
     update orgs
        set settings = jsonb_set(settings, '{sampleCompany,provisioningStage}', to_jsonb(${stage}::text), true),
            updated_at = now()
@@ -639,7 +639,7 @@ async function assertShellOrgHasNoTenantRows(orgId: string): Promise<void> {
  * second company over an undeleted partial would strand it.
  */
 async function deletePartialSampleOrg(orgId: string): Promise<"deleted" | "gone"> {
-  return withBypassContext(async () => {
+  return withOrgContext(orgId, async () => {
     const row = (await db.execute<{ name: string; envKind: string; isSample: boolean }>(sql`
       select name, env_kind as "envKind",
              ((settings ? 'sampleCompany')
@@ -771,7 +771,7 @@ async function stampTemplateAttempt(orgId: string, profileId: string): Promise<v
     stage: "provisioned",
     attemptedAt: new Date().toISOString(),
   };
-  const stamped = (await withBypassContext(() => db.execute(sql`
+  const stamped = (await withOrgContext(orgId, () => db.execute(sql`
     update orgs
        set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('sampleTemplateAttempt',
              coalesce(settings->'sampleTemplateAttempt', '{}'::jsonb) || ${JSON.stringify(attempt)}::jsonb),
@@ -785,7 +785,7 @@ async function stampTemplateAttempt(orgId: string, profileId: string): Promise<v
 
 /** Drop the attempt marker once the template registers — it has converged. */
 async function clearTemplateAttempt(orgId: string): Promise<void> {
-  const cleared = (await withBypassContext(() => db.execute(sql`
+  const cleared = (await withOrgContext(orgId, () => db.execute(sql`
     update orgs
        set settings = settings - 'sampleTemplateAttempt',
            updated_at = now()

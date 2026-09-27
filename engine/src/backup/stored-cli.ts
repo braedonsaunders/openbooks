@@ -10,7 +10,7 @@
  */
 import { existsSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
+import { db, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { executeBackupRun } from "./backup.ts";
 import { s3Enabled } from "../platform/file-storage.ts";
 
@@ -39,7 +39,7 @@ if (!s3Enabled) {
 // The standalone CLI starts with no request org context. Resolve only the
 // operator-supplied organization id across the trusted boundary, then keep
 // all actor and backup-ledger access inside that tenant's RLS scope.
-const org = await withBypassContext(() => db.execute<{ id: string; name: string; env_kind: string }>(sql`
+const org = await withOrgContext(orgId, () => db.execute<{ id: string; name: string; env_kind: string }>(sql`
   select id, name, env_kind from orgs where id = ${orgId}
 `));
 if (!org.rows[0]) throw new Error("organization not found");

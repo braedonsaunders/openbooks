@@ -40,7 +40,7 @@ async function commandOrg(cmd: string | undefined, positional: string[], rest: s
   const suppliedOrg = flag(rest, "org");
   if (cmd === "list" || cmd === "create" || !cmd) {
     if (!suppliedOrg) return firstOrg();
-    const org = await withBypassContext(() => db.execute<{ id: string }>(sql`
+    const org = await withOrgContext(suppliedOrg, () => db.execute<{ id: string }>(sql`
       select id from orgs where id = ${suppliedOrg} and env_kind = 'production'`));
     if (!org.rows[0]) throw new Error(`production org not found: ${suppliedOrg}`);
     return org.rows[0].id;
