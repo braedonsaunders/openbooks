@@ -5,7 +5,7 @@
     "salesOrder": "Sales order",
     "pickList": "Pick list",
     "shipment": "Shipment",
-    "salesFulfillment": "Sales fulfillment",
+    "salesFulfillment": "Fulfillment",
     "salesOrderLine": "Order line",
     "bin": "Bin",
     "lotSerial": "Lot / serial",

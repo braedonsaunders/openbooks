@@ -52,6 +52,7 @@ export function ShipmentDrawer({ data, initialMode = 'view' }: { data: Fulfillme
   const [carrierId, setCarrierId] = useState(shipment.carrier?.id ?? '')
   const [service, setService] = useState(shipment.carrierService ?? '')
   const [tracking, setTracking] = useState(shipment.trackingNumber ?? '')
+  const [custom, setCustom] = useState<Record<string, unknown>>(data.custom)
   const base = `/api/shipments/${shipment.id}`
 
   // The active carriers, plus the shipment's own carrier when it has since
@@ -68,22 +69,37 @@ export function ShipmentDrawer({ data, initialMode = 'view' }: { data: Fulfillme
     setCarrierId(shipment.carrier?.id ?? '')
     setService(shipment.carrierService ?? '')
     setTracking(shipment.trackingNumber ?? '')
+    setCustom(data.custom)
   }
 
   async function saveCarrier() {
-    if (!carrierId) {
-      refuse(t('shipment.carrierRequired'), t('actionFailed'))
-      return
+    const carrierChanged = carrierId !== (shipment.carrier?.id ?? '')
+      || service !== (shipment.carrierService ?? '')
+      || tracking.trim() !== (shipment.trackingNumber ?? '')
+    // Only changed custom values travel; a cleared value is sent as null.
+    const customChanges: Record<string, unknown> = {}
+    for (const key of new Set([...Object.keys(custom), ...Object.keys(data.custom)])) {
+      if (JSON.stringify(custom[key] ?? null) !== JSON.stringify(data.custom[key] ?? null)) customChanges[key] = custom[key] ?? null
     }
-    if (!service) {
-      refuse(t('shipment.serviceRequired'), t('actionFailed'))
+    const body: Record<string, unknown> = {}
+    if (carrierChanged) {
+      if (!carrierId) {
+        refuse(t('shipment.carrierRequired'), t('actionFailed'))
+        return
+      }
+      if (!service) {
+        refuse(t('shipment.serviceRequired'), t('actionFailed'))
+        return
+      }
+      body.carrier = { carrierId, service, trackingNumber: tracking.trim() || null }
+    }
+    if (Object.keys(customChanges).length > 0) body.custom = customChanges
+    if (Object.keys(body).length === 0) {
+      setMode('view')
       return
     }
     await execute(
-      () => fulfillmentRequest(base, {
-        method: 'PATCH',
-        body: { carrier: { carrierId, service, trackingNumber: tracking.trim() || null } },
-      }, t('shipment.saveFailed')),
+      () => fulfillmentRequest(base, { method: 'PATCH', body }, t('shipment.saveFailed')),
       {
         fallbackMessage: t('shipment.saveFailed'),
         successMessage: t('shipment.saved', { number: shipment.documentNumber }),
@@ -360,9 +376,10 @@ export function ShipmentDrawer({ data, initialMode = 'view' }: { data: Fulfillme
           document={shipment}
           layout={data.layout}
           headerDefs={data.headerDefs}
-          custom={data.custom}
+          custom={mode === 'edit' ? custom : data.custom}
           editable={mode === 'edit' && !busy}
           editableField={editableField}
+          onCustomChange={(key, value) => setCustom((current) => ({ ...current, [key]: value }))}
         />
         {draft && !shipment.carrier ? (
           <p className="text-sm text-slate-600 dark:text-slate-300">{t('shipment.carrierHint')}</p>

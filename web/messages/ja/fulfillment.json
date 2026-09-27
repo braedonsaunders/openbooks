@@ -5,7 +5,7 @@
     "salesOrder": "受注",
     "pickList": "ピッキングリスト",
     "shipment": "出荷",
-    "salesFulfillment": "受注出荷記録",
+    "salesFulfillment": "出荷実績",
     "salesOrderLine": "受注明細",
     "bin": "ロケーション",
     "lotSerial": "ロット / シリアル",

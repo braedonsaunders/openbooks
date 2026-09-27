@@ -13,7 +13,7 @@ import {
   releasePickList,
   setShipmentCarrier,
 } from '@openbooks/engine/src/sales/fulfillment.ts'
-import { completeShipment } from './shipments'
+import { completeShipment, saveFulfillmentCustom } from './shipments'
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
@@ -68,6 +68,15 @@ test('completing a shipment issues from the picked bins through the fulfilment p
     }))
     await releasePickList(org.orgId, userId, { pickListId: pickList.id, ...scoped })
     const shipment = await inTx((tx) => createShipment(tx, org.orgId, userId, { pickListId: pickList.id, documentDate: org.date, ...scoped }))
+    // A custom field defined on shipments saves through the customization
+    // validation (unknown keys dropped) and is final once the shipment is.
+    await withBypassContext(() => db.execute(sql`
+      insert into custom_field_defs (org_id, target_table, target_kind, key, label, field_type)
+      values (${org.orgId}, 'documents', 'shipment', 'dock_door', 'Dock door', 'text')`))
+    const saveCustom = () => inTx((tx) => saveFulfillmentCustom(tx, org.orgId, userId, {
+      documentId: shipment.id, kind: 'shipment', custom: { dock_door: 'D-4', stray: 'dropped' },
+    }))
+    assert.deepEqual(await saveCustom(), { dock_door: 'D-4' })
     const complete = () => withOrg(org.orgId, () => completeShipment(org.orgId, userId, { shipmentId: shipment.id, ...scoped }))
 
     await assert.rejects(complete(), (error: unknown) =>
@@ -93,6 +102,7 @@ test('completing a shipment issues from the picked bins through the fulfilment p
         'fulfilled', (select trim_scale(quantity_fulfilled)::text from document_lines where id = ${lineId}),
         'linked', (select count(*)::int from document_links
                     where from_document_id = ${orderId} and to_document_id = ${completed.fulfillmentId} and link_type = 'fulfills'),
+        'custom', (select custom from documents where id = ${shipment.id}),
         'stages', (select jsonb_object_agg(d.kind, jsonb_build_array(fd.stage, d.status, fd.sales_fulfillment_id = ${completed.fulfillmentId}))
                      from fulfillment_documents fd join documents d on d.id = fd.document_id
                     where fd.document_id in (${pickList.id}, ${shipment.id}))
@@ -102,6 +112,7 @@ test('completing a shipment issues from the picked bins through the fulfilment p
       movements: [['A1', '5'], ['A2', '3']],
       fulfilled: '8',
       linked: 1,
+      custom: { dock_door: 'D-4' },
       stages: { pick_list: ['done', 'approved', null], shipment: ['done', 'approved', true] },
     })
     assert.deepEqual(await withOrg(org.orgId, () => activePickReservations(db, org.orgId, { salesOrderLineIds: [lineId] })), [],
@@ -114,6 +125,7 @@ test('completing a shipment issues from the picked bins through the fulfilment p
       'a retry answers with the fulfilment already recorded',
     )
     assert.equal(replay.replayed, true)
+    await assert.rejects(saveCustom(), { code: 'wrong_stage' })
   } finally {
     await dropScratchOrg(org.orgId)
   }

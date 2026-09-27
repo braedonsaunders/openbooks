@@ -36,6 +36,8 @@ export interface FulfillmentDrawerData {
 export interface NewPickListData {
   salesOrder: { id: string; number: string; customerName: string | null }
   layout: FormLayoutConfig
+  /** Header custom-field definitions for the pick-list record type. */
+  headerDefs: CustomFieldDefClient[]
   today: string
   closeHref: string
 }

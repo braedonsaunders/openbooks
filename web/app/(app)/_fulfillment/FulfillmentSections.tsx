@@ -70,7 +70,9 @@ function formatShipTo(address: FulfillmentDocumentView['shipToAddress']): string
  * customization form: moved, hidden and renamed fields and custom fields all
  * follow the layout. Every built-in field is read-only except a draft
  * shipment's carrier, service and tracking number, which the shipment drawer
- * supplies through `editableField` while it is editing.
+ * supplies through `editableField` while it is editing. Custom fields are
+ * editable while the form is editable and `onCustomChange` is supplied; the
+ * server validates them like every document's custom fields.
  */
 export function FulfillmentHeader({
   document,
@@ -79,6 +81,7 @@ export function FulfillmentHeader({
   custom,
   editable = false,
   editableField,
+  onCustomChange,
 }: {
   document: FulfillmentDocumentView
   layout: FormLayoutConfig
@@ -86,6 +89,7 @@ export function FulfillmentHeader({
   custom: Record<string, unknown>
   editable?: boolean
   editableField?: (key: string, label: string) => ReactNode | null
+  onCustomChange?: (key: string, value: unknown) => void
 }) {
   const t = useTranslations('fulfillment.fields')
   const tCommon = useTranslations('common')
@@ -95,8 +99,15 @@ export function FulfillmentHeader({
     if (isCustomFieldKey(placement.key)) {
       const def = defByKey.get(customFieldDefKey(placement.key))
       if (!def) return null
-      // Custom values are shown as stored; this form does not write them.
-      return <CustomFieldInput def={{ ...def, label: placement.labelOverride?.trim() || def.label }} value={custom[def.key]} onChange={() => undefined} readOnly />
+      const writable = isEditable && onCustomChange !== undefined
+      return (
+        <CustomFieldInput
+          def={{ ...def, label: placement.labelOverride?.trim() || def.label }}
+          value={custom[def.key]}
+          onChange={(value) => onCustomChange?.(def.key, value)}
+          readOnly={!writable}
+        />
+      )
     }
     const override = placement.labelOverride?.trim()
     const labelled = (fallback: string, value: ReactNode) => {

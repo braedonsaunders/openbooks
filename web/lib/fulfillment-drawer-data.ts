@@ -103,13 +103,14 @@ export async function loadNewPickListData({
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
      where d.org_id = ${orgId} and d.id = ${scope.id}`)).rows[0]
   if (!order) return null
+  const headerDefs = await loadFieldDefs('documents', 'pick_list')
   const [resolved, today] = await Promise.all([
     resolveFormLayout({
       orgId,
       userId: authz.user.id,
       recordType: 'pick_list',
       userRoles: authz.user.roles.map(({ key }) => key),
-      headerDefs: [],
+      headerDefs,
       lineDefs: [],
       explicitLayoutId: formLayoutId,
     }),
@@ -118,6 +119,7 @@ export async function loadNewPickListData({
   return {
     salesOrder: { id: scope.id, number: order.document_number, customerName: order.party_name },
     layout: resolved.layout,
+    headerDefs: headerDefs as CustomFieldDefClient[],
     today,
     closeHref,
   }
