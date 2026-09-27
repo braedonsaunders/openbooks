@@ -19,6 +19,11 @@ stubModules({ navigation: false, intl: 'export async function getTranslations(){
 
 registerHooks({
   resolve(specifier, context, next) {
+    // The session behind lib/authz is the test's own user; stubModules has no
+    // option for a double conditioned on its importer.
+    if ((specifier === './auth' || specifier.endsWith('/lib/auth')) && context.parentURL?.endsWith('/web/lib/authz.ts')) {
+      return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent('export async function currentUser(){return globalThis.__closeLifecycleUser.user}') }
+    }
     const app = resolveAppModule(specifier, context, next, root)
     if (app) return app
     return next(specifier, context)
