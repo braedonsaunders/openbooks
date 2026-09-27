@@ -144,7 +144,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?record-pdf-print-route-test'
 const { GET } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+test.after(() => hooks.deregister())
 
 function reset(): void {
   state.granted = new Set(['ar.read'])

@@ -59,12 +59,12 @@ stubModules({
           state.queries.push(text)
           if (text.includes("update connections")) {
             state.updates.push(text)
-            return Promise.resolve({ rows: state.updateMatches ? [{ id: "connection-1" }] : [] })
+            return Promise.resolve({ rows: state.updateMatches ? [{ id: "00000000-0000-4000-8000-000000000002" }] : [] })
           }
           if (text.includes("from connections")) {
             return Promise.resolve({
               rows: [{
-                id: "connection-1",
+                id: "00000000-0000-4000-8000-000000000002",
                 orgId: "org-1",
                 source: "test",
                 displayName: "Test",
@@ -93,7 +93,7 @@ stubModules({
         }
       }
     `,
-    "../../../../../../lib/authz": `
+    "@/lib/authz": `
       export function guardUnrestrictedScope(authz) { return authz.allowedSubsidiaryIds == null ? null : new Response(JSON.stringify({ error: "requires unrestricted subsidiary access" }), { status: 403 }) }
       export async function guardPermission() {
         return {
@@ -126,10 +126,10 @@ function updateSql(): string {
 function call(): Promise<Response> {
   return POST(
     new Request(
-      "http://openbooks.test/api/platform/connections/connection-1/test",
+      "http://openbooks.test/api/platform/connections/00000000-0000-4000-8000-000000000002/test",
       { method: "POST" },
     ),
-    { params: Promise.resolve({ id: "connection-1" }) },
+    { params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000002" }) },
   );
 }
 

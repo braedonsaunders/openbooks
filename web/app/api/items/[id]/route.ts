@@ -74,7 +74,7 @@ const nullableMoney = z.preprocess(
 // Validate the complete patch shape before normalization. Non-text values must
 // never become silent clears, and PostgreSQL must not coerce lifecycle flags.
 const itemPatchSchema = z.object({
-  kind: z.string().optional(),
+  kind: z.enum(ITEM_KINDS).optional(),
   code: nullableText,
   name: z.string().optional(),
   description: nullableText,
@@ -183,7 +183,7 @@ export const PATCH = defineRoute({
   scope: 'unrestricted',
   params: itemParams,
   body: itemPatchSchema,
-  handler: async ({ params: { id }, body, authz: gate }) => {
+  handler: async ({ request, params: { id }, body, authz: gate }) => {
   // Item accounts, tax, and recognition config apply org-wide.
   const user = gate.user
   if (!isUuid(id)) return notFound("record")
@@ -455,7 +455,7 @@ export const PATCH = defineRoute({
           (org_id, table_name, row_id, action, changes, actor_id, request_id, at)
         values
           (${user.orgId}, 'items', ${id}, 'update', ${JSON.stringify(changes)}::jsonb,
-           ${user.id}, ${req.headers.get('X-Request-Id')}, now())
+           ${user.id}, ${request.headers.get('X-Request-Id')}, now())
       `)
       return after
     })

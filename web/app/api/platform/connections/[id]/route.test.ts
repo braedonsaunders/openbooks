@@ -207,7 +207,7 @@ const hooks = registerHooks({
 
 const connection_id_urlUrl = './route.ts?connection-id-url'
 const { PATCH, DELETE } = (await import(connection_id_urlUrl)) as typeof import('./route.ts');
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 const refused = [
   ["loopback IPv4", { url: "http://127.0.0.1/" }],

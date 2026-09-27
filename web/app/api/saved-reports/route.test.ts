@@ -99,7 +99,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?saved-reports-route-test'
 const { DELETE, POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+test.after(() => hooks.deregister())
 
 function reset(): void {
   state.granted = new Set()

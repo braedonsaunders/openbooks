@@ -19,11 +19,12 @@ import { notFound } from "@/lib/api/responses";
 
 
 const projectParams = z.object({ id: z.string() })
+const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
 const projectPatchSchema = z.object({
   name: z.string().optional(),
   code: z.string().nullable().optional(), customerId: nullableUuidId.optional(),
   foremanId: nullableUuidId.optional(), managerId: nullableUuidId.optional(),
-  status: z.string().optional(), projectTypeId: z.string().nullable().optional(),
+  status: z.enum(STATUSES).optional(), projectTypeId: z.string().nullable().optional(),
   invoicingPreference: z.object({
     defaultBasis: z.enum(["date_range", "draw_amount", "time_selection", "milestone"]).nullable().optional(),
     backupRequired: z.boolean().nullable().optional(),
@@ -35,8 +36,6 @@ const projectPatchSchema = z.object({
   custom: z.record(z.string(), z.unknown()).optional(), subsidiaryId: nullableUuidId.optional(),
   subsidiaryIncludeChildren: z.boolean().optional(), isActive: z.boolean().optional(), tasks: z.never().optional(),
 }).strict()
-
-const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
 
 function bad(error: string, fieldErrors?: Record<string, string>) {
   return NextResponse.json({ error, ...(fieldErrors ? { fieldErrors } : {}) }, { status: 422 })

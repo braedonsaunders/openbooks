@@ -134,7 +134,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?inventory-advanced-scope-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 function reset(scope: Set<string> | null): void {
   state.allowedSubsidiaryIds = scope;

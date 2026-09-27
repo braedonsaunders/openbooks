@@ -55,7 +55,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 const { POST: postPurchase } = await import('./route.ts')
 const { POST: postSales } = await import('../../sales-orders/draft/route.ts')
 const { POST: postEstimate } = await import('../../estimates/draft/route.ts')
-hooks.deregister()
+test.after(() => hooks.deregister())
 
 const CASES = [
   { kind: 'purchase_order', post: postPurchase, permission: 'ap.create' },

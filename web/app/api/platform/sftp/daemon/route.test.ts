@@ -205,7 +205,7 @@ const tenantDaemonRoute = (await import(tenantDaemonUrl)) as typeof import('../.
 
 const tenantServersUrl = '../../../banking/sftp/route.ts?sftp-servers-org-scoped-test'
 const { POST: tenantServerPOST } = (await import(tenantServersUrl)) as typeof import('../../../banking/sftp/route.ts')
-hooks.deregister()
+test.after(() => hooks.deregister())
 
 const ORG_ADMIN_AUTHZ = {
   user: { orgId: 'org-1', id: 'user-org-admin', isSuperAdmin: false },

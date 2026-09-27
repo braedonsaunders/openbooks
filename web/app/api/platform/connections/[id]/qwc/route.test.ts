@@ -32,7 +32,7 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocks: Record<string, string> = {
-      "../../../../../../lib/authz": "mock:authz",
+      "@/lib/authz": "mock:authz",
       "@openbooks/engine/src/sync/connection.ts": "mock:connection",
       "@openbooks/engine/src/flows/email-tokens.ts": "mock:email-tokens",
       "next-intl/server": "mock:i18n",
@@ -50,7 +50,7 @@ const hooks = registerHooks({
 
 const qwc_origin_testUrl = './route.ts?qwc-origin-test'
 const { GET } = (await import(qwc_origin_testUrl)) as typeof import('./route.ts');
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 
 test("QWC AppURL and AppSupport pin to appBaseUrl, not the request Host", async () => {

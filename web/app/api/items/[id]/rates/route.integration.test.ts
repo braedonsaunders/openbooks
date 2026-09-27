@@ -53,7 +53,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?rates-currency-serialization-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 const { withBypassContext, withOrgContext, db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(

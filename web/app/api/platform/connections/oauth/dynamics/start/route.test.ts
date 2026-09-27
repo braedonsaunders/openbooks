@@ -43,7 +43,7 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocks: Record<string, string> = {
-      "../../../../../../../lib/authz": "mock:authz",
+      "@/lib/authz": "mock:authz",
       "@openbooks/engine/src/sync/connection.ts": "mock:connection",
       "@openbooks/engine/src/flows/email-tokens.ts": "mock:email-tokens",
     };
@@ -62,7 +62,7 @@ const dynamics_oauth_startUrl = './route.ts?dynamics-oauth-start'
 const { GET } = (await import(dynamics_oauth_startUrl)) as typeof import('./route.ts');
 const dynamics_oauth_start_flowUrl = '../../_flow.ts?dynamics-oauth-start-flow'
 const { CONNECTION_OAUTH_COOKIE } = (await import(dynamics_oauth_start_flowUrl)) as typeof import('../../_flow.ts');
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 
 function cookieMap(response: Response): Map<string, string> {

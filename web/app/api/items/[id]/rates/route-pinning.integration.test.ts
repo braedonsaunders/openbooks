@@ -48,7 +48,7 @@ const { POST: BOOKS_POST } = (await import(bookRouteUrl)) as typeof import('../.
 const { withBypassContext, db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { resolveItemRate } = await import('../../../../../lib/item-rates.ts')
-hooks.deregister()
+test.after(() => hooks.deregister())
 
 
 const TIERS = [
