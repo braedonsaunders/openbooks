@@ -29,7 +29,7 @@ const { join } = await import('node:path')
 // @openbooks/* symlinks resolve to the MAIN checkout (stale); pin the real
 // worktree copy so the test runs the code under test.
 const worktreeUi = pathToFileURL(join(process.cwd(), 'packages', 'ui', 'src', 'index.ts')).href
-const { stubModules } = await import('../../../../testing/stub-modules')
+const { stubModules, withPlatformDbTestSurface } = await import('../../../../testing/stub-modules')
 stubModules({ navigation: { pathname: '/admin/ai' } })
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -68,7 +68,7 @@ registerHooks({
     if (url === 'mock:ai-cutover-db') {
       return {
         format: 'module',
-        source: `
+        source: withPlatformDbTestSurface(`
           const state = globalThis[Symbol.for('openbooks.ai-cutover-route')]
           // Every read returns one inert row: the upsert below reads the
           // RETURNING id into its audit write, so an empty row set would
@@ -103,7 +103,7 @@ registerHooks({
           export async function withTransactionSavepoint(runner, fn) { return fn() }
           export async function inDbTransaction(fn) { return fn(txShim) }
           export function runtimeDatabaseRoleCheckRequired() { return false }
-        `,
+        `),
         shortCircuit: true,
       }
     }

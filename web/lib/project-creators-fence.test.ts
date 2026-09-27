@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
+import { withPlatformDbTestSurface } from '../testing/stub-modules'
 
 // Project-domain creator fence: createProjectCharge and createBillingRequest
 // gate Projects at the entry, then must recheck the gate INSIDE the write
@@ -44,7 +45,7 @@ const PROJECT_ID = '00000000-0000-4000-8000-00000000c101'
 const mockSources = new Map<string, string>([
   [
     'mock:db',
-    `
+    withPlatformDbTestSurface(`
       const state = globalThis[Symbol.for('openbooks.project-creators-fence-test')]
       const sqlText = globalThis.openbooksSqlTextCreators
       const respond = (kind, text) => {
@@ -106,7 +107,7 @@ const mockSources = new Map<string, string>([
       export const runtimeDatabaseRoleCheckRequired = false
       export async function withMaintenanceTransaction(...args) { return args[args.length - 1]() }
       export async function withTransactionSavepoint(_runner, fn) { return fn() }
-    `,
+    `),
   ],
 ])
 

@@ -17,7 +17,12 @@ await bootJsdomEnvironment({ url: 'http://localhost:4800/data/import', scrollInt
 
 const { registerHooks } = await import('node:module')
 const { stubModules } = await import('../../../../testing/stub-modules')
-stubModules({ navigation: 'export function useRouter(){return {push(url){globalThis.__sampleTestRouter.pushes.push(String(url))}}}' })
+stubModules({
+  navigation: {
+    pathname: '/data/import',
+    routerSource: 'export function useRouter(){return {push(url){globalThis.__sampleTestRouter.pushes.push(String(url))}}}',
+  },
+})
 registerHooks({
   resolve(specifier, context, next) {
 
