@@ -143,11 +143,7 @@ function hasLiveEntriesOnlyIntent(raw, condition) {
   const lineStart = raw.lastIndexOf("\n", condition.offset) + 1;
   const lineEnd = raw.indexOf("\n", condition.end);
   const predicateLine = raw.slice(lineStart, lineEnd < 0 ? raw.length : lineEnd);
-  if (/--\s*Live entries only: [^\r\n]+\s*$/.test(predicateLine)) return true;
-  const previousEnd = lineStart - 1;
-  if (previousEnd < 0) return false;
-  const previousStart = raw.lastIndexOf("\n", previousEnd - 1) + 1;
-  return /--\s*Live entries only: [^\r\n]+\s*$/.test(raw.slice(previousStart, previousEnd));
+  return /--\s*Live entries only: [^\r\n]+\s*$/.test(predicateLine);
 }
 
 export function scanSource(path, content) {

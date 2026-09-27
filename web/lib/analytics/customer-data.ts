@@ -796,7 +796,7 @@ export async function customerData(
             and e.origin = 'revenue_recognition'
             and e.posting_date >= ${from}) as sched,
         sum(l.amount) filter (
-          where a.type in ${REVENUE_TYPES} and e.is_void
+          where a.type in ${REVENUE_TYPES} and e.is_void and e.origin <> 'revenue_recognition'
             and (d.id is null or d.kind not in ('customer_invoice', 'customer_credit'))
             and e.posting_date >= ${from}) as voids,
         max(e.posting_date) filter (where e.posting_date >= ${from})::text as late,

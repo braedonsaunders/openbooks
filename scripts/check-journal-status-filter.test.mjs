@@ -18,7 +18,7 @@ test("journal entry status filters retain reversed originals", () => {
   assert.deepEqual(live, []);
 
   const adjacentIntent = scanSource("fixture.ts", "const q = sql`select je.id from journal_entries je\n-- Live entries only: a current candidate list excludes reversed entries\nwhere je.status = 'posted'`;");
-  assert.deepEqual(adjacentIntent, []);
+  assert.equal(adjacentIntent.length, 1, "intent must be on the status predicate line");
 });
 
 test("document amount aggregates distinguish voided from reversed status values", () => {

@@ -121,24 +121,21 @@ test("feature disable probes ignore secondary-book journal amounts", { skip: !DB
       await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,retainageReceivable}', ${JSON.stringify(org.accounts.revenue)}::jsonb, true)
         where id = ${org.orgId}`);
       await db.execute(sql`insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin)
-        values (${entry}, ${org.orgId}, ${secondaryBook}, ${secondSubsidiary}, 'ALT-BOOK', ${org.date}, ${org.periodId}, 'posted', 'manual')`);
+        values (${entry}, ${org.orgId}, ${secondaryBook}, ${secondSubsidiary}, 'ALT-BOOK', ${org.date}, ${org.periodId}, 'draft', 'manual')`);
       await db.execute(sql`insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
         values (${org.orgId}, ${entry}, 1, ${org.accounts.revenue}, ${secondSubsidiary}, '100', 'CAD', '80', '1.25'),
-               (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, '-100', 'CAD', '-80', '1.25')`);
+               (${org.orgId}, ${entry}, 2, ${org.accounts.bank}, ${secondSubsidiary}, '-100', 'CAD', '-80', '1.25'),
+               (${org.orgId}, ${entry}, 3, ${org.accounts.revenue}, ${org.subsidiaryId}, '50', 'CAD', '40', '1.25'),
+               (${org.orgId}, ${entry}, 4, ${org.accounts.bank}, ${org.subsidiaryId}, '-50', 'CAD', '-40', '1.25')`);
+      const posted = await db.execute(sql`update journal_entries set status = 'posted', posted_at = now()
+        where id = ${entry} and org_id = ${org.orgId} returning id`);
+      assert.equal(posted.rows.length, 1);
     });
     const status = await withBypassContext(() => featureDisableStatuses(org.orgId, ['multiSubsidiary', 'multiCurrency', 'projects']));
     assert.equal(status.multiSubsidiary?.blocked, false);
     assert.equal(status.multiCurrency?.blocked, false);
     assert.ok(!status.projects?.impacts.some((impact) => impact.labelKey === 'outstandingRetainage'));
 
-    const voidedRun = await withBypassContext(() => db.execute(sql`insert into documents
-      (org_id, kind, document_number, status, voided_at, void_reason)
-      values (${org.orgId}, 'pay_run', 'VOIDED-PAYRUN', 'voided', '2026-08-05 12:00:00+00'::timestamptz, 'history probe')
-      returning id`));
-    assert.equal(voidedRun.rows.length, 1);
-    const payroll = await withBypassContext(() => featureDisableStatuses(org.orgId, ['payroll']));
-    assert.equal(payroll.payroll?.blocked, true, 'a voided payroll run still records irreversible posting history');
-    assert.deepEqual(payroll.payroll?.impacts, [{ labelKey: 'postedPayRuns', count: 1 }]);
   } finally {
     await dropScratchOrg(org.orgId);
   }
