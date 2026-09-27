@@ -6,7 +6,7 @@
       "excluded": "Ausgeschlossen"
     },
     "exclusion": {
-      "won": "Auftrag gewonnen: Weisen Sie Ressourcen über eine Ressourcenanfrage zu",
+      "won": "Verkaufschance gewonnen: Weisen Sie Ressourcen über eine Ressourcenanfrage zu",
       "closed": "Verkaufschance geschlossen",
       "omitted": "Nicht in der Prognose berücksichtigt",
       "inactive": "Verkaufschance inaktiv",
