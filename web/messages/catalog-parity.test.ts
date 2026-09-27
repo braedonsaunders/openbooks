@@ -2805,6 +2805,8 @@ const COGNATES = new Set<string>([
   'pt-BR:inventory.counts.columns.item|Item',
   'pt-BR:inventory.labels.item|Item',
   'pt-BR:warehouse.putaway.columns.item|Item',
+  'pt-BR:warehouse.availability.columns.item|Item',
+  'pt-BR:warehouse.replenishment.columns.item|Item',
   'de:items.costing.methods.fifo|FIFO',
   'de:items.drawer.codePlaceholder|SVC-01',
   'de:items.labels.code|Code',

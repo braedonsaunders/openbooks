@@ -46,6 +46,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   if (kind === 'budget' && !(await isFeatureEnabled(gate.user.orgId, 'budgets'))) {
     return notFound("record")
   }
+  if ((kind === 'availability' || kind === 'replenishment') && !(await isFeatureEnabled(gate.user.orgId, 'warehousing'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   const url = new URL(req.url)
   const p = url.searchParams

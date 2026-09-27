@@ -46,6 +46,7 @@ export interface ReportsHubData {
 export async function loadReportsHub(): Promise<ReportsHubData> {
   const t = await getTranslations('reports')
   const tc = await getTranslations('analytics.trueCost')
+  const tw = await getTranslations('warehouse')
   const authz = await getAuthz()
   const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
 
@@ -60,7 +61,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
   if (orgId) await ensureReportDefinitions(orgId)
   const emptySaved = Promise.resolve({ rows: [] as { id: string; name: string; path: string; params: Record<string, string> }[] })
   const emptyDefs = Promise.resolve({ rows: [] as { id: string; slug: string; name: string; description: string | null; kind: string; entity: string | null }[] })
-  const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, inventoryEnabled, hiddenEntities, hrmEnabled] = await Promise.all([
+  const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, inventoryEnabled, hiddenEntities, hrmEnabled, warehousingEnabled] = await Promise.all([
     orgId
       ? db.execute(sql`select id, name, path, params from saved_reports where org_id = ${orgId} order by created_at desc limit 12`) as Promise<{
           rows: { id: string; name: string; path: string; params: Record<string, string> }[]
@@ -85,6 +86,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
     authz ? isFeatureEnabled(authz.user.orgId, 'inventory') : Promise.resolve(false),
     authz ? hiddenReportEntityKeys(authz) : Promise.resolve<string[]>([]),
     authz ? isFeatureEnabled(authz.user.orgId, 'hrm') : Promise.resolve(false),
+    authz ? isFeatureEnabled(authz.user.orgId, 'warehousing') : Promise.resolve(false),
   ])
 
   // Hide definitions over permission-gated or feature-off entities from
@@ -168,6 +170,16 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
     icon,
   }))
 
+  // Availability and Replenishment compute from the stock engine, so they
+  // are pages of their own rather than definitions; both need Warehousing and
+  // the item read permission their pages require.
+  const stockReportCards: HubCard[] = warehousingEnabled && authz && can(authz, 'items.read')
+    ? [
+        { href: '/reports/availability', title: tw('availability.title'), desc: tw('availability.hubDescription'), icon: 'Boxes' },
+        { href: '/reports/replenishment', title: tw('replenishment.title'), desc: tw('replenishment.hubDescription'), icon: 'ClipboardList' },
+      ]
+    : []
+
   const groups: HubGroup[] = [
     {
       key: 'financial',
@@ -218,11 +230,14 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
       accent: 'teal',
       cards: definitionCards(crmDefinitions, 'BriefcaseBusiness', t('hub.cards.builtInDescription')),
     } satisfies HubGroup] : []),
-    ...(inventoryDefinitions.length > 0 ? [{
+    ...(inventoryDefinitions.length > 0 || stockReportCards.length > 0 ? [{
       key: 'inventory',
       label: t('hub.groups.inventory'),
       accent: 'amber',
-      cards: definitionCards(inventoryDefinitions, 'Boxes', t('hub.cards.builtInDescription')),
+      cards: [
+        ...stockReportCards,
+        ...definitionCards(inventoryDefinitions, 'Boxes', t('hub.cards.builtInDescription')),
+      ],
     } satisfies HubGroup] : []),
     ...(aiDefinitions.length > 0 ? [{
       key: 'aiGovernance',
@@ -288,6 +303,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
             budgets: budgetsEnabled,
             orders: ordersEnabled,
             inventory: inventoryEnabled,
+            warehousing: warehousingEnabled,
           }),
         ).map((s) => {
           const qs = new URLSearchParams(s.params ?? {}).toString()
