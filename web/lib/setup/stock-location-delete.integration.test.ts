@@ -116,7 +116,7 @@ test("stock-location deletion names stock and pick blockers before cascading unu
       assert.equal(reservation.status, 409);
       assert.equal(reservation.body.code, "stock_location_in_use");
       assert.match(String(reservation.body.error), /DELETE-PICK-BIN.*open pick list .* reserves bin DELETE-PICK-BIN/);
-      assert.equal(reservation.body.remedy, "ship or void pick list DELETE-PICK-LIST first");
+      assert.equal(reservation.body.remedy, `ship or void pick list ${pick.documentNumber} first`);
 
       const unusedWarehouse = await addWarehouse(org, "DELETE-UNUSED");
       await db.execute(sql`
