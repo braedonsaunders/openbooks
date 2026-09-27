@@ -6,14 +6,14 @@ export const crewTimeEntry: DocArticle = {
   category: "projects",
   order: 12,
   summary:
-    "How foremen enter a day's crew time in one batch: lines per worker, equipment hours, sign-and-submit, stage approvals, and posting.",
-  updated: "2026-09-21",
+    "How foremen enter a day's crew time in one batch: lines per worker, equipment hours, sign-and-submit, Flows approval, and posting.",
+  updated: "2026-09-27",
   keywords: [
     "crew time",
     "foreman",
     "crew batch",
     "sign and submit",
-    "approval stages",
+    "crew approval flow",
     "equipment hours",
     "post crew time",
     "crew approval",
@@ -24,9 +24,9 @@ export const crewTimeEntry: DocArticle = {
 When the foreman holds the time for the whole crew, one batch per
 project per day replaces a dozen clock pages. The foreman enters a
 line per worker — hours, time type, task, cost code, and equipment —
-signs once, and submits. Approval runs the declared stage chain, and
-posting creates the time entries plus the equipment charges in one
-transaction.
+signs once, and submits. Approval runs through Flows when the org has
+authored a flow, and posting creates the time entries plus the
+equipment charges in one transaction.
 
 ## The batch page
 
@@ -46,14 +46,20 @@ org.
 Submitting a draft needs the foreman's signature when the org requires
 it (the default): the signature seals the lines, and any later edit
 needs a withdraw back to draft first — history stays in the batch
-events either way. Submitted batches run the multi-stage chain through
-Flows: supervisor, then project manager, then payroll, or whatever the
-org declares in Timesheets setup. Each stage approves or rejects with
-a reason; rejection returns the batch with the reason attached.
+events either way.
+
+Approval routing is authored in Flows: a flow on the crew time batch
+record with one approval step per stage — supervisor, project manager,
+payroll, with any quorum. Without a flow, a time approver approves the
+batch directly. While a flow's approval gates are open, the flow owns
+the batch and it cannot be approved or rejected directly; the batch
+turns approved when the flow releases it. Rejection returns the batch
+with the reason attached. A batch moves through draft, submitted,
+approved, rejected, and posted.
 
 ## Posting
 
-A fully-approved batch posts once: one submitted time entry per line
+Only an approved batch posts, and it posts once: one submitted time entry per line
 with a back-link to the line, plus one project-charge document per
 equipment line priced from the unit's equipment-charge item. Posting
 twice refuses — the second post would double the hours — and a unit
@@ -61,7 +67,9 @@ with no charge item refuses by name rather than posting a zero.
 Equipment cost lands on the job through the same balanced charge the
 equipment register posts, attributed to the unit.
 
-Turn the crew feature off and the pages and routes go away; the posted
-entries and their history stay exactly where they were.
+Crew time entry is part of field time capture, and equipment lines
+additionally need the Equipment module. Turn field time capture off and
+the pages and routes go away; the posted entries and their history stay
+exactly where they were.
 `,
 };

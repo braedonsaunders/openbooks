@@ -7,14 +7,14 @@ export const certificationsLicensesDispatch: DocArticle = {
   order: 12,
   summary:
     'Which certifications and licenses each worker holds, when they lapse, what each job demands, and whether that person can be on that job today — with renewals as new rows and expiry projected at read, never stored.',
-  updated: '2026-09-21',
+  updated: '2026-09-27',
   keywords: ['certification', 'license', 'qualification', 'dispatch', 'gating', 'renewal', 'expiry', 'equipment', 'scheduling'],
   related: ['positions-and-headcount', 'certified-payroll-prevailing-wage-per-diem', 'field-tickets'],
   body: `# Certifications, Licenses, and Dispatch Gating
 
 Certifications and licenses answer one question: can this person be on that job today. The register records what each worker holds, requirements declare what each project, equipment, position, or classification demands, and the dispatch gate compares the two on the assignment date. A block-severity gap refuses the assignment; a warn-severity gap records the override and lets it through.
 
-Enable the module in Company Settings → Features → HRM → Certifications. Three subordinate switches ride beneath it: Dispatch gating (which also needs Projects and Scheduling), Equipment qualifications (which also needs Equipment), and Certification alerts. Turning any switch off preserves its data and history; with the switch off, no gate runs and no alert fires.
+Enable the module in Company Settings → Features → HRM → Certifications and licenses. It is one switch: renewal alerts come with it, dispatch gating applies wherever Project Scheduling is on, and equipment qualification requirements apply wherever Equipment is on. Turning the module off preserves its data and history; while it is off, no gate runs and no alert fires.
 
 ## Qualification types
 
@@ -34,7 +34,7 @@ License numbers are sensitive: sandbox clones blank them, and the assistant regi
 
 Requirements live wherever the work is defined: a project, a piece of equipment, a position, or a classification names the qualification types it demands, each with a severity (block or warn) and an effective window. The gate reads the requirements in force on the assignment date, matches them against the worker's held qualifications as projected that day, and returns a verdict: allowed with warnings, or refused with the blocking gaps named.
 
-The gate runs on the scheduling assignment path, on field-ticket crew rows, on timesheet chips, and through the check API — all four read through the same evaluation, which never writes. A warn-severity override is recorded as its own warned event inside the caller's transaction, so the evidence of who accepted the risk sits beside the assignment. With dispatch gating off, the assignment path never calls the gate.
+The gate runs on the scheduling assignment path, on field-ticket crew rows, on timesheet chips, and through the check API — all four read through the same evaluation, which never writes. A warn-severity override is recorded as its own warned event inside the caller's transaction, so the evidence of who accepted the risk sits beside the assignment. Without Project Scheduling there is no assignment path, so the scheduling gate never runs.
 
 ## Renewal alerts
 

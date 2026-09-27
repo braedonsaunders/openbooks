@@ -7,7 +7,7 @@ export const structuredInterviewsOffersJobBoards: DocArticle = {
   order: 10,
   summary:
     "How interview kits with blind scorecards, candidate self-scheduling, template offers with in-product signing, board publishing with disposition sync, and consent-based retention rules extend the recruiting funnel.",
-  updated: "2026-09-21",
+  updated: "2026-09-27",
   keywords: [
     "interview kit",
     "scorecard",
@@ -27,10 +27,12 @@ export const structuredInterviewsOffersJobBoards: DocArticle = {
 
 The funnel (openings, candidates, applications, interviews, offers, hire)
 gets candidacies in the door. Everything on this page is the depth layer
-behind the Recruiting sub-tabs, each behind its own feature switch:
-structured interviews, interview scheduling, offer signing, job boards,
-candidate retention, and the talent pool. Turning a switch off hides its
-surface; rows stay and render again when it comes back on.
+behind the Recruiting sub-tabs: structured interviews, interview
+scheduling, offer signing, job boards, candidate retention, and the
+talent pool. All of it comes with the Recruiting switch under HRM in
+Company Settings → Features — there are no separate switches. Turning
+Recruiting off hides these surfaces; rows stay and render again when it
+comes back on.
 
 ## Interview kits and blind scorecards
 
@@ -73,9 +75,9 @@ never overwritten. Sending emails a signed link through the per-org
 delivery; the page records views, and signing seals the HMAC record
 (signer name, timestamp, IP hash, document hash) with the signed PDF
 stored as a new file version. Declining needs a reason; voiding closes
-the letter. Hire requires an accepted AND signed offer while the offer
-signing switch is on, and refuses an unsigned offer by name; with the
-switch off, hire behaves as before.
+the letter. Once an offer is sent for signing, hire requires it to be
+accepted AND signed, and refuses an unsigned offer by name; an offer
+that never entered signing hires on its acceptance.
 
 ## Job boards and the career page
 

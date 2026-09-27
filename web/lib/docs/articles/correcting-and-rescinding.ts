@@ -7,12 +7,12 @@ export const correctingAndRescinding: DocArticle = {
   order: 13,
   summary:
     'Action and reason codes on every change request, and the three event verbs — cancel an in-flight request, rescind a completed change, or correct it — all as appended events, never edits.',
-  updated: '2026-09-20',
+  updated: '2026-09-27',
   keywords: ['rescind', 'correct', 'cancel', 'reason code', 'action code', 'reverse', 'change request'],
   related: ['hrm-processes', 'automations'],
   body: `# Correcting and Rescinding Changes
 
-Every change request files under a generic HR action (hire, transfer, promotion, pay change, manager change, termination, and more) with a reason code from the vocabulary configured beside the change-request queue. While the reason-code switch is on, submitting without both is refused; while it is off, classification is ignored and nothing is asked.
+Every change request files under a generic HR action (hire, transfer, promotion, pay change, manager change, termination, and more) with a reason code from the vocabulary configured beside the change-request queue (/hrm/change-requests). Once the org has declared at least one active reason code, submitting without an action and an active reason code is refused; with no active codes declared, classification is optional. The three verbs below are part of HRM and need no switch of their own.
 
 History is never edited. All three corrections are appended events on the immutable change ledger, each visible in the change history with its verb chip:
 

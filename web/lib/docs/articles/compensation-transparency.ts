@@ -7,7 +7,7 @@ export const compensationAndTransparency: DocArticle = {
   order: 10,
   summary:
     "How job architecture, pay bands, merit cycles, headcount plans, and pay-equity snapshots work — what a role should pay, how a raise is decided and pushed, and how gaps are measured from payroll truth.",
-  updated: "2026-09-20",
+  updated: "2026-09-27",
   keywords: [
     "compensation",
     "pay bands",
@@ -25,6 +25,10 @@ Positions carry planned and funded FTE and payroll carries what is paid.
 Compensation is the layer between them: what a role SHOULD pay, whether
 a person sits in range, how a raise is decided, and whether pay is
 equitable across the org's declared comparison groups.
+
+Turn on Compensation under HRM in Company Settings → Features. It is
+one switch: job architecture, pay bands, merit cycles, headcount plans,
+and pay transparency all come with it; merit cycles also need Payroll.
 
 Job architecture is the org's own ladder: families (crafts like
 Engineering) with levels (rungs like IC3), or one org-wide ladder for

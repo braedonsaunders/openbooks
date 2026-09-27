@@ -7,14 +7,14 @@ export const engagementSurveys: DocArticle = {
   order: 14,
   summary:
     'How HR authors engagement surveys, invites respondents with single-use tokens, and reads aggregate results with minimum-group suppression — plus the recurring pulse cadence and the org-chart directory.',
-  updated: '2026-09-21',
+  updated: '2026-09-27',
   keywords: ['survey', 'engagement', 'pulse', 'enps', 'anonymity', 'heatmap', 'invitation', 'driver', 'onboarding', 'exit'],
   related: ['positions-and-headcount', 'documents-signatures-and-retention'],
   body: `# Engagement and Pulse Surveys
 
 Surveys answer one question: how does the workforce feel, in groups large enough to protect. Authoring declares kinds, anonymity grades, and question cards; invitations carry single-use tokens; results read aggregate only, with minimum-group suppression and anonymity handling that differs per grade. A recycled token refuses by name — one response per invitation, never silent overwrites.
 
-Enable the module in Company Settings → Features → HRM → Surveys. One subordinate switch rides beneath it: Pulse surveys (the recurring cadence with trends). Turning any switch off preserves its data and history; with the switch off, the tab and the API 404.
+Enable the module in Company Settings → Features → HRM → Engagement surveys. It is one switch: pulse surveys (the recurring cadence with trends) come with it. Turning the module off preserves its data and history; while it is off, the tab and the API 404.
 
 ## Kinds and anonymity
 

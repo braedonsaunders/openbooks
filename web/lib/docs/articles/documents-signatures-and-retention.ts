@@ -7,14 +7,14 @@ export const documentsSignaturesAndRetention: DocArticle = {
   order: 13,
   summary:
     'How HR issues documents from templates, collects ordered e-signatures and acknowledgments, retains them on schedules with audited deletion, and exports subject data — with categories declared once under Setup.',
-  updated: '2026-09-21',
+  updated: '2026-09-27',
   keywords: ['document', 'template', 'signature', 'acknowledgment', 'retention', 'legal hold', 'export', 'category', 'merge'],
   related: ['positions-and-headcount', 'certifications-licenses-dispatch'],
   body: `# HR Documents, Signatures, and Retention
 
 HR documents answer one question: what did this person sign, and can we prove it. Templates declare the reusable shells, documents carry the issued instances with their ordered signer timeline, retention schedules declare how long each category lives, and subject-access exports answer data requests. Every refusal on these paths names its remedy — an undeclared category points at Setup, a consumed link points at HR.
 
-Enable the module in Company Settings → Features → HRM → Documents. Two subordinate switches ride beneath it: Retention (schedules with audited deletion after a grace period) and Subject-access exports (one-click exports for data subjects). Turning any switch off preserves its data and history; with the switch off, the tab and the API 404 and no gate runs.
+Enable the module in Company Settings → Features → HRM → HR documents. It is one switch: retention schedules and subject-access exports come with it. Turning the module off preserves its data and history; while it is off, the tab and the API 404 and no retention job runs.
 
 ## Categories
 
