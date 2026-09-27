@@ -501,3 +501,430 @@ const consolidatedRows = [
 ] as const;
 
 for (const row of consolidatedRows) await row.register();
+
+
+const authCredentialCases = [
+  { label: "auth blank email", register: async () => {
+        const assert = (await import("node:assert/strict")).default;
+        const test = (await import("node:test")).default;
+        const { sql } = await import("drizzle-orm");
+        const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { login } = await import("./auth");
+
+        const DB = !!process.env.OPENBOOKS_DB_URL;
+        const context = { networkAddress: "127.0.0.1", userAgent: "blank-email regression" };
+
+        async function nullHashStateRows(): Promise<number> {
+          const rows = (await withBypassContext(() => db.execute<{ n: number }>(sql`
+            select count(*)::int as n from auth_login_state where email_hash is null`))).rows;
+          return rows[0]!.n;
+        }
+
+        async function recentNullUserStateRows(): Promise<Array<{ email_hash: string }>> {
+          return (await withBypassContext(() => db.execute<{ email_hash: string }>(sql`
+            select email_hash from auth_login_state
+             where user_id is null and updated_at > now() - interval '5 minutes'`))).rows;
+        }
+
+        test("blank, whitespace and malformed login emails get a generic invalid with no null-hash state", { skip: !DB }, async () => {
+          const before = await nullHashStateRows();
+          try {
+            for (const bad of ["", "   ", "not-an-email", "x".repeat(400)]) {
+              const result = await login(bad, "probe-only", context);
+              assert.equal(result.kind, "invalid", `email ${JSON.stringify(bad.slice(0, 20))} must be a generic invalid`);
+            }
+            // The refusal that used to be a bare 500 with an auth_login_state
+            // NOT NULL violation: no null email_hash row may exist.
+            assert.equal(await nullHashStateRows(), before);
+            // The attempts still count toward the rate limit under a non-null bucket.
+            const recent = await recentNullUserStateRows();
+            assert.ok(recent.length > 0, "blank-email attempts must still record rate-limit state");
+            assert.ok(recent.every((row) => typeof row.email_hash === "string" && row.email_hash.length > 0));
+          } finally {
+            await withBypassContext(() => db.execute(sql`
+              delete from auth_login_state where user_id is null and updated_at > now() - interval '5 minutes'`));
+          }
+        });
+  } },
+  { label: "auth credential expiry", register: async () => {
+        const assert = (await import("node:assert/strict")).default;
+        const { createHash, randomBytes, randomUUID } = await import("node:crypto");
+        const test = (await import("node:test")).default;
+        const { sql } = await import("drizzle-orm");
+        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        for (const method of ["reset", "begin MFA", "confirm MFA"] as const) {
+          for (const expires of [true, false]) {
+            test(`${method} ${expires ? "refuses a credential expiring" : "accepts an unexpired credential"} while waiting for its user lock`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+              const org = await withBypassContext(() => createScratchOrg());
+              // web/lib/auth.ts reads the session secret live from process.env (never the
+        // engine db.ts module-evaluation snapshot), so seed it there too.
+        const priorSecret = process.env.SESSION_SECRET;
+              process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+              let release = () => {};
+              let holder: Promise<void> | undefined;
+              let contender: Promise<unknown> | undefined;
+              try {
+                const auth = await import("./auth");
+                const { completePasswordReset } = await import("./auth-reset");
+                const { sealSecret } = await import("./secrets");
+                const { generateTotpSecret, totpCode } = await import("./auth-totp");
+                const password = "Isolated original password 8614";
+                const originalHash = await auth.hashPassword(password);
+                const sessionId = randomUUID();
+                const rawToken = randomBytes(32).toString("base64url");
+                const secret = generateTotpSecret();
+                const duration = expires ? "1 second" : "30 minutes";
+                // MFA enrollment checks use the application clock; reset consumption
+                // is checked in SQL. Seed each credential in its consumer's domain.
+                const sessionExpiry = new Date(Date.now() + (expires ? 1000 : 30 * 60_000));
+                // Fixture seeds under explicit bypass: importing ./auth above pulls in
+                // the web request-org resolver, which denies every unscoped query
+                // under pooled RLS (bare setup dies with 42501, reads see zero rows).
+                // The credential calls under test scope their own queries internally.
+                const userId = await withBypassContext(async () => {
+                  const userId = (await seedFlowActors(org.orgId)).adminId;
+                  await db.execute(sql`update users set password_hash=${originalHash} where id=${userId}`);
+                  if (method !== "reset") {
+                    await db.execute(sql`insert into auth_sessions(id,user_id,token_hash,auth_method,expires_at)
+                      values (${sessionId},${userId},${createHash("sha256").update(rawToken).digest("hex")},'password',${sessionExpiry})`);
+                    if (method === "confirm MFA") await db.execute(sql`
+                      insert into auth_mfa_factors(user_id,secret_encrypted,setup_session_id,setup_expires_at)
+                      values (${userId},${sealSecret(secret, { orgId: userId, purpose: "auth.mfa.secret" })},${sessionId},${new Date(Date.now()+30*60_000)})`);
+                  } else {
+                    await db.execute(sql`insert into auth_password_resets(user_id,token_hash,expires_at)
+                      values (${userId},${createHash("sha256").update(rawToken).digest("hex")},clock_timestamp()+${duration}::interval)`);
+                  }
+                  return userId;
+                });
+                let staged!: () => void;
+                const ready = new Promise<void>(resolve => { staged = resolve; });
+                const hold = new Promise<void>(resolve => { release = resolve; });
+                let holderPid = 0;
+                holder = withBypass(async () => {
+                  holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+                  await db.execute(sql`select id from users where id=${userId} for update`);
+                  staged();
+                  await hold;
+                });
+                await Promise.race([ready, holder]);
+                contender = method === "reset" ? completePasswordReset(rawToken, "Isolated replacement password 7861")
+                  : method === "begin MFA" ? auth.beginMfaSetup(userId, sessionId, password, { networkAddress: "127.0.0.1", userAgent: "expiry regression" })
+                  : auth.confirmMfaSetup(userId, sessionId, totpCode(secret)!.code);
+                let settled = false;
+                void contender.then(() => { settled = true; }, () => { settled = true; });
+                let blocked = false;
+                const deadline = Date.now() + 5000;
+                while (!settled && Date.now() < deadline) {
+                  blocked = await withBypassContext(async () => (await db.execute<{ blocked: boolean }>(sql`select exists(
+                    select 1 from pg_stat_activity where datname=current_database() and ${holderPid}=any(pg_blocking_pids(pid))
+                  ) as blocked`)).rows[0]!.blocked);
+                  if (blocked) break;
+                  await new Promise(resolve => setTimeout(resolve, 10));
+                }
+                assert.ok(blocked, "the credential must still be valid when the operation starts waiting");
+                if (expires) {
+                  let expired = false;
+                  while (Date.now() < deadline) {
+                    expired = await withOrgContext(org.orgId, async () => (await db.execute<{ expired: boolean }>(method === "reset"
+                      ? sql`select expires_at <= clock_timestamp() as expired from auth_password_resets where user_id=${userId}`
+                      : sql`select expires_at <= ${new Date()} as expired from auth_sessions where id=${sessionId}`)).rows[0]!.expired);
+                    if (expired) break;
+                    await new Promise(resolve => setTimeout(resolve, 20));
+                  }
+                  assert.ok(expired, "release only after the credential expires in its authoritative clock domain");
+                }
+                release();
+                await holder;
+                const result = await contender;
+                // Verification reads run in the scratch org's scope.
+                await withOrgContext(org.orgId, async () => {
+                  if (method === "reset") {
+                    assert.deepEqual(result, expires ? { ok: false, reason: "invalid_token" } : { ok: true });
+                    if (expires) assert.equal((await db.execute<{ password_hash: string }>(sql`select password_hash from users where id=${userId}`)).rows[0]!.password_hash, originalHash);
+                  } else {
+                    if (expires) assert.equal(result, null);
+                    else assert.ok(result);
+                    const factor = (await db.execute<{ enabled_at: string | null }>(sql`select enabled_at from auth_mfa_factors where user_id=${userId}`)).rows[0];
+                    if (method === "begin MFA" && expires) assert.equal(factor, undefined);
+                    if (method === "confirm MFA") assert.equal(Boolean(factor?.enabled_at), !expires);
+                  }
+                });
+              } finally {
+                release();
+                await Promise.allSettled([holder, contender]);
+                if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+                else process.env.SESSION_SECRET = priorSecret;
+                await withBypassContext(() => dropScratchOrg(org.orgId));
+              }
+            });
+          }
+        }
+  } },
+  { label: "auth proxy session", register: async () => {
+        const assert = (await import("node:assert/strict")).default;
+        const { createHash, createHmac, randomBytes, randomUUID } = await import("node:crypto");
+        const test = (await import("node:test")).default;
+        const { NextRequest } = await import("next/server");
+        const { sql } = await import("drizzle-orm");
+        // The request proxy checks server-side session revocation on every private
+        // request: a revoked session cookie is refused 401 at the edge instead of
+        // reaching any route, while a live one passes through. Tokens are minted
+        // with the same HMAC scheme the proxy verifies, against real session rows.
+        const { db, withBypassContext: withBypass } = await import(
+          "@openbooks/engine/src/platform/db.ts"
+        );
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
+          "@openbooks/engine/src/testing/fixtures.ts"
+        );
+        const { proxy } = await import("../proxy.ts");
+        const { sessionSigningInput } = await import("./auth-token-format.ts");
+
+        function mintSessionCookie(secret: string, sessionId: string, userId: string): string {
+          const payload = `v2.${sessionId}.${userId}.${Math.floor(Date.now() / 1000) + 3600}`;
+          const signature = createHmac("sha256", secret)
+            .update(sessionSigningInput(payload))
+            .digest("base64url");
+          return `${payload}.${signature}`;
+        }
+
+        function apiRequest(token: string): NextRequest {
+          return new NextRequest("http://openbooks.test/api/gl/accounts", {
+            headers: { cookie: `ob_session=${token}` },
+          });
+        }
+
+        async function seedSession(orgId: string, userId: string, token: string, revoked: boolean): Promise<void> {
+          const parsed = token.split(".");
+          await withBypass(() =>
+            db.execute(sql`
+              insert into auth_sessions (id, user_id, token_hash, auth_method, expires_at, revoked_at)
+              values (
+                ${parsed[1]}, ${userId}, ${createHash("sha256").update(token).digest("hex")},
+                'password', ${new Date(Date.now() + 3_600_000)},
+                ${revoked ? new Date() : null}
+              )
+            `),
+          );
+          await withBypass(() => db.execute(sql`update users set is_active = true where id = ${userId}`));
+        }
+
+        test("the proxy refuses a revoked session cookie with 401 JSON", async () => {
+          const scratch = await withBypass(() => createScratchOrg());
+          const priorSecret = process.env.SESSION_SECRET;
+          process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+          try {
+            const userId = (await withBypass(() => seedFlowActors(scratch.orgId))).adminId;
+            const token = mintSessionCookie(process.env.SESSION_SECRET, randomUUID(), userId);
+            await seedSession(scratch.orgId, userId, token, true);
+
+            const response = await proxy(apiRequest(token));
+            assert.equal(response.status, 401);
+            assert.deepEqual(await response.json(), {
+              error: "unauthorized",
+              requestId: response.headers.get("x-request-id"),
+            });
+          } finally {
+            if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+            else process.env.SESSION_SECRET = priorSecret;
+            await withBypass(() => dropScratchOrg(scratch.orgId));
+          }
+        });
+
+        test("the proxy passes a live session cookie through to the route", async () => {
+          const scratch = await withBypass(() => createScratchOrg());
+          const priorSecret = process.env.SESSION_SECRET;
+          process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+          try {
+            const userId = (await withBypass(() => seedFlowActors(scratch.orgId))).adminId;
+            const token = mintSessionCookie(process.env.SESSION_SECRET, randomUUID(), userId);
+            await seedSession(scratch.orgId, userId, token, false);
+
+            const response = await proxy(apiRequest(token));
+            assert.equal(response.status, 200);
+            assert.ok(response.headers.get("x-request-id"), "passthrough carries the edge request id");
+          } finally {
+            if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+            else process.env.SESSION_SECRET = priorSecret;
+            await withBypass(() => dropScratchOrg(scratch.orgId));
+          }
+        });
+
+        test("the proxy refuses a forged session cookie with 401 JSON", async () => {
+          const scratch = await withBypass(() => createScratchOrg());
+          const priorSecret = process.env.SESSION_SECRET;
+          process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+          try {
+            const userId = (await withBypass(() => seedFlowActors(scratch.orgId))).adminId;
+            const forged = mintSessionCookie(randomBytes(32).toString("hex"), randomUUID(), userId);
+
+            const response = await proxy(apiRequest(forged));
+            assert.equal(response.status, 401);
+            assert.equal((await response.json() as { error: string }).error, "unauthorized");
+          } finally {
+            if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+            else process.env.SESSION_SECRET = priorSecret;
+            await withBypass(() => dropScratchOrg(scratch.orgId));
+          }
+        });
+  } },
+  { label: "auth session revoke liveness", register: async () => {
+        const assert = (await import("node:assert/strict")).default;
+        const { randomBytes, randomUUID } = await import("node:crypto");
+        const test = (await import("node:test")).default;
+        const { sql } = await import("drizzle-orm");
+        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        async function seedSessions(orgId: string) {
+          return withBypassContext(async () => {
+            const userId = (await seedFlowActors(orgId)).adminId;
+            const caller = randomUUID();
+            const others = [randomUUID(), randomUUID()];
+            for (const id of [caller, ...others]) await db.execute(sql`
+              insert into auth_sessions(id,user_id,token_hash,auth_method,expires_at)
+              values (${id},${userId},${randomBytes(32).toString("hex")},'password',${new Date(Date.now() + 86_400_000)})`);
+            return { userId, caller, others };
+          });
+        }
+
+        async function revokedById(orgId: string, userId: string) {
+          return withOrgContext(orgId, async () => (await db.execute<{ id: string; revoked: boolean }>(sql`
+            select id, (revoked_at is not null) as revoked from auth_sessions where user_id=${userId} order by id`)).rows);
+        }
+
+        test("revokeOtherUserSessions refuses when the keeper session was revoked first", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+          const org = await withBypassContext(() => createScratchOrg());
+          const priorSecret = process.env.SESSION_SECRET;
+          process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+          try {
+            const auth = await import("./auth");
+            const { userId, caller, others } = await seedSessions(org.orgId);
+            await withBypassContext(async () => {
+              await db.execute(sql`update auth_sessions set revoked_at=now(), revocation_reason='user_revoked' where id=${caller}`);
+            });
+            assert.deepEqual(await auth.revokeOtherUserSessions(userId, caller), {
+              ok: false, reason: "caller_session_revoked",
+            });
+            for (const row of await revokedById(org.orgId, userId)) {
+              assert.equal(row.revoked, row.id === caller, `only the pre-revoked keeper may be revoked: ${row.id}`);
+            }
+            assert.ok(others.length === 2);
+          } finally {
+            if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+            else process.env.SESSION_SECRET = priorSecret;
+            await withBypassContext(() => dropScratchOrg(org.orgId));
+          }
+        });
+
+        test("revokeOtherUserSessions revokes the others for a live keeper", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+          const org = await withBypassContext(() => createScratchOrg());
+          const priorSecret = process.env.SESSION_SECRET;
+          process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+          try {
+            const auth = await import("./auth");
+            const { userId, caller, others } = await seedSessions(org.orgId);
+            assert.deepEqual(await auth.revokeOtherUserSessions(userId, caller), { ok: true, revoked: others.length });
+            const rows = await revokedById(org.orgId, userId);
+            assert.equal(rows.find((row) => row.id === caller)?.revoked, false);
+            for (const id of others) assert.equal(rows.find((row) => row.id === id)?.revoked, true);
+          } finally {
+            if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+            else process.env.SESSION_SECRET = priorSecret;
+            await withBypassContext(() => dropScratchOrg(org.orgId));
+          }
+        });
+
+        test("revokeUserSession refuses a dead caller without touching the target", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+          const org = await withBypassContext(() => createScratchOrg());
+          const priorSecret = process.env.SESSION_SECRET;
+          process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+          try {
+            const auth = await import("./auth");
+            const { userId, caller, others } = await seedSessions(org.orgId);
+            await withBypassContext(async () => {
+              await db.execute(sql`update auth_sessions set revoked_at=now(), revocation_reason='user_revoked' where id=${caller}`);
+            });
+            assert.deepEqual(await auth.revokeUserSession(userId, others[0]!, caller), {
+              ok: false, reason: "caller_session_revoked",
+            });
+            assert.equal((await revokedById(org.orgId, userId)).find((row) => row.id === others[0])?.revoked, false);
+          } finally {
+            if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+            else process.env.SESSION_SECRET = priorSecret;
+            await withBypassContext(() => dropScratchOrg(org.orgId));
+          }
+        });
+
+        test("revokeUserSession revokes another session and its own for a live caller", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+          const org = await withBypassContext(() => createScratchOrg());
+          const priorSecret = process.env.SESSION_SECRET;
+          process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+          try {
+            const auth = await import("./auth");
+            const { userId, caller, others } = await seedSessions(org.orgId);
+            assert.deepEqual(await auth.revokeUserSession(userId, others[0]!, caller), { ok: true, revoked: true });
+            assert.deepEqual(await auth.revokeUserSession(userId, randomUUID(), caller), { ok: true, revoked: false });
+            assert.deepEqual(await auth.revokeUserSession(userId, caller, caller), { ok: true, revoked: true });
+          } finally {
+            if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+            else process.env.SESSION_SECRET = priorSecret;
+            await withBypassContext(() => dropScratchOrg(org.orgId));
+          }
+        });
+
+        test("revokeOtherUserSessions refuses a keeper revoked while it waited on the lock", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+          const org = await withBypassContext(() => createScratchOrg());
+          const priorSecret = process.env.SESSION_SECRET;
+          process.env.SESSION_SECRET = randomBytes(32).toString("hex");
+          let release = () => {};
+          let held: Promise<unknown> | undefined;
+          let contender: Promise<import("./auth").RevokeSessionsResult> | undefined;
+          try {
+            const auth = await import("./auth");
+            const { userId, caller, others } = await seedSessions(org.orgId);
+            const hold = new Promise<void>((resolve) => { release = resolve; });
+            let holderPid = 0;
+            held = withBypass(async () => {
+              holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid() as pid`)).rows[0]!.pid;
+              await db.execute(sql`update auth_sessions set revoked_at=now(), revocation_reason='user_revoked' where id=${caller}`);
+              await hold;
+            });
+            const deadline = Date.now() + 10_000;
+            while ((await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
+              select count(*)::int as n from pg_stat_activity where datname=current_database() and pid=${holderPid} and state <> 'idle'
+            `)).rows[0]!.n)) === 0 && Date.now() < deadline) {
+              await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            contender = auth.revokeOtherUserSessions(userId, caller);
+            let settled = false;
+            void contender.then(() => { settled = true; }, () => { settled = true; });
+            const blockDeadline = Date.now() + 10_000;
+            let blocked = false;
+            while (!settled && Date.now() < blockDeadline) {
+              blocked = await withBypassContext(async () => (await db.execute<{ blocked: boolean }>(sql`select exists(
+                select 1 from pg_stat_activity where datname=current_database()
+                  and ${holderPid}=any(pg_blocking_pids(pid))
+              ) as blocked`)).rows[0]!.blocked);
+              if (blocked) break;
+              await new Promise((resolve) => setTimeout(resolve, 10));
+            }
+            assert.ok(blocked, "revocation must reach the held keeper lock before revoking");
+            release();
+            await held;
+            assert.deepEqual(await contender, { ok: false, reason: "caller_session_revoked" });
+            assert.equal(others.length, 2);
+            for (const id of others) {
+              assert.equal((await revokedById(org.orgId, userId)).find((row) => row.id === id)?.revoked, false);
+            }
+          } finally {
+            release();
+            await Promise.allSettled([held, contender]);
+            if (priorSecret === undefined) delete process.env.SESSION_SECRET;
+            else process.env.SESSION_SECRET = priorSecret;
+            await withBypassContext(() => dropScratchOrg(org.orgId));
+          }
+        });
+  } },
+] as const;
+
+for (const row of authCredentialCases) await row.register();

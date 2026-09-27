@@ -377,3 +377,326 @@ const consolidatedRows = [
 ] as const;
 
 for (const row of consolidatedRows) await row.register();
+
+
+const billingTimeSelectionCases = [
+  { label: "billing request scope", register: async () => {
+        const assert = (await import('node:assert/strict')).default;
+        const test = (await import('node:test')).default;
+        const { registerHooks } = await import('node:module');
+        type SessionUser = import('./auth').SessionUser;
+        const { stubModules } = await import('../testing/stub-modules.ts');
+        const session: { user: SessionUser | null } = { user: null };
+        Object.assign(globalThis, { __billingScopeSession: session });
+        stubModules({ intl: true, navigation: false, authz: false, features: false });
+
+        registerHooks({ resolve(specifier, context, next) {
+          if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__billingScopeSession.user}' };
+          return next(specifier,context);
+        }});
+        const { sql } = await import('drizzle-orm');
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { randomUUID } = await import('node:crypto');
+        const { PATCH } = await import('../app/api/billing-requests/[id]/route');
+        const { POST } = await import('../app/api/billing-requests/[id]/create-invoice/route');
+        const { GET, POST: POST_BACKUP } = await import('../app/api/billing-requests/[id]/backup/route');
+        const { createBillingRequest } = await import('./billing-requests');
+        for(const action of ['cancel','invoice','backup']) for(const scope of ['empty','hidden','visible','all',...(action==='backup'?['invoice-hidden','source-hidden','manifest-hidden']:[])]) {
+          test(`billing request scope: ${action} ${scope}`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+            const org=await withBypassContext(()=>createScratchOrg());
+            try{
+              await withBypassContext(()=>db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`));
+              const actor=await withBypassContext(()=>createScratchUser(org.orgId,'Billing controller','reviewer'));
+              await withBypassContext(()=>db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='reviewer'`));
+              session.user={id:actor,orgId:org.orgId,name:'Billing controller',email:'billing@scratch.test',roles:[],isSuperAdmin:false,envKind:'production',productionOrgId:org.orgId,homeOrgId:org.orgId,homeUserId:actor};
+              const project=randomUUID(), other=randomUUID();
+              await withBypassContext(()=>db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${other},${org.orgId},${org.subsidiaryId},'Other entity','CAD','CA')`));
+              await withBypassContext(()=>db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active) values (${project},${org.orgId},${org.subsidiaryId},'SCOPED','Scoped billing',${org.customerId},'active',true)`));
+              const request=await withOrgContext(org.orgId,()=>createBillingRequest(org.orgId,actor,{projectId:project,basis:'draw_amount',drawAmount:'100',cutoffDate:org.date,backupRequired:false}));
+              let invoice:string|null=null;
+              const bytes=Buffer.from('%PDF-1.4\nDisposable scoped backup');
+              if(action==='backup') {
+                invoice=randomUUID();
+                const targetInvoice: string = invoice;
+                await withBypassContext(()=>db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,subsidiary_id,party_id,project_id,currency) values (${invoice},${org.orgId},'customer_invoice',${invoice},${org.date},${org.subsidiaryId},${org.customerId},${project},'CAD')`));
+                await withBypassContext(()=>db.execute(sql`update billing_requests set invoice_document_id=${invoice},status='invoiced' where id=${request.id}`));
+                const {uploadAndAttach}=await import('./file-cabinet');
+                const file=await withOrgContext(org.orgId,()=>uploadAndAttach({orgId:org.orgId,targetTable:'documents',targetId:targetInvoice,filename:'Backup.pdf',contentType:'application/pdf',bytes,createdBy:actor}));
+                await withBypassContext(()=>db.execute(sql`insert into invoice_backups(org_id,document_id,billing_request_id,backup_type,file_id,page_count) values (${org.orgId},${invoice},${request.id},'none',${file.id},1)`));
+              }
+              if(scope==='source-hidden'||scope==='manifest-hidden') {
+                const source=randomUUID(),sourceLine=randomUUID(),invoiceLine=randomUUID();
+                await withBypassContext(()=>db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,subsidiary_id,party_id,project_id,currency) values (${source},${org.orgId},'vendor_bill',${source},${org.date},${other},${org.vendorId},${project},'CAD')`));
+                if(scope==='manifest-hidden') await withBypassContext(()=>db.execute(sql`update invoice_backups set component_manifest=${JSON.stringify([{kind:'attachments',sourceDocumentId:source}])}::jsonb where document_id=${invoice}`));
+                else {
+                await withBypassContext(()=>db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,account_id,quantity,unit_price,amount) values (${invoiceLine},${org.orgId},${invoice},1,${org.accounts.revenue},1,100,100)`));
+                await withBypassContext(()=>db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,account_id,quantity,unit_price,amount,billed_by_line_id) values (${sourceLine},${org.orgId},${source},1,${org.accounts.cogs},1,100,100,${invoiceLine})`));
+                }
+              }
+              if(scope==='invoice-hidden') await withBypassContext(()=>db.execute(sql`update documents set subsidiary_id=${other} where id=${invoice}`));
+              if(scope!=='all') await withBypassContext(()=>db.execute(sql`update app_roles set subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:scope==='empty'?[]:[['visible','invoice-hidden','source-hidden','manifest-hidden'].includes(scope)?org.subsidiaryId:other]})}::jsonb where org_id=${org.orgId} and key='reviewer'`));
+              const call=action==='cancel'?PATCH:action==='invoice'?POST:GET;
+              const response=await withOrgContext(org.orgId,()=>call(new Request('http://audit.local/api/billing-requests/'+request.id,{method:action==='cancel'?'PATCH':action==='invoice'?'POST':'GET',...(action==='cancel'?{body:JSON.stringify({action:'cancel'})}:{})}),{params:Promise.resolve({id:request.id})}));
+              const allowed=scope==='visible'||scope==='all';
+              assert.equal(response.status,allowed?200:404,action==='backup'&&response.status===200?'backup bytes disclosed':await response.text());
+              if(action==='backup'&&allowed) assert.deepEqual(Buffer.from(await response.arrayBuffer()),bytes);
+              if(action==='backup'&&!allowed) {
+                const {loadInvoiceBackup,assembleInvoiceBackup}=await import('./invoice-backup');
+                const scopeIds=new Set(scope==='empty'?[]:[['invoice-hidden','source-hidden','manifest-hidden'].includes(scope)?org.subsidiaryId:other]);
+                await assert.rejects(withOrgContext(org.orgId,()=>loadInvoiceBackup(org.orgId,invoice!,scopeIds)),/Invoice not found/);
+                if(scope!=='manifest-hidden') {
+                await assert.rejects(withOrgContext(org.orgId,()=>assembleInvoiceBackup(org.orgId,actor,invoice!,'none',scopeIds)),/Invoice not found/);
+                const rebuilt=await withOrgContext(org.orgId,()=>POST_BACKUP(new Request('http://audit.local/api/backup',{method:'POST'}),{params:Promise.resolve({id:request.id})}));
+                assert.equal(rebuilt.status,404);
+                }
+                if(scope==='invoice-hidden') {
+                  const {listBillingRequests}=await import('./billing-requests');
+                  const listed=await withOrgContext(org.orgId,()=>listBillingRequests(org.orgId,project,scopeIds));
+                  assert.equal(listed[0]?.invoiceDocumentId,null);
+                  assert.equal(listed[0]?.invoiceTotal,null);
+                }
+              }
+              const state=(await withOrgContext(org.orgId,()=>db.execute(sql`select status,invoice_document_id from billing_requests where id=${request.id}`))).rows[0];
+              assert.equal(state?.status,action==='backup'?'invoiced':allowed?(action==='cancel'?'cancelled':'invoiced'):'open');
+              if(!allowed&&action==='invoice') assert.equal(state?.invoice_document_id,null);
+            }finally{session.user=null;await dropScratchOrg(org.orgId);}
+          });
+        }
+  } },
+  { label: "billing time entry reconciliation", register: async () => {
+        const assert = (await import('node:assert/strict')).default;
+        const test = (await import('node:test')).default;
+        const { registerHooks } = await import('node:module');
+        type SessionUser = import('./auth').SessionUser;
+        // Every explicitly selected time entry must actually be billable when the
+        // invoice is cut: invoicing only the eligible subset while marking the
+        // request invoiced would silently drop the rest. The generator reconciles
+        // the selection against the billed entries and refuses naming the ones that
+        // cannot be billed, leaving the request open.
+        const session: { user: SessionUser | null } = { user: null }
+        Object.assign(globalThis, { __billingTimeSelectionSession: session })
+        registerHooks({
+          resolve(specifier, context, next) {
+            if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
+              return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__billingTimeSelectionSession.user}' }
+            }
+            return next(specifier, context)
+          },
+        })
+        const { sql } = await import('drizzle-orm')
+        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { randomUUID } = await import('node:crypto')
+        const { createBillingRequest } = await import('./billing-requests')
+        const { generateInvoiceFromBillingRequest } = await import('./billing')
+        const DB = !!process.env.OPENBOOKS_DB_URL
+
+        async function setup() {
+          const org = await withBypassContext(() => createScratchOrg())
+          const { actor, project } = await withBypassContext(async () => {
+            await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
+            const actor = await createScratchUser(org.orgId, 'Billing controller', 'reviewer')
+            const project = randomUUID()
+            await db.execute(sql`insert into projects(id, org_id, subsidiary_id, code, name, customer_id, status, is_active) values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'TIMESEL', 'Time selection probe', ${org.customerId}, 'active', true)`)
+            return { actor, project }
+          })
+          return { org, actor, project }
+        }
+
+        async function seedEntry(org: Awaited<ReturnType<typeof setup>>['org'], project: string, overrides: { status?: string; billingStatus?: string } = {}): Promise<string> {
+          const employee = randomUUID()
+          const entry = randomUUID()
+          await withBypassContext(async () => {
+            await db.execute(sql`insert into parties(id, org_id, kind, display_name, subsidiary_id) values (${employee}, ${org.orgId}, 'employee', 'Billable worker', ${org.subsidiaryId})`)
+            await db.execute(sql`insert into time_entries(id, org_id, employee_party_id, worked_on, hours, project_id, item_id, is_billable, status, billing_status, bill_rate) values (${entry}, ${org.orgId}, ${employee}, ${org.date}, 1, ${project}, ${org.items.service}, true, ${overrides.status ?? 'approved'}, ${overrides.billingStatus ?? 'unbilled'}, 100)`)
+          })
+          return entry
+        }
+
+        async function requestStatus(requestId: string): Promise<string> {
+          const r = await withBypassContext(() => db.execute<{ status: string }>(sql`select status from billing_requests where id = ${requestId}`))
+          return r.rows[0]?.status ?? 'missing'
+        }
+
+        test('invoicing refuses naming selected entries that are no longer billable', { skip: !DB }, async () => {
+          const { org, actor, project } = await setup()
+          try {
+            const fresh = await seedEntry(org, project)
+            const stale = await seedEntry(org, project)
+            // Bill the stale entry through an earlier request so it is no longer eligible.
+            const earlier = await withOrgContext(org.orgId, () => createBillingRequest(org.orgId, actor, {
+              projectId: project, basis: 'time_selection', selectedTimeEntryIds: [stale],
+            }))
+            await withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, earlier.id, null))
+            const request = await withOrgContext(org.orgId, () => createBillingRequest(org.orgId, actor, {
+              projectId: project, basis: 'time_selection', selectedTimeEntryIds: [fresh, stale],
+            }))
+            await assert.rejects(
+              withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, request.id, null)),
+              (error: unknown) => {
+                assert.match(String(error), new RegExp(stale))
+                assert.match(String(error), /cannot be billed/)
+                return true
+              },
+            )
+            // The refusal leaves the request open: nothing was invoiced, nothing marked.
+            assert.equal(await requestStatus(request.id), 'open')
+            const freshRow = (await withBypassContext(() => db.execute<{ status: string }>(sql`
+              select billing_status as status from time_entries where id = ${fresh}`))).rows[0]
+            assert.equal(freshRow?.status, 'unbilled')
+          } finally {
+            await dropScratchOrg(org.orgId)
+          }
+        })
+  } },
+  { label: "billing time selection", register: async () => {
+        const assert = (await import('node:assert/strict')).default;
+        const test = (await import('node:test')).default;
+        const { registerHooks } = await import('node:module');
+        type SessionUser = import('./auth').SessionUser;
+        // time_selection billing names its entries explicitly: an explicitly empty
+        // selection refuses at creation (it would otherwise bill every eligible
+        // entry on the project), and a present selection always scopes the invoice —
+        // even a final one, which widens only when nothing was selected.
+        const session: { user: SessionUser | null } = { user: null }
+        Object.assign(globalThis, { __billingTimeSelectionSession: session })
+        registerHooks({
+          resolve(specifier, context, next) {
+            if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
+              return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__billingTimeSelectionSession.user}' }
+            }
+            return next(specifier, context)
+          },
+        })
+        const { sql } = await import('drizzle-orm')
+        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { randomUUID } = await import('node:crypto')
+        const { createBillingRequest } = await import('./billing-requests')
+        const { generateInvoiceFromBillingRequest } = await import('./billing')
+        const DB = !!process.env.OPENBOOKS_DB_URL
+
+        async function setup() {
+          const org = await withBypassContext(() => createScratchOrg())
+          const { actor, project } = await withBypassContext(async () => {
+            await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
+            const actor = await createScratchUser(org.orgId, 'Billing controller', 'reviewer')
+            const project = randomUUID()
+            await db.execute(sql`insert into projects(id, org_id, subsidiary_id, code, name, customer_id, status, is_active) values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'TIMESEL', 'Time selection probe', ${org.customerId}, 'active', true)`)
+            return { actor, project }
+          })
+          return { org, actor, project }
+        }
+
+        async function seedEntry(org: Awaited<ReturnType<typeof setup>>['org'], project: string, overrides: { status?: string; billingStatus?: string } = {}): Promise<string> {
+          const employee = randomUUID()
+          const entry = randomUUID()
+          await withBypassContext(async () => {
+            await db.execute(sql`insert into parties(id, org_id, kind, display_name, subsidiary_id) values (${employee}, ${org.orgId}, 'employee', 'Billable worker', ${org.subsidiaryId})`)
+            await db.execute(sql`insert into time_entries(id, org_id, employee_party_id, worked_on, hours, project_id, item_id, is_billable, status, billing_status, bill_rate) values (${entry}, ${org.orgId}, ${employee}, ${org.date}, 1, ${project}, ${org.items.service}, true, ${overrides.status ?? 'approved'}, ${overrides.billingStatus ?? 'unbilled'}, 100)`)
+          })
+          return entry
+        }
+
+        async function requestStatus(requestId: string): Promise<string> {
+          const r = await withBypassContext(() => db.execute<{ status: string }>(sql`select status from billing_requests where id = ${requestId}`))
+          return r.rows[0]?.status ?? 'missing'
+        }
+
+        test('time_selection creation refuses an explicitly empty selection', { skip: !DB }, async () => {
+          const { org, actor, project } = await setup()
+          try {
+            await assert.rejects(
+              withOrgContext(org.orgId, () => createBillingRequest(org.orgId, actor, {
+                projectId: project, basis: 'time_selection', selectedTimeEntryIds: [],
+              })),
+              /empty selection would bill every eligible entry/,
+            )
+          } finally {
+            await dropScratchOrg(org.orgId)
+          }
+        })
+
+        test('time_selection creation refuses invalid entry ids and wrong-basis selections', { skip: !DB }, async () => {
+          const { org, actor, project } = await setup()
+          try {
+            await assert.rejects(
+              withOrgContext(org.orgId, () => createBillingRequest(org.orgId, actor, {
+                projectId: project, basis: 'time_selection', selectedTimeEntryIds: ['not-a-uuid'],
+              })),
+              /selected time entry is invalid/,
+            )
+            await assert.rejects(
+              withOrgContext(org.orgId, () => createBillingRequest(org.orgId, actor, {
+                projectId: project, basis: 'date_range', cutoffDate: org.date, selectedTimeEntryIds: [randomUUID()],
+              })),
+              /only for time-selection billing/,
+            )
+          } finally {
+            await dropScratchOrg(org.orgId)
+          }
+        })
+
+        test('a present time selection scopes the invoice to exactly those entries', { skip: !DB }, async () => {
+          const { org, actor, project } = await setup()
+          try {
+            const billed = await seedEntry(org, project)
+            const unbilled = await seedEntry(org, project)
+            const request = await withOrgContext(org.orgId, () => createBillingRequest(org.orgId, actor, {
+              projectId: project, basis: 'time_selection', selectedTimeEntryIds: [billed],
+            }))
+            const invoice = await withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, request.id, null))
+            assert.equal(await requestStatus(request.id), 'invoiced')
+            const rows = (await withBypassContext(() => db.execute<{ entry: string; status: string }>(sql`
+              select id as entry, billing_status as status from time_entries where project_id = ${project} and org_id = ${org.orgId}`))).rows
+            const byId = new Map(rows.map((r) => [r.entry, r.status]))
+            assert.equal(byId.get(billed), 'billed')
+            assert.equal(byId.get(unbilled), 'unbilled')
+            assert.ok(invoice.id)
+          } finally {
+            await dropScratchOrg(org.orgId)
+          }
+        })
+
+        test('invoicing refuses a time_selection request stored with an empty selection', { skip: !DB }, async () => {
+          const { org, actor, project } = await setup()
+          try {
+            await seedEntry(org, project)
+            const request = await withOrgContext(org.orgId, () => createBillingRequest(org.orgId, actor, {
+              projectId: project, basis: 'date_range', cutoffDate: org.date,
+            }))
+            // A request predating the creation-time refusal, carrying the exact
+            // defect shape: time_selection with an empty stored selection.
+            await withBypassContext(() => db.execute(sql`
+              update billing_requests set basis = 'time_selection', selected_time_entry_ids = '[]'::jsonb where id = ${request.id}`))
+            await assert.rejects(
+              withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, request.id, null)),
+              /empty time selection/,
+            )
+            assert.equal(await requestStatus(request.id), 'open')
+          } finally {
+            await dropScratchOrg(org.orgId)
+          }
+        })
+
+        test('a final invoice keeps an explicit time selection instead of widening', { skip: !DB }, async () => {
+          const { org, actor, project } = await setup()
+          try {
+            const billed = await seedEntry(org, project)
+            const unbilled = await seedEntry(org, project)
+            const request = await withOrgContext(org.orgId, () => createBillingRequest(org.orgId, actor, {
+              projectId: project, basis: 'time_selection', invoiceType: 'final', selectedTimeEntryIds: [billed],
+            }))
+            await withOrgContext(org.orgId, () => generateInvoiceFromBillingRequest(org.orgId, actor, request.id, null))
+            const left = (await withBypassContext(() => db.execute<{ status: string }>(sql`
+              select billing_status as status from time_entries where id = ${unbilled}`))).rows[0]
+            assert.equal(left?.status, 'unbilled')
+          } finally {
+            await dropScratchOrg(org.orgId)
+          }
+        })
+  } },
+] as const;
+
+for (const row of billingTimeSelectionCases) await row.register();
