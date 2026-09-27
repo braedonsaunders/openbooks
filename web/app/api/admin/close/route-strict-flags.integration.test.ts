@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { registerHooks } from "node:module";
+import { stubModules, withAuthzTestSurface } from "../../../../testing/stub-modules";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
@@ -13,20 +13,12 @@ import { sql } from "drizzle-orm";
 
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __closeFlagsUser: state });
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier.endsWith("/lib/authz") && context.parentURL?.includes("/api/admin/close/")) {
-      return {
-        shortCircuit: true,
-        url:
-          "data:text/javascript," +
-          encodeURIComponent(
-            "export async function guardPermission(){return {user:globalThis.__closeFlagsUser.user,permissions:new Set(['*']),allowedSubsidiaryIds:null}} export function guardSubsidiaryScope(){return null}",
-          ),
-      };
-    }
-    return next(specifier, context);
+stubModules({
+  navigation: true,
+  authz: {
+    source: withAuthzTestSurface("export async function guardPermission(){return {user:globalThis.__closeFlagsUser.user,permissions:new Set(['*']),allowedSubsidiaryIds:null}} export function guardSubsidiaryScope(){return null}"),
   },
+  features: false,
 });
 const { POST } = await import("./route");
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
