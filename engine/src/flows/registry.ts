@@ -69,6 +69,11 @@ import {
   crewBatchFlowAdapter,
   crewBatchSubjectProfile,
 } from "./crew-batches-adapter.ts";
+import {
+  WORK_ORDER_SUBJECT_KIND,
+  manufacturingFlowAdapter,
+  workOrderSubjectProfile,
+} from "./manufacturing-adapter.ts";
 // HR-20 end
 import {
   employmentMigrationFlowAdapter,
@@ -106,6 +111,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   // HR-20 begin: crew time batches approve through Flows.
   if (subjectKind === CREW_TIME_BATCH_SUBJECT_KIND) return crewBatchFlowAdapter;
   // HR-20 end
+  if (subjectKind === WORK_ORDER_SUBJECT_KIND) return manufacturingFlowAdapter;
   if (subjectKind === HRM_EMPLOYMENT_MIGRATION_SUBJECT_KIND) return employmentMigrationFlowAdapter;
   // A pay run is a document, but with payroll's own authoring vocabulary; the
   // adapter is the documents adapter with those fields layered on.
@@ -156,6 +162,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     // HR-20 begin
     crewBatchSubjectProfile,
     // HR-20 end
+    workOrderSubjectProfile,
     employmentMigrationSubjectProfile,
   ];
 }
