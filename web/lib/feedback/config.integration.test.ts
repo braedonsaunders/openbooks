@@ -3,6 +3,7 @@ import test from "node:test";
 const { sql } = await import("drizzle-orm");
 const { db, withBypass } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { requireDataKey } = await import("@openbooks/engine/src/platform/secrets.ts");
 const {
   clearFeedbackToken,
   getFeedbackRuntime,
@@ -100,7 +101,12 @@ test("the deployment's issue destination is installation state, sealed and bypas
 
     const raw = await storedFeedback();
     assert.notEqual(raw.token, TOKEN, "a plaintext token must never reach the column");
-    assert.match(String(raw.token), /^enc:v1:/);
+    // enc:v2:<active key id>:<12-byte nonce>:<ciphertext>:<16-byte tag>, base64 parts.
+    assert.match(
+      String(raw.token),
+      new RegExp(`^enc:v2:${requireDataKey()}:[A-Za-z0-9+/]{16}:[A-Za-z0-9+/]+={0,2}:[A-Za-z0-9+/]{22}==$`),
+      "the token is sealed under the active data key in the v2 wire format",
+    );
     assert.equal(await getFeedbackToken(), TOKEN);
 
     const actor = await withBypass(() =>
