@@ -115,6 +115,7 @@
         "hrm",
         "journal",
         "ledger",
+        "manufacturing",
         "nonprofit",
         "payments",
         "platform",
@@ -288,7 +289,8 @@
         "journal",
         "money",
         "organization",
-        "platform"
+        "platform",
+        "records"
       ]
     },
     "ledger": {

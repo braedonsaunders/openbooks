@@ -16,6 +16,7 @@ import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensat
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
 import { RESOURCING_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/resourcing.ts";
+import { WORK_ORDER_SUBJECT_KIND } from "../flows/manufacturing-adapter.ts";
 import { releaseAllocationRunApproval } from "../allocations/flow-release.ts";
 import { releaseFundReleaseFlowApproval } from "../nonprofit/flow-release.ts";
 import { releaseCloseRunApproval } from "../close/flow-release.ts";
@@ -28,6 +29,7 @@ import {
   releaseLeaveRequestApproval,
 } from "../hrm/flow-releases.ts";
 import { releaseResourcingRequestApproval } from "../resourcing/flow-release.ts";
+import { releaseWorkOrderApproval } from "../manufacturing/flow-release.ts";
 
 /**
  * Composition root: the one place that wires engine
@@ -59,6 +61,7 @@ export function installEngineSeams(): void {
   registerFlowApprovalReleaseHandler(HRM_CHANGE_REQUEST_SUBJECT_KIND, releaseHrmChangeRequestApproval);
   registerFlowApprovalReleaseHandler(HRM_LEAVE_REQUEST_SUBJECT_KIND, releaseLeaveRequestApproval);
   registerFlowApprovalReleaseHandler(RESOURCING_REQUEST_SUBJECT_KIND, releaseResourcingRequestApproval);
+  registerFlowApprovalReleaseHandler(WORK_ORDER_SUBJECT_KIND, releaseWorkOrderApproval);
   // Document effects: post_document and before_void completion,
   // verbatim from flows/execute.ts and flows/documents-adapter.ts. Runs
   // inline in the caller's chain, so the ambient pinned org transaction
