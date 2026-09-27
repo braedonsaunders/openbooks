@@ -76,7 +76,8 @@ const mockSources = new Map<string, string>([
       export function guardSubsidiaryScope() { return null }
     `,
   ],
-  ['mock:payments', `export function encryptAccountNumber(value) { return 'encrypted:' + value }`],
+  ['mock:payments', `export class PaymentError extends Error {}
+    export function encryptAccountNumber(value) { return 'encrypted:' + value }`],
   ['mock:flows', `export async function runRecordFlows() { return { runs: [], gatesCreated: 0, failed: false, error: null } }`],
   ['mock:bank-adapter', `export const BANK_ACCOUNT_SUBJECT_KIND = 'party_bank_account'`],
 ])
