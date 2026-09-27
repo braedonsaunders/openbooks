@@ -1,15 +1,16 @@
 import 'server-only'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import {
   addCalendarDays, businessToday, calendarQuarterBounds, weekStartsEndingOn,
 } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { add, cmp, mulDecimal } from '@openbooks/engine/src/money/money.ts'
-import { flowRates, lineFunctional, presentationCurrency, presentationRates, translateFlows } from '../fx-presentation'
+import { flowRates, translateFlows } from '../fx-presentation'
 import { calculateForecast, type ForecastRow } from '../crm'
 import { crmOpportunityScope } from '../crm-scope'
 import { isFeatureEnabled } from '../features'
 import { paymentStats } from '../cash/core'
+import { openItems } from '../cash/open-items'
 
 /**
  * Customers module home — one light round trip for the relationship-to-cash
@@ -80,6 +81,26 @@ export interface CustomersHome {
 }
 
 const TREND_WEEKS = 13
+
+function customerPaymentMovements(orgId: string, from: string, through: string, docScope: SQL) {
+  return sql`
+    select coalesce(d.document_date, d.posting_date)::date as dt,
+           sub.base_currency as func, round(abs(d.total * d.fx_rate), 4) as amount
+      from documents d
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+     where d.org_id = ${orgId} and d.kind = 'customer_payment' and d.status in ('posted', 'voided')
+       ${docScope}
+       and coalesce(d.document_date, d.posting_date)::date between ${from}::date and ${through}::date
+    union all
+    select d.voided_at::date as dt,
+           sub.base_currency as func, -round(abs(d.total * d.fx_rate), 4) as amount
+      from documents d
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+     where d.org_id = ${orgId} and d.kind = 'customer_payment' and d.status = 'voided'
+       and d.voided_at::date between ${from}::date and ${through}::date
+       ${docScope}
+  `
+}
 
 /**
  * Forecast rollups retain each opportunity's transaction currency. The
@@ -177,7 +198,6 @@ export async function customersHome(
   const weekStarts = weekStartsEndingOn(today, TREND_WEEKS)
   const trendFrom = weekStarts[0]!
   const subArr = subIds !== undefined ? sql`${`{${subIds.join(',')}}`}::uuid[]` : null
-  const lineScope = subArr ? sql` and jl.subsidiary_id = any(${subArr})` : sql``
   // Document-side reads match root-owned rows only for unrestricted
   // root-covering views; the limb never widens an empty scope (see filters).
   const docScope =
@@ -188,40 +208,8 @@ export async function customersHome(
         : sql``
   const q = calendarQuarterBounds(today)
 
-  const [arRes, dsoStats, topRes, trendRes, badgeRes, collectedRowsRes, forecast, orgRes] = (await Promise.all([
-    // Open receivables aggregate — the cash engine's openItems population,
-    // aggregated (one open-receivables definition — the as-of
-    // book — across dashboard, workspace, hub and aging). Legs are stamped
-    // in their line entity's functional: aggregate per functional and
-    // translate to presentation below.
-    // Skipped without ar.read — never queried, never shaped.
-    arGranted ? db.execute(sql`
-      with oi as (
-        select jl.party_id, jl.due_date, sub.base_currency as func,
-               (case when d.kind = 'customer_credit' then -1 else 1 end) * (abs(jl.amount) - coalesce((
-                 select sum(x.amount) from applications x
-                  where x.org_id = ${orgId}
-                    and (x.to_line_id = jl.id or x.from_line_id = jl.id)
-                    and x.applied_on <= ${today}
-                    and (x.unapplied_at is null or x.unapplied_at::date > ${today}::date)
-               ), 0)) as remaining
-          from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.org_id = ${orgId} and je.status = 'posted'
-           and je.posting_date <= ${today}
-          join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
-          join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
-           and d.posted_entry_id = je.id and d.status = 'posted' and d.kind in ('customer_invoice', 'customer_credit')
-          left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
-         where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'asset_receivable'
-           and ((d.kind = 'customer_credit' and jl.amount < 0) or (d.kind <> 'customer_credit' and jl.amount > 0))${lineScope}
-      )
-      select oi.func,
-             coalesce(sum(remaining), 0) as outstanding,
-             coalesce(sum(remaining) filter (where due_date < ${today}), 0) as overdue,
-             count(*) filter (where remaining <> 0) as open_count,
-             count(*) filter (where remaining <> 0 and due_date < ${today}) as overdue_count
-        from oi where remaining <> 0 group by oi.func
-    `) : Promise.resolve({ rows: [] }),
+  const [arItems, dsoStats, trendRes, badgeRes, collectedRowsRes, forecast, orgRes, oppRes] = (await Promise.all([
+    arGranted ? openItems(orgId, 'ar', today, subIds) : Promise.resolve([]),
     // Days-sales-outstanding is the ONE org DSO from the cash engine's
     // maintained settlement rollup — the same reader the cash cockpit,
     // cashflow analytics, MCP cashflow tool, get_vitals, and customer
@@ -229,62 +217,13 @@ export async function customersHome(
     // this landing cheap; subsidiary scoping rides the engine's own rules.
     // The AR settlement rollup is unreadable without ar.read.
     arGranted ? paymentStats("ar", today, subIds, orgId) : Promise.resolve({ map: new Map<string, { avg: number; sd: number; n: number }>(), globalAvg: 0 }),
-    // Hero roster — top relationships by open balance, with open-opp counts.
-    // Per (party, functional): the translated ranking happens in JS below.
+    // 13-week collections trend retains the original receipt in its posting
+    // week and records a void as a negative movement in the void week.
     // Skipped without ar.read — never queried, never shaped.
     arGranted ? db.execute(sql`
-      with oi as (
-        select jl.party_id, jl.due_date, sub.base_currency as func,
-               (case when d.kind = 'customer_credit' then -1 else 1 end) * (abs(jl.amount) - coalesce((
-                 select sum(x.amount) from applications x
-                  where x.org_id = ${orgId}
-                    and (x.to_line_id = jl.id or x.from_line_id = jl.id)
-                    and x.applied_on <= ${today}
-                    and (x.unapplied_at is null or x.unapplied_at::date > ${today}::date)
-               ), 0)) as remaining
-          from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.org_id = ${orgId} and je.status = 'posted'
-           and je.posting_date <= ${today}
-          join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
-          join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
-           and d.posted_entry_id = je.id and d.status = 'posted' and d.kind in ('customer_invoice', 'customer_credit')
-          left join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = ${orgId}
-         where jl.org_id = ${orgId} and jl.is_open_item and a.type = 'asset_receivable'
-           and ((d.kind = 'customer_credit' and jl.amount < 0) or (d.kind <> 'customer_credit' and jl.amount > 0))${lineScope}
-      )
-      select oi.party_id, oi.func, coalesce(p.display_name, 'Unspecified') as name,
-             sum(oi.remaining) as open,
-             sum(oi.remaining) filter (where oi.due_date < ${today}) as overdue,
-             count(*) as open_invoices,
-             min(oi.due_date) as oldest_due,
-             ${crmOn && crmGranted ? sql`coalesce(opp.n, 0)` : sql`0`} as open_opps
-        from oi
-        left join parties p on p.id = oi.party_id and p.org_id = ${orgId}
-        ${crmOn && crmGranted ? sql`left join lateral (
-          select count(*) as n
-            from crm_opportunities o
-            join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
-           where o.org_id = ${orgId} ${crmOpportunityScope(subIds === undefined ? null : new Set(subIds))} and o.is_active and not s.is_closed
-             and o.party_id = oi.party_id) opp on true` : sql``}
-       where oi.remaining <> 0
-       group by oi.party_id, oi.func, p.display_name${crmOn && crmGranted ? sql`, opp.n` : sql``}
-    `) : Promise.resolve({ rows: [] }),
-    // 13-week collections trend (posted customer payments by week). `total`
-    // is denominated in the document's transaction currency, so convert each
-    // receipt with its posting FX rate (first leg) before adding unlike
-    // currencies; the second leg to presentation runs per (week, functional)
-    // below.
-    // Skipped without ar.read — never queried, never shaped.
-    arGranted ? db.execute(sql`
-      select (date_trunc('week', coalesce(d.document_date, d.posting_date)))::date as wk,
-             sub.base_currency as func,
-             max(coalesce(d.document_date, d.posting_date))::text as late,
-             coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as collected
-        from documents d
-        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
-       where d.org_id = ${orgId} and d.kind = 'customer_payment' and d.status = 'posted'
-         and d.voided_at is null${docScope}
-         and coalesce(d.document_date, d.posting_date) >= ${trendFrom}
+      select date_trunc('week', movement.dt)::date as wk, movement.func,
+             max(movement.dt)::text as late, coalesce(sum(movement.amount), 0) as collected
+        from (${customerPaymentMovements(orgId, trendFrom, today, docScope)}) movement
        group by 1, 2
     `) : Promise.resolve({ rows: [] }),
     // Directory badges — cheap counts for the workspace's other pages (the
@@ -301,41 +240,38 @@ export async function customersHome(
         ${ordersOn && arGranted ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'sales_order'
           and d.status not in ('closed', 'cancelled') and d.voided_at is null${docScope})` : sql`0`} as open_sos,
         ${arGranted ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'customer_payment'
-          and d.status = 'posted' and d.voided_at is null${docScope}
+          and d.status = 'posted' -- Live entries only: the live receipt count excludes payments voided by the current snapshot
+          and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago7})` : sql`0`} as receipts_7d,
         ${partiesGranted ? sql`(select count(*) from parties p where p.org_id = ${orgId} and p.is_active
           and exists (select 1 from customer_roles cr where cr.org_id = p.org_id and cr.party_id = p.id and cr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``})` : sql`0`} as customers
     `),
-    // 7-day collection value per (date, functional) for presentation translation.
+    // 7-day net collections per (date, functional), including voids that
+    // reverse an earlier receipt inside this window.
     // Skipped without ar.read — never queried, never shaped.
     arGranted ? db.execute(sql`
-      select coalesce(d.document_date, d.posting_date)::text as dt, sub.base_currency as func,
-             coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as amt
-        from documents d
-        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
-       where d.org_id = ${orgId} and d.kind = 'customer_payment'
-         and d.status = 'posted' and d.voided_at is null${docScope}
-         and coalesce(d.document_date, d.posting_date) >= ${ago7}
+      select movement.dt::text as dt, movement.func, coalesce(sum(movement.amount), 0) as amt
+        from (${customerPaymentMovements(orgId, ago7, today, docScope)}) movement
        group by 1, 2
     `) : Promise.resolve({ rows: [] }),
     crmOn && crmGranted ? calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end, allowedSubsidiaryIds: subIds === undefined ? null : new Set(subIds) }) : Promise.resolve([]),
     db.execute<{ baseCurrency: string }>(sql`
       select base_currency as "baseCurrency" from orgs where id = ${orgId}
     `),
+    crmOn && crmGranted && arGranted ? db.execute<{ party_id: string; n: string }>(sql`
+      select o.party_id, count(*) as n
+        from crm_opportunities o
+        join crm_opportunity_statuses s on s.id = o.status_id and s.org_id = o.org_id
+       where o.org_id = ${orgId} ${crmOpportunityScope(subIds === undefined ? null : new Set(subIds))}
+         and o.is_active and not s.is_closed
+       group by o.party_id
+    `) : Promise.resolve({ rows: [] }),
   ]))
 
-  // Presentation: balances translate at the tile-date (closing) spot, flows at
-  // their document-date spot. Missing coverage fails closed.
-  const base = await presentationCurrency(orgId)
-  const balRates = await presentationRates(
-    orgId,
-    base,
-    [...arRes.rows.map((r) => (r.func ?? null) as string | null), ...topRes.rows.map((r) => (r.func ?? null) as string | null)],
-    today,
-  )
-  const trBal = (amount: unknown, func: unknown): string =>
-    mulDecimal(String(amount ?? '0'), balRates.get(lineFunctional(typeof func === "string" ? func : null, base))!)
+  // Open-item balances arrive in presentation currency from the shared cash
+  // reader. Collection flows translate at their document-date spot; missing
+  // coverage fails closed.
   // Each week bucket translates at its latest document date, so the rate
   // lookup never runs ahead of the data it translates.
   const trendCtx = await flowRates(
@@ -354,20 +290,13 @@ export async function customersHome(
     collectedRowsRes.rows.map((r) => ({ func: (r.func ?? null) as string | null, date: String(r.dt).slice(0, 10), amount: String(r.amt ?? 0) })),
   ))
 
-  // Open-receivables vitals: per-functional balances summed in presentation.
+  const openOppsByParty = new Map(oppRes.rows.map((row) => [row.party_id, Number(row.n)]))
   let arOutstanding = '0.0000'
   let arOverdue = '0.0000'
   let openInvoices = 0
   let overdueInvoices = 0
-  for (const r of arRes.rows) {
-    arOutstanding = add(arOutstanding, trBal(r.outstanding, r.func))
-    arOverdue = add(arOverdue, trBal(r.overdue, r.func))
-    openInvoices += Number(r.open_count ?? 0)
-    overdueInvoices += Number(r.overdue_count ?? 0)
-  }
-
-  // Hero roster: merge per-(party, functional) legs in presentation, then
-  // rank — the translated top 10, not the raw-functional top 10.
+  // The shared open-item population supplies both the summary and hero
+  // roster, so voids, applications and book selection stay consistent.
   const byParty = new Map<string, {
     name: string
     open: string
@@ -376,16 +305,22 @@ export async function customersHome(
     openOpportunities: number
     oldestDue: string | null
   }>()
-  for (const r of topRes.rows) {
-    const partyId = String(r.party_id)
+  for (const item of arItems) {
+    const partyId = item.partyId ?? 'null'
     const cur = byParty.get(partyId) ?? {
-      name: String(r.name), open: '0.0000', overdue: '0.0000', openInvoices: 0, openOpportunities: 0, oldestDue: null as string | null,
+      name: item.partyName, open: '0.0000', overdue: '0.0000', openInvoices: 0,
+      openOpportunities: openOppsByParty.get(partyId) ?? 0, oldestDue: null as string | null,
     }
-    cur.open = add(cur.open, trBal(r.open, r.func))
-    cur.overdue = add(cur.overdue, trBal(r.overdue, r.func))
-    cur.openInvoices += Number(r.open_invoices ?? 0)
-    cur.openOpportunities = Math.max(cur.openOpportunities, Number(r.open_opps ?? 0))
-    const due = r.oldest_due ? String(r.oldest_due) : null
+    cur.open = add(cur.open, item.remaining)
+    cur.openInvoices += 1
+    openInvoices += 1
+    arOutstanding = add(arOutstanding, item.remaining)
+    const due = item.dueDate
+    if (due && due < today) {
+      cur.overdue = add(cur.overdue, item.remaining)
+      arOverdue = add(arOverdue, item.remaining)
+      overdueInvoices += 1
+    }
     if (due && (!cur.oldestDue || due < cur.oldestDue)) cur.oldestDue = due
     byParty.set(partyId, cur)
   }

@@ -26,18 +26,15 @@ import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
  *       book, posted/reversed entries), net of credit memos, voids netting to
  *       zero. Attribution is line party_id plus recognition schedules through
  *       their contract customer (those legs carry no party).
- *     * invoicedRevenue = BILLINGS: posted, non-voided customer-invoice
- *       document totals at the document rate — gross of credits, includes
- *       sales tax, blind to deferral. The reconciling column, never the
- *       headline.
+ *     * invoicedRevenue = BILLINGS: customer-invoice document totals at the
+ *       document rate, with a void recorded as a negative movement on its
+ *       reversal date — gross of credits, includes sales tax, blind to
+ *       deferral. The reconciling column, never the headline.
  *     * recon bridges them per customer: invoiced − recognized =
  *       tax + credits + (timingDeferred − timingRecognized) + voids + other.
  *     Recognition cancellations attribute through the schedule
- *     reversal_journal_entry_id back-link (both the flipped original and the
- *     mirror land in voids); the mirror period ties to the P&L exactly.
- *     Known edge (F-p2-002): a voided invoice's prior-period reversed
- *     recognition has no population row, so the org total trails the P&L by
- *     exactly those legs until the population rule learns ledger presence.
+ *     reversal_journal_entry_id back-link. Document voids stay in the period
+ *     where they were posted and reverse in the period their void is dated.
  *    Population, invoice counts, avg invoice value and first/last dates stay
  *    document-based (billing activity); every `revenue` roll-up (rows, KPIs,
  *    segments, tiers, monthly trend, cohorts) is recognized.
@@ -126,9 +123,8 @@ export interface CustomerRevenueRecon {
   /** Earned but not billed this period: revenue-recognition schedule postings
    *  attributed through the contract customer (those legs carry no party_id). */
   timingRecognized: number;
-  /** Net income effect of reversed entries and their mirrors in this period.
-   *  Same-period voids net to zero here; a cross-period void reads positive in
-   *  the reversal period and negative in the original period. */
+  /** Income effect of reversals that have no corresponding document billing
+   *  movement in the same period. */
   voids: number;
   /** Residual: manual-journal income with a party tag and FX/rounding dust —
    *  anything outside the buckets above. Persistently large `other` for a
@@ -150,10 +146,11 @@ export interface CustomerRow {
   /** Prior-period recognized revenue (YoY base for `revenue`). */
   priorRevenue: number;
   /**
-   * INVOICED revenue (billings): posted, non-voided customer-invoice document
-   * totals translated at the document rate. Gross of credit memos, includes
-   * sales tax, blind to deferred recognition — the cash/AR/sales-comp question,
-   * kept as the explicitly labelled reconciling column, never the headline.
+   * INVOICED revenue (billings): customer-invoice document totals translated
+   * at the document rate, with voids recorded in their reversal period. Gross
+   * of credits, includes sales tax, blind to deferred recognition — the
+   * cash/AR/sales-comp question, kept as the explicitly labelled reconciling
+   * column, never the headline.
    */
   invoicedRevenue: number;
   /** The invoiced→recognized bridge; see CustomerRevenueRecon. */
@@ -565,6 +562,34 @@ function priorYearIso(iso: string): string {
   return addMonthsClamped(iso, -12);
 }
 
+function customerDocumentMovements(
+  orgId: string,
+  kinds: string[],
+  allowed: ReadonlySet<string> | null,
+  from?: string,
+  to?: string,
+) {
+  const kindFilter = sql`d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})`;
+  const postedDateFilter = from && to ? sql`and d.posting_date::date between ${from}::date and ${to}::date` : sql``;
+  const voidDateFilter = from && to ? sql`and d.voided_at::date between ${from}::date and ${to}::date` : sql``;
+  const subsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed);
+  return sql`
+    select d.party_id, d.kind, sub.base_currency as func, d.posting_date::date as event_date,
+           d.posting_date::date as posting_date, round(abs(d.total) * d.fx_rate, 4) as amount, 1::int as direction
+      from documents d
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+     where d.org_id = ${orgId} and ${kindFilter} and d.status in ('posted', 'voided')
+       and d.party_id is not null ${subsidiaryFilter} ${postedDateFilter}
+    union all
+    select d.party_id, d.kind, sub.base_currency as func, d.voided_at::date as event_date,
+           d.posting_date::date as posting_date, round(abs(d.total) * d.fx_rate, 4) as amount, -1::int as direction
+      from documents d
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+     where d.org_id = ${orgId} and ${kindFilter} and d.status = 'voided'
+       and d.voided_at is not null and d.party_id is not null ${subsidiaryFilter} ${voidDateFilter}
+  `;
+}
+
 /* ------------------------------------------------------------------- main */
 export async function customerData(
   period: { from: string; to: string; label: string },
@@ -600,40 +625,32 @@ export async function customerData(
     // the posted document rate to the posting subsidiary's functional; the
     // second leg to presentation runs per (party, functional) below.
     (db.execute(sql`
-      select d.party_id as id, coalesce(p.display_name, 'Unknown') as name,
-        sub.base_currency as func,
-        count(*) as txn_count,
-        sum(round(abs(d.total) * d.fx_rate, 4)) as revenue,
-        max(d.posting_date)::text as late,
-        min(d.posting_date) as first_txn,
-        max(d.posting_date) as last_txn
-      from documents d
-      join parties p on p.id = d.party_id and p.org_id = d.org_id
-      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
-      where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
-        and d.voided_at is null and d.party_id is not null
-        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
-        and d.posting_date >= ${from} and d.posting_date <= ${to}
-      group by d.party_id, p.display_name, sub.base_currency
-      having sum(abs(d.total)) > 0
+      with movement as (${customerDocumentMovements(orgId, ['customer_invoice'], allowed, from, to)})
+      select movement.party_id as id, coalesce(p.display_name, 'Unknown') as name,
+        movement.func,
+        sum(movement.direction) as txn_count,
+        sum(movement.amount * movement.direction) as revenue,
+        max(movement.event_date)::text as late,
+        min(movement.event_date) as first_txn,
+        max(movement.event_date) as last_txn
+      from movement
+      join parties p on p.id = movement.party_id and p.org_id = ${orgId}
+      group by movement.party_id, p.display_name, movement.func
+      having sum(movement.amount * movement.direction) <> 0 or sum(movement.direction) <> 0
     `)),
     // Friction — credit memos per customer (returns×3 + credits×2;
     // this ledger has no return-auth kind, so returns are always 0).
     // Credit value translates per (party, functional) below.
     (db.execute(sql`
-      select d.party_id as id, sub.base_currency as func,
-        count(*) filter (where d.kind = 'customer_credit') as credit_count,
-        coalesce(sum(round(abs(d.total) * d.fx_rate, 4)) filter (where d.kind = 'customer_credit'), 0) as credit_value,
-        max(d.posting_date) filter (where d.kind = 'customer_credit')::text as late,
-        count(*) filter (where d.kind = 'customer_invoice') as order_count
-      from documents d
-      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
-      where d.org_id = ${orgId} and d.kind in ('customer_credit', 'customer_invoice')
-        and d.status = 'posted' and d.voided_at is null and d.party_id is not null
-        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
-        and d.posting_date >= ${from} and d.posting_date <= ${to}
-      group by d.party_id, sub.base_currency
-      having count(*) filter (where d.kind = 'customer_invoice') > 0
+      with movement as (${customerDocumentMovements(orgId, ['customer_credit', 'customer_invoice'], allowed, from, to)})
+      select movement.party_id as id, movement.func,
+        sum(movement.direction) filter (where movement.kind = 'customer_credit') as credit_count,
+        coalesce(sum(movement.amount * movement.direction) filter (where movement.kind = 'customer_credit'), 0) as credit_value,
+        max(movement.event_date) filter (where movement.kind = 'customer_credit')::text as late,
+        sum(movement.direction) filter (where movement.kind = 'customer_invoice') as order_count
+      from movement
+      group by movement.party_id, movement.func
+      having coalesce(sum(movement.direction) filter (where movement.kind = 'customer_invoice'), 0) <> 0
     `)),
     // Payment behaviour — paid = fully-applied invoice; days-to-pay = final
     // application date − invoice date; overdue =
@@ -663,9 +680,10 @@ export async function customerData(
               ${subsidiaryVisibleFilter(sql`source_line.subsidiary_id`, allowed)})
         left join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ap.org_id
         left join journal_entries pe on pe.id = pl.entry_id and pe.org_id = pl.org_id
-        where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
+        where d.org_id = ${orgId} and d.kind = 'customer_invoice'
+          and (d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${ref}::date))
           ${subsidiaryVisibleFilter(sql`il.subsidiary_id`, allowed)}
-          and d.voided_at is null and d.party_id is not null
+          and d.party_id is not null
           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
           and d.posting_date >= ${from} and d.posting_date <= ${to}
         group by d.id, d.party_id, d.posting_date, d.due_date, d.total
@@ -686,64 +704,49 @@ export async function customerData(
     // is the same test — the invoice itself qualifies, so "no earlier document"
     // and "first document is this month" coincide.
     (db.execute(sql`
-      with first_doc as (
-        select party_id, min(date_trunc('month', posting_date)) as first_month
-          from documents
-         where org_id = ${orgId} and kind in ('customer_invoice', 'sales_order')
-           and voided_at is null and party_id is not null
-           ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
-         group by party_id
-      )
-      select to_char(d.posting_date, 'YYYY-MM') as month,
-        sub.base_currency as func,
-        sum(round(abs(d.total) * d.fx_rate, 4)) as revenue,
-        max(d.posting_date)::text as late
-      from documents d
-      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
-      where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
-        and d.voided_at is null and d.party_id is not null
-        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
-        and d.posting_date >= ${from} and d.posting_date <= ${to}
+      with movement as (${customerDocumentMovements(orgId, ['customer_invoice'], allowed, from, to)})
+      select to_char(movement.event_date, 'YYYY-MM') as month,
+        movement.func,
+        sum(movement.amount * movement.direction) as revenue,
+        max(movement.event_date)::text as late
+      from movement
       group by 1, 2 order by 1
     `)),
     // Growth counts — distinct customers never merge across functionals, so
     // they stay on their own month grain while revenue translates above.
     (db.execute(sql`
-      with first_doc as (
+      with movement as (${customerDocumentMovements(orgId, ['customer_invoice'], allowed, from, to)}),
+      monthly as (
+        select party_id, date_trunc('month', event_date) as month, sum(direction) as txn_count
+          from movement group by party_id, date_trunc('month', event_date)
+      ), first_doc as (
         select party_id, min(date_trunc('month', posting_date)) as first_month
           from documents
          where org_id = ${orgId} and kind in ('customer_invoice', 'sales_order')
-           and voided_at is null and party_id is not null
+           and status in ('posted', 'voided') and party_id is not null
            ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)}
          group by party_id
       )
-      select to_char(d.posting_date, 'YYYY-MM') as month,
-        count(distinct d.party_id) as unique_customers,
-        count(*) as txn_count,
-        count(distinct d.party_id) filter (
-          where f.first_month = date_trunc('month', d.posting_date)) as new_customers
-      from documents d
-      join first_doc f on f.party_id = d.party_id
-      where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
-        and d.voided_at is null and d.party_id is not null
-        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
-        and d.posting_date >= ${from} and d.posting_date <= ${to}
-      group by 1 order by 1
+      select to_char(monthly.month, 'YYYY-MM') as month,
+        count(*) filter (where monthly.txn_count <> 0)::int as unique_customers,
+        sum(monthly.txn_count) as txn_count,
+        count(*) filter (where first_doc.first_month = monthly.month and monthly.txn_count > 0)::int as new_customers
+      from monthly
+      join first_doc on first_doc.party_id = monthly.party_id
+      group by monthly.month order by monthly.month
     `)),
     // Cohorts — lifetime per-customer first/last order + lifetime revenue;
     // grouped into join-year cohorts below (active = ordered in last 6 months).
     // Lifetime revenue translates per (party, functional) below.
     (db.execute(sql`
-      select party_id as id, sub.base_currency as func,
-        max(posting_date) as last_order, min(posting_date) as first_order,
-        max(posting_date)::text as late,
-        sum(round(abs(total) * fx_rate, 4)) as lifetime_revenue
-      from documents d
-      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
-      where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
-        and d.voided_at is null and d.party_id is not null
-        ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed)}
-      group by party_id, sub.base_currency
+      with movement as (${customerDocumentMovements(orgId, ['customer_invoice'], allowed)})
+      select movement.party_id as id, movement.func,
+        max(movement.posting_date) filter (where movement.direction > 0) as last_order,
+        min(movement.posting_date) filter (where movement.direction > 0) as first_order,
+        max(movement.event_date)::text as late,
+        sum(movement.amount * movement.direction) as lifetime_revenue
+      from movement
+      group by movement.party_id, movement.func
     `)),
     // Recognized revenue + recon legs, per (customer, functional) — the SAME
     // universe the P&L reads (REVENUE_TYPES legs on posted/reversed entries in
@@ -792,6 +795,7 @@ export async function customerData(
             and e.posting_date >= ${from}) as sched,
         sum(l.amount) filter (
           where a.type in ${REVENUE_TYPES} and e.is_void
+            and (d.id is null or d.kind not in ('customer_invoice', 'customer_credit'))
             and e.posting_date >= ${from}) as voids,
         max(e.posting_date) filter (where e.posting_date >= ${from})::text as late,
         max(e.posting_date) filter (

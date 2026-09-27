@@ -33,6 +33,7 @@ const mocks = new Map([
       return { map: new Map(), globalAvg: 45 }
     }
   `],
+  ['../cash/open-items', 'export async function openItems() { return [] }'],
 ])
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {

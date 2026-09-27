@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { activePostingPrimaryBookId } from '@openbooks/engine/src/platform/accounting-books.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { mulDecimal } from '@openbooks/engine/src/money/money.ts'
 // Relative (not the bare workspace specifier): worktree node_modules resolves
@@ -60,6 +61,7 @@ export async function openItems(
   // same-labeled AP/AR figures; the source-text guard forbids literals).
   const kinds = side === 'ap' ? AP_OPEN_ITEM_KINDS : AR_OPEN_ITEM_KINDS
   const kindFilter = sql`d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})`
+  const bookId = await activePostingPrimaryBookId(orgId)
   // `remaining` reconstructs what was still collectible AS OF the forecast
   // date — gross line minus applications dated on/before it (an application
   // unapplied only after the date still counted then). Netting live
@@ -82,6 +84,7 @@ export async function openItems(
              ), 0)) as remaining
         from documents d
         ${asOfPostedEntryLateral(orgId, asOf)}
+        join journal_entries book_entry on book_entry.id = je.id and book_entry.org_id = je.org_id and book_entry.book_id = ${bookId}
         join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and ${lineFilter}
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
          and ${side === 'ap' ? apOpenAccountScope(sql`a`, orgId) : arOpenAccountScope(sql`a`)}

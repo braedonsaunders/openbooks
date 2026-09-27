@@ -199,6 +199,9 @@ test('fx reads and revaluation run through the engine tables', { skip: !process.
       const adjustment = revalData.items.find((i) => !i.entryNumber.endsWith('-R'));
       assert.ok(adjustment, 'adjustment entry present');
       assert.ok(adjustment.mirrorEntryNumber?.endsWith('-R'), 'adjustment links its mirror');
+      const originalStatus = await db.execute<{ status: string }>(sql`
+        select status from journal_entries where org_id = ${org.orgId} and entry_number = ${adjustment.entryNumber}`)
+      assert.equal(originalStatus.rows[0]?.status, 'reversed', 'the mirror reverses the original adjustment')
       const unfiltered = await executeAssistantTool(reader, 'list_fx_revaluations', {});
       assert.ok(unfiltered.ok, JSON.stringify(unfiltered));
       assert.equal((unfiltered.data as { total: number }).total, 2);

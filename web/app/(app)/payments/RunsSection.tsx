@@ -150,7 +150,7 @@ export async function RunsSection({
            exists (select 1 from payment_mandates m where m.org_id = d.org_id and m.party_id = d.party_id and m.status = 'active' and (m.valid_from is null or m.valid_from <= ${today}) and (m.expires_on is null or m.expires_on >= ${today})) as has_bank
       from documents d
       join parties p on p.id = d.party_id and p.org_id = d.org_id
-      join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
+      join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status in ('posted', 'reversed')
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount > 0
      where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted' ${sourceScope}` : sql`
     select d.id, d.document_number, d.document_date, d.due_date, d.reference_number, d.currency,
@@ -164,7 +164,7 @@ export async function RunsSection({
            ) as has_bank
       from documents d
       join parties p on p.id = d.party_id and p.org_id = d.org_id
-      join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
+      join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status in ('posted', 'reversed')
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount < 0
      where d.org_id = ${orgId} and d.kind in ('vendor_bill', 'expense_report') and d.status = 'posted'
        and d.payment_hold_reason is null ${sourceScope}`

@@ -24,13 +24,17 @@ async function loadEquipmentRows(
   const metrics = ((await executor.execute(sql`
     select
       coalesce((select sum(dl.base_quantity) from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-        where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'project_charge' and d.status in ('approved','posted')), 0) as usage,
+        where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'project_charge' and d.status in ('approved','posted') -- Live entries only: equipment usage includes currently approved and posted charges
+      ), 0) as usage,
       coalesce((select sum(dl.cost_amount) from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-        where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'project_charge' and d.status in ('approved','posted')), 0) as recovery,
+        where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'project_charge' and d.status in ('approved','posted') -- Live entries only: equipment recovery includes currently approved and posted charges
+      ), 0) as recovery,
       coalesce((select sum(dl.bill_amount) from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-        where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'project_charge' and d.status in ('approved','posted')), 0) as billable,
+        where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'project_charge' and d.status in ('approved','posted') -- Live entries only: equipment billable value includes currently approved and posted charges
+      ), 0) as billable,
       coalesce((select sum(dl.amount) from document_lines dl join documents d on d.id = dl.document_id and d.org_id = dl.org_id
-        where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'), 0) as billed_revenue,
+        where dl.equipment_unit_id = ${id} and dl.org_id = ${orgId} and d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted' -- Live entries only: equipment revenue includes currently posted invoices
+      ), 0) as billed_revenue,
       coalesce((select sum(jl.amount) from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         left join documents d on d.id = je.source_document_id and d.org_id = je.org_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id

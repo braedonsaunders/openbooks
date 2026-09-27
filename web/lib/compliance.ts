@@ -931,7 +931,7 @@ export async function loadInformationReturnReadiness(
           join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id
           join accounts funding on funding.id = jl.account_id and funding.org_id = jl.org_id
          where d.org_id = p.org_id and d.party_id = p.id
-           and d.kind = 'vendor_payment' and d.status = 'posted'
+           and d.kind = 'vendor_payment' and d.status = 'posted' -- Live entries only: readiness uses payments still posted today
            and d.document_date between ${`${taxYear}-01-01`} and ${`${taxYear}-12-31`}
            ${complianceSubsidiaryFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
       ) paid on true

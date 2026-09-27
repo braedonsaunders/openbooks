@@ -122,13 +122,11 @@ export const GET = defineRoute({
     const docScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed);
     const srcEntryScope = joinedSubsidiaryScope(sql`e.id`, sql`e.subsidiary_id`, allowed);
     // The posted population every parent metric reads: spend-velocity resolves
-    // GL activity in the statement book with posted/reversed entries and live
-    // documents; customer data reads posted invoices. Drafts, secondary-book
-    // mirrors and voided documents are not activity, whatever the caller knew.
+    // GL activity in the statement book with posted/reversed entries and
+    // customer data carries document voids in the period where they occurred.
     const book = statementBookExpr(user.orgId);
     const postedEntry = sql`and e.status in ('posted', 'reversed') and e.book_id = ${book}`;
-    const liveDoc = sql`and (d.id is null or d.voided_at is null)`;
-    const postedDoc = sql`and d.status = 'posted'`;
+    const postedDoc = sql`and d.status = 'posted' -- Live entries only: the detail list shows documents posted today`;
 
     // Journal legs are stamped in their subsidiary's functional currency and
     // translate to presentation at the posting date through the flow path, as
@@ -149,8 +147,7 @@ export const GET = defineRoute({
             ${lineScope}
             ${entryScope}
             ${docJoinScope}
-            ${postedEntry}
-            ${liveDoc}`;
+            ${postedEntry}`;
     // Restricted detail collapses payroll legs per (entry, account) in a UNION
     // arm BEFORE the sort/limit below, so no limit:1 plan or amount ordering
     // can return a pre-collapse per-employee row. The arm keeps the summed
@@ -279,6 +276,17 @@ export const GET = defineRoute({
     const docFunc = sql`coalesce(sub.base_currency, o.base_currency)`;
     const docLeg = sql`round(abs(d.total) * d.fx_rate, 4)`;
     const docDate = sql`coalesce(d.document_date, d.posting_date)`;
+    const docEvents = sql`
+      select d.id as document_id, ${docDate}::date as event_date, 1::int as direction
+        from documents d
+       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.status in ('posted', 'voided')
+         and ${docDate}::date between ${from}::date and ${to}::date ${docScope}
+      union all
+      select d.id as document_id, d.voided_at::date as event_date, -1::int as direction
+        from documents d
+       where d.org_id = ${user.orgId} and d.party_id = ${party} and d.status = 'voided'
+         and d.voided_at is not null and d.voided_at::date between ${from}::date and ${to}::date ${docScope}
+    `;
     const [detail, monthly, byKind, agg] = await Promise.all([
       (db.execute(sql`
         select ${docDate}::text as date,
@@ -298,39 +306,33 @@ export const GET = defineRoute({
         limit 1000
       `)),
       (db.execute(sql`
-        select to_char(${docDate}, 'YYYY-MM') as month, ${docFunc} as func,
-          sum(${docLeg}) as amount, max(${docDate})::text as late
+        with events as (${docEvents})
+        select to_char(events.event_date, 'YYYY-MM') as month, ${docFunc} as func,
+          sum(${docLeg} * events.direction) as amount, max(events.event_date)::text as late
         from documents d
+        join events on events.document_id = d.id
         ${docJoins}
-        where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
-          and ${docDate} >= ${from}
-          and ${docDate} <= ${to}
-          ${docScope}
-          ${postedDoc}
+        where d.org_id = ${user.orgId} and d.party_id = ${party}
         group by 1, 2 order by 1, 2
       `)),
       (db.execute(sql`
-        select d.kind as name, ${docFunc} as func, sum(${docLeg}) as amount,
-          count(*) as n, max(${docDate})::text as late
+        with events as (${docEvents})
+        select d.kind as name, ${docFunc} as func, sum(${docLeg} * events.direction) as amount,
+          sum(events.direction)::int as n, max(events.event_date)::text as late
         from documents d
+        join events on events.document_id = d.id
         ${docJoins}
-        where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
-          and ${docDate} >= ${from}
-          and ${docDate} <= ${to}
-          ${docScope}
-          ${postedDoc}
+        where d.org_id = ${user.orgId} and d.party_id = ${party}
         group by 1, 2 order by 1, 2
       `)),
       (db.execute(sql`
-        select ${docFunc} as func, count(*) as n, coalesce(sum(${docLeg}), 0) as amount,
-          max(${docDate})::text as late
+        with events as (${docEvents})
+        select ${docFunc} as func, sum(events.direction)::int as n, coalesce(sum(${docLeg} * events.direction), 0) as amount,
+          max(events.event_date)::text as late
         from documents d
+        join events on events.document_id = d.id
         ${docJoins}
-        where d.org_id = ${user.orgId} and d.party_id = ${party} and d.voided_at is null
-          and ${docDate} >= ${from}
-          and ${docDate} <= ${to}
-          ${docScope}
-          ${postedDoc}
+        where d.org_id = ${user.orgId} and d.party_id = ${party}
         group by 1 order by 1
       `)),
     ]);

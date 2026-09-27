@@ -317,12 +317,23 @@ export async function calculateForecast(scope: ForecastScope) {
        where o.org_id = ${scope.orgId} and o.is_active
          and o.expected_close_date between ${scope.periodStart}::date and ${scope.periodEnd}::date
          ${ownerFilter}
-    ), actuals as (
-      select d.currency, coalesce(sum(case when d.kind = 'customer_invoice' then d.subtotal else -d.subtotal end), 0)::numeric(19,4) as closed_amount
+    ), document_events as (
+      select d.id as document_id, d.document_date::date as event_date, 1::int as direction
         from documents d
-       where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit') and d.status = 'posted'
+       where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit')
+         and d.status in ('posted', 'voided')
+      union all
+      select d.id as document_id, d.voided_at::date as event_date, -1::int as direction
+        from documents d
+       where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit')
+         and d.status = 'voided' and d.voided_at is not null
+    ), actuals as (
+      select d.currency, coalesce(sum(case when d.kind = 'customer_invoice' then d.subtotal * events.direction else -d.subtotal * events.direction end), 0)::numeric(19,4) as closed_amount
+        from documents d
+        join document_events events on events.document_id = d.id
+       where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit')
          ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, scope.allowedSubsidiaryIds == null ? null : new Set(scope.allowedSubsidiaryIds))}
-         and d.document_date between ${scope.periodStart}::date and ${scope.periodEnd}::date
+         and events.event_date between ${scope.periodStart}::date and ${scope.periodEnd}::date
          ${ownerActualsFilter}
          ${teamActualsFilter}
        group by d.currency

@@ -1,5 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
+import { activePostingPrimaryBookId } from '@openbooks/engine/src/platform/accounting-books.ts'
 import { addMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
@@ -150,6 +151,7 @@ export async function expensesDashboard(
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<ExpensesDashboardData> {
   const to = await businessToday(orgId)
+  const primaryBookId = await activePostingPrimaryBookId(orgId)
   const monthStart = startOfMonth(to)
   const from = addMonthsStart(to, -11)
   const priorFrom = addMonthsStart(to, -23)
@@ -164,8 +166,8 @@ export async function expensesDashboard(
         coalesce(sum(total) filter (where status = 'pending_approval'), 0) as pending_total,
         count(*) filter (where status = 'approved') as approved_count,
         coalesce(sum(total) filter (where status = 'approved'), 0) as approved_total,
-        count(*) filter (where status = 'posted' and posting_date >= ${monthStart}) as posted_month_count,
-        coalesce(sum(total) filter (where status = 'posted' and posting_date >= ${monthStart}), 0) as posted_month_total
+        count(*) filter (where status = 'posted' and posting_date >= ${monthStart}) as posted_month_count, -- Live entries only: the live pipeline omits reports that have been voided
+        coalesce(sum(total) filter (where status = 'posted' and posting_date >= ${monthStart}), 0) as posted_month_total -- Live entries only: the live pipeline omits reports that have been voided
       from documents
       where org_id = ${orgId} and kind = 'expense_report' and voided_at is null
         ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds)}
@@ -221,6 +223,7 @@ export async function expensesDashboard(
       join documents d on d.id = e.source_document_id and d.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and d.voided_at is null
+        and e.book_id = ${primaryBookId}
         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
         and d.kind = 'expense_report'
@@ -245,6 +248,7 @@ export async function expensesDashboard(
         join documents d on d.id = e.source_document_id and d.org_id = e.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
         where l.org_id = ${orgId} and d.voided_at is null
+          and e.book_id = ${primaryBookId}
           ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
           ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
           and d.kind = 'expense_report'
@@ -263,6 +267,7 @@ export async function expensesDashboard(
       join documents d on d.id = e.source_document_id and d.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       where l.org_id = ${orgId} and d.voided_at is null
+        and e.book_id = ${primaryBookId}
         ${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
         ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowedSubsidiaryIds)}
         and d.kind in ('expense_report', 'vendor_bill')

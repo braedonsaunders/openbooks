@@ -1,5 +1,5 @@
 import 'server-only'
-import { sql } from 'drizzle-orm'
+import { sql, type SQL } from 'drizzle-orm'
 import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/platform/business-date.ts'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { add, mulDecimal } from '@openbooks/engine/src/money/money.ts'
@@ -66,6 +66,25 @@ type OpenPoRow = {
   name: string | null
   total: string
   currency: string
+}
+
+function documentMovements(orgId: string, kinds: string[], from: string, through: string, docScope: SQL) {
+  const kindFilter = sql`d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})`;
+  return sql`
+    select coalesce(d.document_date, d.posting_date)::date as dt, sub.base_currency as func,
+           round(abs(d.total * d.fx_rate), 4) as amount
+      from documents d
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+     where d.org_id = ${orgId} and ${kindFilter} and d.status in ('posted', 'voided')
+       and coalesce(d.document_date, d.posting_date)::date between ${from}::date and ${through}::date${docScope}
+    union all
+    select d.voided_at::date as dt, sub.base_currency as func,
+           -round(abs(d.total * d.fx_rate), 4) as amount
+      from documents d
+      left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+     where d.org_id = ${orgId} and ${kindFilter} and d.status = 'voided' and d.voided_at is not null
+       and d.voided_at::date between ${from}::date and ${through}::date${docScope}
+  `;
 }
 
 /**
@@ -198,15 +217,9 @@ export async function purchasingHome(
     // translate txn→functional at their maintained rate; the second leg to
     // presentation happens per (week, functional) below.
     grants.ap ? db.execute(sql`
-      select (date_trunc('week', coalesce(d.document_date, d.posting_date)))::date as wk,
-             sub.base_currency as func,
-             max(coalesce(d.document_date, d.posting_date))::text as late,
-             coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as spend
-        from documents d
-        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
-       where d.org_id = ${orgId} and d.kind = 'vendor_bill' and d.status = 'posted'
-         and d.voided_at is null${docScope}
-         and coalesce(d.document_date, d.posting_date) >= ${trendFrom}
+      select date_trunc('week', movement.dt)::date as wk, movement.func,
+             max(movement.dt)::text as late, coalesce(sum(movement.amount), 0) as spend
+        from (${documentMovements(orgId, ['vendor_bill'], trendFrom, today, docScope)}) movement
        group by 1, 2
     `) : noTrend,
     // Directory badges + the remaining vitals (money scalars moved to the
@@ -217,7 +230,8 @@ export async function purchasingHome(
         ${ordersOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'purchase_order'
           and d.status in ('draft', 'pending_approval', 'approved') and d.voided_at is null${docScope})` : sql`0`} as open_pos,
         (select count(*) from documents d where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
-          and d.status = 'posted' and d.voided_at is null${docScope}
+          and d.status = 'posted' -- Live entries only: the badge counts payments still posted today
+          and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= ${ago7}) as payments_7d,
         ${expensesOn ? sql`(select count(*) from documents d where d.org_id = ${orgId} and d.kind = 'expense_report'
           and d.status in ('draft', 'pending_approval', 'approved') and d.voided_at is null${docScope})` : sql`0`} as unposted_expenses,
@@ -227,24 +241,14 @@ export async function purchasingHome(
     `),
     // 7-day payment value per (date, functional) for presentation translation.
     grants.ap ? db.execute(sql`
-      select coalesce(d.document_date, d.posting_date)::text as dt, sub.base_currency as func,
-             coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as amt
-        from documents d
-        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
-       where d.org_id = ${orgId} and d.kind in ('vendor_payment', 'check')
-         and d.status = 'posted' and d.voided_at is null${docScope}
-         and coalesce(d.document_date, d.posting_date) >= ${ago7}
+      select movement.dt::text as dt, movement.func, coalesce(sum(movement.amount), 0) as amt
+        from (${documentMovements(orgId, ['vendor_payment', 'check'], ago7, today, docScope)}) movement
        group by 1, 2
     `) : noFlows,
     // 30-day billed spend per (date, functional) for presentation translation.
     grants.ap ? db.execute(sql`
-      select coalesce(d.document_date, d.posting_date)::text as dt, sub.base_currency as func,
-             coalesce(sum(round(abs(d.total * d.fx_rate), 4)), 0) as amt
-        from documents d
-        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
-       where d.org_id = ${orgId} and d.kind = 'vendor_bill'
-         and d.status = 'posted' and d.voided_at is null${docScope}
-         and coalesce(d.document_date, d.posting_date) >= ${ago30}
+      select movement.dt::text as dt, movement.func, coalesce(sum(movement.amount), 0) as amt
+        from (${documentMovements(orgId, ['vendor_bill'], ago30, today, docScope)}) movement
        group by 1, 2
     `) : noFlows,
     // Open purchase-order headers translate per-row in JS: POs never post,

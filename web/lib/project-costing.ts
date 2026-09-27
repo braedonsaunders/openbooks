@@ -456,8 +456,8 @@ async function projectUnbilledInSnapshot(orgId: string, projectId: string, opts:
      where dl.org_id = ${orgId}
        and coalesce(dl.project_id, d.project_id) = ${projectId}
        and dl.is_billable and dl.billed_by_line_id is null
-       and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
-         or (d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check')))
+       and ((d.kind = 'project_charge' and d.status in ('approved','posted')) -- Live entries only: unbilled project work includes currently approved and posted charges
+         or (d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check'))) -- Live entries only: unbilled project work includes currently posted costs
   `)
   const tr = timeRow.rows[0] ?? {}
   const lr = lineRow.rows[0] ?? {}
