@@ -47,7 +47,7 @@ const hooks = registerHooks({
 
 const postRouteUrl = "./route.ts?projects-create-integration";
 const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 const { db } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");

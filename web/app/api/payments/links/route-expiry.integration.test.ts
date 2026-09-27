@@ -47,7 +47,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?payment-links-expiry-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { sealJson } = await import("@openbooks/engine/src/platform/secrets.ts");

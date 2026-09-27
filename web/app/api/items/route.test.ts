@@ -151,7 +151,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?item-create-test'
 const { POST } = await import(routeUrl) as typeof import('./route.ts')
-hooks.deregister()
+test.after(() => test.after(() => hooks.deregister()))
 
 function reset(): void {
   state.item = null

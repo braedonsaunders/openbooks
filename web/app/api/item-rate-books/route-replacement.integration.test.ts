@@ -36,7 +36,7 @@ const { POST } = (await import(bookRouteUrl)) as typeof import('./route')
 
 const { withBypassContext, withOrgContext, db } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-hooks.deregister()
+test.after(() => hooks.deregister())
 
 
 function bookPost(body: Record<string, unknown>) {

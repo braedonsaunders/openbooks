@@ -33,7 +33,7 @@ stubModules({
         async transaction(work) { return work({ execute: async () => ({ rows: [] }) }) },
       }
     `,
-    "../../../../../lib/authz": `
+    "@/lib/authz": `
       // Org-wide pricing-policy gate: only an explicit unrestricted scope
       // passes — the canonical assertUnrestrictedScope rule.
       export function guardUnrestrictedScope(authz) {
@@ -41,7 +41,7 @@ stubModules({
         return Response.json({ error: 'requires unrestricted subsidiary access' }, { status: 403 })
       }
     `,
-    "../../../../../lib/feature-gates": `
+    "@/lib/feature-gates": `
       const state = globalThis[Symbol.for('openbooks.item-rates-scope-test')]
       export async function guardFeaturePermission() {
         return {

@@ -183,7 +183,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['../../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
   ['../../../../lib/features', 'mock:features'],
   ['../../../../lib/custom-fields', 'mock:custom-fields'],
 ])
@@ -206,7 +206,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?item-accounting-audit-test'
 const { PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+test.after(() => hooks.deregister())
 
 function reset(): void {
   routeState.item = structuredClone(originalItem)

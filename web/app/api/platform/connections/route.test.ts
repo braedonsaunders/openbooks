@@ -105,7 +105,7 @@ const hooks = registerHooks({
 
 const connection_create_urlUrl = './route.ts?connection-create-url'
 const { GET, POST } = (await import(connection_create_urlUrl)) as typeof import('./route.ts');
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 const refused = [
   ["loopback IPv4", "odoo", { url: "http://127.0.0.1/" }],

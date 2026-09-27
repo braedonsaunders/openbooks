@@ -105,7 +105,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?record-pdf-send-test'
 const { GET, POST } = (await import(routeUrl)) as typeof import('./route.ts')
-hooks.deregister()
+test.after(() => hooks.deregister())
 
 function reset(): void {
   state.granted = new Set()

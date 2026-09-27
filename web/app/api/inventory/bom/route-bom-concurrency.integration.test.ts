@@ -58,7 +58,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?bom-route-concurrency-test";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(

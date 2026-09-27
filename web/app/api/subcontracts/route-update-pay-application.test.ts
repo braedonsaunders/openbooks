@@ -155,7 +155,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?subcontracts-update-lines-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 const APP_ID = "00000000-0000-4000-8000-00000000b001";
 const SOV_ID = "00000000-0000-4000-8000-00000000b002";
@@ -181,17 +181,17 @@ function updateBody(lines: unknown, expectedRevision: unknown = 1): Record<strin
   return { action: "updatePayApplication", payApplicationId: APP_ID, expectedRevision, lines };
 }
 
-test("updatePayApplication with missing lines is 422 and never reaches the engine", async () => {
+test("updatePayApplication with missing lines is rejected at the body boundary", async () => {
   reset();
-  const response = await post({ action: "updatePayApplication", payApplicationId: APP_ID });
+  const response = await post({ action: "updatePayApplication", payApplicationId: APP_ID, expectedRevision: 1 });
 
-  assert.equal(response.status, 422);
-  const payload = (await response.json()) as { error?: string };
-  assert.match(payload.error ?? "", /lines must be an array/);
+  assert.equal(response.status, 400);
+  const payload = (await response.json()) as { issues?: Array<{ path: string }> };
+  assert.equal(payload.issues?.[0]?.path, "lines");
   assert.equal(routeState.updateCalls.length, 0);
 });
 
-test("updatePayApplication without a revision token is 422 and never reaches the engine", async () => {
+test("updatePayApplication without a revision token is rejected at the body boundary", async () => {
   reset();
   const lines = [{ sovLineId: SOV_ID, workCompletedThisPeriod: "10", materialsStoredCurrent: "0" }];
   // A missing token must arrive as a MISSING key (JSON drops undefined),
@@ -200,23 +200,22 @@ test("updatePayApplication without a revision token is 422 and never reaches the
   delete missing.expectedRevision;
   for (const body of [missing, updateBody(lines, 0), updateBody(lines, 1.5), updateBody(lines, "1")]) {
     const response = await post(body);
-    assert.equal(response.status, 422, `expectedRevision=${JSON.stringify(body.expectedRevision)}`);
-    const payload = (await response.json()) as { error?: string };
-    assert.match(payload.error ?? "", /expectedRevision/);
+    assert.equal(response.status, 400, `expectedRevision=${JSON.stringify(body.expectedRevision)}`);
+    const payload = (await response.json()) as { issues?: Array<{ path: string }> };
+    assert.equal(payload.issues?.[0]?.path, "expectedRevision");
   }
   assert.equal(routeState.updateCalls.length, 0);
 });
 
-test("updatePayApplication with a line missing its identity is 422 naming the line", async () => {
+test("updatePayApplication with a line missing its identity is rejected at the body boundary", async () => {
   reset();
   const response = await post(
     updateBody([{ workCompletedThisPeriod: "10", materialsStoredCurrent: "0" }]),
   );
 
-  assert.equal(response.status, 422);
-  const payload = (await response.json()) as { error?: string };
-  assert.match(payload.error ?? "", /line 1/);
-  assert.match(payload.error ?? "", /sovLineId/);
+  assert.equal(response.status, 400);
+  const payload = (await response.json()) as { issues?: Array<{ path: string }> };
+  assert.equal(payload.issues?.[0]?.path, "lines.0.sovLineId");
   assert.equal(routeState.updateCalls.length, 0);
 });
 

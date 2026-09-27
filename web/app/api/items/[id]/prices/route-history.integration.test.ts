@@ -42,7 +42,7 @@ const hooks = registerHooks({
 const routeUrl = './route.ts?item-price-history'
 const { POST, PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
 const { resolveItemPrice } = await import('../../../../../lib/item-pricing.ts')
-hooks.deregister()
+test.after(() => hooks.deregister())
 
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')

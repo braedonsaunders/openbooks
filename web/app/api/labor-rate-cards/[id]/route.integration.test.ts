@@ -49,7 +49,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?lrc-array-binding-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(

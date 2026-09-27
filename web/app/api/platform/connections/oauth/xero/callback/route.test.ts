@@ -110,7 +110,7 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocks: Record<string, string> = {
-      "../../../../../../../lib/authz": "mock:authz",
+      "@/lib/authz": "mock:authz",
       "../../../../../lib/authz": "mock:authz",
       "../../../../../../../lib/super-admin": "mock:super-admin",
       "@openbooks/engine/src/sync/connection.ts": "mock:connection",
@@ -134,7 +134,7 @@ const xero_oauth_callbackUrl = './route.ts?xero-oauth-callback'
 const { GET } = (await import(xero_oauth_callbackUrl)) as typeof import('./route.ts');
 const xero_oauth_callback_flowUrl = '../../_flow.ts?xero-oauth-callback-flow'
 const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(xero_oauth_callback_flowUrl)) as typeof import('../../_flow.ts');
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 
 function reset(): void {

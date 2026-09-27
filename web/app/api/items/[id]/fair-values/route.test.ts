@@ -68,7 +68,7 @@ const routeUrl = "./route.ts?fair-values-concurrency-test";
 const { PATCH, DELETE } = (await import(
   routeUrl
 )) as typeof import("./route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } =

@@ -158,7 +158,7 @@ const mockSources = new Map<string, string>([
           if (text.includes('from connections')) {
             return {
               rows: [{
-                id: 'conn-1',
+                id: '00000000-0000-4000-8000-000000000001',
                 orgId: 'org-1',
                 status: 'connected',
                 source: 'netsuite',
@@ -190,7 +190,7 @@ const hooks = registerHooks({
     const mock =
       specifier === "next/server"
         ? "mock:next-server"
-        : specifier === "../../../../../../lib/authz"
+        : specifier === "@/lib/authz"
             ? "mock:authz"
             : specifier === "@openbooks/engine/src/connection.ts"
               ? "mock:connection"
@@ -214,7 +214,7 @@ const hooks = registerHooks({
 });
 
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 function reset(): void {
   routeState.jobs.clear();
@@ -231,7 +231,7 @@ function reset(): void {
 }
 
 function request(mode: string): Request {
-  return new Request("http://openbooks.test/api/platform/connections/conn-1/run", {
+  return new Request("http://openbooks.test/api/platform/connections/00000000-0000-4000-8000-000000000001/run", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ mode }),
@@ -246,12 +246,12 @@ test("concurrent requests serialize the check and queue claim", async () => {
   });
 
   const first = POST(request("full_migration"), {
-    params: Promise.resolve({ id: "conn-1" }),
+    params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
   });
   await firstEnqueueStarted;
 
   const second = POST(request("full_migration"), {
-    params: Promise.resolve({ id: "conn-1" }),
+    params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
   });
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(routeState.lockWaiters.length, 1, "the second request waits on the advisory lock");
@@ -261,7 +261,7 @@ test("concurrent requests serialize the check and queue claim", async () => {
 
   assert.equal(firstResponse.status, 200);
   assert.deepEqual(await firstResponse.json(), {
-    jobId: "migration|conn-1|full_migration",
+    jobId: "migration|00000000-0000-4000-8000-000000000001|full_migration",
     mode: "full_migration",
   });
   assert.equal(secondResponse.status, 409);
@@ -274,25 +274,25 @@ test("a terminal queue record can be replaced for a later deliberate run", async
   reset();
 
   const firstResponse = await POST(request("mirror"), {
-    params: Promise.resolve({ id: "conn-1" }),
+    params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
   });
   assert.equal(firstResponse.status, 200);
-  const prior = routeState.jobs.get("migration|conn-1|mirror");
+  const prior = routeState.jobs.get("migration|00000000-0000-4000-8000-000000000001|mirror");
   assert.ok(prior);
   prior.state = "completed";
 
   const secondResponse = await POST(request("mirror"), {
-    params: Promise.resolve({ id: "conn-1" }),
+    params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
   });
   assert.equal(secondResponse.status, 200);
   assert.deepEqual(await secondResponse.json(), {
-    jobId: "migration|conn-1|mirror",
+    jobId: "migration|00000000-0000-4000-8000-000000000001|mirror",
     mode: "mirror",
   });
   assert.equal(routeState.createdJobIds.length, 2);
   assert.deepEqual(routeState.createdJobIds, [
-    "migration|conn-1|mirror",
-    "migration|conn-1|mirror",
+    "migration|00000000-0000-4000-8000-000000000001|mirror",
+    "migration|00000000-0000-4000-8000-000000000001|mirror",
   ]);
 });
 
@@ -316,7 +316,7 @@ for (const [name, config] of refusedConnectorUrls) {
     routeState.config = { ...config };
 
     const response = await POST(request("full_migration"), {
-      params: Promise.resolve({ id: "conn-1" }),
+      params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
     });
 
     assert.equal(response.status, 422);
@@ -333,7 +333,7 @@ test("run does not enqueue after a concurrent connection change", async () => {
   routeState.versionMatch = false;
 
   const response = await POST(request("full_migration"), {
-    params: Promise.resolve({ id: "conn-1" }),
+    params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
   });
 
   assert.equal(response.status, 409);

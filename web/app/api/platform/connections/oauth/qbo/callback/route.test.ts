@@ -93,7 +93,7 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocks: Record<string, string> = {
-      "../../../../../../../lib/authz": "mock:authz",
+      "@/lib/authz": "mock:authz",
       "../../../../../lib/authz": "mock:authz",
       "../../../../../../../lib/super-admin": "mock:super-admin",
       "@openbooks/engine/src/sync/connection.ts": "mock:connection",
@@ -117,7 +117,7 @@ const qbo_oauth_callbackUrl = './route.ts?qbo-oauth-callback'
 const { GET } = (await import(qbo_oauth_callbackUrl)) as typeof import('./route.ts');
 const qbo_oauth_callback_flowUrl = '../../_flow.ts?qbo-oauth-callback-flow'
 const { CONNECTION_OAUTH_COOKIE, mintConnectionOauthState } = (await import(qbo_oauth_callback_flowUrl)) as typeof import('../../_flow.ts');
-hooks.deregister();
+test.after(() => hooks.deregister())
 
 
 function resetQbo(): void {
