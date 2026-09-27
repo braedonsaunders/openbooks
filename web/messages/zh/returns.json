@@ -1,0 +1,45 @@
+{
+  "list": {
+    "title": "退货授权",
+    "description": "授权客户退货、接收商品、检查每个明细并记录处理方式。",
+    "columns": {
+      "source": "来源单据",
+      "stage": "退货阶段"
+    }
+  },
+  "actions": {
+    "new": "新建退货授权"
+  },
+  "workflow": {
+    "title": "退货流程",
+    "requested": "记录从客户收到的数量，或填写原因后拒绝此申请。",
+    "inspection": "选择接收的数量以及已接收商品的存放位置。",
+    "line": "明细 {number}",
+    "receivedQuantity": "收到数量",
+    "acceptedQuantity": "接收数量",
+    "receivedSummary": "已收到 {quantity}，授权数量为 {authorized}",
+    "disposition": "处理方式",
+    "location": "库存位置",
+    "vendor": "供应商",
+    "restock": "重新入库",
+    "scrap": "报废",
+    "vendorReturn": "退还供应商",
+    "receive": "记录收货",
+    "inspect": "完成检查",
+    "reject": "拒绝退货",
+    "received": "已记录收到数量",
+    "completed": "检查完成并已开具客户贷项",
+    "awaitingApproval": "检查已记录；客户贷项正在等待审批。",
+    "rejected": "退货授权已拒绝",
+    "receiveFailed": "无法记录收到数量",
+    "inspectFailed": "无法完成检查",
+    "rejectFailed": "无法拒绝退货",
+    "rejectTitle": "拒绝 {number}",
+    "reason": "原因",
+    "reasonPlaceholder": "说明拒绝退货的原因",
+    "emailReceived": "发送收货通知",
+    "emailDecision": "发送最终决定",
+    "emailSent": "邮件已发送",
+    "emailFailed": "无法发送退货更新"
+  }
+}

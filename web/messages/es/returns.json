@@ -1,0 +1,45 @@
+{
+  "list": {
+    "title": "Autorizaciones de devolución",
+    "description": "Autorice devoluciones de clientes, reciba los artículos, inspeccione cada línea y registre su destino.",
+    "columns": {
+      "source": "Documento de origen",
+      "stage": "Etapa de devolución"
+    }
+  },
+  "actions": {
+    "new": "Nueva autorización de devolución"
+  },
+  "workflow": {
+    "title": "Proceso de devolución",
+    "requested": "Registre las cantidades recibidas del cliente o rechace la solicitud con un motivo.",
+    "inspection": "Elija cuántas unidades recibidas acepta y dónde deben almacenarse.",
+    "line": "Línea {number}",
+    "receivedQuantity": "Cantidad recibida",
+    "acceptedQuantity": "Cantidad aceptada",
+    "receivedSummary": "{quantity} recibidas de {authorized} autorizadas",
+    "disposition": "Destino",
+    "location": "Ubicación de existencias",
+    "vendor": "Proveedor",
+    "restock": "Reponer existencias",
+    "scrap": "Desechar",
+    "vendorReturn": "Devolver al proveedor",
+    "receive": "Registrar recepción",
+    "inspect": "Completar inspección",
+    "reject": "Rechazar devolución",
+    "received": "Cantidades recibidas registradas",
+    "completed": "Inspección completada y crédito al cliente emitido",
+    "awaitingApproval": "La inspección está registrada; el crédito al cliente espera aprobación.",
+    "rejected": "Autorización de devolución rechazada",
+    "receiveFailed": "No se pudieron registrar las cantidades recibidas",
+    "inspectFailed": "No se pudo completar la inspección",
+    "rejectFailed": "No se pudo rechazar la devolución",
+    "rejectTitle": "Rechazar {number}",
+    "reason": "Motivo",
+    "reasonPlaceholder": "Explique por qué se rechaza la devolución",
+    "emailReceived": "Enviar recepción por correo",
+    "emailDecision": "Enviar decisión final por correo",
+    "emailSent": "Correo enviado",
+    "emailFailed": "No se pudo enviar la actualización de devolución"
+  }
+}

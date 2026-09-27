@@ -1,0 +1,45 @@
+{
+  "list": {
+    "title": "返品承認",
+    "description": "顧客返品を承認し、商品を受領して各明細を検査し、処置を記録します。",
+    "columns": {
+      "source": "元の伝票",
+      "stage": "返品段階"
+    }
+  },
+  "actions": {
+    "new": "返品承認を新規作成"
+  },
+  "workflow": {
+    "title": "返品処理",
+    "requested": "顧客から受け取った数量を記録するか、理由を添えて申請を却下してください。",
+    "inspection": "受領数量のうち承認する数量と、保管場所を選択してください。",
+    "line": "明細 {number}",
+    "receivedQuantity": "受領数量",
+    "acceptedQuantity": "承認数量",
+    "receivedSummary": "承認数量 {authorized} のうち {quantity} を受領",
+    "disposition": "処置",
+    "location": "在庫場所",
+    "vendor": "仕入先",
+    "restock": "在庫に戻す",
+    "scrap": "廃棄",
+    "vendorReturn": "仕入先へ返品",
+    "receive": "受領を記録",
+    "inspect": "検査を完了",
+    "reject": "返品を却下",
+    "received": "受領数量を記録しました",
+    "completed": "検査が完了し、顧客クレジットを発行しました",
+    "awaitingApproval": "検査を記録しました。顧客クレジットは承認待ちです。",
+    "rejected": "返品承認を却下しました",
+    "receiveFailed": "受領数量を記録できませんでした",
+    "inspectFailed": "検査を完了できませんでした",
+    "rejectFailed": "返品を却下できませんでした",
+    "rejectTitle": "{number} を却下",
+    "reason": "理由",
+    "reasonPlaceholder": "返品を却下する理由を入力",
+    "emailReceived": "受領をメールで通知",
+    "emailDecision": "最終決定をメールで通知",
+    "emailSent": "メールを送信しました",
+    "emailFailed": "返品の更新を送信できませんでした"
+  }
+}

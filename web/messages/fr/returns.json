@@ -1,0 +1,45 @@
+{
+  "list": {
+    "title": "Autorisations de retour",
+    "description": "Autorisez les retours clients, réceptionnez les articles, inspectez chaque ligne et enregistrez leur traitement.",
+    "columns": {
+      "source": "Document source",
+      "stage": "Étape du retour"
+    }
+  },
+  "actions": {
+    "new": "Nouvelle autorisation de retour"
+  },
+  "workflow": {
+    "title": "Traitement du retour",
+    "requested": "Saisissez les quantités reçues du client ou refusez la demande en indiquant un motif.",
+    "inspection": "Choisissez la quantité acceptée et l'emplacement des articles acceptés.",
+    "line": "Ligne {number}",
+    "receivedQuantity": "Quantité reçue",
+    "acceptedQuantity": "Quantité acceptée",
+    "receivedSummary": "{quantity} reçues sur {authorized} autorisées",
+    "disposition": "Traitement",
+    "location": "Emplacement de stock",
+    "vendor": "Fournisseur",
+    "restock": "Remettre en stock",
+    "scrap": "Mettre au rebut",
+    "vendorReturn": "Retourner au fournisseur",
+    "receive": "Enregistrer la réception",
+    "inspect": "Terminer l'inspection",
+    "reject": "Refuser le retour",
+    "received": "Quantités reçues enregistrées",
+    "completed": "Inspection terminée et avoir client émis",
+    "awaitingApproval": "L'inspection est enregistrée ; l'avoir client attend son approbation.",
+    "rejected": "Autorisation de retour refusée",
+    "receiveFailed": "Impossible d'enregistrer les quantités reçues",
+    "inspectFailed": "Impossible de terminer l'inspection",
+    "rejectFailed": "Impossible de refuser le retour",
+    "rejectTitle": "Refuser {number}",
+    "reason": "Motif",
+    "reasonPlaceholder": "Expliquez pourquoi le retour est refusé",
+    "emailReceived": "Envoyer la réception par e-mail",
+    "emailDecision": "Envoyer la décision finale par e-mail",
+    "emailSent": "E-mail envoyé",
+    "emailFailed": "Impossible d’envoyer la mise à jour du retour"
+  }
+}

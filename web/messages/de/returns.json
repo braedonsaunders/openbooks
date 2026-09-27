@@ -1,0 +1,45 @@
+{
+  "list": {
+    "title": "Rückgabegenehmigungen",
+    "description": "Kundenrückgaben genehmigen, Waren annehmen, jede Position prüfen und die weitere Behandlung erfassen.",
+    "columns": {
+      "source": "Quelldokument",
+      "stage": "Rückgabestatus"
+    }
+  },
+  "actions": {
+    "new": "Neue Rückgabegenehmigung"
+  },
+  "workflow": {
+    "title": "Rückgabeablauf",
+    "requested": "Erfassen Sie die vom Kunden eingegangenen Mengen oder lehnen Sie die Anfrage mit einer Begründung ab.",
+    "inspection": "Wählen Sie die anzunehmende Menge und den Lagerort für angenommene Waren.",
+    "line": "Position {number}",
+    "receivedQuantity": "Eingegangene Menge",
+    "acceptedQuantity": "Angenommene Menge",
+    "receivedSummary": "{quantity} von {authorized} genehmigten Einheiten eingegangen",
+    "disposition": "Behandlung",
+    "location": "Lagerort",
+    "vendor": "Lieferant",
+    "restock": "Einlagern",
+    "scrap": "Verschrotten",
+    "vendorReturn": "An Lieferant zurückgeben",
+    "receive": "Wareneingang erfassen",
+    "inspect": "Prüfung abschließen",
+    "reject": "Rückgabe ablehnen",
+    "received": "Eingegangene Mengen erfasst",
+    "completed": "Prüfung abgeschlossen und Kundengutschrift erstellt",
+    "awaitingApproval": "Prüfung erfasst; die Kundengutschrift wartet auf Genehmigung.",
+    "rejected": "Rückgabegenehmigung abgelehnt",
+    "receiveFailed": "Eingegangene Mengen konnten nicht erfasst werden",
+    "inspectFailed": "Prüfung konnte nicht abgeschlossen werden",
+    "rejectFailed": "Rückgabe konnte nicht abgelehnt werden",
+    "rejectTitle": "{number} ablehnen",
+    "reason": "Begründung",
+    "reasonPlaceholder": "Begründen Sie die Ablehnung der Rückgabe",
+    "emailReceived": "Eingang per E-Mail mitteilen",
+    "emailDecision": "Endgültige Entscheidung per E-Mail mitteilen",
+    "emailSent": "E-Mail gesendet",
+    "emailFailed": "Rückgabemitteilung konnte nicht gesendet werden"
+  }
+}
