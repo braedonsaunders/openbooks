@@ -81,6 +81,7 @@ export const SCHEDULER_OUTBOX_SCAN_KINDS = [
   "subscription_billing",
   "property_billing",
   "fx_providers",
+  "saas_metrics",
 ] as const;
 
 export type SchedulerOutboxScanKind = (typeof SCHEDULER_OUTBOX_SCAN_KINDS)[number];
@@ -515,6 +516,34 @@ async function runOutboxWork(row: OutboxRow): Promise<void> {
   if (row.kind === "subscription_billing") {
     const { runDueSubscriptions } = await import("../billing/subscription-billing.ts");
     await runDueSubscriptions();
+    return;
+  }
+  if (row.kind === "saas_metrics") {
+    const {
+      recomputeOpenSaasMetrics,
+      saasMetricsScanTargets,
+    } = await import("../billing/metrics/metrics-ledger.ts");
+    const targets = await saasMetricsScanTargets();
+    const problems = new Map<string, string[]>();
+    for (const orgId of targets.enabledOrgIds) {
+      try {
+        await recomputeOpenSaasMetrics(orgId);
+      } catch (error) {
+        const message = errorMessage(error);
+        problems.set(orgId, [...(problems.get(orgId) ?? []), message]);
+      }
+    }
+    for (const orgId of targets.skippedFeatureOffOrgIds) {
+      console.info(`[scheduler-outbox] saas metrics scan skipped org ${orgId}: feature off`);
+    }
+    await surfaceScanOrgFailures({
+      scan: "SaaS metrics",
+      noticeKind: "saas_metrics_scan_failed",
+      href: COLLECTIONS_HREF,
+      remedy: "Review subscription setup in Collections; the scan retries automatically.",
+      problems,
+      unattributed: [],
+    });
     return;
   }
   if (row.kind === "property_billing") {
