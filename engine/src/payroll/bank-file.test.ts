@@ -24,11 +24,13 @@ import {
   releasePayRunBankFile,
 } from "./bank-file-artifact.ts";
 import { packStatutoryComponents, setPackSlotAccount } from "./packs.ts";
+import { US_PACK_RATES } from "./us/rates.ts";
+import { upsertStatutoryRate } from "./statutory-rates.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
+import { seedOntarioEhtFixture, seedUsSuiAccount } from "./filing-test-fixtures.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 import { createScratchOrg, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
@@ -553,7 +555,7 @@ test("a sub-cent credit is refused rather than rounded into the file", () => {
 
 interface Fixture {
   orgId: string; subsidiaryId: string; actorId: string; scheduleId: string; profileId: string;
-  country: "CA" | "US"; currency: "CAD" | "USD"; region: string;
+  country: "CA" | "US"; currency: "CAD" | "USD"; region: string; suiFilingAccountId: string | null;
 }
 
 const account = async (orgId: string, number: string, name: string, type: string) => {
@@ -715,22 +717,21 @@ async function payrollOrg(
         taxPayableAccountId: accounts.craPayable,
         vacationPayableAccountId: accounts.vacationPayable,
         wagesTo: "expense",
-        // Presence-only TX SUI: a live-but-unconfigured SUI refuses by name
-        // at calculate, and these tests assert bank rails, never SUI amounts.
-        // Presence-only FUTA the same way: the 2026 Schedule A is not
-        // transcribed, so an unconfigured FUTA refuses by name; the ordinary
-        // 0.6% full-credit figure is the TEST entering a number as an
-        // employer would, and no expectation below asserts a FUTA amount.
-        ...(country === "US"
-          ? { us: { futaRate: "0.006", sui: { TX: { rate: "0.03", wageBase: "7000" } } } }
-          : {}),
       },
     })}::jsonb where id = ${org.orgId}`);
   await seedComponentsTolerantly(org.orgId, actorId, country);
   if (country === "CA") {
     await seedOntarioEhtFixture(org.orgId, actorId);
   }
+  let suiFilingAccountId: string | null = null;
   if (country === "US") {
+    const saveRate = (rateKey: string, filingAccountId: string | null, values: Record<string, unknown>) =>
+      upsertStatutoryRate({
+        orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey, region, filingAccountId, taxYear: 2026, values,
+      });
+    suiFilingAccountId = await seedUsSuiAccount(org.orgId, actorId, region);
+    await saveRate("us_sui", suiFilingAccountId, { rate: "0.03", wageBase: "7000" });
+    await saveRate("us_futa", null, { rate: "0.006" });
     for (const slot of ["fit", "fica", "futa", "suta", "state_income_tax", "local_income_tax"]) {
       await setPackSlotAccount(org.orgId, actorId, country, slot, accounts.craPayable);
     }
@@ -764,7 +765,7 @@ async function payrollOrg(
 
   return {
     orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, profileId,
-    country, currency, region,
+    country, currency, region, suiFilingAccountId,
   };
 }
 
@@ -805,10 +806,10 @@ async function employee(fx: Fixture, name: string, opts: {
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            country, province, pay_basis, federal_claim_code,
                                            provincial_claim_code, vacation_percent, vacation_method,
-                                           payment_method, filing_status, is_active, created_by, updated_by)
+                                           payment_method, filing_status, filing_account_id, is_active, created_by, updated_by)
     values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, ${fx.country}, ${fx.region},
             'hourly', 1, 1, ${fx.country === "US" ? null : "4"}, 'accrue',
-            ${opts.profileMethod ?? null}, ${fx.country === "US" ? "single" : null}, true,
+            ${opts.profileMethod ?? null}, ${fx.country === "US" ? "single" : null}, ${fx.suiFilingAccountId}, true,
             ${fx.actorId}, ${fx.actorId})`);
   if (opts.bank) {
     const canadian = "institution" in opts.bank;
