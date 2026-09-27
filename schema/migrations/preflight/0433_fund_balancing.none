@@ -1,0 +1,1 @@
+The added fund tables contain no existing rows, and the new segment columns default to non-balancing with no default value. Existing journal history is not rewritten. Enabling balancing later applies the statement-level check to touched entries and the provisioning service reports existing per-fund imbalances for review.
