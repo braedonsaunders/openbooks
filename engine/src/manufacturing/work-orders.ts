@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { allocateDocumentNumber } from "../records/numbering.ts";
-import { cmp, mul, normalizeMoney, toUnits, fromUnits } from "../money/money.ts";
+import { add, cmp, mul, normalizeMoney, toUnits, fromUnits } from "../money/money.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { getAvailableToPromise } from "../inventory/availability.ts";
@@ -47,6 +47,7 @@ const workOrderColumns = sql`id, org_id as "orgId", number, produced_item_id as 
   planned_start::text as "plannedStart", planned_end::text as "plannedEnd",
   released_at as "releasedAt", started_at as "startedAt", completed_at as "completedAt",
   closed_at as "closedAt", hold_reason as "holdReason", cancel_reason as "cancelReason",
+  hold_prior_status as "holdPriorStatus",
   standard_cost_snapshot::text as "standardCostSnapshot", cost_collected::text as "costCollected"`;
 
 type WorkOrderRow = {
@@ -57,6 +58,7 @@ type WorkOrderRow = {
   subsidiaryId: string | null; issueLocationId: string | null; receiptLocationId: string | null;
   plannedStart: string | null; plannedEnd: string | null; releasedAt: Date | null; startedAt: Date | null;
   completedAt: Date | null; closedAt: Date | null; holdReason: string | null; cancelReason: string | null;
+  holdPriorStatus: string | null;
   standardCostSnapshot: string | null; costCollected: string;
 };
 
@@ -492,7 +494,7 @@ async function releaseOne(
   await validateLocation(tx as Runner, orgId, order.subsidiaryId, receiptLocationId, "inbound");
 
   await tx.execute(sql`lock table bom_components in share mode`);
-  await explodeBom(tx, orgId, order.producedItemId, order.quantityOrdered, asOf);
+  const explosion = await explodeBom(tx, orgId, order.producedItemId, order.quantityOrdered, asOf);
   const directRows = await effectiveBomRows(tx, orgId, order.producedItemId, asOf);
   const revision = bomRevision(order.producedItemId, directRows);
   const operations = await tx.execute<{
@@ -544,10 +546,11 @@ async function releaseOne(
     const plannedRunMinutes = decimalValue(mul(operation.run_minutes_per_unit, order.quantityOrdered), "plannedRunMinutes", "Reduce the order quantity or revise the routing run time so the planned minutes fit the supported range.");
     const inserted = await tx.execute(sql`
       insert into mfg_wo_operations (org_id, work_order_id, sequence, name, work_center_id,
-        planned_setup_minutes, planned_run_minutes, quantity_planned, created_by, updated_by)
+        planned_setup_minutes, planned_run_minutes, quantity_planned, quality_gate, backflush_at,
+        created_by, updated_by)
       values (${orgId}, ${id}, ${operation.sequence}, ${operation.name}, ${operation.work_center_id},
         ${operation.setup_minutes}, ${plannedRunMinutes},
-        ${order.quantityOrdered}, ${actorId}, ${actorId}) returning id`);
+        ${order.quantityOrdered}, ${operation.quality_gate}, ${operation.backflush_at}, ${actorId}, ${actorId}) returning id`);
     const operationId = inserted.rows[0]?.id;
     if (!operationId) refuse("A work-order operation snapshot was not saved.", "write_failed", "Retry the release; contact an administrator if it continues.");
     await auditChange(tx, {
@@ -561,9 +564,10 @@ async function releaseOne(
   for (const material of preparedMaterials) {
     const inserted = await tx.execute(sql`
       insert into mfg_wo_materials (org_id, work_order_id, component_item_id, required_qty,
-        operation_seq, lot_serial_policy, shortage_qty, created_by, updated_by)
+        operation_seq, lot_serial_policy, shortage_qty, quantity_per, scrap_pct, created_by, updated_by)
       values (${orgId}, ${id}, ${material.itemId}, ${material.required}, ${material.operationSeq},
-        ${material.tracking}, ${material.shortage}, ${actorId}, ${actorId}) returning id`);
+        ${material.tracking}, ${material.shortage}, ${material.quantityPer}, ${material.scrapPct ?? "0"},
+        ${actorId}, ${actorId}) returning id`);
     const materialId = inserted.rows[0]?.id;
     if (!materialId) refuse("A work-order material snapshot was not saved.", "write_failed", "Retry the release; contact an administrator if it continues.");
     await auditChange(tx, {
@@ -572,6 +576,27 @@ async function releaseOne(
         componentItemId: material.itemId, requiredQty: material.required, shortageQty: material.shortage,
         operationSeq: material.operationSeq, quantityPer: material.quantityPer, scrapPct: material.scrapPct,
       },
+    });
+  }
+
+  const rootByproductIds = new Set(explosion.byproducts
+    .filter((line) => line.parentItemId === order.producedItemId)
+    .map((line) => line.itemId));
+  const byproductQuantities = new Map<string, string>();
+  for (const line of directRows) {
+    if (!line.is_byproduct || !rootByproductIds.has(line.component_item_id)) continue;
+    byproductQuantities.set(line.component_item_id,
+      add(byproductQuantities.get(line.component_item_id) ?? "0", line.quantity_per));
+  }
+  for (const [itemId, quantityPer] of byproductQuantities) {
+    const inserted = await tx.execute(sql`
+      insert into mfg_wo_byproducts (org_id, work_order_id, item_id, quantity_per, created_by, updated_by)
+      values (${orgId}, ${id}, ${itemId}, ${quantityPer}, ${actorId}, ${actorId}) returning id`);
+    const byproductId = inserted.rows[0]?.id;
+    if (!byproductId) refuse("A work-order by-product snapshot was not saved.", "write_failed", "Retry the release; contact an administrator if it continues.");
+    await auditChange(tx, {
+      orgId, actorId, table: "mfg_wo_byproducts", rowId: String(byproductId), action: "insert", before: null,
+      after: { itemId, quantityPer },
     });
   }
 
@@ -619,7 +644,8 @@ export async function holdWorkOrder(tx: SqlExecutor, orgId: string, actorId: str
     refuse(`Work order ${before.number} cannot be put on hold from ${before.status}.`, "invalid_work_order_transition", "Hold a released or in-progress work order.", 409);
   }
   const updated = await tx.execute<WorkOrderRow>(sql`
-    update mfg_work_orders set status='on_hold', hold_reason=${holdReason}, updated_by=${actorId}, updated_at=now()
+    update mfg_work_orders set status='on_hold', hold_reason=${holdReason}, hold_prior_status=${before.status},
+      updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and id=${id} and status=${before.status} returning ${workOrderColumns}`);
   const after = rowOrNotFound(updated.rows);
   await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update", before, after: { ...after, reason: holdReason } });
@@ -639,16 +665,13 @@ export async function resumeWorkOrder(tx: SqlExecutor, orgId: string, actorId: s
     if (before.status === "released" || before.status === "in_progress") return { ...before, pendingApproval: false };
     refuse(`Work order ${before.number} is ${before.status} and cannot resume.`, "invalid_work_order_transition", "Resume an order that is on hold.", 409);
   }
-  const held = (await tx.execute<{ before: { status?: string } | null }>(sql`
-    select changes->'before' as before from audit_log where org_id=${orgId} and table_name='mfg_work_orders'
-      and row_id=${id} and action='update' and changes->'after'->>'status'='on_hold'
-     order by at desc, id desc limit 1`)).rows[0];
-  const prior = held?.before?.status;
+  const prior = before.holdPriorStatus;
   if (prior !== "released" && prior !== "in_progress") {
-    refuse(`Work order ${before.number} has no valid prior state for its hold.`, "hold_history_missing", "Review the work-order audit history before resuming.", 409);
+    refuse(`Work order ${before.number} has no valid prior state for its hold.`, "hold_history_missing", "Restore the held work order's prior status to released or in progress before retrying.", 409);
   }
   const updated = await tx.execute<WorkOrderRow>(sql`
-    update mfg_work_orders set status=${prior}, hold_reason=null, updated_by=${actorId}, updated_at=now()
+    update mfg_work_orders set status=${prior}, hold_reason=null, hold_prior_status=null,
+      updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and id=${id} and status='on_hold' returning ${workOrderColumns}`);
   const after = rowOrNotFound(updated.rows);
   await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update", before, after: { ...after, reason: "Resumed from hold." } });
@@ -738,14 +761,14 @@ export async function cancelWorkOrder(tx: SqlExecutor, orgId: string, actorId: s
     await cancelPendingApprovals(tx, orgId, childGates.get(childBefore.id) ?? [], actorId, cancelReason ?? `Parent ${before.number} cancelled.`);
     const childAfter = await tx.execute<WorkOrderRow>(sql`
       update mfg_work_orders set status='cancelled', cancel_reason=${cancelReason ?? `Parent ${before.number} cancelled.`},
-        hold_reason=null, updated_by=${actorId}, updated_at=now()
+        hold_reason=null, hold_prior_status=null, updated_by=${actorId}, updated_at=now()
        where org_id=${orgId} and id=${childBefore.id} and status=${childBefore.status} returning ${workOrderColumns}`);
     const cancelledChild = rowOrNotFound(childAfter.rows);
     await auditChange(tx, { orgId, actorId, table: "mfg_work_orders", rowId: childBefore.id, action: "update", before: childBefore, after: { ...cancelledChild, reason: cancelReason ?? `Parent ${before.number} cancelled.` } });
   }
   await cancelPendingApprovals(tx, orgId, pendingGates, actorId, cancelReason ?? "Draft cancelled.");
   const updated = await tx.execute<WorkOrderRow>(sql`
-    update mfg_work_orders set status='cancelled', cancel_reason=${cancelReason}, hold_reason=null,
+    update mfg_work_orders set status='cancelled', cancel_reason=${cancelReason}, hold_reason=null, hold_prior_status=null,
       updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and id=${id} and status=${before.status} returning ${workOrderColumns}`);
   const after = rowOrNotFound(updated.rows);

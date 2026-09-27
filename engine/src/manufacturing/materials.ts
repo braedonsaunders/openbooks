@@ -2,22 +2,21 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import type { SqlExecutor } from "../platform/db.ts";
-import { isUuid } from "../platform/uuid.ts";
+import { businessToday } from "../platform/business-date.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
-import { CONTROL_ACCOUNT_TYPE_POLICY } from "../records/control-accounts.ts";
 import { assertItemsActive } from "../inventory/item-active.ts";
 import { assertMovementOwner, assertNoForeignOnHand, assertStockLocationAdmitsSubsidiary, resolveProfile } from "../inventory/profile-policy.ts";
 import { InventoryError, type InventoryProfile, type Runner } from "../inventory/contracts.ts";
 import { consumeLayers, recordConsumptions, resolveProvisionalUnitCost, type Consumption } from "../inventory/cost-layers.ts";
 import { getOnHandWith, lockInventoryPosition, periodForDate, primaryBookId, subsidiaryCurrency } from "../inventory/position.ts";
-import { assertInventoryAccountsPostable, inventoryOffsetAccountProblem, stockLocationDim } from "../inventory/journal.ts";
+import { inventoryOffsetAccountProblem, stockLocationDim } from "../inventory/journal.ts";
 import { validateTrackingSelection } from "../inventory/tracking.ts";
 import { bomRequiredQuantity } from "../inventory/bom-scrap.ts";
 import { assertManufacturingFeature } from "./gate.ts";
 import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, compareDecimal, decimalValue } from "./master-support.ts";
 import { getManufacturingPolicies } from "./policies.ts";
-import { postManufacturingEntry } from "./journal.ts";
+import { manufacturingControlAccount, postManufacturingEntry } from "./journal.ts";
 
 export interface MaterialIssueLine {
   materialId: string;
@@ -42,12 +41,12 @@ type Material = {
   id: string; component_item_id: string; component_code: string | null; component_name: string;
   required_qty: string; issued_qty: string; backflush_qty: string; operation_seq: number | null;
   lot_serial_policy: InventoryProfile["tracking"];
-  quantity_per: string | null; scrap_pct: string | null;
+  quantity_per: string; scrap_pct: string;
 };
 
 type Operation = {
   id: string; sequence: number; status: string; quantity_planned: string;
-  quantity_done: string; measured_qty: string | null; quality_gate: string | null; backflush_at: string | null;
+  quantity_done: string; measured_qty: string | null; quality_gate: string; backflush_at: string;
 };
 
 type IssueIntent = {
@@ -93,16 +92,10 @@ async function lockMaterials(tx: SqlExecutor, orgId: string, workOrderId: string
     select material.id, material.component_item_id, item.code as component_code, item.name as component_name,
            material.required_qty::text, material.issued_qty::text, material.backflush_qty::text,
            material.operation_seq, material.lot_serial_policy,
-           snapshot.changes->'after'->>'quantityPer' as quantity_per,
-           snapshot.changes->'after'->>'scrapPct' as scrap_pct
+           material.quantity_per::text as quantity_per,
+           material.scrap_pct::text as scrap_pct
       from mfg_wo_materials material
       join items item on item.org_id=material.org_id and item.id=material.component_item_id
-      left join lateral (
-        select changes from audit_log
-         where org_id=material.org_id and table_name='mfg_wo_materials'
-           and row_id=material.id and action='insert'
-         order by at, id limit 1
-      ) snapshot on true
      where material.org_id=${orgId} and material.work_order_id=${workOrderId}
      order by material.id for update of material`)).rows;
 }
@@ -113,39 +106,13 @@ async function loadOperation(tx: SqlExecutor, orgId: string, workOrderId: string
            operation.quantity_planned::text as quantity_planned,
            operation.quantity_done::text as quantity_done,
            operation.measured_qty::text as measured_qty,
-           snapshot.changes->'after'->>'qualityGate' as quality_gate,
-           snapshot.changes->'after'->>'backflushAt' as backflush_at
+           operation.quality_gate,
+           operation.backflush_at
       from mfg_wo_operations operation
-      left join lateral (
-        select changes from audit_log
-         where org_id=operation.org_id and table_name='mfg_wo_operations'
-           and row_id=operation.id and action='insert'
-         order by at, id limit 1
-      ) snapshot on true
      where operation.org_id=${orgId} and operation.work_order_id=${workOrderId} and operation.id=${operationId}
      ${lock ? sql`for update of operation` : sql``}`)).rows[0];
   if (!row) throw new ManufacturingNotFoundError();
   return row;
-}
-
-async function wipAccount(tx: SqlExecutor, orgId: string): Promise<string> {
-  const org = (await tx.execute<{ account_id: string | null }>(sql`
-    select settings->'controlAccounts'->>'mfgWip' as account_id
-      from orgs where id=${orgId} for share`)).rows[0];
-  if (!org) throw new ManufacturingNotFoundError();
-  const remedy = "Map Manufacturing WIP under Setup → Company & Accounting → Control accounts.";
-  if (!org.account_id || !isUuid(org.account_id)) {
-    refuse("The Manufacturing WIP control account role mfgWip is not mapped.", "mfg_wip_account_missing", remedy);
-  }
-  const account = (await tx.execute<{ id: string; type: string; is_active: boolean; is_summary: boolean }>(sql`
-    select id, type, is_active, is_summary from accounts
-     where org_id=${orgId} and id=${org.account_id} for share`)).rows[0];
-  const allowedTypes: readonly string[] = CONTROL_ACCOUNT_TYPE_POLICY.mfgWip;
-  if (!account || !account.is_active || account.is_summary || !allowedTypes.includes(account.type)) {
-    refuse("The Manufacturing WIP control account role mfgWip is not mapped to an active posting account.", "mfg_wip_account_invalid", remedy);
-  }
-  await assertInventoryAccountsPostable(tx as Runner, orgId, [account.id]);
-  return account.id;
 }
 
 async function requireValueOrder(tx: SqlExecutor, orgId: string, actorId: string, order: WorkOrder): Promise<WorkOrder> {
@@ -277,9 +244,6 @@ async function backflushIntents(
   const remaining = new Map<string, string>();
   const intents: IssueIntent[] = [];
   for (const material of required) {
-    if (!material.quantity_per) {
-      refuse(`Component ${materialName(material)} has no quantity-per snapshot for operation ${operation.sequence}.`, "material_snapshot_missing", "Create a new work order from the approved BOM and routing version.", 409);
-    }
     const requirement = bomRequiredQuantity(basisQuantity, material.quantity_per, material.scrap_pct);
     if (cmp(requirement.quantity, "0") <= 0 && cmp(requirement.exactQuantity, "0") > 0) {
       refuse(`Component ${materialName(material)} requires ${requirement.exactQuantity}, below the 0.0001 unit precision.`, "material_quantity_below_precision", "Increase the operation quantity or revise the BOM quantity per.");
@@ -376,13 +340,11 @@ async function postMaterialIssue(
     } else merged.set(key, { ...issue, sourceMaterialIds: [issue.material.id] });
   }
   const planned = [...merged.values()];
-  const wip = await wipAccount(tx, orgId);
+  const wip = await manufacturingControlAccount(tx, orgId, order.subsidiary_id, "mfgWip");
   if (!order.subsidiary_id || !order.issue_location_id || !order.bom_revision || order.routing_version === null) {
     refuse(`Work order ${order.number} is missing its released posting evidence.`, "work_order_snapshot_missing", "Release a new work order from a valid BOM and routing version.", 409);
   }
-  const dateRow = (await tx.execute<{ date: string }>(sql`select current_date::text as date`)).rows[0];
-  if (!dateRow) throw new ManufacturingError("The posting date could not be resolved.", { code: "posting_date_missing", remedy: "Retry the material issue; contact an administrator if it continues." });
-  const date = dateRow.date;
+  const date = await businessToday(orgId);
   const periodId = await periodForDate(orgId, date, tx);
   if (!periodId) refuse(`No accounting period is open for material issue on ${date}.`, "posting_period_missing", "Open the accounting period or choose an allowed posting date.");
   const bookId = await primaryBookId(orgId, tx);
@@ -528,9 +490,6 @@ export async function backflushOperation(
   const order = await loadOrder(tx, orgId, workOrderId, true);
   heldRefusal(order);
   const operation = await loadOperation(tx, orgId, workOrderId, operationId, true);
-  if (operation.backflush_at === null) {
-    refuse(`Operation ${operation.sequence} has no backflush setting in its release snapshot.`, "operation_snapshot_missing", "Create a new work order from the approved routing version.", 409);
-  }
   if (operation.backflush_at !== trigger) return { entryId: null, movementIds: [], fired: false };
   const expectedStatus = trigger === "start" ? "running" : "done";
   if (order.status !== "in_progress" || operation.status !== expectedStatus) {
@@ -576,9 +535,6 @@ export async function completeWorkOrderOperation(
   const order = await loadOrder(tx, orgId, workOrderId, true);
   heldRefusal(order);
   const operation = await loadOperation(tx, orgId, workOrderId, operationId, true);
-  if (operation.quality_gate === null) {
-    refuse(`Operation ${operation.sequence} has no quality gate in its release snapshot.`, "operation_snapshot_missing", "Create a new work order from the approved routing version.", 409);
-  }
   const doneQty = decimalValue(input.doneQty, "doneQty", "Enter the measured quantity completed as a positive exact amount.");
   if (compareDecimal(doneQty, "0") < 0) refuse(`Completed quantity for operation ${operation.sequence} cannot be negative.`, "invalid_done_quantity", "Enter a non-negative exact completed quantity.");
   const measuredQty = input.measuredQty == null ? null : decimalValue(input.measuredQty, "measuredQty", "Enter a non-negative exact measured quantity.");
