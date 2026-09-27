@@ -118,6 +118,10 @@ test("new refuses a template built from a different schema unless --allow-stale,
     const passed = await ahead.run(args, env);
     assert.match(passed.stderr, /refusing to rebuild backwards/, `the acknowledgement or a private template must pass the guard:\n${passed.stderr}`);
   }
+  const behind = await ahead.run(["new", "behindcheck"]);
+  assert.doesNotMatch(behind.stderr, /scripts\/testdb\.sh reset/, `a checkout behind the shared template must not be told to reset it:\n${behind.stderr}`);
+  const mine = await ahead.run(["new", "behindcheck"], { OPENBOOKS_TESTDB_TEMPLATE: "openbooks_template_mine" });
+  assert.match(mine.stderr, /OPENBOOKS_TESTDB_TEMPLATE=openbooks_template_mine scripts\/testdb\.sh reset --force$/m, mine.stderr);
 
   for (const [args, env] of [
     [["new", "--allow-stale", "stalecheck"]],
