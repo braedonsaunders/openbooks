@@ -21,10 +21,6 @@ import {
   withHarness,
 } from "../../testing/hrm-harness.ts";
 import {
-  createJobFamily,
-  createJobLevel,
-} from "./architecture.ts";
-import {
   computeGapSnapshot,
   fulfilPayInformationRequest,
   latestGapSnapshot,

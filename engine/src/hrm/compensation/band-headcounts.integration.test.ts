@@ -20,7 +20,6 @@ import {
   createJobFamily,
   createJobLevel,
 } from "./architecture.ts";
-import { createPayBand } from "./bands.ts";
 import { countBandHolders } from "./band-headcounts.ts";
 
 /**

@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { db } from "../platform/db.ts";
 import {
   dropScratchOrg,
 } from "../testing/fixtures.ts";

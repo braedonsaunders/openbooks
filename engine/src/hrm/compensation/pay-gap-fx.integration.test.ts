@@ -3,8 +3,6 @@ import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import {
-} from "../../testing/fixtures.ts";
-import {
   DB,
   seedFx,
   seedLevel,
@@ -12,10 +10,6 @@ import {
   setupHarness,
   withHarness,
 } from "../../testing/hrm-harness.ts";
-import {
-  createJobFamily,
-  createJobLevel,
-} from "./architecture.ts";
 import {
   computeGapSnapshot,
   latestGapSnapshot,
