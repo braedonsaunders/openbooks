@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
-import test from "node:test";
+import test, { after } from "node:test";
 
 const state = { saves: [] as unknown[][] };
 Object.assign(globalThis, { __taxRateProviderRouteTestState: state });
@@ -42,7 +42,7 @@ const hooks = registerHooks({
 
 const routeUrl = "./route.ts?tax-rate-provider-route-test";
 const { PUT } = await import(routeUrl) as typeof import("./route.ts");
-hooks.deregister();
+after(() => hooks.deregister());
 
 function reset(): void {
   state.saves.length = 0;
