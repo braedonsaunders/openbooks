@@ -8,7 +8,7 @@
  * to cents (the eSocial operational rule — see BR_2026_ROUNDING). The
  * arithmetic below is line-for-line the inss-2026.ts algorithm; only the
  * table source differs (argument, not the 2026 constants), so the 2026 path
- * is untouched. Proven by tax-year-2024.test.ts and tax-year-2025.test.ts.
+ * is untouched. Proven by goldens.test.ts.
  *
  * Decimal strings in and out (BRL centavos scale); no floats anywhere.
  */

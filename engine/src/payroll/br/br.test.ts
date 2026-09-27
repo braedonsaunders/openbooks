@@ -54,7 +54,7 @@ test("BR pack exists as an installable 2026 pack in reais on a calendar year", (
   assert.equal(BR_PAYROLL_PACK.country, "BR");
   // installable since the adapter golden proves a full monthly payslip
   // computes AND pushes all six lines through the declaration-enforcing
-  // push path (adapter-goldens.test.ts), with BR slot labels landed.
+  // push path (goldens.test.ts), with BR slot labels landed.
   assert.equal(BR_PAYROLL_PACK.installable, true);
   assert.equal(BR_PAYROLL_PACK.statutoryCurrency, "BRL");
   assert.equal(BR_PAYROLL_PACK.taxYear.basis, "calendar");

@@ -27,7 +27,7 @@
  *   - Manitoba has NO BPAMB formula in 2024 (the 200,000–400,000 phase-out
  *     was announced April 2, 2024, effective 2025): tcpDefault is the flat
  *     $15,780, with no `bpamb` field — the formula path must never trigger
- *     for 2024 (pinned by the high-income golden in rates-2024.test.ts).
+ *     for 2024 (pinned by the high-income golden in t4127.test.ts).
  */
 import type { EditionRates, ProvincialRates, Province } from "./rates.ts";
 

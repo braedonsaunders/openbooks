@@ -4,7 +4,7 @@
  * EC 103/2019 methodology applied from Portaria 13/2026 Anexo I: each
  * salary-de-contribuição slice prices at its own rate ("faixa a faixa"),
  * capped at the teto, with every slice truncated to cents (eSocial rule —
- * see BR_2026_ROUNDING). Proven by tax-year-2026.test.ts, including the
+ * see BR_2026_ROUNDING). Proven by goldens.test.ts, including the
  * sweep that would catch flat-rating the whole salary at the top rate.
  *
  * Decimal strings in and out (BRL centavos scale); no floats anywhere.

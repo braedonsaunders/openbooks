@@ -127,7 +127,7 @@ export const IT_2026_IRPEF_CUMULATIVE = {
  * art. 15 detrazioni for oneri, and the engine carries no oneri inputs (see
  * IT_REFUSED_2026: "art. 16-ter TUIR ... (no oneri inputs in the engine)").
  * A 250.000 reddito therefore computes the same IRPEF lorda/netta with or
- * without c. 4 — pinned by the 200k test in tax-year-2026.test.ts. Refusing
+ * without c. 4 — pinned by the 200k sterilizzazione row in goldens.test.ts. Refusing
  * above-200k payrolls would block legitimate pay; inventing an oneri input
  * would price a detrazione nobody declared.
  */

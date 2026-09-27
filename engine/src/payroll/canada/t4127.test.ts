@@ -1,14 +1,344 @@
-/** T4127 conformance tests against CRA tables and independently worked cases. */
+/**
+ * T4127 conformance goldens, 2024–2026.
+ *
+ * Every row is either a figure the CRA publishes (the Chapter 8 claim-code
+ * K1/K1P columns) or a full stub hand-worked through the guide's formulas
+ * (round at each parenthesis), independent of the engine code. Rows differ by
+ * year and edition; one loop prices them all.
+ */
 import assert from "node:assert/strict";
 import test from "node:test";
 import { cmp } from "../../money/money.ts";
 import { payrollCertificate, resolveCertificate, type StoredCertificate } from "../certificates.ts";
 import "../packs.ts";
+import { unfilledPaths } from "../unfilled.ts";
 import { computeCaStatutory } from "./compute-statutory.ts";
-import { calculateT4127 } from "./t4127.ts";
-import { claimCodeAmount, RATES_2026_JAN, RATES_2026_JUL, ratesForPayDate } from "./rates.ts";
+import { calculateT4127, type T4127Input, type T4127Result } from "./t4127.ts";
+import { RATES_2026_JAN, RATES_2026_JUL, ratesForPayDate, type Province } from "./rates.ts";
+import { RATES_2024_JAN } from "./rates-2024.ts";
+import { RATES_2025_JAN, RATES_2025_JUL } from "./rates-2025.ts";
 
-const money = (value: string) => `${value}00`; // "254.83" -> "254.8300"
+type ResultKey = Exclude<keyof T4127Result, "factors">;
+interface Golden {
+  year: number;
+  label: string;
+  input: T4127Input;
+  /** Result legs; money as 2dp (the engine's 4dp with "00" appended), edition as a number. */
+  expected?: Partial<Record<ResultKey, string | number>>;
+  /** Trace factors; null asserts the factor is absent. */
+  expectedFactors?: Record<string, string | null>;
+  citation: string;
+}
+
+const ED = {
+  119: "T4127 119th edition (Jan 2024)",
+  120: "T4127 120th edition (Jan 2025)",
+  121: "T4127 121st edition (Jul 2025)",
+  122: "T4127 122nd edition (Jan 2026)",
+  123: "T4127 123rd edition (Jul 2026)",
+} as const;
+type Edition = keyof typeof ED;
+
+/** Federal claim codes 1–10: K1 = lowest rate × TC, as printed in Table 8.9. */
+const federalK1 = (year: number, edition: Edition, payDate: string, k1s: string[]): Golden[] =>
+  k1s.map((K1, i) => ({
+    year, label: `federal CC${i + 1} K1 (${edition}th ed.)`, citation: `${ED[edition]} Table 8.9`,
+    input: { payDate, province: "ON", periodsPerYear: 26, income: "1.00", federalClaimCode: i + 1,
+      provincialClaimCode: 0, cppExempt: true, eiExempt: true },
+    expectedFactors: { K1 },
+  }));
+
+/** Provincial claim-code endpoints: published TCP and K1P per jurisdiction. */
+const provincialK1P = (
+  year: number, edition: Edition, payDate: string, rows: [Province, number, string, string][],
+): Golden[] => rows.map(([province, code, TCP, K1P]) => ({
+  year, label: `${province} CC${code} TCP/K1P (${edition}th ed.)`,
+  citation: `${ED[edition]} Chapter 8 ${province} claim codes`,
+  input: { payDate, province, periodsPerYear: 26, income: "1.00", federalClaimCode: 0,
+    provincialClaimCode: code, cppExempt: true, eiExempt: true },
+  expectedFactors: { TCP, K1P },
+}));
+
+const cc1 = { federalClaimCode: 1, provincialClaimCode: 1 } as const;
+const on26 = { province: "ON", periodsPerYear: 26, ...cc1 } as const;
+const onSurtax = { payDate: "2026-02-13", province: "ON", periodsPerYear: 26,
+  federalClaimCode: 0, provincialClaimCode: 0, cppExempt: true, eiExempt: true } as const;
+const nsPhaseOut = (payDate: string, TCP: string, edition: Edition): Golden => ({
+  year: Number(payDate.slice(0, 4)), label: `NS BPA income phase-out, no TD1 (${edition}th ed.)`,
+  citation: `${ED[edition]} Nova Scotia BPA`,
+  input: { payDate, province: "NS", periodsPerYear: 2, income: "25000.00", pensionable: "0",
+    insurable: "0", federalClaimCode: 1 },
+  expectedFactors: { TCP },
+});
+
+const GOLDENS: Golden[] = [
+  // ── Published claim-code columns ─────────────────────────────────────────
+  ...federalK1(2024, 119, "2024-01-15", ["2355.75", "2558.63", "2964.38", "3370.13", "3775.88",
+    "4181.63", "4587.38", "4993.13", "5398.88", "5804.63"]),
+  ...federalK1(2025, 120, "2025-01-15", ["2419.35", "2627.70", "3044.40", "3461.10", "3877.80",
+    "4294.50", "4711.20", "5127.90", "5544.60", "5961.30"]),
+  // Same TC chart as January, prorated 14% lowest rate for Jul–Dec.
+  ...federalK1(2025, 121, "2025-08-14", ["2258.06", "2452.52", "2841.44", "3230.36", "3619.28",
+    "4008.20", "4397.12", "4786.04", "5174.96", "5563.88"]),
+  ...federalK1(2026, 122, "2026-01-15", ["2303.28", "2501.59", "2898.21", "3294.83", "3691.45",
+    "4088.07", "4484.69", "4881.31", "5277.93", "5674.55"]),
+  ...provincialK1P(2024, 119, "2024-01-15", [
+    ["AB", 1, "21885.00", "2188.50"], ["AB", 10, "48490.00", "4849.00"],
+    ["BC", 1, "12580.00", "636.55"], ["BC", 10, "36643.50", "1854.16"],
+    ["MB", 1, "15780.00", "1704.24"], ["MB", 10, "30170.50", "3258.41"],
+    ["NB", 1, "13044.00", "1226.14"], ["NB", 10, "35739.00", "3359.47"],
+    ["NL", 1, "10818.00", "941.17"], ["NL", 10, "30674.00", "2668.64"],
+    ["NS", 1, "11481.00", "1009.18"], ["NS", 10, "25081.00", "2204.62"],
+    ["NT", 1, "17373.00", "1025.01"], ["NT", 10, "42762.50", "2522.99"],
+    ["NU", 1, "18767.00", "750.68"], ["NU", 10, "44564.50", "1782.58"],
+    ["ON", 1, "12399.00", "626.15"], ["ON", 10, "35102.50", "1772.68"],
+    ["PE", 1, "13500.00", "1302.75"], ["PE", 10, "27100.00", "2615.15"],
+    ["SK", 1, "18491.00", "1941.56"], ["SK", 10, "38721.00", "4065.71"],
+    ["YT", 1, "15705.00", "1005.12"], ["YT", 10, "38697.50", "2476.64"],
+  ]),
+  ...provincialK1P(2025, 120, "2025-01-15", [
+    ["AB", 1, "22323.00", "2232.30"], ["AB", 10, "49463.50", "4946.35"],
+    ["BC", 1, "12932.00", "654.36"], ["BC", 10, "37667.00", "1905.95"],
+    ["MB", 1, "15969.00", "1724.65"], ["MB", 10, "30359.50", "3278.83"],
+    ["NB", 1, "13396.00", "1259.22"], ["NB", 10, "36711.50", "3450.88"],
+    ["NL", 1, "11067.00", "962.83"], ["NL", 10, "31382.00", "2730.23"],
+    // The January NS table prints CC10 as 2265.09, 1¢ below the formula
+    // (25,769 × 0.0879 = 2,265.0951) while CC1 needs round-up; no single rule
+    // yields that column. The July table prints the formula value, as here.
+    ["NS", 1, "11744.00", "1032.30"], ["NS", 10, "25769.00", "2265.10"],
+    ["NT", 1, "17842.00", "1052.68"], ["NT", 10, "43920.00", "2591.28"],
+    ["NU", 1, "19274.00", "770.96"], ["NU", 10, "45768.50", "1830.74"],
+    ["ON", 1, "12747.00", "643.72"], ["ON", 10, "36088.00", "1822.44"],
+    ["PE", 1, "14250.00", "1353.75"], ["PE", 10, "27850.00", "2645.75"],
+    ["SK", 1, "18991.00", "1994.06"], ["SK", 10, "39765.00", "4175.33"],
+    ["YT", 1, "16129.00", "1032.26"], ["YT", 10, "39742.00", "2543.49"],
+  ]),
+  // July restatements: AB prorated 6%, MB prorated BPAMB, PE/SK prorated BPA.
+  ...provincialK1P(2025, 121, "2025-08-14", [
+    ["AB", 1, "22323.00", "1339.38"], ["AB", 10, "49463.50", "2967.81"],
+    ["MB", 1, "15591.00", "1683.83"], ["MB", 10, "29981.50", "3238.00"],
+    ["NS", 10, "25769.00", "2265.10"],
+    ["PE", 1, "15050.00", "1429.75"], ["PE", 10, "28650.00", "2721.75"],
+    ["SK", 1, "19991.00", "2099.06"], ["SK", 10, "40765.00", "4280.33"],
+  ]),
+  ...provincialK1P(2026, 122, "2026-01-15", [
+    ["AB", 1, "22769.00", "1821.52"], ["AB", 10, "50453.50", "4036.28"],
+    ["BC", 1, "13216.00", "668.73"], ["BC", 10, "38495.00", "1947.85"],
+    ["MB", 1, "15780.00", "1704.24"], ["MB", 10, "30170.50", "3258.41"],
+    ["NB", 1, "13664.00", "1284.42"], ["NB", 10, "37438.50", "3519.22"],
+    ["NL", 1, "11188.00", "973.36"], ["NL", 10, "31724.00", "2759.99"],
+    ["NS", 1, "11932.00", "1048.82"], ["NS", 10, "26178.00", "2301.05"],
+    ["NT", 1, "18198.00", "1073.68"], ["NT", 10, "44794.50", "2642.88"],
+    ["NU", 1, "19659.00", "786.36"], ["NU", 10, "46680.50", "1867.22"],
+    ["ON", 1, "12989.00", "655.94"], ["ON", 10, "36772.00", "1856.99"],
+    ["PE", 1, "15000.00", "1425.00"], ["PE", 10, "28600.00", "2717.00"],
+    ["SK", 1, "20381.00", "2140.01"], ["SK", 10, "41571.50", "4365.01"],
+    ["YT", 1, "16452.00", "1052.93"], ["YT", 10, "40532.50", "2594.08"],
+  ]),
+  // July: BC prorated 6.14%, NL prorated BPA.
+  ...provincialK1P(2026, 123, "2026-07-15", [
+    ["BC", 1, "13216.00", "811.46"], ["BC", 10, "38495.00", "2363.59"],
+    ["NL", 1, "15000.00", "1305.00"], ["NL", 10, "35536.00", "3091.63"],
+  ]),
+
+  // ── Hand-worked stubs, 2024 ──────────────────────────────────────────────
+  { year: 2024, label: "Ontario biweekly $2,000, claim code 1", citation: `hand-worked, ${ED[119]}`,
+    input: { payDate: "2024-02-13", ...on26, income: "2000.00" },
+    expected: { cpp: "110.99", cpp2: "0.00", ei: "33.20", eiEmployer: "46.48", periodicTax: "272.33" },
+    // K2 = 0.15 × 2400.74 + 0.15 × 863.20; V2 = min(600, 450 + 0.25 × 3515.10); S = 0 as 2 × 286 < T4.
+    expectedFactors: { F5: "18.65", A: "51515.10", K1: "2355.75", K2: "489.59", K4: "214.95",
+      T3: "4666.98", T1: "4666.98", K1P: "626.15", K2P: "164.83", T4: "1813.65", V1: "0.00",
+      V2: "600.00", S: "0.00", T2: "2413.65" } },
+  { year: 2024, label: "PEI biweekly $2,500, claim code 1 (new five-bracket system, no surtax)",
+    citation: `hand-worked, ${ED[119]}`,
+    input: { payDate: "2024-03-14", province: "PE", periodsPerYear: 26, ...cc1, income: "2500.00" },
+    expected: { cpp: "140.74", ei: "41.50", eiEmployer: "58.10", periodicTax: "489.29" },
+    // EI annualizes past the 1049.12 maximum: K2 = 0.15 × 3044.24 + 0.15 × 1049.12.
+    expectedFactors: { F5: "23.65", A: "64385.10", K1: "2355.75", K2: "614.01", T3: "6941.24",
+      K1P: "1302.75", K2P: "395.01", T4: "5780.36", V1: "0.00", T2: "5780.36" } },
+  { year: 2024, label: "Manitoba high earner keeps the flat BPA (BPAMB phase-out starts 2025)",
+    citation: `hand-worked, ${ED[119]}`,
+    input: { payDate: "2024-03-14", province: "MB", periodsPerYear: 26, income: "11538.46" },
+    // A is past the 2025 phase-out band; BPAF floors at its 2024 minimum past $246,752.
+    expectedFactors: { A: "297034.92", TC: "14156.00", TCP: "15780.00" } },
+  nsPhaseOut("2024-01-30", "9981.00", 119),
+
+  // ── Hand-worked stubs, 2025 ──────────────────────────────────────────────
+  { year: 2025, label: "Manitoba biweekly $2,500, claim code 1", citation: `hand-worked, ${ED[120]}`,
+    input: { payDate: "2025-02-13", province: "MB", periodsPerYear: 26, ...cc1, income: "2500.00" },
+    expected: { cpp: "140.74", cpp2: "0.00", ei: "41.00", eiEmployer: "57.40", periodicTax: "457.69" },
+    expectedFactors: { F5: "23.65", A: "64385.10", K1: "2419.35", K2: "616.54", K4: "220.65",
+      T3: "6786.41", T1: "6786.41", K1P: "1724.65", K2P: "443.91", T4: "5113.54", T2: "5113.54" } },
+  { year: 2025, label: "Manitoba no-TD1 default uses the January BPAMB", citation: `hand-worked, ${ED[120]}`,
+    input: { payDate: "2025-02-13", province: "MB", periodsPerYear: 26, income: "2500.00" },
+    expectedFactors: { TCP: "15969.00", TC: "16129.00" } },
+  { year: 2025, label: "Manitoba no-TD1 default uses the July BPAMB", citation: `hand-worked, ${ED[121]}`,
+    input: { payDate: "2025-08-14", province: "MB", periodsPerYear: 26, income: "2500.00" },
+    expectedFactors: { TCP: "15591.00", TC: "16129.00" } },
+  { year: 2025, label: "Alberta biweekly $3,000, claim code 1", citation: `hand-worked, ${ED[121]}`,
+    input: { payDate: "2025-08-14", province: "AB", periodsPerYear: 26, ...cc1, income: "3000.00" },
+    expected: { cpp: "170.49", ei: "49.20", eiEmployer: "68.88", periodicTax: "490.14" },
+    // CPP base share 3687.74 caps at 3356.10; EI annualizes past 1077.48.
+    expectedFactors: { F5: "28.65", A: "77255.10", K1: "2258.06", K2: "620.70", K4: "205.94",
+      T3: "9023.60", K1P: "1339.38", K2P: "266.02", K5P: "0.00", T4: "3720.11" } },
+  { year: 2025, label: "Alberta July K5P supplemental credit (provincial claim 60,000)",
+    citation: `hand-worked, ${ED[121]}`,
+    input: { payDate: "2025-08-14", province: "AB", periodsPerYear: 26, federalClaimCode: 1,
+      provincialClaim: "60000.00", income: "3000.00" },
+    // K5P = (3600.00 + 266.02 − 3600) × 0.666667 = 177.3466… → 177.35.
+    expected: { periodicTax: "396.37" }, expectedFactors: { K5P: "177.35", T4: "1282.14" } },
+  nsPhaseOut("2025-01-30", "10244.00", 120),
+  nsPhaseOut("2025-07-30", "11744.00", 121),
+
+  // ── Hand-worked stubs, 2026 ──────────────────────────────────────────────
+  { year: 2026, label: "Ontario biweekly $2,000, claim code 1", citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-02-13", ...on26, income: "2000.00" },
+    expected: { cpp: "110.99", cpp2: "0.00", ei: "32.60", eiEmployer: "45.64", f5: "18.65",
+      periodicTax: "254.83", totalTax: "254.83" },
+    // K2 = 0.14 × min(26 × 110.99 × 495/595, 3519.45) + 0.14 × min(26 × 32.60, 1123.07).
+    expectedFactors: { A: "51515.10", K2: "454.76", T3: "4243.93", T1: "4243.93", T4: "1781.53",
+      V2: "600.00", T2: "2381.53" } },
+  { year: 2026, label: "Ontario biweekly $2,000 with a $28.85 labour-sponsored funds credit (capped at $750/yr)",
+    citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-02-13", ...on26, income: "2000.00", labourFundsCreditFederal: "28.85" },
+    expected: { periodicTax: "225.98" }, expectedFactors: { T1: "3493.93" } },
+  { year: 2026, label: "BC biweekly $2,000, claim code 1, June", citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-06-15", province: "BC", periodsPerYear: 26, ...cc1, income: "2000.00" },
+    expected: { edition: 122, periodicTax: "232.60" }, expectedFactors: { T4: "1803.56" } },
+  { year: 2026, label: "BC biweekly $2,000, claim code 1, July (prorated deduction)",
+    citation: `hand-worked, ${ED[123]}`,
+    input: { payDate: "2026-07-15", province: "BC", periodsPerYear: 26, ...cc1, income: "2000.00" },
+    expected: { edition: 123, periodicTax: "246.68" }, expectedFactors: { T4: "2169.75" } },
+  { year: 2026, label: "CPP annual maximum and CPP2 band boundary", citation: `hand-worked, ${ED[123]}`,
+    input: { payDate: "2026-11-06", province: "AB", periodsPerYear: 52, ...cc1, income: "3000.00",
+      ytd: { cpp: "4200.00", pensionable: "73000.00" } },
+    // C2: W = max(73,000, 74,600) = 74,600; band 76,000 − 74,600 = 1,400 → 0.04 × 1,400.
+    expected: { cpp: "30.45", cpp2: "56.00", cppEmployer: "86.45" }, expectedFactors: { K2: "649.95" } },
+  { year: 2026, label: "EI annual maximum stops the premium at the cap", citation: `hand-worked, ${ED[123]}`,
+    input: { payDate: "2026-11-06", province: "AB", periodsPerYear: 52, ...cc1, income: "3000.00",
+      ytd: { ei: "1120.00" } },
+    expected: { ei: "3.07" } },
+  { year: 2026, label: "bonus method: Ontario monthly $5,000 + $10,000 bonus", citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-03-31", province: "ON", periodsPerYear: 12, ...cc1, income: "5000.00",
+      nonPeriodic: "10000.00" },
+    expected: { cpp: "875.15", f5A: "49.03", f5B: "98.05", periodicTax: "678.98", bonusTax: "2935.92",
+      totalTax: "3614.90" },
+    expectedFactors: { A: "69313.59", A_step2: "59411.64" } },
+  { year: 2026, label: "bonus flat 15% when annual income is $5,000 or less", citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-03-06", province: "ON", periodsPerYear: 52, ...cc1, income: "50.00",
+      nonPeriodic: "400.00" },
+    expected: { bonusTax: "60.00", periodicTax: "0.00" } },
+  { year: 2026, label: "BPAF phase-out when no federal TD1 is filed", citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-01-30", province: "AB", periodsPerYear: 12, provincialClaimCode: 1,
+      income: "20000.00" },
+    // BPAF = 16452 − (237,635.04 − 181,440) × 1623/77042 = 15,268.17.
+    expectedFactors: { TC: "15268.17", K1: "2137.54" } },
+  { year: 2026, label: "Quebec employment: QPP + QPIP + 16.5% abatement, no provincial T2",
+    citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-02-13", province: "QC", periodsPerYear: 26, federalClaimCode: 1, income: "2000.00" },
+    expected: { cpp: "117.52", ei: "26.00", qpip: "8.60", qpipEmployer: "12.04" },
+    expectedFactors: { T2: null, T3: "4212.88", T1: "3517.75" } },
+  { year: 2026, label: "QPIP prices off its own insurable base below the EI leg", citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-02-13", province: "QC", periodsPerYear: 26, federalClaimCode: 1, income: "2000.00",
+      insurable: "2000.00", qpipInsurable: "1500.00" },
+    expected: { ei: "26.00", qpip: "6.45", qpipEmployer: "9.03" } },
+  { year: 2026, label: "QPIP prices off its own insurable base above the EI leg", citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-02-13", province: "QC", periodsPerYear: 26, federalClaimCode: 1, income: "2000.00",
+      insurable: "2000.00", qpipInsurable: "2500.00" },
+    expected: { ei: "26.00", qpip: "10.75", qpipEmployer: "15.05" } },
+  { year: 2026, label: "tax-exempt (claim code E) still pays the Ontario Health Premium",
+    citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-02-13", province: "ON", periodsPerYear: 26, income: "2000.00", taxExempt: true },
+    expected: { periodicTax: "23.08", cpp: "110.99", ei: "32.60" },
+    expectedFactors: { T1: "0.00", T4: "0.00", V2: "600.00" } },
+  { year: 2026, label: "Manitoba BPAMB income phase-out", citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-01-30", province: "MB", periodsPerYear: 12, federalClaimCode: 1, income: "20000.00" },
+    // BPAMB = 15780 − (237,635.04 − 200,000) × 15780/200000.
+    expectedFactors: { TCP: "12810.60" } },
+  nsPhaseOut("2026-01-30", "11932.00", 122),
+  { year: 2026, label: "Alberta K5P floors at zero below its threshold", citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-01-30", province: "AB", periodsPerYear: 26, ...cc1, income: "2000.00" },
+    expectedFactors: { K5P: "0.00" } },
+  { year: 2026, label: "Alberta K5P supplemental credit (provincial claim 60,000)", citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-01-30", province: "AB", periodsPerYear: 26, federalClaimCode: 1,
+      provincialClaim: "60000.00", income: "8000.00" },
+    // K5P = (0.08 × 60000 + 371.41 − 4896) × 0.25.
+    expectedFactors: { K5P: "68.85" } },
+  { year: 2026, label: "outside Canada (ZZ): 48% federal surtax, no provincial tax",
+    citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-02-13", province: "ZZ", periodsPerYear: 26, federalClaimCode: 1, income: "2000.00" },
+    expectedFactors: { T3: "4243.93", T1: "6281.02", T2: null } },
+  { year: 2026, label: "tiny weekly income yields no negative deductions", citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-02-13", province: "ON", periodsPerYear: 52, ...cc1, income: "50.00" },
+    // Below the $67.30 weekly CPP exemption; EI is first-dollar.
+    expected: { cpp: "0.00", ei: "0.82", periodicTax: "0.00" } },
+  { year: 2026, label: "additional per-period tax L applies even when A is nil", citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-02-13", ...on26, income: "0.00", additionalTaxPerPeriod: "25.00" },
+    expected: { periodicTax: "25.00" } },
+  { year: 2026, label: "single-month CPP proration (PM=1) still contributes and earns credits",
+    citation: `hand-worked, ${ED[122]}`,
+    input: { payDate: "2026-01-15", ...on26, cppMonths: 1, income: "2000.00" },
+    // K2 = 0.14 × min(26 × 110.99 × 495/595, 3519.45/12) + 0.14 × 847.60: prorated, not zeroed.
+    expected: { cpp: "110.99", periodicTax: "270.27" }, expectedFactors: { K2: "159.72" } },
+  // Ontario surtax is strictly above its $5,818 / $7,446 thresholds.
+  { year: 2026, label: "Ontario surtax: T4 exactly on the first threshold", citation: `hand-worked, ${ED[122]}`,
+    input: { ...onSurtax, income: "3374.5269" }, expectedFactors: { T4: "5818.00", V1: "0.00" } },
+  { year: 2026, label: "Ontario surtax: just above the first threshold", citation: `hand-worked, ${ED[122]}`,
+    input: { ...onSurtax, income: "3400.00" }, expectedFactors: { T4: "5878.60", V1: "12.12" } },
+  { year: 2026, label: "Ontario surtax: above the second threshold", citation: `hand-worked, ${ED[122]}`,
+    input: { ...onSurtax, income: "4500.00" }, expectedFactors: { T4: "8681.20", V1: "1017.31" } },
+];
+
+const money = (value: string | number | null) =>
+  value === null ? undefined : typeof value === "number" ? value : `${value}00`;
+
+for (const row of GOLDENS) {
+  test(`${row.year} ${row.label}`, () => {
+    const result = calculateT4127(row.input);
+    const where = (key: string) => `${row.year} ${row.label}: ${key} (${row.citation})`;
+    for (const [key, want] of Object.entries(row.expected ?? {})) {
+      assert.equal(result[key as ResultKey], money(want), where(key));
+    }
+    for (const [key, want] of Object.entries(row.expectedFactors ?? {})) {
+      assert.equal(result.factors[key], money(want), where(key));
+    }
+  });
+}
+
+test("edition resolution by pay date", () => {
+  const EDITIONS: [string, Edition][] = [
+    ["2024-01-01", 119], ["2024-12-31", 119], ["2025-01-01", 120], ["2025-06-30", 120],
+    ["2025-07-01", 121], ["2025-12-31", 121], ["2026-01-01", 122], ["2026-06-30", 122],
+    ["2026-07-01", 123], ["2026-12-31", 123],
+  ];
+  for (const [payDate, edition] of EDITIONS) {
+    assert.equal(ratesForPayDate(payDate).edition, edition, `${payDate} resolves to ${ED[edition]}`);
+  }
+});
+
+const REFUSALS: { label: string; payDate: string; refusal: RegExp }[] = [
+  { label: "pay date after the last published edition", payDate: "2027-01-01",
+    refusal: /no T4127 constants for pay date 2027-01-01/ },
+  { label: "pay date before the first published edition", payDate: "2023-12-31",
+    refusal: /no T4127 constants for pay date 2023-12-31/ },
+];
+for (const row of REFUSALS) {
+  test(`refuses: ${row.label}`, () => {
+    assert.throws(() => ratesForPayDate(row.payDate), row.refusal, row.label);
+  });
+}
+
+test("every published edition's constants are transcribed, not scaffolded", () => {
+  for (const [name, rates] of Object.entries({ RATES_2024_JAN, RATES_2025_JAN, RATES_2025_JUL })) {
+    assert.deepEqual(unfilledPaths(rates), [], `transcribe every ${name} figure from T4127`);
+  }
+});
+
+test("123rd edition leaves untouched provinces identical to the 122nd", () => {
+  for (const province of ["AB", "MB", "NB", "NS", "NT", "NU", "ON", "SK", "YT"] as const) {
+    assert.deepEqual(RATES_2026_JUL.provinces[province], RATES_2026_JAN.provinces[province]);
+  }
+});
 
 test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purchases", async () => {
   const tax = async (region: "ON" | "QC", answers?: Record<string, string>) => {
@@ -42,366 +372,4 @@ test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purcha
     (await tax("ON")).income_tax ?? assert.fail("no ON income tax")) < 0);
   const withFunds = await tax("QC", { ftq_shares_per_period: "100", fondaction_shares_per_period: "150" });
   assert.deepEqual([withFunds.income_tax, withFunds.qc_income_tax], ["9.6900", "13.9500"]);
-});
-
-test("edition resolution: 122nd Jan–Jun, 123rd Jul–Dec, refuses unknown years", () => {
-  assert.equal(ratesForPayDate("2026-01-01").edition, 122);
-  assert.equal(ratesForPayDate("2026-06-30").edition, 122);
-  assert.equal(ratesForPayDate("2026-07-01").edition, 123);
-  assert.equal(ratesForPayDate("2026-12-31").edition, 123);
-  assert.throws(() => ratesForPayDate("2027-01-01"));
-  assert.throws(() => ratesForPayDate("2023-12-31"));
-});
-
-test("published federal claim-code K1 values (122nd edition Table 8.9)", () => {
-  // K1 = 0.14 × TC — CRA publishes both columns; verify the pairing exactly.
-  const publishedK1 = [
-    "2303.28", "2501.59", "2898.21", "3294.83", "3691.45",
-    "4088.07", "4484.69", "4881.31", "5277.93", "5674.55",
-  ];
-  for (let code = 1; code <= 10; code++) {
-    const tc = claimCodeAmount(RATES_2026_JAN.federal.claimCodes, code);
-    const result = calculateT4127({
-      payDate: "2026-01-15", province: "ON", periodsPerYear: 26,
-      income: "1.00", federalClaim: tc, provincialClaimCode: 0, cppExempt: true, eiExempt: true,
-    });
-    assert.equal(result.factors.K1, money(publishedK1[code - 1]!), `claim code ${code}`);
-  }
-});
-
-test("published provincial claim-code K1P endpoints", () => {
-  // CC1 and CC10 K1P for every jurisdiction, straight from the CRA tables.
-  const cases: [string, string, number, string, string][] = [
-    // province, payDate, code, TCP (published), K1P (published)
-    ["AB", "2026-01-15", 1, "22769.00", "1821.52"],
-    ["AB", "2026-01-15", 10, "50453.50", "4036.28"],
-    ["BC", "2026-01-15", 1, "13216.00", "668.73"],
-    ["BC", "2026-01-15", 10, "38495.00", "1947.85"],
-    ["BC", "2026-07-15", 1, "13216.00", "811.46"],   // 123rd: prorated 6.14%
-    ["BC", "2026-07-15", 10, "38495.00", "2363.59"],
-    ["MB", "2026-01-15", 1, "15780.00", "1704.24"],
-    ["MB", "2026-01-15", 10, "30170.50", "3258.41"],
-    ["NB", "2026-01-15", 1, "13664.00", "1284.42"],
-    ["NB", "2026-01-15", 10, "37438.50", "3519.22"],
-    ["NL", "2026-01-15", 1, "11188.00", "973.36"],
-    ["NL", "2026-01-15", 10, "31724.00", "2759.99"],
-    ["NL", "2026-07-15", 1, "15000.00", "1305.00"],  // 123rd: prorated BPA
-    ["NL", "2026-07-15", 10, "35536.00", "3091.63"],
-    ["NS", "2026-01-15", 1, "11932.00", "1048.82"],
-    ["NS", "2026-01-15", 10, "26178.00", "2301.05"],
-    ["NT", "2026-01-15", 1, "18198.00", "1073.68"],
-    ["NT", "2026-01-15", 10, "44794.50", "2642.88"],
-    ["NU", "2026-01-15", 1, "19659.00", "786.36"],
-    ["NU", "2026-01-15", 10, "46680.50", "1867.22"],
-    ["ON", "2026-01-15", 1, "12989.00", "655.94"],
-    ["ON", "2026-01-15", 10, "36772.00", "1856.99"],
-    ["PE", "2026-01-15", 1, "15000.00", "1425.00"],
-    ["PE", "2026-01-15", 10, "28600.00", "2717.00"],
-    ["SK", "2026-01-15", 1, "20381.00", "2140.01"],
-    ["SK", "2026-01-15", 10, "41571.50", "4365.01"],
-    ["YT", "2026-01-15", 1, "16452.00", "1052.93"],
-    ["YT", "2026-01-15", 10, "40532.50", "2594.08"],
-  ];
-  for (const [province, payDate, code, tcp, k1p] of cases) {
-    const rates = ratesForPayDate(payDate);
-    const provRates = rates.provinces[province as "AB"]!;
-    assert.equal(claimCodeAmount(provRates.claimCodes, code), tcp, `${province} CC${code} TCP`);
-    const result = calculateT4127({
-      payDate, province: province as "AB", periodsPerYear: 26,
-      income: "1.00", federalClaimCode: 0, provincialClaimCode: code,
-      cppExempt: true, eiExempt: true,
-    });
-    assert.equal(result.factors.K1P, money(k1p), `${province} CC${code} K1P (${payDate})`);
-  }
-});
-
-test("Ontario biweekly $2,000, claim code 1 — full hand-worked stub", () => {
-  const result = calculateT4127({
-    payDate: "2026-02-13", province: "ON", periodsPerYear: 26,
-    income: "2000.00", federalClaimCode: 1, provincialClaimCode: 1,
-  });
-  // C = 0.0595 × (2000 − 134.61) = 110.99
-  assert.equal(result.cpp, "110.9900");
-  assert.equal(result.cpp2, "0.0000");
-  // EI = 0.0163 × 2000 = 32.60
-  assert.equal(result.ei, "32.6000");
-  assert.equal(result.eiEmployer, "45.6400"); // 32.60 × 1.4
-  // F5 = 110.99 × (0.0100/0.0595) = 18.65 → A = 26 × 1981.35 = 51,515.10
-  assert.equal(result.f5, "18.6500");
-  assert.equal(result.factors.A, "51515.1000");
-  // K2 = 0.14×min(26×110.99×495/595, 3519.45) + 0.14×min(26×32.60, 1123.07)
-  //    = 0.14×2400.74 + 0.14×847.60 = 336.10 + 118.66 = 454.76
-  assert.equal(result.factors.K2, "454.7600");
-  // T3 = 0.14×51515.10 − 2303.28 − 454.76 − 210.14 = 4243.93
-  assert.equal(result.factors.T3, "4243.9300");
-  // T4 = 0.0505×51515.10 − 655.94 − 164.04 = 1781.53; V2 (OHP) = 600; S = 0
-  assert.equal(result.factors.T4, "1781.5300");
-  assert.equal(result.factors.V2, "600.0000");
-  assert.equal(result.factors.T2, "2381.5300");
-  // T = (4243.93 + 2381.53)/26 = 254.83
-  assert.equal(result.periodicTax, "254.8300");
-  assert.equal(result.totalTax, "254.8300");
-});
-
-test("BC edition switch: same pay, higher prorated Jul–Dec deduction", () => {
-  const base = {
-    province: "BC" as const, periodsPerYear: 26,
-    income: "2000.00", federalClaimCode: 1 as const, provincialClaimCode: 1,
-  };
-  const jan = calculateT4127({ ...base, payDate: "2026-06-15", federalClaimCode: 1 });
-  const jul = calculateT4127({ ...base, payDate: "2026-07-15", federalClaimCode: 1 });
-  assert.equal(jan.edition, 122);
-  assert.equal(jul.edition, 123);
-  // Jan: T4 = 0.077×51515.10 − 1330 − 668.73 − 164.37 = 1803.56 → T = 232.60
-  assert.equal(jan.factors.T4, "1803.5600");
-  assert.equal(jan.periodicTax, "232.6000");
-  // Jul: T4 = 3966.66 − 786 − 811.46 − 199.45 = 2169.75 → T = 246.68
-  assert.equal(jul.factors.T4, "2169.7500");
-  assert.equal(jul.periodicTax, "246.6800");
-});
-
-test("CPP annual maximum and CPP2 band boundary", () => {
-  const result = calculateT4127({
-    payDate: "2026-11-06", province: "AB", periodsPerYear: 52,
-    income: "3000.00", federalClaimCode: 1, provincialClaimCode: 1,
-    ytd: { cpp: "4200.00", pensionable: "73000.00" },
-  });
-  // C = min(4230.45 − 4200, 0.0595×2932.70) = 30.45
-  assert.equal(result.cpp, "30.4500");
-  // C2: W = max(73000, 74600) = 74600; band = 1400 → 0.04×1400 = 56.00
-  assert.equal(result.cpp2, "56.0000");
-  assert.equal(result.cppEmployer, "86.4500"); // employer matches C + C2
-  // K2 crossing period: max reached → base 3519.45; EI 0.0163×3000 = 48.90,
-  // 52×48.90 caps at 1123.07. K2 = 0.14×3519.45 + 0.14×1123.07 = 492.72 + 157.23
-  assert.equal(result.factors.K2, "649.9500");
-});
-
-test("EI annual maximum stops the premium at the cap", () => {
-  const result = calculateT4127({
-    payDate: "2026-11-06", province: "AB", periodsPerYear: 52,
-    income: "3000.00", federalClaimCode: 1, provincialClaimCode: 1,
-    ytd: { ei: "1120.00" },
-  });
-  assert.equal(result.ei, "3.0700"); // 1123.07 − 1120.00
-});
-
-test("bonus method: Ontario monthly $5,000 + $10,000 bonus", () => {
-  const result = calculateT4127({
-    payDate: "2026-03-31", province: "ON", periodsPerYear: 12,
-    income: "5000.00", nonPeriodic: "10000.00",
-    federalClaimCode: 1, provincialClaimCode: 1,
-  });
-  // C on PI 15,000: 0.0595×14708.34 = 875.15; F5 = 147.08 split 49.03/98.05
-  assert.equal(result.cpp, "875.1500");
-  assert.equal(result.f5A, "49.0300");
-  assert.equal(result.f5B, "98.0500");
-  // A(step1) = 12×4950.97 + 9901.95 = 69,313.59; A(step2) = 59,411.64
-  assert.equal(result.factors.A, "69313.5900");
-  assert.equal(result.factors.A_step2, "59411.6400");
-  // Periodic T = (5212.02 + 2935.78)/12 = 678.98; TB = 11,083.72 − 8,147.80
-  assert.equal(result.periodicTax, "678.9800");
-  assert.equal(result.bonusTax, "2935.9200");
-  assert.equal(result.totalTax, "3614.9000");
-});
-
-test("bonus flat 15% when annual income is $5,000 or less", () => {
-  const result = calculateT4127({
-    payDate: "2026-03-06", province: "ON", periodsPerYear: 52,
-    income: "50.00", nonPeriodic: "400.00",
-    federalClaimCode: 1, provincialClaimCode: 1,
-  });
-  assert.equal(result.bonusTax, "60.0000"); // 15% × 400
-  assert.equal(result.periodicTax, "0.0000");
-});
-
-test("BPAF phase-out when no TD1 is filed (dynamic basic personal amount)", () => {
-  const result = calculateT4127({
-    payDate: "2026-01-30", province: "AB", periodsPerYear: 12,
-    income: "20000.00", provincialClaimCode: 1,
-  });
-  // A = 12×(20000 − 197.08) = 237,635.04 → BPAF = 16452 − 56,195.04×1623/77042
-  //   = 16452 − 1183.83 = 15,268.17 → K1 = 2,137.54
-  assert.equal(result.factors.TC, "15268.1700");
-  assert.equal(result.factors.K1, "2137.5400");
-});
-
-test("Quebec employment: QPP + QPIP + abatement, no provincial T2", () => {
-  const result = calculateT4127({
-    payDate: "2026-02-13", province: "QC", periodsPerYear: 26,
-    income: "2000.00", federalClaimCode: 1,
-  });
-  // QPP: 0.0630 × (2000 − 134.61) = 117.52
-  assert.equal(result.cpp, "117.5200");
-  // EI at the Quebec-reduced rate: 0.0130 × 2000 = 26.00
-  assert.equal(result.ei, "26.0000");
-  // QPIP: 0.0043 × 2000 = 8.60; employer 0.00602 × 2000 = 12.04
-  assert.equal(result.qpip, "8.6000");
-  assert.equal(result.qpipEmployer, "12.0400");
-  // No provincial tax through T4127; federal abated 16.5%
-  assert.equal(result.factors.T2 ?? "0", "0");
-  assert.equal(result.factors.T3, "4212.8800");
-  // Abatement = 16.5% × 4212.88 = 695.13 → T1 = 3517.75. Exact, so any
-  // digit change in the 16.5% rate fails loudly.
-  assert.equal(result.factors.T1, "3517.7500");
-});
-
-test("QPIP prices off its OWN insurable base, never the EI leg (C-12)", () => {
-  // EI-insurable 2,000 but only 1,500 QPIP-insurable (benefits the QPIP
-  // program excludes): the QPIP premium follows the program base while EI
-  // still prices off the full EI leg.
-  const low = calculateT4127({
-    payDate: "2026-02-13", province: "QC", periodsPerYear: 26,
-    income: "2000.00", insurable: "2000.00", qpipInsurable: "1500.00",
-    federalClaimCode: 1,
-  });
-  assert.equal(low.ei, "26.0000"); // 0.0130 × 2000 — untouched
-  assert.equal(low.qpip, "6.4500"); // 0.0043 × 1500
-  assert.equal(low.qpipEmployer, "9.0300"); // 0.00602 × 1500
-  // And the reverse: EI-excluded earnings that ARE QPIP-insurable price QPIP
-  // above the EI premium's base.
-  const high = calculateT4127({
-    payDate: "2026-02-13", province: "QC", periodsPerYear: 26,
-    income: "2000.00", insurable: "2000.00", qpipInsurable: "2500.00",
-    federalClaimCode: 1,
-  });
-  assert.equal(high.ei, "26.0000");
-  assert.equal(high.qpip, "10.7500"); // 0.0043 × 2500
-  assert.equal(high.qpipEmployer, "15.0500"); // 0.00602 × 2500
-});
-
-test("tax-exempt (claim code E) still pays the Ontario Health Premium", () => {
-  const result = calculateT4127({
-    payDate: "2026-02-13", province: "ON", periodsPerYear: 26,
-    income: "2000.00", taxExempt: true,
-  });
-  assert.equal(result.factors.T1, "0.0000");
-  assert.equal(result.factors.T4, "0.0000");
-  assert.equal(result.factors.V2, "600.0000");
-  assert.equal(result.periodicTax, "23.0800"); // 600/26 — OHP survives exemption
-  // Statutory contributions unaffected
-  assert.equal(result.cpp, "110.9900");
-  assert.equal(result.ei, "32.6000");
-});
-
-test("Manitoba BPAMB and Nova Scotia BPA income phase-out editions", () => {
-  const mb = calculateT4127({
-    payDate: "2026-01-30", province: "MB", periodsPerYear: 12,
-    income: "20000.00", federalClaimCode: 1,
-  });
-  // NI = 237,635.04 > 200,000 → BPAMB = 15780 − 37,635.04×15780/200000
-  //   = 15780 − 2969.40 = 12,810.60
-  assert.equal(mb.factors.TCP, "12810.6000");
-  assert.deepEqual(["2024-01-30", "2025-01-30", "2025-07-30", "2026-01-30"].map((payDate) =>
-    calculateT4127({ payDate, province: "NS", periodsPerYear: 2, income: "25000.00",
-      pensionable: "0", insurable: "0", federalClaimCode: 1 }).factors.TCP),
-  ["9981.0000", "10244.0000", "11744.0000", "11932.0000"]);
-});
-
-test("Alberta K5P supplemental credit", () => {
-  const result = calculateT4127({
-    payDate: "2026-01-30", province: "AB", periodsPerYear: 26,
-    income: "2000.00", federalClaimCode: 1, provincialClaimCode: 1,
-  });
-  // K1P = 0.08×22769 = 1821.52; K2P = 0.08×2400.74 + 0.08×847.60 = 192.06 + 67.81
-  //     = 259.87; K5P = (1821.52 + 259.87 − 4896) × 0.25 → negative → 0
-  assert.equal(result.factors.K5P, "0.0000");
-  const high = calculateT4127({
-    payDate: "2026-01-30", province: "AB", periodsPerYear: 26,
-    income: "8000.00", federalClaimCode: 1, provincialClaim: "60000.00",
-  });
-  // C = 0.0595×7865.39 = 467.99; 26×467.99×495/595 caps at 3519.45;
-  // EI 130.40, 26× caps at 1123.07 → K2P = 281.56 + 89.85 = 371.41
-  // K5P = (0.08×60000 + 371.41 − 4896) × 0.25 = 275.41 × 0.25 = 68.85
-  assert.equal(high.factors.K5P, "68.8500");
-});
-
-test("outside Canada (ZZ): 48% federal surtax, no provincial tax", () => {
-  const result = calculateT4127({
-    payDate: "2026-02-13", province: "ZZ", periodsPerYear: 26,
-    income: "2000.00", federalClaimCode: 1,
-  });
-  assert.equal(result.factors.T3, "4243.9300");
-  // Surtax = 48% × 4243.93 = 2037.09 → T1 = 6281.02. Exact, so any digit
-  // change in the 48% rate fails loudly.
-  assert.equal(result.factors.T1, "6281.0200");
-  assert.equal(result.factors.T2, undefined);
-});
-
-test("zero and negative guards: tiny income yields no negative deductions", () => {
-  const result = calculateT4127({
-    payDate: "2026-02-13", province: "ON", periodsPerYear: 52,
-    income: "50.00", federalClaimCode: 1, provincialClaimCode: 1,
-  });
-  assert.equal(result.cpp, "0.0000"); // below the $67.30 weekly exemption
-  assert.equal(result.ei, "0.8200"); // 0.0163 × 50, first-dollar insurable
-  assert.equal(result.periodicTax, "0.0000");
-});
-
-test("additional per-period tax L applies even when A is nil", () => {
-  const result = calculateT4127({
-    payDate: "2026-02-13", province: "ON", periodsPerYear: 26,
-    income: "0.00", additionalTaxPerPeriod: "25.00",
-    federalClaimCode: 1, provincialClaimCode: 1,
-  });
-  assert.equal(result.periodicTax, "25.0000");
-});
-
-test("single-month CPP proration (PM=1) still contributes and earns credits", () => {
-  // Turning 18/70 or a mid-year CPT30 election can leave one contributory
-  // month: the period contribution and the K2 credit basis must prorate, not
-  // vanish. Zeroing either under-withholds (PM guard) or over-withholds
-  // (credit-basis guard) that employee's whole December.
-  const result = calculateT4127({
-    payDate: "2026-01-15", province: "ON", periodsPerYear: 26, cppMonths: 1,
-    income: "2000.00", federalClaimCode: 1, provincialClaimCode: 1,
-  });
-  // C = min(4230.45/12, 0.0595 × 1865.39) = 110.99 — the PM guard must pass.
-  assert.equal(result.cpp, "110.9900");
-  // K2 = 0.14 × min(26 × 110.99 × 495/595, 3519.45/12) + 0.14 × 847.60
-  //    = 41.06 + 118.66 = 159.72 — the basis must prorate, not zero.
-  assert.equal(result.factors.K2, "159.7200");
-  assert.equal(result.periodicTax, "270.2700");
-});
-
-test("labour-sponsored funds credit reduces federal tax, capped annually", () => {
-  // $28.85 per biweekly period annualizes to $750.10, capped at the $750
-  // statutory annual maximum: T1 falls by exactly the cap. Adding instead of
-  // subtracting would over-withhold every affected employee by $57.69/pay.
-  const base = {
-    payDate: "2026-02-13", province: "ON", periodsPerYear: 26,
-    income: "2000.00", federalClaimCode: 1, provincialClaimCode: 1,
-  } as const;
-  const plain = calculateT4127({ ...base });
-  const credited = calculateT4127({ ...base, labourFundsCreditFederal: "28.85" });
-  assert.equal(plain.factors.T1, "4243.9300");
-  assert.equal(credited.factors.T1, "3493.9300");
-  assert.equal(credited.periodicTax, "225.9800");
-});
-
-test("Ontario surtax applies strictly above its thresholds", () => {
-  const exempt = { cppExempt: true, eiExempt: true } as const;
-  const base = {
-    payDate: "2026-02-13", province: "ON", periodsPerYear: 26,
-    federalClaimCode: 0, provincialClaimCode: 0, ...exempt,
-  } as const;
-  // T4 lands EXACTLY on the $5,818 first threshold: no surtax. (A `>=`
-  // comparison would add 20% of zero here — identical output, so the strict
-  // operator is pinned by the thresholds below rather than by this case.)
-  const exact = calculateT4127({ ...base, income: "3374.5269" });
-  assert.equal(exact.factors.T4, "5818.0000");
-  assert.equal(exact.factors.V1, "0.0000");
-  // Just above the first threshold: 20% of the $60.60 excess = $12.12.
-  const above = calculateT4127({ ...base, income: "3400.00" });
-  assert.equal(above.factors.T4, "5878.6000");
-  assert.equal(above.factors.V1, "12.1200");
-  // Above the $7,446 second threshold: 20% of $2,863.20 + 36% of $1,235.20.
-  const high = calculateT4127({ ...base, income: "4500.00" });
-  assert.equal(high.factors.T4, "8681.2000");
-  assert.equal(high.factors.V1, "1017.3100");
-});
-
-test("123rd edition leaves untouched provinces identical to the 122nd", () => {
-  for (const province of ["AB", "MB", "NB", "NS", "NT", "NU", "ON", "SK", "YT"] as const) {
-    assert.deepEqual(RATES_2026_JUL.provinces[province], RATES_2026_JAN.provinces[province]);
-  }
 });
