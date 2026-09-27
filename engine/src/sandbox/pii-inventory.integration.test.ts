@@ -720,7 +720,6 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "form_templates.name",
   "form_templates.status",
   "funds.budgetary_control",
-  "funds.custom",
   "funds.kind",
   "funds.restriction_class",
   "fx_provider_configs.base_currency",
