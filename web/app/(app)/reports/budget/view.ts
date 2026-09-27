@@ -2,10 +2,6 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import {
-  filterBar,
-  page,
-  pageHeader,
-  paper,
   ref,
   textBlock,
   widget,
@@ -24,6 +20,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadBudgetDimensionOptions } from '../../../../lib/budgets'
+import { statementReportSpec } from '@/lib/reports/statement-report-spec'
 
 /**
  * The budget-vs-actual statement, split into a loader and a spec.
@@ -215,97 +212,76 @@ export function budgetReportSpec(data: BudgetReportData): PageSpec {
   )
   // `primaryFilter` binds a field, not a literal — the loader assembles the
   // picker and the spec names where it lives.
-  return page({
+  return statementReportSpec({
     route: '/reports/budget',
-    layout: 'list',
-    header: [
-      pageHeader({
-        title: f('title'),
-        back: { href: f('backHref'), label: f('backLabel') },
-      }),
-      // No scenarios at all: the native page renders a bare bar with only the
-      // manage action, and no scenario picker to choose from.
+    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
+    actionsBefore: [manage],
+    exportMenu: { kind: 'budget', params: data.exportParams },
+    filters: [
       {
-        ...filterBar({ period: false }, { actions: [manage] }),
+        controls: { period: false },
+        options: { when: f('noScenarios') },
+        actions: [manage],
+      },
+      {
+        controls: { period: true, dimensions: true, sections: true },
+        options: {
+          primaryFilter: f('scenarioFilter'),
+          dimensions: f('dimensions'),
+          when: f('showSections'),
+        },
+      },
+      {
+        controls: { period: true, dimensions: true },
+        options: {
+          primaryFilter: f('scenarioFilter'),
+          dimensions: f('dimensions'),
+          when: f('hideSections'),
+        },
+      },
+    ],
+    bodyBeforePaper: [
+      {
+        ...widgetBlock('empty-state', {
+          title: data.baseCurrencyNotice?.title ?? '',
+          description: data.baseCurrencyNotice?.description,
+          action: 'link-button',
+          actionProps: {
+            href: data.baseCurrencyNotice?.actionHref ?? '/admin/setup/company',
+            label: data.baseCurrencyNotice?.actionLabel ?? '',
+          },
+        }),
+        when: f('baseCurrencyNotice'),
+      },
+    ],
+    showPaper: !data.baseCurrencyNotice,
+    paper: {
+      company: f('company'),
+      title: f('title'),
+      periodPhrase: f('periodPhrase'),
+      wide: f('wide'),
+    },
+    blocks: [
+      {
+        ...widgetBlock('statement-matrix', {
+          view: data.view,
+          currency: data.currency,
+          drill: data.drill,
+        }),
+        when: f('hasView'),
+      },
+      {
+        ...textBlock(f('emptyNote'), {
+          className: 'py-8 text-center text-slate-400 italic',
+        }),
         when: f('noScenarios'),
       },
       {
-        ...filterBar(
-          { period: true, dimensions: true, sections: true },
-          {
-            primaryFilter: f('scenarioFilter'),
-            dimensions: f('dimensions'),
-            actions: [
-              manage,
-              widget('save-view'),
-              widget('export-menu', { kind: 'budget', params: data.exportParams }),
-            ],
-          },
-        ),
-        when: f('showSections'),
-      },
-      {
-        ...filterBar(
-          { period: true, dimensions: true },
-          {
-            primaryFilter: f('scenarioFilter'),
-            dimensions: f('dimensions'),
-            actions: [
-              manage,
-              widget('save-view'),
-              widget('export-menu', { kind: 'budget', params: data.exportParams }),
-            ],
-          },
-        ),
+        ...textBlock(f('emptyNote'), {
+          className: 'py-8 text-center text-slate-400 italic',
+        }),
         when: f('hideSections'),
       },
     ],
-    // The named refusal renders instead of numbers when the org has no
-    // base currency: title, description and the Company settings link.
-    body: data.baseCurrencyNotice
-      ? [
-          {
-            ...widgetBlock('empty-state', {
-              title: data.baseCurrencyNotice?.title ?? '',
-              description: data.baseCurrencyNotice?.description,
-              action: 'link-button',
-              actionProps: {
-                href: data.baseCurrencyNotice?.actionHref ?? '/admin/setup/company',
-                label: data.baseCurrencyNotice?.actionLabel ?? '',
-              },
-            }),
-            when: f('baseCurrencyNotice'),
-          },
-        ]
-      : [
-          paper({
-            company: f('company'),
-            title: f('title'),
-            periodPhrase: f('periodPhrase'),
-            wide: f('wide'),
-            blocks: [
-              {
-                ...widgetBlock('statement-matrix', {
-                  view: data.view,
-                  currency: data.currency,
-                  drill: data.drill,
-                }),
-                when: f('hasView'),
-              },
-              {
-                ...textBlock(f('emptyNote'), {
-                  className: 'py-8 text-center text-slate-400 italic',
-                }),
-                when: f('noScenarios'),
-              },
-              {
-                ...textBlock(f('emptyNote'), {
-                  className: 'py-8 text-center text-slate-400 italic',
-                }),
-                when: f('hideSections'),
-              },
-            ],
-          }),
-        ],
   })
 }

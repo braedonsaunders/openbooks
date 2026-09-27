@@ -9,18 +9,13 @@ import {
   column,
   drill,
   field,
-  filterBar,
   money,
-  page,
-  pageHeader,
-  paper,
   ref,
   rootRef,
   table,
   text,
   toggleLinks,
   txn,
-  widget,
   widgetBlock,
   widgetCell,
   type PageSpec,
@@ -36,6 +31,7 @@ import { resolvePeriod } from '../../../../../lib/periods'
 import { parseReportQuery, toSearchParams } from '../../../../../lib/report-filters'
 import { reportTotalRowClass } from '../../ReportTable'
 import { decimalCmp, decimalIsZero } from '../../../../../lib/statement-format'
+import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
 import type { ReportDrillTarget } from '../../../../../lib/report-drill'
 
 /**
@@ -261,19 +257,11 @@ export async function loadStatement(
       txn: { kind: 'transaction', entryId: l.entryId, docKind: l.docKind, docId: l.docId },
     })),
     primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
-    exportParams: { ...stringParams(sp), party: partyId, side },
+    exportParams: { ...stringReportParams(sp), party: partyId, side },
     subsidiaries: subView?.picker ?? [],
     currencyBasisBlocked,
     currencyBasisReady: currencyBasisBlocked === null,
   }
-}
-
-function stringParams(sp: Record<string, string | undefined>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [key, value] of Object.entries(sp)) {
-    if (typeof value === 'string') out[key] = value
-  }
-  return out
 }
 
 const f = ref<StatementData>()
@@ -308,31 +296,25 @@ const closingRow: TableSpanRow = {
 }
 
 export function statementSpec(data: StatementData): PageSpec {
-  return page({
+  return statementReportSpec({
     route: '/reports/statements/[partyId]',
-    layout: 'list',
-    header: [
-      pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),
-      filterBar(
-        { period: true, subsidiary: true },
-        {
-          subsidiaries: f('subsidiaries'),
-          leading: {
-            ...toggleLinks([
-              { href: f('receivablesHref'), label: f('receivablesLabel'), activeWhen: f('isReceivable') },
-              { href: f('payablesHref'), label: f('payablesLabel'), activeWhen: f('isPayable') },
-            ]),
-            divider: true,
-          },
-          primaryFilter: f('primaryFilter'),
-          actions: [
-            widget('save-view'),
-            widget('export-menu', { kind: 'partner-statement', params: data.exportParams }),
-          ],
+    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
+    filters: [{
+      controls: { period: true, subsidiary: true },
+      options: {
+        subsidiaries: f('subsidiaries'),
+        leading: {
+          ...toggleLinks([
+            { href: f('receivablesHref'), label: f('receivablesLabel'), activeWhen: f('isReceivable') },
+            { href: f('payablesHref'), label: f('payablesLabel'), activeWhen: f('isPayable') },
+          ]),
+          divider: true,
         },
-      ),
-    ],
-    body: [
+        primaryFilter: f('primaryFilter'),
+      },
+    }],
+    exportMenu: { kind: 'partner-statement', params: data.exportParams },
+    bodyBeforePaper: [
       // The multi-currency refusal renders without an action: the remedy is
       // the subsidiary picker in the filter bar above, not a link.
       ...(data.currencyBasisBlocked
@@ -346,53 +328,53 @@ export function statementSpec(data: StatementData): PageSpec {
             },
           ]
         : []),
-      paper({
-        company: f('company'),
-        title: f('title'),
-        periodPhrase: f('periodPhrase'),
-        wide: true,
-        when: f('currencyBasisReady'),
-        blocks: [
-          widgetBlock('aging-strip', {
-            cells: data.agingCells,
-            asOfLabel: data.agingAsOfLabel,
-            totalLabel: data.agingTotalLabel,
-            total: data.agingTotal,
-            totalDrill: data.agingTotalDrill,
+    ],
+    paper: {
+      company: f('company'),
+      title: f('title'),
+      periodPhrase: f('periodPhrase'),
+      wide: true,
+      when: f('currencyBasisReady'),
+    },
+    blocks: [
+      widgetBlock('aging-strip', {
+        cells: data.agingCells,
+        asOfLabel: data.agingAsOfLabel,
+        totalLabel: data.agingTotalLabel,
+        total: data.agingTotal,
+        totalDrill: data.agingTotalDrill,
+      }),
+      table({
+        variant: 'report',
+        rows: f('lines'),
+        rowKey: item('key'),
+        leading: [openingRow],
+        trailing: [closingRow],
+        columns: [
+          column(rootF('columnDate'), text(item('date')), {
+            headerClassName: 'w-28',
+            className: 'tabular-nums',
           }),
-          table({
-            variant: 'report',
-            rows: f('lines'),
-            rowKey: item('key'),
-            leading: [openingRow],
-            trailing: [closingRow],
-            columns: [
-              column(rootF('columnDate'), text(item('date')), {
-                headerClassName: 'w-28',
-                className: 'tabular-nums',
-              }),
-              column(
-                rootF('columnEntry'),
-                widgetCell('entry-cell', {
-                  entryId: item('entryId'),
-                  docKind: item('docKind'),
-                  docId: item('docId'),
-                  entryNumber: item('entryNumber'),
-                }),
-                { headerClassName: 'w-24' },
-              ),
-              column(rootF('columnMemo'), text(item('memo')), {
-                className: 'text-slate-600 dark:text-slate-300',
-              }),
-              column(rootF('columnDebits'), txn(item('txn'), money(item('debit'))), { align: 'right' }),
-              column(rootF('columnCredits'), txn(item('txn'), money(item('credit'))), { align: 'right' }),
-              column(
-                rootF('columnBalance'),
-                txn(item('txn'), money(item('balance'), { tone: item('balanceTone') })),
-                { align: 'right' },
-              ),
-            ],
+          column(
+            rootF('columnEntry'),
+            widgetCell('entry-cell', {
+              entryId: item('entryId'),
+              docKind: item('docKind'),
+              docId: item('docId'),
+              entryNumber: item('entryNumber'),
+            }),
+            { headerClassName: 'w-24' },
+          ),
+          column(rootF('columnMemo'), text(item('memo')), {
+            className: 'text-slate-600 dark:text-slate-300',
           }),
+          column(rootF('columnDebits'), txn(item('txn'), money(item('debit'))), { align: 'right' }),
+          column(rootF('columnCredits'), txn(item('txn'), money(item('credit'))), { align: 'right' }),
+          column(
+            rootF('columnBalance'),
+            txn(item('txn'), money(item('balance'), { tone: item('balanceTone') })),
+            { align: 'right' },
+          ),
         ],
       }),
     ],

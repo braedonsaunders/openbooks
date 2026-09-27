@@ -4,11 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import {
   column,
   field,
-  filterBar,
   money,
-  page,
-  pageHeader,
-  paper,
   ref,
   repeat,
   rootRef,
@@ -17,7 +13,6 @@ import {
   textBlock,
   txn,
   drill,
-  widget,
   widgetBlock,
   widgetCell,
   type PageSpec,
@@ -38,6 +33,7 @@ import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report
 import { reportTotalRowClass } from '../ReportTable'
 import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
+import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
 
 /**
  * The general ledger, split into a loader and a spec.
@@ -272,16 +268,8 @@ export async function loadGeneralLedger(
         : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
-    exportParams: stringParams(sp),
+    exportParams: stringReportParams(sp),
   }
-}
-
-function stringParams(sp: Record<string, string | undefined>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [key, value] of Object.entries(sp)) {
-    if (typeof value === 'string') out[key] = value
-  }
-  return out
 }
 
 const f = ref<GeneralLedgerData>()
@@ -318,30 +306,25 @@ const closingRow: TableSpanRow = {
 }
 
 export function generalLedgerSpec(data: GeneralLedgerData): PageSpec {
-  return page({
+  return statementReportSpec({
     route: '/reports/general-ledger',
-    layout: 'list',
-    header: [
-      pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),
-      filterBar(
-        { period: true, dimensions: true, subsidiary: true },
-        {
-          dimensions: f('dimensions'),
-          subsidiaries: f('subsidiaries'),
-          primaryFilter: f('primaryFilter'),
-          actions: [
-            widget('schedule-report', {
-              definitionId: data.scheduleDefId ?? '',
-              statementParams: data.scheduleParams,
-            }, f('scheduleDefId')),
-            widget('save-view'),
-            widget('export-menu', { kind: 'general-ledger', params: data.exportParams }),
-          ],
-        },
-      ),
-      textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') }),
-    ],
-    body: [
+    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
+    filters: [{
+      controls: { period: true, dimensions: true, subsidiary: true },
+      options: {
+        dimensions: f('dimensions'),
+        subsidiaries: f('subsidiaries'),
+        primaryFilter: f('primaryFilter'),
+      },
+    }],
+    schedule: {
+      definitionId: data.scheduleDefId ?? '',
+      statementParams: data.scheduleParams,
+      when: f('scheduleDefId'),
+    },
+    exportMenu: { kind: 'general-ledger', params: data.exportParams },
+    headerAfterFilters: [textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') })],
+    bodyBeforePaper: [
       {
         ...widgetBlock('empty-state', {
           title: data.ratesBlocked?.title ?? '',
@@ -367,59 +350,59 @@ export function generalLedgerSpec(data: GeneralLedgerData): PageSpec {
             },
           ]
         : []),
-      paper({
-        company: f('company'),
-        title: f('title'),
-        periodPhrase: f('periodPhrase'),
-        wide: true,
-        when: f('ratesReady'),
+    ],
+    paper: {
+      company: f('company'),
+      title: f('title'),
+      periodPhrase: f('periodPhrase'),
+      wide: true,
+      when: f('ratesReady'),
+    },
+    blocks: [
+      repeat({
+        items: f('accounts'),
+        itemKey: item('id'),
+        className: 'space-y-8',
+        empty: { text: f('emptyLabel'), className: 'py-8 text-center text-slate-400 italic' },
         blocks: [
-          repeat({
-            items: f('accounts'),
-            itemKey: item('id'),
-            className: 'space-y-8',
-            empty: { text: f('emptyLabel'), className: 'py-8 text-center text-slate-400 italic' },
-            blocks: [
-              widgetBlock('account-heading', {
-                accountId: item('id'),
-                from: rootF('periodFrom'),
-                to: rootF('periodTo'),
-                number: item('number'),
-                name: item('name'),
+          widgetBlock('account-heading', {
+            accountId: item('id'),
+            from: rootF('periodFrom'),
+            to: rootF('periodTo'),
+            number: item('number'),
+            name: item('name'),
+          }),
+          table({
+            variant: 'report',
+            rows: item('lines'),
+            rowKey: item('key'),
+            leading: [openingRow],
+            trailing: [closingRow],
+            columns: [
+              column(rootF('columnDate'), text(item('date')), {
+                headerClassName: 'w-28',
+                className: 'tabular-nums',
               }),
-              table({
-                variant: 'report',
-                rows: item('lines'),
-                rowKey: item('key'),
-                leading: [openingRow],
-                trailing: [closingRow],
-                columns: [
-                  column(rootF('columnDate'), text(item('date')), {
-                    headerClassName: 'w-28',
-                    className: 'tabular-nums',
-                  }),
-                  column(
-                    rootF('columnEntry'),
-                    widgetCell('entry-cell', {
-                      entryId: item('entryId'),
-                      docKind: item('docKind'),
-                      docId: item('docId'),
-                      entryNumber: item('entryNumber'),
-                    }),
-                    { headerClassName: 'w-24' },
-                  ),
-                  column(rootF('columnDetail'), text(item('detail')), {
-                    className: 'text-slate-600 dark:text-slate-300',
-                  }),
-                  column(rootF('columnDebits'), txn(item('txn'), money(item('debit'))), { align: 'right' }),
-                  column(rootF('columnCredits'), txn(item('txn'), money(item('credit'))), { align: 'right' }),
-                  column(
-                    rootF('columnBalance'),
-                    txn(item('txn'), money(item('balance'), { tone: item('balanceTone') })),
-                    { align: 'right' },
-                  ),
-                ],
+              column(
+                rootF('columnEntry'),
+                widgetCell('entry-cell', {
+                  entryId: item('entryId'),
+                  docKind: item('docKind'),
+                  docId: item('docId'),
+                  entryNumber: item('entryNumber'),
+                }),
+                { headerClassName: 'w-24' },
+              ),
+              column(rootF('columnDetail'), text(item('detail')), {
+                className: 'text-slate-600 dark:text-slate-300',
               }),
+              column(rootF('columnDebits'), txn(item('txn'), money(item('debit'))), { align: 'right' }),
+              column(rootF('columnCredits'), txn(item('txn'), money(item('credit'))), { align: 'right' }),
+              column(
+                rootF('columnBalance'),
+                txn(item('txn'), money(item('balance'), { tone: item('balanceTone') })),
+                { align: 'right' },
+              ),
             ],
           }),
         ],

@@ -5,12 +5,7 @@ import { resolveOrgId } from '../../../../lib/org-scope'
 
 import { getTranslations } from 'next-intl/server'
 import {
-  filterBar,
-  page,
-  pageHeader,
-  paper,
   ref,
-  widget,
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
@@ -27,6 +22,7 @@ import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import { reportSubtotalRowClass, reportTotalRowClass } from '../ReportTable'
 import type { StatementRow } from '../StatementRows'
 import { decimalCmp, decimalIsMaterial, type ExactDecimal } from '../../../../lib/statement-format'
+import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
 
 /**
  * Direct cash flow, split into a loader and a spec.
@@ -297,42 +293,31 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
     primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
-    exportParams: stringParams(sp),
+    exportParams: stringReportParams(sp),
   }
-}
-
-function stringParams(sp: Record<string, string | undefined>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [key, value] of Object.entries(sp)) {
-    if (typeof value === 'string') out[key] = value
-  }
-  return out
 }
 
 const f = ref<CashFlowData>()
 
 export function cashFlowSpec(data: CashFlowData): PageSpec {
-  return page({
+  return statementReportSpec({
     route: '/reports/cash-flow',
-    layout: 'list',
-    header: [
-      pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),
-      filterBar(
-        { period: true, dimensions: true, subsidiary: true },
-        {
+    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
+    filters: [{
+      controls: { period: true, dimensions: true, subsidiary: true },
+      options: {
           dimensions: f('dimensions'),
           subsidiaries: f('subsidiaries'),
           primaryFilter: f('primaryFilter'),
-          actions: [
-            widget('schedule-report', {
-              definitionId: data.scheduleDefId ?? '',
-              statementParams: data.scheduleParams,
-            }, f('scheduleDefId')),
-            widget('save-view'),
-            widget('export-menu', { kind: 'cash-flow', params: data.exportParams }),
-          ],
-        },
-      ),
+      },
+    }],
+    schedule: {
+      definitionId: data.scheduleDefId ?? '',
+      statementParams: data.scheduleParams,
+      when: f('scheduleDefId'),
+    },
+    exportMenu: { kind: 'cash-flow', params: data.exportParams },
+    headerAfterFilters: [
       {
         ...widgetBlock('reconciliation-note', {
           label: data.reconciliationLabel,
@@ -343,7 +328,7 @@ export function cashFlowSpec(data: CashFlowData): PageSpec {
         when: f('ratesReady'),
       },
     ],
-    body: [
+    bodyBeforePaper: [
       {
         ...widgetBlock('empty-state', {
           title: data.ratesBlocked?.title ?? '',
@@ -369,13 +354,13 @@ export function cashFlowSpec(data: CashFlowData): PageSpec {
             },
           ]
         : []),
-      paper({
-        company: f('company'),
-        title: f('title'),
-        periodPhrase: f('periodPhrase'),
-        when: f('ratesReady'),
-        blocks: [widgetBlock('statement-rows', { rows: data.rows })],
-      }),
     ],
+    paper: {
+      company: f('company'),
+      title: f('title'),
+      periodPhrase: f('periodPhrase'),
+      when: f('ratesReady'),
+    },
+    blocks: [widgetBlock('statement-rows', { rows: data.rows })],
   })
 }

@@ -8,11 +8,7 @@ import {
   column,
   drill,
   field,
-  filterBar,
   money,
-  page,
-  pageHeader,
-  paper,
   ref,
   repeat,
   rootRef,
@@ -21,7 +17,6 @@ import {
   textBlock,
   toggleLinks,
   txn,
-  widget,
   widgetBlock,
   widgetCell,
   type PageSpec,
@@ -37,6 +32,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, toSearchParams } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
+import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
 import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 
@@ -278,16 +274,8 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
     primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
-    exportParams: stringParams(sp),
+    exportParams: stringReportParams(sp),
   }
-}
-
-function stringParams(sp: Record<string, string | undefined>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [key, value] of Object.entries(sp)) {
-    if (typeof value === 'string') out[key] = value
-  }
-  return out
 }
 
 const f = ref<RegistersData>()
@@ -308,37 +296,32 @@ const openingRow: TableSpanRow = {
 }
 
 export function registersSpec(data: RegistersData): PageSpec {
-  return page({
+  return statementReportSpec({
     route: '/reports/registers',
-    layout: 'list',
-    header: [
-      pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),
-      filterBar(
-        { period: true, dimensions: true, subsidiary: true },
-        {
-          leading: {
-            ...toggleLinks([
-              { href: f('receivablesHref'), label: f('receivablesLabel'), activeWhen: f('isReceivable') },
-              { href: f('payablesHref'), label: f('payablesLabel'), activeWhen: f('isPayable') },
-            ]),
-            divider: true,
-          },
-          dimensions: f('dimensions'),
-          subsidiaries: f('subsidiaries'),
-          primaryFilter: f('primaryFilter'),
-          actions: [
-            widget('schedule-report', {
-              definitionId: data.scheduleDefId ?? '',
-              statementParams: data.scheduleParams,
-            }, f('scheduleDefId')),
-            widget('save-view'),
-            widget('export-menu', { kind: 'registers', params: data.exportParams }),
-          ],
+    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
+    filters: [{
+      controls: { period: true, dimensions: true, subsidiary: true },
+      options: {
+        leading: {
+          ...toggleLinks([
+            { href: f('receivablesHref'), label: f('receivablesLabel'), activeWhen: f('isReceivable') },
+            { href: f('payablesHref'), label: f('payablesLabel'), activeWhen: f('isPayable') },
+          ]),
+          divider: true,
         },
-      ),
-      textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') }),
-    ],
-    body: [
+        dimensions: f('dimensions'),
+        subsidiaries: f('subsidiaries'),
+        primaryFilter: f('primaryFilter'),
+      },
+    }],
+    schedule: {
+      definitionId: data.scheduleDefId ?? '',
+      statementParams: data.scheduleParams,
+      when: f('scheduleDefId'),
+    },
+    exportMenu: { kind: 'registers', params: data.exportParams },
+    headerAfterFilters: [textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') })],
+    bodyBeforePaper: [
       {
         ...widgetBlock('empty-state', {
           title: data.ratesBlocked?.title ?? '',
@@ -364,59 +347,59 @@ export function registersSpec(data: RegistersData): PageSpec {
             },
           ]
         : []),
-      paper({
-        company: f('company'),
-        title: f('title'),
-        periodPhrase: f('periodPhrase'),
-        wide: true,
-        when: f('ratesReady'),
+    ],
+    paper: {
+      company: f('company'),
+      title: f('title'),
+      periodPhrase: f('periodPhrase'),
+      wide: true,
+      when: f('ratesReady'),
+    },
+    blocks: [
+      repeat({
+        items: f('parties'),
+        itemKey: item('key'),
+        className: 'space-y-8',
+        empty: { text: f('emptyLabel'), className: 'py-8 text-center text-slate-400 italic' },
         blocks: [
-          repeat({
-            items: f('parties'),
-            itemKey: item('key'),
-            className: 'space-y-8',
-            empty: { text: f('emptyLabel'), className: 'py-8 text-center text-slate-400 italic' },
-            blocks: [
-              widgetBlock('party-heading', {
-                partyId: item('partyId'),
-                partyName: item('partyName'),
-                statementHref: item('statementHref'),
-                closingLabel: rootF('closingLabel'),
-                closing: item('closing'),
-                closingDrill: item('closingDrill'),
+          widgetBlock('party-heading', {
+            partyId: item('partyId'),
+            partyName: item('partyName'),
+            statementHref: item('statementHref'),
+            closingLabel: rootF('closingLabel'),
+            closing: item('closing'),
+            closingDrill: item('closingDrill'),
+          }),
+          table({
+            variant: 'report',
+            rows: item('lines'),
+            rowKey: item('key'),
+            leading: [openingRow],
+            columns: [
+              column(rootF('columnDate'), text(item('date')), {
+                headerClassName: 'w-28',
+                className: 'tabular-nums',
               }),
-              table({
-                variant: 'report',
-                rows: item('lines'),
-                rowKey: item('key'),
-                leading: [openingRow],
-                columns: [
-                  column(rootF('columnDate'), text(item('date')), {
-                    headerClassName: 'w-28',
-                    className: 'tabular-nums',
-                  }),
-                  column(
-                    rootF('columnEntry'),
-                    widgetCell('entry-cell', {
-                      entryId: item('entryId'),
-                      docKind: item('docKind'),
-                      docId: item('docId'),
-                      entryNumber: item('entryNumber'),
-                    }),
-                    { headerClassName: 'w-24' },
-                  ),
-                  column(rootF('columnMemo'), text(item('memo')), {
-                    className: 'text-slate-600 dark:text-slate-300',
-                  }),
-                  column(rootF('columnDebits'), txn(item('txn'), money(item('debit'))), { align: 'right' }),
-                  column(rootF('columnCredits'), txn(item('txn'), money(item('credit'))), { align: 'right' }),
-                  column(
-                    rootF('columnBalance'),
-                    txn(item('txn'), money(item('balance'), { tone: item('balanceTone') })),
-                    { align: 'right' },
-                  ),
-                ],
+              column(
+                rootF('columnEntry'),
+                widgetCell('entry-cell', {
+                  entryId: item('entryId'),
+                  docKind: item('docKind'),
+                  docId: item('docId'),
+                  entryNumber: item('entryNumber'),
+                }),
+                { headerClassName: 'w-24' },
+              ),
+              column(rootF('columnMemo'), text(item('memo')), {
+                className: 'text-slate-600 dark:text-slate-300',
               }),
+              column(rootF('columnDebits'), txn(item('txn'), money(item('debit'))), { align: 'right' }),
+              column(rootF('columnCredits'), txn(item('txn'), money(item('credit'))), { align: 'right' }),
+              column(
+                rootF('columnBalance'),
+                txn(item('txn'), money(item('balance'), { tone: item('balanceTone') })),
+                { align: 'right' },
+              ),
             ],
           }),
         ],

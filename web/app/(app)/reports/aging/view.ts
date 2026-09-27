@@ -5,11 +5,7 @@ import {
   column,
   drill,
   field,
-  filterBar,
   money,
-  page,
-  pageHeader,
-  paper,
   ref,
   rootRef,
   table,
@@ -33,6 +29,7 @@ import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import { reportTotalRowClass } from '../ReportTable'
 import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
+import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
 
 /**
  * Aging (AR / AP), split into a loader and a spec.
@@ -388,16 +385,8 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     // The export must age as of the date on the screen it leaves from
     // Without the resolved as-of the endpoint falls back to the
     // fiscal year end and every bucket is wrong.
-    exportParams: stringParams({ ...sp, asOf }),
+    exportParams: stringReportParams({ ...sp, asOf }),
   }
-}
-
-function stringParams(sp: Record<string, string | undefined>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [key, value] of Object.entries(sp)) {
-    if (typeof value === 'string') out[key] = value
-  }
-  return out
 }
 
 const f = ref<AgingData>()
@@ -452,39 +441,34 @@ const totalsRow: TableSpanRow = {
 }
 
 export function agingSpec(data: AgingData): PageSpec {
-  return page({
+  return statementReportSpec({
     route: '/reports/aging',
-    layout: 'list',
-    header: [
-      pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),
-      filterBar(
-        { period: true, asOf: true, dimensions: true, subsidiary: true },
-        {
-          dimensions: f('dimensions'),
-          subsidiaries: f('subsidiaries'),
-          defaultPeriod: 'today',
-          periodPresets: f('periodPresets'),
-          actions: [
-            widget('currency-basis', {
-              currencies: data.currencyOptions,
-              currency: data.currencyValue,
-              currencyBasis: data.currencyBasisValue,
-              currencyLabel: data.labelCurrency,
-              basisLabel: data.labelConvertFrom,
-              baseLabel: data.labelBase,
-              transactionLabel: data.labelTransaction,
-            }, f('ratesReady')),
-            widget('schedule-report', {
-              definitionId: data.scheduleDefId ?? '',
-              statementParams: data.scheduleParams,
-            }, f('scheduleDefId')),
-            widget('save-view'),
-            widget('export-menu', { kind: 'aging', params: data.exportParams }),
-          ],
-        },
-      ),
-    ],
-    body: [
+    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
+    filters: [{
+      controls: { period: true, asOf: true, dimensions: true, subsidiary: true },
+      options: {
+        dimensions: f('dimensions'),
+        subsidiaries: f('subsidiaries'),
+        defaultPeriod: 'today',
+        periodPresets: f('periodPresets'),
+      },
+    }],
+    actionsBefore: [widget('currency-basis', {
+      currencies: data.currencyOptions,
+      currency: data.currencyValue,
+      currencyBasis: data.currencyBasisValue,
+      currencyLabel: data.labelCurrency,
+      basisLabel: data.labelConvertFrom,
+      baseLabel: data.labelBase,
+      transactionLabel: data.labelTransaction,
+    }, f('ratesReady'))],
+    schedule: {
+      definitionId: data.scheduleDefId ?? '',
+      statementParams: data.scheduleParams,
+      when: f('scheduleDefId'),
+    },
+    exportMenu: { kind: 'aging', params: data.exportParams },
+    bodyBeforePaper: [
       {
         ...widgetBlock('empty-state', {
           title: data.ratesBlocked?.title ?? '',
@@ -497,66 +481,66 @@ export function agingSpec(data: AgingData): PageSpec {
         }),
         when: f('ratesBlocked'),
       },
-      paper({
-        company: f('company'),
-        title: f('title'),
-        periodPhrase: f('periodPhrase'),
-        wide: true,
-        when: f('ratesReady'),
-        blocks: [
-          // Two independent presence flags, not a negation.
-          {
-            ...table({
-              variant: 'report',
-              rows: f('detailRows'),
-              rowKey: item('key'),
-              emptyRow: { text: f('emptyLabel'), colSpan: 8, className: EMPTY_ROW_CLASS },
-              columns: [
-                column(rootF('labelParty'), partyCell()),
-                column(rootF('labelEntry'), txn(item('txn'), text(item('reference'))), {
-                  className: 'font-mono text-xs',
-                }),
-                column(rootF('labelDue'), text(item('dueDate')), { className: 'tabular-nums' }),
-                column(rootF('labelAge'), txn(item('txn'), text(item('ageDays'))), {
-                  align: 'right',
-                  className: 'tabular-nums',
-                }),
-                column(rootF('labelBucket'), text(item('bucketLabel'))),
-                column(rootF('labelTotal'), txn(item('txn'), money(item('open'))), {
-                  align: 'right',
-                  className: 'font-medium tabular-nums',
-                }),
-                column(rootF('labelDocCurrency'), text(item('currency')), {
-                  className: 'font-mono text-xs',
-                }),
-                column(rootF('labelTxnOpen'), txn(item('txn'), money(item('txnOpen'))), {
-                  align: 'right',
-                  className: 'tabular-nums',
-                }),
-              ],
+    ],
+    paper: {
+      company: f('company'),
+      title: f('title'),
+      periodPhrase: f('periodPhrase'),
+      wide: true,
+      when: f('ratesReady'),
+    },
+    blocks: [
+      // Two independent presence flags, not a negation.
+      {
+        ...table({
+          variant: 'report',
+          rows: f('detailRows'),
+          rowKey: item('key'),
+          emptyRow: { text: f('emptyLabel'), colSpan: 8, className: EMPTY_ROW_CLASS },
+          columns: [
+            column(rootF('labelParty'), partyCell()),
+            column(rootF('labelEntry'), txn(item('txn'), text(item('reference'))), {
+              className: 'font-mono text-xs',
             }),
-            when: f('isDetail'),
-          },
-          {
-            ...table({
-              variant: 'report',
-              rows: f('summaryRows'),
-              rowKey: item('key'),
-              emptyRow: { text: f('emptyLabel'), colSpan: BUCKETS.length + 2, className: EMPTY_ROW_CLASS },
-              trailing: data.hasSummaryRows ? [totalsRow] : [],
-              columns: [
-                column(rootF('labelParty'), partyCell()),
-                ...BUCKETS.map(bucketColumn),
-                column(rootF('labelTotal'), drill(item('totalDrill'), money(item('total'))), {
-                  align: 'right',
-                  className: 'font-semibold tabular-nums',
-                }),
-              ],
+            column(rootF('labelDue'), text(item('dueDate')), { className: 'tabular-nums' }),
+            column(rootF('labelAge'), txn(item('txn'), text(item('ageDays'))), {
+              align: 'right',
+              className: 'tabular-nums',
             }),
-            when: f('isSummary'),
-          },
-        ],
-      }),
+            column(rootF('labelBucket'), text(item('bucketLabel'))),
+            column(rootF('labelTotal'), txn(item('txn'), money(item('open'))), {
+              align: 'right',
+              className: 'font-medium tabular-nums',
+            }),
+            column(rootF('labelDocCurrency'), text(item('currency')), {
+              className: 'font-mono text-xs',
+            }),
+            column(rootF('labelTxnOpen'), txn(item('txn'), money(item('txnOpen'))), {
+              align: 'right',
+              className: 'tabular-nums',
+            }),
+          ],
+        }),
+        when: f('isDetail'),
+      },
+      {
+        ...table({
+          variant: 'report',
+          rows: f('summaryRows'),
+          rowKey: item('key'),
+          emptyRow: { text: f('emptyLabel'), colSpan: BUCKETS.length + 2, className: EMPTY_ROW_CLASS },
+          trailing: data.hasSummaryRows ? [totalsRow] : [],
+          columns: [
+            column(rootF('labelParty'), partyCell()),
+            ...BUCKETS.map(bucketColumn),
+            column(rootF('labelTotal'), drill(item('totalDrill'), money(item('total'))), {
+              align: 'right',
+              className: 'font-semibold tabular-nums',
+            }),
+          ],
+        }),
+        when: f('isSummary'),
+      },
     ],
   })
 }

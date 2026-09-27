@@ -4,11 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import {
   column,
   field,
-  filterBar,
   money,
-  page,
-  pageHeader,
-  paper,
   ref,
   repeat,
   rootRef,
@@ -16,7 +12,6 @@ import {
   text,
   textBlock,
   txn,
-  widget,
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
@@ -33,6 +28,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { decimalIsZero } from '../../../../lib/statement-format'
+import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
 
 /**
  * The journal report, split into a loader and a spec.
@@ -232,16 +228,8 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
         : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
-    exportParams: stringParams(sp),
+    exportParams: stringReportParams(sp),
   }
-}
-
-function stringParams(sp: Record<string, string | undefined>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [key, value] of Object.entries(sp)) {
-    if (typeof value === 'string') out[key] = value
-  }
-  return out
 }
 
 const f = ref<JournalData>()
@@ -258,30 +246,25 @@ const item = field
 const rootF = rootRef<JournalData>()
 
 export function journalSpec(data: JournalData): PageSpec {
-  return page({
+  return statementReportSpec({
     route: '/reports/journal',
-    layout: 'list',
-    header: [
-      pageHeader({ title: f('title'), back: { href: f('backHref'), label: f('backLabel') } }),
-      filterBar(
-        { period: true, dimensions: true, subsidiary: true },
-        {
-          dimensions: f('dimensions'),
-          subsidiaries: f('subsidiaries'),
-          primaryFilter: f('primaryFilter'),
-          actions: [
-            widget('schedule-report', {
-              definitionId: data.scheduleDefId ?? '',
-              statementParams: data.scheduleParams,
-            }, f('scheduleDefId')),
-            widget('save-view'),
-            widget('export-menu', { kind: 'journal', params: data.exportParams }),
-          ],
-        },
-      ),
-      textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') }),
-    ],
-    body: [
+    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
+    filters: [{
+      controls: { period: true, dimensions: true, subsidiary: true },
+      options: {
+        dimensions: f('dimensions'),
+        subsidiaries: f('subsidiaries'),
+        primaryFilter: f('primaryFilter'),
+      },
+    }],
+    schedule: {
+      definitionId: data.scheduleDefId ?? '',
+      statementParams: data.scheduleParams,
+      when: f('scheduleDefId'),
+    },
+    exportMenu: { kind: 'journal', params: data.exportParams },
+    headerAfterFilters: [textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') })],
+    bodyBeforePaper: [
       {
         ...widgetBlock('empty-state', {
           title: data.ratesBlocked?.title ?? '',
@@ -307,50 +290,50 @@ export function journalSpec(data: JournalData): PageSpec {
             },
           ]
         : []),
-      paper({
-        company: f('company'),
-        title: f('title'),
-        periodPhrase: f('periodPhrase'),
-        wide: true,
-        when: f('ratesReady'),
+    ],
+    paper: {
+      company: f('company'),
+      title: f('title'),
+      periodPhrase: f('periodPhrase'),
+      wide: true,
+      when: f('ratesReady'),
+    },
+    blocks: [
+      repeat({
+        items: f('entries'),
+        itemKey: item('id'),
+        className: 'space-y-6',
+        empty: { text: f('emptyLabel'), className: 'py-8 text-center text-slate-400 italic' },
         blocks: [
-          repeat({
-            items: f('entries'),
-            itemKey: item('id'),
-            className: 'space-y-6',
-            empty: { text: f('emptyLabel'), className: 'py-8 text-center text-slate-400 italic' },
-            blocks: [
-              // Props are field refs, resolved against the repeat item.
-              widgetBlock('journal-entry-heading', {
-                entryId: item('entryId'),
-                docKind: item('docKind'),
-                docId: item('docId'),
-                entryNumber: item('entryNumber'),
-                date: item('date'),
-                originLabel: item('originLabel'),
-                memo: item('memo'),
+          // Props are field refs, resolved against the repeat item.
+          widgetBlock('journal-entry-heading', {
+            entryId: item('entryId'),
+            docKind: item('docKind'),
+            docId: item('docId'),
+            entryNumber: item('entryNumber'),
+            date: item('date'),
+            originLabel: item('originLabel'),
+            memo: item('memo'),
+          }),
+          table({
+            variant: 'report',
+            rows: item('lines'),
+            rowKey: item('key'),
+            columns: [
+              column(
+                rootF('columnAccount'),
+                text(item('accountName'), {
+                  prefix: {
+                    field: item('accountNumber'),
+                    className: 'mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400',
+                  },
+                }),
+              ),
+              column(rootF('columnDetail'), text(item('detail')), {
+                className: 'text-slate-600 dark:text-slate-300',
               }),
-              table({
-                variant: 'report',
-                rows: item('lines'),
-                rowKey: item('key'),
-                columns: [
-                  column(
-                    rootF('columnAccount'),
-                    text(item('accountName'), {
-                      prefix: {
-                        field: item('accountNumber'),
-                        className: 'mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400',
-                      },
-                    }),
-                  ),
-                  column(rootF('columnDetail'), text(item('detail')), {
-                    className: 'text-slate-600 dark:text-slate-300',
-                  }),
-                  column(rootF('columnDebits'), txn(item('txn'), money(item('debit'))), { align: 'right' }),
-                  column(rootF('columnCredits'), txn(item('txn'), money(item('credit'))), { align: 'right' }),
-                ],
-              }),
+              column(rootF('columnDebits'), txn(item('txn'), money(item('debit'))), { align: 'right' }),
+              column(rootF('columnCredits'), txn(item('txn'), money(item('credit'))), { align: 'right' }),
             ],
           }),
         ],

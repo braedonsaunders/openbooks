@@ -7,11 +7,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { payrollSubsidiaryScopeFilter } from '@openbooks/engine/src/payroll/scope.ts'
 import { getTranslations } from 'next-intl/server'
 import {
-  filterBar,
-  page,
-  pageHeader,
   pagination,
-  paper,
   ref,
   textBlock,
   widget,
@@ -35,6 +31,7 @@ import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { resolvePeriod } from '../../../../../../lib/periods'
 import type { ExtraPeriodOption } from '../../../ReportFilterBar'
 import type { ReportDrillTarget } from '../../../../../../lib/report-drill'
+import { statementReportSpec } from '@/lib/reports/statement-report-spec'
 
 /**
  * A saved query report IS a regular report: this screen is the exact native
@@ -274,39 +271,27 @@ export function reportRunSpec(data: ReportRunData): PageSpec {
     { href: data.editHref, label: data.editLabel, variant: 'outline', size: 'sm' },
     f('canCreate'),
   )
-  const actions = [
-    edit,
-    widget('schedule-report', { definitionId: data.definitionId, historyHref: data.historyHref }),
-    widget('save-view'),
-    widget('export-menu', { baseHref: data.exportBaseHref }),
-  ]
-  return page({
+  return statementReportSpec({
     route: '/reports/custom/run/[id]',
-    layout: 'list',
-    header: [
-      pageHeader({
-        title: f('title'),
-        description: f('periodLabel'),
-        back: { href: f('backHref'), label: f('backLabel') },
-      }),
-      // The generic period picker owns a date field only when the persisted
-      // plan says so — a static-controls language needs both bars, exactly
-      // like the budget page's sections pair. `extraPeriods` carries the pay
-      // periods that sit above the presets in their own optgroup.
+    header: {
+      title: f('title'),
+      description: f('periodLabel'),
+      back: { href: f('backHref'), label: f('backLabel') },
+    },
+    actionsBefore: [edit],
+    schedule: { definitionId: data.definitionId, historyHref: data.historyHref },
+    exportMenu: { baseHref: data.exportBaseHref },
+    filters: [
       {
-        ...filterBar({ period: true }, { actions, extraPeriods: f('extraPeriods') }),
-        when: f('hasPeriodField'),
+        controls: { period: true },
+        options: { extraPeriods: f('extraPeriods'), when: f('hasPeriodField') },
       },
       {
-        ...filterBar({ period: false }, { actions, extraPeriods: f('extraPeriods') }),
-        when: f('noPeriodField'),
+        controls: { period: false },
+        options: { extraPeriods: f('extraPeriods'), when: f('noPeriodField') },
       },
     ],
-    body: [
-      // Success: the engine result rendered as the shared sheet of paper.
-      // `result-view` is the existing registry widget wrapping ResultView —
-      // flat props (company/title/description/result/drillTarget), exactly
-      // the shape its entry passes through.
+    bodyBeforePaper: [
       {
         ...widgetBlock('result-view', {
           company: data.company,
@@ -317,24 +302,19 @@ export function reportRunSpec(data: ReportRunData): PageSpec {
         }),
         when: f('hasResult'),
       },
-      // Failure (bad URL filters, engine error): the same paper with the
-      // error paragraph this page renders — `py-12 text-center
-      // text-sm text-slate-500 dark:text-slate-400`, verbatim.
-      {
-        ...paper({
-          company: f('company'),
-          title: f('title'),
-          periodPhrase: f('periodPhrase'),
-          blocks: [
-            textBlock(f('error'), {
-              className: 'py-12 text-center text-sm text-slate-500 dark:text-slate-400',
-            }),
-          ],
-        }),
-        when: f('hasError'),
-      },
-      // The native pager sits directly under the paper with no mt-3 wrapper,
-      // so the block goes bare.
+    ],
+    paper: {
+      company: f('company'),
+      title: f('title'),
+      periodPhrase: f('periodPhrase'),
+      when: f('hasError'),
+    },
+    blocks: [
+      textBlock(f('error'), {
+        className: 'py-12 text-center text-sm text-slate-500 dark:text-slate-400',
+      }),
+    ],
+    bodyAfterPaper: [
       {
         ...pagination({
           basePath: f('pagerBasePath'),

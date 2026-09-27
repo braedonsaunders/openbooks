@@ -3,13 +3,8 @@ import 'server-only'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { getTranslations } from 'next-intl/server'
 import {
-  filterBar,
-  page,
-  pageHeader,
-  paper,
   ref,
   textBlock,
-  widget,
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
@@ -25,6 +20,7 @@ import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { getAuthz } from '@/lib/authz'
 import { dimensionOptionsScope } from '../../../../lib/reports/filters'
+import { statementReportSpec } from '@/lib/reports/statement-report-spec'
 
 /**
  * The balance sheet, split into a loader and a spec — the same statement
@@ -203,17 +199,15 @@ export async function loadBalanceSheet(
 const f = ref<BalanceSheetData>()
 
 export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
-  return page({
+  return statementReportSpec({
     route: '/reports/balance-sheet',
-    layout: 'list',
-    header: [
-      pageHeader({
+    header: {
         title: f('title'),
         description: f('description'),
         back: { href: f('backHref'), label: f('backLabel') },
-      }),
-      filterBar(
-        {
+    },
+    filters: [{
+      controls: {
           period: true,
           asOf: true,
           breakout: true,
@@ -224,25 +218,20 @@ export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
           showZero: true,
           scale: true,
           sections: true,
-        },
-        {
+      },
+      options: {
           dimensions: f('dimensions'),
           subsidiaries: f('subsidiaries'),
           primaryFilter: f('primaryFilter'),
-          actions: [
-            widget(
-              'schedule-report',
-              {
-                definitionId: data.scheduleDefId ?? '',
-                statementParams: data.scheduleParams,
-              },
-              f('scheduleDefId'),
-            ),
-            widget('save-view'),
-            widget('export-menu', { kind: 'balance-sheet', params: data.exportParams }),
-          ],
-        },
-      ),
+      },
+    }],
+    schedule: {
+      definitionId: data.scheduleDefId ?? '',
+      statementParams: data.scheduleParams,
+      when: f('scheduleDefId'),
+    },
+    exportMenu: { kind: 'balance-sheet', params: data.exportParams },
+    headerAfterFilters: [
       // The matrix caps breakout columns at MAX_MATRIX_COLUMNS: warn when it
       // did, exactly like the P&L, so a narrowed-looking sheet is legible as
       // truncated rather than complete.
@@ -257,7 +246,7 @@ export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
         when: f('ratesReady'),
       },
     ],
-    body: [
+    bodyBeforePaper: [
       {
         ...widgetBlock('empty-state', {
           title: data.ratesBlocked?.title ?? '',
@@ -270,22 +259,22 @@ export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
         }),
         when: f('ratesBlocked'),
       },
-      paper({
+    ],
+    paper: {
         company: f('company'),
         title: f('title'),
         periodPhrase: f('periodPhrase'),
         note: f('note'),
         wide: f('wide'),
         when: f('ratesReady'),
-        blocks: [
+    },
+    blocks: [
           widgetBlock('statement-matrix', {
             view: data.view,
             scale: data.scale,
             currency: data.currency,
             drill: data.drill,
           }),
-        ],
-      }),
     ],
   })
 }

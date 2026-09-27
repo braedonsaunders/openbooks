@@ -4,18 +4,13 @@ import { getTranslations } from 'next-intl/server'
 import {
   column,
   field,
-  filterBar,
   heading,
   link,
-  page,
-  pageHeader,
-  paper,
   ref,
   rootRef,
   table,
   text,
   textBlock,
-  widget,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -32,6 +27,7 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { orgInfo } from '../../../../lib/data'
 import { pickString } from '../../../../lib/list-params'
+import { statementReportSpec } from '@/lib/reports/statement-report-spec'
 import {
   availabilityEntityScope,
   availabilityRefusalText,
@@ -203,71 +199,63 @@ const quantity = (name: string, header: Parameters<typeof column>[0]) =>
   column(header, text(item(name)), { align: 'right', className: 'tabular-nums' })
 
 export function availabilitySpec(data: AvailabilityData): PageSpec {
-  return page({
+  return statementReportSpec({
     route: '/reports/availability',
-    layout: 'list',
-    header: [
-      pageHeader({
-        title: f('title'),
-        description: f('description'),
-        back: { href: f('backHref'), label: f('backLabel') },
-      }),
-      textBlock(f('refusal'), { tone: 'warning', when: f('refusal') }),
-      filterBar(
-        { search: true, subsidiary: true, showZero: true },
-        {
-          searchPlaceholder: f('searchPlaceholder'),
-          subsidiaries: f('subsidiaries'),
-          primaryFilter: f('primaryFilter'),
-          actions: [
-            widget('save-view'),
-            widget('export-menu', { kind: 'availability', params: data.exportParams }),
-          ],
-        },
-      ),
-    ],
-    body: [
-      paper({
-        company: f('company'),
-        title: f('title'),
-        periodPhrase: f('scopePhrase'),
-        wide: true,
-        blocks: [
-          table({
-            variant: 'report',
-            rows: f('rows'),
-            rowKey: item('itemId'),
-            emptyRow: { text: f('empty'), colSpan: 6 },
-            columns: [
-              column(rootF('columns.item'), text(item('item')), { className: 'font-medium' }),
-              column(rootF('columns.unit'), text(item('unit'))),
-              quantity('onHand', rootF('columns.onHand')),
-              quantity('committed', rootF('columns.committed')),
-              quantity('available', rootF('columns.available')),
-              quantity('unallocated', rootF('columns.unallocated')),
-            ],
-          }),
-          textBlock(f('note'), { tone: 'muted', className: 'mt-3' }),
-          { ...heading(3, f('releasableTitle'), 'mt-8 mb-2'), when: f('showReleasable') },
-          table({
-            variant: 'report',
-            when: f('showReleasable'),
-            rows: f('releasable'),
-            rowKey: item('lineId'),
-            emptyRow: { text: f('releasableEmpty'), colSpan: 7 },
-            columns: [
-              column(rootF('releasableColumns.order'), link(item('order'), item('orderHref')), { className: 'font-medium' }),
-              column(rootF('releasableColumns.date'), text(item('date')), { className: 'tabular-nums' }),
-              column(rootF('releasableColumns.customer'), text(item('customer'))),
-              column(rootF('releasableColumns.item'), text(item('item'))),
-              column(rootF('releasableColumns.unit'), text(item('unit'))),
-              quantity('open', rootF('releasableColumns.open')),
-              quantity('releasable', rootF('releasableColumns.releasable')),
-            ],
-          }),
-          textBlock(f('releasableNote'), { tone: 'muted', className: 'mt-3', when: f('showReleasable') }),
+    header: {
+      title: f('title'),
+      description: f('description'),
+      back: { href: f('backHref'), label: f('backLabel') },
+    },
+    headerBeforeFilters: [textBlock(f('refusal'), { tone: 'warning', when: f('refusal') })],
+    filters: [{
+      controls: { search: true, subsidiary: true, showZero: true },
+      options: {
+        searchPlaceholder: f('searchPlaceholder'),
+        subsidiaries: f('subsidiaries'),
+        primaryFilter: f('primaryFilter'),
+      },
+    }],
+    exportMenu: { kind: 'availability', params: data.exportParams },
+    paper: {
+      company: f('company'),
+      title: f('title'),
+      periodPhrase: f('scopePhrase'),
+      wide: true,
+    },
+    blocks: [
+      table({
+        variant: 'report',
+        rows: f('rows'),
+        rowKey: item('itemId'),
+        emptyRow: { text: f('empty'), colSpan: 6 },
+        columns: [
+          column(rootF('columns.item'), text(item('item')), { className: 'font-medium' }),
+          column(rootF('columns.unit'), text(item('unit'))),
+          quantity('onHand', rootF('columns.onHand')),
+          quantity('committed', rootF('columns.committed')),
+          quantity('available', rootF('columns.available')),
+          quantity('unallocated', rootF('columns.unallocated')),
         ],
       }),
+      textBlock(f('note'), { tone: 'muted', className: 'mt-3' }),
+      { ...heading(3, f('releasableTitle'), 'mt-8 mb-2'), when: f('showReleasable') },
+      table({
+        variant: 'report',
+        when: f('showReleasable'),
+        rows: f('releasable'),
+        rowKey: item('lineId'),
+        emptyRow: { text: f('releasableEmpty'), colSpan: 7 },
+        columns: [
+          column(rootF('releasableColumns.order'), link(item('order'), item('orderHref')), { className: 'font-medium' }),
+          column(rootF('releasableColumns.date'), text(item('date')), { className: 'tabular-nums' }),
+          column(rootF('releasableColumns.customer'), text(item('customer'))),
+          column(rootF('releasableColumns.item'), text(item('item'))),
+          column(rootF('releasableColumns.unit'), text(item('unit'))),
+          quantity('open', rootF('releasableColumns.open')),
+          quantity('releasable', rootF('releasableColumns.releasable')),
+        ],
+      }),
+      textBlock(f('releasableNote'), { tone: 'muted', className: 'mt-3', when: f('showReleasable') }),
     ],
   })
 }
