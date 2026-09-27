@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
-import { db, withOrgContext } from "../platform/db.ts";
+import { db, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
 import { addMoney, negMoney, subMoney, sumMoney, ZERO_MONEY, type Money } from "../money/brands.ts";
 import { NonprofitError, fundFeatureOff } from "./errors.ts";
@@ -65,6 +65,8 @@ export type NonprofitStatementInput = {
   periodTo: string;
   fundId?: string | null;
   bookId?: string | null;
+  /** Reuse an existing read snapshot when another report owns the consistency boundary. */
+  runner?: SqlExecutor;
 };
 
 export type AccountSnapshot = {
@@ -126,6 +128,8 @@ export type FunctionalStatementTotal = {
 export type CashFlowReconciliation = {
   baseCurrency: string;
   openingCash: Money;
+  openingAssets: Money;
+  openingLiabilities: Money;
   cashChange: Money;
   closingCash: Money;
   openingNetAssets: Money;
@@ -235,8 +239,8 @@ function isCash(type: string): boolean {
   return type === "asset_bank";
 }
 
-async function resolveStatementBookId(orgId: string, requestedBookId?: string | null): Promise<string> {
-  const row = (await db.execute<{ book_id: string }>(sql`
+async function resolveStatementBookId(orgId: string, requestedBookId?: string | null, runner: SqlExecutor = db): Promise<string> {
+  const row = (await runner.execute<{ book_id: string }>(sql`
     select b.id as book_id
       from accounting_books b
       join subsidiaries s on s.org_id = b.org_id
@@ -280,12 +284,13 @@ function mapMapping(row: MappingRow): FunctionalMapping {
 /** Read and reconcile all four statements from posted ledger lines. */
 export async function loadNonprofitStatements(input: NonprofitStatementInput): Promise<NonprofitStatements> {
   validateInput(input);
-  return withOrgContext(input.orgId, async () => {
-    if (!(await orgFeatureEnabled(input.orgId, "nonprofit", db))) throw featureOff("nonprofit", "Nonprofit Accounting");
-    if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", db))) throw fundFeatureOff();
-    if (!(await orgFeatureEnabled(input.orgId, "functionalExpenses", db))) throw functionalFeatureOff();
-    const bookId = await resolveStatementBookId(input.orgId, input.bookId);
-    const framework = await requireNonprofitFramework(input.orgId);
+  const runner = input.runner ?? db;
+  const load = async () => {
+    if (!(await orgFeatureEnabled(input.orgId, "nonprofit", runner))) throw featureOff("nonprofit", "Nonprofit Accounting");
+    if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner))) throw fundFeatureOff();
+    if (!(await orgFeatureEnabled(input.orgId, "functionalExpenses", runner))) throw functionalFeatureOff();
+    const bookId = await resolveStatementBookId(input.orgId, input.bookId, runner);
+    const framework = await requireNonprofitFramework(input.orgId, runner);
     const classLabels = new Map(Object.entries(NONPROFIT_FRAMEWORKS[framework.framework].classes));
     const classLabel = (restrictionClass: string | null): string | null => {
       if (restrictionClass === null) return null;
@@ -301,20 +306,20 @@ export async function loadNonprofitStatements(input: NonprofitStatementInput): P
       return label;
     };
 
-    const mappings = (await db.execute<MappingRow>(sql`
+    const mappings = (await runner.execute<MappingRow>(sql`
       select id, org_id, department_id, project_id, function, program_key,
              effective_from::text, effective_to::text, created_at::text, created_by::text
         from functional_mappings
        where org_id = ${input.orgId}
        order by effective_from, id
     `)).rows.map(mapMapping);
-    const accounts = (await db.execute<AccountRow>(sql`
+    const accounts = (await runner.execute<AccountRow>(sql`
       select id, number, name, type
         from accounts
        where org_id = ${input.orgId}
        order by number, id
     `)).rows;
-    const lineRows = await db.execute<StatementLineRow>(sql`
+    const lineRows = await runner.execute<StatementLineRow>(sql`
       select jl.id::text as line_id, jl.account_id::text as account_id,
              a.number as account_number, a.name as account_name, a.type as account_type,
              jl.amount::text as amount, je.posting_date::text as posting_date,
@@ -337,7 +342,7 @@ export async function loadNonprofitStatements(input: NonprofitStatementInput): P
     `);
     const rows = lineRows.rows;
     const periodRows = rows.filter((row) => row.posting_date >= input.periodFrom && row.posting_date <= input.periodTo);
-    const releaseRows = (await db.execute<ReleaseRow>(sql`
+    const releaseRows = (await runner.execute<ReleaseRow>(sql`
       select source_fund.restriction_class as from_class,
              target_fund.restriction_class as to_class,
              release.amount::text as amount, source_sub.base_currency
@@ -530,6 +535,8 @@ export async function loadNonprofitStatements(input: NonprofitStatementInput): P
       return {
         baseCurrency,
         openingCash,
+        openingAssets,
+        openingLiabilities: negMoney(openingLiabilities),
         cashChange: subMoney(closingCash, openingCash),
         closingCash,
         openingNetAssets,
@@ -567,5 +574,6 @@ export async function loadNonprofitStatements(input: NonprofitStatementInput): P
       },
       cashFlows: { from: input.periodFrom, to: input.periodTo, reconciliation },
     };
-  });
+  };
+  return input.runner ? load() : withOrgContext(input.orgId, load);
 }

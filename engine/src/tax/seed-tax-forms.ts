@@ -182,10 +182,10 @@ async function installTaxReturnPackWith(
   const insertRow = async (box: TaxReturnPackBox, taxCodeId: string | null) => {
     await tx.execute(sql`
       insert into tax_report_lines
-        (org_id, report_code, line_code, label, tax_code_id, basis, sign,
+        (org_id, report_code, line_code, label, tax_code_id, basis, input_key, sign,
          sequence, formula, created_by, updated_by)
       values (${orgId}, ${pack.code}, ${box.lineCode}, ${box.label}, ${taxCodeId},
-              ${box.basis ?? null}, ${box.sign}, ${box.sequence}, ${box.formula ?? null},
+              ${box.basis ?? null}, ${box.inputKey ?? null}, ${box.sign}, ${box.sequence}, ${box.formula ?? null},
               ${actorId}, ${actorId})`);
     boxRows++;
   };

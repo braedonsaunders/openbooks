@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { computeTaxReturn, TaxReturnError } from "@openbooks/engine/src/tax-returns/return.ts";
+import { computeTaxReturn, filterTaxReturnFormsByFeatures, TaxReturnError } from "@openbooks/engine/src/tax-returns/return.ts";
 import { can } from "../authz";
 import { isDocKindEnabled } from "../documents.ts";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -26,7 +26,7 @@ const listTaxReturnForms: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({}),
   execute: async (_raw, authz): Promise<ToolResult> => {
-    const rows = (await db.execute<Record<string, unknown>>(sql`
+    const rows = (await db.execute<{ code: string; name: string; country: string | null; submission_channel: string; is_active: boolean; registrations: number }>(sql`
       select f.code, f.name, f.country, f.submission_channel, f.is_active,
              (select count(*)::int from tax_registrations r
                where r.org_id = f.org_id and r.return_form_code = f.code) as registrations
@@ -34,10 +34,11 @@ const listTaxReturnForms: AssistantToolDef = {
        where f.org_id = ${authz.user.orgId}
        order by f.is_active desc, f.country, f.code
     `));
+    const visibleRows = await filterTaxReturnFormsByFeatures(authz.user.orgId, rows.rows);
     return {
       ok: true,
       data: {
-        forms: rows.rows.map((r) => ({
+        forms: visibleRows.map((r) => ({
           code: r.code,
           name: r.name,
           country: r.country,

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { pool, type SqlExecutor } from "../platform/db.ts";
+import { db, pool, type SqlExecutor } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
 import { abs, add, cmp, fromUnits, mulRate, neg, toUnits } from "../money/money.ts";
 import {
@@ -10,6 +10,7 @@ import {
 import { countryTaxPackForReturn, packTaxCodesForReturn, taxReturnPackBox } from "../country-tax-packs/index.ts";
 import { taxRegistrationFormProblem, taxReturnPack } from "../tax/seed-tax-forms.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
+import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { buildFilingCalendar, type FilingFrequency } from "../tax/nexus.ts";
 
 // A return is a statutory report, not a best-effort dashboard query. By
@@ -25,6 +26,54 @@ import { buildFilingCalendar, type FilingFrequency } from "../tax/nexus.ts";
 // deadlock a pool of N.
 const returnDb = drizzle({ client: pool });
 export type TaxReturnRunner = SqlExecutor;
+
+export interface ReturnInputProviderRequest {
+  runner: TaxReturnRunner;
+  orgId: string;
+  from: string;
+  to: string;
+  /** Full, namespaced input keys declared by boxes in this return. */
+  keys: readonly string[];
+}
+
+export type ReturnInputProvider = (
+  request: ReturnInputProviderRequest,
+) => Promise<Readonly<Record<string, string>>>;
+
+const returnInputProviders = new Map<string, ReturnInputProvider>();
+
+/** Register or replace the provider for one input namespace. */
+export function registerReturnInputProvider(
+  namespace: string,
+  provider: ReturnInputProvider,
+): void {
+  if (!/^[a-z][a-z0-9_-]*$/.test(namespace)) {
+    throw new TypeError("return input provider namespaces must be lowercase identifiers");
+  }
+  returnInputProviders.set(namespace, provider);
+}
+
+/** Hide input-backed return forms when their owning feature namespace is off. */
+export async function filterTaxReturnFormsByFeatures<T extends { code: string }>(
+  orgId: string,
+  forms: readonly T[],
+  runner: TaxReturnRunner = db,
+): Promise<T[]> {
+  if (forms.length === 0) return [];
+  const rows = (await runner.execute<{ report_code: string; input_key: string }>(sql`
+    select distinct report_code, input_key
+      from tax_report_lines
+     where org_id = ${orgId} and input_key is not null
+  `)).rows;
+  const disabled = new Set<string>();
+  for (const key of new Set(rows.map((row) => row.input_key.split(".", 1)[0]!))) {
+    if (!returnInputProviders.has(key) || !(await orgFeatureEnabled(orgId, key, runner))) {
+      disabled.add(key);
+    }
+  }
+  const disabledByForm = new Set(rows.filter((row) => disabled.has(row.input_key.split(".", 1)[0]!)).map((row) => row.report_code));
+  return forms.filter((form) => !disabledByForm.has(form.code));
+}
 
 /**
  * Configurable government tax return computation.
@@ -50,6 +99,8 @@ export interface TaxReturnBoxDef {
   sequence: number;
   /** Arithmetic over sibling line codes; when set the box is computed, not GL-mapped. */
   formula: string | null;
+  /** Namespaced input key resolved by a registered return-input provider. */
+  inputKey?: string | null;
   /** True for manual ADJUSTMENT boxes (no formula, no GL source): the filer types
    *  the amount (e.g. GST34 lines 104/107). */
   editable: boolean;
@@ -67,10 +118,30 @@ export interface TaxReturnBox {
   editable: boolean;
   /** AcroForm field to fill on the official-PDF overlay (null when unmapped). */
   pdfField: string | null;
+  /** Provider key for a sourced box, omitted for GL and formula boxes. */
+  inputKey?: string;
 }
 
 export class TaxReturnError extends Error {
-  readonly name = "TaxReturnError";
+  readonly name: string = "TaxReturnError";
+}
+
+const returnInputRemedy = (namespace?: string) =>
+  namespace
+    ? `Enable ${namespace} in Company Settings → Features.`
+    : "Enable the feature that owns this return input in Company Settings → Features.";
+
+/** A declared source could not be supplied by the registered return-input seam. */
+export class TaxReturnInputError extends TaxReturnError {
+  override readonly name: string = "TaxReturnInputError";
+  readonly status = 422;
+  readonly code = "return_input_unavailable";
+  readonly remedy: string;
+
+  constructor(message: string, remedy = returnInputRemedy()) {
+    super(message);
+    this.remedy = remedy;
+  }
 }
 
 /**
@@ -176,6 +247,7 @@ export function assembleReturn(
   boxes: TaxReturnBoxDef[],
   glRawByLineCode: Map<string, string>,
   adjustments: Map<string, string> = new Map(),
+  inputValues: ReadonlyMap<string, string> = new Map(),
 ): TaxReturnBox[] {
   const ordered = [...boxes].sort(
     (a, b) => a.sequence - b.sequence || a.lineCode.localeCompare(b.lineCode),
@@ -190,6 +262,16 @@ export function assembleReturn(
     let value: string;
     if (box.formula && box.formula.trim()) {
       value = signed(evalFormula(box.formula, values, boxCodes));
+    } else if (box.inputKey) {
+      const inputValue = inputValues.get(box.inputKey);
+      if (inputValue === undefined) {
+        const namespace = box.inputKey.split(".", 1)[0];
+        throw new TaxReturnInputError(
+          `return box "${box.lineCode}" requires input "${box.inputKey}", but no value was resolved — ${returnInputRemedy(namespace)}`,
+          returnInputRemedy(namespace),
+        );
+      }
+      value = signed(inputValue);
     } else if (box.editable) {
       // Adjustment box: the filer's typed amount (already in the sign the form
       // shows), defaulting to zero. Not sign-flipped — it's entered as displayed.
@@ -205,6 +287,7 @@ export function assembleReturn(
       computed: Boolean(box.formula?.trim()),
       editable: box.editable,
       pdfField: box.pdfField,
+      ...(box.inputKey ? { inputKey: box.inputKey } : {}),
     });
   }
   return result;
@@ -218,6 +301,7 @@ export interface TaxReportLineRow {
   sequence: number;
   taxCodeId: string | null;
   basis: string | null;
+  inputKey?: string | null;
   formula: string | null;
   pdfField?: string | null;
 }
@@ -274,24 +358,110 @@ export function planReturn(rows: TaxReportLineRow[]): {
         sign: row.sign,
         sequence: row.sequence,
         formula: row.formula,
+        inputKey: row.inputKey ?? null,
         editable: false,
         pdfField: row.pdfField ?? null,
       });
     } else {
       existing.sequence = Math.min(existing.sequence, row.sequence);
+      if ((existing.inputKey || row.inputKey) && existing.inputKey !== (row.inputKey ?? null)) {
+        throw new TaxReturnError(`return box "${row.lineCode}" cannot combine an input key with another source`);
+      }
       if (!existing.formula && row.formula) existing.formula = row.formula;
       if (!existing.pdfField && row.pdfField) existing.pdfField = row.pdfField;
+      if (!existing.inputKey && row.inputKey) existing.inputKey = row.inputKey;
+      if (existing.inputKey && row.inputKey && existing.inputKey !== row.inputKey) {
+        throw new TaxReturnError(`return box "${row.lineCode}" declares conflicting input keys`);
+      }
     }
-    if (!row.formula?.trim() && row.taxCodeId && row.basis) {
+    if (row.inputKey && byLine.get(row.lineCode)?.formula?.trim()) {
+      throw new TaxReturnError(
+        `return box "${row.lineCode}" input "${row.inputKey}" cannot also declare a formula or tax-code source`,
+      );
+    }
+    if (row.formula?.trim() && byLine.get(row.lineCode)?.inputKey) {
+      throw new TaxReturnError(
+        `return box "${row.lineCode}" input "${byLine.get(row.lineCode)!.inputKey}" cannot also declare a formula or tax-code source`,
+      );
+    }
+    if (row.inputKey && (row.formula?.trim() || row.taxCodeId || row.basis)) {
+      throw new TaxReturnError(
+        `return box "${row.lineCode}" input "${row.inputKey}" cannot also declare a formula or tax-code source`,
+      );
+    }
+    if (!row.inputKey && !row.formula?.trim() && row.taxCodeId && row.basis) {
       glSources.push({ lineCode: row.lineCode, taxCodeId: row.taxCodeId, basis: row.basis });
       hasGl.add(row.lineCode);
     }
   }
   // A box with neither a formula nor any GL source is a manual adjustment box.
   for (const box of byLine.values()) {
-    box.editable = !box.formula?.trim() && !hasGl.has(box.lineCode);
+    box.editable = !box.formula?.trim() && !box.inputKey && !hasGl.has(box.lineCode);
   }
   return { boxes: [...byLine.values()], glSources };
+}
+
+/** Resolve all declared input boxes, sequentially on the caller's snapshot runner. */
+export async function resolveReturnInputValues(
+  runner: TaxReturnRunner,
+  request: { orgId: string; from: string; to: string; boxes: readonly TaxReturnBoxDef[] },
+): Promise<Map<string, string>> {
+  const boxesByNamespace = new Map<string, TaxReturnBoxDef[]>();
+  for (const box of request.boxes) {
+    if (!box.inputKey) continue;
+    const separator = box.inputKey.indexOf(".");
+    const namespace = separator > 0 ? box.inputKey.slice(0, separator) : "";
+    if (!namespace || !/^[a-z][a-z0-9_-]*$/.test(namespace) || separator === box.inputKey.length - 1) {
+      throw new TaxReturnError(`return box "${box.lineCode}" has invalid input key "${box.inputKey}"`);
+    }
+    const group = boxesByNamespace.get(namespace) ?? [];
+    group.push(box);
+    boxesByNamespace.set(namespace, group);
+  }
+
+  const resolved = new Map<string, string>();
+  for (const [namespace, boxes] of boxesByNamespace) {
+    const provider = returnInputProviders.get(namespace);
+    if (!provider) {
+      const box = boxes[0]!;
+      throw new TaxReturnInputError(
+        `return box "${box.lineCode}" requires input "${box.inputKey}", but provider "${namespace}" is not registered — ${returnInputRemedy(namespace)}`,
+        returnInputRemedy(namespace),
+      );
+    }
+    const keys = [...new Set(boxes.map((box) => box.inputKey!))].sort();
+    const values = await provider({
+      runner,
+      orgId: request.orgId,
+      from: request.from,
+      to: request.to,
+      keys,
+    });
+    for (const box of boxes) {
+      const key = box.inputKey!;
+      if (!Object.prototype.hasOwnProperty.call(values, key)) {
+        throw new TaxReturnInputError(
+          `return box "${box.lineCode}" requires input "${key}", but provider "${namespace}" returned no value — ${returnInputRemedy(namespace)}`,
+          returnInputRemedy(namespace),
+        );
+      }
+      const value = values[key];
+      if (typeof value !== "string") {
+        throw new TaxReturnError(`return input provider "${namespace}" returned a non-string value for "${key}"`);
+      }
+      let canonical: string;
+      try {
+        canonical = fromUnits(toUnits(value));
+      } catch {
+        throw new TaxReturnError(`return input provider "${namespace}" returned an invalid decimal for "${key}"`);
+      }
+      if (canonical !== value) {
+        throw new TaxReturnError(`return input provider "${namespace}" returned a non-canonical decimal for "${key}"`);
+      }
+      resolved.set(key, canonical);
+    }
+  }
+  return resolved;
 }
 
 export interface TaxReturnResult {
@@ -309,6 +479,8 @@ export interface TaxReturnResult {
    */
   registrationNumber: string | null;
   boxes: TaxReturnBox[];
+  /** The declared input evidence used for non-GL boxes, when present. */
+  inputSources?: Array<{ lineCode: string; inputKey: string; value: string }>;
   /**
    * The currency `boxes` are denominated in: the filing entity's functional
    * currency, or the presentation currency when the return is a translated
@@ -1164,10 +1336,11 @@ async function computeTaxReturnInSnapshot(
 
   const boxRes = (await runner.execute<{
       line_code: string; label: string; sign: number; sequence: number;
-      tax_code_id: string | null; basis: string | null; formula: string | null; pdf_field: string | null;
+      tax_code_id: string | null; basis: string | null; input_key: string | null;
+      formula: string | null; pdf_field: string | null;
     }>(sql`
     select line_code, label, coalesce(sign, 1) as sign, coalesce(sequence, 0) as sequence,
-           tax_code_id, basis, formula, pdf_field
+           tax_code_id, basis, input_key, formula, pdf_field
       from tax_report_lines
      where org_id = ${orgId} and report_code = ${formCode}
      order by sequence, line_code`));
@@ -1183,17 +1356,20 @@ async function computeTaxReturnInSnapshot(
       sequence: Number(r.sequence),
       taxCodeId: r.tax_code_id,
       basis: r.basis,
+      inputKey: r.input_key,
       formula: r.formula,
       pdfField: r.pdf_field,
     })),
   );
+  const hasInputBoxes = boxDefs.some((box) => Boolean(box.inputKey));
+  const inputValues = await resolveReturnInputValues(runner, { orgId, from, to, boxes: boxDefs });
 
   // A code the install left out of every box contributes nothing to the
   // figures — a hand-made code with no jurisdiction never lands in a state
   // return, and the filed figures silently understate. When such a code
   // holds this form's jurisdiction (or the catalog expects it on this form)
   // AND has activity in the period, refuse by name instead of filing short.
-  await assertNoUnmappedActivity(runner, {
+  if (!hasInputBoxes || glSources.length > 0) await assertNoUnmappedActivity(runner, {
     orgId,
     formCode,
     from,
@@ -1256,6 +1432,14 @@ async function computeTaxReturnInSnapshot(
     );
   }
   if (policy) {
+    if (hasInputBoxes) {
+      const box = boxDefs.find((candidate) => candidate.inputKey)!;
+      const namespace = box.inputKey!.split(".", 1)[0];
+      throw new TaxReturnInputError(
+        `return box "${box.lineCode}" input "${box.inputKey}" cannot be translated across filing entities — prepare one filing entity at a time — ${returnInputRemedy(namespace)}`,
+        returnInputRemedy(namespace),
+      );
+    }
     // Translated consolidated view — taken even when single-currency, so the
     // declared policy and its evidence are always visible when asked for.
     const translated = await translateReturnGlRaw(
@@ -1269,7 +1453,7 @@ async function computeTaxReturnInSnapshot(
     );
     translation = translated.translation;
     functionalCurrency = policy.presentationCurrency;
-    boxes = assembleReturn(boxDefs, translated.glRaw, adjustmentsMap);
+    boxes = assembleReturn(boxDefs, translated.glRaw, adjustmentsMap, inputValues);
   } else {
     const glRaw = await sumReturnGlRaw(runner, {
       ...sumBase,
@@ -1297,7 +1481,7 @@ async function computeTaxReturnInSnapshot(
         functionalCurrency = orgBase;
       }
     }
-    boxes = assembleReturn(boxDefs, glRaw, adjustmentsMap);
+    boxes = assembleReturn(boxDefs, glRaw, adjustmentsMap, inputValues);
   }
 
   // The filing identity travels with the computed boxes so every printed
@@ -1312,6 +1496,13 @@ async function computeTaxReturnInSnapshot(
     watermark: form.watermark,
     registrationNumber: registration.registrationNumber,
     boxes,
+    ...(hasInputBoxes ? {
+      inputSources: boxDefs.flatMap((box) => box.inputKey ? [{
+        lineCode: box.lineCode,
+        inputKey: box.inputKey,
+        value: inputValues.get(box.inputKey)!,
+      }] : []),
+    } : {}),
     functionalCurrency,
     subsidiaryIds: scope.legacy ? [] : scope.ids,
     registrationId: registration.registrationId,

@@ -146,6 +146,21 @@ const PACK_FACTS: Record<string, PackFacts> = {
         formulas: ["7 = 5 - 6"],
         codes: ["US-FL-ST -: 3% 1949-11-01, 4% 1968-04-01, 5% 1982-05-01, 6% 1988-02-01"],
       },
+      US_990: {
+        filing: "annual portal_manual paper",
+        boxes: "VIII12A IX25B IX25C IX25D IX25A X16A X16B X26A X26B X32A X32B X33A X33B I12 I18 I19 I20 I21 I22",
+        formulas: [
+          "IX25A = IX25B + IX25C + IX25D",
+          "X33A = X26A + X32A",
+          "X33B = X26B + X32B",
+          "I12 = VIII12A",
+          "I18 = IX25A",
+          "I19 = I12 - I18",
+          "I20 = X16B",
+          "I21 = X26B",
+          "I22 = X32B",
+        ],
+      },
     },
   },
   AU: {

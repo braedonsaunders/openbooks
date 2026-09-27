@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { computeTaxReturn, TaxReturnError } from "@openbooks/engine/src/tax-returns/return.ts";
+import { computeTaxReturn, filterTaxReturnFormsByFeatures, TaxReturnError } from "@openbooks/engine/src/tax-returns/return.ts";
 import { normalizeMoneyValue } from "../cash/core";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
@@ -30,10 +30,11 @@ export async function listApplicationTaxReturnForms(context: ApplicationContext)
              where r.org_id = f.org_id and r.return_form_code = f.code) as registrations
       from tax_return_forms f
      where f.org_id = ${context.authz.user.orgId}
-     order by f.is_active desc, f.country, f.code`);
+    order by f.is_active desc, f.country, f.code`);
+  const visibleRows = await filterTaxReturnFormsByFeatures(context.authz.user.orgId, rows.rows);
   return {
-    total: rows.rows.length,
-    forms: rows.rows.map((row) => ({
+    total: visibleRows.length,
+    forms: visibleRows.map((row) => ({
       code: row.code,
       name: row.name,
       country: row.country,

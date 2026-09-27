@@ -6,7 +6,7 @@ import {
 } from "./continuous-close-config.ts";
 import { db } from "../platform/db.ts";
 import { activePostingPrimaryBookId } from "../platform/accounting-books.ts";
-import { computeTaxReturn, TaxReturnError } from "../tax-returns/return.ts";
+import { computeTaxReturn, filterTaxReturnFormsByFeatures, TaxReturnError } from "../tax-returns/return.ts";
 import { absoluteUnits, classifyForensicItem, moneyAbs } from "./measure.ts";
 import type { AgentFinding } from "./types.ts";
 
@@ -30,9 +30,9 @@ export async function taxFindings(
   const findings: AgentFinding[] = [];
   const byKey = new Map(detectors.map((detector) => [detector.detectorKey, detector]));
 
-  const activeForms = (await db.execute<{ code: string; name: string }>(sql`
+  const activeForms = await filterTaxReturnFormsByFeatures(orgId, (await db.execute<{ code: string; name: string }>(sql`
     select code, name from tax_return_forms where org_id = ${orgId} and is_active order by code
-  `)).rows;
+  `)).rows);
 
   const formRegistration = async (formCode: string): Promise<string | null> => {
     const reg = (await db.execute<{ id: string }>(sql`

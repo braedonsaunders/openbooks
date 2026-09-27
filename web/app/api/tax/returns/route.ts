@@ -5,6 +5,7 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { filterTaxReturnFormsByFeatures } from '@openbooks/engine/src/tax-returns/return.ts'
 import { installTaxReturnPacks, TAX_RETURN_PACKS } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
 import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { planTaxReturnLibraryChange } from '../../../../lib/setup/tax-return-library'
@@ -25,7 +26,7 @@ async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, in
       from tax_return_forms
      where org_id = ${gate.user.orgId} and is_active
      order by name`))
-  return NextResponse.json({ forms: r.rows })
+  return NextResponse.json({ forms: await filterTaxReturnFormsByFeatures(gate.user.orgId, r.rows) })
 }
 
 /** Atomically install or explicitly reset one or more reference jurisdiction packs. */

@@ -27,6 +27,8 @@ export interface TaxReturnPackBox {
   basis?: TaxBoxBasis;
   formula?: string;
   glMap?: TaxBoxMap;
+  /** Namespaced key resolved by a registered statement input provider. */
+  inputKey?: string;
 }
 
 export interface TaxReturnPackJurisdiction {
