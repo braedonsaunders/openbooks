@@ -1,4 +1,6 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { ApplicationError } from "../../../../../../lib/application/errors";
 import {
   readV1JsonObject,
@@ -14,9 +16,17 @@ import {
 export const runtime = "nodejs";
 
 const ACTIONS = new Set(["submit", "post", "void", "correct"]);
+const voidDocumentBody = z.looseObject({
+  reason: z.string().optional(),
+  reversalDate: z.string().nullable().optional(),
+  reversalPeriodId: z.string().nullable().optional(),
+});
+const correctDocumentBody = z.looseObject({
+  correction: z.record(z.string(), z.unknown()),
+});
 
 /** POST /api/v1/documents/:id/:action — document lifecycle through the application layer. */
-export async function POST(
+async function handleV1POST(
   request: Request,
   { params }: { params: Promise<{ id: string; action: string }> },
 ): Promise<NextResponse> {
@@ -34,8 +44,8 @@ export async function POST(
       });
       return { status: 200, body: outcome.result, replayed: outcome.replayed };
     }
-    const body = await readV1JsonObject(request);
     if (action === "void") {
+      const body = voidDocumentBody.parse(await readV1JsonObject(request));
       const reason = typeof body.reason === "string" ? body.reason : "";
       const outcome = await voidDocument(context, {
         documentId: id,
@@ -46,6 +56,7 @@ export async function POST(
       });
       return { status: 200, body: outcome.result, replayed: outcome.replayed };
     }
+    const body = correctDocumentBody.parse(await readV1JsonObject(request));
     const outcome = await correctPostedDocument(context, {
       documentId: id,
       correction: body.correction as never,
@@ -54,3 +65,8 @@ export async function POST(
     return { status: 200, body: outcome.result, replayed: outcome.replayed };
   });
 }
+
+export const POST = defineRoute({
+  public: "token",
+  handler: ({ request, params }) => handleV1POST(request, { params: Promise.resolve(params as never) } as never),
+});

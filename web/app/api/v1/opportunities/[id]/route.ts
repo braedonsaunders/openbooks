@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { withV1Request } from "../../../../../lib/api/v1-request";
 import { getApplicationOpportunity } from "../../../../../lib/application/crm-read";
@@ -5,7 +6,7 @@ import { getApplicationOpportunity } from "../../../../../lib/application/crm-re
 export const runtime = "nodejs";
 
 /** GET /api/v1/opportunities/{id} — one opportunity through the drawer loader. */
-export async function GET(
+async function handleV1GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
@@ -14,3 +15,8 @@ export async function GET(
     return { status: 200, body: await getApplicationOpportunity(context, id) };
   });
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: ({ request, params }) => handleV1GET(request, { params: Promise.resolve(params as never) } as never),
+});

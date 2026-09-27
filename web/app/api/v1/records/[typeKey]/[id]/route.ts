@@ -1,5 +1,6 @@
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import {
@@ -15,6 +16,7 @@ import {
 } from "../../../../../../lib/application/api-key-audit";
 import { applicationContextFromApiKey } from "../../../../../../lib/application/context";
 import { ApplicationError } from "../../../../../../lib/application/errors";
+import { z } from "zod";
 import {
   deleteApplicationRecord,
   getRecord,
@@ -22,6 +24,8 @@ import {
 } from "../../../../../../lib/application/records";
 
 export const runtime = "nodejs";
+
+const recordBodySchema = z.record(z.string(), z.unknown());
 
 /**
  * Durably evidence one finished request attempt. Material commands already
@@ -46,14 +50,14 @@ async function emitExecutionEvent(status: number, auth: ApiKeyAuth, error?: stri
   }
 }
 
-export async function GET(request: Request, route: RouteContext): Promise<NextResponse> {
+async function handleV1GET(request: Request, route: RouteContext): Promise<NextResponse> {
   return withAuth(request, route, async (auth, typeKey, id) => {
     const record = await getRecord(context(auth, request), { typeKey, id });
     return { status: 200, body: record };
   });
 }
 
-export async function PATCH(request: Request, route: RouteContext): Promise<NextResponse> {
+async function handleV1PATCH(request: Request, route: RouteContext): Promise<NextResponse> {
   return mutate(request, route, async (auth, typeKey, id, body, idempotencyKey) => {
     const result = await updateApplicationRecord(context(auth, request), {
       typeKey, id, body, idempotencyKey,
@@ -62,7 +66,7 @@ export async function PATCH(request: Request, route: RouteContext): Promise<Next
   });
 }
 
-export async function DELETE(request: Request, route: RouteContext): Promise<NextResponse> {
+async function handleV1DELETE(request: Request, route: RouteContext): Promise<NextResponse> {
   return withAuth(request, route, async (auth, typeKey, id) => {
     const idempotencyKey = request.headers.get("idempotency-key")?.trim();
     if (!idempotencyKey) throw new ApplicationError("invalid_input", "Idempotency-Key header is required", 400);
@@ -92,7 +96,7 @@ async function mutate(
     if (!idempotencyKey) throw new ApplicationError("invalid_input", "Idempotency-Key header is required", 400);
     let body: Record<string, unknown>;
     try {
-      const parsedBody = await parseJsonBody(request, jsonObject);
+      const parsedBody = await parseJsonBody(request, recordBodySchema);
       if (!parsedBody.ok) return parsedBody.response;
       const parsed = parsedBody.data;
       if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
@@ -148,3 +152,18 @@ function context(auth: ApiKeyAuth, request: Request) {
     request.headers.get("x-request-id") || randomUUID(),
   );
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: ({ request, params }) => handleV1GET(request, { params: Promise.resolve(params as never) } as never),
+});
+
+export const PATCH = defineRoute({
+  public: "token",
+  handler: ({ request, params }) => handleV1PATCH(request, { params: Promise.resolve(params as never) } as never),
+});
+
+export const DELETE = defineRoute({
+  public: "token",
+  handler: ({ request, params }) => handleV1DELETE(request, { params: Promise.resolve(params as never) } as never),
+});

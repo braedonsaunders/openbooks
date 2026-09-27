@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { ApplicationError } from "../../../../../lib/application/errors";
 import { withV1Request } from "../../../../../lib/api/v1-request";
@@ -31,7 +32,7 @@ function readStringRecord(value: string | null, name: string): Record<string, st
  * renders today. `params`/`searchParams` are optional JSON objects of string
  * values for the route's dynamic segments and query string.
  */
-export async function GET(request: Request): Promise<NextResponse> {
+async function handleV1GET(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/layouts/describe", async (_auth, context) => {
     const url = new URL(request.url);
     const route = url.searchParams.get("route") ?? "";
@@ -46,3 +47,8 @@ export async function GET(request: Request): Promise<NextResponse> {
     return { status: 200, body: { ok: true, ...result } };
   });
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1GET(request),
+});

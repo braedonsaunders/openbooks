@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { ApplicationError } from "../../../../../lib/application/errors";
 import {
@@ -19,7 +20,7 @@ export const runtime = "nodejs";
  * Mutations already require an idempotency key inside the tool schema; the
  * header is accepted as the same key when the body omitted it.
  */
-export async function POST(
+async function handleV1POST(
   request: Request,
   { params }: { params: Promise<{ name: string }> },
 ): Promise<NextResponse> {
@@ -33,11 +34,17 @@ export async function POST(
     if (!applicationToolVisible(definition, context.authz, features)) {
       throw new ApplicationError("forbidden", "forbidden", 403);
     }
-    const body = await readV1JsonObject(request);
-    if (!definition.readOnly && typeof body.idempotencyKey !== "string") {
-      body.idempotencyKey = requireV1IdempotencyKey(request);
+    const input = await readV1JsonObject(request);
+    if (!definition.readOnly && typeof input.idempotencyKey !== "string") {
+      input.idempotencyKey = requireV1IdempotencyKey(request);
     }
+    const body = definition.inputSchema.parse(input) as Record<string, unknown>;
     const result = await executeApplicationTool(definition, context, body);
     return { status: 200, body: result };
   });
 }
+
+export const POST = defineRoute({
+  public: "token",
+  handler: ({ request, params }) => handleV1POST(request, { params: Promise.resolve(params as never) } as never),
+});

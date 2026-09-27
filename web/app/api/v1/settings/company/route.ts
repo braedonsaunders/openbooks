@@ -1,4 +1,6 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { ApplicationError } from "../../../../../lib/application/errors";
 import { assertApplicationPermission } from "../../../../../lib/application/context";
 import {
@@ -11,6 +13,10 @@ import { settleWrite } from "../../../../../lib/application/tool-catalog";
 import { can } from "../../../../../lib/authz";
 import { readCompanySettings, updateCompanySettings } from "../../../../../lib/company-settings";
 
+const updateCompanySettingsBody = z.looseObject({
+  changes: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const runtime = "nodejs";
 
 /**
@@ -19,7 +25,7 @@ export const runtime = "nodejs";
  * `get_company_settings` tool is visible to); refusals settle through the
  * shared settings/setup write mapping, never as silent nulls.
  */
-export async function GET(request: Request): Promise<NextResponse> {
+async function handleV1GET(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/settings/company", async (_auth, context) => {
     if (!can(context.authz, "admin.users.manage") && !can(context.authz, "admin.setup.manage")) {
       throw new ApplicationError("forbidden", "forbidden", 403);
@@ -34,10 +40,10 @@ export async function GET(request: Request): Promise<NextResponse> {
  * application tool, so the fiscal-calendar and base-currency immutability
  * rules, control-account checks, and audit evidence are shared, not copied.
  */
-export async function PATCH(request: Request): Promise<NextResponse> {
+async function handleV1PATCH(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/settings/company", async (_auth, context) => {
     assertApplicationPermission(context, "admin.setup.manage");
-    const body = await readV1JsonObject(request);
+    const body = updateCompanySettingsBody.parse(await readV1JsonObject(request));
     const raw = (body.changes && typeof body.changes === "object" && !Array.isArray(body.changes)
       ? body.changes
       : body) as Record<string, unknown>;
@@ -59,3 +65,13 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     return { status: 200, body: outcome.value, replayed: outcome.replayed };
   });
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1GET(request),
+});
+
+export const PATCH = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1PATCH(request),
+});

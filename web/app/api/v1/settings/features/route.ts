@@ -1,4 +1,6 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { ApplicationError, conflict, notFound } from "../../../../../lib/application/errors";
 import { assertApplicationPermission } from "../../../../../lib/application/context";
 import {
@@ -10,10 +12,14 @@ import { executeIdempotent } from "../../../../../lib/application/idempotency";
 import { applyFeatureChanges, normalizeFeatureChanges } from "../../../../../lib/features-admin";
 import { listApplicationFeatures } from "../../../../../lib/application/setup-read";
 
+const updateFeaturesBody = z.looseObject({
+  features: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const runtime = "nodejs";
 
 /** GET /api/v1/settings/features — the Features switchboard as this org sees it. */
-export async function GET(request: Request): Promise<NextResponse> {
+async function handleV1GET(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/settings/features", async (_auth, context) => ({
     status: 200,
     body: await listApplicationFeatures(context),
@@ -27,10 +33,10 @@ export async function GET(request: Request): Promise<NextResponse> {
  * installs baseline config. The feature gate stays in that command — this
  * route adds no second gate.
  */
-export async function POST(request: Request): Promise<NextResponse> {
+async function handleV1POST(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/settings/features", async (_auth, context) => {
     assertApplicationPermission(context, "admin.setup.manage");
-    const body = await readV1JsonObject(request);
+    const body = updateFeaturesBody.parse(await readV1JsonObject(request));
     const normalized = normalizeFeatureChanges(body.features ?? body);
     if (!normalized.ok) {
       throw new ApplicationError(
@@ -64,3 +70,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     return { status: 200, body: outcome.value, replayed: outcome.replayed };
   });
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1GET(request),
+});
+
+export const POST = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1POST(request),
+});

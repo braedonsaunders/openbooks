@@ -1,4 +1,6 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import {
   readV1JsonObject,
   requireV1IdempotencyKey,
@@ -8,10 +10,17 @@ import { listApplicationFiles, uploadCabinetFile } from "../../../../lib/applica
 import { executeIdempotent } from "../../../../lib/application/idempotency";
 import { withContentDigest } from "../../../../lib/application/idempotency-core";
 
+const uploadFileBody = z.looseObject({
+  folderId: z.string().min(1),
+  filename: z.string().trim().min(1),
+  contentType: z.string().trim().min(1),
+  contentBase64: z.string().min(1),
+});
+
 export const runtime = "nodejs";
 
 /** GET /api/v1/files — File Cabinet metadata through the same grants as the files screen. */
-export async function GET(request: Request): Promise<NextResponse> {
+async function handleV1GET(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/files", async (_auth, context) => {
     const url = new URL(request.url);
     const limitRaw = url.searchParams.get("limit");
@@ -29,13 +38,13 @@ export async function GET(request: Request): Promise<NextResponse> {
 }
 
 /** POST /api/v1/files — File Cabinet upload through the same storage and grants. */
-export async function POST(request: Request): Promise<NextResponse> {
+async function handleV1POST(request: Request): Promise<NextResponse> {
   return withV1Request(request, "api/v1/files", async (_auth, context) => {
-    const body = await readV1JsonObject(request);
-    const folderId = String(body.folderId ?? "");
-    const filename = String(body.filename ?? "");
-    const contentType = String(body.contentType ?? "");
-    const contentBase64 = String(body.contentBase64 ?? "");
+    const body = uploadFileBody.parse(await readV1JsonObject(request));
+    const folderId = body.folderId;
+    const filename = body.filename;
+    const contentType = body.contentType;
+    const contentBase64 = body.contentBase64;
     const outcome = await executeIdempotent({
       context,
       operation: "file.upload",
@@ -55,3 +64,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     return { status: 201, body: outcome.value, replayed: outcome.replayed };
   });
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1GET(request),
+});
+
+export const POST = defineRoute({
+  public: "token",
+  handler: ({ request }) => handleV1POST(request),
+});

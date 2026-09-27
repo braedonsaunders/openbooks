@@ -1,4 +1,6 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { readV1JsonObject, requireV1IdempotencyKey, withV1Request } from "../../../../../lib/api/v1-request";
 import { assertApplicationPermission } from "../../../../../lib/application/context";
 import { executeIdempotent } from "../../../../../lib/application/idempotency";
@@ -6,13 +8,15 @@ import { listSetupRecords } from "../../../../../lib/application/setup-read";
 import { settleWrite } from "../../../../../lib/application/tool-catalog";
 import { createSetupRecord } from "../../../../../lib/setup/write";
 
+const setupRecordBody = z.record(z.string(), z.unknown());
+
 export const runtime = "nodejs";
 
 /**
  * GET /api/v1/setup/[entityKey] — records of one Setup entity.
  * Same registry-driven select as `list_setup_records` and /admin/setup.
  */
-export async function GET(
+async function handleV1GET(
   request: Request,
   { params }: { params: Promise<{ entityKey: string }> },
 ): Promise<NextResponse> {
@@ -37,14 +41,14 @@ export async function GET(
  * whitelisting, validation, the feature fence, per-entity rules, and audit
  * evidence all live in `createSetupRecord`, not here.
  */
-export async function POST(
+async function handleV1POST(
   request: Request,
   { params }: { params: Promise<{ entityKey: string }> },
 ): Promise<NextResponse> {
   return withV1Request(request, "api/v1/setup/:entityKey", async (_auth, context) => {
     assertApplicationPermission(context, "admin.setup.manage");
     const { entityKey } = await params;
-    const body = await readV1JsonObject(request);
+    const body = setupRecordBody.parse(await readV1JsonObject(request));
     const outcome = await executeIdempotent({
       context,
       operation: "setup_record.create",
@@ -59,3 +63,13 @@ export async function POST(
     return { status: 200, body: outcome.value, replayed: outcome.replayed };
   });
 }
+
+export const GET = defineRoute({
+  public: "token",
+  handler: ({ request, params }) => handleV1GET(request, { params: Promise.resolve(params as never) } as never),
+});
+
+export const POST = defineRoute({
+  public: "token",
+  handler: ({ request, params }) => handleV1POST(request, { params: Promise.resolve(params as never) } as never),
+});
