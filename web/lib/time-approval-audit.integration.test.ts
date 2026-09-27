@@ -5,16 +5,12 @@ import { env } from "@openbooks/engine/src/platform/db.ts";
 
 // Same child-process harness as time-approval-guards.integration.test.ts:
 // web/lib modules import `server-only`, so the approval service runs in a
-// child with that marker stubbed (trusted integration process only).
-const serverOnlyLoader = `data:text/javascript,${encodeURIComponent(`
-`)}`;
-
+// child resolved under the react-server condition (trusted integration process only).
 function runIntegrationSource(source: string): void {
   const result = spawnSync(
     process.execPath,
     [
-      "--import",
-      serverOnlyLoader,
+      "--conditions=react-server",
       "--import",
       "tsx",
       "--import",
