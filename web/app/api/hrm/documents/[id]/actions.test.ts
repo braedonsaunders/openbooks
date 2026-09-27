@@ -85,7 +85,7 @@ const mockSources = new Map<string, string>([
 
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmDocumentsActionsNextResponse = NextResponse;
 
-const hooks = registerHooks({
+registerHooks({
   resolve(specifier, _context, nextResolve) {
     if (specifier === "../../../../../../lib/authz" || specifier === "./authz" || specifier === "./features") return { url: "mock:authz", shortCircuit: true };
     if (specifier === "@openbooks/engine/src/hrm/documents/documents.ts") return { url: "mock:service", shortCircuit: true };
@@ -103,7 +103,6 @@ const sendRoute = (await import("./send/route.ts")) as typeof import("./send/rou
 const remindRoute = (await import("./remind/route.ts")) as typeof import("./remind/route.ts");
 const voidRoute = (await import("./void/route.ts")) as typeof import("./void/route.ts");
 const holdRoute = (await import("./hold/route.ts")) as typeof import("./hold/route.ts");
-hooks.deregister();
 
 const UUID = "00000000-0000-4000-8000-000000000001";
 const ctx = { params: Promise.resolve({ id: UUID }) };

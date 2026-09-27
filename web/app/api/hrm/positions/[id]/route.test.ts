@@ -99,7 +99,7 @@ const mockUrls = new Map<string, string>([
   ["../_lib", "mock:lib"],
 ]);
 
-  const hooks = registerHooks({
+  registerHooks({
     resolve(specifier, _context, nextResolve) {
       const mocked = mockUrls.get(specifier) ?? (specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
       if (mocked) return { url: mocked, shortCircuit: true };
@@ -113,7 +113,6 @@ const mockUrls = new Map<string, string>([
   });
   const routeUrl = "./route.ts?hrm-position-item";
   const itemRoute: typeof import("./route.ts") | undefined = (await import(routeUrl)) as typeof import("./route.ts");
-  hooks.deregister();
 
 
 const POSITION_ID = "00000000-0000-4000-8000-000000000031";
