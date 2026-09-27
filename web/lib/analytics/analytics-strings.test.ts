@@ -9,8 +9,8 @@ import test from 'node:test'
  * `view.ts` loaders).
  *
  * Every insight sentence template, month/period label and other display
- * string in these modules resolves through the message catalogs (the
- * `*-strings.ts` bundles, whose English defaults are the canonical source).
+ * string in these modules resolves through the message catalogs and their
+ * catalog-backed bundle builders.
  * A Capitalized multi-word literal anywhere else in these files is either a
  * reviewed leftover below or a regression — the scan fails closed so a new
  * one trips this test.
@@ -37,7 +37,7 @@ const ANALYTICS_DIR = import.meta.dirname
 const WEB_DIR = join(ANALYTICS_DIR, '..', '..')
 const HUB_DIR = join(WEB_DIR, 'app', '(app)', 'analytics')
 
-/** English-default homes and their tests never scan. */
+/** Catalog plumbing is not a user-facing loader. */
 const EXEMPT_BASENAMES = new Set(['catalog-strings.ts'])
 
 /** identifier -> why its string contents stay English. */

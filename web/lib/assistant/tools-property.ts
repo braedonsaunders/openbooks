@@ -10,7 +10,7 @@ import { isFeatureEnabled } from "../features";
 import { withOrgContext } from "@openbooks/engine/src/platform/db.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
-import { assistantListPage, dateInput, uuidInput, num, capList, decimalText } from "./tools-shared";
+import { assistantListPage, dateInput, money, uuidInput, numberValue, capList, decimalText } from "./tools-shared";
 
 /**
  * Property-management read/search tools for the agentic assistant. Every tool
@@ -60,7 +60,7 @@ function monthlyChargesFor(charges: ChargeRow[], lease: LeaseRow, asOf: string):
       && (!charge.effectiveTo || String(charge.effectiveTo) >= asOf),
   );
   if (current.length) return sum(current.map((charge) => String(charge.amount)));
-  return lease.status === "draft" ? String(lease.baseRent ?? "0") : "0";
+  return lease.status === "draft" ? money(lease.baseRent) : "0";
 }
 
 /**
@@ -73,7 +73,8 @@ function pastDueInvoices(overdue: OverdueInvoiceRow[], leaseId: unknown): Overdu
 
 /** Per-lease past-due balance from the server-side aggregate. */
 function pastDueFor(overdue: OverdueLeaseRow[], leaseId: unknown): string {
-  return overdue.find((row) => String(row.leaseId) === String(leaseId))?.balance ?? "0.0000";
+  const row = overdue.find((entry) => String(entry.leaseId) === String(leaseId));
+  return row ? row.balance : "0.0000";
 }
 
 const listProperties: AssistantToolDef = {
@@ -164,7 +165,7 @@ const listLeases: AssistantToolDef = {
         status: l.status,
         startsOn: l.startsOn,
         endsOn: l.endsOn,
-        baseRent: l.baseRent == null ? null : num(l.baseRent),
+        baseRent: l.baseRent == null ? null : numberValue(l.baseRent),
         currency: l.currency,
         depositBalance: decimalText(l.depositBalance ?? 0),
         autoInvoice: l.autoInvoice,
@@ -250,7 +251,7 @@ const getLease: AssistantToolDef = {
           endsOn: lease.endsOn,
           billingDay: lease.billingDay,
           paymentTermsDays: lease.paymentTermsDays,
-          securityDepositRequired: lease.securityDepositRequired == null ? null : num(lease.securityDepositRequired),
+          securityDepositRequired: lease.securityDepositRequired == null ? null : numberValue(lease.securityDepositRequired),
           camMethod: lease.camMethod,
           camSharePercent: lease.camSharePercent,
           lateFeeType: lease.lateFeeType,
@@ -258,11 +259,11 @@ const getLease: AssistantToolDef = {
           graceDays: lease.graceDays,
           autoInvoice: lease.autoInvoice,
           autoPost: lease.autoPost,
-          baseRent: lease.baseRent == null ? null : num(lease.baseRent),
+          baseRent: lease.baseRent == null ? null : numberValue(lease.baseRent),
           currency: lease.currency,
           depositBalance: decimalText(lease.depositBalance ?? 0),
-          monthlyCharges: num(monthlyChargesFor(workspace.charges, lease, asOf)),
-          pastDue: num(pastDueFor(workspace.overdueByLease, lease.id)),
+          monthlyCharges: numberValue(monthlyChargesFor(workspace.charges, lease, asOf)),
+          pastDue: numberValue(pastDueFor(workspace.overdueByLease, lease.id)),
           notes: lease.notes == null ? null : truncateText(String(lease.notes), 500),
         },
         charges: charges.map((c) => ({
@@ -334,8 +335,8 @@ const rentRoll: AssistantToolDef = {
         tenantName: row.lease.tenantName,
         status: row.lease.status,
         currency: row.lease.currency,
-        monthlyCharges: num(row.monthly),
-        pastDue: num(row.pastDue),
+        monthlyCharges: numberValue(row.monthly),
+        pastDue: numberValue(row.pastDue),
       })),
       limit
     );
@@ -388,7 +389,7 @@ const leaseArrears: AssistantToolDef = {
     const rows = leases
       .map((l) => {
         const invoices = pastDueInvoices(workspace.overdueInvoices, l.id);
-        const pastDue = sum(invoices.map((line) => String(line.openBalance ?? "0")));
+        const pastDue = sum(invoices.map((line) => money(line.openBalance)));
         return { lease: l, invoices, pastDue };
       })
       .filter((row) => cmp(row.pastDue, "0") > 0)
@@ -407,7 +408,7 @@ const leaseArrears: AssistantToolDef = {
         tenantName: row.lease.tenantName,
         status: row.lease.status,
         currency: row.lease.currency,
-        pastDue: num(row.pastDue),
+        pastDue: numberValue(row.pastDue),
         invoices: row.invoices.map((line) => ({
           invoiceDocumentId: line.documentId,
           invoiceNumber: line.documentNumber,
@@ -470,7 +471,7 @@ const propertyDeposits: AssistantToolDef = {
         totals: {
           subledgerBalance: decimalText(sum(rows.map((row) => row.subledgerBalance))),
           linkedGlBalance: decimalText(sum(rows.map((row) => row.linkedGlBalance))),
-          cashActivity: num(sum(rows.map((row) => row.cashActivity))),
+          cashActivity: numberValue(sum(rows.map((row) => row.cashActivity))),
           discrepancies: rows.filter((row) => row.status === "discrepancy").length,
           configurationRequired: rows.filter((row) => row.status === "configuration_required").length,
         },

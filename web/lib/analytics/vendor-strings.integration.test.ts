@@ -25,8 +25,7 @@ const JULY = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
 
 /**
  * One CAD bill in July: the July spend-month label renders and the named
- * vendor passes through. The loader keeps byte-identical English without a
- * bundle and renders the request locale with one.
+ * vendor passes through while the month label uses the request locale.
  */
 test('vendor month labels render in the request locale', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypass(() => createScratchOrg())
@@ -44,18 +43,12 @@ test('vendor month labels render in the request locale', { skip: !env.OPENBOOKS_
       await db.execute(sql`update journal_entries set status='posted', posted_at=now() where id=${entry}`)
     })
     await withOrgContext(org.orgId, async () => {
-      const fallback = await vendorData(JULY, org.orgId, null)
-      const july = fallback.monthly.find((m) => m.month === '2026-07')!
-      assert.ok(july, 'july month present')
-      assert.equal(july.label, "Jul '26")
-      assert.equal(july.spend, 100)
-      assert.equal(fallback.rows[0]?.name, 'Acme')
-
       const fr = vendorStrings(catalogTranslator('fr'), 'fr')
       const localized = await vendorData(JULY, org.orgId, null, fr)
       const julyFr = localized.monthly.find((m) => m.month === '2026-07')!
       assert.equal(julyFr.label, "juil. '26")
       assert.equal(localized.rows[0]?.name, 'Acme')
+      assert.equal(julyFr.spend, 100)
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))

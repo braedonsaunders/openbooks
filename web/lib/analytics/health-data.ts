@@ -2,13 +2,15 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { addMonthsClamped, utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { abs, add, cmp, isZero, mulDecimal, neg, roundDiv, sum, toUnits } from "@openbooks/engine/src/money/money.ts";
-import { canonicalDecimal, compareDecimal, divideDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
+import { abs, add, cmp, isZero, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
+import { canonicalDecimal, compareDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
 import { flowRates } from "../fx-presentation";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { financialHealth, type FinancialHealth, type HealthBenchmarks } from "./financial-health";
-import { englishHealthStrings, type HealthStrings } from "./health-strings";
+import { healthStrings, type HealthStrings } from "./health-strings";
+import { englishCatalogMessage } from "./catalog-strings";
+import { evaluateAnalyticsRatio } from "./analytics-ratio";
 import { analyticsConfig } from "./config";
 import { isFeatureEnabled } from "../features";
 import { OPERATING_EXPENSE_TYPES, operatingExpenseRatio } from "./operating-expenses";
@@ -226,20 +228,19 @@ function translateAmount(
   return isZero(amount) ? "0" : mulDecimal(amount, rateAt(func, date));
 }
 
-const RATIO_SCALE = 1_000_000n;
 /**
  * Dimensionless ratio of two exact amounts as a display/chart number.
- * Money never crosses into Number here: the quotient rounds once, to
- * microunits, from integer minor units. A zero denominator yields 0 —
+ * The reports formula evaluator rounds to microunits from the exact decimal
+ * inputs. A zero denominator yields 0 —
  * callers needing null-on-empty keep their own guard, as before.
  */
 function amountRatio(numerator: string, denominator: string): number {
-  const n = toUnits(numerator);
-  const d = toUnits(denominator);
-  if (d === 0n) return 0;
-  const negative = (n < 0n) !== (d < 0n);
-  const mag = roundDiv((n < 0n ? -n : n) * RATIO_SCALE, d < 0n ? -d : d);
-  return Number(negative ? -mag : mag) / Number(RATIO_SCALE);
+  const exact = evaluateAnalyticsRatio(numerator, denominator, "ratio", 6);
+  if (exact === null) {
+    if (isZero(denominator)) return 0;
+    throw new Error("An analytics amount ratio could not be evaluated.");
+  }
+  return Number(exact);
 }
 
 /**
@@ -270,7 +271,7 @@ async function monthlySeries(
   to: string,
   allowed: ReadonlySet<string> | null,
   months = 12,
-  strings: HealthStrings = englishHealthStrings,
+  strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): Promise<MonthPoint[]> {
   const end = new Date(to + "T00:00:00Z");
   // utcDateFromParts keeps literal years 0001-0099 that Date.UTC would remap
@@ -386,7 +387,7 @@ async function segmentsBy(
   from: string,
   to: string,
   allowed: ReadonlySet<string> | null,
-  strings: HealthStrings = englishHealthStrings,
+  strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): Promise<SegmentRow[]> {
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
@@ -634,7 +635,7 @@ async function itemAnalysis(orgId: string, from: string, to: string, allowed: Re
 function buildPnlSummary(
   f: FinancialHealth["figures"],
   prior: FinancialHealth["figures"],
-  strings: HealthStrings = englishHealthStrings,
+  strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): PnlLine[] {
   const line = (key: Parameters<HealthStrings["pnlLine"]>[0], current: number, priorV: number, strong?: boolean): PnlLine => ({
     key,
@@ -656,7 +657,7 @@ function buildPnlSummary(
   ];
 }
 
-function buildMarginFlow(f: FinancialHealth["figures"], strings: HealthStrings = englishHealthStrings): MarginStage[] {
+function buildMarginFlow(f: FinancialHealth["figures"], strings: HealthStrings = healthStrings(englishCatalogMessage, "en")): MarginStage[] {
   const rev = f.revenue || 1;
   const pct = (n: number) => n / rev;
   const stage = (key: Parameters<HealthStrings["marginStage"]>[0], amount: number, pctOfRevenue: number, kind: MarginStage["kind"]): MarginStage =>
@@ -682,7 +683,7 @@ function buildInsights(
   monthly: MonthPoint[],
   benchmarks: HealthBenchmarks,
   money: (value: number) => string,
-  strings: HealthStrings = englishHealthStrings,
+  strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): Insight[] {
   const out: Insight[] = [];
   const f = base.figures;
@@ -754,7 +755,7 @@ export async function healthData(
   period: { from: string; to: string; label: string },
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-  strings: HealthStrings = englishHealthStrings,
+  strings: HealthStrings = healthStrings(englishCatalogMessage, "en"),
 ): Promise<HealthData> {
   const { money: formatMoney } = await getMoneyFormatter(orgId)
   const money = (value: number) => formatMoney(value, { maximumFractionDigits: 0 })
@@ -833,9 +834,11 @@ export function budgetLineStatus(
  * dimensionless tolerance ratio is projected to a number for status bands. */
 export function exactBudgetVariance(budget: string, actual: string): { variance: string; variancePct: number | null } {
   const variance = add(actual, neg(budget));
+  const variancePct = isZero(budget) ? null : evaluateAnalyticsRatio(variance, abs(budget), "ratio", 12);
+  if (!isZero(budget) && variancePct === null) throw new Error("Budget variance ratio is undefined for a nonzero budget.");
   return {
     variance,
-    variancePct: isZero(budget) ? null : Number(divideDecimal(variance, abs(budget), 12)),
+    variancePct: variancePct === null ? null : Number(variancePct),
   };
 }
 

@@ -2,13 +2,11 @@
  * Localizable sentence templates for the spend-velocity insight engine.
  *
  * The loader (`spend-velocity-data.ts`) computes numbers and picks rules; every
- * user-facing word comes from here. `englishSpendVelocityStrings` is the exact
- * legacy English copy — direct callers (unit tests, assistant tools) keep
- * byte-identical output by omitting the bundle. Request-scoped dashboards
- * build a catalog-backed bundle with `spendVelocityStrings(t, locale)` where
- * `t` resolves through `getTranslations('analytics')`, i.e. the request locale
- * (users.locale ?? org defaultLocale ?? en) with English fallback — the same
- * locale statements use.
+ * user-facing word comes from here. Request-scoped dashboards build a bundle
+ * with `spendVelocityStrings(t, locale)` where `t` resolves through
+ * `getTranslations('analytics')`, i.e. the request locale (users.locale ??
+ * org defaultLocale ?? en) with English fallback — the same locale statements
+ * use.
  *
  * Counts travel as NUMBERS into ICU `{count, plural, …}` forms (never
  * `account(s)` string hacks); already-formatted money travels as strings via
@@ -50,67 +48,6 @@ export interface SpendVelocityStrings {
   shadowItReason: string;
 }
 
-const LEGACY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** Exact legacy English sentences (byte-identical to the pre-catalog loader). */
-export const englishSpendVelocityStrings: SpendVelocityStrings = {
-  locale: "en",
-  shortMonths: [...LEGACY_MONTHS],
-  monthYear: (month, yy) => `${month} '${yy}`,
-  highGrowth: (count) => ({
-    title: "High Growth Expense Categories",
-    message: `${count} expense account${count === 1 ? "" : "s"} growing >20%/month`,
-    action: "Review spending policies for these categories",
-  }),
-  typeImbalance: (faster, gapPct) => ({
-    title: "Transaction Type Imbalance",
-    message: `${faster === "bills" ? "Bills" : "Expense Reports"} growing ${gapPct}% faster than other type`,
-    action: "Review approval workflows and spending controls",
-  }),
-  anomalies: (criticalCount) => ({
-    title: "Spending Anomalies Detected",
-    message: `${criticalCount} critical anomal${criticalCount === 1 ? "y requires" : "ies require"} investigation`,
-    action: "Review flagged transactions for errors or unauthorized spend",
-  }),
-  creep: (count) => ({
-    title: "Gradual Cost Creep Detected",
-    message: `${count} account${count === 1 ? "" : "s"} showing consistent increases`,
-    action: "Negotiate rates or find alternative solutions",
-  }),
-  concentration: (top1SharePct) => ({
-    title: "High Spend Concentration",
-    message: `Top expense category accounts for ${top1SharePct}% of spend`,
-    action: "Review for cost optimization opportunities",
-  }),
-  zombies: (count, annualCost) => ({
-    title: "Potential Unused Subscriptions",
-    message: `${count} vendor${count === 1 ? "" : "s"} with identical recurring charges (${annualCost}/year)`,
-    action: "Review for usage — these may be auto-renewing unused services",
-  }),
-  fragmentation: (categories) => ({
-    title: "Purchasing Fragmentation Detected",
-    message: `${categories} categor${categories === 1 ? "y" : "ies"} with high transaction volume and low avg size`,
-    action: "Consider vendor consolidation or preferred supplier agreements",
-  }),
-  opexRatio: (pct) => ({
-    title: "High OpEx to Revenue Ratio",
-    message: `Operating expenses are ${pct}% of revenue`,
-    action: "Review cost structure and identify efficiency opportunities",
-  }),
-  cliff: (po, so, gap, ratio) => ({
-    title: "Purchase-Sales Velocity Imbalance",
-    message: `PO velocity (${po}%/mo) exceeds SO velocity (${so}%/mo) by ${gap}% — PO/SO ratio: ${ratio}×`,
-    action: "",
-  }),
-  cliffAction: (monthsToCliff) =>
-    monthsToCliff
-      ? `Cash pressure risk in ~${monthsToCliff} months. Review purchase commitments.`
-      : "Monitor purchase velocity and align with sales pipeline.",
-  seasonalHigh: (monthNames) => `Higher spending typically occurs in ${monthNames.join(", ")}`,
-  seasonalLow: (monthNames) => `Lower spending typically occurs in ${monthNames.join(", ")}`,
-  shadowItReason:
-    "Expense-report lines carry no line-level merchant/vendor — only the expense account and a free-text description — so viral software adoption across employees cannot be traced.",
-};
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
 export function spendVelocityStrings(t: CatalogMessageFn, locale: string): SpendVelocityStrings {

@@ -7,7 +7,8 @@ import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.t
 import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
 import { flowRates } from "../fx-presentation";
 import { analyticsConfig } from "./config";
-import { englishUtilizationStrings, type UtilizationStrings } from "./utilization-strings";
+import { utilizationStrings, type UtilizationStrings } from "./utilization-strings";
+import { englishCatalogMessage } from "./catalog-strings";
 import { getMoneyFormatter } from '../money-server'
 
 /**
@@ -205,7 +206,7 @@ const ZERO: UStat = { hours: 0, billableHours: 0, nonBillableHours: 0, percentBi
 type Key = "department" | "item" | "employee";
 
 /** Build current/prior utilization groups for one reporting dimension. */
-function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map<string, string>, noBillDepts: Set<string>, minHours: number, strings: UtilizationStrings = englishUtilizationStrings): UGroupRow[] {
+function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map<string, string>, noBillDepts: Set<string>, minHours: number, strings: UtilizationStrings = utilizationStrings(englishCatalogMessage, "en")): UGroupRow[] {
   const deptName = new Map<string, string>();
   for (const r of curr) if (r.department && r.department_name) deptName.set(r.department, r.department_name);
 
@@ -273,7 +274,7 @@ export async function utilizationData(
   orgId: string,
   period: { from: string; to: string; label: string },
   allowed: ReadonlySet<string> | null,
-  strings: UtilizationStrings = englishUtilizationStrings,
+  strings: UtilizationStrings = utilizationStrings(englishCatalogMessage, "en"),
 ): Promise<UtilizationData> {
   if (!(await isFeatureEnabled(orgId, "timeTracking"))) throw new Error("time tracking feature is disabled");
   const { money } = await getMoneyFormatter(orgId)

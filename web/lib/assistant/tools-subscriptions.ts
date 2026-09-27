@@ -15,7 +15,7 @@ import { subsidiaryScopeAllows } from "../authz";
 import { disabledDocKinds } from "../documents.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
-import { uuidInput, num, capList, decimalText } from "./tools-shared";
+import { uuidInput, money, numberValue, capList, decimalText } from "./tools-shared";
 
 /**
  * Subscription and recurring-billing read/search tools for the agentic
@@ -56,8 +56,9 @@ type MrrSource = {
 
 function rowMrr(row: MrrSource): string {
   if (row.status !== "active") return "0.0000";
+  const price = row.priceOverride ?? row.planAmount;
   return monthlyRecurringRevenue(
-    String(row.priceOverride ?? row.planAmount ?? "0"),
+    money(price),
     row.interval,
     Number(row.intervalCount ?? 1),
     String(row.quantity ?? "1"),
@@ -140,7 +141,7 @@ function subscriptionRow(r: Record<string, unknown>) {
     customerName: r.customerName,
     planId: r.planId,
     planName: r.planName,
-    quantity: r.quantity == null ? null : num(r.quantity),
+    quantity: r.quantity == null ? null : numberValue(r.quantity),
     status: r.status,
     startOn: r.startOn,
     nextBillOn: r.nextBillOn,
@@ -562,7 +563,7 @@ const subscriptionUpcomingInvoices: AssistantToolDef = {
         nextBillOn: r.nextBillOn,
         customerName: r.customerName,
         planName: r.planName,
-        quantity: num(r.quantity),
+        quantity: numberValue(r.quantity),
         currency: r.currency,
         expectedAmount: decimalText(mulDecimal(String(r.priceOverride ?? r.planAmount ?? 0), String(r.quantity ?? 1))),
         lastError: r.lastError == null ? null : truncateText(String(r.lastError), 200),

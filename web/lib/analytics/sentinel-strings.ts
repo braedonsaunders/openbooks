@@ -1,11 +1,8 @@
 /**
  * Localizable sentence templates for Sentinel ledger forensics.
  *
- * Same pattern as the other analytics bundles: `englishSentinelStrings` is
- * the exact legacy English copy (direct callers — unit tests, assistant
- * tools — keep byte-identical output); `sentinelStrings(t)` builds the
- * catalog-backed bundle from `getTranslations('analytics')` in the request
- * locale. Entity names, document numbers and trap digits travel verbatim as
+ * `sentinelStrings(t)` builds the bundle from `getTranslations('analytics')`
+ * in the request locale. Entity names, document numbers and trap digits travel verbatim as
  * ICU string params (they are data); counts travel as numbers into ICU
  * plurals. Benford conformity itself is a stable CODE
  * (excellent/acceptable/marginal/nonConforming) in every language — the
@@ -123,41 +120,6 @@ export function auditEventArgs(
     fields,
   };
 }
-
-/**
- * Exact English sentences, byte-identical to the `en` catalog rendering for
- * every input (ICU `one`/`other` plurals included). Direct callers — the
- * data loader default, unit tests, assistant tools — keep stable output
- * without a request locale; the parity test below pins this.
- */
-export const englishSentinelStrings: SentinelStrings = {
-  locale: "en",
-  displayPartyName: (name) => (name === null || name === "" || name === "Unknown" ? "Unknown" : name),
-  benfordInsufficient: (total) => `Insufficient data (${total} transaction${total === 1 ? "" : "s"}). Need at least 50.`,
-  benfordClose: "Transaction amounts closely follow Benford's Law — low manipulation risk.",
-  benfordReasonable: "Transaction amounts reasonably follow Benford's Law.",
-  benfordSomeDeviation: "Some deviation detected — warrants review.",
-  benfordSignificant: "Significant deviation — possible manipulation.",
-  trapReason: (trap) => `Amount ends in ${trap} (potential threshold avoidance)`,
-  weekendReason: (sunday) => `Dated on ${sunday ? "Sunday" : "Saturday"}`,
-  rsfReason: (multiple, vendor, currency) => `${multiple}× larger than ${vendor}'s historical 2nd largest (${currency})`,
-  zscoreReason: (z, vendor, currency, baseline) =>
-    `Z-score ${z} vs ${vendor} ${currency} average (${baseline} transaction${baseline === 1 ? "" : "s"})`,
-  sequentialReason: (count, first, last, days, high, currency) =>
-    `${count} gap-free sequential ${currency} invoice${count === 1 ? "" : "s"} (${first}–${last}) over ${days} day${days === 1 ? "" : "s"}${high ? " — possible shell company / sole customer" : ""}`,
-  ghostBoth: (vendor, employee) => `Vendor "${vendor}" matches employee "${employee}" by BOTH name and street address`,
-  ghostAddress: (vendor, employee) => `Vendor "${vendor}" shares a street address with employee "${employee}"`,
-  ghostName: (vendor, employee) => `Vendor "${vendor}" matches employee name "${employee}"`,
-  duplicateGroupReason: ({ count, currency, amount, sharedReference, daysSpan, others }) =>
-    `${count} matching document${count === 1 ? "" : "s"} — same vendor, kind, amount (${currency} ${amount})${sharedReference ? `, shared reference ${sharedReference}` : ""} (${daysSpan} day${daysSpan === 1 ? "" : "s"} span): ${others}`,
-  auditEvent: ({ verb, action, actor, table, row, fields }) =>
-    `${actor} ${verb === "other" ? action : verb === "created" ? "created" : verb === "updated" ? "updated" : "deleted"} ${table} ${row}${fields ? ` (${fields})` : ""}`,
-  riskGhosts: (count) => ({ area: "Ghost Vendors", message: `${count} vendor${count === 1 ? "" : "s"} match employee names` }),
-  riskSequential: (count) => ({ area: "Sequential Invoices", message: `${count} vendor${count === 1 ? "" : "s"} with gap-free invoice runs` }),
-  riskDuplicates: (count) => ({ area: "Duplicate Payments", message: `${count} duplicate group${count === 1 ? "" : "s"} (one finding per group)` }),
-  riskTraps: (count) => ({ area: "Approval Limit Avoidance", message: `${count} amount${count === 1 ? "" : "s"} ending 99/999/9999` }),
-  riskBenford: () => ({ area: "Benford Deviation", message: "First-digit distribution deviates significantly" }),
-};
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
 export function sentinelStrings(t: CatalogMessageFn, locale: string): SentinelStrings {

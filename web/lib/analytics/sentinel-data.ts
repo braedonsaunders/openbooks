@@ -5,8 +5,9 @@ import { analyticsConfig } from "./config";
 import { presentationCurrency } from "../fx-presentation";
 import { ForbiddenError, type Authz } from "../authz";
 import { sentinelAccessDenied } from "./sentinel-access";
-import { auditEventArgs, englishSentinelStrings, type ConformityCode, type SentinelStrings } from "./sentinel-strings";
+import { auditEventArgs, type ConformityCode, type SentinelStrings, sentinelStrings } from "./sentinel-strings";
 import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from "@openbooks/engine/src/platform/business-date.ts";
+import { englishCatalogMessage } from "./catalog-strings";
 
 /**
  * Sentinel — transaction integrity forensics re-engineered for scale.
@@ -245,7 +246,7 @@ export async function sentinelData(
   orgId: string,
   period: { from: string; to: string; label: string },
   authz: Authz,
-  strings: SentinelStrings = englishSentinelStrings,
+  strings: SentinelStrings = sentinelStrings(englishCatalogMessage, "en"),
 ): Promise<SentinelData> {
   // Whole-company forensics includes cross-entity baselines, identity matches
   // and retained administrative audit snapshots. Partial access cannot be

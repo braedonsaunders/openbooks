@@ -1,18 +1,14 @@
 /**
  * Localizable sentence templates for customer intelligence.
  *
- * Same pattern as spend-velocity-strings: `englishCustomerStrings` is the
- * exact legacy English copy (direct callers keep byte-identical output);
- * `customerStrings(t)` builds the catalog-backed bundle from
- * `getTranslations('analytics')` in the request locale. Counts travel as
- * numbers into ICU plurals; pre-formatted money travels as strings.
+ * `customerStrings(t)` builds the bundle from `getTranslations('analytics')`
+ * in the request locale. Counts travel as numbers into ICU plurals;
+ * pre-formatted money travels as strings.
  */
 
 import type { CatalogMessageFn } from "./catalog-strings";
 import { catalogMonthLabel } from "./catalog-strings";
 
-/** en-US short month names, Jan→Dec — the exact legacy toLocaleString rendering. */
-const LEGACY_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export interface CustomerInsightText {
   title: string;
@@ -51,75 +47,6 @@ export interface CustomerStrings {
   growing(growth: number, newCustomers: number): CustomerInsightText;
   overdue(count: number): CustomerInsightText;
 }
-
-/** Exact legacy English sentences (byte-identical to the pre-catalog loader). */
-export const englishCustomerStrings: CustomerStrings = {
-  locale: "en",
-  monthLabel: (ym) => {
-    // Static table, never a Date: the month index passes straight through
-    // (Date.UTC would remap years 0-99 onto 1900-1999, but the label only
-    // reads the month name and the 2-digit year suffix, so output is
-    // identical at every year — verified "Feb 26"/"Feb 96" against the old
-    // toLocaleDateString rendering).
-    const [y, m] = ym.split("-").map(Number);
-    return `${LEGACY_MONTHS[((m ?? 1) - 1 + 12) % 12] ?? ym} ${String(y ?? "").slice(-2)}`;
-  },
-  displayCustomerName: (name) => (name === "Unknown" ? "Unknown" : name),
-  displayJobName: (name) => (name === "Untitled project" ? "Untitled project" : name),
-  churnInactive: (days) => `No activity in ${days} days`,
-  churnDeclining: "Declining engagement",
-  churnBelowPattern: "Below typical purchase pattern",
-  churnSingle: "Single transaction customer",
-  churnLowFrequency: "Low transaction frequency",
-  recMaintain: "Continue current engagement strategy",
-  recFriction: (credits) => `High friction: ${credits} credits — address issues immediately`,
-  recOverdue: (overdueDays, cycleDays) => `${overdueDays} days overdue for order (avg cycle: ${cycleDays} days)`,
-  recWinBack: "At risk of churn — immediate outreach needed",
-  recNurture: "High-value customer — prioritize relationship",
-  recOnboard: "New customer — focus on successful onboarding",
-  recReprice: (marginPct) => `High revenue but low margin (${marginPct}%) — review pricing`,
-  recReview: "Low engagement — evaluate account strategy",
-  intelligenceScore: (score) => {
-    if (score < 40) return { label: "Needs Attention", grade: "D" };
-    if (score < 55) return { label: "Fair", grade: "C" };
-    if (score < 70) return { label: "Good", grade: "B" };
-    if (score < 85) return { label: "Very Good", grade: "B+" };
-    return { label: "Excellent", grade: "A" };
-  },
-  projectedClv: (amount, years, customers) => ({
-    title: "Projected Customer Value",
-    message: `${amount} projected CLV over ${years} years from ${customers} customers`,
-  }),
-  churnRisk: (count, revenue) => ({
-    title: "Churn Risk Alert",
-    message: `${count} customers at high/critical churn risk representing ${revenue} revenue`,
-    action: "Initiate win-back campaigns for at-risk customers",
-  }),
-  champions: (count, revenue) => ({
-    title: "Champion Customers",
-    message: `${count} champion customers generating ${revenue}`,
-    action: "Maintain VIP treatment and referral programs",
-  }),
-  concentration: (share, hhi) => ({
-    title: "Revenue Concentration Risk",
-    message: `Top customer accounts for ${share}% of revenue. HHI: ${hhi}`,
-    action: "Diversify customer base to reduce dependency",
-  }),
-  declining: (growth) => ({
-    title: "Declining Revenue Trend",
-    message: `Average monthly growth of ${growth}%`,
-    action: "Review customer acquisition and retention strategies",
-  }),
-  growing: (growth, newCustomers) => ({
-    title: "Strong Growth Trajectory",
-    message: `${growth}% average monthly growth with ${newCustomers} new customers`,
-  }),
-  overdue: (count) => ({
-    title: "Overdue Invoices",
-    message: `${count} overdue invoices require attention`,
-    action: "Review collections process and payment terms",
-  }),
-};
 
 /** Catalog-backed bundle: every sentence renders in the request locale. */
 export function customerStrings(t: CatalogMessageFn, locale: string): CustomerStrings {

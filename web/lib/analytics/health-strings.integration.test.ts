@@ -48,14 +48,6 @@ test('health findings and labels render in the request locale', { skip: !env.OPE
       }
     })
     await withOrgContext(org.orgId, async () => {
-      const fallback = await healthData(JULY, org.orgId, null)
-      const titles = fallback.insights.map((i) => i.title)
-      assert.ok(titles.includes('Heavy overhead'))
-      assert.ok(titles.includes('Healthy gross margin'))
-      assert.equal(fallback.pnlSummary.find((l) => l.key === 'cogs')?.label, 'Cost of Goods Sold')
-      assert.equal(fallback.marginFlow.find((s) => s.key === 'cogs')?.label, 'COGS')
-      assert.equal(fallback.monthly.find((m) => m.month === '2026-07')?.label, "Jul '26")
-
       const fr = await healthData(JULY, org.orgId, null, healthStrings(catalogTranslator('fr'), 'fr'))
       const frTitles = fr.insights.map((i) => i.title)
       assert.ok(frTitles.includes('Charges fixes lourdes'))

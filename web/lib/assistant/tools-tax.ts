@@ -2,13 +2,12 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { computeTaxReturn, TaxReturnError } from "@openbooks/engine/src/tax-returns/return.ts";
 import { can } from "../authz";
 import { isDocKindEnabled } from "../documents.ts";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
+import { money, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
 
 /**
  * Indirect-tax tools. The return is computed by the SAME engine the /tax
@@ -18,8 +17,6 @@ import { rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shar
  * callers get one filing entity — their own allowed subsidiary set — never an
  * org-wide blend they may not read.
  */
-
-const money = (v: unknown) => normalizeMoney(v == null ? "0" : String(v));
 
 const listTaxReturnForms: AssistantToolDef = {
   name: "list_tax_return_forms",

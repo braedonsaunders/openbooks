@@ -7,12 +7,14 @@ import { sql } from "drizzle-orm";
 import { addMonthsClamped, businessToday, calendarDaysBetween } from "@openbooks/engine/src/platform/business-date.ts";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { analyticsConfig } from "./config";
-import { englishCustomerStrings, type CustomerStrings } from "./customer-strings";
+import { customerStrings, type CustomerStrings } from "./customer-strings";
+import { englishCatalogMessage } from "./catalog-strings";
 import { paymentStats } from "../cash/core";
 import { isFeatureEnabled } from "../features";
 import { flowRates } from "../fx-presentation";
 import { add, cmp, mulDecimal, neg, sum } from "@openbooks/engine/src/money/money.ts";
 import { exactMarginPercent, exactProfit } from "./customer-profitability-money";
+import { evaluateAnalyticsRatio } from "./analytics-ratio";
 import { PNL_COST_TYPES, PNL_TYPES } from "../account-types";
 
 /**
@@ -434,7 +436,7 @@ export async function customerProfitability(
   period: { from: string; to: string },
   orgId: string,
   allowed: ReadonlySet<string> | null,
-  strings: CustomerStrings = englishCustomerStrings,
+  strings: CustomerStrings = customerStrings(englishCatalogMessage, "en"),
 ): Promise<Profitability> {
   // Job-costed margins join `projects`. When Projects is off that register is
   // not a live module — an empty result is not "no jobs this period".
@@ -568,7 +570,7 @@ export async function customerData(
   period: { from: string; to: string; label: string },
   orgId: string,
   allowed: ReadonlySet<string> | null,
-  strings: CustomerStrings = englishCustomerStrings,
+  strings: CustomerStrings = customerStrings(englishCatalogMessage, "en"),
 ): Promise<CustomerData> {
   const { moneyCompact } = await getMoneyFormatter(orgId)
   const { from, to } = period;
@@ -1178,22 +1180,39 @@ export async function customerData(
   };
 
   /* ---- concentration () ---- */
-  const totalRevenue = base.reduce((a, c) => a + c.revenue, 0);
+  const totalRevenueExact = sum(base.map((c) => String(c.revenue)));
+  const totalRevenue = Number(totalRevenueExact);
   const byRevenue = [...enriched].sort((a, b) => b.c.revenue - a.c.revenue);
   const shareMap = new Map<string, { sharePct: number; risk: RiskLevel }>();
-  let cumulative = 0;
+  let cumulative = "0";
   let customersFor80Pct = 0;
   byRevenue.forEach((e, i) => {
-    const sharePct = totalRevenue > 0 ? (e.c.revenue / totalRevenue) * 100 : 0;
-    cumulative += sharePct;
-    if (cumulative <= 80) customersFor80Pct = i + 1;
-    const risk: RiskLevel = sharePct >= 25 ? "critical" : sharePct >= 15 ? "high" : sharePct >= 10 ? "medium" : "low";
-    shareMap.set(e.c.id, { sharePct: Math.round(sharePct * 100) / 100, risk });
+    const shareText = totalRevenue > 0
+      ? evaluateAnalyticsRatio(String(e.c.revenue), totalRevenueExact, "percent", 2)
+      : "0.00";
+    if (shareText === null) throw new Error("Customer revenue share is undefined for a positive total revenue.");
+    const sharePct = Number(shareText);
+    const shareComparison = cmp(shareText, "25") >= 0 ? "critical"
+      : cmp(shareText, "15") >= 0 ? "high"
+        : cmp(shareText, "10") >= 0 ? "medium" : "low";
+    const risk: RiskLevel = shareComparison;
+    cumulative = add(cumulative, shareText);
+    if (cmp(cumulative, "80") <= 0) customersFor80Pct = i + 1;
+    shareMap.set(e.c.id, { sharePct, risk });
   });
   const hhiScaled = Math.round(byRevenue.reduce((a, e) => a + ((totalRevenue > 0 ? e.c.revenue / totalRevenue : 0) * 100) ** 2, 0));
   const hhiLevel: CustomerData["kpis"]["hhiLevel"] = hhiScaled >= hhiCritical ? "high" : hhiScaled >= hhiWarning ? "moderate" : "low";
   const top10PctCount = Math.ceil(nAll * 0.1);
-  const top10Share = totalRevenue > 0 ? (byRevenue.slice(0, top10PctCount).reduce((a, e) => a + e.c.revenue, 0) / totalRevenue) * 100 : 0;
+  const top10ShareText = totalRevenue > 0
+    ? evaluateAnalyticsRatio(
+      sum(byRevenue.slice(0, top10PctCount).map((e) => String(e.c.revenue))),
+      totalRevenueExact,
+      "percent",
+      0,
+    )
+    : "0";
+  if (top10ShareText === null) throw new Error("Top-customer revenue share is undefined for a positive total revenue.");
+  const top10Share = Number(top10ShareText);
 
   /* ---- health scores + recommendations () ---- */
   const rows: CustomerRow[] = enriched.map(({ c, rfm, clv, churn, vel }) => {
@@ -1519,7 +1538,7 @@ export async function customerData(
       retentionRate: avgRetentionProbability,
       paymentRate,
       avgDaysToPay,
-      top10PctShare: Math.round(top10Share),
+      top10PctShare: top10Share,
       hhiScaled,
       hhiLevel,
       customersFor80Pct,

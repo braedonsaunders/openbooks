@@ -2,7 +2,6 @@ import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
 import { can } from "../authz";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -15,7 +14,7 @@ import {
   toQuantityUnits,
 } from "../order-cycle-math";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { assistantListPage, dateInput, uuidInput } from "./tools-shared";
+import { assistantListPage, dateInput, money, uuidInput } from "./tools-shared";
 
 /**
  * Quote / sales-order / purchase-order reads. Orders are non-posting
@@ -27,8 +26,6 @@ import { assistantListPage, dateInput, uuidInput } from "./tools-shared";
  * (`find_documents`); these tools add fulfilment/billing state, line-level
  * remainders, the document-links graph, and backlog totals.
  */
-
-const money = (v: unknown) => normalizeMoney(v == null ? "0" : String(v));
 
 const ORDER_KINDS = ["quote", "sales_order", "purchase_order"] as const;
 type OrderKind = (typeof ORDER_KINDS)[number];

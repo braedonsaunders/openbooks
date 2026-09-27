@@ -1,3 +1,6 @@
+import { createTranslator } from "next-intl";
+import englishAnalyticsMessages from "../../messages/en/analytics.json";
+
 /**
  * Shared plumbing for catalog-backed analytics strings.
  *
@@ -17,6 +20,16 @@ export type CatalogMessageFn = (
   key: string,
   values?: Record<string, string | number>,
 ) => string;
+
+const englishCatalogTranslator = createTranslator({
+  locale: "en",
+  messages: { analytics: englishAnalyticsMessages },
+  namespace: "analytics",
+});
+
+/** English fallback for non-request callers, resolved from the message catalog. */
+export const englishCatalogMessage: CatalogMessageFn = (key, values) =>
+  englishCatalogTranslator(key, values as Record<string, string | number | Date> | undefined);
 
 export const MONTH_KEYS = [
   "jan", "feb", "mar", "apr", "may", "jun",

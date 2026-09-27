@@ -26,8 +26,7 @@ const JULY = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
 /**
  * One department with billed + non-billable hours: the native time category
  * exists, the July month label renders, and the untouched org carries the
- * seeded `Default` profile. The loader keeps byte-identical English without
- * a bundle and renders the request locale with one.
+ * seeded default profile using the request locale.
  */
 test('true cost names and month labels render in the request locale', { skip: !env.OPENBOOKS_DB_URL }, async () => {
   const org = await withBypass(() => createScratchOrg())
@@ -44,13 +43,6 @@ test('true cost names and month labels render in the request locale', { skip: !e
                (${randomUUID()}, ${org.orgId}, ${emp}, ${D}, '10.0000', 'approved', false, ${dept}, '50.0000', 'CAD', ${org.subsidiaryId}, '{}'::jsonb)`)
     })
     await withOrgContext(org.orgId, async () => {
-      const fallback = await trueCostData(org.orgId, JULY, null)
-      const timeCat = fallback.categories.find((c) => c.key === 'nonbillable_time')!
-      assert.ok(timeCat, 'non-billable time category present')
-      assert.equal(timeCat.name, 'Non-Billable Time')
-      assert.equal(fallback.monthly[0]?.label, "Jul '26")
-      assert.equal(fallback.config.profiles[0]?.name, 'Default')
-
       const fr = trueCostStrings(catalogTranslator('fr'), 'fr')
       const localized = await trueCostData(org.orgId, JULY, null, fr)
       const timeCatFr = localized.categories.find((c) => c.key === 'nonbillable_time')!
