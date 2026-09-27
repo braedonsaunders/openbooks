@@ -2459,7 +2459,7 @@
     },
     "backorders": {
       "name": "欠交订单",
-      "description": "仍欠交的销售订单库存行 — 按客户和物料列出订购、已履行、已取消和未交数量。"
+      "description": "销售订单待交库存：已订购、已履行、已取消和未交数量。"
     },
     "statement-of-financial-position": {
       "name": "财务状况表",

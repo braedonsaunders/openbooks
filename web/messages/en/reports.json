@@ -2459,7 +2459,7 @@
     },
     "backorders": {
       "name": "Backorders",
-      "description": "Sales-order stock lines still owed — ordered, fulfilled, cancelled and open by customer and item."
+      "description": "Stock lines still owed on sales orders: ordered, fulfilled, cancelled and open."
     },
     "statement-of-financial-position": {
       "name": "Statement of financial position",

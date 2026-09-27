@@ -2439,7 +2439,7 @@
     },
     "backorders": {
       "name": "Pedidos pendientes",
-      "description": "Líneas de inventario de pedidos de venta aún adeudadas: pedida, entregada, cancelada y pendiente por cliente y artículo."
+      "description": "Existencias pendientes de pedidos: cantidades pedidas, servidas, canceladas y abiertas."
     },
     "statement-of-financial-position": {
       "name": "Estado de situación financiera",

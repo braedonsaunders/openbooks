@@ -2459,7 +2459,7 @@
     },
     "backorders": {
       "name": "Rückstände",
-      "description": "Noch geschuldete Lagerpositionen von Kundenaufträgen – bestellt, erfüllt, storniert und offen nach Kunde und Artikel."
+      "description": "Noch geschuldeter Auftragsbestand: bestellt, erfüllt, storniert und offen."
     },
     "statement-of-financial-position": {
       "name": "Bilanz nach Vermögensklasse",

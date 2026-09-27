@@ -2459,7 +2459,7 @@
     },
     "backorders": {
       "name": "受注残",
-      "description": "未出荷の受注在庫明細 — 顧客・品目別の受注・出荷済み・取消・未出荷数量。"
+      "description": "受注残の在庫数量：受注済み、出荷済み、取消済み、未出荷。"
     },
     "statement-of-financial-position": {
       "name": "財政状態計算書",

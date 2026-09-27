@@ -465,7 +465,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'backorders',
     name: 'Backorders',
-    description: 'Sales-order stock lines still owed — ordered, fulfilled, cancelled and open by customer and item.',
+    description: 'Stock lines still owed on sales orders: ordered, fulfilled, cancelled and open.',
     urlFilters: [
       { param: 'itemId', field: 'item_id', op: 'eq', valueKind: 'uuid' },
       { param: 'orderId', field: 'document_id', op: 'eq', valueKind: 'uuid' },
