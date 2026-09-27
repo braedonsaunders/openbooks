@@ -144,10 +144,21 @@ function midReportCommitGate(
     text: unknown,
     values?: unknown[],
   ) => Promise<unknown>;
-  const originalConnect = pool.connect;
-  const pooledConnect = originalConnect.bind(pool) as unknown as () => Promise<
+  const originalPoolConnect = pg.Pool.prototype.connect;
+  const pooledConnect = originalPoolConnect.bind(pool) as unknown as () => Promise<
     import("pg").PoolClient
   >;
+  const observeClient = (client: import("pg").PoolClient) => {
+    const clientQuery = client.query.bind(client) as unknown as (
+      text: unknown,
+      values?: unknown[],
+    ) => Promise<unknown>;
+    (client as unknown as { query: unknown }).query = (
+      text: unknown,
+      values?: unknown[],
+    ) => driveGenerationBoundary(() => clientQuery(text, values), textOf(text));
+    return client;
+  };
 
   return {
     /** True once the staged poster actually committed mid-report. */
@@ -159,22 +170,14 @@ function midReportCommitGate(
         text: unknown,
         values?: unknown[],
       ) => driveGenerationBoundary(() => pooledQuery(text, values), textOf(text));
-      (pool as unknown as { connect: unknown }).connect = async () => {
-        const client = await pooledConnect();
-        const clientQuery = client.query.bind(client) as unknown as (
-          text: unknown,
-          values?: unknown[],
-        ) => Promise<unknown>;
-        (client as unknown as { query: unknown }).query = (
-          text: unknown,
-          values?: unknown[],
-        ) => driveGenerationBoundary(() => clientQuery(text, values), textOf(text));
-        return client;
-      };
+      pg.Pool.prototype.connect = function (this: pg.Pool, ...args: unknown[]) {
+        if (this !== pool) return originalPoolConnect.apply(this, args as never);
+        return pooledConnect().then(observeClient);
+      } as typeof pg.Pool.prototype.connect;
     },
     restore() {
       (pool as unknown as { query: unknown }).query = originalQuery;
-      (pool as unknown as { connect: unknown }).connect = originalConnect;
+      pg.Pool.prototype.connect = originalPoolConnect;
     },
   };
 }
