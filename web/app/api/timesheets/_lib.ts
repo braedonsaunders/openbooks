@@ -6,6 +6,7 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { add } from '@openbooks/engine/src/money/money.ts'
 import { subsidiaryScopeAllows } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
+import { loadPlannedWeek, type PlannedRow } from '../../../lib/resourcing/timesheet-prefill'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import {
   lockReasonsFor,
@@ -241,6 +242,7 @@ export interface WeekPayload {
   week: string
   days: string[]
   rows: WeekRow[]
+  planned: PlannedRow[]
   status: WeekStatus
   /** True when any entry in the week is approved (those must not be overwritten). */
   hasApproved: boolean
@@ -360,11 +362,15 @@ export async function loadWeek(
   const rows = Array.from(byKey.values())
   const status: WeekStatus =
     allStatuses.length === 0 && header.status === 'draft' ? 'empty' : header.status
+  const planned = status === 'draft' || status === 'empty'
+    ? await loadPlannedWeek(orgId, ownedEmployee, week, allowedSubsidiaryIds ?? null)
+    : []
   return {
     employeeId: ownedEmployee,
     week,
     days,
     rows,
+    planned,
     // Status is the header's, not a fold over the entries: a week with no
     // hours yet is 'draft' (a real, submittable record), and 'empty' is
     // reserved for describing that it carries nothing.

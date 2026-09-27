@@ -57,6 +57,8 @@ interface GridRow {
   custom: Record<string, unknown>
   immutable: boolean
   amendsEntryId: string | null
+  plannedHours: string | null
+  plannedOnly: boolean
 }
 
 function emptyRow(timeTypes: TimeTypeOption[]): GridRow {
@@ -72,6 +74,8 @@ function emptyRow(timeTypes: TimeTypeOption[]): GridRow {
     custom: {},
     immutable: false,
     amendsEntryId: null,
+    plannedHours: null,
+    plannedOnly: false,
   }
 }
 
@@ -88,7 +92,35 @@ function fromPayload(rows: WeekRow[], timeTypes: TimeTypeOption[]): GridRow[] {
     custom: r.custom ?? {},
     immutable: r.immutable,
     amendsEntryId: r.amendsEntryId,
+    plannedHours: null,
+    plannedOnly: false,
   }))
+}
+
+function seedRows(payload: WeekPayload, pickers: TimesheetPickers): GridRow[] {
+  const rows = fromPayload(payload.rows, pickers.timeTypes)
+  if ((payload.status !== 'draft' && payload.status !== 'empty') || !(payload.planned?.length)) return rows
+  const projectIds = new Set(pickers.projects.map((project) => project.value))
+  const additions: GridRow[] = []
+  for (const booking of payload.planned) {
+    if (!projectIds.has(booking.projectId)) continue
+    const index = payload.rows.findIndex((row) =>
+      row.projectId === booking.projectId && row.itemId === booking.itemId && row.isBillable === booking.isBillable,
+    )
+    if (index >= 0) {
+      rows[index] = { ...rows[index]!, plannedHours: booking.plannedHours }
+    } else {
+      additions.push({
+        ...emptyRow(pickers.timeTypes),
+        projectId: booking.projectId,
+        itemId: booking.itemId ?? '',
+        isBillable: booking.isBillable,
+        plannedHours: booking.plannedHours,
+        plannedOnly: true,
+      })
+    }
+  }
+  return payload.rows.length === 0 && additions.length > 0 ? additions : [...rows, ...additions]
 }
 
 function num(v: string): number {
@@ -184,7 +216,7 @@ export function WeeklyGrid({
     COMMON_STATUS_KEYS.has(s) ? tCommon(`status.${s}`) : LOCAL_STATUS_KEYS.has(s) ? t(`status.${s}`) : s
   const router = useRouter()
   const today = useBusinessToday()
-  const [rows, setRows] = useState<GridRow[]>(() => fromPayload(payload.rows, pickers.timeTypes))
+  const [rows, setRows] = useState<GridRow[]>(() => seedRows(payload, pickers))
   const [status, setStatus] = useState(payload.status)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -211,12 +243,12 @@ export function WeeklyGrid({
     if (seededKey.current === loadedKey && seededRevision.current === payload.revision) return
     seededKey.current = loadedKey
     seededRevision.current = payload.revision
-    setRows(fromPayload(payload.rows, pickers.timeTypes))
+    setRows(seedRows(payload, pickers))
     setStatus(payload.status)
     setRevision(payload.revision)
     setDirty(false)
     setStaleError(null)
-  }, [loadedKey, payload, pickers.timeTypes])
+  }, [loadedKey, payload, pickers])
 
   // Manual approval seals the week. Automatic availability seals each saved
   // row, while later days can still be added without reopening posted history.
@@ -336,7 +368,7 @@ export function WeeklyGrid({
   }
 
   const applyPayload = (data: WeekPayload) => {
-    setRows(fromPayload(data.rows, pickers.timeTypes))
+    setRows(seedRows(data, pickers))
     setStatus(data.status)
     setDirty(false)
     router.refresh()
@@ -348,7 +380,7 @@ export function WeeklyGrid({
       employee: employeeId,
       week,
       expectedRevision: revision,
-      rows: rows.filter((r) => !r.immutable).map((r) => ({
+      rows: rows.filter((r) => !r.immutable && !(r.plannedOnly && !r.hours.some((hours) => hours.trim() !== '' && Number(hours) !== 0))).map((r) => ({
         projectId: r.projectId || null,
         itemId: r.itemId || null,
         timeTypeId: r.timeTypeId || null,
@@ -766,6 +798,8 @@ function RowFragment({
 }) {
   const t = useTranslations('timesheets')
   const tCommon = useTranslations('common')
+  const tResourcing = useTranslations('resourcing')
+  const locale = useLocale()
   const cell = 'flex min-h-[42px] items-center border-b border-slate-100 px-1 dark:border-slate-800'
   const label = (opts: PickerOption[], v: string) => opts.find((o) => o.value === v)?.label ?? '—'
 
@@ -850,6 +884,11 @@ function RowFragment({
       <div className={cell}>
         {r.amendsEntryId ? (
           <Badge variant="outline" className="mr-1 shrink-0">{t('grid.amendmentLine')}</Badge>
+        ) : null}
+        {r.plannedHours !== null ? (
+          <Badge variant="outline" className="mr-1 shrink-0">
+            {tResourcing('prefill.badge', { hours: decimalLabel(Number(r.plannedHours), locale, 0, 4) })}
+          </Badge>
         ) : null}
         {readOnly ? (
           <span className="truncate px-1.5 text-sm text-slate-500 dark:text-slate-400">{r.memo || '—'}</span>
