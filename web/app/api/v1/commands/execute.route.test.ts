@@ -89,8 +89,8 @@ function post(name: string, body: unknown, idempotencyKey?: string): Promise<Res
 
 test("POST /api/v1/commands/:name executes a visible catalog command", async () => {
   routeState.executed.length = 0;
-  const response = await post("post_journal", { documentId: "11111111-1111-1111-1111-111111111111" }, "cmd-key-1");
-  assert.equal(response.status, 200);
+  const response = await post("post_journal", { documentId: "123e4567-e89b-12d3-a456-426614174000" }, "cmd-key-1");
+  assert.equal(response.status, 200, await response.clone().text());
   assert.deepEqual(await response.json(), { ok: true, status: "posted" });
   assert.equal(routeState.executed[0]?.name, "post_journal");
   assert.equal(
