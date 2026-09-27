@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import { sql } from 'drizzle-orm'
 
 const stateKey = Symbol.for('openbooks.item-prices-route-test')
@@ -41,7 +41,7 @@ const hooks = registerHooks({
 
 const routeUrl = './route.ts?item-price-route-integration'
 const { GET, POST } = (await import(routeUrl)) as typeof import('./route.ts')
-test.after(() => hooks.deregister())
+after(() => hooks.deregister())
 
 const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
@@ -97,6 +97,8 @@ test('a foreign price level is refused before schedule or audit insertion', asyn
   const foreign = await fixture()
   const key = randomUUID()
   try {
+    const missing = await post({ ...own, itemId: randomUUID() }, key)
+    assert.deepEqual([missing.status, await missing.json()], [404, { error: 'not_found' }])
     const response = await post({ ...own, priceLevelId: foreign.priceLevelId }, key)
     assert.equal(response.status, 400)
     assert.match(String((await response.json()).error), /not active in this organization/)
@@ -132,7 +134,7 @@ test('customer price schedules and picker entries stay hidden outside the actor 
     assert.ok(!result.schedules.some((row) => row.id === key), 'customer-specific schedules do not disclose hidden customer ids or names')
 
     const denied = await post({ ...f, customerId }, randomUUID(), '12.3400', new Set())
-    assert.equal(denied.status, 404)
+    assert.deepEqual([denied.status, await denied.json()], [404, { error: 'not_found' }])
     const count = (await db.execute<{ count: number }>(sql`select count(*)::int as count from item_price_schedules where org_id=${f.orgId} and id<>${key} and customer_id=${customerId}`)).rows[0]
     assert.equal(count?.count, 0, 'the denied write leaves no schedule for the hidden customer')
   } finally {

@@ -189,7 +189,7 @@ test('reconciliation list hides out-of-scope sessions; detail is uniform not-fou
     authorize(fx, 'A')
     const hidden = await errorOf(await reconSession.GET(get(`https://openbooks.test/x/${fx.sessionB}`), params(fx.sessionB)))
     assert.equal(hidden.status, 404)
-    assert.equal(hidden.body.error, 'not found')
+    assert.equal(hidden.body.error, 'not_found')
     const sharedHidden = await errorOf(await reconSession.GET(get(`https://openbooks.test/x/${fx.sessionShared}`), params(fx.sessionShared)))
     assert.equal(sharedHidden.status, 404)
     const shown = await reconSession.GET(get(`https://openbooks.test/x/${fx.sessionA}`), params(fx.sessionA))

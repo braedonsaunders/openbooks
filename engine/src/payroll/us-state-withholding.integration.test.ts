@@ -12,6 +12,8 @@ import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "./packs.ts";
 import {
   AL_WITHHOLDING, CA_WITHHOLDING, DC_WITHHOLDING, MA_WITHHOLDING, NY_WITHHOLDING, NYC_WITHHOLDING, PA_WITHHOLDING,
 } from "./us/states/index.ts";
+import { US_PACK_RATES } from "./us/rates.ts";
+import { upsertStatutoryRate } from "./statutory-rates.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
@@ -132,27 +134,17 @@ async function usPayrollOrg(): Promise<Fixture> {
   }
   await setPackSlotAccount(org.orgId, actorId, "US", "state_income_tax", statePayable);
   await setPackSlotAccount(org.orgId, actorId, "US", "local_income_tax", statePayable);
-  // Presence-only SUI for every work state below: a live-but-unconfigured
-  // SUI refuses by name at calculate, and these tests assert withholding,
-  // never SUI amounts. Nested merge — a top-level `||` would replace the
-  // whole payroll blob and drop the accounts above.
-  // Presence-only FUTA the same way: the 2026 Schedule A is not transcribed,
-  // so an unconfigured FUTA refuses by name; the ordinary 0.6% full-credit
-  // figure below is the TEST entering a number as an employer would, and no
-  // expectation below asserts a FUTA amount.
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(
-      coalesce(settings, '{}'::jsonb),
-      '{payroll,us}',
-      coalesce(settings#>'{payroll,us}', '{}'::jsonb) || ${JSON.stringify({
-        futaRate: "0.006",
-        sui: Object.fromEntries(
-          ["AL", "CA", "NJ", "PA", "NY", "DC", "OH", "MA", "TX", "OR"].map((state) => [
-            state, { rate: "0.03", wageBase: "7000" },
-          ]),
-        ),
-      })}::jsonb
-    ) where id = ${org.orgId}`);
+  for (const state of ["AL", "CA", "NJ", "PA", "NY", "DC", "OH", "MA", "TX", "OR"]) {
+    const filingAccountId = await seedUsSuiAccount(org.orgId, actorId, state);
+    await upsertStatutoryRate({
+      orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
+      region: state, filingAccountId, taxYear: 2026, values: { rate: "0.03", wageBase: "7000" },
+    });
+    await upsertStatutoryRate({
+      orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
+      region: state, filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
+    });
+  }
   // CA ETT reserve status: an unconfigured balance refuses by name.
   // A positive test balance keeps the employer liable.
   await db.execute(sql`

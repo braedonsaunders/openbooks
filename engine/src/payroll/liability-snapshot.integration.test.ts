@@ -21,6 +21,10 @@ test(
   async () => {
     const fx = await seedAdoption();
     try {
+      await db.execute(sql`insert into payroll_filing_accounts
+        (id, org_id, country, program_type, account_number, name, remitter_type, is_default, is_active, created_by, updated_by)
+        values (${randomUUID()}, ${fx.orgId}, 'CA', 'ca_rp', '123456789RP0001', 'CRA remittances',
+                'regular', true, true, ${fx.actorId}, ${fx.actorId})`);
       const { input } = await calculatedRun(fx);
       await commitPayRun(input);
       const range = { from: "2026-07-01", to: "2026-07-31" };

@@ -98,9 +98,9 @@ for (const change of [
           await db.execute(
             sql`update parties set subsidiary_id=${fx.subsidiaryId} where id=${fx.employeeId} and org_id=${fx.orgId}`,
           );
-          await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,subsidiary_id,is_default)
-    values(${first},${fx.orgId},'CA','ca_rp','123456789RP0001','Original employer',${change === "hidden-original" ? hidden : fx.subsidiaryId},true),
-    (${second},${fx.orgId},'CA','ca_rp','123456789RP0002','Future employer',${fx.subsidiaryId},false)`);
+          await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,subsidiary_id,remitter_type,is_default)
+    values(${first},${fx.orgId},'CA','ca_rp','123456789RP0001','Original employer',${change === "hidden-original" ? hidden : fx.subsidiaryId},'regular',true),
+    (${second},${fx.orgId},'CA','ca_rp','123456789RP0002','Future employer',${fx.subsidiaryId},'regular',false)`);
           if (change === "inactive-original")
             await db.execute(
               sql`update employee_payroll_profiles set filing_account_id=${first} where org_id=${fx.orgId}`,
@@ -134,7 +134,7 @@ for (const change of [
         } else {
           await withBypassContext(() => markLegacy(fx.orgId));
           const response = await get(fx.orgId);
-          assert.equal(response.status, 200);
+          assert.equal(response.status, 200, JSON.stringify(await response.clone().json()));
           const body = await response.json();
           assert.ok(body.groups.length > 0);
           assert.ok(
