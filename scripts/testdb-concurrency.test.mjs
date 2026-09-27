@@ -18,10 +18,11 @@ async function writeExecutable(path, source) {
 async function createHarness() {
   const root = await mkdtemp(join(tmpdir(), "openbooks-testdb-concurrency-"));
   const bin = join(root, "bin");
-  const fixtureContents = "-- test fixture\\n";
+  const fixtureContents = "-- test fixture\n";
   const fixtureDigest = createHash("sha256").update(fixtureContents).digest("hex");
+  const migrationCount = 1;
   const fingerprint = createHash("sha256")
-    .update(`0001_fixture.sql:${fixtureDigest}\\n`)
+    .update(`0001_fixture.sql:${fixtureDigest}\n`)
     .digest("hex");
   await mkdir(bin);
 
@@ -52,6 +53,7 @@ printf '%s\\n' "$*" >> "$FAKE_PSQL_LOG"
 case "$*" in
   *"select 1 from pg_database"*) printf '1\\n' ;;
   *"select fingerprint from openbooks_testdb_meta"*) printf '%s\\n' "$FAKE_FINGERPRINT" ;;
+  *"select migration_count from openbooks_testdb_meta"*) printf '%s\\n' "$FAKE_MIGRATION_COUNT" ;;
   *) exit 0 ;;
 esac
 `,
@@ -60,10 +62,7 @@ esac
     ["env_alpha", "env_bravo"].map(async (identity) => {
       const worktree = join(root, identity, "openbooks");
       await mkdir(join(worktree, "schema", "migrations", "generated"), { recursive: true });
-      await writeFile(
-        join(worktree, "schema", "migrations", "generated", "0001_fixture.sql"),
-        fixtureContents,
-      );
+      await writeFile(join(worktree, "schema", "migrations", "generated", "0001_fixture.sql"), fixtureContents);
       return { identity, worktree, tmp: await mkdtemp(join(root, `${identity}-tmp-`)) };
     }),
   );
@@ -72,6 +71,7 @@ esac
     root,
     bin,
     fingerprint,
+    migrationCount,
     log: join(root, "psql.log"),
     worktrees,
     async cleanup() {
@@ -90,6 +90,7 @@ async function runNew(harness, { worktree, tmp }, name) {
       FAKE_REPO_ROOT: worktree,
       FAKE_PSQL_LOG: harness.log,
       FAKE_FINGERPRINT: harness.fingerprint,
+      FAKE_MIGRATION_COUNT: String(harness.migrationCount),
       OPENBOOKS_TESTDB_TEMPLATE: "test_template",
     };
     delete env.BB_ENVIRONMENT_ID;
