@@ -868,4 +868,26 @@ export async function inDbTransaction<T>(fn: (tx: DbTransaction) => Promise<T>):
   return db.transaction(fn);
 }
 
+/**
+ * Run `fn` as one atomic unit on the executor the caller handed in. A
+ * pool-backed database — the app `db` outside a pinned transaction, or any
+ * drizzle database over the pool — autocommits every statement, so this opens
+ * one transaction on a dedicated pooled connection (tenant or bypass scope
+ * applied at checkout, like every pooled connect). Every other executor is
+ * the caller's own unit and is joined as is: the `db` proxy inside a pinned
+ * transaction, a drizzle transaction, or a client adapter the caller opened a
+ * transaction on. Opening a transaction on those would either BEGIN twice on
+ * one client or move the work onto another connection outside the caller's
+ * atomic unit.
+ */
+export async function inExecutorTransaction<T>(
+  executor: SqlExecutor,
+  fn: (tx: SqlExecutor) => Promise<T>,
+): Promise<T> {
+  if ((executor as { $client?: unknown }).$client instanceof pg.Pool) {
+    return (executor as typeof poolDb).transaction((tx) => fn(tx));
+  }
+  return fn(executor);
+}
+
 export { schema };
