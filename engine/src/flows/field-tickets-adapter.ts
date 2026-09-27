@@ -10,6 +10,7 @@ import {
 } from "./subject-profiles.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
+import { documentKindPermissions } from "../records/document-kind-permissions.ts";
 
 export const FIELD_TICKET_SUBJECT_KIND = "field_ticket";
 
@@ -118,6 +119,9 @@ async function loadTicket(subjectId: string): Promise<FieldTicketRow | null> {
 
 export const fieldTicketsFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: FIELD_TICKET_SUBJECT_KIND,
+  // Field tickets are documents.
+  permissions: documentKindPermissions(FIELD_TICKET_SUBJECT_KIND),
+  scope: { via: "document" },
   profile: fieldTicketSubjectProfile,
   // releaseApproval below delegates to the registered handler: this kind
   // needs a handler registered at web boot (see handlerReleasedSubjectKinds).

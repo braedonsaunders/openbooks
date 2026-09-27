@@ -36,35 +36,28 @@ import type { DashboardMetrics } from "./_metrics";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-// F4T2-6: every pending-approval row deep-links to its record through the
-// shared approvals resolver — the same href the inbox row uses — instead of
-// the generic list href. A kind with no module surface keeps /inbox.
-const BILL_ID = "b0000000-0000-0000-0000-000000000001";
-const RUN_ID = "p0000000-0000-0000-0000-000000000002";
+// Every pending-approval row links to the record href the server resolved
+// for it (the same href the inbox row uses); a row whose kind has no record
+// surface keeps the widget's generic list href.
+const BILL_HREF = "/ap/bills?doc=b0000000-0000-0000-0000-000000000001";
 const APPROVALS = [
   {
     id: "a0000000-0000-0000-0000-000000000001",
     targetKind: "vendor_bill",
-    targetId: BILL_ID,
+    targetId: "b0000000-0000-0000-0000-000000000001",
+    href: BILL_HREF,
     amount: "100.00",
     title: "VB-1",
     createdAt: "2026-09-20T12:00:00.000Z",
   },
   {
     id: "a0000000-0000-0000-0000-000000000002",
-    targetKind: "pay_run",
-    targetId: RUN_ID,
+    targetKind: "unlinked_kind",
+    targetId: "x0000000-0000-0000-0000-000000000002",
+    href: null,
     amount: null,
-    title: "PR-1",
+    title: "UK-1",
     createdAt: "2026-09-21T12:00:00.000Z",
-  },
-  {
-    id: "a0000000-0000-0000-0000-000000000003",
-    targetKind: "party_bank_account",
-    targetId: "x0000000-0000-0000-0000-000000000003",
-    amount: null,
-    title: "BA-1",
-    createdAt: "2026-09-22T12:00:00.000Z",
   },
 ];
 
@@ -90,7 +83,7 @@ function rowHrefs(host: HTMLElement): string[] {
   return [...host.querySelectorAll("li a")].map((a) => a.getAttribute("href") ?? "");
 }
 
-test("pending approval rows deep-link to their records", async (t) => {
+test("pending approval rows link to their resolved record, else the list", async (t) => {
   const { host, root } = await mount();
   t.after(async () => {
     await act(async () => {
@@ -99,12 +92,5 @@ test("pending approval rows deep-link to their records", async (t) => {
     host.remove();
   });
   await tick();
-  const hrefs = rowHrefs(host);
-  assert.equal(hrefs.length, 3, `three approval rows must render, got ${JSON.stringify(hrefs)}`);
-  assert.ok(hrefs.some((h) => h.includes(`/ap/bills?doc=${BILL_ID}`)), `bill row must deep-link, got ${JSON.stringify(hrefs)}`);
-  assert.ok(hrefs.some((h) => h.includes(`/payroll/runs/${RUN_ID}`)), `pay-run row must deep-link, got ${JSON.stringify(hrefs)}`);
-  assert.ok(
-    hrefs.some((h) => h === "/inbox"),
-    `a kind with no record drawer lands on the hub, got ${JSON.stringify(hrefs)}`,
-  );
+  assert.deepEqual(rowHrefs(host), [BILL_HREF, "/inbox?tab=all"]);
 });

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
+import { existsSync, readdirSync } from "node:fs";
 import { registerHooks } from "node:module";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-// approvals-links is client-safe, but exhaustiveness is a property of the
-// ENGINE's gatable kinds — so this test imports the real flow registry and
-// the real link map, stubbing only the database (never called here). A
-// kind the engine can gate must never fall through to a null href
-// silently again: the hrm_employment_change_request hire approval showed
-// an opaque id with nowhere to click while offering Approve and Reject.
+// approvals-links resolves through the ENGINE's flow registry, so this test
+// imports the real registry and the real resolver, stubbing only the
+// database (never called here).
 
 // Every value the engine chain imports from the platform database module.
 const bomb = `throw new Error("no database in this test")`;
@@ -49,30 +49,42 @@ registerHooks({
   },
 });
 
-const { listFlowSubjectProfiles } = await import(
+const { getFlowAdapter, listFlowSubjectProfiles } = await import(
   "@openbooks/engine/src/flows/registry.ts"
 );
 const { approvalRecordHref } = await import("./approvals-links.ts");
 
 const PROBE_ID = "55555555-5555-4555-8555-555555555555";
+const APP_ROUTES = fileURLToPath(new URL("../app/(app)/", import.meta.url));
 
-test("every subject kind the flows engine can gate has a record link", () => {
+/** True when a Next.js page serves `path` (dynamic `[segment]` dirs match any value). */
+function pageExists(path: string): boolean {
+  let dir = APP_ROUTES;
+  for (const segment of path.split("/").filter(Boolean)) {
+    const next = existsSync(join(dir, segment))
+      ? segment
+      : readdirSync(dir).find((entry) => /^\[[^.\]]+\]$/.test(entry));
+    if (!next) return false;
+    dir = join(dir, next);
+  }
+  return existsSync(join(dir, "page.tsx"));
+}
+
+test("every gatable subject kind links to a page that exists", () => {
+  // A non-document subject opens where its adapter's deepLink says, so the
+  // approvals hub and notifications can never disagree; every link must
+  // land on a real page, or a kind is registered with no surface.
   const kinds = listFlowSubjectProfiles().map((profile) => profile.subjectKind);
   assert.ok(kinds.length > 0, "the engine must declare gatable subject kinds");
-  const missing = kinds.filter((kind) => approvalRecordHref(kind, PROBE_ID) == null);
-  assert.deepEqual(
-    missing,
-    [],
-    "these engine-gatable kinds fall through to a null record link:\n  " + missing.join("\n  "),
-  );
-});
-
-test("an employment change request links to its queue", () => {
-  // The engine adapter's deepLink names the same URL: one declaration of
-  // where an approver inspects the request (employee, kind, effective
-  // date, requester), never a second drawer.
-  assert.equal(
-    approvalRecordHref("hrm_employment_change_request", PROBE_ID),
-    `/hrm/change-requests?request=${PROBE_ID}`,
-  );
+  const defects = kinds.flatMap((kind) => {
+    const adapter = getFlowAdapter(kind);
+    const href = approvalRecordHref(kind, PROBE_ID);
+    if (href == null) return [`${kind}: no record link`];
+    if (adapter && adapter.scope.via !== "document" && href !== adapter.deepLink(PROBE_ID)) {
+      return [`${kind}: ${href} is not the adapter's deepLink ${adapter.deepLink(PROBE_ID)}`];
+    }
+    const path = href.split("?")[0]!;
+    return pageExists(path) ? [] : [`${kind}: ${path} is not a page`];
+  });
+  assert.deepEqual(defects, [], `approval record links:\n  ${defects.join("\n  ")}`);
 });

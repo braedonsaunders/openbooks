@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { decideGate, GateError, worklistGates } from "./gates.ts";
+import { getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
@@ -205,4 +206,21 @@ test("a restricted worklist hides gates from other subsidiaries", { skip: !DB },
     await db.execute(sql`delete from timesheet_weeks where org_id = ${org.orgId}`);
     await dropScratchOrg(org.orgId);
   }
+});
+
+test("every table-backed subject scope names real tables and columns", { skip: !DB }, async () => {
+  // The scope interpreter builds its SQL from these identifiers; a typo would
+  // only surface when a restricted caller first meets that kind.
+  const catalog = new Set((await db.execute<{ name: string }>(sql`
+    select table_name || '.' || column_name as name from information_schema.columns where table_schema = 'public'
+  `)).rows.map((row) => row.name));
+  const defects = listFlowSubjectProfiles().flatMap(({ subjectKind }) => {
+    const scope = getFlowAdapter(subjectKind)?.scope;
+    if (!scope || !("table" in scope)) return [];
+    return ["id", "org_id", scope.column]
+      .map((column) => `${scope.table}.${column}`)
+      .filter((name) => !catalog.has(name))
+      .map((name) => `${subjectKind}: ${name} does not exist`);
+  });
+  assert.deepEqual(defects, [], `subject scopes naming missing columns:\n  ${defects.join("\n  ")}`);
 });

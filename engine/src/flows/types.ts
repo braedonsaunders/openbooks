@@ -1,3 +1,4 @@
+import type { SQL } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 
 /**
@@ -42,9 +43,60 @@ export interface FlowSubjectContext {
   makerUserId?: string | null;
 }
 
+/** Grants generic flow endpoints check: read, edit short of a decision, and post/approve. */
+export interface FlowSubjectPermissions {
+  read: string;
+  edit: string;
+  approve: string;
+}
+
+/**
+ * Where a subject's legal entity lives. A closed union: every interpreter
+ * (flows/subject-scope.ts) switches exhaustively. `document` reads
+ * documents.subsidiary_id; `none` is org-wide (restricted callers fail
+ * closed); `custom` is a stored visibility predicate richer than one owner.
+ */
+export type FlowSubjectScope =
+  | { via: "document" }
+  | { via: "none" }
+  | FlowSubjectTableScope
+  | FlowSubjectCustomScope;
+
+/**
+ * `column`: the subject row carries its own subsidiary column. `party`,
+ * `project`, `employment`: `column` references the owner whose subsidiary
+ * the subject inherits. Build through subject-scope.ts tableScope, which
+ * validates the identifiers.
+ */
+export interface FlowSubjectTableScope {
+  via: "column" | "party" | "project" | "employment";
+  table: string;
+  column: string;
+}
+
+export interface FlowSubjectCustomScope {
+  via: "custom";
+  /**
+   * Owning subsidiary per existing subject id as `allowed` sees it: null when
+   * hidden from that caller or ownerless. `lock` share-locks the rows read.
+   */
+  subsidiaryOf(
+    orgId: string,
+    ids: readonly string[],
+    allowed: ReadonlySet<string> | null,
+    lock: boolean,
+  ): Promise<Map<string, string | null>>;
+  /** SQL over flow_gates `g`: may this caller (subsidiary ids as JSON) see the subject? */
+  worklistPredicate?(allowedIdsJson: string): SQL;
+}
+
 export interface FlowSubjectAdapter {
   /** Subject discriminator this adapter instance serves (a document kind). */
   subjectKind: string;
+  /** Grants for generic endpoints; null (fail closed) when no single grant exists. */
+  permissions: FlowSubjectPermissions | null;
+  /** Where this kind's legal entity lives (subsidiary scope and locking). */
+  scope: FlowSubjectScope;
   /** The author-time vocabulary for this subject (triggers/actions/fields). */
   profile: FlowSubjectProfile;
   /** Header fields a flow may persist into via set_field. */

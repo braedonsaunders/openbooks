@@ -47,6 +47,37 @@ export const financialChangeSubjectProfile: FlowSubjectProfile = {
 };
 export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: FINANCIAL_CHANGE_SUBJECT_KIND,
+  // Authorization is polymorphic per change type (assets.manage / ar.post /
+  // close.run); no single domain grant covers the kind, so generic
+  // endpoints fail closed on it.
+  permissions: null,
+  scope: {
+    via: "custom",
+    // A change is visible only when every legal entity it requires is.
+    async subsidiaryOf(orgId, ids, allowed, lock) {
+      const changes = (await db.execute<{ id: string; subsidiaryId: string | null; required: Array<string | null> }>(sql`
+        select id, subsidiary_id as "subsidiaryId",
+               coalesce(payload->'requiredSubsidiaryIds', jsonb_build_array(subsidiary_id)) as required
+          from financial_changes
+         where org_id = ${orgId}
+           and id in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)
+         ${lock ? sql`for share` : sql``}
+      `)).rows;
+      return new Map(changes.map((change) => [
+        change.id,
+        allowed === null || change.required.every((id) => id !== null && allowed.has(id))
+          ? change.subsidiaryId
+          : null,
+      ]));
+    },
+    worklistPredicate(ids) {
+      return sql`exists (
+        select 1 from financial_changes fc where fc.org_id=g.org_id and fc.id=g.subject_id
+        and fc.subsidiary_id in (select jsonb_array_elements_text(${ids}::jsonb)::uuid)
+        and not exists(select 1 from jsonb_array_elements_text(coalesce(fc.payload->'requiredSubsidiaryIds','[]'::jsonb)) required(id) where required.id not in(select jsonb_array_elements_text(${ids}::jsonb)))
+      )`;
+    },
+  },
   profile: financialChangeSubjectProfile,
   selfApprovalPolicy: "forbidden",
   async loadContext(id) {

@@ -13,6 +13,7 @@ import {
 } from "./subject-profiles.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { tableScope } from "./subject-scope.ts";
 
 /**
  * Employment change requests as a native flow subject.
@@ -96,6 +97,9 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
 
 export const hrmChangeRequestFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: HRM_CHANGE_REQUEST_SUBJECT_KIND,
+  // A request belongs to the employer entity of the employment it changes.
+  permissions: { read: "hrm.employment.read", edit: "hrm.employment.manage", approve: "hrm.employment.manage" },
+  scope: tableScope("employment", "hrm_employment_change_requests", "employment_id"),
   profile: hrmChangeRequestSubjectProfile,
   // releaseApproval below delegates to the registered engine handler.
   releaseViaHandler: true,

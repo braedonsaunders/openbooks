@@ -40,6 +40,7 @@ import {
   type PaymentStats,
 } from '@/lib/cash/core'
 import { presentationCurrency } from '@/lib/fx-presentation'
+import { approvalRecordHref } from '@/lib/approvals-links'
 import { WIDGETS } from './_widget-registry'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
 
@@ -176,6 +177,8 @@ export type DashboardMetrics = {
     id: string
     targetKind: string
     targetId: string
+    /** The record's approval deep link; null when the kind has no surface. */
+    href: string | null
     amount: string | null
     title: string
     createdAt: string
@@ -188,6 +191,8 @@ export type DashboardMetrics = {
     id: string
     targetKind: string
     targetId: string
+    /** The record's approval deep link; null when the kind has no surface. */
+    href: string | null
     amount: string | null
     title: string
     createdAt: string
@@ -584,6 +589,7 @@ export async function loadDashboardMetrics(
         createdAt: unionRequestedAt(item),
       }
     })
+    .map((row) => ({ ...row, href: approvalRecordHref(row.targetKind, row.targetId) }))
   const agent = (agentFindings as unknown as { rows: Array<{ open: number; proposals: number; last_run: string | Date | null }> }).rows[0]!
   // HR-15 persona fields: only the fields the visible widgets render are
   // queried — a denied widget's reader never runs.

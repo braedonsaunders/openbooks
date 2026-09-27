@@ -8,6 +8,7 @@ import { ambientTenantOrgId, db } from "../platform/db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { releaseFlowApproval } from "./approval-release-hook.ts";
 import { BUILT_IN_ROLE_NAMES, EVENT_SOURCE_OPTIONS } from "./subject-profiles.ts";
+import { tableScope } from "./subject-scope.ts";
 
 const REQUEST_STATUSES = [
   { value: "draft", label: "Draft" },
@@ -67,6 +68,9 @@ async function loadRequest(subjectId: string) {
 
 export const resourcingRequestFlowAdapter: FlowSubjectAdapter = {
   subjectKind: RESOURCING_REQUEST_SUBJECT_KIND,
+  // A request belongs to its project's legal entity.
+  permissions: { read: "resourcing.read", edit: "resourcing.manage", approve: "resourcing.manage" },
+  scope: tableScope("project", "res_requests", "project_id"),
   profile: resourcingRequestSubjectProfile,
   releaseViaHandler: true,
   writableFields: new Set<string>(),
@@ -97,8 +101,10 @@ export const resourcingRequestFlowAdapter: FlowSubjectAdapter = {
     return `Resource request ${subjectId.slice(0, 8)}`;
   },
 
-  deepLink(subjectId: string): string {
-    return `/resourcing/requests?request=${subjectId}`;
+  deepLink(): string {
+    // Resource requests have no record page yet; the hub is the landing
+    // surface until one ships (party_bank_account precedent).
+    return "/inbox";
   },
 
   async getStatus(subjectId: string): Promise<string | null> {

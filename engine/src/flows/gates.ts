@@ -3,7 +3,9 @@ import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { planFromGate, type GateData } from "@openbooks/forms-core";
 import { db, pool, schema, withOrg, withBypassContext, withOrgContext, withTransactionSavepoint } from "../platform/db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
-import { getFlowAdapter } from "./registry.ts";
+import { getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
+import { resolveSubjectSubsidiaries } from "./subject-scope.ts";
+import { CLOSE_RUN_SUBJECT_KIND, closeRunsFlowAdapter } from "./close-runs-adapter.ts";
 import { executeFlowPlan } from "./execute.ts";
 import { enqueueApprovalEscalation, enqueueFlowEmail } from "../delivery/outbox-enqueue.ts";
 import { parseFlowGraph } from "./run.ts";
@@ -18,7 +20,6 @@ import {
 } from "./targets.ts";
 import { activeDelegationPrincipal, activeDelegationPrincipals } from "./delegations.ts";
 import { emailActionUrls } from "./email-tokens.ts";
-import { allocationScopeVisible } from "../organization/allocation-scope.ts";
 
 /**
  * Gate lifecycle — decide / worklist / delegate / timers. OpenBooks resumes
@@ -211,91 +212,25 @@ async function canActOnGate(gate: GateRow, userId: string): Promise<boolean> {
 }
 
 /**
- * Resolve the legal entity behind a gate subject. Flow gates are polymorphic:
- * documents (including pay runs and field tickets) carry their own subsidiary,
- * while bank-account and timesheet approvals inherit it from their party.
- * Unknown/non-entity subjects intentionally return null so a restricted
- * caller cannot decide a gate whose legal-entity ownership is not provable.
+ * Refuse a restricted caller acting on a gate whose subject lies outside
+ * their legal entities. The subject's entity resolves through its adapter's
+ * declared scope; a subject with no provable entity fails closed.
  */
-async function gateSubjectSubsidiaryId(gate: Pick<GateRow, "subjectKind" | "subjectId" | "orgId">): Promise<string | null> {
-  const r = await db.execute<{ subsidiaryId: string | null }>(sql`
-    select case
-             when g.subject_kind = 'financial_change' then (
-               select fc.subsidiary_id from financial_changes fc where fc.id=g.subject_id and fc.org_id=g.org_id
-             )
-             when g.subject_kind = 'allocation_run' then (
-               select ar.subsidiary_id from allocation_runs ar where ar.id=g.subject_id and ar.org_id=g.org_id
-             )
-             when g.subject_kind = 'work_order' then (
-               select wo.subsidiary_id from mfg_work_orders wo where wo.id=g.subject_id and wo.org_id=g.org_id
-             )
-             when g.subject_kind = 'party_bank_account' then (
-               select p.subsidiary_id
-                 from party_bank_accounts ba
-                 join parties p on p.id = ba.party_id and p.org_id = ba.org_id
-                where ba.id = g.subject_id and ba.org_id = g.org_id
-             )
-             when g.subject_kind = 'timesheet_week' then (
-               select p.subsidiary_id
-                 from timesheet_weeks tw
-                 join parties p on p.id = tw.employee_party_id and p.org_id = tw.org_id
-                where tw.id = g.subject_id and tw.org_id = g.org_id
-             )
-             else d.subsidiary_id
-           end as "subsidiaryId"
-      from flow_gates g
-      left join documents d
-        on d.id = g.subject_id and d.org_id = g.org_id and d.kind = g.subject_kind
-     where g.subject_kind = ${gate.subjectKind}
-       and g.subject_id = ${gate.subjectId}
-       and g.org_id = ${gate.orgId}
-     limit 1
-  `);
-  return r.rows[0]?.subsidiaryId ?? null;
-}
-
 async function assertGateSubsidiaryScope(
   gate: Pick<GateRow, "subjectKind" | "subjectId" | "orgId">,
   allowedSubsidiaryIds: GateSubsidiaryScope,
 ): Promise<void> {
   if (allowedSubsidiaryIds == null) return;
-  if (gate.subjectKind === "allocation_run") {
-    // Allocation visibility depends on the full stored computation (pin plus
-    // every source, target, and line), not just the run pin the generic
-    // resolver below returns.
-    const run = (
-      await db.execute<{
-        subsidiaryId: string | null;
-        computation: unknown;
-      }>(sql`
-      select subsidiary_id as "subsidiaryId", computation
-        from allocation_runs
-       where org_id = ${gate.orgId} and id = ${gate.subjectId}
-    `)
-    ).rows[0];
-    if (
-      !run ||
-      !allocationScopeVisible(
-        allowedSubsidiaryIds,
-        run.subsidiaryId,
-        run.computation,
-      )
-    ) {
-      throw new GateError("approval not found");
-    }
-    return;
-  }
-  if (gate.subjectKind === "financial_change") {
-    const required = (
-      await db.execute<{ ids: string[] }>(
-        sql`select coalesce(payload->'requiredSubsidiaryIds',jsonb_build_array(subsidiary_id)) as ids from financial_changes where org_id=${gate.orgId} and id=${gate.subjectId}`,
-      )
-    ).rows[0]?.ids;
-    if (!required || required.some((id) => !allowedSubsidiaryIds.has(id)))
-      throw new GateError("approval not found");
-  }
-  const subsidiaryId = await gateSubjectSubsidiaryId(gate);
-  if (!gateSubsidiaryScopeAllows(allowedSubsidiaryIds, subsidiaryId)) {
+  const adapter = getFlowAdapter(gate.subjectKind);
+  if (!adapter) throw new GateError(`approval subject kind "${gate.subjectKind}" is not registered`);
+  const owners = await resolveSubjectSubsidiaries(
+    gate.orgId,
+    gate.subjectKind,
+    adapter.scope,
+    [gate.subjectId],
+    allowedSubsidiaryIds,
+  );
+  if (!gateSubsidiaryScopeAllows(allowedSubsidiaryIds, owners.get(gate.subjectId))) {
     throw new GateError("approval not found");
   }
 }
@@ -1003,7 +938,7 @@ function mapWorklistRow(
     onBehalfOf,
     subjectLabel: (row.subjectLabel as string | null) ?? null,
     subsidiaryId: (row.subsidiaryId as string | null) ?? null,
-    href: row.closePeriodName ? `/close?run=${String(row.subjectId)}&stage=lock` : null,
+    href: row.closePeriodName ? closeRunsFlowAdapter.deepLink(String(row.subjectId)) : null,
     document: row.documentNumber
       ? {
           subsidiaryId: (row.subsidiaryId as string | null) ?? null,
@@ -1035,7 +970,7 @@ const WORKLIST_SELECT = sql`
       from flow_gates g
       left join documents d on d.id = g.subject_id and d.org_id = g.org_id
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
-      left join close_runs cr on cr.id = g.subject_id and cr.org_id = g.org_id and g.subject_kind = 'close_run'
+      left join close_runs cr on cr.id = g.subject_id and cr.org_id = g.org_id and g.subject_kind = ${CLOSE_RUN_SUBJECT_KIND}
       left join accounting_periods cp on cp.id = cr.period_id and cp.org_id = cr.org_id`;
 
 /**
@@ -1046,94 +981,35 @@ const WORKLIST_SELECT = sql`
  */
 /**
  * Fill in the legal entity behind worklist rows whose subject is not a
- * document (timesheet weeks inherit it from the employee party, bank-account
- * approvals from theirs). Batched per subject kind; subjects with no
- * resolvable entity keep null so restricted callers fail closed on them.
+ * document, through each kind's declared scope (a timesheet week inherits
+ * its employee party's, a work order carries its own). One query per
+ * subject kind; subjects with no resolvable entity keep null so restricted
+ * callers fail closed on them.
  */
 async function resolveWorklistSubsidiaries(
   orgId: string,
   gates: WorklistGate[],
   allowedSubsidiaryIds?: GateSubsidiaryScope,
 ): Promise<void> {
-  const missing = gates.filter((g) => g.subsidiaryId == null);
-  if (missing.length === 0) return;
-  const idsFor = (kind: string): string[] => [
-    ...new Set(missing.filter((g) => g.subjectKind === kind).map((g) => g.subjectId)),
-  ];
-  const apply = (rows: Array<{ id: string; subsidiaryId: string | null }>) => {
-    const byId = new Map(rows.map((r) => [r.id, r.subsidiaryId]));
-    for (const g of missing) {
-      if (byId.has(g.subjectId)) g.subsidiaryId = byId.get(g.subjectId) ?? null;
-    }
-  };
-  const changes = idsFor("financial_change");
-  if (changes.length > 0) {
-    const result = await db.execute<{id:string;subsidiaryId:string}>(sql`
-      select id,subsidiary_id as "subsidiaryId" from financial_changes where org_id=${orgId}
-        and id in (select jsonb_array_elements_text(${JSON.stringify(changes)}::jsonb)::uuid)
-    `);
-    apply(result.rows);
+  const missing = new Map<string, WorklistGate[]>();
+  for (const gate of gates) {
+    if (gate.subsidiaryId != null) continue;
+    missing.set(gate.subjectKind, [...(missing.get(gate.subjectKind) ?? []), gate]);
   }
-  const timesheets = idsFor("timesheet_week");
-  if (timesheets.length > 0) {
-    const r = await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
-      select tw.id, p.subsidiary_id as "subsidiaryId"
-        from timesheet_weeks tw
-        join parties p on p.id = tw.employee_party_id and p.org_id = tw.org_id
-       where tw.org_id = ${orgId}
-         and tw.id in (select jsonb_array_elements_text(${JSON.stringify(timesheets)}::jsonb)::uuid)
-    `);
-    apply(r.rows);
-  }
-  const bankAccounts = idsFor("party_bank_account");
-  if (bankAccounts.length > 0) {
-    const r = await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
-      select ba.id, p.subsidiary_id as "subsidiaryId"
-        from party_bank_accounts ba
-        join parties p on p.id = ba.party_id and p.org_id = ba.org_id
-       where ba.org_id = ${orgId}
-         and ba.id in (select jsonb_array_elements_text(${JSON.stringify(bankAccounts)}::jsonb)::uuid)
-    `);
-    apply(r.rows);
-  }
-  const allocationRuns = idsFor("allocation_run");
-  if (allocationRuns.length > 0) {
-    const rows = (
-      await db.execute<{
-        id: string;
-        subsidiaryId: string | null;
-        computation: unknown;
-      }>(sql`
-      select id, subsidiary_id as "subsidiaryId", computation
-        from allocation_runs
-       where org_id = ${orgId}
-         and id in (select jsonb_array_elements_text(${JSON.stringify(allocationRuns)}::jsonb)::uuid)
-    `)
-    ).rows;
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    for (const gate of missing.filter(
-      (candidate) => candidate.subjectKind === "allocation_run",
-    )) {
-      const run = byId.get(gate.subjectId);
-      gate.subsidiaryId =
-        run &&
-        allocationScopeVisible(
-          allowedSubsidiaryIds ?? null,
-          run.subsidiaryId,
-          run.computation,
-        )
-          ? run.subsidiaryId
-          : null;
-    }
-  }
-  const workOrders = idsFor("work_order");
-  if (workOrders.length > 0) {
-    const result = await db.execute<{ id: string; subsidiaryId: string | null }>(sql`
-      select id, subsidiary_id as "subsidiaryId" from mfg_work_orders where org_id = ${orgId}
-        and id in (select jsonb_array_elements_text(${JSON.stringify(workOrders)}::jsonb)::uuid)
-    `);
-    apply(result.rows);
-  }
+  await Promise.all([...missing].map(async ([kind, kindGates]) => {
+    const scope = getFlowAdapter(kind)?.scope;
+    // Documents already carry their entity through the join, and org-wide
+    // subjects have none; an unregistered kind keeps null and fails closed.
+    if (!scope || scope.via === "document" || scope.via === "none") return;
+    const owners = await resolveSubjectSubsidiaries(
+      orgId,
+      kind,
+      scope,
+      kindGates.map((gate) => gate.subjectId),
+      allowedSubsidiaryIds ?? null,
+    );
+    for (const gate of kindGates) gate.subsidiaryId = owners.get(gate.subjectId) ?? null;
+  }));
 }
 
 /**
@@ -1153,22 +1029,27 @@ export interface WorklistGatePage {
 
 /**
  * SQL pre-filter reproducing gateSubsidiaryScopeAllows for the rows the
- * documents join already carries an entity for. Non-document subjects
- * (d.id is null) pass through to resolveWorklistSubsidiaries + the JS filter
- * below, exactly as before — the predicate drops in SQL only what the JS
- * filter would drop, so full and paged reads return the same rows.
+ * documents join already carries an entity for, plus each custom scope's
+ * own worklist predicate. Other non-document subjects (d.id is null) pass
+ * through to resolveWorklistSubsidiaries + the JS filter below — the
+ * predicate drops in SQL only what the JS filter would drop, so full and
+ * paged reads return the same rows.
  */
 function worklistGateScopeSql(allowedSubsidiaryIds: GateSubsidiaryScope): SQL {
   if (allowedSubsidiaryIds == null) return sql``;
   const ids = JSON.stringify([...allowedSubsidiaryIds]);
+  const predicates = listFlowSubjectProfiles().flatMap(({ subjectKind }) => {
+    const scope = getFlowAdapter(subjectKind)?.scope;
+    return scope?.via === "custom" && scope.worklistPredicate
+      ? [{ subjectKind, predicate: scope.worklistPredicate(ids) }]
+      : [];
+  });
+  const filteredKinds = JSON.stringify(predicates.map((entry) => entry.subjectKind));
   return sql`and (
-    (d.id is null and g.subject_kind <> 'financial_change')
+    (d.id is null and g.subject_kind not in (select jsonb_array_elements_text(${filteredKinds}::jsonb)))
     or d.subsidiary_id in (select jsonb_array_elements_text(${ids}::jsonb)::uuid)
-    or (g.subject_kind='financial_change' and exists (
-      select 1 from financial_changes fc where fc.org_id=g.org_id and fc.id=g.subject_id
-      and fc.subsidiary_id in (select jsonb_array_elements_text(${ids}::jsonb)::uuid)
-      and not exists(select 1 from jsonb_array_elements_text(coalesce(fc.payload->'requiredSubsidiaryIds','[]'::jsonb)) required(id) where required.id not in(select jsonb_array_elements_text(${ids}::jsonb)))
-    ))
+    ${sql.join(predicates.map(({ subjectKind, predicate }) =>
+      sql`or (g.subject_kind = ${subjectKind} and ${predicate})`), sql` `)}
   )`;
 }
 

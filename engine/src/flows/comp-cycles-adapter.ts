@@ -13,6 +13,7 @@ import {
 } from "./subject-profiles.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { tableScope } from "./subject-scope.ts";
 
 /**
  * Compensation cycles as a native flow subject.
@@ -99,6 +100,10 @@ async function loadCycle(subjectId: string): Promise<CycleRow | null> {
 
 export const hrmCompCycleFlowAdapter: FlowSubjectAdapter = defineTableSubjectAdapter({
   subjectKind: HRM_COMP_CYCLE_SUBJECT_KIND,
+  // A cycle scoped to one employer entity carries it; an org-wide cycle has
+  // no owner and restricted callers fail closed on it.
+  permissions: { read: "hrm.compensation.read", edit: "hrm.compensation.manage", approve: "hrm.compensation.manage" },
+  scope: tableScope("column", "hrm_comp_cycles", "scope_employer_subsidiary_id"),
   profile: hrmCompCycleSubjectProfile,
   // releaseApproval below delegates to the registered engine handler.
   releaseViaHandler: true,

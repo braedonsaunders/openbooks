@@ -10,6 +10,7 @@ import {
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { flowDocumentEffects } from "./document-effects-hook.ts";
 import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
+import { documentKindPermissions } from "../records/document-kind-permissions.ts";
 import {
   DOCUMENT_FIELDS,
   WRITABLE_DOCUMENT_FIELDS,
@@ -186,6 +187,8 @@ export const RESERVED_DOCUMENT_FIELD_KEYS: ReadonlySet<string> = new Set([
 export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
   return defineTableSubjectAdapter({
     subjectKind: kind,
+    permissions: documentKindPermissions(kind),
+    scope: { via: "document" },
     profile: documentSubjectProfile(kind),
     writableFields: WRITABLE_DOCUMENT_FIELDS,
 
