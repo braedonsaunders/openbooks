@@ -77,7 +77,9 @@ test("a deliberately planted money.ts mutant is reported as killed", async () =>
     // runner would emit (inverts formatMoney's zero-precision branch). The
     // anchor is semantic, not a line number, so it survives source shifts;
     // if formatMoney ever loses this branch the lookup fails loudly below.
-    const planted = generateMutants("engine/src/money/money.ts", pristine).find(
+    const planted = generateMutants("engine/src/money/money.ts", pristine, {
+      maxPerOperator: Number.MAX_SAFE_INTEGER,
+    }).find(
       (m) =>
         m.operator === "comparison-flip" &&
         m.mutatedSource.includes("decimalPlaces !== 0 ? whole!"),
