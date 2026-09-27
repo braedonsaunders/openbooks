@@ -255,7 +255,7 @@ export async function postDrawdown(
         select changes from audit_log
          where org_id = ${input.orgId} and table_name = 'res_retainer_drawdowns'
            and row_id = ${drawdown.id} and action = 'insert'
-         order by created_at desc limit 1
+         order by at desc, id desc limit 1
       `)).rows[0]?.changes?.after;
       const amounts = audit?.byMonth;
       const hours = audit?.hoursByMonth;

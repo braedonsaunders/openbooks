@@ -55,7 +55,7 @@ test("hours invoices activate and post idempotent monthly drawdown events", { sk
   const employeeId = retainer.employeeId;
   await withBypassContext(() => write(db.execute(sql`insert into time_entries
     (id, org_id, employee_party_id, project_id, worked_on, hours, status, is_billable, billing_status, created_by, updated_by)
-    select v.id, ${org.orgId}, ${employeeId}, ${retainer.projectId}, v.day::date, '2.0000', 'approved', true, 'unbilled', ${actorId}, ${actorId}
+    select v.id::uuid, ${org.orgId}, ${employeeId}, ${retainer.projectId}, v.day::date, '2.0000', 'approved', true, 'unbilled', ${actorId}, ${actorId}
       from (values (${timeEntries[0]!.id}, ${timeEntries[0]!.workedOn}), (${timeEntries[1]!.id}, ${timeEntries[1]!.workedOn})) v(id, day)`), "test time-entry setup", 2));
   const draft = await draftHoursDrawdown({ ...input(retainer.id), sunday: "2026-07-26" });
   assert.equal(draft.amount, "400.0000");
@@ -87,7 +87,11 @@ test("extra recognition lines block activation and draft edits stop at invoice l
   await withBypassContext(async () => db.transaction(async (tx) => {
     await write(tx.execute(sql`insert into document_lines (org_id, document_id, line_number, item_id, description, quantity, unit_price, amount, created_by)
       values (${org.orgId}, ${invoiceId}, 2, ${org.items.service}, 'Additional service', '1', '1', '1', ${actorId})`), "add second recognition line");
-    await write(tx.execute(sql`update documents set subtotal = subtotal + 1, total = total + 1 where org_id = ${org.orgId} and id = ${invoiceId}`), "update invoice totals");
+    await write(tx.execute(sql`update documents d
+      set subtotal = lines.subtotal, tax_total = lines.tax_total, total = lines.subtotal + lines.tax_total
+      from (select sum(amount) as subtotal, sum(tax_amount) as tax_total
+              from document_lines where org_id = ${org.orgId} and document_id = ${invoiceId}) lines
+      where d.org_id = ${org.orgId} and d.id = ${invoiceId}`), "update invoice totals");
   }));
   await approveAndPostInvoice(invoiceId);
   await assert.rejects(withOrgTransaction(org.orgId, () => syncRetainerActivation(db, org.orgId, retainer.id, actorId)),
