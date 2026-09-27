@@ -253,14 +253,24 @@ test("fund balancing stays data-driven and fund postings use configured interfun
         update funds set restriction_class = 'without_donor_restrictions'
          where org_id = ${org.orgId} and id = ${restricted.id}
       `)),
-      /fund SCHOLARSHIP restriction class cannot change while \d+ posted journal lines carry it/,
+      (error) => {
+        const wrapped = error as Error & { cause?: { message?: string } };
+        return /fund SCHOLARSHIP restriction class cannot change while \d+ posted journal lines carry it/.test(
+          `${wrapped.message} ${wrapped.cause?.message ?? ""}`,
+        );
+      },
     );
     await assert.rejects(
       withOrgContext(org.orgId, () => db.execute(sql`
         update segment_definitions set is_balancing = false
          where org_id = ${org.orgId} and id = ${initial.segmentId}
       `)),
-      /segment fund cannot stop balancing while \d+ posted journal lines carry it/,
+      (error) => {
+        const wrapped = error as Error & { cause?: { message?: string } };
+        return /segment fund cannot stop balancing while \d+ posted journal lines carry it/.test(
+          `${wrapped.message} ${wrapped.cause?.message ?? ""}`,
+        );
+      },
     );
   } finally {
     clearBalancingLegProviders();
