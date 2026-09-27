@@ -59,14 +59,6 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    "mock:list-params",
-    `
-      export function isUuid(value) {
-        return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-      }
-    `,
-  ],
 ]);
 
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmEmploymentRecordNextResponse =
@@ -76,7 +68,6 @@ const mockUrls = new Map<string, string>([
   ["../../../../../lib/feature-gates", "mock:gates"],
   ["@openbooks/engine/src/hrm/employment-read.ts", "mock:service"],
   ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
-  ["../../../../../lib/list-params", "mock:list-params"],
 ]);
 
   const hooks = registerHooks({

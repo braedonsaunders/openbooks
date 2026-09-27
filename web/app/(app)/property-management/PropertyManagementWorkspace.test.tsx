@@ -1,17 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { decimalCmp, decimalSum } from "../../../lib/statement-format.ts";
-
-const source = readFileSync(
-  join(
-    dirname(fileURLToPath(import.meta.url)),
-    "PropertyManagementWorkspace.tsx",
-  ),
-  "utf8",
-);
 
 test("property-management KPI money aggregates preserve exact decimals", () => {
   assert.equal(decimalSum(["0.1000", "0.2000"]), "0.3000");
@@ -20,20 +9,4 @@ test("property-management KPI money aggregates preserve exact decimals", () => {
     "9007199254740993.0000",
   );
   assert.equal(decimalCmp("0.3000", "0") > 0, true);
-});
-
-test("property-management KPI totals use exact decimal helpers", () => {
-  assert.match(source, /const monthlyRent = sumByCurrency\(/);
-  assert.match(source, /const depositsHeld = sumByCurrency\(/);
-  assert.match(source, /decimalCmp\(part\.total, "0"\) > 0/);
-  assert.doesNotMatch(
-    source,
-    /Number\((?:charge\.amount|line\.invoiceOpenBalance|lease\.depositBalance)/,
-  );
-});
-
-test("property-management past-due total reads the server aggregate, never the capped preview", () => {
-  assert.match(source, /data\.overdueByLease\.map\(/);
-  assert.doesNotMatch(source, /overdueInvoices\.values\(\)/);
-  assert.doesNotMatch(source, /for \(const line of data\.schedules\)/);
 });

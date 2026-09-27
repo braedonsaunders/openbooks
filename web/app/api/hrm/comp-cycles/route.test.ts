@@ -51,14 +51,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    "mock:list-params",
-    `
-      export function isUuid(value) {
-        return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-      }
-    `,
-  ],
-  [
     "mock:cycles",
     `
       const state = globalThis[Symbol.for('openbooks.hrm-comp-cycles-route-test')]
@@ -138,32 +130,6 @@ const mockSources = new Map<string, string>([
       }
     `,
   ],
-  [
-    "mock:json",
-    `
-      export const jsonObject = { safeParse: (data) => ({ success: true, data }) }
-      export async function parseJsonBody(req, schema) {
-        let data
-        try {
-          data = await req.json()
-        } catch {
-          const NextResponse = globalThis.openbooksHrmCompCyclesRouteNextResponse
-          return { ok: false, response: NextResponse.json({ error: 'invalid json' }, { status: 400 }) }
-        }
-        const parsed = schema.safeParse(data)
-        if (!parsed.success) {
-          const NextResponse = globalThis.openbooksHrmCompCyclesRouteNextResponse
-          // Mirror the real boundary (web/lib/api/json.ts): the first
-          // issue message with its field path, so boundary tests assert
-          // the refusal the operator actually reads.
-          const issue = parsed.error.issues[0]
-          const message = issue ? issue.path.map(String).join('.') + ': ' + issue.message : 'invalid body'
-          return { ok: false, response: NextResponse.json({ error: message }, { status: 400 }) }
-        }
-        return { ok: true, data: parsed.data }
-      }
-    `,
-  ],
 ]);
 
 (globalThis as typeof globalThis & Record<string, unknown>).openbooksHrmCompCyclesRouteNextResponse = NextResponse;
@@ -175,11 +141,7 @@ const mockUrls = new Map<string, string>([
   ["../../../../lib/features", "mock:features"],
   ["../../../../../lib/features", "mock:features"],
   ["../../../../../../../lib/features", "mock:features"],
-  ["../../../../lib/list-params", "mock:list-params"],
-  ["../../../../../lib/list-params", "mock:list-params"],
-  ["../../../../../../../lib/list-params", "mock:list-params"],
   ["@openbooks/engine/src/hrm/compensation/cycles.ts", "mock:cycles"],
-  ["@/lib/api/json", "mock:json"],
 ]);
 
 let collectionRoute: typeof import("./route.ts") | undefined;

@@ -229,7 +229,7 @@ export async function loadApprovals(
 
   // Server-side window shared by every tab on this page. perPage never
   // exceeds the bulk batch ceiling, so a page-scoped selection always fits
-  // a single bulk request (pinned by approvals-paging.test.ts).
+  // a single bulk request.
   const page = clamp(Number(pickString(sp.page) ?? '1'), 1, 10_000)
   const perPage = Math.min(
     clamp(Number(pickString(sp.perPage) ?? '25'), 5, 100),

@@ -26,14 +26,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:list-params',
-    `
-      export function isUuid(value) {
-        return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-      }
-    `,
-  ],
-  [
     'mock:business-date',
     `
       const state = globalThis[Symbol.for('openbooks.asset-disposal-writeoff-test')]
@@ -49,9 +41,6 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === '../../../../../lib/feature-gates') {
       return { url: 'mock:feature-gates', shortCircuit: true }
-    }
-    if (specifier === '../../../../../lib/list-params') {
-      return { url: 'mock:list-params', shortCircuit: true }
     }
     if (specifier === '@openbooks/engine/src/platform/business-date.ts') {
       return { url: 'mock:business-date', shortCircuit: true }

@@ -43,15 +43,6 @@ const state: RouteState = {
 
 const mockSources = new Map<string, string>([
   [
-    'json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'authz',
     `
       const NextResponse = globalThis.openbooksBankAccountsNextResponse
@@ -72,12 +63,6 @@ const mockSources = new Map<string, string>([
     'features',
     `
       export async function isFeatureEnabled() { return true }
-    `,
-  ],
-  [
-    'list-params',
-    `
-      export function isUuid(value) { return typeof value === 'string' && value.length > 0 }
     `,
   ],
   [
@@ -189,10 +174,8 @@ const mockSources = new Map<string, string>([
 const selfUrl = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${selfUrl}?bank-accounts-mock=${name}`
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', mockUrl('json')],
   ['../../../../../lib/authz', mockUrl('authz')],
   ['../../../../../lib/features', mockUrl('features')],
-  ['../../../../../lib/list-params', mockUrl('list-params')],
   ['../../../../../lib/countries', mockUrl('countries')],
   ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
   ['@openbooks/engine/src/payments/payment-accounts.ts', mockUrl('payments')],

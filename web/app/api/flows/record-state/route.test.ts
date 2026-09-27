@@ -93,12 +93,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    "mock:list-params",
-    `
-      export function isUuid(value) { return typeof value === 'string' && value.length > 0 }
-    `,
-  ],
-  [
     "mock:subject-authz",
     `
       const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
@@ -115,7 +109,6 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/src/flows/index.ts", "mock:flows"],
   ["../_lib", "mock:lib"],
   ["../../../../lib/authz", "mock:authz"],
-  ["../../../../lib/list-params", "mock:list-params"],
   ["../../../../lib/flow-subject-authz", "mock:subject-authz"],
 ]);
 
@@ -153,9 +146,11 @@ function reset(allowedSubsidiaryIds: Set<string> | null): void {
   routeState.readChecks = [];
 }
 
+const SUBJECT_ID = "11111111-1111-4111-8111-111111111111";
+
 function request(): Request {
   return new Request(
-    "http://openbooks.test/api/flows/record-state?subjectKind=vendor_bill&subjectId=subject-1",
+    `http://openbooks.test/api/flows/record-state?subjectKind=vendor_bill&subjectId=${SUBJECT_ID}`,
   );
 }
 
@@ -176,7 +171,7 @@ test("an in-scope caller may read approval state", async () => {
 
   assert.equal(response.status, 200);
   assert.deepEqual(routeState.lockChecks, ["sub-hidden"]);
-  assert.deepEqual(routeState.statusCalls, ["subject-1"]);
+  assert.deepEqual(routeState.statusCalls, [SUBJECT_ID]);
 });
 
 test("a caller without the kind's read grant meets the missing-record answer", async () => {

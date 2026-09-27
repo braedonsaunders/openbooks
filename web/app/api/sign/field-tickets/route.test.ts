@@ -21,15 +21,6 @@ const REQUEST_ID = '00000000-0000-4000-8000-00000000c003'
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:db',
     `
       const state = globalThis[Symbol.for('openbooks.field-ticket-sign-gate-test')]
@@ -83,7 +74,6 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../lib/file-cabinet', 'mock:file-cabinet'],
   ['../../../../lib/field-ticket-lock', 'mock:lock'],

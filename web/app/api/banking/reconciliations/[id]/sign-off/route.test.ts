@@ -30,14 +30,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    "mock:list-params",
-    `
-      export function isUuid(value) {
-        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value ?? '')
-      }
-    `,
-  ],
-  [
     "mock:banking",
     `
       const state = globalThis[Symbol.for('openbooks.signoff-route-test')]
@@ -56,7 +48,6 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/feature-gates", "mock:feature-gates"],
-  ["../../../../../../lib/list-params", "mock:list-params"],
   ["@openbooks/engine/src/banking/banking.ts", "mock:banking"],
 ]);
 

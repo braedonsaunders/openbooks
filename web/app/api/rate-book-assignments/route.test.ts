@@ -141,7 +141,6 @@ stubModules({
     export function guardSubsidiaryScope() { return null }
   `,
     "../../../lib/features": `export async function isFeatureEnabled() { return true }`,
-    "../../../lib/list-params": `export function isUuid(value) { return typeof value === 'string' && value.length > 0 }`,
   },
 })
 

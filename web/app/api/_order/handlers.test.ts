@@ -586,14 +586,6 @@ const mockSources = new Map<string, string>([
       })
     }
   `],
-  ['mock:json', `
-    export const jsonObject = {}
-    export const assignWarehouseBody = {}
-    export async function parseJsonBody(request) {
-      try { return { ok: true, data: await request.json() } }
-      catch { return { ok: false, response: Response.json({ error: 'invalid JSON' }, { status: 400 }) } }
-    }
-  `],
 ])
 
 const resolutionMocks = new Map<string, string>([
@@ -613,7 +605,6 @@ const resolutionMocks = new Map<string, string>([
   ['@openbooks/engine/src/flows/index.ts', 'mock:flows'],
   ['@openbooks/engine/src/sales/sales-orders.ts', 'mock:sales-orders'],
   ['@openbooks/engine/src/ledger/document-void.ts', 'mock:document-void'],
-  ['@/lib/api/json', 'mock:json'],
 ])
 
 const hooks = registerHooks({

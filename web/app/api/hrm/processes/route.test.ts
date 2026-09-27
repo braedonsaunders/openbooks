@@ -66,14 +66,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    "mock:list-params",
-    `
-      export function isUuid(value) {
-        return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-      }
-    `,
-  ],
-  [
     "mock:processes-service",
     `
       // Re-export the real module so error classes keep their identity;
@@ -143,17 +135,10 @@ const featureDepths = [
   "../../../../../../lib/features",
   "../../../../../../../lib/features",
 ];
-const listParamDepths = [
-  "../../../../lib/list-params",
-  "../../../../../lib/list-params",
-  "../../../../../../lib/list-params",
-  "../../../../../../../lib/list-params",
-];
 
 const mockUrls = new Map<string, string>([
   ...authzDepths.map((specifier) => [specifier, "mock:authz"] as const),
   ...featureDepths.map((specifier) => [specifier, "mock:features"] as const),
-  ...listParamDepths.map((specifier) => [specifier, "mock:list-params"] as const),
   ["@openbooks/engine/src/hrm/processes.ts", "mock:processes-service"],
   ["@openbooks/engine/src/hrm/processes-read.ts", "mock:processes-read-service"],
 ]);
@@ -167,7 +152,7 @@ async function loadRoute(path: string): Promise<RouteModule> {
   const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
       // The real JSON boundary is pure (Request + schema → value) and runs
-      // test double that cannot produce the refusal is not a test of the
+      // for real: a test double that cannot produce the refusal is not a test of the
       // refusal, so parseJsonBody is never mocked here.
       // The real error mapping must see the real error classes: _lib.ts
       // keeps its own engine import while every route reads the stubbed

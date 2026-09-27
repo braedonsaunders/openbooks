@@ -62,16 +62,6 @@ function sqlText(query: unknown): string {
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = { safeParse: (data) => ({ success: typeof data === 'object' && data !== null && !Array.isArray(data), data }) }
-      export async function parseJsonBody(request, schema) {
-        const parsed = schema.safeParse(await request.json().catch(() => undefined))
-        return parsed.success ? { ok: true, data: parsed.data } : { ok: false, response: Response.json({ error: 'invalid request body' }, { status: 400 }) }
-      }
-    `,
-  ],
-  [
     'mock:authz',
     `
       const state = globalThis[Symbol.for('openbooks.tax-filing-route-test')]
@@ -182,7 +172,6 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],

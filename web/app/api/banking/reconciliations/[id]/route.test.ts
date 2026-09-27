@@ -166,12 +166,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:list-params',
-    `
-      export function isUuid() { return true }
-    `,
-  ],
-  [
     'mock:util',
     `
       export function bankingErrorResponse(error) {
@@ -194,7 +188,6 @@ const mockUrls = new Map<string, string>([
   ['drizzle-orm', 'mock:drizzle'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
-  ['../../../../../lib/list-params', 'mock:list-params'],
   ['../../util', 'mock:util'],
 ])
 

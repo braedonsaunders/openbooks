@@ -93,30 +93,11 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
-    if (specifier === '@/lib/api/json') {
-      return { url: 'mock:json', shortCircuit: true }
-    }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
     const source = mockSources.get(url)
     if (source !== undefined) return { format: 'module', source, shortCircuit: true }
-    if (url === 'mock:json') {
-      return {
-        format: 'module',
-        source: `
-          export const jsonObject = {}
-          export async function parseJsonBody(req) {
-            const raw = await req.json().catch(() => undefined)
-            if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-              return { ok: false, response: new Response(JSON.stringify({ error: 'invalid request body' }), { status: 400, headers: { 'content-type': 'application/json' } }) }
-            }
-            return { ok: true, data: raw }
-          }
-        `,
-        shortCircuit: true,
-      }
-    }
     return nextLoad(url, context)
   },
 })

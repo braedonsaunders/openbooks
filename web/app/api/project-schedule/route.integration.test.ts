@@ -36,15 +36,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:authz',
     `
       const state = globalThis[Symbol.for('openbooks.project-schedule-route-test')]
@@ -109,7 +100,6 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'next/server') return { url: 'mock:next-server', shortCircuit: true }
-    if (specifier === '@/lib/api/json') return { url: 'mock:json', shortCircuit: true }
     if (specifier === '../../../lib/authz') return { url: 'mock:authz', shortCircuit: true }
     if (specifier === '../../../lib/projects-gate') return { url: 'mock:feature-gate', shortCircuit: true }
     if (specifier === '../../../lib/project-schedule') return { url: 'mock:schedule', shortCircuit: true }

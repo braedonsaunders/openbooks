@@ -56,21 +56,6 @@ const mockSources = new Map<string, string>([
     `export async function businessToday() { return '2026-08-31' }`,
   ],
   [
-    'json',
-    `
-      import { NextResponse } from 'next/server'
-      import { z } from 'zod'
-      export const uuidId = z.string()
-      export function isoDate() { return z.string().regex(/^\\d{4}-\\d{2}-\\d{2}$/) }
-      export async function parseJsonBody(req, schema, opts) {
-        const raw = await req.json().catch(() => undefined)
-        const parsed = schema.safeParse(raw)
-        if (!parsed.success) return { ok: false, response: NextResponse.json({ error: 'invalid request body' }, { status: opts?.status ?? 400 }) }
-        return { ok: true, data: parsed.data }
-      }
-    `,
-  ],
-  [
     'project-revenue',
     `
       const state = globalThis[Symbol.for('openbooks.recognition-route-test')]
@@ -120,7 +105,6 @@ const mockUrls = new Map<string, string>([
   // The shared error mapper reaches the same engine module through a
   // relative specifier; it must see the same double or instanceof splits.
   ['../../engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
-  ['@/lib/api/json', mockUrl('json')],
 ])
 
 const hooks = registerHooks({

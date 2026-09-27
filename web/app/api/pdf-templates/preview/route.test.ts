@@ -23,20 +23,6 @@ const state: PreviewState = { granted: new Set(), allowedSubsidiaryIds: null, sa
 
 const mockSources = new Map<string, string>([
   [
-    'json',
-    `
-      import { NextResponse } from 'next/server'
-      export const jsonObject = {}
-      export async function parseJsonBody(req) {
-        const raw = await req.json().catch(() => undefined)
-        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-          return { ok: false, response: NextResponse.json({ error: 'invalid request body' }, { status: 400 }) }
-        }
-        return { ok: true, data: raw }
-      }
-    `,
-  ],
-  [
     'pdf',
     `
       // Thin re-export-plus-override of the real @openbooks/pdf surface: the
@@ -102,7 +88,6 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', mockUrl('json')],
   ['@openbooks/pdf', mockUrl('pdf')],
   ['../../../../lib/authz', mockUrl('authz')],
   ['../../../../lib/documents.ts', mockUrl('documents')],

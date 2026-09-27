@@ -17,7 +17,6 @@ const mockSources = new Map<string, string>([
   ['mock:export', `export function pdfResponse(bytes, filename) { globalThis[Symbol.for('openbooks.continuous-close-pdf-calendar-test')].filename = filename; return new Response(bytes) }; export function safeName(value) { return value }`],
   ['mock:report-pdf', `const state = globalThis[Symbol.for('openbooks.continuous-close-pdf-calendar-test')]; export async function exportDataToPdf(_data, _branding, _layout, options) { state.generatedAt = options.generatedAt; return Buffer.from('pdf') }; export async function orgBranding() { return {} }`],
   ['mock:pdf', `export function resolvePdfPageSetup() { return {} }`],
-  ['mock:list-params', `export function isUuid(value) { return value === '11111111-1111-4111-8111-111111111111' }`],
 ])
 
 const mockUrls = new Map<string, string>([
@@ -30,7 +29,6 @@ const mockUrls = new Map<string, string>([
   ['../../../../../../lib/continuous-close', 'mock:continuous-close'],
   ['../../../../../../lib/export', 'mock:export'],
   ['../../../../../../lib/report-pdf', 'mock:report-pdf'],
-  ['../../../../../../lib/list-params', 'mock:list-params'],
 ])
 
 registerHooks({

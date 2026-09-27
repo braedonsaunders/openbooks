@@ -35,15 +35,6 @@ function sqlText(query: unknown): string {
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:db',
     `
       const state = globalThis[Symbol.for('openbooks.payment-patch-validation-test')]
@@ -77,7 +68,6 @@ const mockSources = new Map<string, string>([
   ],
   ['mock:authz', `export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null } }`],
   ['mock:features', `export async function isFeatureEnabled() { return true }`],
-  ['mock:list-params', `export function isUuid() { return true }`],
   ['mock:countries', `export function normalizeCountryCode(value) { return String(value).trim().toUpperCase() }`],
   ['mock:payment-operations', `export async function updatePaymentBankProfile() {}`],
   ['mock:scripting', `export function computeNextRunAt() { return new Date('2026-01-01T09:00:00Z') }`],
@@ -85,13 +75,11 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['@openbooks/engine/src/payments/operations.ts', 'mock:payment-operations'],
   ['@openbooks/engine/src/scripting/scripting.ts', 'mock:scripting'],
   ['../../../../../../lib/authz', 'mock:authz'],
   ['../../../../../../lib/features', 'mock:features'],
-  ['../../../../../../lib/list-params', 'mock:list-params'],
   ['../../../../../../lib/countries', 'mock:countries'],
   ['../../_lib', 'mock:audit'],
 ])

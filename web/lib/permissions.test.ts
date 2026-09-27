@@ -57,22 +57,12 @@ const emailState: EmailRouteState = {
 
 let realEmailsUrl = ''
 const mockedSpecifiers = new Map<string, string>([
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['@openbooks/engine/src/delivery/email-config.ts', 'mock:email-config'],
 ])
 
 const mockSources = new Map<string, string>([
-  [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
   [
     'mock:authz',
     `

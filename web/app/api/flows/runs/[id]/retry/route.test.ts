@@ -68,14 +68,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    "mock:list-params",
-    `
-      export function isUuid(value) {
-        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value ?? '')
-      }
-    `,
-  ],
-  [
     "mock:engine",
     `
       const state = globalThis[Symbol.for('openbooks.flow-retry-route-test')]
@@ -130,7 +122,6 @@ const mockUrls = new Map<string, string>([
   ["next/server", "mock:next"],
   ["drizzle-orm", "mock:drizzle"],
   ["../../../../../../lib/feature-gates", "mock:feature-gates"],
-  ["../../../../../../lib/list-params", "mock:list-params"],
   ["@openbooks/engine/src/flows/index.ts", "mock:engine"],
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["../../../_lib", "mock:lib"],

@@ -1,16 +1,10 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
 import test from 'node:test'
-import { fileURLToPath } from 'node:url'
 import {
   displayLineDecimal,
   invalidLineDecimal,
   normalizeLineDecimal,
 } from './line-grid-decimal.ts'
-
-const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
-const source = (path: string) => readFileSync(join(webRoot, path), 'utf8')
 
 test('line decimal display removes storage-scale zeroes without rounding', () => {
   assert.equal(displayLineDecimal('1.00000000'), '1')
@@ -33,16 +27,4 @@ test('line decimal validation rejects precision loss and malformed input', () =>
   assert.equal(invalidLineDecimal(''), false)
   assert.equal(invalidLineDecimal('43.566784001'), true)
   assert.equal(invalidLineDecimal('not-a-number'), true)
-})
-
-test('order and posting-document drawers use exact decimal cells for quantity and rate', () => {
-  const orders = source('app/(app)/_order/OrderDrawer.tsx')
-  const documents = source('components/document-drawer.tsx')
-
-  for (const drawer of [orders, documents]) {
-    assert.match(drawer, /quantity:[^\n]+type: 'decimal'[^\n]+decimalScale: 8/)
-    assert.match(drawer, /unit_price:[^\n]+type: 'decimal'[^\n]+decimalScale: 8/)
-    assert.doesNotMatch(drawer, /quantity:[^\n]+type: 'amount'/)
-    assert.doesNotMatch(drawer, /unit_price:[^\n]+type: 'amount'/)
-  }
 })

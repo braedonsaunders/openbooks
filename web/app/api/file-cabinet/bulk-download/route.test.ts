@@ -14,16 +14,6 @@ const state = {
 
 const mockSources = new Map<string, string>([
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        const body = await request.json().catch(() => null)
-        return { ok: true, data: body }
-      }
-    `,
-  ],
-  [
     'mock:authz',
     `
       export async function guardPermission() {
@@ -67,7 +57,6 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
     const mocked = new Map<string, string>([
-      ['@/lib/api/json', 'mock:json'],
       ['../../../../lib/authz', 'mock:authz'],
       ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
       ['../../../../lib/file-zip', 'mock:file-zip'],

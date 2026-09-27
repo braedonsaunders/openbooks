@@ -177,15 +177,6 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    'mock:json',
-    `
-      export const jsonObject = {}
-      export async function parseJsonBody(request) {
-        return { ok: true, data: await request.json() }
-      }
-    `,
-  ],
-  [
     'mock:authz',
     `
       const state = globalThis[Symbol.for('openbooks.admin-users-route-test')]
@@ -210,7 +201,6 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@/lib/api/json', 'mock:json'],
   ['../../../../lib/authz', 'mock:authz'],
 ])
 

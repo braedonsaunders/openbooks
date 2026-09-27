@@ -37,11 +37,6 @@ stubModules({
         return { user: { orgId: 'org-1', id: 'user-1' } }
       }
     `,
-    "../../../../../lib/list-params": `
-      export function isUuid(value) {
-        return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-      }
-    `,
     "@openbooks/engine/src/platform/business-date.ts": `
       const state = globalThis[Symbol.for('openbooks.asset-disposal-route-test')]
       export async function businessToday(orgId) {

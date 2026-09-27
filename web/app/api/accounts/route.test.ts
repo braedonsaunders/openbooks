@@ -129,10 +129,6 @@ const mockSources = new Map<string, string>([
      export async function findUnownedCustomReferences() { return [] }`,
   ],
   [
-    "mock:list-params",
-    "export function isUuid(value) { return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value) }",
-  ],
-  [
     "mock:accounts-lib",
     `export async function loadAccount(id, orgId) {
        const state = globalThis[Symbol.for('openbooks.accounts-route-test')]
@@ -155,7 +151,6 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/schema", "mock:schema"],
   ["../../../lib/features", "mock:features"],
   ["../../../lib/custom-fields", "mock:custom-fields"],
-  ["../../../lib/list-params", "mock:list-params"],
   ["./_lib", "mock:accounts-lib"],
 ]);
 

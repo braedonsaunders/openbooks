@@ -70,22 +70,6 @@ const mockSources = new Map<string, string>([
       export async function loadRecordSubsidiaryScope() { return { subsidiaryId: null } }
     `,
   ],
-  [
-    // Same JSON boundary semantics as lib/api/json.ts (object passes through,
-    // anything else fails closed as 400) so the route exercises its real shape.
-    'json',
-    `
-      import { NextResponse } from 'next/server'
-      export const jsonObject = {}
-      export async function parseJsonBody(req) {
-        const raw = await req.json().catch(() => undefined)
-        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-          return { ok: false, response: NextResponse.json({ error: 'invalid request body' }, { status: 400 }) }
-        }
-        return { ok: true, data: raw }
-      }
-    `,
-  ],
 ])
 
 // Mock modules live behind query-string variants of THIS file's own URL: a
@@ -95,7 +79,6 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 
 const mockUrls = new Map<string, string>([
-  ['@/lib/api/json', mockUrl('json')],
   ['../../../../../../lib/authz', mockUrl('authz')],
   ['../../../../../../lib/documents.ts', mockUrl('documents')],
   ['../../../../../../lib/pdf-templates/send', mockUrl('send')],
