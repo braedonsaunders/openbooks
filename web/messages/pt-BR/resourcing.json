@@ -1,0 +1,18 @@
+{
+  "demand": {
+    "basis": {
+      "manual": "Lançamento manual",
+      "pipeline": "Funil de vendas",
+      "excluded": "Excluído"
+    },
+    "exclusion": {
+      "won": "Oportunidade ganha: aloque recursos por meio de uma solicitação de recursos",
+      "closed": "Oportunidade encerrada",
+      "omitted": "Omitida da previsão",
+      "inactive": "Oportunidade inativa",
+      "out_of_scope": "Oportunidade fora das suas subsidiárias"
+    },
+    "weightedHours": "Horas ponderadas",
+    "probability": "Probabilidade"
+  }
+}

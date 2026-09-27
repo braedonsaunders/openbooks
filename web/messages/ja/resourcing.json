@@ -1,0 +1,18 @@
+{
+  "demand": {
+    "basis": {
+      "manual": "手動入力",
+      "pipeline": "商談パイプライン",
+      "excluded": "対象外"
+    },
+    "exclusion": {
+      "won": "商談の受注済み：リソース依頼で要員を割り当ててください",
+      "closed": "商談はクローズ済みです",
+      "omitted": "予測対象外です",
+      "inactive": "商談は無効です",
+      "out_of_scope": "貴社の子会社の範囲外です"
+    },
+    "weightedHours": "加重時間",
+    "probability": "確度"
+  }
+}

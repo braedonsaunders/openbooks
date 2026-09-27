@@ -1,0 +1,18 @@
+{
+  "demand": {
+    "basis": {
+      "manual": "Manual",
+      "pipeline": "Pipeline",
+      "excluded": "Excluded"
+    },
+    "exclusion": {
+      "won": "Opportunity won: staff it with a resource request",
+      "closed": "Opportunity closed",
+      "omitted": "Omitted from the forecast",
+      "inactive": "Opportunity inactive",
+      "out_of_scope": "Opportunity outside your subsidiaries"
+    },
+    "weightedHours": "Weighted hours",
+    "probability": "Probability"
+  }
+}

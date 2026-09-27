@@ -1,0 +1,18 @@
+{
+  "demand": {
+    "basis": {
+      "manual": "Manuelle Eingabe",
+      "pipeline": "Vertriebspipeline",
+      "excluded": "Ausgeschlossen"
+    },
+    "exclusion": {
+      "won": "Auftrag gewonnen: Weisen Sie Ressourcen über eine Ressourcenanfrage zu",
+      "closed": "Verkaufschance geschlossen",
+      "omitted": "Nicht in der Prognose berücksichtigt",
+      "inactive": "Verkaufschance inaktiv",
+      "out_of_scope": "Verkaufschance außerhalb Ihrer Tochtergesellschaften"
+    },
+    "weightedHours": "Gewichtete Stunden",
+    "probability": "Wahrscheinlichkeit"
+  }
+}

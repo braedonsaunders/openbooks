@@ -1,0 +1,18 @@
+{
+  "demand": {
+    "basis": {
+      "manual": "Ingreso manual",
+      "pipeline": "Cartera de ventas",
+      "excluded": "Excluido"
+    },
+    "exclusion": {
+      "won": "Oportunidad ganada: asígnela mediante una solicitud de recursos",
+      "closed": "Oportunidad cerrada",
+      "omitted": "Omitida de la previsión",
+      "inactive": "Oportunidad inactiva",
+      "out_of_scope": "Oportunidad fuera de sus filiales"
+    },
+    "weightedHours": "Horas ponderadas",
+    "probability": "Probabilidad"
+  }
+}
