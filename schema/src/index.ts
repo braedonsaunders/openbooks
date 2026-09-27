@@ -9,6 +9,7 @@ export * from "./tax";
 export * from "./depreciation-conventions";
 export * from "./extension";
 export * from "./inventory";
+export * from "./manufacturing";
 export * from "./revenue";
 export * from "./assets";
 export * from "./labor-costing";
@@ -73,5 +74,4 @@ export * from "./hrm-documents-surveys";
 // HR-18 begin: recruiting-depth drizzle mirror (0229).
 export * from "./hrm-recruiting-depth";
 // HR-18 end
-
 

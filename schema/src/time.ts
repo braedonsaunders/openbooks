@@ -2,6 +2,7 @@ import {
   boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -21,6 +22,7 @@ import {
   money,
   orgRef,
 } from "./helpers";
+import { mfgWoOperations, mfgWorkOrders } from "./manufacturing";
 
 /**
  * A weekly timesheet header — one row per employee per Sunday→Saturday week.
@@ -196,9 +198,32 @@ export const timeEntries = pgTable(
     /** Keeps the source platform timebill nsId + source flags for the import bridge. */
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
+    workOrderId: uuid("work_order_id"),
+    woOperationId: uuid("wo_operation_id"),
   },
   (t) => [
     uniqueIndex("time_entries_org_id_id_unique").on(t.orgId, t.id),
+    foreignKey({
+      name: "time_entries_work_order_fk",
+      columns: [t.orgId, t.workOrderId],
+      foreignColumns: [mfgWorkOrders.orgId, mfgWorkOrders.id],
+    }),
+    foreignKey({
+      name: "time_entries_wo_operation_fk",
+      columns: [t.orgId, t.workOrderId, t.woOperationId],
+      foreignColumns: [mfgWoOperations.orgId, mfgWoOperations.workOrderId, mfgWoOperations.id],
+    }),
+    check(
+      "time_entries_one_cost_object_check",
+      sql`${t.projectId} is null or ${t.workOrderId} is null`,
+    ),
+    check(
+      "time_entries_operation_requires_work_order_check",
+      sql`${t.woOperationId} is null or ${t.workOrderId} is not null`,
+    ),
+    index("time_entries_org_work_order")
+      .on(t.orgId, t.workOrderId)
+      .where(sql`${t.workOrderId} is not null`),
     index("time_entries_employee_date").on(t.employeePartyId, t.workedOn),
     index("time_entries_project").on(t.projectId, t.isBillable),
     /**
