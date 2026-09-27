@@ -27,6 +27,7 @@ import { PROVISION_CASES } from "./cases/provisions.ts";
 import { REVENUE_CASES } from "./cases/revenue.ts";
 import { RESOURCING_CASES } from "./cases/resourcing.ts";
 import { NONPROFIT_GRANT_CASES } from "./cases/nonprofit-grants.ts";
+import { NONPROFIT_CONTRIBUTION_CASES } from "./cases/nonprofit-contributions.ts";
 import type { ConformanceCase } from "./types.ts";
 
 export const CONFORMANCE_CORPUS: readonly ConformanceCase[] = [
@@ -45,6 +46,7 @@ export const CONFORMANCE_CORPUS: readonly ConformanceCase[] = [
   ...CONSOLIDATION_CASES,
   ...RESOURCING_CASES,
   ...NONPROFIT_CASES,
+  ...NONPROFIT_CONTRIBUTION_CASES,
 ];
 
 /**
@@ -77,6 +79,7 @@ export const REGISTERED_FLOORS: readonly {
   { area: "provisions", source: PROVISION_CASES, minimum: 2 },
   { area: "consolidation", source: CONSOLIDATION_CASES, minimum: 6 },
   { area: "nonprofit", source: NONPROFIT_CASES, minimum: 2 },
+  { area: "nonprofit contributions", source: NONPROFIT_CONTRIBUTION_CASES, minimum: 2 },
 ];
 
 /** Every standard the corpus makes a claim about, in citation order. */

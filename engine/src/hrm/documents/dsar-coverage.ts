@@ -173,6 +173,14 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     reason:
       "general ledger; finance remit. Payroll postings derive from gathered pay stubs.",
   },
+  {
+    table: "gifts",
+    reason: "nonprofit contribution records; donor counterparty. Finance remit.",
+  },
+  {
+    table: "pledges",
+    reason: "nonprofit contribution records; donor counterparty. Finance remit.",
+  },
   { table: "payment_cards", reason: "financial instruments; finance remit." },
   { table: "payment_instructions", reason: "financial instruments; finance remit." },
   { table: "payment_links", reason: "financial instruments; finance remit." },

@@ -165,6 +165,7 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   // HR-9 self-service (0198): the emergency contact is candidate PII —
   // nulled in sandboxes like tax_ids, never faked into a plausible lie.
   { tableName: "parties", columnName: "emergency_contact", transform: "null_out" },
+  { tableName: "gifts", columnName: "tribute_name", transform: "faker_name" },
   // HR-20 begin: raw clock coordinates are worker location — nulled in
   // sandboxes like tax_ids, never faked into a plausible lie. The
   // geo_check flag stays so approval behavior remains testable.

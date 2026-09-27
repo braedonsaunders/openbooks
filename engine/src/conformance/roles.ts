@@ -24,6 +24,10 @@ import { ROLES } from "./role-bindings.ts";
 /** Accounts the corpus needs beyond the shared scratch fixture. */
 const EXTRA_ACCOUNTS: readonly [Role, string, string, string][] = [
   ["contractAsset", "1150", "Contract Asset", "asset_current_other"],
+  ["pledgesReceivable", "1160", "Pledges Receivable", "asset_current_other"],
+  ["discountOnPledges", "1161", "Discount on Pledges Receivable", "asset_current_other"],
+  ["pledgeAllowance", "1162", "Allowance for Uncollectible Pledges", "asset_current_other"],
+  ["contributions", "4040", "Contributions", "income_other"],
   ["fixedAsset", "1500", "Equipment at Cost", "asset_fixed"],
   ["accumulatedDepreciation", "1590", "Accumulated Depreciation", "asset_fixed"],
   ["impairmentLoss", "6800", "Impairment Loss", "expense"],
