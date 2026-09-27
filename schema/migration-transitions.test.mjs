@@ -22,6 +22,34 @@ const TRANSITIONS = [...bootstrap.matchAll(
 const presentFiles = readdirSync(MIGRATIONS_DIR).filter((name) => name.endsWith('.sql')).sort()
 const presentContent = new Map(presentFiles.map((name) => [name, readFileSync(join(MIGRATIONS_DIR, name), 'utf8')]))
 
+// A historical digest only needs an explicit bridge after the migration was
+// included in a tagged release. Derive publication from tagged release trees,
+// so an unreleased migration under active development does not need a ledger
+// transition for each interim edit.
+const releaseTags = execFileSync('git', ['tag', '--list'], { cwd: ROOT, encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+const publishedFiles = new Set()
+for (const tag of releaseTags) {
+  const files = execFileSync(
+    'git',
+    ['ls-tree', '-r', '--name-only', tag, '--', 'schema/migrations/generated'],
+    { cwd: ROOT, encoding: 'utf8' },
+  )
+  for (const path of files.split('\n')) {
+    if (path.startsWith('schema/migrations/generated/')) {
+      publishedFiles.add(path.slice('schema/migrations/generated/'.length))
+    }
+  }
+}
+
+function uncoveredHistoricalDigests({ name, current, history, transitions, queued, isPublished }) {
+  if (!isPublished) return []
+  return [...history]
+    .filter((digest) => digest !== current)
+    .filter((digest) => !transitions.some((entry) => entry.file === name && entry.from === digest && entry.to === current))
+    .filter((digest) => !queued.includes(digest))
+    .map((digest) => `${name} ${digest.slice(0, 12)}`)
+}
+
 /**
  * Every digest each migration file ever published on main: only landed bytes
  * can wedge a durable ledger, so fleet lanes' drafts stay invisible (they
@@ -145,13 +173,14 @@ test('every historical digest can advance: covered by a transition or queued for
   const uncovered = []
   for (const name of presentFiles) {
     const current = sha256(presentContent.get(name))
-    for (const digest of published.get(name) ?? []) {
-      if (digest === current) continue
-      if (TRANSITIONS.some((entry) => entry.file === name && entry.from === digest && entry.to === current)) continue
-      const queued = PENDING_TRANSITION_AUDIT.get(name) ?? []
-      if (queued.includes(digest)) continue
-      uncovered.push(`${name} ${digest.slice(0, 12)}`)
-    }
+    uncovered.push(...uncoveredHistoricalDigests({
+      name,
+      current,
+      history: published.get(name) ?? [],
+      transitions: TRANSITIONS,
+      queued: PENDING_TRANSITION_AUDIT.get(name) ?? [],
+      isPublished: publishedFiles.has(name),
+    }))
   }
   assert.deepEqual(uncovered, [], `Historical ledger digests with no path to the current identity wedge the database at "changed after it was applied":\n${uncovered.join('\n')}\nAdd an individually-audited transition entry (review the corrective edit, write its reason) or extend the pending queue with a justification.`)
 
@@ -167,6 +196,23 @@ test('every historical digest can advance: covered by a transition or queued for
     }
   }
   assert.deepEqual(stale, [], `Pending-audit queue entries that no longer name a real uncovered digest (strike them with the transition that landed):\n${stale.join('\n')}`)
+})
+
+test('published migrations still require transitions for uncovered historical digests', () => {
+  const historicalDigest = 'a'.repeat(64)
+  const currentDigest = 'b'.repeat(64)
+  const fixture = {
+    name: '0438_nonprofit_pledges_gifts.sql',
+    current: currentDigest,
+    history: [historicalDigest, currentDigest],
+    transitions: [],
+    queued: [],
+  }
+  assert.deepEqual(uncoveredHistoricalDigests({ ...fixture, isPublished: false }), [])
+  assert.deepEqual(
+    uncoveredHistoricalDigests({ ...fixture, isPublished: true }),
+    ['0438_nonprofit_pledges_gifts.sql aaaaaaaaaaaa'],
+  )
 })
 
 test('no migration body commits the runner transaction from inside itself', () => {
