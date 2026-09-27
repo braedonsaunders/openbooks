@@ -571,7 +571,6 @@ function customerDocumentMovements(
 ) {
   const kindFilter = sql`d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})`;
   const postedDateFilter = from && to ? sql`and d.posting_date::date between ${from}::date and ${to}::date` : sql``;
-  const voidDateFilter = from && to ? sql`and d.voided_at::date between ${from}::date and ${to}::date` : sql``;
   const subsidiaryFilter = subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowed);
   return sql`
     select d.party_id, d.kind, sub.base_currency as func, d.posting_date::date as event_date,
@@ -581,12 +580,15 @@ function customerDocumentMovements(
      where d.org_id = ${orgId} and ${kindFilter} and d.status in ('posted', 'voided')
        and d.party_id is not null ${subsidiaryFilter} ${postedDateFilter}
     union all
-    select d.party_id, d.kind, sub.base_currency as func, d.voided_at::date as event_date,
+    select d.party_id, d.kind, sub.base_currency as func,
+           coalesce(reversal_entry.posting_date::date, d.voided_at::date) as event_date,
            d.posting_date::date as posting_date, round(abs(d.total) * d.fx_rate, 4) as amount, -1::int as direction
       from documents d
       left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+      left join journal_entries reversal_entry on reversal_entry.id = d.reversal_entry_id and reversal_entry.org_id = d.org_id
      where d.org_id = ${orgId} and ${kindFilter} and d.status = 'voided'
-       and d.voided_at is not null and d.party_id is not null ${subsidiaryFilter} ${voidDateFilter}
+       and d.voided_at is not null and d.party_id is not null ${subsidiaryFilter}
+       ${from && to ? sql`and coalesce(reversal_entry.posting_date::date, d.voided_at::date) between ${from}::date and ${to}::date` : sql``}
   `;
 }
 

@@ -323,8 +323,9 @@ export async function calculateForecast(scope: ForecastScope) {
        where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit')
          and d.status in ('posted', 'voided')
       union all
-      select d.id as document_id, d.voided_at::date as event_date, -1::int as direction
+      select d.id as document_id, coalesce(reversal_entry.posting_date::date, d.voided_at::date) as event_date, -1::int as direction
         from documents d
+        left join journal_entries reversal_entry on reversal_entry.id = d.reversal_entry_id and reversal_entry.org_id = d.org_id
        where d.org_id = ${scope.orgId} and d.kind in ('customer_invoice', 'customer_credit')
          and d.status = 'voided' and d.voided_at is not null
     ), actuals as (

@@ -78,12 +78,13 @@ function documentMovements(orgId: string, kinds: string[], from: string, through
      where d.org_id = ${orgId} and ${kindFilter} and d.status in ('posted', 'voided')
        and coalesce(d.document_date, d.posting_date)::date between ${from}::date and ${through}::date${docScope}
     union all
-    select d.voided_at::date as dt, sub.base_currency as func,
+    select coalesce(reversal_entry.posting_date::date, d.voided_at::date) as dt, sub.base_currency as func,
            -round(abs(d.total * d.fx_rate), 4) as amount
       from documents d
       left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+      left join journal_entries reversal_entry on reversal_entry.id = d.reversal_entry_id and reversal_entry.org_id = d.org_id
      where d.org_id = ${orgId} and ${kindFilter} and d.status = 'voided' and d.voided_at is not null
-       and d.voided_at::date between ${from}::date and ${through}::date${docScope}
+       and coalesce(reversal_entry.posting_date::date, d.voided_at::date) between ${from}::date and ${through}::date${docScope}
   `;
 }
 

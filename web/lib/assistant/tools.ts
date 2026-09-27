@@ -1057,8 +1057,9 @@ const partyConcentration: AssistantToolDef = {
          where d.org_id = ${authz.user.orgId} and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
            and d.status in ('posted', 'voided')
         union all
-        select d.id as document_id, d.voided_at::date as event_date, -1::int as direction
+        select d.id as document_id, coalesce(reversal_entry.posting_date::date, d.voided_at::date) as event_date, -1::int as direction
           from documents d
+          left join journal_entries reversal_entry on reversal_entry.id = d.reversal_entry_id and reversal_entry.org_id = d.org_id
          where d.org_id = ${authz.user.orgId} and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
            and d.status = 'voided' and d.voided_at is not null
       ), ranked as (

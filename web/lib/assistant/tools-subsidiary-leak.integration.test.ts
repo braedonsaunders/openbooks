@@ -24,6 +24,7 @@ const { db, withBypassContext, withOrgContext } = await import('@openbooks/engin
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
 const { getAuthz } = await import('../authz');
 const { executeAssistantTool } = await import('./registry');
+const { voidScratchDocument } = await import('../test-document-void.ts')
 
 const PROBE_PERMS = ["ap.read", "ar.read", "parties.read", "projects.read", "reports.read", "assistant.use"];
 
@@ -114,11 +115,15 @@ test('party_concentration scopes posted documents to the caller subsidiary', { s
         await db.execute(sql`update documents set status='approved' where id=${id} and org_id=${org.orgId}`);
         await postDocument(id, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
       }
-      const voided = await db.execute(sql`update documents
-        set status = 'voided', voided_at = '2026-08-05 12:00:00+00'::timestamptz
-        where id = ${visibleInvoiceId} and org_id = ${org.orgId} returning id`)
-      assert.equal(voided.rows.length, 1, 'the July invoice must be voided after the report period')
     });
+    const voidResult = await voidScratchDocument({
+      orgId: org.orgId,
+      documentId: visibleInvoiceId,
+      actorName: 'Party Report Void Operator',
+      reason: 'Customer invoice was entered in error',
+      reversalDate: '2026-08-05',
+    })
+    assert.ok(voidResult.reversalEntryId)
     await withOrgContext(org.orgId, async () => {
       const authz = await getAuthz();
       assert.ok(authz);
