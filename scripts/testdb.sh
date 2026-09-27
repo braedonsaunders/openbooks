@@ -34,7 +34,15 @@
 #                                        <interval> ago (default 1 day) that hold
 #                                        no live connection; --dry-run prints the
 #                                        plan and drops nothing
-#   scripts/testdb.sh reset              rebuild the template from the current schema
+#   scripts/testdb.sh reset [--force] [--i-own-this-template]
+#                                        rebuild the template from the current
+#                                        schema. The default template is SHARED
+#                                        by every worktree on the machine, so
+#                                        rebuilding it asks you to type "shared"
+#                                        (or pass --i-own-this-template); with no
+#                                        terminal and no flag it refuses. Other
+#                                        workers here? Use a private template:
+#                                        OPENBOOKS_TESTDB_TEMPLATE=openbooks_template_<suffix>
 #
 # Typical use from a worktree:
 #   eval "$(scripts/testdb.sh new)" && npm test
@@ -49,7 +57,8 @@ SUPER=openbooks
 SUPERPASS=openbooks
 # Overridable so the harness's own concurrency regression can exercise publish
 # and copy against a throwaway template instead of the shared one.
-TEMPLATE=${OPENBOOKS_TESTDB_TEMPLATE:-openbooks_template}
+SHARED_TEMPLATE=openbooks_template
+TEMPLATE=${OPENBOOKS_TESTDB_TEMPLATE:-$SHARED_TEMPLATE}
 RUNTIME_ROLE=openbooks_app
 RUNTIME_PASS=openbooks-runtime-test-password
 
@@ -264,14 +273,42 @@ report_template_mismatch() {
   echo "testdb: the template was built from a different schema than this checkout" >&2
   echo "testdb:   template ${TEMPLATE}: ${theirs_n} migrations   this checkout: ${mine_n} migrations" >&2
   if [ "${mine_n:-0}" -gt "${theirs_n:-0}" ]; then
-    echo "testdb:   your migrations are NOT in the template. Run: scripts/testdb.sh reset" >&2
+    echo "testdb:   your migrations are NOT in the template." >&2
   elif [ "${mine_n:-0}" -lt "${theirs_n:-0}" ]; then
-    echo "testdb:   this checkout is behind the template, and reset refuses to rebuild it backwards. Rebase this checkout." >&2
+    echo "testdb:   this checkout is behind the template. Rebase this checkout, or use a private template." >&2
   else
-    echo "testdb:   the same number of migrations with different contents. Run: scripts/testdb.sh reset" >&2
+    echo "testdb:   the same number of migrations with different contents." >&2
   fi
-  echo "testdb:   or build a template from this checkout alone, leaving the shared one untouched:" >&2
-  echo "testdb:     OPENBOOKS_TESTDB_TEMPLATE=openbooks_template_<suffix> scripts/testdb.sh new [name]" >&2
+}
+
+# Applying this checkout's migrations to a copy of a stale template, exactly as
+# build_template runs them: bootstrap's migrate step applies only the pending
+# ones, and the ownership transfer keeps new tables usable by the runtime role.
+print_bootstrap_onto_copy() {
+  echo "testdb:      then bootstrap this checkout's migrations onto that copy, once:" >&2
+  echo 'testdb:        eval "$(scripts/testdb.sh new --allow-stale <name>)"' >&2
+  echo 'testdb:        OPENBOOKS_DB_URL="$OPENBOOKS_TEST_ADMIN_DB_URL" OPENBOOKS_TEST_OWNERSHIP_TRANSFER=1 npx tsx scripts/bootstrap.ts' >&2
+  echo "testdb:      bootstrap only adds migrations the template lacks; it cannot remove a newer one or undo an edited one." >&2
+}
+
+# Ordered by who a remedy affects. The first two touch only the caller's own
+# databases. `reset` rebuilds the template every worktree on the machine copies
+# from, and on a shared box those belong to other people, so it comes last and
+# says so; `reset` itself also demands an acknowledgement for the shared name.
+report_mismatch_remedies() {
+  if [ "$TEMPLATE" != "$SHARED_TEMPLATE" ]; then
+    echo "testdb:   ${TEMPLATE} is a private template; rebuild it from this checkout:" >&2
+    echo "testdb:     OPENBOOKS_TESTDB_TEMPLATE=${TEMPLATE} scripts/testdb.sh reset" >&2
+    return
+  fi
+  echo "testdb: remedies, safest first:" >&2
+  echo "testdb:   1. build a private template from this checkout alone; the shared one is untouched:" >&2
+  echo "testdb:        OPENBOOKS_TESTDB_TEMPLATE=openbooks_template_<suffix> scripts/testdb.sh new <name>" >&2
+  echo "testdb:   2. take the stale copy anyway: pass --allow-stale (or OPENBOOKS_TESTDB_ALLOW_STALE=1)," >&2
+  print_bootstrap_onto_copy
+  echo "testdb:   3. LAST, and only if no other worktree on this machine runs tests: scripts/testdb.sh reset" >&2
+  echo "testdb:      reset rebuilds the SHARED template ${TEMPLATE} from this checkout, for every worktree on this machine;" >&2
+  echo "testdb:      every other worker's next 'new' then refuses or copies your schema." >&2
 }
 
 print_env() {
@@ -376,7 +413,7 @@ case "$cmd" in
       if [ "$allow_stale" != 1 ]; then
         report_template_mismatch
         echo "testdb: refusing to hand out a copy of it. A run against it is not evidence about this checkout." >&2
-        echo "testdb:   to take the copy anyway, pass --allow-stale (or OPENBOOKS_TESTDB_ALLOW_STALE=1)." >&2
+        report_mismatch_remedies
         exit 1
       fi
       # From here every diagnostic line, the database name included, carries the
@@ -385,6 +422,7 @@ case "$cmd" in
       exec 2> >(sed 's/^/stale-template: /' >&2)
       report_template_mismatch
       echo "testdb: --allow-stale: handing out a copy of the mismatched template" >&2
+      print_bootstrap_onto_copy
     fi
     # Include the worktree identity: BB worktrees all use the basename
     # "openbooks", so basename plus commit alone collides across agents.
@@ -555,13 +593,44 @@ case "$cmd" in
     ;;
 
   reset)
+    shift
+    force=0; owns_template=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --force) force=1 ;;
+        --i-own-this-template) owns_template=1 ;;
+        *) echo "testdb: reset: unknown option '$1'" >&2; exit 1 ;;
+      esac
+      shift
+    done
+    # The default template is copied by every worktree on the machine, and on a
+    # shared box those are other workers': rebuilding it from this checkout makes
+    # each of their next `new` refuse or copy the wrong schema. So the shared
+    # name needs an acknowledgement, typed or passed, before anything is touched.
+    # A private template is the caller's own and needs none.
+    if [ "$TEMPLATE" = "$SHARED_TEMPLATE" ] && [ "$owns_template" != 1 ]; then
+      echo "testdb: reset rebuilds the SHARED template ${TEMPLATE} from this checkout, for every worktree on this machine." >&2
+      echo "testdb:   if another worktree here runs tests, leave it alone and use a private template instead:" >&2
+      echo "testdb:     OPENBOOKS_TESTDB_TEMPLATE=openbooks_template_<suffix> scripts/testdb.sh new <name>" >&2
+      if [ -t 0 ]; then
+        printf 'testdb: type "shared" to rebuild it anyway: ' >&2
+        read -r answer || answer=""
+        if [ "$answer" != shared ]; then
+          echo "testdb: not confirmed; the shared template is unchanged." >&2
+          exit 1
+        fi
+      else
+        echo "testdb: refusing: there is no terminal to confirm on. If you own this machine's template, pass --i-own-this-template." >&2
+        exit 1
+      fi
+    fi
     require_docker
     start_container
     # One global template shared by every worktree: a stale checkout rebuilding
     # it would silently regress everyone else's schema.
     theirs_n=$(template_ready && template_meta migration_count || echo 0)
     mine_n=$(migration_count)
-    if [ "${2:-}" != "--force" ] && [ "${theirs_n:-0}" -gt "${mine_n:-0}" ]; then
+    if [ "$force" != 1 ] && [ "${theirs_n:-0}" -gt "${mine_n:-0}" ]; then
       echo "testdb: refusing to rebuild backwards — the template has ${theirs_n} migrations and this checkout has ${mine_n}." >&2
       echo "testdb: rebase this worktree, or pass --force if you really mean to drop the newer schema." >&2
       exit 1
@@ -570,6 +639,6 @@ case "$cmd" in
     ;;
 
   *)
-    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,/^set -euo pipefail$/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
     ;;
 esac
