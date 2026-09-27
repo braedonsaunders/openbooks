@@ -181,7 +181,9 @@ export const POST = defineRoute({
       breaks: parsed.breaks,
     }
     const outcome = await db.transaction(async (tx) => {
-      if (!(await tx.execute(sql`select 1 from items where org_id=${gate.user.orgId} and id=${id} for update`)).rows[0]) throw new Error('not found')
+      if (!(await tx.execute(sql`select 1 from items where org_id=${gate.user.orgId} and id=${id} for update`)).rows[0]) {
+        return { kind: 'missing' as const }
+      }
       await validateReferences(tx, gate.user.orgId, parsed, gate.allowedSubsidiaryIds)
       const claim = await claimIdempotentCreate(tx, { orgId: gate.user.orgId, table: 'item_price_schedules', key: requestId })
       if (claim === 'exists') {
@@ -220,6 +222,7 @@ export const POST = defineRoute({
       await auditSetupChange({ orgId: gate.user.orgId, table: 'item_price_schedules', rowId: String(row.id), action: 'insert', changes: { before: null, after: { ...match, id: requestId, org_id: gate.user.orgId } }, actorId: gate.user.id, requestId }, tx)
       return { kind: 'created' as const }
     })
+    if (outcome.kind === 'missing') return notFound('item')
     if (outcome.kind === 'replay' && outcome.result === 'conflict') return conflict('invalid_idempotency_key')
     if (outcome.kind === 'created') return created({ id: requestId })
     return NextResponse.json({ id: requestId })
