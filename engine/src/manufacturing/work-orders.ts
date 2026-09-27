@@ -427,7 +427,10 @@ async function releaseMaterials(
   const shortages: string[] = [];
   const result: Array<{ itemId: string; itemCode: string; required: string; shortage: string; operationSeq: number | null; tracking: string }> = [];
   for (const itemId of itemIds) {
-    const itemLines = lines.filter((line) => line.itemId === itemId);
+    const item = await itemDetails(tx, orgId, itemId);
+    const displayCode = item.code?.trim() || item.name;
+    const itemLines = lines.filter((line) => line.itemId === itemId)
+      .map((material) => ({ ...material, itemCode: displayCode }));
     const line = itemLines[0]!;
     // ATP is the authoritative no-profile refusal; let it pass through unchanged.
     const atp = await getAvailableToPromise(tx as Runner, orgId, {
