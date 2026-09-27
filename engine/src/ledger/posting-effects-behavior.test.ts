@@ -8,6 +8,8 @@ import {
   markPostingEffectsFailed,
   markPostingEffectsSucceeded,
   MAX_POSTING_EFFECTS_ATTEMPTS,
+  POSTING_EFFECT_TERMINAL_NOTICE_KIND,
+  postingEffectTerminalNotice,
   postingEffectsBackoffMs,
   PostingEffectsLeaseFencedError,
   replayTerminalPostingEffect,
@@ -187,6 +189,71 @@ test("a short replay reason is refused before any database work", async () => {
         /db-stub-reached/,
       );
     },
+  );
+});
+
+test("the terminal notice names the document, the kind, the error, and the retry", () => {
+  const notice = postingEffectTerminalNotice({
+    documentNumber: "INV-1042",
+    documentId: "33333333-3333-4333-8333-333333333333",
+    kind: "customer_invoice",
+    attemptCount: MAX_POSTING_EFFECTS_ATTEMPTS,
+    error: "connection reset by peer",
+  });
+  assert.equal(notice.kind, POSTING_EFFECT_TERMINAL_NOTICE_KIND);
+  assert.match(notice.title, /INV-1042/, "title names the document");
+  assert.match(notice.title, /customer_invoice/, "title names the effect kind");
+  assert.match(notice.body, /INV-1042/, "body names the document");
+  assert.match(notice.body, /8 attempts/, "body states the exhausted ceiling");
+  assert.match(notice.body, /connection reset by peer/, "body carries the last error");
+  assert.match(notice.body, /retry-effects/, "body names the retry action that exists on the document actions route");
+});
+
+test("the terminal transition stores the named notice for an operator who can retry", async () => {
+  const failedClaim: PostingEffectsRow = {
+    ...claim,
+    kind: "customer_invoice",
+    attempt_count: MAX_POSTING_EFFECTS_ATTEMPTS,
+  };
+  const terminalRow = {
+    ...failedClaim,
+    lease_token: null,
+    terminal_failure_reason: "connection reset by peer",
+    terminal_failed_at: NOW,
+    terminal_failed_by: "posting-effects-worker",
+    becameTerminal: true,
+  };
+  const tx: TxStub = {
+    // The terminal UPDATE returns the row, then the audit insert lands.
+    execute: async () => ({ rows: [terminalRow], rowCount: 1 }),
+  };
+  const notified: unknown[] = [];
+  const scripted: StubRows[] = [
+    { rows: [{ document_number: "INV-1042", kind: "customer_invoice" }], rowCount: 1 },
+    { rows: [{ id: "66666666-6666-4666-8666-666666666666" }], rowCount: 1 },
+    { rows: [], rowCount: 0 },
+    { rows: [{ id: "77777777-7777-4777-8777-777777777777" }], rowCount: 1 },
+  ];
+  let call = 0;
+  await withStubbedDb(
+    {
+      transaction: async (fn) => fn(tx),
+      execute: async (query: unknown) => {
+        notified.push(query);
+        return scripted[call++] ?? (() => { throw new Error("unexpected database query"); })();
+      },
+    },
+    async () => {
+      await markPostingEffectsFailed(failedClaim, new Error("x"), NOW);
+    },
+  );
+  assert.equal(call, 4, "doc lookup, recipients, dedup check, and the notice insert all run");
+  const bound = notified.flatMap(boundParams).filter((p): p is string => typeof p === "string");
+  assert.ok(bound.includes(POSTING_EFFECT_TERMINAL_NOTICE_KIND), "the named notice kind is stored");
+  assert.ok(bound.some((s) => s.includes("INV-1042") && s.includes("customer_invoice")), "the stored notice names the document and kind");
+  assert.ok(
+    bound.some((s) => s.includes("connection reset by peer") && s.includes("retry-effects")),
+    "the stored notice carries the last error and the retry remedy",
   );
 });
 
