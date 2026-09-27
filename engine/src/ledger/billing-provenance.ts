@@ -24,6 +24,51 @@ export async function releaseBillingProvenance(
   documentId: string,
   audit: { actorId: string | null; reason: string },
 ): Promise<void> {
+  const retainer = (await tx.execute<{
+    id: string;
+    state: string;
+    obligation_id: string | null;
+    invoice_document_id: string;
+  }>(sql`
+    select id, state, obligation_id, invoice_document_id
+      from res_retainers
+     where org_id = ${orgId} and invoice_document_id = ${documentId}
+     for update
+  `)).rows[0];
+  if (retainer) {
+    const postedDrawdown = (await tx.execute<{ id: string }>(sql`
+      select id from res_retainer_drawdowns
+       where org_id = ${orgId} and retainer_id = ${retainer.id} and state = 'posted'
+       limit 1
+    `)).rows[0];
+    if (postedDrawdown) throw new Error("retainer invoice provenance cannot be released while a drawdown is posted");
+    const nextState = retainer.state === "active" ? "draft" : retainer.state;
+    const released = await tx.execute<{ id: string }>(sql`
+      update res_retainers
+         set invoice_document_id = null, obligation_id = null, state = ${nextState},
+             updated_at = now(), updated_by = ${audit.actorId}
+       where org_id = ${orgId} and id = ${retainer.id}
+         and invoice_document_id = ${documentId}
+       returning id
+    `);
+    if ((released.rowCount ?? 0) !== 1 || released.rows.length !== 1) {
+      throw new Error("retainer invoice provenance release did not update exactly one row");
+    }
+    const evidence = await tx.execute<{ row_id: string }>(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'res_retainers', ${retainer.id}, 'update',
+        ${JSON.stringify({
+          before: { invoiceDocumentId: retainer.invoice_document_id, obligationId: retainer.obligation_id, state: retainer.state },
+          after: { invoiceDocumentId: null, obligationId: null, state: nextState },
+          reason: audit.reason,
+        })}::jsonb, ${audit.actorId})
+      returning row_id
+    `);
+    if ((evidence.rowCount ?? 0) !== 1 || evidence.rows.length !== 1) {
+      throw new Error("retainer invoice provenance audit did not write exactly one row");
+    }
+  }
+
   // Keep source release and its evidence in the caller's controlled void/delete
   // transaction. The historical invoice retains its original schedule IDs;
   // clearing this current reservation permits a corrected invoice exactly once.
