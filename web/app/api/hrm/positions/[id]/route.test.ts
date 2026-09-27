@@ -101,7 +101,7 @@ const mockUrls = new Map<string, string>([
 
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
-      const mocked = mockUrls.get(specifier);
+      const mocked = mockUrls.get(specifier) ?? (specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
       if (mocked) return { url: mocked, shortCircuit: true };
       return nextResolve(specifier);
     },

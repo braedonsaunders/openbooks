@@ -3,15 +3,7 @@ import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
 
-/**
- * F3-38 (security): Send, Remind, Void and Legal-hold refuse a read-only
- * role before any service runs. Module doubles cover only the network
- * boundary (authz) and the engine service/delivery (DB- and
- * transport-owned); the zod bodies and the error mapper run as-is. The
- * mock answers 403 for permissions the role does not hold, like the real
- * gate — and the positive send proves the double can also let the manage
- * grant through, so the refusals are not vacuous.
- */
+/** Read-only roles cannot send, remind, void, or place a legal hold. */
 
 interface RouteState {
   perms: string[];
@@ -45,6 +37,7 @@ const mockSources = new Map<string, string>([
         }
         return { user: { id: 'user-1', orgId: 'org-1' } }
       }
+      export async function isFeatureEnabled() { return true }
     `,
   ],
   [
@@ -94,7 +87,7 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    if (specifier === "../../../../../../lib/authz") return { url: "mock:authz", shortCircuit: true };
+    if (specifier === "../../../../../../lib/authz" || specifier === "./authz" || specifier === "./features") return { url: "mock:authz", shortCircuit: true };
     if (specifier === "@openbooks/engine/src/hrm/documents/documents.ts") return { url: "mock:service", shortCircuit: true };
     if (specifier === "../../../../../../lib/hrm/document-delivery") return { url: "mock:delivery", shortCircuit: true };
     if (specifier === "../../route") return { url: "mock:collection", shortCircuit: true };

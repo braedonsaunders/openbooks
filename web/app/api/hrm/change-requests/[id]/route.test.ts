@@ -5,8 +5,7 @@ import { NextResponse } from "next/server";
 
 interface RouteState {
   gate: { user: { id: string; orgId: string } } | { status: number };
-  // F3-36: the mock answers 403 for permissions the role does not hold,
-  // like the real gate — a read-only role carries read without manage.
+  // A read-only role carries read without manage.
   perms: string[];
   featureOn: boolean;
   actionReasonsOn: boolean;
@@ -44,7 +43,7 @@ const mockSources = new Map<string, string>([
           const NextResponse = globalThis.openbooksHrmIdRouteNextResponse
           return NextResponse.json({ error: 'denied' }, { status: state.gate.status })
         }
-        // The real gate answers 403 without the grant; the route decides.
+      // The gate answers 403 without the grant; the route decides.
         if (!state.perms.includes(permission)) {
           const NextResponse = globalThis.openbooksHrmIdRouteNextResponse
           return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
@@ -122,7 +121,7 @@ const mockUrls = new Map<string, string>([
   const hooks = registerHooks({
     resolve(specifier, _context, nextResolve) {
       // The real JSON boundary is pure (Request + schema → value) and runs as-is;
-      const mocked = mockUrls.get(specifier);
+      const mocked = mockUrls.get(specifier) ?? (specifier === "./authz" ? "mock:authz" : specifier === "./features" ? "mock:features" : undefined);
       if (mocked) return { url: mocked, shortCircuit: true };
       return nextResolve(specifier);
     },
@@ -231,7 +230,7 @@ test("record read returns the service row", async () => {
     assert.deepEqual(routeState.calls[1], { fn: "withdraw", args: { orgId: "org-1", actorId: "user-1", requestId: REQUEST_ID, reason: "hiring freeze" } });
   });
 
-  test("F3-36: edit, submit and withdraw refuse a read-only role before the service runs", async () => {
+  test("edit, submit and withdraw refuse a read-only role before the service runs", async () => {
   reset();
   routeState.perms = ["hrm.employment.read"];
   const patch = await idRoute!.PATCH(
