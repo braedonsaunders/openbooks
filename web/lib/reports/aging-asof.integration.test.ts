@@ -19,7 +19,7 @@ const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/s
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
 const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
 const { agingByParty, agingDetail } = (await import(root + 'web/lib/reports/aging.ts')) as typeof import('./aging')
-const { voidReportDocument } = await import('../test-document-void.ts')
+const { voidReportDocument } = await import('../../testing/document-void.ts')
 const { partnerBalances } = (await import(root + 'web/lib/reports/statements.ts')) as typeof import('./statements')
 const { partyRegister, partnerStatement } = (await import(root + 'web/lib/reports/registers.ts')) as typeof import('./registers')
 

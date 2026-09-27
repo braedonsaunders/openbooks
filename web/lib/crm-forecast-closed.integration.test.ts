@@ -21,7 +21,7 @@ const { sql } = await import('drizzle-orm');
 const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
 const { calculateForecast } = await import('./crm');
-const { voidReportDocument } = await import('./test-document-void.ts')
+const { voidReportDocument } = await import('../testing/document-void.ts')
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const PERIOD = { periodStart: '2026-07-01', periodEnd: '2026-07-31' } as const;

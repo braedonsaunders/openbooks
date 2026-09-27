@@ -19,7 +19,7 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import('drizzle-orm');
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
-const { voidReportDocument } = await import('../../../../lib/test-document-void.ts')
+const { voidReportDocument } = await import('../../../../testing/document-void.ts')
 const { GET } = await import('./route.ts');
 
 const FROM = '2026-07-01';

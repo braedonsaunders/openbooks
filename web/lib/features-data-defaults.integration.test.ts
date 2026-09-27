@@ -25,7 +25,7 @@ const { dataDependentFeatureDefault } = await import(
   "@openbooks/engine/src/organization/feature-defaults.ts"
 );
 const { featureDisableStatuses, isFeatureEnabled, resolvedFeatureState } = await import("./features.ts");
-const { seedFeatureDisableBookScope } = await import("./test-report-fixtures.ts");
+const { seedFeatureDisableBookScope } = await import("../testing/report-fixtures.ts");
 import type { FeatureState } from "./features.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

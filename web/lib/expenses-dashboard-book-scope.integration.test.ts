@@ -4,7 +4,7 @@ import test from 'node:test'
 const { withSimClock } = await import('@openbooks/engine/src/platform/clock.ts')
 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
 const { expensesDashboard } = await import('./expenses-dashboard.ts')
-const { seedExpensesDashboardBookScope } = await import('./test-report-fixtures.ts')
+const { seedExpensesDashboardBookScope } = await import('../testing/report-fixtures.ts')
 
 test('expense categories exclude secondary-book journal amounts', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()

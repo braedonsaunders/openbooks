@@ -31,7 +31,8 @@
  * forces the entry down), and the listed calls may never exceed
  * ALLOWLIST_CEILING, so a new entry cannot be added to excuse a new call.
  *
- * Test files and the test fixture library are out of scope; bypass use there
+ * Test files and the test fixture libraries (engine/src/testing, web/testing)
+ * are out of scope; bypass use there
  * is governed by check-test-bypass-scope.
  *
  *   node scripts/check-bypass-justification.mjs
@@ -49,7 +50,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const ALLOWLIST_PATH = 'scripts/check-bypass-justification.allowlist.json'
 const SCAN_ROOTS = ['engine/src', 'web', 'packages', 'schema', 'scripts', 'integrations']
 const SOURCE_FILE = /\.(?:[cm]?[jt]sx?)$/
-const OUT_OF_SCOPE = /\.(?:test|spec)\.[cm]?[jt]sx?$|\.d\.[cm]?ts$|^engine\/src\/testing\//
+const OUT_OF_SCOPE = /\.(?:test|spec)\.[cm]?[jt]sx?$|\.d\.[cm]?ts$|^engine\/src\/testing\/|^web\/testing\//
 
 /**
  * Untagged calls the allowlist may hold. Lower it as entries are converted;
