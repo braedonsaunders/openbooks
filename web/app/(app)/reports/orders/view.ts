@@ -9,17 +9,12 @@ import {
   column,
   drill,
   field,
-  filterBar,
   money,
-  page,
-  pageHeader,
-  paper,
   ref,
   rootRef,
   table,
   text,
   textBlock,
-  widget,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { getMoneyFormatter } from '@/lib/money-server'
@@ -29,6 +24,7 @@ import { orgInfo } from '../../../../lib/data'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import { decimalSum } from '../../../../lib/statement-format'
+import { statementReportSpec } from '@/lib/reports/statement-report-spec'
 
 /**
  * The order pipeline report, split into a loader and a spec.
@@ -183,54 +179,49 @@ const item = field
 const rootF = rootRef<OrdersData>()
 
 export function ordersSpec(): PageSpec {
-  return page({
+  return statementReportSpec({
     route: '/reports/orders',
-    layout: 'list',
-    header: [
-      pageHeader({
-        title: f('title'),
-        description: f('description'),
-        back: { href: f('backHref'), label: f('backLabel') },
-      }),
-      filterBar({ period: false }, { actions: [widget('save-view')] }),
-    ],
-    body: [
-      paper({
-        company: f('company'),
-        title: f('title'),
-        periodPhrase: f('description'),
-        wide: true,
-        blocks: [
-          table({
-            variant: 'report',
-            rows: f('rows'),
-            rowKey: item('kind'),
-            columns: [
-              column(rootF('columnType'), text(item('typeLabel')), { className: 'font-medium' }),
-              column(rootF('columnOpen'), drill(item('openCountDrill'), text(item('openCount'))), {
-                align: 'right',
-                className: 'tabular-nums',
-              }),
-              column(rootF('columnOpenValue'), drill(item('openValueDrill'), money(item('openValue'))), {
-                align: 'right',
-              }),
-              column(rootF('columnConverted'), drill(item('convertedDrill'), text(item('converted'))), {
-                align: 'right',
-                className: 'tabular-nums',
-              }),
-              column(rootF('columnConvRate'), drill(item('convRateDrill'), text(item('convRate'))), {
-                align: 'right',
-                className: 'tabular-nums',
-              }),
-              column(rootF('columnVoided'), drill(item('voidedDrill'), text(item('voided'))), {
-                align: 'right',
-                className: 'tabular-nums',
-              }),
-            ],
+    header: {
+      title: f('title'),
+      description: f('description'),
+      back: { href: f('backHref'), label: f('backLabel') },
+    },
+    filters: [{ controls: { period: false } }],
+    paper: {
+      company: f('company'),
+      title: f('title'),
+      periodPhrase: f('description'),
+      wide: true,
+    },
+    blocks: [
+      table({
+        variant: 'report',
+        rows: f('rows'),
+        rowKey: item('kind'),
+        columns: [
+          column(rootF('columnType'), text(item('typeLabel')), { className: 'font-medium' }),
+          column(rootF('columnOpen'), drill(item('openCountDrill'), text(item('openCount'))), {
+            align: 'right',
+            className: 'tabular-nums',
           }),
-          textBlock(f('note'), { tone: 'muted', className: 'mt-3' }),
+          column(rootF('columnOpenValue'), drill(item('openValueDrill'), money(item('openValue'))), {
+            align: 'right',
+          }),
+          column(rootF('columnConverted'), drill(item('convertedDrill'), text(item('converted'))), {
+            align: 'right',
+            className: 'tabular-nums',
+          }),
+          column(rootF('columnConvRate'), drill(item('convRateDrill'), text(item('convRate'))), {
+            align: 'right',
+            className: 'tabular-nums',
+          }),
+          column(rootF('columnVoided'), drill(item('voidedDrill'), text(item('voided'))), {
+            align: 'right',
+            className: 'tabular-nums',
+          }),
         ],
       }),
+      textBlock(f('note'), { tone: 'muted', className: 'mt-3' }),
     ],
   })
 }

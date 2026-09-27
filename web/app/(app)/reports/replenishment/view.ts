@@ -2,13 +2,8 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import {
-  filterBar,
-  page,
-  pageHeader,
-  paper,
   ref,
   textBlock,
-  widget,
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
@@ -20,6 +15,7 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'
 import { orgInfo } from '../../../../lib/data'
 import { pickString } from '../../../../lib/list-params'
+import { statementReportSpec } from '@/lib/reports/statement-report-spec'
 import { availabilityEntityScope, availabilityRefusalText } from '../../../../lib/availability-report'
 import type { ReplenishmentRowView } from './ReplenishmentProposals'
 
@@ -113,43 +109,32 @@ export async function loadReplenishment(sp: Record<string, string | undefined>):
 const f = ref<ReplenishmentData>()
 
 export function replenishmentSpec(data: ReplenishmentData): PageSpec {
-  return page({
+  return statementReportSpec({
     route: '/reports/replenishment',
-    layout: 'list',
-    header: [
-      pageHeader({
-        title: f('title'),
-        description: f('description'),
-        back: { href: f('backHref'), label: f('backLabel') },
+    header: {
+      title: f('title'),
+      description: f('description'),
+      back: { href: f('backHref'), label: f('backLabel') },
+    },
+    headerBeforeFilters: [textBlock(f('refusal'), { tone: 'warning', when: f('refusal') })],
+    filters: [{
+      controls: { search: true, subsidiary: true },
+      options: { searchPlaceholder: f('searchPlaceholder'), subsidiaries: f('subsidiaries') },
+    }],
+    exportMenu: { kind: 'replenishment', params: data.exportParams },
+    paper: {
+      company: f('company'),
+      title: f('title'),
+      periodPhrase: f('scopePhrase'),
+      wide: true,
+    },
+    blocks: [
+      widgetBlock('replenishment-proposals', {
+        rows: data.rows,
+        orderSubsidiaryId: data.orderSubsidiaryId,
+        canOrder: data.canOrder,
       }),
-      textBlock(f('refusal'), { tone: 'warning', when: f('refusal') }),
-      filterBar(
-        { search: true, subsidiary: true },
-        {
-          searchPlaceholder: f('searchPlaceholder'),
-          subsidiaries: f('subsidiaries'),
-          actions: [
-            widget('save-view'),
-            widget('export-menu', { kind: 'replenishment', params: data.exportParams }),
-          ],
-        },
-      ),
-    ],
-    body: [
-      paper({
-        company: f('company'),
-        title: f('title'),
-        periodPhrase: f('scopePhrase'),
-        wide: true,
-        blocks: [
-          widgetBlock('replenishment-proposals', {
-            rows: data.rows,
-            orderSubsidiaryId: data.orderSubsidiaryId,
-            canOrder: data.canOrder,
-          }),
-          textBlock(f('note'), { tone: 'muted', className: 'mt-3' }),
-        ],
-      }),
+      textBlock(f('note'), { tone: 'muted', className: 'mt-3' }),
     ],
   })
 }

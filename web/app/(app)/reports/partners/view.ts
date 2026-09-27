@@ -8,20 +8,15 @@ import {
   column,
   drill,
   field,
-  filterBar,
   money,
   number,
-  page,
-  pageHeader,
   pagination,
-  paper,
   ref,
   rootRef,
   summaryLine,
   table,
   text,
   toggleLinks,
-  widget,
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
@@ -30,6 +25,7 @@ import { getMoneyFormatter } from '@/lib/money-server'
 import { buildHref, parseListParams } from '../../../../lib/list-params'
 import { partnerBalances } from '../../../../lib/reports'
 import { reportSubsidiaryView, type CurrencyBasisNotice } from '../../../../lib/consolidation'
+import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
 import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
@@ -224,20 +220,11 @@ export async function loadPartners(
     primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
-    exportParams: { ...stringParams(sp), kind },
+    exportParams: { ...stringReportParams(sp), kind },
     subsidiaries: subView?.picker ?? [],
     currencyBasisBlocked,
     currencyBasisReady: currencyBasisBlocked === null,
   }
-}
-
-/** searchParams values may be arrays; the export menu takes flat strings. */
-function stringParams(sp: Record<string, string | string[] | undefined>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [key, value] of Object.entries(sp)) {
-    if (typeof value === 'string') out[key] = value
-  }
-  return out
 }
 
 const f = ref<PartnersData>()
@@ -246,37 +233,29 @@ const row = field
 const rootF = rootRef<PartnersData>()
 
 export function partnersSpec(data: PartnersData): PageSpec {
-  return page({
+  return statementReportSpec({
     route: '/reports/partners',
-    layout: 'list',
-    header: [
-      pageHeader({
-        title: f('title'),
-        back: { href: f('backHref'), label: f('backLabel') },
-      }),
-      filterBar(
-        { search: true, period: false, subsidiary: true },
-        {
-          searchPlaceholder: f('searchPlaceholder'),
-          subsidiaries: f('subsidiaries'),
-          leading: toggleLinks([
-            { href: f('payableHref'), label: f('payableLabel'), activeWhen: f('isPayable') },
-            { href: f('receivableHref'), label: f('receivableLabel'), activeWhen: f('isReceivable') },
-          ]),
-          primaryFilter: f('primaryFilter'),
-          actions: [
-            widget('schedule-report', {
-              definitionId: data.scheduleDefId ?? '',
-              statementParams: data.scheduleParams,
-            }, f('scheduleDefId')),
-            widget('save-view'),
-            widget('export-menu', { kind: 'partners', params: data.exportParams }),
-          ],
-        },
-      ),
-      summaryLine(f('totalLabel'), drill(f('totalDrill'), money(f('total')))),
-    ],
-    body: [
+    header: { title: f('title'), back: { href: f('backHref'), label: f('backLabel') } },
+    filters: [{
+      controls: { search: true, period: false, subsidiary: true },
+      options: {
+        searchPlaceholder: f('searchPlaceholder'),
+        subsidiaries: f('subsidiaries'),
+        leading: toggleLinks([
+          { href: f('payableHref'), label: f('payableLabel'), activeWhen: f('isPayable') },
+          { href: f('receivableHref'), label: f('receivableLabel'), activeWhen: f('isReceivable') },
+        ]),
+        primaryFilter: f('primaryFilter'),
+      },
+    }],
+    schedule: {
+      definitionId: data.scheduleDefId ?? '',
+      statementParams: data.scheduleParams,
+      when: f('scheduleDefId'),
+    },
+    exportMenu: { kind: 'partners', params: data.exportParams },
+    headerAfterFilters: [summaryLine(f('totalLabel'), drill(f('totalDrill'), money(f('total'))))],
+    bodyBeforePaper: [
       // The multi-currency refusal renders without an action: the remedy is
       // the subsidiary picker in the filter bar above, not a link.
       ...(data.currencyBasisBlocked
@@ -290,31 +269,31 @@ export function partnersSpec(data: PartnersData): PageSpec {
             },
           ]
         : []),
-      paper({
-        company: f('company'),
-        title: f('title'),
-        periodPhrase: f('periodPhrase'),
-        when: f('currencyBasisReady'),
-        blocks: [
-          table({
-            variant: 'report',
-            rows: f('rows'),
-            rowKey: row('rowKey'),
-            columns: [
-              column(f('columnParty'), text(row('displayName'), { fallback: rootF('noPartyLabel') })),
-              column(f('columnOutstanding'), drill(row('drill'), money(row('balance'), { tone: row('balanceTone') })), {
-                align: 'right',
-              }),
-              column(f('columnGlLines'), drill(row('drill'), number(row('lineCount'))), { align: 'right' }),
-            ],
+    ],
+    paper: {
+      company: f('company'),
+      title: f('title'),
+      periodPhrase: f('periodPhrase'),
+      when: f('currencyBasisReady'),
+    },
+    blocks: [
+      table({
+        variant: 'report',
+        rows: f('rows'),
+        rowKey: row('rowKey'),
+        columns: [
+          column(f('columnParty'), text(row('displayName'), { fallback: rootF('noPartyLabel') })),
+          column(f('columnOutstanding'), drill(row('drill'), money(row('balance'), { tone: row('balanceTone') })), {
+            align: 'right',
           }),
-          pagination({
-            basePath: '/reports/partners',
-            total: f('totalRows'),
-            page: f('currentPage'),
-            perPage: f('perPage'),
-          }),
+          column(f('columnGlLines'), drill(row('drill'), number(row('lineCount'))), { align: 'right' }),
         ],
+      }),
+      pagination({
+        basePath: '/reports/partners',
+        total: f('totalRows'),
+        page: f('currentPage'),
+        perPage: f('perPage'),
       }),
     ],
   })

@@ -2,13 +2,8 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import {
-  filterBar,
-  page,
-  pageHeader,
-  paper,
   ref,
   textBlock,
-  widget,
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
@@ -23,6 +18,7 @@ import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { getAuthz } from '@/lib/authz'
 import { dimensionOptionsScope } from '../../../../lib/reports/filters'
+import { statementReportSpec, stringReportParams } from '@/lib/reports/statement-report-spec'
 
 /**
  * The profit-and-loss statement, split into a loader and a spec.
@@ -173,32 +169,22 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
         : null,
     scheduleDefId: scheduleDefId ?? null,
     scheduleParams: scheduleParamsFrom(sp),
-    exportParams: stringParams(sp),
+    exportParams: stringReportParams(sp),
   }
-}
-
-function stringParams(sp: Record<string, string | undefined>): Record<string, string> {
-  const out: Record<string, string> = {}
-  for (const [key, value] of Object.entries(sp)) {
-    if (typeof value === 'string') out[key] = value
-  }
-  return out
 }
 
 const f = ref<PnlData>()
 
 export function pnlSpec(data: PnlData): PageSpec {
-  return page({
+  return statementReportSpec({
     route: '/reports/pnl',
-    layout: 'list',
-    header: [
-      pageHeader({
+    header: {
         title: f('title'),
         description: f('description'),
         back: { href: f('backHref'), label: f('backLabel') },
-      }),
-      filterBar(
-        {
+    },
+    filters: [{
+      controls: {
           period: true,
           breakout: true,
           compare: true,
@@ -208,27 +194,26 @@ export function pnlSpec(data: PnlData): PageSpec {
           showZero: true,
           scale: true,
           sections: true,
-        },
-        {
+      },
+      options: {
           dimensions: f('dimensions'),
           subsidiaries: f('subsidiaries'),
           primaryFilter: f('primaryFilter'),
-          actions: [
-            widget('schedule-report', {
-              definitionId: data.scheduleDefId ?? '',
-              statementParams: data.scheduleParams,
-            }, f('scheduleDefId')),
-            widget('save-view'),
-            widget('export-menu', { kind: 'pnl', params: data.exportParams }),
-          ],
-        },
-      ),
+      },
+    }],
+    schedule: {
+      definitionId: data.scheduleDefId ?? '',
+      statementParams: data.scheduleParams,
+      when: f('scheduleDefId'),
+    },
+    exportMenu: { kind: 'pnl', params: data.exportParams },
+    headerAfterFilters: [
       // The native page renders this warning only when the statement was
       // truncated. `when` is how a spec expresses that without the language
       // acquiring a conditional operator.
       textBlock(f('truncatedLabel'), { tone: 'warning', when: f('truncated') }),
     ],
-    body: [
+    bodyBeforePaper: [
       {
         ...widgetBlock('empty-state', {
           title: data.ratesBlocked?.title ?? '',
@@ -241,22 +226,22 @@ export function pnlSpec(data: PnlData): PageSpec {
         }),
         when: f('ratesBlocked'),
       },
-      paper({
+    ],
+    paper: {
         company: f('company'),
         title: f('title'),
         periodPhrase: f('periodPhrase'),
         note: f('note'),
         wide: f('wide'),
         when: f('ratesReady'),
-        blocks: [
+    },
+    blocks: [
           widgetBlock('statement-matrix', {
             view: data.view,
             scale: data.scale,
             currency: data.currency,
             drill: data.drill,
           }),
-        ],
-      }),
     ],
   })
 }
