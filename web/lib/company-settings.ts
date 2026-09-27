@@ -242,6 +242,14 @@ export async function updateCompanySettings(
         return { status: 400, body: { error: "controlAccounts must be an object" } };
       }
       const input = body.controlAccounts as Record<string, unknown>;
+      const unknownRoles = Object.keys(input).filter(
+        (key) => !CONTROL_ACCOUNT_ROLES.some((role) => role === key),
+      );
+      if (unknownRoles.length > 0) {
+        return { status: 400, body: {
+          error: unknownRoles.map((key) => `unknown control account role ${key}`).join("; "),
+        } };
+      }
       const currentControl =
         settings.controlAccounts && typeof settings.controlAccounts === "object"
           ? (settings.controlAccounts as Record<string, unknown>)

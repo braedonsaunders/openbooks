@@ -679,6 +679,18 @@
           "label": "Por pagar a empleados",
           "hint": "Reembolsos de gastos adeudados al personal"
         },
+        "payrollDeductions": {
+          "label": "Retenciones de nómina",
+          "hint": "Retenciones legales de nómina y aportaciones patronales pendientes de ingresar a las autoridades"
+        },
+        "employeeReceivable": {
+          "label": "Cuentas por cobrar a empleados",
+          "hint": "Cargos personales en tarjetas de empresa que los empleados deben reembolsar"
+        },
+        "payrollVariance": {
+          "label": "Desviaciones de nómina",
+          "hint": "Diferencias entre los costes de mano de obra imputados a proyectos y los costes reales de nómina"
+        },
         "fxUnrealizedGainLoss": {
           "label": "Ganancia/pérdida cambiaria no realizada",
           "hint": "Donde se registra la revaluación de fin de período de los saldos en moneda extranjera"

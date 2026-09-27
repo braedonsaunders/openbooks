@@ -679,6 +679,18 @@
           "label": "Verbindlichkeiten gegenüber Mitarbeitern",
           "hint": "Den Mitarbeitern geschuldete Spesenerstattungen"
         },
+        "payrollDeductions": {
+          "label": "Lohnabzüge",
+          "hint": "Gesetzliche Lohnabzüge und an Behörden abzuführende Arbeitgeberbeiträge"
+        },
+        "employeeReceivable": {
+          "label": "Forderungen an Mitarbeitende",
+          "hint": "Von Mitarbeitenden zu erstattende private Firmenkartenausgaben"
+        },
+        "payrollVariance": {
+          "label": "Lohnkostenabweichungen",
+          "hint": "Differenzen zwischen verrechneten Projektarbeitskosten und tatsächlichen Lohnkosten"
+        },
         "fxUnrealizedGainLoss": {
           "label": "Nicht realisierter Währungsgewinn/-verlust",
           "hint": "Wo die Neubewertung von Fremdwährungssalden zum Periodenende gebucht wird"

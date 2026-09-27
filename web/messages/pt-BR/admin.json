@@ -680,6 +680,18 @@
           "label": "A pagar a funcionários",
           "hint": "Reembolsos de despesas devidos à equipe"
         },
+        "payrollDeductions": {
+          "label": "Deduções da folha de pagamento",
+          "hint": "Retenções legais da folha e contribuições patronais a recolher aos órgãos competentes"
+        },
+        "employeeReceivable": {
+          "label": "Valores a receber de funcionários",
+          "hint": "Despesas pessoais no cartão corporativo a serem reembolsadas pelos funcionários"
+        },
+        "payrollVariance": {
+          "label": "Variação da folha de pagamento",
+          "hint": "Diferenças entre os custos de mão de obra apropriados aos projetos e os custos reais da folha"
+        },
         "fxUnrealizedGainLoss": {
           "label": "Ganho/perda cambial não realizado",
           "hint": "Onde a reavaliação de fim de período de saldos em moeda estrangeira é registrada"

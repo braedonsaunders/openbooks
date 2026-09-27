@@ -680,6 +680,18 @@
           "label": "应付员工款",
           "hint": "欠付员工的费用报销"
         },
+        "payrollDeductions": {
+          "label": "薪资代扣款",
+          "hint": "应向主管机关缴纳的法定薪资代扣款和雇主缴费"
+        },
+        "employeeReceivable": {
+          "label": "员工应收款",
+          "hint": "员工使用公司卡支付私人开支后应偿还公司的款项"
+        },
+        "payrollVariance": {
+          "label": "薪资差异",
+          "hint": "计入项目的人工成本与实际薪资成本之间的差额"
+        },
         "fxUnrealizedGainLoss": {
           "label": "未实现汇兑损益",
           "hint": "外币余额期末重估的入账科目"

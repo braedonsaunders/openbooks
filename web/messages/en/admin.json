@@ -680,6 +680,18 @@
           "label": "Employee payable",
           "hint": "Expense reimbursements owed to staff"
         },
+        "payrollDeductions": {
+          "label": "Payroll deductions",
+          "hint": "Statutory payroll withholdings and employer contributions payable to the authorities"
+        },
+        "employeeReceivable": {
+          "label": "Employee receivable",
+          "hint": "Personal company-card charges owed back by employees"
+        },
+        "payrollVariance": {
+          "label": "Payroll variance",
+          "hint": "Differences between project labor charges and actual payroll costs"
+        },
         "fxUnrealizedGainLoss": {
           "label": "Unrealized FX gain/loss",
           "hint": "Where period-end revaluation of foreign-currency balances is booked"
