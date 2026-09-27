@@ -220,14 +220,14 @@ test("a replacement default calendar releases the lease without tripping the def
   }
 });
 
-test("a colliding BOM replacement releases the lease without tripping the assembly uniqueness", { skip: !DB }, async () => {
-  // bom_assembly_component is a plain UNIQUE(assembly_item_id,
-  // component_item_id): a test that deletes the seeded recipe and installs its
-  // own row on the same pair (the BOM-concurrency race does exactly this)
-  // used to make the baseline restore re-insert the deleted baseline row
-  // while the replacement still stood, so every bounded retry died on 23505
-  // and the lease never released. The restore now removes non-baseline rows
-  // colliding on any catalog unique key first, in the same transaction.
+test("a colliding BOM replacement releases the lease without tripping the assembly exclusion", { skip: !DB }, async () => {
+  // The BOM exclusion uses org, assembly, component, byproduct, operation,
+  // and effectivity; the last two are expressions. A test that deletes the
+  // seeded recipe and installs its replacement on the same plain columns
+  // used to make baseline restore reinsert the deleted row while the
+  // replacement still stood, so every bounded retry died on 23P01 and the
+  // lease never released. Restore now removes non-baseline rows colliding on
+  // plain unique or exclusion columns first, in the same transaction.
   const org = await createScratchOrg();
   try {
     const seeded = (await db.execute<{ id: string }>(sql`
@@ -239,7 +239,7 @@ test("a colliding BOM replacement releases the lease without tripping the assemb
     await db.execute(sql`
       insert into bom_components (id, org_id, assembly_item_id, component_item_id, quantity_per, sort_order)
       values (${replacement}, ${org.orgId}, ${org.items.assembly}, ${org.items.component}, '1', 0)`);
-    // Must not throw: pre-fix this died on 23505 inside the restore.
+    // Must not throw: before exclusion keys were included, this died on 23P01.
     await dropScratchOrg(org.orgId);
     if (POOLED_FIXTURES) {
       const current = (await db.execute<{ id: string }>(sql`
