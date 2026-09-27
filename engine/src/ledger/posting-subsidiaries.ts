@@ -5,6 +5,7 @@ import { mulMoneyRate, type Money } from "../money/brands.ts";
 import { lookupSpotRate } from "../fx/spot-rate.ts";
 import { absorbFxRoundingResidual, intercompanyBalancingLegs, loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { type Doc, type KernelLine, PostingError } from "../journal/posting-contracts.ts";
+import { collectBalancingLegs } from "../journal/balancing-hooks.ts";
 /**
  * Application-layer proof for the storage trigger `jl_check_account`
  * (F-t06-002): every final line inserts in its line currency, so a target
@@ -172,6 +173,23 @@ export async function applySubsidiaries(
         memo: leg.memo,
       })),
     ];
+    // Balancing-segment legs (interfund due-to/due-from for a balancing fund
+    // segment, for example) come from registered providers. They are
+    // appended before the restriction checks below so every leg is
+    // validated exactly like a kernel line; a provider can only add legs.
+    const segmentLegs = await collectBalancingLegs(runner, { orgId: doc.orgId, postingDate }, all);
+    for (const leg of segmentLegs) {
+      all.push({
+        accountId: leg.accountId,
+        amount: leg.amount,
+        currency: leg.currency,
+        txnAmount: leg.txnAmount,
+        fxRate: leg.fxRate,
+        subsidiaryId: leg.subsidiaryId,
+        memo: leg.memo,
+        extraDims: leg.extraDims,
+      });
+    }
     await validateSubsidiaryRestrictions(runner, {
       orgId: doc.orgId,
       ctx,

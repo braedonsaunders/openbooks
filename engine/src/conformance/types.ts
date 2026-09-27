@@ -38,6 +38,7 @@ export type Standard =
   | "ASC 810"
   | "ASC 830"
   | "ASC 842"
+  | "ASC 958"
   | "IAS 2"
   | "IAS 12"
   | "IAS 16"
@@ -61,7 +62,8 @@ export type Standard =
   | "HMRC VAT700/12"
   | "SD v. Wayfair"
   | "CDTFA Reg 1684"
-  | "NY Tax Law 1101";
+  | "NY Tax Law 1101"
+  | "FRS 102";
 
 /**
  * How the case relates to its source.

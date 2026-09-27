@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { assertPeriodModulesOpen, CloseError, type CloseModule } from "../periods/period-policy.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 import { PostingError } from "./posting-contracts.ts";
+import { collectBalancingLegs } from "./balancing-hooks.ts";
 import { assertFinalKernelBalance } from "./posting-invariants.ts";
 import { findLiveReplayAuthorization } from "./replay-authorization.ts";
 
@@ -164,6 +165,31 @@ export async function postEntry(
       lineNumber,
     };
   });
+
+  // Balancing-segment legs from registered providers are appended after
+  // the caller's lines, so the balance check and every guard below see the
+  // final set. A provider can only add legs; each takes the next number.
+  const segmentLegs = await collectBalancingLegs(
+    executor,
+    { orgId, postingDate: input.postingDate },
+    lines,
+  );
+  let nextLineNumber = Math.max(0, ...seenNumbers);
+  for (const leg of segmentLegs) {
+    nextLineNumber += 1;
+    seenNumbers.add(nextLineNumber);
+    lines.push({
+      accountId: leg.accountId,
+      amount: leg.amount,
+      subsidiaryId: leg.subsidiaryId,
+      currency: leg.currency,
+      txnAmount: leg.txnAmount,
+      fxRate: leg.fxRate,
+      memo: leg.memo,
+      extraDims: leg.extraDims,
+      lineNumber: nextLineNumber,
+    });
+  }
 
   // Balance validation before any write: whole entry and per subsidiary.
   // assertFinalKernelBalance is the shared kernel check (also >= 2 lines).
