@@ -1,10 +1,18 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
 import { getAuthz } from "../../../lib/authz";
 import { isLocale } from "../../../i18n/config";
 import { isNavMode } from "../../../lib/nav-mode";
+
+const requestBodySchema = z.object({
+  locale: z.string().refine(isLocale, "unsupported locale").nullable().optional(),
+  navMode: z.string().refine(isNavMode, "unsupported nav mode").nullable().optional(),
+}).refine((body) => body.locale !== undefined || body.navMode !== undefined, "nothing to update");
+
 
 export const runtime = "nodejs";
 
@@ -15,12 +23,12 @@ export const runtime = "nodejs";
  * orgs.settings.defaultNavMode). Any authenticated user may update their own
  * row; audited like every other mutation.
  */
-export async function PATCH(req: Request) {
+async function legacyPATCH(req: Request) {
   const authz = await getAuthz();
   if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { user } = authz;
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     locale?: unknown;
@@ -63,3 +71,14 @@ export async function PATCH(req: Request) {
 
   return NextResponse.json({ ok: true, ...changes });
 }
+
+export const PATCH = defineRoute({
+  public: "session",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never);
+  },
+});

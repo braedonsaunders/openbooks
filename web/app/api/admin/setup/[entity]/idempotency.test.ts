@@ -79,6 +79,7 @@ const mockDb = `
   export async function withMaintenanceTransaction(...args) { const fn = args[args.length - 1]; return fn({ execute }) }
   export async function withTransactionSavepoint(...args) { const fn = args[args.length - 1]; return fn({ execute }) }
   export async function inDbTransaction(fn) { return fn({ execute }) }
+  export async function inExecutorTransaction(executor, fn) { return fn(executor) }
   export const env = {}
   export const pool = null
   export const longPool = null
@@ -95,7 +96,7 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const parent = context.parentURL ?? "";
     const isEntityRoute = parent.includes("%5Bentity%5D") || parent.includes("[entity]");
-    if (specifier === "../../../../../lib/authz" && isEntityRoute) {
+    if (specifier === "@/lib/authz" || (specifier === "../../../../../lib/authz" && isEntityRoute)) {
       return { url: "mock:authz", shortCircuit: true };
     }
     if (specifier === "@openbooks/engine/src/platform/db.ts" || specifier.endsWith("/platform/db.ts")) {

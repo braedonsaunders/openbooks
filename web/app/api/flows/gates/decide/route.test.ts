@@ -60,6 +60,7 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.flow-decide-route-test')]
       const NextResponse = globalThis.openbooksFlowDecideNextResponse
+      export async function getAuthz() { return state.authz }
       export function guardSubsidiaryScope(authz, subsidiaryId) {
         state.scopeChecks.push(subsidiaryId ?? null)
         if (authz.allowedSubsidiaryIds !== null &&
@@ -100,6 +101,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
+  ["@/lib/authz", "mock:authz"],
   ["@openbooks/engine/src/flows/index.ts", "mock:engine"],
   ["../../_lib", "mock:lib"],
 ]);

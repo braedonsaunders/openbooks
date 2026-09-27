@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
@@ -12,7 +13,7 @@ export const runtime = "nodejs";
  * recorded immediately (status 'queued') so the UI can track it; the worker
  * claims and executes it. Manual runs count toward retention like any other.
  */
-export async function POST() {
+async function legacyPOST() {
   const gate = await guardPermission("admin.backups.manage");
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
@@ -88,3 +89,9 @@ export async function POST() {
 
   return NextResponse.json({ ok: true, runId });
 }
+
+export const POST = defineRoute({
+  permission: "admin.backups.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async () => legacyPOST(),
+});

@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -11,7 +13,7 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = "nodejs";
 
 /** Restore-CLI-compatible authenticated evidence for one stored archive. */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission("admin.backups.manage");
   if (gate instanceof NextResponse) return gate;
   const { id } = await params;
@@ -75,3 +77,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     },
   });
 }
+
+export const GET = defineRoute({
+  permission: "admin.backups.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+});

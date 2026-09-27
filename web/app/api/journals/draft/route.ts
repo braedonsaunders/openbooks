@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { guardPermission } from "../../../../lib/authz";
 import { createDraftJournal } from "../../../../lib/journals";
@@ -89,7 +90,7 @@ function scopeErrorResponse(error: unknown): NextResponse | null {
 }
 
 /** Instant-into-draft: create an empty draft manual journal and return its id. */
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardPermission("gl.post");
   if (gate instanceof NextResponse) return gate;
   const parsed = await readDraftBody(req);
@@ -130,3 +131,9 @@ export async function POST(req: Request) {
     throw error;
   }
 }
+
+export const POST = defineRoute({
+  permission: "gl.post",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async ({ request }) => legacyPOST(request as never),
+});

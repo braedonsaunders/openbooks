@@ -1,6 +1,8 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardCloseScope } from "@/lib/close-scope";
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { attestOwnerManagedClose, requestCloseApproval } from "@openbooks/engine/src/close/approvals.ts";
 import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/src/close/run-completion.ts";
@@ -11,17 +13,26 @@ import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 
+const requestBodySchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("refresh") }),
+  z.object({ action: z.literal("request_approval") }),
+  z.object({ action: z.literal("attest"), comment: z.string().max(2000).optional() }),
+  z.object({ action: z.literal("close") }),
+  z.object({ action: z.literal("publish"), comment: z.string().max(2000).optional() }),
+]);
+
+
 
 export const runtime = "nodejs";
 
-export async function POST(
+async function legacyPOST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
   if (!isUuid(id))
     return NextResponse.json({ error: "invalid run id" }, { status: 400 });
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     action?: string;
@@ -65,3 +76,15 @@ export async function POST(
     throw error;
   }
 }
+
+export const POST = defineRoute({
+  public: "session",
+  params: z.object({ "id": z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});

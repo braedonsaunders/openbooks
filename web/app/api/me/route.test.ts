@@ -111,6 +111,11 @@ stubModules({
         return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
       }
     `,
+    "@/lib/authz": `
+      export async function getAuthz() {
+        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' } }
+      }
+    `,
   },
 });
 

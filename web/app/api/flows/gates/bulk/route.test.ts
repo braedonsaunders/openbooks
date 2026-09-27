@@ -46,6 +46,8 @@ const mockSources = new Map<string, string>([
   [
     'mock:authz',
     `
+      const state = globalThis[Symbol.for('openbooks.bulk-gates-route-test')]
+      export async function getAuthz() { return state.authz instanceof Response ? null : state.authz }
       export function guardSubsidiaryScope(authz, subsidiaryId) {
         if (authz.allowedSubsidiaryIds !== null &&
             (subsidiaryId === null || subsidiaryId === undefined ||
@@ -62,6 +64,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/flows/index.ts', 'mock:flows'],
   ['../../_lib', 'mock:flows-lib'],
   ['../../../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
 ])
 
 const hooks = registerHooks({
@@ -109,7 +112,9 @@ test('rejects a bulk request above the cap before any per-item database work', a
   const response = await post({ items, decision: 'approved' })
 
   assert.equal(response.status, 400)
-  assert.deepEqual(await response.json(), { error: `too many items (max ${MAX_BULK_ITEMS})` })
+  const refusal = await response.json() as { error: string; issues: { path: string }[] }
+  assert.equal(refusal.error, `too many items (max ${MAX_BULK_ITEMS})`)
+  assert.ok(refusal.issues.some((issue) => issue.path === 'items'))
   assert.deepEqual(routeState.loadCalls, [])
   assert.deepEqual(routeState.decideCalls, [])
 })
@@ -196,7 +201,7 @@ test('a thrown release failure is reported per item, never as ok:true', async ()
   assert.equal(routeState.decideCalls.length, 2, 'one failure never aborts the rest')
 })
 
-test('invalid gate IDs fail individually without reaching the database', async () => {
+test('invalid gate IDs are refused by the request boundary before database work', async () => {
   reset()
 
   const response = await post({
@@ -204,13 +209,10 @@ test('invalid gate IDs fail individually without reaching the database', async (
     decision: 'approved',
   })
 
-  assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), {
-    results: [
-      { ok: false, error: 'invalid gateId' },
-      { ok: false, error: 'invalid item' },
-    ],
-  })
+  assert.equal(response.status, 400)
+  const refusal = await response.json() as { error: string; issues: { path: string }[] }
+  assert.equal(refusal.error, 'Invalid UUID')
+  assert.ok(refusal.issues.some((issue) => issue.path.startsWith('items.')))
   assert.deepEqual(routeState.loadCalls, [])
   assert.deepEqual(routeState.decideCalls, [])
 })

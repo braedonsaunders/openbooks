@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
@@ -12,7 +14,7 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = 'nodejs'
 
 /** Generate a draft customer_invoice from an open billing request. */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('ar.create')
   if (gate instanceof NextResponse) return gate
   const feature = await guardProjectsFeature(gate.user.orgId)
@@ -60,3 +62,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return apiErrorResponse(e)
   }
 }
+
+export const POST = defineRoute({
+  permission: "ar.create",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyPOST(request as never, { params: Promise.resolve(params as never) } as never),
+});

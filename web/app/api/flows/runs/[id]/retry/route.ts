@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -23,7 +25,7 @@ export const runtime = 'nodejs'
  * subject's subsidiary and applies the same direct-record gate as
  * record-state / decide / manual before the engine may re-drive the run.
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
@@ -61,3 +63,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     throw e
   }
 }
+
+export const POST = defineRoute({
+  permission: "flows.manage",
+  feature: "flows",
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyPOST(request as never, { params: Promise.resolve(params as never) } as never),
+});

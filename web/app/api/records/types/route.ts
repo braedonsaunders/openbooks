@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -10,16 +11,17 @@ import { subsidiaryDeclaredTypeIds } from '../../../../lib/records'
 import { lintRecordFields, recordTypeLintBody, slugifyTypeKey, typeKeyError } from '../../../../lib/record-schema'
 import { claimIdempotentCreate, resolveIdempotentReplay } from '../../../../lib/api/idempotency'
 import { auditSetupChange } from '../../../../lib/setup/audit'
+import { formSectionSchema } from '@openbooks/forms-core'
 
 const ICON_KEY_RE = /^[a-z0-9-]{1,32}$/
 
-const createTypeBodySchema = z.looseObject({
-  name: z.string().optional(),
+const createTypeBodySchema = z.object({
+  name: z.string().trim().min(1).max(200),
   pluralName: z.string().optional(),
   key: z.string().optional(),
   iconKey: z.string().optional(),
   description: z.string().nullable().optional(),
-  fields: z.unknown().optional(),
+  fields: z.array(formSectionSchema).max(100).optional(),
   showInNav: z.boolean().optional(),
   allowedRoles: z.string().array().nullable().optional(),
   sortOrder: z.number().optional(),
@@ -28,7 +30,7 @@ const createTypeBodySchema = z.looseObject({
 export const runtime = 'nodejs'
 
 /** All of the org's record types (builder data source). */
-export async function GET() {
+async function legacyGET() {
   const gate = await guardPermission('records.manage_types')
   if (gate instanceof NextResponse) return gate
   // A subsidiary-restricted type manager sees only the records their fence
@@ -73,7 +75,7 @@ export async function GET() {
  * the same request returns the same type without a duplicate insert or
  * duplicate audit event. Cancel/close writes nothing — there is no draft.
  */
-export async function POST(request: Request) {
+async function legacyPOST(request: Request) {
   const gate = await guardPermission('records.manage_types')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
@@ -263,3 +265,21 @@ async function createType(
   }
   return NextResponse.json({ id: requestId }, { status: outcome === 'fresh' ? 201 : 200 })
 }
+
+export const GET = defineRoute({
+  permission: "records.manage_types",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async () => legacyGET(),
+});
+
+export const POST = defineRoute({
+  permission: "records.manage_types",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: createTypeBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

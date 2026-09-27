@@ -1,10 +1,15 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { RevaluationError, RevaluationFeatureDisabledError, runRevaluation } from '@openbooks/engine/src/close/fx-revaluation.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.object({ periodId: z.string().uuid(), bookId: z.string().uuid().optional() });
+
 
 
 export const runtime = 'nodejs'
@@ -25,12 +30,12 @@ interface Body {
  * The multiCurrency feature must also be on — a disabled FX module cannot
  * still post unrealized gain/loss through this close action.
  */
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardFeaturePermission('close.run', 'multiCurrency')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Body
   if (!body.periodId || !isUuid(body.periodId)) {
@@ -75,3 +80,15 @@ export async function POST(req: Request) {
     return apiErrorResponse(e)
   }
 }
+
+export const POST = defineRoute({
+  permission: "close.run",
+  feature: "multiCurrency",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

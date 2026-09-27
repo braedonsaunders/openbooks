@@ -1,11 +1,23 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardCloseScope } from "@/lib/close-scope";
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { startCloseRun } from "@openbooks/engine/src/close/run-start.ts";
 import { CloseError } from "@openbooks/engine/src/periods/period-policy.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
+
+const requestBodySchema = z.object({
+  periodId: z.string().uuid(),
+  bookId: z.string().uuid(),
+  blueprintId: z.string().uuid().optional(),
+  reportingPackageId: z.string().uuid().optional(),
+  targetCloseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  subsidiaryIds: z.array(z.string().uuid()).min(1).nullable().optional(),
+});
+
 
 export const runtime = "nodejs";
 
@@ -79,10 +91,10 @@ function parseCloseRunSubsidiaryIds(
   return requested;
 }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardFeaturePermission("close.run", "continuousClose");
   if (gate instanceof NextResponse) return gate;
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as Record<string, unknown>;
   const periodId = typeof body.periodId === "string" ? body.periodId : "";
@@ -132,3 +144,15 @@ export async function POST(req: Request) {
     throw error;
   }
 }
+
+export const POST = defineRoute({
+  permission: "close.run",
+  feature: "continuousClose",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

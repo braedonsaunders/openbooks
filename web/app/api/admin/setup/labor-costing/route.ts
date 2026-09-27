@@ -1,5 +1,7 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
@@ -32,6 +34,30 @@ import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 import { notFound } from "@/lib/api/responses";
+
+const decimalText = (field: string, noun: string) => z.string().superRefine((value, ctx) => {
+  if (canonicalDecimal(value, 4) === null) ctx.addIssue({ code: "custom", message: decimalNullRefusal(field, noun, value, 4) });
+});
+const componentSchema = z.object({
+  key: z.string().max(40).nullable().optional(), name: z.string().max(120).nullable().optional(),
+  kind: z.enum(["percent_of_wage", "per_hour", "per_day", "worker_comp"]),
+  value: decimalText("component value", "an exact decimal amount"), scaleWithOvertime: z.boolean().optional(),
+});
+const laborSettingsSchema = z.object({
+  mode: z.enum(["off", "post"]).optional(), hoursPerDay: decimalText("hoursPerDay", "a number of hours").nullable().optional(),
+  annualHours: decimalText("annualHours", "a number of hours").nullable().optional(),
+  components: z.array(componentSchema).max(100).optional(), allowUnratedTime: z.boolean().optional(),
+});
+const accountFields = { laborWip: z.string().uuid().nullable().optional(), laborClearing: z.string().uuid().nullable().optional(), payrollVariance: z.string().uuid().nullable().optional() };
+const settingsBodySchema = z.object({ settings: laborSettingsSchema, ...accountFields });
+const postBodySchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("save-rate"), currency: z.string().regex(/^[A-Z]{3}$/), rate: decimalText("rate", "an exact decimal rate"), effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), basis: z.enum(["hour", "year"]).optional(), annualHours: decimalText("annualHours", "a number of hours").nullable().optional(), employeePartyId: z.string().uuid().nullable().optional(), jobTitle: z.string().trim().max(160).nullable().optional(), tradeId: z.string().uuid().nullable().optional(), departmentId: z.string().uuid().nullable().optional(), subsidiaryId: z.string().uuid().nullable().optional(), notes: z.string().max(500).nullable().optional(), reason: z.string().trim().max(500).optional() }),
+  z.object({ action: z.literal("end-rate"), id: z.string().uuid(), effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(), reason: z.string().trim().max(500).optional() }),
+  z.object({ action: z.literal("delete-rate"), id: z.string().uuid(), reason: z.string().trim().max(500).optional() }),
+  z.object({ action: z.literal("reconcile"), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), subsidiaryId: z.string().uuid() }),
+  z.object({ action: z.literal("post-variance"), periodStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), periodEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), subsidiaryId: z.string().uuid() }),
+]);
+
 
 
 export const dynamic = 'force-dynamic'
@@ -256,7 +282,7 @@ function rateStorageRefusal(error: unknown): { error: string; errorCode: string 
 
 /** GET ?employee=<partyId> → that employee's wage-rate history (confidential;
  * the employee record's Wages tab reads this). */
-export async function GET(req: Request) {
+async function legacyGET(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const feature = await guardProjectsFeature(gate.user.orgId)
@@ -301,7 +327,7 @@ export async function GET(req: Request) {
   })
 }
 
-export async function PUT(req: Request) {
+async function legacyPUT(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
@@ -309,7 +335,7 @@ export async function PUT(req: Request) {
   if (feature) return feature
   const scopeDenied = guardUnrestrictedScope(gate)
   if (scopeDenied) return scopeDenied
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, settingsBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
 
@@ -436,14 +462,14 @@ export async function PUT(req: Request) {
   return NextResponse.json({ ok: true })
 }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
   const feature = await guardProjectsFeature(orgId)
   if (feature) return feature
   const userId = gate.user.id
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  const parsedBody2 = await parseJsonBody(req, postBodySchema);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = parsedBody2.data
 
@@ -609,9 +635,7 @@ export async function POST(req: Request) {
   }
 
   if (body.action === 'end-rate') {
-    // body comes from the loose jsonObject schema, so body.id is unknown and
-    // property narrowing does not survive into the transaction closure below.
-    // Capture the narrowed id in a const so the locked statements keep a string.
+    // Capture the validated id so the locked statements keep a string.
     const id = body.id
     if (typeof id !== 'string' || !isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
     const to = body.effectiveTo
@@ -676,8 +700,7 @@ export async function POST(req: Request) {
   }
 
   if (body.action === 'delete-rate') {
-    // Same loose-schema capture as end-rate: body.id is unknown and property
-    // narrowing does not survive into the transaction closure below.
+    // Capture the validated id so the locked statements keep a string.
     const id = body.id
     if (typeof id !== 'string' || !isUuid(id)) return NextResponse.json({ error: 'invalid id' }, { status: 422 })
     const reason = bodyReason(body.reason, 'wage rate deleted')
@@ -779,3 +802,34 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ error: 'unknown action' }, { status: 400 })
 }
+
+export const GET = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async ({ request }) => legacyGET(request as never),
+});
+
+export const PUT = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  scope: "unrestricted",
+  body: settingsBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPUT(replayRequest as never);
+  },
+});
+
+export const POST = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: postBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

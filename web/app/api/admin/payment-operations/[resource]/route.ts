@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/platform/db.ts'
@@ -12,16 +14,69 @@ import { guardPermission } from '../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
+import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { moneyRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { auditConfigChange } from '../_lib'
 import { notFound } from "@/lib/api/responses";
+
+const countrySchema = z.string()
+  .refine((value) => value.trim() === '' || normalizeCountryCode(value) !== null, 'country must be a valid ISO country code')
+  .nullable().optional()
+const currencySchema = z.string().regex(/^(?:[A-Za-z]{3})?$/, 'currency must be a three-letter code or blank').optional()
+const calendarDateSchema = z.string().refine((value) => value === '' || isIsoCalendarDate(value), 'date must be a real calendar date (YYYY-MM-DD)')
+const optionalScheduleAmountSchema = z.string().superRefine((value, ctx) => {
+  if (value !== '' && canonicalDecimal(value, 4) === null) {
+    ctx.addIssue({ code: 'custom', message: moneyRefusal('Payment schedule amount', value) })
+  }
+})
+const selectionCriteriaSchema = z.object({
+  dueThroughDays: z.number().int().min(0).max(3650).optional(),
+  minimumAmount: optionalScheduleAmountSchema.optional(),
+  maximumRunAmount: optionalScheduleAmountSchema.optional(),
+  captureDiscounts: z.boolean().optional(),
+  applyCredits: z.boolean().optional(),
+})
+
+const paymentFormatBodySchema = z.object({
+  code: z.string().trim().min(1).max(80), name: z.string().trim().min(1).max(200),
+  formatterScript: z.string().trim().min(1), direction: z.enum(['credit', 'debit', 'both']).optional(),
+  country: countrySchema, currency: currencySchema,
+  fileExtension: z.string().max(20).optional(), contentType: z.string().max(200).optional(),
+  settings: z.record(z.string(), z.json()).optional(), isActive: z.boolean().optional(),
+})
+const paymentProfileBodySchema = z.object({
+  name: z.string().trim().min(1).max(200), bankAccountId: z.string().uuid(), paymentFormatId: z.string().uuid(),
+  subsidiaryId: z.string().uuid().nullable().optional(), country: countrySchema, currency: currencySchema,
+  originatorSecrets: z.record(z.string(), z.string()).nullable().optional(),
+  settings: z.record(z.string(), z.json()).optional(), sftpServerId: z.string().uuid().nullable().optional(),
+  sftpFolder: z.string().nullable().optional(), requireRunApproval: z.boolean().optional(),
+  requireFileApproval: z.boolean().optional(), autoRemittance: z.boolean().optional(), isActive: z.boolean().optional(),
+})
+const paymentScheduleBodySchema = z.object({
+  name: z.string().trim().min(1).max(200), paymentBankProfileId: z.string().uuid(), cron: z.string().trim().min(1).max(200),
+  timezone: z.string().trim().min(1).max(100).optional(), selectionCriteria: selectionCriteriaSchema.optional(),
+  action: z.enum(['create_draft', 'submit_for_approval']).optional(), isActive: z.boolean().optional(),
+})
+const paymentMandateBodySchema = z.object({
+  partyId: z.string().uuid(), partyBankAccountId: z.string().uuid(), mandateReference: z.string().trim().min(1).max(200),
+  scheme: z.enum(['nacha', 'sepa_core', 'sepa_b2b', 'custom']).optional(),
+  status: z.enum(['pending', 'active', 'suspended', 'revoked', 'expired']).optional(),
+  signedOn: calendarDateSchema.optional(), validFrom: calendarDateSchema.optional(), expiresOn: calendarDateSchema.optional(),
+  proofFileId: z.string().uuid().optional(),
+})
+const requestBodySchema = z.union([
+  paymentFormatBodySchema, paymentProfileBodySchema, paymentScheduleBodySchema, paymentMandateBodySchema,
+])
+
 
 
 export const runtime = 'nodejs'
 
 const RESOURCES = new Set(['formats', 'profiles', 'schedules', 'mandates'])
 
-export async function GET(_req: Request, { params }: { params: Promise<{ resource: string }> }) {
+async function legacyGET(_req: Request, { params }: { params: Promise<{ resource: string }> }) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const { resource } = await params
@@ -82,12 +137,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ resourc
   return NextResponse.json({ rows: rows.rows })
 }
 
-export async function POST(req: Request, { params }: { params: Promise<{ resource: string }> }) {
+async function legacyPOST(req: Request, { params }: { params: Promise<{ resource: string }> }) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const { resource } = await params
   if (!RESOURCES.has(resource)) return notFound("record")
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as {
     code?: string; name?: string; formatterScript?: string; direction?: string;
@@ -256,3 +311,23 @@ function optionalCountry(value: unknown): string | null | undefined {
   if (value == null || (typeof value === 'string' && value.trim() === '')) return null
   return normalizeCountryCode(value) ?? undefined
 }
+
+export const GET = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "resource": z.string() }),
+  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+});
+
+export const POST = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "resource": z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});

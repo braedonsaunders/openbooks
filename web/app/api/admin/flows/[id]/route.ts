@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
@@ -10,6 +12,15 @@ import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { filterFlowRunSubjectsToScope } from '../../../flows/_lib'
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.object({
+  "description": z.string().optional(),
+  "enabled": z.boolean().optional(),
+  "expectedUpdatedAt": z.string().refine(isDocumentRevisionToken, "Reload the flow and send its exact revision before saving"),
+  "graph": automationGraphSchema.optional(),
+  "name": z.string().optional(),
+});
+
 
 
 export const runtime = 'nodejs'
@@ -38,7 +49,7 @@ async function loadFlow(orgId: string, id: string) {
   return r.rows[0] ?? null
 }
 
-export async function GET(_req: Request, { params }: Params) {
+async function legacyGET(_req: Request, { params }: Params) {
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
@@ -66,7 +77,7 @@ export async function GET(_req: Request, { params }: Params) {
   return NextResponse.json({ flow, runs: visibleRuns.map((subject) => subject.row) })
 }
 
-export async function PATCH(req: Request, { params }: Params) {
+async function legacyPATCH(req: Request, { params }: Params) {
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   const scopeDenied = guardUnrestrictedScope(gate)
@@ -74,7 +85,7 @@ export async function PATCH(req: Request, { params }: Params) {
   const user = gate.user
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
-  const parsedBody = await parseJsonBody(req, jsonObject)
+  const parsedBody = await parseJsonBody(req, requestBodySchema)
   if (!parsedBody.ok) return parsedBody.response
   const body = parsedBody.data as Record<string, unknown>
   if (body.enabled !== undefined && typeof body.enabled !== 'boolean') {
@@ -157,7 +168,7 @@ function revisionConflict() {
   return NextResponse.json({ error: 'The flow has changed. Reload it before saving or deleting.' }, { status: 409 })
 }
 
-export async function DELETE(req: Request, { params }: Params) {
+async function legacyDELETE(req: Request, { params }: Params) {
   const gate = await guardFeaturePermission('flows.manage', 'flows')
   if (gate instanceof NextResponse) return gate
   const scopeDenied = guardUnrestrictedScope(gate)
@@ -165,7 +176,7 @@ export async function DELETE(req: Request, { params }: Params) {
   const orgId = gate.user.orgId
   const { id } = await params
   if (!isUuid(id)) return notFound("record")
-  const parsedBody = await parseJsonBody(req, jsonObject)
+  const parsedBody = await parseJsonBody(req, requestBodySchema)
   if (!parsedBody.ok) return parsedBody.response
   if (!isDocumentRevisionToken(parsedBody.data.expectedUpdatedAt)) return revisionConflict()
 
@@ -197,3 +208,38 @@ export async function DELETE(req: Request, { params }: Params) {
     return NextResponse.json({ ok: true })
   })
 }
+
+export const GET = defineRoute({
+  permission: "flows.manage",
+  feature: "flows",
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+});
+
+export const PATCH = defineRoute({
+  permission: "flows.manage",
+  feature: "flows",
+  scope: "unrestricted",
+  params: z.object({ "id": z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});
+
+export const DELETE = defineRoute({
+  permission: "flows.manage",
+  feature: "flows",
+  scope: "unrestricted",
+  params: z.object({ "id": z.string() }),
+  body: requestBodySchema,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyDELETE(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});

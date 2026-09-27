@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -41,7 +42,7 @@ async function withExactDocumentRevision<T extends { doc: Record<string, unknown
 
 export const runtime = 'nodejs'
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('gl.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
@@ -81,7 +82,7 @@ const journalLineInput = z
     projectId: nullableUuidId.optional(),
     subsidiaryId: nullableUuidId.optional(),
     extraDims: z.record(z.string(), z.string().nullable()).optional(),
-    custom: z.record(z.string(), z.unknown()).optional(),
+    custom: z.record(z.string(), z.json()).optional(),
   })
   // A zero leg carries no financial meaning; reject it instead of silently
   // dropping a submitted line at the posting boundary.
@@ -89,7 +90,7 @@ const journalLineInput = z
 
 const journalPatchBody = z.object({
   /** Optimistic concurrency token from documents.revision_seq (exact form). */
-  expectedUpdatedAt: z.string().optional(),
+  expectedUpdatedAt: z.string().min(1),
   partyId: nullableUuidId.optional(),
   documentDate: isoDate().optional(),
   referenceNumber: z.string().nullable().optional(),
@@ -97,7 +98,7 @@ const journalPatchBody = z.object({
   /** null = org root (posting resolves it). Only sent by multi-subsidiary orgs. */
   subsidiaryId: nullableUuidId.optional(),
   extraDims: z.record(z.string(), z.string().nullable()).optional(),
-  custom: z.record(z.string(), z.unknown()).optional(),
+  custom: z.record(z.string(), z.json()).optional(),
   lines: z.array(journalLineInput).optional(),
 })
 
@@ -110,7 +111,7 @@ const journalPatchBody = z.object({
  * still matches the row locked FOR UPDATE inside the same transaction — so
  * two concurrent saves can never silently overwrite one another.
  */
-export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyPATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('gl.post')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
@@ -461,7 +462,7 @@ function isTenantReferenceViolation(error: unknown): boolean {
 }
 
 /** Delete a journal (guarded: open period, no applied payments, no downstream conversion). */
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyDELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('gl.post')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
@@ -477,7 +478,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!owned.rows[0]) return notFound("record")
   const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
   if (denied) return denied
-  const parsedBody = await parseJsonBody(req, z.looseObject({ expectedUpdatedAt: z.string().optional() }))
+  const parsedBody = await parseJsonBody(req, z.object({ expectedUpdatedAt: z.string().min(1) }))
   if (!parsedBody.ok) return parsedBody.response
   let expectedRevision: string
   try {
@@ -498,3 +499,36 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     throw e
   }
 }
+
+export const GET = defineRoute({
+  permission: "gl.read",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+});
+
+export const PATCH = defineRoute({
+  permission: "gl.post",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  body: journalPatchBody,
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});
+
+export const DELETE = defineRoute({
+  permission: "gl.post",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  body: z.object({ expectedUpdatedAt: z.string().min(1) }),
+  handler: async ({ request, body, params }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyDELETE(replayRequest as never, { params: Promise.resolve(params as never) } as never);
+  },
+});

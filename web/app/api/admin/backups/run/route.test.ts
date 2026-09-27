@@ -92,7 +92,7 @@ const hooks = registerHooks({
     if (specifier === "@openbooks/jobs") {
       return { url: "mock:jobs", shortCircuit: true };
     }
-    if (specifier === "../../../../../lib/authz") {
+    if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") {
       return { url: "mock:authz", shortCircuit: true };
     }
     return nextResolve(specifier, context);

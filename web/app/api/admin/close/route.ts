@@ -1,6 +1,8 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardCloseScope } from "@/lib/close-scope";
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/platform/db.ts";
@@ -12,6 +14,54 @@ import { guardPermission, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isValidEmailAddress } from "@openbooks/emails";
+import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { canonicalDecimal } from "../../../../lib/exact-decimal";
+import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
+
+const closeObject = z.record(z.string(), z.json());
+const closePolicySchema = z.object({
+  action: z.literal("save-policy"), code: z.string().trim().min(1), name: z.string().trim().min(1),
+  policyType: z.enum(["materiality", "lock", "review", "segregation", "exception"]),
+  description: z.string().nullable().optional(), rules: closeObject.optional(), isActive: z.boolean().optional(),
+}).superRefine((body, ctx) => {
+  if (body.policyType !== "materiality") return;
+  const amount = body.rules?.amount;
+  if (typeof amount !== "string") {
+    ctx.addIssue({ code: "custom", path: ["rules", "amount"], message: "Materiality amount must be a decimal string" });
+  } else if (canonicalDecimal(amount, 4) === null) {
+    ctx.addIssue({ code: "custom", path: ["rules", "amount"], message: moneyRefusal("Materiality threshold", amount) });
+  }
+  const percent = body.rules?.percent;
+  if (percent !== undefined && (typeof percent !== "number" || !Number.isFinite(percent) || percent < 0 || percent > 100)) {
+    ctx.addIssue({ code: "custom", path: ["rules", "percent"], message: "Materiality percent must be between 0 and 100" });
+  }
+});
+const closeStepSchema = z.object({
+  key: z.string().trim().min(1), title: z.string().trim().min(1),
+  workstream: z.enum(["readiness", "banking", "ar", "ap", "assets", "tax", "payroll", "intercompany", "gl", "review", "publish"]),
+  taskType: z.enum(["check", "action", "reconciliation", "journal", "approval", "report", "publish"]).optional(),
+  completionMode: z.enum(["manual", "computed", "automatic"]).optional(),
+  gateType: z.enum(["none", "soft", "hard"]).optional(),
+  description: z.string().nullable().optional(), dueOffsetBusinessDays: z.number().int().optional(),
+  evidenceRequired: z.boolean().optional(), defaultOwnerRoleKey: z.string().nullable().optional(),
+  defaultReviewerRoleKey: z.string().nullable().optional(), applicability: closeObject.optional(),
+  dependsOn: z.array(z.string()).optional(),
+});
+const closeActionSchemas = [
+  z.object({ action: z.literal("save-calendar"), id: z.string().uuid().optional(), name: z.string().trim().min(1), cadence: z.enum(["monthly", "four_four_five", "four_five_four", "five_four_four", "thirteen_period", "custom"]), yearStartMonth: z.number().int().min(1).max(12), weekStartsOn: z.number().int().min(0).max(6).optional(), anchorDate: z.string().refine(isIsoCalendarDate).nullable().optional(), timeZone: z.string().optional(), adjustmentPeriodEnabled: z.boolean().optional(), isDefault: z.boolean().optional(), isActive: z.boolean().optional(), config: closeObject.optional() }),
+  z.object({ action: z.literal("generate-periods"), calendarId: z.string().uuid(), fiscalYear: z.number().int().min(1900).max(2200) }),
+  z.object({ action: z.literal("save-blueprint"), id: z.string().uuid().optional(), name: z.string().trim().min(1), description: z.string().nullable().optional(), periodType: z.enum(["month", "quarter", "year", "adjustment", "any"]).optional(), steps: z.array(closeStepSchema).min(1).max(200), isDefault: z.boolean().optional() }),
+  closePolicySchema,
+  z.object({ action: z.literal("save-automation"), id: z.string().uuid().optional(), name: z.string().trim().min(1), trigger: z.enum(["run_started", "task_ready", "exception_opened", "deadline_approaching", "run_closed"]), automationAction: z.enum(["notify", "assign", "run_check", "complete_task", "create_task", "generate_report", "start_flow", "run_allocation"]), conditions: closeObject.optional(), config: closeObject.optional(), isActive: z.boolean().optional() }),
+  z.object({ action: z.literal("save-package"), id: z.string().uuid().optional(), name: z.string().trim().min(1), description: z.string().nullable().optional(), reports: z.array(z.record(z.string(), z.json()).refine((report) => typeof report.slug === "string" && report.slug.trim().length > 0, "report slug is required")).min(1), recipients: z.array(z.string().trim().min(1).max(320)).optional(), delivery: closeObject.optional(), isDefault: z.boolean().optional(), isActive: z.boolean().optional() }),
+  z.object({ action: z.literal("send-package"), packageId: z.string().uuid(), periodId: z.string().uuid(), bookId: z.string().uuid(), idempotencyKey: z.string().uuid() }),
+  z.object({ action: z.literal("set-lock"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional(), module: z.enum(CLOSE_MODULES), state: z.enum(["open", "soft_closed", "closed"]), reason: z.string().trim().min(1), }),
+  z.object({ action: z.literal("request-reopen"), periodId: z.string().uuid(), bookId: z.string().uuid(), subsidiaryId: z.string().uuid().nullable().optional(), modules: z.array(z.enum(CLOSE_MODULES)).min(1), reason: z.string().trim().min(1) }),
+  z.object({ action: z.literal("decide-reopen"), requestId: z.string().uuid(), approve: z.boolean(), hours: z.number().positive().max(168).optional() }),
+  z.object({ action: z.literal("reclose-reopen"), requestId: z.string().uuid(), reason: z.string().trim().min(1) }),
+] as const;
+const requestBodySchema = z.discriminatedUnion("action", closeActionSchemas);
+
 
 export const runtime = "nodejs";
 
@@ -530,10 +580,10 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
   });
 }
 
-export async function POST(req: Request) {
-  const parsedBody = await parseJsonBody(req, jsonObject);
+async function legacyPOST(req: Request) {
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
-  const body = (parsedBody.data) as Body;
+  const body = parsedBody.data as Body;
   const action = typeof body.action === "string" ? body.action : "";
   const permission = [
     "request-reopen",
@@ -705,3 +755,14 @@ export async function POST(req: Request) {
     throw error;
   }
 }
+
+export const POST = defineRoute({
+  public: "session",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

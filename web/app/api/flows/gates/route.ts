@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { worklistGates } from '@openbooks/engine/src/flows/index.ts'
 import { requireFlowsSession } from '../_lib'
@@ -10,7 +11,7 @@ export const runtime = 'nodejs'
  * (assignees can always act on their own gates), so any signed-in user may
  * list what is waiting on them.
  */
-export async function GET() {
+async function legacyGET() {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
   // A gate assignment is not a grant to every legal entity: the worklist
@@ -24,3 +25,8 @@ export async function GET() {
   )
   return NextResponse.json({ gates })
 }
+
+export const GET = defineRoute({
+  public: "session",
+  handler: async () => legacyGET(),
+});

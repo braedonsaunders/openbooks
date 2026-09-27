@@ -1,5 +1,7 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -14,10 +16,27 @@ import {
 } from '@openbooks/engine/src/fx/providers.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
+const requestBodySchema = z.object({
+  provider: z.enum(["bank_of_canada", "ecb", "open_exchange_rates"]),
+  displayName: z.string().trim().min(1).max(100),
+  baseCurrency: z.string().regex(/^[A-Z]{3}$/),
+  currencies: z.array(z.string().regex(/^[A-Z]{3}$/)).min(1).max(200),
+  schedule: z.enum(["manual", "daily", "weekdays", "weekly"]),
+  syncHourUtc: z.number().int().min(0).max(23),
+  lookbackDays: z.number().int().min(0).max(3650),
+  isEnabled: z.boolean(),
+  apiKey: z.string().nullable().optional(),
+});
+const runBodySchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("test") }),
+  z.object({ action: z.literal("sync") }),
+]);
+
+
 export const runtime = 'nodejs'
 const PERMISSION = 'admin.setup.manage'
 
-export async function GET() {
+async function legacyGET() {
   const gate = await guardFeaturePermission(PERMISSION, 'multiCurrency')
   if (gate instanceof NextResponse) return gate
   const config = await readFxProviderConfigView(gate.user.orgId)
@@ -32,10 +51,10 @@ export async function GET() {
   return NextResponse.json({ config, runs: runs.rows, providers: Object.keys(FX_PROVIDER_MANIFESTS) })
 }
 
-export async function PUT(req: Request) {
+async function legacyPUT(req: Request) {
   const gate = await guardFeaturePermission(PERMISSION, 'multiCurrency')
   if (gate instanceof NextResponse) return gate
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     provider?: FxProviderKey
@@ -69,10 +88,10 @@ export async function PUT(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardFeaturePermission(PERMISSION, 'multiCurrency')
   if (gate instanceof NextResponse) return gate
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  const parsedBody2 = await parseJsonBody(req, runBodySchema);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as { action?: 'test' | 'sync' }
   if (body.action !== 'test' && body.action !== 'sync') {
@@ -90,3 +109,33 @@ export async function POST(req: Request) {
     throw error
   }
 }
+
+export const GET = defineRoute({
+  permission: "admin.setup.manage",
+  feature: "multiCurrency",
+  handler: async () => legacyGET(),
+});
+
+export const PUT = defineRoute({
+  permission: "admin.setup.manage",
+  feature: "multiCurrency",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPUT(replayRequest as never);
+  },
+});
+
+export const POST = defineRoute({
+  permission: "admin.setup.manage",
+  feature: "multiCurrency",
+  body: runBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

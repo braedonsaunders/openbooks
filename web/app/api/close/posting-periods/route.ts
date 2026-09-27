@@ -1,5 +1,7 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import {
   commitPostingPeriodAssignment,
@@ -9,6 +11,12 @@ import {
 import { CloseError } from "@openbooks/engine/src/periods/period-policy.ts";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
+
+const requestBodySchema = z.object({
+  bookId: z.string().uuid(),
+  documentIds: z.array(z.string().uuid()).max(1000).optional(),
+});
+
 
 export const runtime = "nodejs";
 
@@ -39,7 +47,7 @@ function parseIdList(value: string | null): string[] | undefined | NextResponse 
 }
 
 /** Preview the posting-period assignment for approved documents lacking one. */
-export async function GET(req: Request) {
+async function legacyGET(req: Request) {
   const gate = await guardFeaturePermission("close.run", "continuousClose");
   if (gate instanceof NextResponse) return gate;
   const url = new URL(req.url);
@@ -67,10 +75,10 @@ export async function GET(req: Request) {
 }
 
 /** Commit the assignment (preview first: only previewed rows are committed). */
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardFeaturePermission("close.run", "continuousClose");
   if (gate instanceof NextResponse) return gate;
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as Record<string, unknown>;
   const bookId = typeof body.bookId === "string" ? body.bookId : "";
@@ -107,3 +115,21 @@ export async function POST(req: Request) {
     throw error;
   }
 }
+
+export const GET = defineRoute({
+  permission: "close.run",
+  feature: "continuousClose",
+  handler: async ({ request }) => legacyGET(request as never),
+});
+
+export const POST = defineRoute({
+  permission: "close.run",
+  feature: "continuousClose",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

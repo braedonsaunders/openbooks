@@ -1,7 +1,12 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
 import { applyFeatureChanges, normalizeFeatureChanges } from '../../../../../lib/features-admin'
+
+const requestBodySchema = z.object({ features: z.record(z.string(), z.boolean()) });
+
 
 export const dynamic = 'force-dynamic'
 
@@ -24,11 +29,11 @@ export const dynamic = 'force-dynamic'
  * outcome is always a refused disable or a refused activation. Evaluating the
  * blockers before the transaction would leave a window where both apply.
  */
-export async function PUT(req: Request) {
+async function legacyPUT(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
   const normalized = normalizeFeatureChanges(body.features)
@@ -46,3 +51,15 @@ export async function PUT(req: Request) {
   }
   return NextResponse.json({ ok: true })
 }
+
+export const PUT = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPUT(replayRequest as never);
+  },
+});

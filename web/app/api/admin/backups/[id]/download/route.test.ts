@@ -52,6 +52,7 @@ const mockSources = new Map<string, string>([
 const listParamsUrl = new URL("../../../../../../lib/list-params.ts", import.meta.url).href;
 const exportUrl = new URL("../../../../../../lib/export.ts", import.meta.url).href;
 const mockUrls = new Map([
+  ["@/lib/authz", "mock:authz"],
   ["../../../../../../lib/authz", "mock:authz"],
   ["@openbooks/engine/src/platform/db.ts", "mock:db"],
   ["@openbooks/engine/src/backup/backup.ts", "mock:backup"],

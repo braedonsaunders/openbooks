@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import {
@@ -21,6 +23,16 @@ import { authRequestContext, normalizeLoginEmail } from "../../../../lib/auth-po
 import { InviteIssuanceRefusedError, issueInviteSetPasswordLink, setPasswordUrl } from "../../../../lib/auth-reset";
 import { deriveInviteDisplayName, UNUSABLE_PASSWORD_HASH } from "./invite";
 import { isUuid } from "../../../../lib/list-params";
+
+const requestBodySchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("assign"), userId: z.string().uuid(), roleId: z.string().uuid() }),
+  z.object({ action: z.literal("unassign"), userId: z.string().uuid(), roleId: z.string().uuid() }),
+  z.object({ action: z.literal("set-active"), userId: z.string().uuid(), isActive: z.boolean() }),
+  z.object({ action: z.literal("set-party"), userId: z.string().uuid(), partyId: z.string().uuid().nullable(), expectedPartyId: z.string().uuid().nullable(), reason: z.string().trim().min(1).max(500), attestation: z.literal(true, { error: "attestation required" }) }),
+  z.object({ action: z.literal("invite"), email: z.string().trim().email().max(320), roleId: z.string().uuid() }),
+  z.object({ action: z.literal("resend-invite"), userId: z.string().uuid() }),
+]);
+
 
 export const runtime = "nodejs";
 
@@ -205,12 +217,12 @@ async function audit(
             ${JSON.stringify(args.changes)}, ${args.actorId})`);
 }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardPermission("admin.users.manage");
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data as {
     action?: "assign" | "unassign" | "set-active" | "set-party" | "invite" | "resend-invite";
@@ -886,7 +898,7 @@ export async function POST(req: Request) {
  * even when it leaves the page or becomes inactive. Cross-org and missing
  * ids share one null selected so callers cannot probe other orgs.
  */
-export async function GET(req: Request) {
+async function legacyGET(req: Request) {
   const gate = await guardPermission("admin.users.manage");
   if (gate instanceof NextResponse) return gate;
   const orgId = gate.user.orgId;
@@ -987,3 +999,21 @@ export async function GET(req: Request) {
 
   return NextResponse.json({ options, selected });
 }
+
+export const POST = defineRoute({
+  permission: "admin.users.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});
+
+export const GET = defineRoute({
+  permission: "admin.users.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async ({ request }) => legacyGET(request as never),
+});

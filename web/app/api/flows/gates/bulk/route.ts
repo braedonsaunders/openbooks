@@ -1,10 +1,19 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { decideGate } from '@openbooks/engine/src/flows/index.ts'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadGateHeader, requireFlowsSession } from '../../_lib'
 import { MAX_BULK_ITEMS } from './bulk-limit'
+
+const requestBodySchema = z.object({
+  items: z.array(z.object({ gateId: z.string().uuid() })).min(1).max(MAX_BULK_ITEMS, { error: `too many items (max ${MAX_BULK_ITEMS})` }),
+  decision: z.enum(["approved", "rejected"]),
+  comment: z.string().trim().max(2000).optional(),
+});
+
 
 export const runtime = 'nodejs'
 
@@ -20,13 +29,13 @@ export const runtime = 'nodejs'
  * per-item database and engine operations bounded for every request.
  */
 
-type BulkItem = { gateId?: string }
+type BulkItem = { gateId: string }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     items?: BulkItem[]
@@ -82,3 +91,14 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ results })
 }
+
+export const POST = defineRoute({
+  public: "session",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

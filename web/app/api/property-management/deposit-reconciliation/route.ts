@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { securityDepositReconciliation } from "@openbooks/engine/src/property/management.ts";
@@ -7,7 +8,7 @@ import { guardPropertyManagementFeature } from "../../../../lib/property-managem
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
+async function legacyGET(request: Request) {
   const authz = await guardPermission("ar.read");
   if (authz instanceof NextResponse) return authz;
   const feature = await guardPropertyManagementFeature(authz.user.orgId);
@@ -27,3 +28,9 @@ export async function GET(request: Request) {
     return apiErrorResponse(error);
   }
 }
+
+export const GET = defineRoute({
+  permission: "ar.read",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  handler: async ({ request }) => legacyGET(request as never),
+});

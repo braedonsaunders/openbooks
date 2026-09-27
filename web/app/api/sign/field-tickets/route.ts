@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
@@ -9,6 +11,14 @@ import { acquireFeatureGateLock } from '../../../../lib/features'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { notFound } from "@/lib/api/responses";
+
+const requestBodySchema = z.object({
+  token: z.string().min(1),
+  signature: z.string().min(1).max(400_000),
+  name: z.string().trim().min(1).max(120),
+  comment: z.string().max(500).optional(),
+});
+
 
 
 export const runtime = 'nodejs'
@@ -29,8 +39,8 @@ export const runtime = 'nodejs'
  * never an uploaded signature image without its evidence row, and never two
  * customer evidence rows for one ticket.
  */
-export async function POST(req: Request) {
-  const parsedBody = await parseJsonBody(req, jsonObject);
+async function legacyPOST(req: Request) {
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
   const verified = verifySigningToken(String(body.token ?? ''))
@@ -142,3 +152,14 @@ export async function POST(req: Request) {
     uniqueConflicts: { field_ticket_signatures_role: 'This ticket is already signed' },
   }))
 }
+
+export const POST = defineRoute({
+  public: "token",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
@@ -10,7 +12,7 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = 'nodejs'
 
 /** Run a view fresh and return its ReportRunResult (browse live). */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { user, permissions } = gate
@@ -29,3 +31,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return apiErrorResponse(err)
   }
 }
+
+export const POST = defineRoute({
+  permission: "reports.read",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyPOST(request as never, { params: Promise.resolve(params as never) } as never),
+});

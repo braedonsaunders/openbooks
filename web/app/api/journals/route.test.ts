@@ -135,6 +135,10 @@ stubModules({
        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
      }
      export function subsidiariesInScope() { return true }`,
+    "@/lib/authz": `export async function guardPermission() {
+       return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
+     }
+     export function subsidiariesInScope() { return true }`,
     "../../../lib/journals": `const state = globalThis[Symbol.for('openbooks.journals-route-test')]
      export async function loadJournalDoc(id, orgId) {
        if (!state.inserted || id !== state.requestKey) return null

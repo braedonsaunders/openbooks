@@ -1,7 +1,13 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextRequest, NextResponse } from "next/server";
 import { completePasswordReset, requestPasswordReset } from "../../../lib/auth-reset";
 import { authRequestContext, hasExpectedOrigin } from "../../../lib/auth-policy";
+
+const requestResetBodySchema = z.object({ email: z.string().trim().min(1).max(320) });
+const completeResetBodySchema = z.object({ token: z.string().min(1).max(2048), password: z.string().min(1).max(1024) });
+
 
 export const runtime = "nodejs";
 
@@ -9,12 +15,12 @@ export const runtime = "nodejs";
  * POST { email } — request a reset link. Always 200 after a uniform delay:
  * whether the address matched an account is never observable here.
  */
-export async function POST(req: NextRequest) {
+async function legacyPOST(req: NextRequest) {
   if (!hasExpectedOrigin(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   const startedAt = Date.now();
   let body: { email?: unknown };
   try {
-    const parsedBody = await parseJsonBody(req, jsonObject);
+    const parsedBody = await parseJsonBody(req, requestResetBodySchema);
     if (!parsedBody.ok) return parsedBody.response;
     body = parsedBody.data;
   } catch {
@@ -36,11 +42,11 @@ export async function POST(req: NextRequest) {
 }
 
 /** PUT { token, password } — consume the link and set the new password. */
-export async function PUT(req: NextRequest) {
+async function legacyPUT(req: NextRequest) {
   if (!hasExpectedOrigin(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
   let body: { token?: unknown; password?: unknown };
   try {
-    const parsedBody2 = await parseJsonBody(req, jsonObject);
+    const parsedBody2 = await parseJsonBody(req, completeResetBodySchema);
     if (!parsedBody2.ok) return parsedBody2.response;
     body = parsedBody2.data;
   } catch {
@@ -58,3 +64,25 @@ export async function PUT(req: NextRequest) {
   }
   return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
 }
+
+export const POST = defineRoute({
+  public: "token",
+  body: requestResetBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});
+
+export const PUT = defineRoute({
+  public: "token",
+  body: completeResetBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPUT(replayRequest as never);
+  },
+});

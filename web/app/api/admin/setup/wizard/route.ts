@@ -1,5 +1,7 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -15,6 +17,27 @@ import {
 } from '../../../../../lib/fiscal-periods'
 import { ONBOARDING_SCHEMA_VERSION, onboardingRecord } from '../../../../../lib/onboarding'
 import { isBookStart, isCloseCadence, isComplexityLevel, isMonthlyActivityLevel, isTaxPosition, isTeamSize } from '../../../../../lib/workspace-profile'
+
+const requestBodySchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  country: z.string().length(2),
+  legalName: z.string().optional(),
+  baseCurrency: z.string().regex(/^[A-Z]{3}$/).optional(),
+  fiscalYearStartMonth: z.number().int().min(1).max(12).optional(),
+  timeZone: z.string().optional(),
+  reportingFramework: z.enum(["us_gaap", "ifrs"]).optional(),
+  industry: z.string().optional(),
+  features: z.record(z.string(), z.boolean()).optional(),
+  workspaceProfile: z.object({
+    teamSize: z.enum(["solo", "small", "medium", "large"]).optional(),
+    complexity: z.enum(["essentials", "growing", "advanced"]).optional(),
+    bookStart: z.enum(["fresh", "migrate"]).optional(),
+    taxPosition: z.enum(["registered", "not_registered", "unsure"]).optional(),
+    monthlyActivity: z.enum(["light", "steady", "high"]).optional(),
+    closeCadence: z.enum(["monthly", "quarterly", "annual"]).optional(),
+  }).optional(),
+});
+
 
 /** A feature the wizard was asked to disable still has load-bearing data. */
 class WizardFeatureBlocked extends Error {
@@ -56,14 +79,14 @@ export const dynamic = 'force-dynamic'
  *     duplicates accounts; control-account mapping uses `lookup by number` so it
  *     picks up existing accounts on re-run.
  */
-export async function PUT(req: Request) {
+async function legacyPUT(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const scopeDenied = guardUnrestrictedScope(gate)
   if (scopeDenied) return scopeDenied
   const { orgId, id: actorId } = gate.user
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = parsedBody.data
   const {
@@ -594,7 +617,7 @@ export async function PUT(req: Request) {
  * overlay closes, while Company Settings → Setup wizard remains the explicit
  * resume path. The before/after state and actor are recorded atomically.
  */
-export async function POST() {
+async function legacyPOST() {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const scopeDenied = guardUnrestrictedScope(gate)
@@ -643,3 +666,23 @@ export async function POST() {
 
   return NextResponse.json({ ok: true })
 }
+
+export const PUT = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  scope: "unrestricted",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPUT(replayRequest as never);
+  },
+});
+
+export const POST = defineRoute({
+  permission: "admin.setup.manage",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  scope: "unrestricted",
+  handler: async () => legacyPOST(),
+});

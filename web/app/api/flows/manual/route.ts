@@ -1,4 +1,6 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { evaluateLogicRule, planAutomation, type EvalContext } from '@openbooks/forms-core'
@@ -13,6 +15,11 @@ import { can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { canReadFlowSubject, manualButtonPermission } from '../../../../lib/flow-subject-authz'
 import { loadFlowSubjectSubsidiary, requireFlowsSession } from '../_lib'
 import { isUuid } from '../../../../lib/list-params'
+
+const requestBodySchema = z.object({
+  buttonId: z.string().trim().min(1).max(100), subjectId: z.string().uuid(), subjectKind: z.string().trim().min(1).max(100),
+});
+
 
 export const runtime = 'nodejs'
 
@@ -126,7 +133,7 @@ async function availableButtons(
   return buttons
 }
 
-export async function GET(req: Request) {
+async function legacyGET(req: Request) {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
 
@@ -144,11 +151,11 @@ export async function GET(req: Request) {
   return NextResponse.json({ buttons })
 }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     subjectKind?: string
@@ -202,3 +209,19 @@ export async function POST(req: Request) {
     ...(reason ? { error: reason } : {}),
   })
 }
+
+export const GET = defineRoute({
+  public: "session",
+  handler: async ({ request }) => legacyGET(request as never),
+});
+
+export const POST = defineRoute({
+  public: "session",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});

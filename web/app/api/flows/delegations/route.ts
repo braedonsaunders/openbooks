@@ -1,5 +1,7 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import {
   createDelegation,
@@ -9,6 +11,13 @@ import {
 } from '@openbooks/engine/src/flows/index.ts'
 import { requireFlowsSession } from '../_lib'
 import { isUuid } from '../../../../lib/list-params'
+
+const createDelegationBodySchema = z.object({
+  toUserId: z.string().uuid(), startsAt: z.string().datetime({ offset: true }), endsAt: z.string().datetime({ offset: true }),
+  reason: z.string().trim().max(500).optional(),
+});
+const revokeDelegationBodySchema = z.object({ id: z.string().uuid(), revoke: z.literal(true) });
+
 
 export const runtime = 'nodejs'
 
@@ -36,18 +45,18 @@ function delegationErrorResponse(e: unknown): Promise<NextResponse> {
   return Promise.resolve(NextResponse.json({ error: 'internal error' }, { status: 500 }))
 }
 
-export async function GET() {
+async function legacyGET() {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
   const delegations = await listUserDelegations(authz.user.orgId, authz.user.id)
   return NextResponse.json({ delegations })
 }
 
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, createDelegationBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     toUserId?: string
@@ -81,10 +90,10 @@ export async function POST(req: Request) {
   }
 }
 
-export async function PATCH(req: Request) {
+async function legacyPATCH(req: Request) {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  const parsedBody2 = await parseJsonBody(req, revokeDelegationBodySchema);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as { id?: string; revoke?: boolean }
   if (!body.id || !isUuid(body.id) || body.revoke !== true) {
@@ -98,7 +107,7 @@ export async function PATCH(req: Request) {
   }
 }
 
-export async function DELETE(req: Request) {
+async function legacyDELETE(req: Request) {
   const authz = await requireFlowsSession()
   if (authz instanceof NextResponse) return authz
   const id = new URL(req.url).searchParams.get('id')
@@ -110,3 +119,35 @@ export async function DELETE(req: Request) {
     return delegationErrorResponse(e)
   }
 }
+
+export const GET = defineRoute({
+  public: "session",
+  handler: async () => legacyGET(),
+});
+
+export const POST = defineRoute({
+  public: "session",
+  body: createDelegationBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});
+
+export const PATCH = defineRoute({
+  public: "session",
+  body: revokeDelegationBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never);
+  },
+});
+
+export const DELETE = defineRoute({
+  public: "session",
+  handler: async ({ request }) => legacyDELETE(request as never),
+});

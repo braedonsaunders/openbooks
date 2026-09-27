@@ -199,6 +199,9 @@ const mockUrls = new Map<string, string>([
   // permission and subsidiary-scope derivation stays real.
   ['../platform/db.ts', 'mock:db'],
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
+  // The route factory owns the outer permission boundary and imports the
+  // canonical alias while the route module is loaded.
+  ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../../../lib/api-auth', 'mock:api-auth'],
 ])
 

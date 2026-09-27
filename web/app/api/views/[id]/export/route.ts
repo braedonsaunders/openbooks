@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../../lib/authz'
@@ -21,7 +23,7 @@ import { notFound } from "@/lib/api/responses";
 export const runtime = 'nodejs'
 
 /** Export a view to PDF, Excel or CSV (runs fresh, current data). */
-export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyGET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { user, permissions } = gate
@@ -71,3 +73,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   })
   return pdfResponse(pdf, filename)
 }
+
+export const GET = defineRoute({
+  permission: "reports.read",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+});

@@ -1,4 +1,5 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
@@ -19,6 +20,27 @@ import {
 } from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
 import { isUuid } from "../../../../lib/list-params";
 import { z } from "zod";
+
+const createApiKeyBodySchema = z.object({
+  name: z.string().trim().min(1),
+  scopes: z.array(z.string().trim().min(1), { error: "at least one scope is required" }).min(1, { error: "at least one scope is required" }),
+  description: z.string().nullable().optional(),
+  expiresAt: z.string().datetime({ offset: true, error: "expiresAt must be an ISO date-time with a timezone or null" }).nullable().optional(),
+  rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\\d+$/)]).nullable().optional(),
+});
+
+const updateApiKeyBodySchema = z.object({
+  id: z.string().uuid(),
+  description: z.string().nullable().optional(),
+  expiresAt: z.string().datetime({ offset: true, error: "expiresAt must be an ISO date-time with a timezone or null" }).nullable().optional(),
+  isActive: z.boolean({ error: "isActive must be a boolean" }).optional(),
+  name: z.string().trim().min(1).optional(),
+  rateLimitPerMin: z.union([z.number().int().positive(), z.string().regex(/^\\d+$/)]).nullable().optional(),
+  scopes: z.array(z.string().trim().min(1), { error: "at least one scope is required" }).min(1, { error: "at least one scope is required" }).optional(),
+});
+
+const revokeApiKeyBodySchema = z.object({ id: z.string().uuid() });
+
 
 export const runtime = "nodejs";
 
@@ -184,7 +206,7 @@ async function hasRevocationRecord(orgId: string, rowId: string): Promise<boolea
 }
 
 /** List all keys in the org (without secrets). */
-export async function GET() {
+async function legacyGET() {
   const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
   if (gate instanceof NextResponse) return gate;
 
@@ -201,12 +223,12 @@ export async function GET() {
 }
 
 /** Create a new key — returns the plaintext ONCE. */
-export async function POST(req: Request) {
+async function legacyPOST(req: Request) {
   const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, createApiKeyBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const body = (parsedBody.data) as {
     name?: string;
@@ -310,12 +332,12 @@ export async function POST(req: Request) {
 }
 
 /** Update a key — name, description, scopes, suspension/resume, or rate limit. */
-export async function PATCH(req: Request) {
+async function legacyPATCH(req: Request) {
   const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 
-  const parsedBody2 = await parseJsonBody(req, jsonObject);
+  const parsedBody2 = await parseJsonBody(req, updateApiKeyBodySchema);
   if (!parsedBody2.ok) return parsedBody2.response;
   const body = (parsedBody2.data) as {
     id?: string;
@@ -506,12 +528,12 @@ export async function PATCH(req: Request) {
 }
 
 /** Revoke a key permanently while preserving its row and event references. */
-export async function DELETE(req: Request) {
+async function legacyDELETE(req: Request) {
   const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 
-  const parsedBody3 = await parseJsonBody(req, jsonObject);
+  const parsedBody3 = await parseJsonBody(req, revokeApiKeyBodySchema);
   if (!parsedBody3.ok) return parsedBody3.response;
   const { id } = (parsedBody3.data) as { id?: string };
   if (!id || !isUuid(id)) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -566,3 +588,45 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ ok: true });
   });
 }
+
+export const GET = defineRoute({
+  permission: "api.keys.manage",
+  feature: "apiAccess",
+  handler: async () => legacyGET(),
+});
+
+export const POST = defineRoute({
+  permission: "api.keys.manage",
+  feature: "apiAccess",
+  body: createApiKeyBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPOST(replayRequest as never);
+  },
+});
+
+export const PATCH = defineRoute({
+  permission: "api.keys.manage",
+  feature: "apiAccess",
+  body: updateApiKeyBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPATCH(replayRequest as never);
+  },
+});
+
+export const DELETE = defineRoute({
+  permission: "api.keys.manage",
+  feature: "apiAccess",
+  body: revokeApiKeyBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyDELETE(replayRequest as never);
+  },
+});

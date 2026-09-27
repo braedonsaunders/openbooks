@@ -1,10 +1,26 @@
-import { jsonObject, parseJsonBody } from "@/lib/api/json";
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
+import { parseJsonBody } from "@/lib/api/json";
 import { pgTextArrayLiteral } from "@/lib/pg-array";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
 import { guardPermission, type Authz } from '../../../../lib/authz'
 import { MODULE_BY_KEY, type OrgNavConfig } from '../../../../lib/nav/registry'
+
+const navItemBodySchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("module"), moduleKey: z.string(), label: z.string().optional(), iconKey: z.string().optional(), hidden: z.boolean().optional(), mobile: z.boolean().optional() }),
+  z.object({ kind: z.literal("app"), appKey: z.string(), label: z.string().optional(), iconKey: z.string().optional(), hidden: z.boolean().optional(), mobile: z.boolean().optional() }),
+  z.object({ kind: z.literal("link"), href: z.string().min(1), label: z.string().min(1), iconKey: z.string().optional(), hidden: z.boolean().optional(), mobile: z.boolean().optional(), extensionKey: z.string().optional(), requiredPermission: z.string().optional(), retiredAt: z.string().datetime({ offset: true }).optional() }),
+]);
+const requestBodySchema = z.object({
+  config: z.object({
+    version: z.literal(2),
+    groups: z.array(z.object({ id: z.string().min(1).max(100), label: z.string().min(1).max(80), items: z.array(navItemBodySchema) })).min(1).max(32),
+  }),
+  expectedUpdatedAt: z.string().datetime({ offset: true }).nullable().optional(),
+});
+
 
 export const runtime = 'nodejs'
 
@@ -81,12 +97,12 @@ async function guardNavManage(): Promise<Authz | NextResponse> {
   return NextResponse.json({ error: 'missing permission: admin.nav.manage' }, { status: 403 });
 }
 
-export async function PUT(req: Request) {
+async function legacyPUT(req: Request) {
   const gate = await guardNavManage()
   if (gate instanceof NextResponse) return gate
   const { user } = gate
 
-  const parsedBody = await parseJsonBody(req, jsonObject);
+  const parsedBody = await parseJsonBody(req, requestBodySchema);
   if (!parsedBody.ok) return parsedBody.response;
   const { config, expectedUpdatedAt } = (parsedBody.data) as { config?: unknown; expectedUpdatedAt?: unknown }
   if (!validate(config)) return NextResponse.json({ error: 'invalid nav config' }, { status: 400 })
@@ -158,3 +174,14 @@ export async function PUT(req: Request) {
   }
   return NextResponse.json({ ok: true, revision: new Date(outcome.updatedAt).toISOString() })
 }
+
+export const PUT = defineRoute({
+  public: "session",
+  body: requestBodySchema,
+  handler: async ({ request, body }) => {
+    const replayHeaders = new Headers(request.headers);
+    replayHeaders.delete("content-length");
+    const replayRequest = new Request(request.url, { method: request.method, headers: replayHeaders, body: JSON.stringify(body), signal: request.signal });
+    return legacyPUT(replayRequest as never);
+  },
+});

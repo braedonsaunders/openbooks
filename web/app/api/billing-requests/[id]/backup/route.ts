@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -30,7 +32,7 @@ async function requestInvoice(orgId: string, requestId: string, allowedSubsidiar
 }
 
 /** POST — assemble + persist the backup package for the request's invoice. */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyPOST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('ar.create')
   if (gate instanceof NextResponse) return gate
   const feature = await guardProjectsFeature(gate.user.orgId)
@@ -58,7 +60,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
  * packet persists a PDF plus file-cabinet evidence, which a reader holding
  * only ar.read must not be able to create.
  */
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+async function legacyGET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('ar.read')
   if (gate instanceof NextResponse) return gate
   const feature = await guardProjectsFeature(gate.user.orgId)
@@ -83,3 +85,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     throw e
   }
 }
+
+export const POST = defineRoute({
+  permission: "ar.create",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyPOST(request as never, { params: Promise.resolve(params as never) } as never),
+});
+
+export const GET = defineRoute({
+  permission: "ar.read",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "id": z.string() }),
+  handler: async ({ request, params }) => legacyGET(request as never, { params: Promise.resolve(params as never) } as never),
+});

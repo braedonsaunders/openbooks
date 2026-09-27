@@ -214,6 +214,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
   ['../../../lib/authz', 'mock:authz'],
+  ['@/lib/authz', 'mock:authz'],
   ['@/lib/custom-record-report-catalog', 'mock:report-catalog'],
   ['../../../lib/report-authz', 'mock:report-authz'],
 ])
@@ -311,8 +312,10 @@ test('view create refuses a bad scope and a malformed query before inserting', a
   const key = '00000000-0000-4000-8000-00000000c010'
 
   const badScope = await post(key, { ...BODY, scope: 'everyone' })
-  assert.equal(badScope.status, 422)
-  assert.deepEqual(await badScope.json(), { error: 'Invalid scope' })
+  assert.equal(badScope.status, 400)
+  const badScopeBody = await badScope.json() as { error: string; issues: { path: string }[] }
+  assert.equal(badScopeBody.error, 'Invalid scope')
+  assert.ok(badScopeBody.issues.some((issue) => issue.path === 'scope'))
 
   const badQuery = await post(key, { ...BODY, query: 'tomorrow' })
   assert.equal(badQuery.status, 422)

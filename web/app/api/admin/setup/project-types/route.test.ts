@@ -221,12 +221,16 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (context.parentURL?.includes("setup/project-types")) {
+    if (
+      context.parentURL?.includes("setup/project-types") ||
+      (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
+    ) {
       const modules: Record<string, string> = {
         "@openbooks/engine/src/platform/db.ts": "mock:project-types-db",
         "@openbooks/engine/src/projects/financial-profile-versions.ts": "mock:project-types-financial-profile",
         "@openbooks/engine/src/platform/business-date.ts": "mock:project-types-business-date",
         "../../../../../lib/authz": "mock:project-types-authz",
+        "@/lib/authz": "mock:project-types-authz",
         "../../../../../lib/projects-gate": "mock:project-types-gate",
         "../../../../../lib/features": "mock:project-types-features",
       };
@@ -326,13 +330,11 @@ test("PATCH rejects an invalid financial date without publishing or auditing par
     const auditsBefore = structuredClone(routeState.audits);
     const response = await PATCH(patchRequest(patchBody({ financialEffectiveFrom: invalidDate })));
 
-    assert.equal(response.status, 422, `expected invalid date ${JSON.stringify(invalidDate)} to fail`);
+    assert.equal(response.status, 400, `expected invalid date ${JSON.stringify(invalidDate)} to fail at the request boundary`);
+    assert.match(((await response.json()) as { error: string }).error, /financialEffectiveFrom.*YYYY-MM-DD/);
     assert.deepEqual(routeState.versions, versionsBefore);
     assert.deepEqual(routeState.audits, auditsBefore);
-    // Rejected at the route boundary before any statement runs: the mocked
-    // engine below validates strictly, but the real engine only
-    // shape-checks (project-financial-profile-versions.ts DATE regex), so in
-    // production an impossible date used to escape to a raw Postgres throw.
+    // A shape-valid but impossible date must be rejected before SQL date casts.
     assert.equal(routeState.txCalls, 0);
   }
 });

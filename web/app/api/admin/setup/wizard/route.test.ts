@@ -96,7 +96,10 @@ let authzRealUrl = ''
 let dbRealUrl = ''
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '../../../../../lib/authz' && context.parentURL?.includes('setup/wizard/route')) {
+    if (
+      (specifier === '../../../../../lib/authz' && context.parentURL?.includes('setup/wizard/route')) ||
+      (specifier === '@/lib/authz' && context.parentURL?.includes('/web/lib/api/route.ts'))
+    ) {
       authzRealUrl = nextResolve(specifier, context).url
       return { url: 'mock:setup-wizard-authz', shortCircuit: true }
     }

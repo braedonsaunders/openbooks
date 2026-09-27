@@ -4,7 +4,7 @@ import test from "node:test";
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "../../../../../lib/authz") {
+    if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") {
       return {
         shortCircuit: true,
         url: "data:text/javascript,export async function guardPermission(){return {user:{id:'user',orgId:'org'}}}",

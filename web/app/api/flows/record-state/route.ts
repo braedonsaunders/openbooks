@@ -1,3 +1,4 @@
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
@@ -100,7 +101,7 @@ const iso = (v: unknown): string =>
       : "";
 
 /** `[delegated YYYY-MM-DD by <userId> → <name>]` markers written by delegateGate. */
-export async function GET(req: Request) {
+async function legacyGET(req: Request) {
   const authz = await requireFlowsSession();
   if (authz instanceof NextResponse) return authz;
 
@@ -296,3 +297,8 @@ export async function GET(req: Request) {
     return NextResponse.json(body);
   });
 }
+
+export const GET = defineRoute({
+  public: "session",
+  handler: async ({ request }) => legacyGET(request as never),
+});

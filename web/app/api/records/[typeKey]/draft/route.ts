@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
@@ -25,7 +27,7 @@ export const runtime = 'nodejs'
  * field defaults (today/now/current-user/expression), persist, and return
  * the id for the flyout to open.
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ typeKey: string }> }) {
+async function legacyPOST(_req: Request, { params }: { params: Promise<{ typeKey: string }> }) {
   const gate = await guardPermission('records.create')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
@@ -98,3 +100,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ typeKe
 
   return NextResponse.json({ id: r.rows[0]!.id, recordNumber: r.rows[0]!.record_number })
 }
+
+export const POST = defineRoute({
+  permission: "records.create",
+  feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
+  params: z.object({ "typeKey": z.string() }),
+  handler: async ({ request, params }) => legacyPOST(request as never, { params: Promise.resolve(params as never) } as never),
+});
