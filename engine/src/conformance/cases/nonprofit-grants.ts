@@ -80,7 +80,7 @@ export const NONPROFIT_GRANT_CASES: readonly ConformanceCase[] = [
       const fund = await provisionFundAccounting({
         orgId: ledger.orgId,
         defaultFund: { code: "GRANT-OPS", name: "Grant Operating Fund" },
-        classifications: { "GRANT-OPS": { kind: "restricted", restrictionClass: "with_donor_restrictions" } },
+        classifications: { "GRANT-OPS": { kind: "operating", restrictionClass: "without_donor_restrictions" } },
         actorId: ledger.actorId,
       });
       const groupId = await withOrgContext(ledger.orgId, async () => {
