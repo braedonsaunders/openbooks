@@ -523,6 +523,7 @@ export const TENANT_TABLE_POLICIES = {
   "stock_counts": "clone:catalog-uuid-rebase",
   "stock_locations": "clone:catalog-uuid-rebase",
   "storage_cleanup_outbox": "skip:no-copy",
+  "stripe_billing_links": "skip:no-copy",
   "subcontract_change_orders": "clone:catalog-uuid-rebase",
   "subcontract_payment_controls": "clone:catalog-uuid-rebase",
   "subcontract_sov_lines": "clone:catalog-uuid-rebase",
