@@ -4,6 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { postEntry } from "../journal/post-entry.ts";
+import { reverseProjectGlEntry } from "../journal/origin-entry.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { activateGrant, amendGrant, awardGrant, createGrant, recognizeGrantDrawdown, recordGrantDrawdown, satisfyGrantBarrier, type GrantPostingAccounts } from "./grants.ts";
 import { createFund } from "./funds.ts";
@@ -175,11 +176,34 @@ test("grant awards preserve conditional liabilities, enforce drawdown limits, an
       recordGrantDrawdown({ orgId: org.orgId, grantId: conditional.id, amount: "60.00", kind: "advance", accounts, postingDate: org.date, actorId }),
       (error: unknown) => error instanceof NonprofitError && error.code === "grant_drawdown_over_award" && error.message.includes("59.9900"),
     );
-    await assert.rejects(
-      recordGrantDrawdown({ orgId: org.orgId, grantId: conditional.id, amount: "55.01", kind: "reimbursement", accounts, postingDate: org.date, actorId }),
-      (error: unknown) => error instanceof NonprofitError && error.code === "grant_drawdown_over_allowable_spend" &&
-        error.message.includes("55.0000") && error.message.includes("Grant Allowable Costs"),
-    );
+    const allowableLimitRefusal = async (): Promise<string> => {
+      let message = "";
+      await assert.rejects(
+        recordGrantDrawdown({ orgId: org.orgId, grantId: conditional.id, amount: "55.01", kind: "reimbursement", accounts, postingDate: org.date, actorId }),
+        (error: unknown) => {
+          if (!(error instanceof NonprofitError) || error.code !== "grant_drawdown_over_allowable_spend") return false;
+          message = error.message;
+          return true;
+        },
+      );
+      assert.match(message, /55\.0000.*Grant Allowable Costs/);
+      return message;
+    };
+    const allowableLimitBefore = await allowableLimitRefusal();
+    const expense = await withOrgTransaction(org.orgId, () => postEntry(db, {
+      orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
+      entryNumber: `GRANT-COST-REVERSED-${randomUUID().slice(0, 8)}`,
+      postingDate: org.date, periodId: org.periodId, origin: "manual", currency: "CAD",
+      lines: [
+        { accountId: org.accounts.cogs, amount: "25.00", extraDims: { fund: restrictedFund.id } },
+        { accountId: org.accounts.bank, amount: "-25.00", extraDims: { fund: restrictedFund.id } },
+      ],
+    }));
+    const reversalId = await withOrgTransaction(org.orgId, () => reverseProjectGlEntry(
+      org.orgId, actorId, expense.entryId, "Correct the grant cost", org.date,
+    ));
+    assert.ok(reversalId);
+    assert.equal(await allowableLimitRefusal(), allowableLimitBefore);
 
     const unconditional = await createGrant({
       orgId: org.orgId,

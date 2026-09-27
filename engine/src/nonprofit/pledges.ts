@@ -336,11 +336,17 @@ async function readPledge(orgId: string, id: string, lock = false): Promise<Pled
 }
 async function activity(orgId: string, pledgeId: string, asOfDate?: string): Promise<Activity> {
   const rows = (await db.execute<{ posting_date: string; custom: Record<string, unknown> | null }>(sql`
-    select posting_date::text as posting_date, custom from journal_entries
-     where org_id = ${orgId} and origin = 'pledge' and status = 'posted'
-       and custom #>> '{nonprofitPledge,pledgeId}' = ${pledgeId}
-       and (${asOfDate ?? null}::date is null or posting_date <= ${asOfDate ?? null}::date)
-     order by posting_date, id`)).rows;
+    select je.posting_date::text as posting_date, je.custom from journal_entries je
+     where je.org_id = ${orgId} and je.origin = 'pledge'
+       and je.status in ('posted', 'reversed') and je.reverses_entry_id is null
+       and not exists (
+         select 1 from journal_entries reversal
+          where reversal.org_id = je.org_id and reversal.reverses_entry_id = je.id
+            and (${asOfDate ?? null}::date is null or reversal.posting_date <= ${asOfDate ?? null}::date)
+       )
+       and je.custom #>> '{nonprofitPledge,pledgeId}' = ${pledgeId}
+       and (${asOfDate ?? null}::date is null or je.posting_date <= ${asOfDate ?? null}::date)
+     order by je.posting_date, je.id`)).rows;
   const out: Activity = {
     collected: new Map(), writtenOff: new Map(), collectionsByMonth: new Map(),
     amortizedByMonth: new Map(), amortizedMonths: new Set(), totalCollected: 0n,
