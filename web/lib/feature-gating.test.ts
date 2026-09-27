@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
@@ -160,9 +161,7 @@ const { PUT: putFeaturesRoute } = await import('../app/api/admin/setup/features/
 const { PATCH: patchProjectRoute } = await import('../app/api/projects/[id]/route.ts') as {
   PATCH: (req: Request, ctx: { params: Promise<{ id: string }> }) => Promise<Response>
 }
-const { POST: postDraftRoute } = await import('../app/api/projects/draft/route.ts') as unknown as {
-  POST: (req: Request) => Promise<Response>
-}
+const { POST: postProjectRoute } = await import('../app/api/projects/route.ts') as typeof import('../app/api/projects/route.ts')
 
 /** Disabling `projects` must also disable `timeTracking` in the same request:
  * the registry default leaves timeTracking resolved-on, and the toggle route
@@ -185,8 +184,12 @@ function activateProject(id: string): Promise<Response> {
   }), { params: Promise.resolve({ id }) })
 }
 
-function createDraft(): Promise<Response> {
-  return postDraftRoute(new Request('http://openbooks.test/api/projects/draft', { method: 'POST' }))
+function createProject(): Promise<Response> {
+  return postProjectRoute(new Request('http://openbooks.test/api/projects', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'Idempotency-Key': randomUUID() },
+    body: JSON.stringify({ name: 'Feature gate test project', isActive: false }),
+  }))
 }
 
 async function storedFeatures(orgId: string): Promise<string> {
@@ -238,9 +241,9 @@ async function startScenario() {
 test('serial order disable-then-activate: the disable applies, the stale-guard activation is refused', { skip: !DB }, async () => {
   const org = await startScenario()
   try {
-    const draft = await createDraft()
-    assert.equal(draft.status, 200)
-    const projectId = ((await draft.json()) as { id: string }).id
+    const created = await createProject()
+    assert.equal(created.status, 201)
+    const projectId = ((await created.json()) as { id: string }).id
 
     const disable = await putFeatures(DISABLE_PROJECTS)
     assert.equal(disable.status, 200, 'a disable with no blocker must succeed')
@@ -254,7 +257,7 @@ test('serial order disable-then-activate: the disable applies, the stale-guard a
 
     const row = await projectRow(projectId)
     assert.equal(row.is_active, false, 'refused activation must leave the project inactive')
-    assert.equal(row.name, 'New project', 'refused activation must not touch the row')
+    assert.equal(row.name, 'Feature gate test project', 'refused activation must not touch the row')
     assert.equal(await featureToggleAudits(org.orgId), 1, 'exactly the successful disable audited')
   } finally {
     await dropScratchOrg(org.orgId)
@@ -265,9 +268,9 @@ test('serial order activate-then-disable: the activation applies, the disable is
   const org = await startScenario()
   let holder: pg.Client | undefined
   try {
-    const draft = await createDraft()
-    assert.equal(draft.status, 200)
-    const projectId = ((await draft.json()) as { id: string }).id
+    const created = await createProject()
+    assert.equal(created.status, 201)
+    const projectId = ((await created.json()) as { id: string }).id
 
     // Park the activation behind the fence, then release it: the activation
     // lands whole while the feature is still on (the allow side).
@@ -304,18 +307,18 @@ test('serial order activate-then-disable: the activation applies, the disable is
   }
 })
 
-test('draft creation joins the fence: it queues behind a held feature-gate lock before inserting', { skip: !DB }, async () => {
+test('project creation joins the fence: it queues behind a held feature-gate lock before inserting', { skip: !DB }, async () => {
   const org = await startScenario()
   let holder: pg.Client | undefined
   try {
     holder = await openLockSession()
     await holder.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [featureGateLockKey(org.orgId)])
 
-    const draft = track(createDraft())
+    const creation = track(createProject())
     const fence = await fenceHalves(featureGateLockKey(org.orgId))
     await waitForInterleaving(
-      'draft creation to queue on the feature-gate fence (create participates in the lock contract)',
-      async () => !draft.settled && fenceQueued(fence),
+      'project creation to queue on the feature-gate fence (create participates in the lock contract)',
+      async () => !creation.settled && fenceQueued(fence),
     )
 
     // Nothing may exist yet while the fence is held: the insert cannot have
@@ -327,11 +330,12 @@ test('draft creation joins the fence: it queues behind a held feature-gate lock 
     await closeLockSession(holder)
     holder = undefined
 
-    await waitForInterleaving('draft creation to finish after release', async () => draft.settled)
-    const response = draft.value as Response
-    assert.equal(response.status, 200)
+    await waitForInterleaving('project creation to finish after release', async () => creation.settled)
+    const response = creation.value as Response
+    assert.equal(response.status, 201)
     const row = await projectRow(((await response.json()) as { id: string }).id)
-    assert.equal(row.is_active, false, 'the placeholder starts inactive')
+    assert.equal(row.is_active, false, 'the requested initial state is inactive')
+    assert.equal(row.name, 'Feature gate test project')
   } finally {
     await closeLockSession(holder)
     await dropScratchOrg(org.orgId)
@@ -342,8 +346,8 @@ test('adversarial interleave: a disable parked mid-flight and an activation land
   const org = await startScenario()
   let holder: pg.Client | undefined
   try {
-    const draft = await createDraft()
-    const projectId = ((await draft.json()) as { id: string }).id
+    const created = await createProject()
+    const projectId = ((await created.json()) as { id: string }).id
 
     // Hold BOTH serialization points the two generations of this code use:
     // the feature-gate fence (post-fix) and the orgs row the toggle updates
