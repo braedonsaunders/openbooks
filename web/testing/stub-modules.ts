@@ -132,13 +132,31 @@ function virtual(source: string): { shortCircuit: boolean; url: string } {
   };
 }
 
+/** Add the shared authorization predicate used by route test doubles. */
+export function withAuthzTestSurface(source: string): string {
+  const additions: string[] = [];
+  const hasExport = (name: string): boolean =>
+    new RegExp(`\\bexport\\s+(?:(?:async)\\s+)?(?:function|const|let|var|class)\\s+${name}\\b`).test(source);
+  if (!hasExport("can")) {
+    additions.push(`export function can(authz, permission) { const permissions = authz?.permissions; return Boolean(permissions && (permissions.has?.('*') || permissions.has?.(permission) || permissions.includes?.('*') || permissions.includes?.(permission))); }`);
+  }
+  if (!hasExport("getAuthz") && hasExport("guardPermission")) {
+    additions.push(`export async function getAuthz() { return guardPermission(); }`);
+  }
+  return additions.length === 0 ? source : `${source}\n${additions.join("\n")}`;
+}
+
 /** Add the transaction helpers shared by platform database test doubles. */
 export function withPlatformDbTestSurface(source: string): string {
   const hasExport = (name: string): boolean =>
     new RegExp(`\\bexport\\s+(?:(?:async)\\s+)?(?:function|const|let|var|class)\\s+${name}\\b`).test(source);
   const sharedExports: Array<[string, string]> = [
     ["inExecutorTransaction", `export async function inExecutorTransaction(executor, fn) { return fn(executor) }`],
+    ["ambientTenantOrgId", `export function ambientTenantOrgId() { return null }`],
+    ["withBypass", `export async function withBypass(fn) { return fn() }`],
     ["withBypassContext", `export async function withBypassContext(fn) { return fn() }`],
+    ["currentRequestOrgResolver", `export function currentRequestOrgResolver() { return null }`],
+    ["registerRequestOrgResolver", `export function registerRequestOrgResolver() {}`],
   ];
   const additions = sharedExports
     .filter(([name]) => !hasExport(name))

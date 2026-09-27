@@ -70,7 +70,7 @@ test("parseJsonBody rejects non-object and array payloads with 400", async () =>
   }
 });
 
-test("parseJsonBody surfaces the first issue message and all issues", async () => {
+test("parseJsonBody reports well-formed schema failures as 422 with all issues", async () => {
   const schema = z.object({
     decision: z.string({ error: "decision required" }).min(1, "invalid decision"),
     reason: z.string().max(3, "reason too long"),
@@ -78,7 +78,7 @@ test("parseJsonBody surfaces the first issue message and all issues", async () =
   const parsed = await parseJsonBody(jsonRequest({ reason: "way too long" }), schema);
   assert.equal(parsed.ok, false);
   if (!parsed.ok) {
-    assert.equal(parsed.response.status, 400);
+    assert.equal(parsed.response.status, 422);
     const body = (await parsed.response.json()) as { error: string; issues: { path: string; message: string }[] };
     assert.equal(body.error, "decision required");
     assert.deepEqual(

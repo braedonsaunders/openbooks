@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { registerHooks } from 'node:module'
+import { stubModules, withAuthzTestSurface } from '@/testing/stub-modules'
 import test from 'node:test'
 
 // PATCH used to persist `is_active = (body.isActive === true)` whenever the
@@ -10,23 +10,23 @@ import test from 'node:test'
 // before/after row.
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __crmAccountPatchValidationState: state })
-const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })
-registerHooks({
-  resolve(specifier, context, next) {
-    if (specifier === 'next/navigation') return virtual('export function redirect() {}; export function notFound() {}; export function useRouter() {}; export function usePathname() { return "" }')
-    if (specifier === '../../../../../lib/authz') return virtual(`
-      export async function guardPermission() {
-        const s = globalThis.__crmAccountPatchValidationState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
-      }
-    `)
-    if (specifier === '../../../../../lib/feature-gates' || specifier === '@/lib/feature-gates') return virtual(`
-      export async function guardFeaturePermission() {
-        const s = globalThis.__crmAccountPatchValidationState;
-        return { user: { orgId: s.orgId, id: s.actorId }, permissions: [], allowedSubsidiaryIds: null };
-      }
-    `)
-    return next(specifier, context)
+stubModules({
+  navigation: true,
+  authz: {
+    source: withAuthzTestSurface(`
+      const state = globalThis.__crmAccountPatchValidationState;
+      const session = () => ({ user: { orgId: state.orgId, id: state.actorId }, permissions: [], allowedSubsidiaryIds: null });
+      export async function getAuthz() { return session(); }
+      export async function guardPermission() { return session(); }
+    `),
+  },
+  features: {
+    source: `
+      const state = globalThis.__crmAccountPatchValidationState;
+      const session = () => ({ user: { orgId: state.orgId, id: state.actorId }, permissions: [], allowedSubsidiaryIds: null });
+      export async function isFeatureEnabled() { return true; }
+      export async function guardFeaturePermission() { return session(); }
+    `,
   },
 })
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
@@ -54,7 +54,9 @@ async function fixture() {
   return { org, partyId, profileId }
 }
 
-async function patch(id: string, body: unknown): Promise<{ status: number; json: { error?: string } | null }> {
+type PatchResult = { status: number; json: { error?: string; issues?: { path: string }[] } | null }
+
+async function patch(id: string, body: unknown): Promise<PatchResult> {
   try {
     const response = await withOrgContext(state.orgId, () => PATCH(
       new Request(`http://crm.test/api/crm/accounts/${id}`, {
@@ -64,7 +66,7 @@ async function patch(id: string, body: unknown): Promise<{ status: number; json:
       }),
       { params: Promise.resolve({ id }) },
     ))
-    return { status: response.status, json: (await response.json().catch(() => null)) as { error?: string } | null }
+    return { status: response.status, json: (await response.json().catch(() => null)) as PatchResult['json'] }
   } catch (error) {
     return { status: 500, json: { error: error instanceof Error ? error.message : String(error) } }
   }
@@ -89,7 +91,7 @@ for (const malformed of ['true', 1, null]) {
     try {
       const result = await patch(partyId, { isActive: malformed, expectedUpdatedAt: await revisionFor(partyId) })
       assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
-      assert.match(result.json?.error ?? '', /isActive/)
+      assert.ok(result.json?.issues?.some((issue) => issue.path === 'isActive'))
       assert.deepEqual(await profileState(profileId), { is_active: true, industry: 'Software', qualification_score: 10 })
     } finally {
       await dropScratchOrg(org.orgId)
@@ -113,7 +115,7 @@ test('PATCH refuses a boolean qualification score without writing', async () => 
   try {
     const result = await patch(partyId, { qualificationScore: true, expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.match(result.json?.error ?? '', /qualification score/)
+    assert.ok(result.json?.issues?.some((issue) => issue.path === 'qualificationScore'))
     assert.equal((await profileState(profileId)).qualification_score, 10)
   } finally {
     await dropScratchOrg(org.orgId)
@@ -125,7 +127,7 @@ test('PATCH refuses a non-string industry without clearing it', async () => {
   try {
     const result = await patch(partyId, { industry: 123, expectedUpdatedAt: await revisionFor(partyId) })
     assert.equal(result.status, 422, `expected 422, got ${result.status}: ${JSON.stringify(result.json)}`)
-    assert.match(result.json?.error ?? '', /industry/)
+    assert.ok(result.json?.issues?.some((issue) => issue.path === 'industry'))
     assert.equal((await profileState(profileId)).industry, 'Software')
   } finally {
     await dropScratchOrg(org.orgId)
