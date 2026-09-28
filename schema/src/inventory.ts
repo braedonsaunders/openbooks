@@ -89,7 +89,10 @@ export const lots = pgTable(
     expiresOn: date("expires_on"),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("lots_item_number").on(t.itemId, t.lotNumber)],
+  (t) => [
+    uniqueIndex("lots_item_number").on(t.itemId, t.lotNumber),
+    uniqueIndex("lots_org_id_id_uniq").on(t.orgId, t.id),
+  ],
 );
 
 export const serials = pgTable(
@@ -107,6 +110,7 @@ export const serials = pgTable(
   },
   (t) => [
     uniqueIndex("serials_item_number").on(t.itemId, t.serialNumber),
+    uniqueIndex("serials_org_id_id_uniq").on(t.orgId, t.id),
     check(
       "serials_status_location",
       sql`(${t.status} = 'in_stock' and ${t.currentStockLocationId} is not null)

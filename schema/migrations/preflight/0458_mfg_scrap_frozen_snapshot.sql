@@ -1,12 +1,13 @@
 -- OpenBooks upgrade preflight for 0458_mfg_scrap_frozen_snapshot.
 -- Catalog-only probes against the pre-0458 catalog: the seven snapshot
 -- column names must be absent from mfg_scrap_events, every object name 0458
--- creates must be unused, the supporting column types must exist, the
--- lots/serials tables must expose org_id/id anchors for the tenant-safe
--- parent keys, and the financial_changes domain check the migration extends
--- must be discoverable by shape (never assumed by name). Legacy all-null
--- snapshot rows never block: they are normalized later by a controlled
--- restatement proposal, never by this upgrade.
+-- creates must be unused on its own intended table and schema (a same-named
+-- object on another table or schema does not block), the supporting column
+-- types must exist, the lots/serials tables must expose org_id/id anchors
+-- for the tenant-safe parent keys, and the financial_changes domain check
+-- the migration extends must be discoverable by shape (never assumed by
+-- name). Legacy all-null snapshot rows never block: they are normalized
+-- later by a controlled restatement proposal, never by this upgrade.
 SELECT '0458.snapshot_column_present' AS code,
        'refuse' AS severity,
        format('mfg_scrap_events already carries column %s', a.attname) AS subject,
@@ -26,25 +27,49 @@ SELECT '0458.snapshot_object_present' AS code,
        'a constraint, index, trigger, or function already uses a name 0458 must create' AS detail,
        'Restore the pre-0458 catalog by renaming or dropping the conflicting object before retrying the upgrade.' AS remedy
   FROM (VALUES
-    ('lots_org_id_id_uniq'),
-    ('serials_org_id_id_uniq'),
-    ('mfg_scrap_events_org_lot_fk'),
-    ('mfg_scrap_events_org_serial_fk'),
-    ('mfg_scrap_events_org_lot_idx'),
-    ('mfg_scrap_events_org_serial_idx'),
-    ('mfg_scrap_snapshot_legacy_or_complete_chk'),
-    ('mfg_scrap_snapshot_evidence_chk'),
-    ('mfg_scrap_snapshot_pre_issue_chk'),
-    ('mfg_scrap_snapshot_post_issue_chk'),
-    ('mfg_scrap_snapshot_operation_chk'),
-    ('mfg_scrap_snapshot_immutable_guard'),
-    ('mfg_scrap_snapshot_immutable_trg'),
-    ('financial_changes_manufacturing_live_proposal_uniq')
-  ) AS wanted(name)
- WHERE EXISTS (SELECT 1 FROM pg_constraint WHERE conname = wanted.name)
-    OR EXISTS (SELECT 1 FROM pg_class WHERE relname = wanted.name)
-    OR EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = wanted.name)
-    OR EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = wanted.name)
+    ('constraint', 'lots', 'lots_org_id_id_uniq'),
+    ('constraint', 'serials', 'serials_org_id_id_uniq'),
+    ('constraint', 'mfg_scrap_events', 'mfg_scrap_events_org_lot_fk'),
+    ('constraint', 'mfg_scrap_events', 'mfg_scrap_events_org_serial_fk'),
+    ('constraint', 'mfg_scrap_events', 'mfg_scrap_snapshot_legacy_or_complete_chk'),
+    ('constraint', 'mfg_scrap_events', 'mfg_scrap_snapshot_evidence_chk'),
+    ('constraint', 'mfg_scrap_events', 'mfg_scrap_snapshot_pre_issue_chk'),
+    ('constraint', 'mfg_scrap_events', 'mfg_scrap_snapshot_post_issue_chk'),
+    ('constraint', 'mfg_scrap_events', 'mfg_scrap_snapshot_operation_chk'),
+    ('index', NULL, 'mfg_scrap_events_org_lot_idx'),
+    ('index', NULL, 'mfg_scrap_events_org_serial_idx'),
+    ('index', NULL, 'financial_changes_manufacturing_live_proposal_uniq'),
+    ('trigger', 'mfg_scrap_events', 'mfg_scrap_snapshot_immutable_trg'),
+    ('function', NULL, 'mfg_scrap_snapshot_immutable_guard')
+  ) AS wanted(kind, relname, name)
+ WHERE (wanted.kind = 'constraint' AND EXISTS (
+          SELECT 1
+            FROM pg_constraint c
+            JOIN pg_class t ON t.oid = c.conrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+           WHERE n.nspname = 'public'
+             AND t.relname = wanted.relname
+             AND c.conname = wanted.name))
+    OR (wanted.kind = 'index' AND EXISTS (
+          SELECT 1
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = 'public'
+             AND c.relname = wanted.name))
+    OR (wanted.kind = 'trigger' AND EXISTS (
+          SELECT 1
+            FROM pg_trigger g
+            JOIN pg_class t ON t.oid = g.tgrelid
+            JOIN pg_namespace n ON n.oid = t.relnamespace
+           WHERE n.nspname = 'public'
+             AND t.relname = wanted.relname
+             AND g.tgname = wanted.name))
+    OR (wanted.kind = 'function' AND EXISTS (
+          SELECT 1
+            FROM pg_proc p
+            JOIN pg_namespace n ON n.oid = p.pronamespace
+           WHERE n.nspname = 'public'
+             AND p.proname = wanted.name))
 UNION ALL
 SELECT '0458.snapshot_type_missing' AS code,
        'refuse' AS severity,
