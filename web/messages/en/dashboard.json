@@ -29,6 +29,7 @@
     "overduePayables": "Overdue payables",
     "itemsToReconcile": "Items to reconcile",
     "expensesAwaitingApproval": "Expenses awaiting approval",
+    "resourcingPulse": "Staffing pulse",
     "closeReadiness": "Close readiness",
     "closeReadinessEmpty": "No close runs yet",
     "agentFindings": "Agent findings",
@@ -79,7 +80,8 @@
     "weekOf": "week of {date}",
     "noBurn": "No net burn",
     "cashShortfall": "Cash shortfall",
-    "runwayWeeks": "{weeks, plural, one {# week of runway} other {# weeks of runway}}"
+    "runwayWeeks": "{weeks, plural, one {# week of runway} other {# weeks of runway}}",
+    "resourcingPulse": "Bench {bench} · rolling off {rolloffs} · {overallocated} overallocated weeks"
   },
   "categories": {
     "kpi": "Headlines",
@@ -107,6 +109,7 @@
     "overduePayables": "Vendor bills past their due date in base currency.",
     "itemsToReconcile": "Unmatched bank statement lines awaiting reconciliation.",
     "expensesAwaitingApproval": "Expense reports waiting for approval.",
+    "resourcingPulse": "Staffing utilization, bench, and rolloffs.",
     "closeReadiness": "Latest period-close runs and their current stage.",
     "agentFindings": "Open background-agent findings — jump to the workbench.",
     "revenue": "Revenue posted month to date, in base currency.",

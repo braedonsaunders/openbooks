@@ -28,6 +28,7 @@ import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
 import { TransactionsTab } from './tabs/TransactionsTab'
 import { WorkBreakdownTab } from './tabs/WorkBreakdownTab'
 import { ScheduleTab } from './tabs/ScheduleTab'
+import { StaffingTab } from './tabs/StaffingTab'
 import type { ChargeRow, ChargeItemOption, ChargeEquipmentOption, ChargeOperatorOption } from './tabs/ChargesSection'
 import {
   BillingSection,
@@ -156,6 +157,7 @@ export function ProjectDrawer({
   cockpit,
   projectTypes = [],
   schedulingEnabled = false,
+  resourcingEnabled = false,
   locale,
   initialTab = 'overview',
   applicationPermissions,
@@ -178,6 +180,8 @@ export function ProjectDrawer({
   projectTypes?: { id: string; name: string; billingMethod: string | null; billingProcedure: string }[]
   /** Server-resolved Projects → Project Scheduling gate. */
   schedulingEnabled?: boolean
+  /** Server-resolved resourcing feature plus the reader grant. */
+  resourcingEnabled?: boolean
   /** Tenant locale, so the schedule surface formats dates like the rest of the app. */
   locale?: string
   /** Stable URL state used when a related transaction is stacked over the project. */
@@ -277,12 +281,12 @@ export function ProjectDrawer({
   const [tab, setTab] = useState<TabKey>(
     createMode
       ? 'overview'
-      : initialTab === 'work_breakdown' || initialTab === 'schedule'
+      : initialTab === 'work_breakdown' || initialTab === 'schedule' || initialTab === 'staffing'
         ? 'project_management'
         : initialTab,
   )
   const [managementTab, setManagementTab] = useState<string>(
-    initialTab === 'schedule' ? 'schedule' : 'work_breakdown',
+    initialTab === 'schedule' ? 'schedule' : initialTab === 'staffing' ? 'staffing' : 'work_breakdown',
   )
   const [actionsOpen, setActionsOpen] = useState(false)
   const [chargeFormOpen, setChargeFormOpen] = useState(false)
@@ -649,7 +653,9 @@ export function ProjectDrawer({
         groupIds: placement.groupIds ?? [],
         subtabs: (placement.subtabs ?? [])
           .filter((subtab) =>
-            subtab.visible && (subtab.key !== 'schedule' || schedulingEnabled),
+            subtab.visible &&
+            (subtab.key !== 'schedule' || schedulingEnabled) &&
+            (subtab.key !== 'staffing' || resourcingEnabled),
           )
           .map((subtab) => ({
             key: subtab.key,
@@ -666,7 +672,7 @@ export function ProjectDrawer({
       .filter((placement) =>
         placement.key !== 'project_management' || placement.subtabs.length > 0,
       )
-  }, [effectiveLayout, schedulingEnabled, t, createMode])
+  }, [effectiveLayout, schedulingEnabled, resourcingEnabled, t, createMode])
 
   // A hidden or gated-off tab must never stay selected, during render (same
   // committed value, no extra render).
@@ -918,6 +924,9 @@ export function ProjectDrawer({
               canManage={canManage}
               locale={locale}
             />
+          ) : null}
+          {managementTab === 'staffing' && resourcingEnabled ? (
+            <StaffingTab projectId={String(pr.id)} />
           ) : null}
         </div>
       ) : null}

@@ -1,4 +1,47 @@
 {
+  "cockpit": {
+    "title": "Recursos",
+    "description": "Alocação, capacidade e plano versus realizado.",
+    "vitals": {
+      "capacity": "Capacidade líquida · 4 semanas",
+      "capacityUnknown": "Exclui {count} com capacidade desconhecida",
+      "capacityResolved": "Toda a capacidade apurada",
+      "bench": "Disponíveis",
+      "rolloffs": "Encerrando alocação",
+      "overallocated": "Semanas superalocadas",
+      "utilization": "Utilização",
+      "utilizationUndefined": "Sem capacidade registrada",
+      "utilizationSub": "{from} – {to}"
+    },
+    "tieout": {
+      "title": "Plano versus realizado",
+      "hint": "Horas planejadas contra tempo aprovado e capacidade líquida.",
+      "empty": "Sem horas planejadas ou aprovadas nestas semanas.",
+      "person": "Pessoa",
+      "week": "Semana",
+      "planned": "Planejadas",
+      "approved": "Aprovadas",
+      "variance": "Variação",
+      "capacity": "Capacidade",
+      "evidence": "Evidências",
+      "noCapacity": "Sem capacidade",
+      "overallocated": "Excesso",
+      "assignments": "Alocação",
+      "absences": "Ausências",
+      "leaveRequest": "Pedido de licença",
+      "holidays": "Feriados",
+      "scheduleTier": "Jornada"
+    },
+    "tabs": {
+      "overview": "Visão geral",
+      "board": "Quadro de alocação de equipe",
+      "assignments": "Alocações",
+      "requests": "Solicitações de recursos",
+      "demand": "Demanda de equipe",
+      "retainers": "Adiantamentos",
+      "reports": "Previsão de utilização"
+    }
+  },
   "prefill": { "badge": "Planejado: {hours} h" },
   "requests": {
     "title": "Solicitações de recursos",

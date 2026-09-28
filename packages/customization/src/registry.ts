@@ -1574,6 +1574,7 @@ const PROJECT: RecordTypeMeta = {
       subtabs: [
         { key: "work_breakdown", labelKey: "projects.cockpit.tabs.work_breakdown" },
         { key: "schedule", labelKey: "projects.cockpit.tabs.schedule", featureKey: "projectScheduling" },
+        { key: "staffing", labelKey: "projects.cockpit.tabs.staffing", featureKey: "resourcing" },
       ],
     },
     { key: "cost_time", labelKey: "projects.cockpit.tabs.cost_time" },

@@ -17,6 +17,7 @@ import {
 } from './_role-tier'
 import { resolvePersona } from './_persona'
 import { personaDefaultLayout } from './_persona-layout'
+import { widgetFeatureOn } from './widget-features'
 import { qualificationSourceAvailable } from '@openbooks/engine/src/inbox/adapters/hrm-qualification-alert.ts'
 import { DashboardLayoutInputSchema, clampToWidgetMinimums } from './_layout-input'
 
@@ -54,13 +55,15 @@ export async function resolveDashboardDefault(authz: Authz): Promise<DashboardDe
   if (roleDefault) return roleDefault
   // HR-15 persona defaults: employee always, manager by reports or
   // approval grant, admin by manage grants — what the actor holds, never
-  // their role name. Gated tiles join only when their source is live.
+  // their role name. Gated tiles join only when their source is live; the
+  // flags resolve through the single widget-feature map, so the keys live
+  // in exactly one place.
   const orgId = authz.user.orgId
   const [persona, payroll, hrm, announcements, quals] = await Promise.all([
     resolvePersona(authz),
-    isFeatureEnabled(orgId, 'payroll'),
-    isFeatureEnabled(orgId, 'hrm'),
-    isFeatureEnabled(orgId, 'homeAnnouncements'),
+    widgetFeatureOn(orgId, 'pay-tile'),
+    widgetFeatureOn(orgId, 'balance-tile'),
+    widgetFeatureOn(orgId, 'announcements-card'),
     qualificationSourceAvailable(),
   ])
   return {

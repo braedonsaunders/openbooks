@@ -1,4 +1,47 @@
 {
+  "cockpit": {
+    "title": "Recursos",
+    "description": "Dotación, capacidad y plan frente a real.",
+    "vitals": {
+      "capacity": "Capacidad neta · 4 semanas",
+      "capacityUnknown": "Excluye {count} con capacidad desconocida",
+      "capacityResolved": "Toda la capacidad resuelta",
+      "bench": "Disponibles",
+      "rolloffs": "Finalizan asignación",
+      "overallocated": "Semanas sobreasignadas",
+      "utilization": "Utilización",
+      "utilizationUndefined": "Sin capacidad registrada",
+      "utilizationSub": "{from} – {to}"
+    },
+    "tieout": {
+      "title": "Plan frente a real",
+      "hint": "Horas planificadas frente a tiempo aprobado y capacidad neta.",
+      "empty": "Sin horas planificadas ni aprobadas en estas semanas.",
+      "person": "Persona",
+      "week": "Semana",
+      "planned": "Planificadas",
+      "approved": "Aprobadas",
+      "variance": "Desviación",
+      "capacity": "Capacidad",
+      "evidence": "Evidencia",
+      "noCapacity": "Sin capacidad",
+      "overallocated": "Exceso",
+      "assignments": "Reserva",
+      "absences": "Ausencias",
+      "leaveRequest": "Solicitud de permiso",
+      "holidays": "Festivos",
+      "scheduleTier": "Horario"
+    },
+    "tabs": {
+      "overview": "Resumen",
+      "board": "Planificación de personal",
+      "assignments": "Asignaciones",
+      "requests": "Solicitudes de recursos",
+      "demand": "Demanda de personal",
+      "retainers": "Anticipos",
+      "reports": "Previsión de utilización"
+    }
+  },
   "prefill": { "badge": "Planificadas: {hours} h" },
   "requests": {
     "title": "Solicitudes de recursos",

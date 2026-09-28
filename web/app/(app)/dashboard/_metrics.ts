@@ -8,6 +8,8 @@ import { loadPersonaMetrics, type PersonaMetrics } from './_persona'
 import { randomUUID } from 'node:crypto'
 import { readableContinuousCloseAgents } from '@/lib/continuous-close'
 import { bankingHome } from '@/lib/module-home/banking'
+import { resourcingHome } from '@/lib/module-home/resourcing'
+import { widgetFeatureOn } from './widget-features'
 import { expensesDashboard } from '@/lib/expenses-dashboard'
 import { listCloseRuns } from '@/lib/application/close'
 import { ApplicationError } from '@/lib/application/errors'
@@ -160,6 +162,17 @@ export type DashboardMetrics = {
    * (including the honest empty list) or the widget was never queried.
    */
   closeRunsUnavailable: string | null
+  /**
+   * Staffing pulse off the resourcing cockpit loader (same vitals, next four
+   * weeks). Null when the widget was never queried or the feature is off —
+   * the tile then renders its empty state, never a zero that reads as a fact.
+   */
+  resourcingPulse: {
+    utilization: string | null
+    benchPeople: number
+    rolloffs: number
+    overallocatedWeeks: number
+  } | null
   /** Business day the as-of readers (cash, open AR/AP) were cut — the tiles
    * label it so a figure that excludes future-dated documents says so. */
   asOfDate: string
@@ -358,7 +371,11 @@ export async function loadDashboardMetrics(
   const wantArStats = need('expectedReceipts30d', 'receivablesDso')
   const wantApStats = need('expectedPayments30d', 'payablesDpo')
   const wantRunway = need('runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek')
-  const [totals, banks, baseCurrency, arItems, apItems, recon, expenses, closeReadiness, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings] = await Promise.all([
+  // The staffing pulse reads the resourcing cockpit loader — the same vitals
+  // the cockpit shows. Gated on the single widget-feature map: with the
+  // feature off the reader never runs and the tile renders its empty state.
+  const wantResourcing = need('resourcingPulse') && (await widgetFeatureOn(orgId, 'resourcing-pulse'))
+  const [totals, banks, baseCurrency, arItems, apItems, recon, expenses, closeReadiness, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings, resourcingPulse] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -507,6 +524,14 @@ export async function loadDashboardMetrics(
              ${workItemSubjectScopePredicate(orgId, authz.allowedSubsidiaryIds)}
         `)
       : Promise.resolve({ rows: [{ open: 0, proposals: 0, last_run: null }] }),
+    wantResourcing
+      ? resourcingHome(orgId, authz.allowedSubsidiaryIds).then((home) => ({
+          utilization: home.utilization,
+          benchPeople: home.benchPeople,
+          rolloffs: home.rolloffs,
+          overallocatedWeeks: home.overallocatedWeeks,
+        }))
+      : Promise.resolve(null),
   ])
 
   const t = totals.rows[0]!
@@ -637,6 +662,7 @@ export async function loadDashboardMetrics(
     pendingExpenses: expenses?.pendingExpenses ?? 0,
     closeRuns: closeReadiness.runs ?? [],
     closeRunsUnavailable: closeReadiness.unavailable,
+    resourcingPulse: resourcingPulse ?? null,
     asOfDate: today,
     recentEntries: recentEntries.rows.map((r) => ({
       id: r.id,
@@ -686,6 +712,7 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-cash-runway': ['baseCurrency', 'runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek', 'asOfDate'],
   'kpi-items-to-reconcile': ['unreconciledItems'],
   'kpi-expenses-awaiting-approval': ['pendingExpenses'],
+  'resourcing-pulse': ['resourcingPulse'],
   'list-close-readiness': ['closeRuns', 'closeRunsUnavailable'],
   'list-recent-entries': ['recentEntries'],
   'list-pending-approvals': ['pendingApprovalList'],
@@ -745,6 +772,7 @@ const EMPTY_METRICS: DashboardMetrics = {
   pendingExpenses: 0,
   closeRuns: [],
   closeRunsUnavailable: null,
+  resourcingPulse: null,
   asOfDate: '',
   recentEntries: [],
   pendingApprovalList: [],

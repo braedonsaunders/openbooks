@@ -1,4 +1,47 @@
 {
+  "cockpit": {
+    "title": "Resourcing",
+    "description": "Staffing, capacity, and plan versus actual.",
+    "vitals": {
+      "capacity": "Net capacity · 4 weeks",
+      "capacityUnknown": "Excludes {count} with unknown capacity",
+      "capacityResolved": "All capacity resolved",
+      "bench": "On the bench",
+      "rolloffs": "Rolling off",
+      "overallocated": "Overallocated weeks",
+      "utilization": "Utilization",
+      "utilizationUndefined": "No capacity recorded",
+      "utilizationSub": "{from} – {to}"
+    },
+    "tieout": {
+      "title": "Plan vs actual",
+      "hint": "Planned hours against approved time and net capacity.",
+      "empty": "No planned or approved hours in these weeks.",
+      "person": "Person",
+      "week": "Week",
+      "planned": "Planned",
+      "approved": "Approved",
+      "variance": "Variance",
+      "capacity": "Capacity",
+      "evidence": "Evidence",
+      "noCapacity": "No capacity",
+      "overallocated": "Over",
+      "assignments": "Booking",
+      "absences": "Leave",
+      "leaveRequest": "Leave request",
+      "holidays": "Holidays",
+      "scheduleTier": "Schedule"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "board": "Staffing board",
+      "assignments": "Assignments",
+      "requests": "Resource requests",
+      "demand": "Staffing demand",
+      "retainers": "Retainers",
+      "reports": "Utilization forecast"
+    }
+  },
   "prefill": { "badge": "Planned {hours} h" },
   "requests": {
     "title": "Resource requests",
