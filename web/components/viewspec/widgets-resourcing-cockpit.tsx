@@ -9,21 +9,21 @@ import { type WidgetRenderer } from './widget-props'
  * Resourcing cockpit adapters. The tie-out body is the one shared section
  * component the cockpit composition renders, and the utilization tile is the
  * shared home stat tile wrapped in a link to the utilization report — the
- * registry cannot drift from the page on either. Registration of the
- * `resourcing-tieout` and `resourcing-utilization-tile` names and contracts
- * follows once the shared registry files are free.
+ * registry cannot drift from the page on either. Named adapter parameters
+ * let the registry generator enforce the exact prop contracts consumed by
+ * these shared components.
  */
 export const RESOURCING_COCKPIT_WIDGETS = {
-  'resourcing-tieout': (props) => {
-    const section = props as unknown as ComponentProps<typeof TieOutSection>
+  'resourcing-tieout': ({ rows, labels, empty }) => {
+    const section = { rows, labels, empty } as ComponentProps<typeof TieOutSection>
     return <TieOutSection {...section} />
   },
-  'resourcing-busy-season': (props) => {
-    const section = props as unknown as ComponentProps<typeof BusySeasonSection>
+  'resourcing-busy-season': ({ gaps, projects, labels, canCreateDraft }) => {
+    const section = { gaps, projects, labels, canCreateDraft } as ComponentProps<typeof BusySeasonSection>
     return <BusySeasonSection {...section} />
   },
-  'resourcing-utilization-tile': (props) => {
-    const tile = props as unknown as { label: string; value: string; sub: string; href: string }
+  'resourcing-utilization-tile': ({ label, value, sub, href }) => {
+    const tile = { label, value, sub, href } as { label: string; value: string; sub: string; href: string }
     return (
       <Link
         href={tile.href as never}

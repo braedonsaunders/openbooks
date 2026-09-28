@@ -2,8 +2,8 @@ import 'server-only'
 import { add } from '@openbooks/engine/src/money/money.ts'
 import { addCalendarDays, businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { weekStartOf } from '@openbooks/engine/src/resourcing/weeks.ts'
-import { loadResourcingBoard } from './queries'
-import { loadUtilizationFacts, RESOURCING_REPORT_PLANS, summarizeResourcingRows } from './report-facts'
+import { loadResourcingBoard } from '../resourcing/queries'
+import { loadUtilizationFacts, RESOURCING_REPORT_PLANS, summarizeResourcingRows } from '../resourcing/report-facts'
 import { reportRunLabels } from '../report-labels'
 
 /**

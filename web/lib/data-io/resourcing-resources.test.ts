@@ -29,7 +29,7 @@ test("assignment refusals use the canonical engine refusal class", () => {
 });
 
 test("export route passes actorId and no resourcing file reaches the trusted seam", () => {
-  const route = readFileSync(new URL("../../../app/api/data/export/route.ts", import.meta.url), "utf8");
+  const route = readFileSync(new URL("../../app/api/data/export/route.ts", import.meta.url), "utf8");
   assert.ok(route.includes("actorId: authz.user.id"), "route threads the actor into resource reads");
   for (const rel of ["./resourcing-resources.ts", "../assistant/tools-resourcing.ts"]) {
     const src = readFileSync(new URL(rel, import.meta.url), "utf8");

@@ -38,7 +38,8 @@ const React = await import("react");
 Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
-const { BusySeasonSection, type BusySeasonLabels } = await import("./BusySeasonSection.tsx");
+type BusySeasonLabels = import("./BusySeasonSection.tsx").BusySeasonLabels;
+const { BusySeasonSection } = await import("./BusySeasonSection.tsx");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
@@ -166,7 +167,7 @@ test("busy-season gap action confirms once, retries idempotently, and drills to 
   const created = scriptFetch((url, init) => {
     assert.equal(url, "/api/resourcing/requests");
     assert.equal(init?.method, "POST");
-    assert.ok(keyOf({ url, init }), "the draft create carries an idempotency key");
+    assert.ok(keyOf({ init }), "the draft create carries an idempotency key");
     assert.deepEqual(JSON.parse(String(init?.body)), {
       projectId: "project-alpha",
       jobTitle: "Senior Tax Associate",

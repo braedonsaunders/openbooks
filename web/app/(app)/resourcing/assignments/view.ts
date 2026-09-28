@@ -72,7 +72,7 @@ const f = ref<ResourcingAssignmentsPageData>();
 
 export function resourcingAssignmentsSpec(data: ResourcingAssignmentsPageData): PageSpec {
   return page({
-    route: "/resourcing/assignments",
+    route: '/resourcing/assignments',
     layout: "list",
     header: [pageHeader({
       title: f("title"),

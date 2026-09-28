@@ -83,6 +83,7 @@ export const POST = defineRoute({
         if (denied) return denied
         await voidEncumbrance({ orgId, encumbranceId: body.encumbranceId, reason: body.reason, actorId })
         return NextResponse.json({ ok: true })
+      }
       default:
         return NextResponse.json({ error: 'unknown action' }, { status: 400 })
     }
