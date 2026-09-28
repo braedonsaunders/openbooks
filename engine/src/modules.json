@@ -79,6 +79,7 @@
       "dependsOn": [
         "banking",
         "flows",
+        "fx",
         "inventory",
         "journal",
         "ledger",
