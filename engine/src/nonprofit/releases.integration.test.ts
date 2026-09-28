@@ -190,6 +190,11 @@ test("fund release readers return the drawer projection with same-org isolation"
   const actor = await withBypass(() => createScratchUser(org.orgId, "Release Reader", "accountant"));
   assert.equal((await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
     update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`))).rows.length, 1);
+  const foreign = await withBypass(() => createScratchOrg());
+  t.after(() => dropScratchOrg(foreign.orgId));
+  const foreignEnabled = await withOrgContext(foreign.orgId, () => db.execute<{ id: string }>(sql`
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${foreign.orgId} returning id`));
+  assert.equal(foreignEnabled.rows.length, 1);
   const setup = await provisionFundAccounting({ orgId: org.orgId, defaultFund: { code: "U", name: "U Fund" },
     classifications: { U: { kind: "operating", restrictionClass: "without_donor_restrictions" } }, actorId: actor });
   const restricted = await createFund({ orgId: org.orgId, code: "R", name: "R",
@@ -208,13 +213,14 @@ test("fund release readers return the drawer projection with same-org isolation"
     releaseAccountId: org.accounts.revenue, submittedBy: null, submittedAt: null, flowRunId: null,
     fromCode: "R", fromName: "R", toCode: "U", toName: "U", postedEntryId: null, voidEntryId: null, custom: { reader: "releases" } });
   const ordered = await withOrgContext(org.orgId, () => listFundReleases({ orgId: org.orgId, limit: 1 }));
-  assert.deepEqual([ordered.total, ...ordered.releases.map((item) => item.id)], [2, [later.id]]);
+  assert.deepEqual([ordered.total, ordered.releases.map((item) => item.id)], [2, [later.id]]);
   const second = await withOrgContext(org.orgId, () => listFundReleases({ orgId: org.orgId, limit: 1, offset: 1 }));
-  assert.deepEqual([second.total, ...second.releases.map((item) => item.id)], [2, [release.id]]);
+  assert.deepEqual([second.total, second.releases.map((item) => item.id)], [2, [release.id]]);
   assert.deepEqual((await withOrgContext(org.orgId, () => listFundReleases({ orgId: org.orgId, status: "draft" }))).total, 2);
   assert.equal((await withOrgContext(org.orgId, () => listFundReleases({ orgId: org.orgId, search: "Later" }))).total, 1);
   assert.equal((await withOrgContext(org.orgId, () => listFundReleases({ orgId: org.orgId, limit: 101 }))).releases.length, 2);
-  assert.equal(await withOrgContext(org.orgId, () => getFundRelease({ orgId: randomUUID(), releaseId: release.id })), null);
+  await assert.rejects(withOrgContext(org.orgId, () => listFundReleases({ orgId: org.orgId, limit: 0 })), /at least 1/);
+  assert.equal(await withOrgContext(foreign.orgId, () => getFundRelease({ orgId: foreign.orgId, releaseId: release.id })), null);
   assert.equal(await withOrgContext(org.orgId, () => getFundRelease({ orgId: org.orgId, releaseId: randomUUID() })), null);
   const disabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
     update orgs set settings = jsonb_set(settings, '{features,fundAccounting}', 'false'::jsonb, true) where id = ${org.orgId} returning id`));
