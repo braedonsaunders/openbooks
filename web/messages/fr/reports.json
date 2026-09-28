@@ -2023,6 +2023,7 @@
       "saas_metrics_subscriptions": {
         "month": "Mois",
         "subsidiary": "Filiale",
+        "reporting_currency": "Devise de reporting",
         "customer": "Client",
         "plan": "Offre",
         "subscription_id": "Abonnement (id)",
@@ -2041,6 +2042,7 @@
       "saas_metrics_facts": {
         "month": "Mois",
         "subsidiary": "Filiale",
+        "reporting_currency": "Devise de reporting",
         "basis": "Base de revenus",
         "mrr_start": "MRR initial",
         "mrr_end": "MRR final",
@@ -2068,6 +2070,7 @@
         "month": "Mois",
         "months_since_start": "Mois depuis le début",
         "subsidiary": "Filiale",
+        "reporting_currency": "Devise de reporting",
         "start_mrr": "MRR initial",
         "mrr": "MRR de la cohorte",
         "start_customers": "Clients au début",
