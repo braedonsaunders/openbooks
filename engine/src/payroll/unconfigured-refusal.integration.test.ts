@@ -287,9 +287,19 @@ test(
   async () => {
     const h = await seedTexasHarness();
     try {
-      // A reimbursable account holds no rate notice: the recorded method
-      // alone must let the run calculate, pricing zero SUI.
+      // A reimbursable account holds no SUI rate notice: the recorded
+      // method alone must let the run calculate, pricing zero SUI. FUTA is
+      // a separate obligation with its own notice — calculation would
+      // default it to the statutory 0.6%, but readiness warns until the
+      // employer enters its own net rate — so this test records the
+      // ordinary full-credit figure explicitly, keeping the no-notice
+      // assertion an SUI property rather than a FUTA gap.
       await seedUsSuiAccount(h.orgId, h.actorId, "TX", "reimbursable");
+      await db.execute(sql`
+        insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
+                                             rate_values, created_by, updated_by)
+        values (${h.orgId}, 'US', 'us_futa', 'TX', 2026, '{"rate":"0.006"}'::jsonb,
+                ${h.actorId}, ${h.actorId})`);
       await db.execute(sql`
         update employee_payroll_profiles set filing_account_id = ${h.txSuiAccountId}
          where org_id = ${h.orgId} and employee_party_id = ${h.employeeId}`);

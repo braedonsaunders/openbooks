@@ -9,6 +9,7 @@ import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
+import { seedUsSuiAccount } from "../filing-test-fixtures.ts";
 import { calculatePub15T } from "./pub15t.ts";
 import { form941Worksheet, w2Slips } from "../yearend.ts";
 import { resolveUsSuiYtd, resolveUsSuiYtdForCoverage, usEmployeeYtd } from "./compute-statutory.ts";
@@ -46,6 +47,7 @@ interface Fixture {
   subsidiaryId: string;
   scheduleId: string;
   deferralPayable: string;
+  suiAccountId: string;
 }
 
 async function usPayrollOrg(): Promise<Fixture> {
@@ -82,16 +84,19 @@ async function usPayrollOrg(): Promise<Fixture> {
   }
   await setPackSlotAccount(org.orgId, actorId, "US", "state_income_tax", statePayable);
   await setPackSlotAccount(org.orgId, actorId, "US", "local_income_tax", statePayable);
-  // Texas SUI presence: asserted here is withholding, never SUI amounts, and
-  // a live-but-unconfigured SUI refuses by name at calculate.
+  // Texas SUI is always owed for these employees, but the subject asserted
+  // here is withholding, never SUI amounts — so the fixture carries the
+  // ordinary contributory setup exactly as an employer would enter it: the
+  // Texas SUI filing account with its recorded financing method, and the
+  // state's experience-rated row bound to that account. A live SUI with no
+  // resolving rate still refuses by name at calculate; this fixture simply
+  // does not leave it unconfigured.
+  const suiAccountId = await seedUsSuiAccount(org.orgId, actorId, "TX");
   await db.execute(sql`
-    update orgs set settings = jsonb_set(
-      coalesce(settings, '{}'::jsonb),
-      '{payroll,us}',
-      coalesce(settings#>'{payroll,us}', '{}'::jsonb) || ${JSON.stringify({
-        sui: { TX: { rate: "0.03", wageBase: "7000" } },
-      })}::jsonb
-    ) where id = ${org.orgId}`);
+    insert into payroll_statutory_rates
+      (org_id, country, rate_key, region, filing_account_id, tax_year, rate_values, created_by, updated_by)
+    values (${org.orgId}, 'US', 'us_sui', 'TX', ${suiAccountId}, 2026,
+            '{"rate":"0.03","wageBase":"7000"}'::jsonb, ${actorId}, ${actorId})`);
   // This integration suite tests SUI and filing aggregation; configure the
   // ordinary full-credit FUTA rate explicitly so it does not depend on a
   // Schedule A transcription for the test year.
@@ -115,7 +120,7 @@ async function usPayrollOrg(): Promise<Fixture> {
                                created_by, updated_by)
     values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, ${PERIOD_END}, 3,
             ${subsidiaryId}, true, ${actorId}, ${actorId})`);
-  return { orgId: org.orgId, actorId, subsidiaryId, scheduleId, deferralPayable };
+  return { orgId: org.orgId, actorId, subsidiaryId, scheduleId, deferralPayable, suiAccountId };
 }
 
 async function usEmployee(fx: Fixture, name: string): Promise<string> {
@@ -133,16 +138,16 @@ async function usEmployee(fx: Fixture, name: string): Promise<string> {
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
-  // No SUI account: this fixture prices presence-only SUI from the legacy
-  // rates, which needs no financing method (there is no account to record
-  // one on) — the run refuses a missing method only for an assigned SUI
-  // account.
+  // Assigned to the fixture's Texas SUI account, whose contributory method
+  // usPayrollOrg records through the product API — SUI is always owed for
+  // these employees, so the run must price it from the account-bound rate,
+  // never refuse it as unconfigured.
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            country, province, residence_region, pay_basis,
-                                           filing_status, is_active, created_by, updated_by)
+                                           filing_status, filing_account_id, is_active, created_by, updated_by)
     values (${fx.orgId}, ${id}, ${employmentId}, ${fx.scheduleId}, 'US', 'TX',
-            null, 'salary', 'single', true, ${fx.actorId}, ${fx.actorId})`);
+            null, 'salary', 'single', ${fx.suiAccountId}, true, ${fx.actorId}, ${fx.actorId})`);
   // The federal calculation refuses payroll without a tax-residency status
   // (Pub. 15-T nonresident-alien rules), so every synthetic employee states
   // one — U.S. person, like the single filing status above.
@@ -333,7 +338,10 @@ test(
       assert.ok(usPack, "US payroll pack is registered");
       const form941 = usPack.filings().yearEnd.find((filing) => filing.key === "941");
       assert.ok(form941?.slip, "the US pack declares the Form 941 slip");
-      const slip = await form941.slip.build(fx.orgId, 2026, ":3");
+      // The worksheet groups by the stubs' assigned filing account, so the
+      // quarter row is addressed under the fixture's Texas SUI account —
+      // the boxed lines asserted below are the same federal figures.
+      const slip = await form941.slip.build(fx.orgId, 2026, `${fx.suiAccountId}:3`);
       assert.equal(slip.boxes.find((box) => box.code === "5d")?.value, "5000.0000");
       assert.equal(slip.boxes.find((box) => box.code === "5d tax")?.value, "45.0000");
       assert.equal(slip.boxes.find((box) => box.code === "5e")?.value, "28868.0000");
@@ -381,19 +389,20 @@ test(
       await db.execute(sql`
         update employee_payroll_profiles set province = 'OR'
          where org_id = ${fx.orgId} and employee_party_id = ${employee}`);
-      await db.execute(sql`
-        update orgs set settings = jsonb_set(
-          settings, '{payroll,us,sui,OR}', '{"rate":"0.03","wageBase":"56700"}'::jsonb, true
-        ) where id = ${fx.orgId}`);
+      // The region-wide Oregon row inserted above is the live configuration
+      // for the new work state; no org-level blob is read anywhere.
       const priorStateStub = (await db.execute<{ province: string }>(sql`
         select province from pay_stubs
          where org_id = ${fx.orgId} and employee_party_id = ${employee}
       `)).rows[0];
       assert.equal(priorStateStub?.province, "TX", "the committed stub preserves the prior work state");
+      // Year-to-date reads scope stubs to the assigned filing account, the
+      // same scoping the run's own money path passes — otherwise the Texas
+      // stub the transfer rule must credit is filtered out of history.
       const stateHistory = await usEmployeeYtd({
         tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026,
         documentId: randomUUID(),
-      }, "OR");
+      }, "OR", fx.suiAccountId);
       assert.equal(stateHistory.suiOtherRegions, "TX", "SUI history is state-dimensioned independently of FUTA");
 
       // SUI-TRANSFER-CREDIT-IMPL: Oregon prices the Texas stub under its
@@ -405,7 +414,7 @@ test(
       const sameStateHistory = await usEmployeeYtd({
         tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026,
         documentId: randomUUID(),
-      }, "TX");
+      }, "TX", fx.suiAccountId);
       assert.equal(resolveUsSuiYtd("TX", 2026, sameStateHistory), PERIOD_WAGES,
         "same-state SUI history remains usable; FUTA retains its independent aggregate");
     } finally {
