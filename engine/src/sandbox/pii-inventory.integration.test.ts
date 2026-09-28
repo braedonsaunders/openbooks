@@ -1267,6 +1267,8 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "mfg_routings.overhead_basis",
   "mfg_routings.status",
   "mfg_scrap_events.classification",
+  "mfg_scrap_events.plan_fingerprint",
+  "mfg_scrap_events.treatment",
   "mfg_scrap_reasons.classification",
   "mfg_scrap_reasons.code",
   "mfg_scrap_reasons.name",

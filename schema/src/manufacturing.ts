@@ -16,6 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { auditColumns, fxRate, id, money, orgRef } from "./helpers";
 import { items } from "./documents";
+import { lots, serials } from "./inventory";
 import { laborCostRates } from "./labor-costing";
 
 export const mfgWorkCenters = pgTable(
@@ -481,6 +482,19 @@ export const mfgScrapEvents = pgTable(
     reasonId: uuid("reason_id").notNull(),
     classification: text("classification", { enum: ["normal", "abnormal"] }).notNull(),
     postedEntryId: uuid("posted_entry_id"),
+    // Stage-frozen valuation snapshot: treatment, frozen value and unit
+    // cost, frozen lot/serial lineage, plan fingerprint, and the
+    // engine-derived approval flag. Null until staged; all seven null is the
+    // sole legacy state and is never backfilled.
+    treatment: text("treatment", {
+      enum: ["evidence", "pre_issue_component", "post_issue_component", "operation"],
+    }),
+    frozenValue: money("frozen_value"),
+    frozenUnitCost: money("frozen_unit_cost"),
+    lotId: uuid("lot_id"),
+    serialId: uuid("serial_id"),
+    planFingerprint: text("plan_fingerprint"),
+    approvalRequired: boolean("approval_required"),
     ...auditColumns,
   },
   (t) => [
@@ -500,9 +514,53 @@ export const mfgScrapEvents = pgTable(
       columns: [t.orgId, t.reasonId],
       foreignColumns: [mfgScrapReasons.orgId, mfgScrapReasons.id],
     }),
+    foreignKey({
+      name: "mfg_scrap_events_org_lot_fk",
+      columns: [t.orgId, t.lotId],
+      foreignColumns: [lots.orgId, lots.id],
+    }),
+    foreignKey({
+      name: "mfg_scrap_events_org_serial_fk",
+      columns: [t.orgId, t.serialId],
+      foreignColumns: [serials.orgId, serials.id],
+    }),
     index("mfg_scrap_events_org_order").on(t.orgId, t.workOrderId, t.createdAt),
+    index("mfg_scrap_events_org_lot_idx").on(t.orgId, t.lotId),
+    index("mfg_scrap_events_org_serial_idx").on(t.orgId, t.serialId),
     check("mfg_scrap_events_quantity_nonnegative", sql`${t.quantity} >= 0`),
     check("mfg_scrap_events_classification_check", sql`${t.classification} in ('normal', 'abnormal')`),
+    check(
+      "mfg_scrap_snapshot_legacy_or_complete_chk",
+      sql`(${t.treatment} is null and ${t.frozenValue} is null and ${t.frozenUnitCost} is null and ${t.lotId} is null and ${t.serialId} is null and ${t.planFingerprint} is null and ${t.approvalRequired} is null)
+        or (${t.treatment} in ('evidence', 'pre_issue_component', 'post_issue_component', 'operation') and ${t.approvalRequired} is not null)`,
+    ),
+    check(
+      "mfg_scrap_snapshot_evidence_chk",
+      sql`${t.treatment} <> 'evidence'
+        or (${t.classification} = 'normal' and ${t.frozenValue} = 0.0000 and ${t.frozenUnitCost} is null
+          and ${t.planFingerprint} is null and ${t.lotId} is null and ${t.serialId} is null and ${t.approvalRequired} = false)`,
+    ),
+    check(
+      "mfg_scrap_snapshot_pre_issue_chk",
+      sql`${t.treatment} <> 'pre_issue_component'
+        or (${t.classification} = 'abnormal' and ${t.componentItemId} is not null and ${t.operationId} is null
+          and ${t.frozenValue} > 0 and ${t.frozenUnitCost} is not null and ${t.frozenUnitCost} >= 0
+          and ${t.planFingerprint} ~ '^[0-9a-f]{64}$' and ${t.approvalRequired} is not null)`,
+    ),
+    check(
+      "mfg_scrap_snapshot_post_issue_chk",
+      sql`${t.treatment} <> 'post_issue_component'
+        or (${t.classification} = 'abnormal' and ${t.componentItemId} is not null and ${t.operationId} is not null
+          and ${t.frozenValue} > 0 and ${t.frozenUnitCost} is not null and ${t.frozenUnitCost} >= 0
+          and ${t.planFingerprint} is null and ${t.lotId} is null and ${t.serialId} is null and ${t.approvalRequired} is not null)`,
+    ),
+    check(
+      "mfg_scrap_snapshot_operation_chk",
+      sql`${t.treatment} <> 'operation'
+        or (${t.classification} = 'abnormal' and ${t.operationId} is not null and ${t.componentItemId} is null
+          and ${t.frozenValue} > 0 and ${t.frozenUnitCost} is not null and ${t.frozenUnitCost} >= 0
+          and ${t.planFingerprint} is null and ${t.lotId} is null and ${t.serialId} is null and ${t.approvalRequired} is not null)`,
+    ),
   ],
 );
 
