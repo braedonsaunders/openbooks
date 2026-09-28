@@ -26,8 +26,14 @@ import {
 } from "./metrics-normalization-service.ts";
 import {
   computeLegacyV0Month,
+  historyRowFromProvenance,
   recomputeSaasMetrics,
+  startRowFromProvenance,
+  validateProvenanceCounts,
+  validateProvenanceEvent,
   type LegacyV0Month,
+  type ProvenanceEvent,
+  type ProvenanceRequest,
 } from "./metrics-ledger.ts";
 
 /**
@@ -274,6 +280,171 @@ async function expectRefusal(
   assert.match(error.remedy, new RegExp(remedyFragment), "the refusal must pin a usable remedy");
   return error;
 }
+
+function expectSyncRefusal(run: () => unknown, code: string, remedyFragment: string, label = "provenance"): UsageBillingError {
+  let error: unknown = null;
+  try {
+    run();
+  } catch (failure) {
+    error = failure;
+  }
+  assert.ok(error instanceof UsageBillingError, `${label}: expected a UsageBillingError (${code}), saw ${String(error)}`);
+  assert.equal(error.code, code, `${label}: the refusal must name its code`);
+  assert.match(error.remedy, new RegExp(remedyFragment), `${label}: the refusal must pin a usable remedy`);
+  return error;
+}
+
+const PROV_APPROVER = "11111111-1111-4111-8111-111111111111";
+const PROV_REQUEST = "22222222-2222-4222-8222-222222222222";
+const PROV_KEY = "33333333-3333-4333-8333-333333333333";
+const PROV_SUB = "44444444-4444-4444-8444-444444444444";
+const PROV_CUSTOMER = "66666666-6666-4666-8666-666666666666";
+const PROV_SUBSIDIARY = "77777777-7777-4777-8777-777777777777";
+const PROV_ROW = "55555555-5555-4555-8555-555555555555";
+const PROV_V0H = "b".repeat(64);
+const PROV_V1H = "a".repeat(64);
+
+function provRequest(overrides: Partial<ProvenanceRequest> = {}): ProvenanceRequest {
+  return {
+    id: PROV_REQUEST,
+    month: MONTH,
+    idempotencyKey: PROV_KEY,
+    approvedBy: PROV_APPROVER,
+    status: "succeeded",
+    attemptCount: 1,
+    result: {
+      month: MONTH,
+      monthHash: PROV_V1H,
+      replacedMonthly: 1,
+      replacedFacts: 1,
+      replacedCohorts: 1,
+      sourceV0Hashes: [PROV_V0H],
+    },
+    ...overrides,
+  };
+}
+
+function provEvent(overrides: Partial<ProvenanceEvent> = {}): ProvenanceEvent {
+  return {
+    table: "saas_metrics_monthly",
+    rowId: PROV_ROW,
+    month: MONTH,
+    naturalKey: { subscriptionId: PROV_SUB, month: MONTH },
+    event: "saas_normalization_corrected",
+    change: "corrected",
+    actor: PROV_APPROVER,
+    requestId: PROV_REQUEST,
+    requestKey: PROV_KEY,
+    attempt: 1,
+    sourceV0Hash: PROV_V0H,
+    v1Hash: PROV_V1H,
+    before: {
+      subscriptionId: PROV_SUB,
+      month: MONTH,
+      customerId: PROV_CUSTOMER,
+      subsidiaryId: PROV_SUBSIDIARY,
+      cohortMonth: MONTH,
+      mrrEnd: "100.0000",
+      inputsHash: PROV_V0H,
+      reportingCurrency: null,
+      denominationVersion: null,
+    },
+    after: { id: PROV_ROW, inputsHash: PROV_V1H },
+    ...overrides,
+  };
+}
+
+test("a joined provenance event validates every identity and digest", () => {
+  const before = validateProvenanceEvent(provEvent(), provRequest(), "saas_metrics_monthly", MONTH);
+  assert.equal((before as Record<string, unknown>).subscriptionId, PROV_SUB);
+  const history = historyRowFromProvenance(before, PROV_SUB, MONTH, MONTH);
+  assert.equal(history.mrr_end, "100.0000");
+  assert.equal(history.reporting_currency, null);
+  validateProvenanceCounts(
+    { saas_metrics_monthly: 1, saas_metrics_facts_monthly: 1, saas_metrics_cohort_monthly: 1 },
+    provRequest().result!,
+    MONTH,
+  );
+});
+
+test("provenance field mismatches refuse as tampered before any write", () => {
+  const cases: Array<[string, Partial<ProvenanceEvent>, Partial<ProvenanceRequest>]> = [
+    ["table", { table: "saas_metrics_facts_monthly" }, {}],
+    ["event", { event: "saas_normalization_approved" }, {}],
+    ["change", { change: "added" }, {}],
+    ["month", { month: NEXT_MONTH }, {}],
+    ["naturalKey month", { naturalKey: { subscriptionId: PROV_SUB, month: NEXT_MONTH } }, {}],
+    ["attempt", { attempt: 2 }, {}],
+    ["actor", { actor: PROV_APPROVER.replace("1", "9") }, {}],
+    ["requestKey", { requestKey: PROV_KEY.replace("3", "9") }, {}],
+    ["requestId", { requestId: PROV_REQUEST.replace("2", "9") }, {}],
+    ["sourceV0Hash outside the recorded set", { sourceV0Hash: "c".repeat(64) }, {}],
+    [
+      "sourceV0Hash detached from the before hash",
+      { sourceV0Hash: "c".repeat(64) },
+      { result: { ...provRequest().result!, sourceV0Hashes: [PROV_V0H, "c".repeat(64)] } },
+    ],
+    ["malformed before hash", { sourceV0Hash: "xyz", before: { ...(provEvent().before as Record<string, unknown>), inputsHash: "xyz" } }, {}],
+    ["v1Hash", { v1Hash: "d".repeat(64) }, {}],
+    ["after hash", { after: { id: PROV_ROW, inputsHash: "d".repeat(64) } }, {}],
+    ["row identity", { rowId: PROV_ROW.replace("5", "9") }, {}],
+    ["failed request", {}, { status: "failed" }],
+    ["null result", {}, { result: null }],
+    ["wrong result month", {}, { result: { ...provRequest().result!, month: NEXT_MONTH } }],
+  ];
+  for (const [name, eventOverride, requestOverride] of cases) {
+    expectSyncRefusal(
+      () => validateProvenanceEvent(provEvent(eventOverride), provRequest(requestOverride), "saas_metrics_monthly", MONTH),
+      "saas_normalization_provenance_tampered",
+      "escalate with the request id",
+      name,
+    );
+  }
+});
+
+test("provenance count shortfalls refuse as incomplete and over-counts as tampered", () => {
+  const result = provRequest().result!;
+  expectSyncRefusal(
+    () => validateProvenanceCounts({ saas_metrics_monthly: 0, saas_metrics_facts_monthly: 1, saas_metrics_cohort_monthly: 1 }, result, MONTH),
+    "saas_normalization_provenance_incomplete",
+    "escalate with the request id",
+  );
+  expectSyncRefusal(
+    () => validateProvenanceCounts({ saas_metrics_monthly: 2, saas_metrics_facts_monthly: 1, saas_metrics_cohort_monthly: 1 }, result, MONTH),
+    "saas_normalization_provenance_tampered",
+    "escalate with the request id",
+  );
+});
+
+test("provenance legacy shapes refuse non-legacy and mismatched before-images", () => {
+  const before = provEvent().before as Record<string, unknown>;
+  expectSyncRefusal(
+    () => historyRowFromProvenance({ ...before, reportingCurrency: "CAD" }, PROV_SUB, MONTH, MONTH),
+    "saas_normalization_provenance_tampered",
+    "escalate with the request id",
+  );
+  expectSyncRefusal(
+    () => historyRowFromProvenance({ ...before, subscriptionId: PROV_SUB.replace("4", "9") }, PROV_SUB, MONTH, MONTH),
+    "saas_normalization_provenance_tampered",
+    "escalate with the request id",
+  );
+  const startBefore = {
+    subsidiaryId: PROV_SUBSIDIARY,
+    cohortMonth: MONTH,
+    startMrr: "100.0000",
+    startCustomers: 1,
+    inputsHash: PROV_V0H,
+    reportingCurrency: null,
+    denominationVersion: null,
+  };
+  const start = startRowFromProvenance(startBefore, PROV_SUBSIDIARY, MONTH, MONTH);
+  assert.equal(start.start_mrr, "100.0000");
+  expectSyncRefusal(
+    () => startRowFromProvenance({ ...startBefore, startCustomers: -1 }, PROV_SUBSIDIARY, MONTH, MONTH),
+    "saas_normalization_provenance_tampered",
+    "escalate with the request id",
+  );
+});
 
 test("lease digests never expose the raw token", () => {
   const first = normalizationLeaseDigest("token-a");
@@ -1193,6 +1364,106 @@ test("a tampered prior v1 row does not poison the next month's proof", { skip: !
     });
     assert.equal(doneAugust.request.status, "succeeded", "the immutable before-image still proves August");
     assert.deepEqual(doneAugust.result.sourceV0Hashes, [augustV0.legacyHash]);
+  });
+});
+
+async function monthlyCorrectedChanges(ctx: Fixture): Promise<Record<string, unknown>> {
+  const found = await withOrgTransaction(ctx.org.orgId, async () =>
+    (await db.execute<{ changes: Record<string, unknown> }>(sql`
+      select changes from audit_log
+       where org_id = ${ctx.org.orgId} and table_name = 'saas_metrics_monthly'
+         and action = 'saas_normalization_corrected'
+       order by at limit 1
+    `)).rows[0]?.changes);
+  assert.ok(found, "a corrected monthly event must exist to stage conflicting provenance");
+  return found;
+}
+
+async function appendAuditEvent(
+  ctx: Fixture,
+  table: string,
+  rowId: string,
+  changes: Record<string, unknown>,
+  actorId: string,
+  requestKey: string,
+): Promise<void> {
+  await withOrgTransaction(ctx.org.orgId, async () => {
+    const stored = await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (${ctx.org.orgId}, ${table}, ${rowId}, 'saas_normalization_corrected',
+              ${JSON.stringify(changes)}::jsonb, ${actorId}, ${requestKey})
+      returning id
+    `);
+    assert.equal(stored.rows.length, 1, "the conflicting audit candidate must append");
+  });
+}
+
+test("a conflicting appended provenance candidate refuses as ambiguous", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx);
+    await seedV0Month(ctx, MONTH);
+    const filedJuly = await fileRequest(ctx, { month: MONTH });
+    await approveAndExecuteNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filedJuly.request.id,
+      approverId: ctx.approver,
+    });
+    await seedV0Month(ctx, NEXT_MONTH);
+    const genuine = await monthlyCorrectedChanges(ctx);
+    await appendAuditEvent(ctx, "saas_metrics_monthly", randomUUID(), {
+      ...genuine,
+      requestId: randomUUID(),
+      request_id: randomUUID(),
+    }, ctx.approver, randomUUID());
+    const filedAugust = await fileRequest(ctx, { month: NEXT_MONTH });
+    await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id, approverId: ctx.approver });
+    const { leaseToken } = await claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
+    const error = await expectRefusal(
+      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id, leaseToken }),
+      "saas_normalization_provenance_ambiguous",
+      "escalate with the request id",
+    );
+    assert.match(error.message, /prior month/, "the refusal names the ambiguously provenanced month");
+    const status = await getNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
+    assert.equal(status.status, "failed");
+    const rows = await withOrgTransaction(ctx.org.orgId, async () =>
+      (await db.execute<{ currency: string | null }>(sql`
+        select reporting_currency as currency from saas_metrics_monthly
+         where org_id = ${ctx.org.orgId} and month = ${NEXT_MONTH}::date
+      `)).rows);
+    assert.ok(rows.length > 0, "August legacy rows remain");
+    for (const row of rows) assert.equal(row.currency, null, "no August row normalizes on ambiguous provenance");
+  });
+});
+
+test("a duplicated provenance event refuses as tampered over-count", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedCustomerAndSubscription(ctx);
+    await seedV0Month(ctx, MONTH);
+    const filedJuly = await fileRequest(ctx, { month: MONTH });
+    await approveAndExecuteNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filedJuly.request.id,
+      approverId: ctx.approver,
+    });
+    await seedV0Month(ctx, NEXT_MONTH);
+    const genuine = await monthlyCorrectedChanges(ctx);
+    await appendAuditEvent(ctx, "saas_metrics_monthly", randomUUID(), genuine, ctx.approver, randomUUID());
+    const filedAugust = await fileRequest(ctx, { month: NEXT_MONTH });
+    await approveNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id, approverId: ctx.approver });
+    const { leaseToken } = await claimNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id });
+    await expectRefusal(
+      executeNormalizationRequest({ orgId: ctx.org.orgId, requestId: filedAugust.request.id, leaseToken }),
+      "saas_normalization_provenance_tampered",
+      "escalate with the request id",
+    );
+    const rows = await withOrgTransaction(ctx.org.orgId, async () =>
+      (await db.execute<{ currency: string | null }>(sql`
+        select reporting_currency as currency from saas_metrics_monthly
+         where org_id = ${ctx.org.orgId} and month = ${NEXT_MONTH}::date
+      `)).rows);
+    assert.ok(rows.length > 0, "August legacy rows remain");
+    for (const row of rows) assert.equal(row.currency, null, "no August row normalizes on a duplicated set");
   });
 });
 
