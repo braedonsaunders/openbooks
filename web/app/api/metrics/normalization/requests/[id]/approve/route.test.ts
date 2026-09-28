@@ -153,6 +153,21 @@ test("POST answers 400 for a malformed request id behind authorization", async (
   assert.deepEqual(routeState.calls, []);
 });
 
+test("POST checks the feature gate before parsing the request id", async () => {
+  reset({ features: [] });
+  const response = await post("not-a-uuid");
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not_found" });
+  assert.deepEqual(routeState.calls, [], "a feature-off caller never reaches the service");
+});
+
+test("POST checks unrestricted scope before parsing the request id", async () => {
+  reset({ scopeDenied: true });
+  const response = await post("not-a-uuid");
+  assert.equal(response.status, 403);
+  assert.deepEqual(routeState.calls, [], "a restricted caller never reaches the service");
+});
+
 test("POST hides behind 404 when the feature is off", async () => {
   reset({ features: [] });
   const response = await post(REQUEST_ID);
