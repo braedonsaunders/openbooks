@@ -816,7 +816,7 @@ test("the generic route enforces an any-of gate with no observable storage effec
     const verdict = resolveSetupEntityGate(probe, { projects: false, manufacturing: false, inventory: true });
     assert.equal(verdict.enabled, false);
     assert.equal(verdict.remedy, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY);
-    assert.equal(verdict.remedy, "Turn on Projects or Manufacturing in Company Settings → Features");
+    assert.equal(verdict.remedy, "Turn on Projects or Manufacturing in Company Settings → Features.");
     assert.equal((await POST(postRequest(probeKey, {}), call(probeKey))).status, 404);
     assert.equal((await PATCH(patchRequest(probeKey, { id: randomUUID() }), call(probeKey))).status, 404);
     assert.equal((await DELETE(deleteRequest(probeKey, randomUUID()), call(probeKey))).status, 404);
