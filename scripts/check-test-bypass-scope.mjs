@@ -406,6 +406,30 @@ export function stripped(code) {
   let i = 0;
   while (i < code.length) {
     const char = code[i];
+    if (char === "/") {
+      const before = code.slice(0, i);
+      const previous = before.match(/\S(?=\s*$)/)?.[0];
+      const expressionStart = previous !== undefined && /[=(:,\[{!?|&;]/.test(previous) ||
+        /\b(?:return|case|throw|yield)\s*$/.test(before);
+      if (expressionStart) {
+        let end = i + 1;
+        let inClass = false;
+        while (end < code.length && code[end] !== "\n") {
+          if (code[end] === "\\") { end += 2; continue; }
+          if (code[end] === "[") inClass = true;
+          else if (code[end] === "]") inClass = false;
+          else if (code[end] === "/" && !inClass) break;
+          end++;
+        }
+        if (code[end] === "/") {
+          end++;
+          while (/[a-z]/i.test(code[end] ?? "")) end++;
+          out += " ".repeat(end - i);
+          i = end;
+          continue;
+        }
+      }
+    }
     if (char === "'" || char === '"') {
       out += char;
       i++;

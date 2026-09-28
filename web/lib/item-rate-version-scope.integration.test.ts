@@ -302,12 +302,13 @@ const consolidatedRows = [
         const { resolveRateAdjustments, findLapsedRateCard } = await import('./rate-adjustments.ts')
 
         test('item rates honor location-scoped version cards', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-          const org = await createScratchOrg()
+          const org = await withBypassContext(() => createScratchOrg())
           try {
             const location = randomUUID()
             const project = randomUUID()
             const book = randomUUID()
             const version = randomUUID()
+            await withBypassContext(async () => {
             await db.execute(sql`insert into locations (id, org_id, name, is_active) values (${location}, ${org.orgId}, 'Field location', true)`)
             await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active)
               values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'LOC-RATE', 'Location rate project', ${org.customerId}, 'active', true)`)
@@ -321,9 +322,11 @@ const consolidatedRows = [
               values (${org.orgId}, ${version}, ${org.items.service}, 'hour', 'Hour', 1, 40, 140)`)
             await db.execute(sql`insert into labor_rate_version_scopes (org_id, version_id, scope_type, scope_value_id)
               values (${org.orgId}, ${version}, 'location', ${location})`)
-            await db.execute(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId}`)
+            const activated = await db.execute<{ id: string }>(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId} returning id`)
+            assert.deepEqual(activated.rows.map(row => row.id), [version], 'location-scoped rate version is activated')
             await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, location_id, date_basis, is_active)
               values (${org.orgId}, ${book}, ${location}, 'usage_date', true)`)
+            })
 
             const resolved = await resolveItemRate({
               orgId: org.orgId,
@@ -339,12 +342,13 @@ const consolidatedRows = [
         })
 
         test('child locations inherit version-scoped rates and adjustments when enabled', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-          const org = await createScratchOrg()
+          const org = await withBypassContext(() => createScratchOrg())
           try {
             const parent = randomUUID(), child = randomUUID()
+            const project = randomUUID(), book = randomUUID(), version = randomUUID()
+            await withBypassContext(async () => {
             await db.execute(sql`insert into locations (id, org_id, name, is_active) values (${parent}, ${org.orgId}, 'Region', true)`)
             await db.execute(sql`insert into locations (id, org_id, parent_id, name, is_active) values (${child}, ${org.orgId}, ${parent}, 'Site', true)`)
-            const project = randomUUID(), book = randomUUID(), version = randomUUID()
             await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active)
               values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'LOC-CHILD', 'Child location project', ${org.customerId}, 'active', true)`)
             await db.execute(sql`insert into item_rate_profiles (org_id, item_id, base_unit, is_active)
@@ -359,9 +363,11 @@ const consolidatedRows = [
               values (${org.orgId}, ${version}, 'location', ${parent}, true)`)
             await db.execute(sql`insert into labor_rate_adjustments (org_id, version_id, code, name, category, calculation, value, presentation)
               values (${org.orgId}, ${version}, 'SITE', 'Site premium', 'surcharge', 'percent', 5, 'separate')`)
-            await db.execute(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId}`)
+            const activated = await db.execute<{ id: string }>(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId} returning id`)
+            assert.deepEqual(activated.rows.map(row => row.id), [version], 'child-location rate version is activated')
             await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, date_basis, is_active)
               values (${org.orgId}, ${book}, 'usage_date', true)`)
+            })
 
             const resolved = await resolveItemRate({
               orgId: org.orgId, projectId: project, itemId: org.items.service,
@@ -494,14 +500,25 @@ const rateBookDefaultCases = [{ label: 'item rate book default controls', regist
   const pg = (await import('pg')).default;
   test('rate book deletion cannot remove a concurrently promoted default', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const org = await withBypassContext(() => createScratchOrg());
-    const writer = new pg.Client({ connectionString: process.env.OPENBOOKS_TEST_ADMIN_DB_URL ?? env.OPENBOOKS_DB_URL }); let writerConnected = false; let pending: Promise<Response> | undefined;
+    const adminUrl = process.env.OPENBOOKS_TEST_ADMIN_DB_URL;
+    assert.ok(adminUrl, 'concurrent rate-book fixture requires the isolated admin database URL');
+    assert.equal(new URL(adminUrl).username, 'openbooks', 'concurrent fixture uses the admin role');
+    assert.equal(new URL(adminUrl).pathname, new URL(env.OPENBOOKS_DB_URL!).pathname, 'concurrent fixture uses the test catalog');
+    const writer = new pg.Client({ connectionString: adminUrl }); let writerConnected = false; let pending: Promise<Response> | undefined;
     try {
       await authenticate(org);
       const prior = await send('POST', { code: 'PRIOR', name: 'Prior default', isDefault: true, isActive: true }); assert.equal(prior.status, 200); const priorId = (await prior.json()).id;
       const next = await send('POST', { code: 'NEXT', name: 'Next default', isDefault: false, isActive: true }); assert.equal(next.status, 200); const nextId = (await next.json()).id;
-      await writer.connect(); writerConnected = true; await writer.query('begin');
-      assert.equal((await writer.query('update item_rate_books set is_default=false where id=$1', [priorId])).rowCount, 1);
-      assert.equal((await writer.query('update item_rate_books set is_default=true where id=$1', [nextId])).rowCount, 1);
+      await writer.connect(); writerConnected = true;
+      const role = await writer.query<{ rolbypassrls: boolean }>('select rolbypassrls from pg_roles where rolname = current_user');
+      assert.equal(role.rows[0]?.rolbypassrls, true, 'concurrent fixture admin connection bypasses tenant RLS');
+      await writer.query('begin');
+      await withBypassContext(async () => {
+        const priorUpdated = await writer.query<{ id: string }>('update item_rate_books set is_default=false where id=$1 returning id', [priorId]);
+        assert.deepEqual(priorUpdated.rows.map(row => row.id), [priorId], 'prior rate-book default is cleared once');
+        const nextUpdated = await writer.query<{ id: string }>('update item_rate_books set is_default=true where id=$1 returning id', [nextId]);
+        assert.deepEqual(nextUpdated.rows.map(row => row.id), [nextId], 'next rate-book default is promoted once');
+      });
       const pendingDelete = send('DELETE', { id: nextId }); pending = pendingDelete; void pendingDelete.catch(() => {});
       await waitForLockWaiter(writer, { label: 'the rate-book deletion' }); await writer.query('commit');
       assert.equal((await pendingDelete).status, 409); assert.equal((await readRow(nextId))?.is_default, true);

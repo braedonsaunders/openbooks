@@ -31,12 +31,14 @@ const request = (body: unknown) =>
   });
 
 async function setup() {
-  const org = await createScratchOrg();
-  const actorId = await createScratchUser(org.orgId, "Close Flags Admin", "close-admin");
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Close Flags Admin", "close-admin"));
   state.user = { orgId: org.orgId, id: actorId };
-  await withBypassContext(() =>
-    db.execute(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId}`),
+  const enabled = await withBypassContext(() =>
+    db.execute<{ id: string }>(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId} returning id`),
   );
+  assert.equal(enabled.rows.length, 1, "close flags setup updates exactly one organization");
+  assert.equal(enabled.rows[0]?.id, org.orgId, "close flags setup updates its own organization");
   return { org, actorId };
 }
 
