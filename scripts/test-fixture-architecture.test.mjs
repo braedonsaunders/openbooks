@@ -462,7 +462,7 @@ test("narrowed resets mark exactly the dirtied tables and restore a pristine slo
   const dirtied = await probe(org);
   assert.deepEqual(
     [...dirtied.tables].sort(),
-    ["accounts", "app_roles", "document_lines", "documents", "journal_entries", "journal_lines", "orgs", "parties", "role_assignments", "stock_locations", "users"],
+    ["accounts", "app_roles", "document_lines", "documents", "journal_entries", "journal_lines", "orgs", "parties", "role_assignments", "stock_locations", "users", "warehouses"],
     "the probe must mark exactly the dirtied tables — no more, no fewer",
   );
   assert.equal(dirtied.special, true, "the orphan password-reset row must trip the special-evidence probe");
