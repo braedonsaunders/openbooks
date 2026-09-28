@@ -403,11 +403,12 @@ function attributedBucket<Bucket extends { subsidiary_id: string; entry_ids: str
  * only for sign or existence: a denomination-invariant comparison still
  * consumes the row, so legacy rows cannot bypass the rollout refusal.
  *
- * The remedy is real: recompute the source month through SaaS metrics
- * recompute — the flow that normalizes stored months to the definitions in
- * Company Settings → Setup → Company — so its rows carry v1 evidence, then
- * recompute the current month. A closed legacy month stays frozen; correct
- * it through the period-close reversal flow, never by rewriting history.
+ * The remedy is the release's controlled normalization workflow, not an
+ * ordinary recompute: the operator opens Company Setup → SaaS Metrics,
+ * submits a normalization request for the source month, and a different
+ * authorized approver approves it before the current month is recomputed.
+ * Closed periods remain closed throughout; legacy rows stay frozen until
+ * the approved correction succeeds.
  */
 function validatedHistoryCurrency(args: {
   scope: string;
@@ -422,7 +423,7 @@ function validatedHistoryCurrency(args: {
     throw refusal(
       "saas_metrics_history_denomination_unknown",
       `${args.scope} is stored without normalized denomination evidence (reporting currency ${currency ?? "absent"}, denomination ${stored}) and cannot open ${args.month}.`,
-      `Recompute ${args.sourceMonth} through SaaS metrics recompute — the flow that normalizes stored months to the definitions in Company Settings → Setup → Company — so its rows carry v1 evidence, then recompute ${args.month}. A closed legacy month stays frozen; correct it through the period-close reversal flow, never by rewriting history.`,
+      `Open Company Setup → SaaS Metrics and submit a normalization request for ${args.sourceMonth}; have a different authorized approver approve it, then recompute ${args.month}. Closed periods remain closed and posted accounting history is never reversed or rewritten to normalize derived metrics.`,
       { field: "month" },
     );
   }
