@@ -435,7 +435,7 @@ function readOffset(offset: number | undefined): number {
   return value;
 }
 
-/** List funds in deterministic code order with same-organization totals. */
+/** List funds in name order with code and id tie-breakers and same-organization totals; null codes sort last. */
 export async function listFunds(
   input: {
     orgId: string;
@@ -455,7 +455,6 @@ export async function listFunds(
   const search = input.search?.trim();
   if (search) conds.push(sql`(sv.code ilike ${`%${search}%`} or sv.name ilike ${`%${search}%`})`);
   const where = sql.join(conds, sql` and `);
-  // Deterministic order: name (the native default sort), code, id; null codes sort last.
   const rows = await runner.execute<FundReadRow>(sql`
     select f.id::text as id, sv.code, sv.name, f.kind,
            f.restriction_class, f.budgetary_control, sv.is_active, f.custom,
