@@ -328,6 +328,31 @@ test('governed rows compile to one statement with no count probe', () => {
   assert.ok((compiled.normalizationHiddenColumns ?? []).includes('__norm_total'))
 })
 
+test('governed rows repeat the requested sort after the final join', () => {
+  // The join must not silently reorder rows: the outer SELECT carries the
+  // exact requested terms — two sort keys here, one selected and one hidden —
+  // with direction and NULLS LAST preserved.
+  const compiled = compileCustomQuery(REPORT_ENTITY_MAP.saas_metrics_facts!, rowsPlan({
+    sorts: [
+      { column: 'month', direction: 'desc' },
+      { column: 'subsidiary', direction: 'asc' },
+    ],
+  }), ORG, {})
+  assert.match(
+    compiled.text,
+    /RIGHT JOIN __denom ON TRUE ORDER BY "month" DESC NULLS LAST, "subsidiary" ASC NULLS LAST$/,
+  )
+  assert.match(compiled.text, /__page AS \(SELECT \*, 1 AS "__page_present" FROM __scope ORDER BY "month" DESC NULLS LAST, "subsidiary" ASC NULLS LAST/)
+})
+
+test('governed rows carry unselected sort columns hidden and stripped', () => {
+  const compiled = compileCustomQuery(REPORT_ENTITY_MAP.saas_metrics_facts!, rowsPlan({
+    sorts: [{ column: 'basis', direction: 'asc' }],
+  }), ORG, {})
+  assert.match(compiled.text, /RIGHT JOIN __denom ON TRUE ORDER BY "__sort_0" ASC NULLS LAST$/)
+  assert.ok((compiled.normalizationHiddenColumns ?? []).includes('__sort_0'))
+})
+
 test('rows pins and breakouts never skip the normalization probes', async () => {
   const entity = REPORT_ENTITY_MAP.saas_metrics_facts!
   const pinned = compileCustomQuery(entity, rowsPlan({
