@@ -11,9 +11,12 @@ import {
   SAAS_METRICS_DENOMINATION_VERSION,
 } from "./metrics-normalization.ts";
 import {
+  computeLegacyV0Month,
   computeNormalizedMetricsMonth,
   readStoredMetricsMonth,
   writeNormalizedMetricsMonth,
+  type LegacyV0Month,
+  type NormalizedMetricsMonth,
   type StoredMetricsMonth,
 } from "./metrics-ledger.ts";
 
@@ -234,6 +237,29 @@ function liveRequestRemedy(existing: NormalizationRequestRecord): string {
 }
 
 /**
+ * Truthful per-status claim remedy: only a running request can be waited
+ * on or cancelled; terminal rows name their own recovery and never invite
+ * a cancel, and failed rows point at retry rather than waiting.
+ */
+function claimStateRemedy(existing: NormalizationRequestRecord): string {
+  switch (existing.status) {
+    case "running":
+      return liveRequestRemedy(existing);
+    case "succeeded":
+      return `Request ${existing.id} for ${existing.month} already succeeded. ` +
+        "Review the stored month and its recorded result in Company Setup → SaaS Metrics; file a new request for further work.";
+    case "failed":
+      return `Request ${existing.id} for ${existing.month} already failed. ` +
+        "Retry the failed request in Company Setup → SaaS Metrics to open a fresh lease, then continue.";
+    case "cancelled":
+      return `Request ${existing.id} for ${existing.month} was cancelled and is immutable. ` +
+        "File a new request in Company Setup → SaaS Metrics for further work.";
+    default:
+      return liveRequestRemedy(existing);
+  }
+}
+
+/**
  * File exactly one org and month per request. Same org, key, and
  * byte-identical body returns the existing request; the same key with a
  * different body refuses by name; a second live request for the month
@@ -439,7 +465,7 @@ export async function claimNormalizationRequest(args: {
       throw refusal(
         "saas_normalization_already_claimed",
         `Request ${requestId} is ${existing.status}; the first claim already ran.`,
-        liveRequestRemedy(toRecord(existing)),
+        claimStateRemedy(toRecord(existing)),
         { status: 409 },
       );
     }
@@ -466,7 +492,7 @@ export async function claimNormalizationRequest(args: {
       throw refusal(
         "saas_normalization_already_claimed",
         `Request ${requestId} was claimed concurrently and is no longer pending.`,
-        current ? liveRequestRemedy(toRecord(current)) : SETUP_LIST_REMEDY,
+        current ? claimStateRemedy(toRecord(current)) : SETUP_LIST_REMEDY,
         { status: 409 },
       );
     }
@@ -729,9 +755,12 @@ export async function cancelNormalizationRequest(args: {
         }
         return toRecord(updated[0]!);
       }
+      // The guard requires a cancelled request to carry no outcome, so
+      // the failed failure and remedy clear atomically with the cancel.
       const updated = (await db.execute<RequestRow>(sql`
         update saas_metrics_normalization_requests
-           set status = 'cancelled', updated_by = approved_by
+           set status = 'cancelled', result = null, failure = null, remedy = null,
+               updated_by = approved_by
          where org_id = ${orgId} and id = ${requestId} and status = 'failed'
         returning ${REQUEST_COLUMNS}
       `)).rows;
@@ -849,13 +878,16 @@ async function markProgress(
 }
 
 /**
- * The v0 proof: reproduce the legacy row set byte-for-byte from unchanged
- * sources before any metric write. Every stored row must still be legacy
- * (all three reporting columns null); a fully normalized month replays as
- * already done, and a mixed month refuses as unsupported partial
- * normalization. An empty month has nothing to correct.
+ * The v0 proof: reproduce the legacy row sets byte-for-byte from the
+ * current sources through the read-only v0 compatibility projection, then
+ * compare every stored legacy field against the reproduction before any
+ * metric write. Natural keys, row counts, every numeric, count, movement,
+ * and basis field, and the one canonical legacy inputs hash must all agree.
+ * Any drift fails closed: source changes refuse as drift, altered stored
+ * rows refuse as tamper, and missing or extra keys refuse as key drift —
+ * each with the controlled Company Setup remedy and zero metric writes.
  */
-function proveLegacyMonth(before: StoredMetricsMonth, month: string): string[] {
+function proveLegacyMonth(before: StoredMetricsMonth, reproduced: LegacyV0Month, month: string): string[] {
   const all = [...before.monthly, ...before.facts, ...before.cohorts];
   if (all.length === 0) {
     throw refusal(
@@ -868,33 +900,218 @@ function proveLegacyMonth(before: StoredMetricsMonth, month: string): string[] {
   const isLegacy = (row: { reportingCurrency: string | null; denominationVersion: string | null }): boolean =>
     row.reportingCurrency === null && row.denominationVersion === null;
   const legacy = all.filter(isLegacy);
-  if (legacy.length === all.length) return [...new Set(all.map((row) => row.inputsHash))];
-  const complete = all.filter((row) => row.reportingCurrency !== null && row.denominationVersion !== null);
-  if (complete.length === all.length) {
+  if (legacy.length !== all.length) {
+    const complete = all.filter((row) => row.reportingCurrency !== null && row.denominationVersion !== null);
+    if (complete.length === all.length) {
+      throw refusal(
+        "saas_normalization_already_normalized",
+        `Month ${month} already carries normalized denomination evidence; no correction is needed.`,
+        `Review the stored month in Company Setup → SaaS Metrics; normalized rows may come from the ordinary recompute as well as an approved correction.`,
+        { field: "month", status: 409 },
+      );
+    }
     throw refusal(
-      "saas_normalization_already_normalized",
-      `Month ${month} already carries normalized denomination evidence; no correction is needed.`,
-      "Open the original succeeded request in Company Setup → SaaS Metrics for its recorded result.",
+      "saas_normalization_partial_denominations",
+      `Month ${month} mixes legacy and normalized rows, which one correction request cannot reconcile.`,
+      "Have an administrator investigate the month's recorded evidence in Company Setup → SaaS Metrics and escalate with the request id; derived metrics rows are never edited by hand.",
       { field: "month", status: 409 },
     );
   }
-  throw refusal(
-    "saas_normalization_partial_denominations",
-    `Month ${month} mixes legacy and normalized rows, which one request cannot reconcile.`,
-    "Open Company Setup → SaaS Metrics and review the month's recorded rows; restore a uniform row set, then file a new request.",
-    { field: "month", status: 409 },
-  );
+  // Natural-key grain first: the proved sets must match the reproduced
+  // sets exactly, in both directions, before any value is compared.
+  const storedMonthlyKeys = new Set(before.monthly.map((row) => row.subscriptionId));
+  const v0MonthlyKeys = new Set(reproduced.monthly.map((row) => row.subscriptionId));
+  const storedFactsKeys = new Set(before.facts.map((row) => row.subsidiaryId));
+  const v0FactsKeys = new Set(reproduced.facts.map((row) => row.subsidiaryId));
+  const storedCohortKeys = new Set(before.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`));
+  const v0CohortKeys = new Set(reproduced.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`));
+  const keyDrift = [
+    ...[...storedMonthlyKeys].filter((key) => !v0MonthlyKeys.has(key)).map((key) => `saas_metrics_monthly:${key}`),
+    ...[...v0MonthlyKeys].filter((key) => !storedMonthlyKeys.has(key)).map((key) => `saas_metrics_monthly:${key}`),
+    ...[...storedFactsKeys].filter((key) => !v0FactsKeys.has(key)).map((key) => `saas_metrics_facts_monthly:${key}`),
+    ...[...v0FactsKeys].filter((key) => !storedFactsKeys.has(key)).map((key) => `saas_metrics_facts_monthly:${key}`),
+    ...[...storedCohortKeys].filter((key) => !v0CohortKeys.has(key)).map((key) => `saas_metrics_cohort_monthly:${key}`),
+    ...[...v0CohortKeys].filter((key) => !storedCohortKeys.has(key)).map((key) => `saas_metrics_cohort_monthly:${key}`),
+  ];
+  if (keyDrift.length > 0) {
+    throw refusal(
+      "saas_normalization_v0_key_drift",
+      `Month ${month} no longer reproduces its recorded natural keys (${keyDrift.slice(0, 3).join(", ")}${keyDrift.length > 3 ? ", …" : ""}).`,
+      "Normalize earlier months first in Company Setup → SaaS Metrics so openings settle, then file a new request; if every source is unchanged, have an administrator investigate with the request id.",
+      { field: "month", status: 409 },
+    );
+  }
+  // One common stored hash, then exact equality with the recomputed v0 hash.
+  const storedHashes = [...new Set(all.map((row) => row.inputsHash))];
+  if (storedHashes.length !== 1 || storedHashes[0] !== reproduced.legacyHash) {
+    const valuesMatch = compareV0Values(before, reproduced).length === 0;
+    if (valuesMatch) {
+      throw refusal(
+        "saas_normalization_hash_tamper",
+        `Month ${month} reproduces its recorded values but not its recorded inputs hash.`,
+        "Have an administrator investigate the month's recorded evidence in Company Setup → SaaS Metrics and escalate with the request id; derived metrics rows are never edited by hand.",
+        { field: "month", status: 409 },
+      );
+    }
+    throw refusal(
+      "saas_normalization_source_drift",
+      `Month ${month} no longer reproduces its recorded legacy evidence from the current sources.`,
+      "Normalize earlier months first in Company Setup → SaaS Metrics so openings settle, correct any changed subscription, FX rate, journal, or definition input, then file a new request.",
+      { field: "month", status: 409 },
+    );
+  }
+  // The hashes agree, so every stored value must agree too; otherwise the
+  // stored rows were altered after recording.
+  const valueDrift = compareV0Values(before, reproduced);
+  if (valueDrift.length > 0) {
+    throw refusal(
+      "saas_normalization_stored_tamper",
+      `Month ${month} carries its recorded inputs hash but not its recorded values (${valueDrift[0]}).`,
+      "Have an administrator investigate the month's recorded evidence in Company Setup → SaaS Metrics and escalate with the request id; derived metrics rows are never edited by hand.",
+      { field: "month", status: 409 },
+    );
+  }
+  return storedHashes as string[];
+}
+
+const V0_MONTHLY_FIELDS = [
+  "subsidiaryId",
+  "customerId",
+  "month",
+  "cohortMonth",
+  "mrrStart",
+  "mrrEnd",
+  "newMrr",
+  "expansionMrr",
+  "contractionMrr",
+  "churnedMrr",
+  "reactivationMrr",
+  "movement",
+  "recognizedRevenue",
+  "deferredDelta",
+] as const;
+
+const V0_FACTS_FIELDS = [
+  "subsidiaryId",
+  "month",
+  "mrrStart",
+  "mrrEnd",
+  "newMrr",
+  "expansionMrr",
+  "contractionMrr",
+  "churnedMrr",
+  "reactivationMrr",
+  "recognizedRevenue",
+  "deferredDelta",
+  "mrrAtRisk",
+  "customersStart",
+  "customersEnd",
+  "customersNew",
+  "customersChurned",
+  "customersReactivated",
+  "glRevenue",
+  "glCogs",
+  "bookings",
+  "billings",
+  "deferredBalance",
+  "basis",
+] as const;
+
+const V0_COHORT_FIELDS = [
+  "subsidiaryId",
+  "cohortMonth",
+  "month",
+  "monthsSinceStart",
+  "startMrr",
+  "mrr",
+  "startCustomers",
+  "customers",
+] as const;
+
+/** Field-level comparison of stored legacy rows against the v0 reproduction; empty means exact. */
+function compareV0Values(before: StoredMetricsMonth, reproduced: LegacyV0Month): string[] {
+  const drift: string[] = [];
+  const v0MonthlyByKey = new Map(reproduced.monthly.map((row) => [row.subscriptionId, row]));
+  for (const stored of before.monthly) {
+    const expected = v0MonthlyByKey.get(stored.subscriptionId);
+    if (!expected) continue;
+    for (const field of V0_MONTHLY_FIELDS) {
+      if (String(stored[field]) !== String(expected[field])) {
+        drift.push(`saas_metrics_monthly:${stored.subscriptionId}.${field}`);
+      }
+    }
+  }
+  const v0FactsByKey = new Map(reproduced.facts.map((row) => [row.subsidiaryId, row]));
+  for (const stored of before.facts) {
+    const expected = v0FactsByKey.get(stored.subsidiaryId);
+    if (!expected) continue;
+    for (const field of V0_FACTS_FIELDS) {
+      if (String(stored[field]) !== String(expected[field])) {
+        drift.push(`saas_metrics_facts_monthly:${stored.subsidiaryId}.${field}`);
+      }
+    }
+  }
+  const v0CohortsByKey = new Map(reproduced.cohorts.map((row) => [`${row.subsidiaryId}:${row.cohortMonth}`, row]));
+  for (const stored of before.cohorts) {
+    const expected = v0CohortsByKey.get(`${stored.subsidiaryId}:${stored.cohortMonth}`);
+    if (!expected) continue;
+    for (const field of V0_COHORT_FIELDS) {
+      if (String(stored[field]) !== String(expected[field])) {
+        drift.push(`saas_metrics_cohort_monthly:${stored.subsidiaryId}:${stored.cohortMonth}.${field}`);
+      }
+    }
+  }
+  return drift;
 }
 
 type CorrectionAuditSeed = {
   table: string;
   rowId: string;
   naturalKey: Record<string, unknown>;
-  change: "corrected" | "added" | "removed";
+  change: "corrected";
   before: unknown;
   after: unknown;
   sourceV0Hash: string | null;
 };
+
+/**
+ * The v1 correction preserves the proved grain: every computed natural key
+ * must already exist in the proved before-image and vice versa, with equal
+ * row counts per set. Normalization changes amounts and evidence, never
+ * subscription, subsidiary, or cohort identity.
+ */
+function assertSameGrain(
+  before: StoredMetricsMonth,
+  normalized: NormalizedMetricsMonth,
+  month: string,
+): void {
+  const missing: string[] = [];
+  const beforeMonthly = new Set(before.monthly.map((row) => row.subscriptionId));
+  const v1Monthly = new Set(normalized.computed.rows.map((row) => row.subscriptionId));
+  const beforeFacts = new Set(before.facts.map((row) => row.subsidiaryId));
+  const v1Facts = new Set(normalized.facts.map((row) => row.subsidiaryId));
+  const beforeCohorts = new Set(before.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`));
+  const v1Cohorts = new Set(normalized.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`));
+  for (const key of v1Monthly) if (!beforeMonthly.has(key)) missing.push(`saas_metrics_monthly:${key}`);
+  for (const key of beforeMonthly) if (!v1Monthly.has(key)) missing.push(`saas_metrics_monthly:${key}`);
+  for (const key of v1Facts) if (!beforeFacts.has(key)) missing.push(`saas_metrics_facts_monthly:${key}`);
+  for (const key of beforeFacts) if (!v1Facts.has(key)) missing.push(`saas_metrics_facts_monthly:${key}`);
+  for (const key of v1Cohorts) if (!beforeCohorts.has(key)) missing.push(`saas_metrics_cohort_monthly:${key}`);
+  for (const key of beforeCohorts) if (!v1Cohorts.has(key)) missing.push(`saas_metrics_cohort_monthly:${key}`);
+  if (
+    missing.length > 0
+    || normalized.computed.rows.length !== before.monthly.length
+    || normalized.facts.length !== before.facts.length
+    || normalized.cohorts.length !== before.cohorts.length
+  ) {
+    throw refusal(
+      "saas_normalization_grain_changed",
+      `Month ${month} changed membership during its correction${missing.length > 0 ? ` (${missing.slice(0, 3).join(", ")}${missing.length > 3 ? ", …" : ""})` : ""}.`,
+      "Retry the request in Company Setup → SaaS Metrics; every metric write was rolled back and the attempt re-proves the month before any write.",
+      { field: "month", status: 409 },
+    );
+  }
+}
 
 /** Per-row before/after correction evidence in the canonical audit_log; raw tokens never appear. */
 async function writeCorrectionAudit(
@@ -1011,30 +1228,26 @@ export async function getNormalizationRequest(args: {
 }
 
 /**
- * Execute one fenced correction attempt in a single transaction: authorize
- * under the live lease, take the feature-gate lock and recheck the gate,
- * take the org/month correction lock, prove the legacy month byte-for-byte,
- * compute through the shared v1 pipeline, replace that month's three row
- * sets atomically, record per-row before/after evidence, and finalize
- * succeeded under the live token. Any drift rolls every metric write back;
- * the caller records the guarded failed outcome outside this transaction.
+ * Execute one fenced correction attempt in a single transaction. The month
+ * arrives from the outer control lookup and is used only as the advisory
+ * lock key: inside the transaction the org feature-gate fence comes first
+ * with its recheck, then the deterministic org/month correction lock, and
+ * only then does the attempt reread and fence the request, verify its
+ * immutable month, prove the legacy month byte-for-byte, compute through
+ * the shared v1 pipeline, replace that month's three row sets atomically,
+ * record per-row before/after evidence, and finalize succeeded under the
+ * live token. No request or metric read precedes those locks. Any drift
+ * rolls every metric write back; the caller records the guarded failed
+ * outcome outside this transaction.
  */
 async function runCorrectionAttempt(
   orgId: string,
   requestId: string,
   leaseToken: string,
+  month: string,
   ttlMinutes: number,
 ): Promise<NormalizationExecutionResult> {
   return withOrgTransaction(orgId, async () => {
-    // Read the month first: the lock key derives from it, and every
-    // authorization decision below still goes through the fenced claim.
-    const peek = await readRequest(db, orgId, requestId);
-    if (!peek) throw missingRequest(requestId);
-    if (peek.status === "succeeded" && peek.result) return peek.result;
-    const month = peek.month.slice(0, 10);
-    // Keel order: the org feature-gate fence first with its recheck, then
-    // the deterministic org/month correction lock, before any proof, read,
-    // or write. One transaction executor holds both to commit.
     await acquireOrgFeatureGateLock(db, orgId);
     if (!(await lockAndCheckOrgFeature(db, orgId, "saasMetrics"))) {
       throw refusal("feature_off", "SaaS metrics are disabled for this organization.", FEATURES_REMEDY);
@@ -1045,8 +1258,17 @@ async function runCorrectionAttempt(
     const assertion = await assertLiveClaim(db, orgId, requestId, leaseToken, ttlMinutes);
     if (assertion.kind === "replay") return assertion.result;
     const { claim } = assertion;
+    if (claim.month !== month) {
+      throw refusal(
+        "saas_normalization_month_mismatch",
+        `Request ${requestId} covers ${claim.month}, not the executed month ${month}.`,
+        SETUP_LIST_REMEDY,
+        { field: "month", status: 409 },
+      );
+    }
     const before = await readStoredMetricsMonth(db, orgId, claim.month);
-    const sourceV0Hashes = proveLegacyMonth(before, claim.month);
+    const reproduced = await computeLegacyV0Month(db, orgId, claim.month);
+    const sourceV0Hashes = proveLegacyMonth(before, reproduced, claim.month);
     await markProgress(db, orgId, requestId, leaseToken, {
       phase: "proof-complete",
       storedMonthly: before.monthly.length,
@@ -1059,6 +1281,11 @@ async function runCorrectionAttempt(
       monthHash: normalized.monthHash,
       reportingCurrency: normalized.reportingCurrency,
     });
+    // Denomination may change amounts and evidence, never identity: the v1
+    // correction must preserve the proved natural-key sets and grain
+    // exactly. Added or removed keys mean the sources moved under the
+    // attempt, so the batch refuses before any delete or write.
+    assertSameGrain(before, normalized, claim.month);
     // Atomic replacement inside the transaction: the proven rows leave
     // first with exact-count deletes, then the shared writers store v1.
     // A closed month is corrected here only under this approved request;
@@ -1108,82 +1335,64 @@ async function runCorrectionAttempt(
         { status: 409 },
       );
     }
+    // Grain was proved equal above, so every rewritten row has exactly one
+    // proved prior; a missing prior fails closed instead of recording an
+    // added or removed correction.
+    const requirePrior = <Key>(prior: Key | undefined, table: string, key: string): Key => {
+      if (!prior) {
+        throw refusal(
+          "saas_normalization_grain_changed",
+          `Month ${claim.month} changed membership during its correction (${table}:${key}).`,
+          "Retry the request in Company Setup → SaaS Metrics; every metric write was rolled back and the attempt re-proves the month before any write.",
+          { field: "month", status: 409 },
+        );
+      }
+      return prior;
+    };
     const beforeMonthlyByKey = new Map(before.monthly.map((row) => [row.subscriptionId, row]));
     const beforeFactsByKey = new Map(before.facts.map((row) => [row.subsidiaryId, row]));
     const beforeCohortsByKey = new Map(before.cohorts.map((row) => [`${row.subsidiaryId}:${row.cohortMonth}`, row]));
-    const afterMonthlyKeys = new Set(after.monthly.map((row) => row.subscriptionId));
-    const afterFactsKeys = new Set(after.facts.map((row) => row.subsidiaryId));
-    const afterCohortKeys = new Set(after.cohorts.map((row) => `${row.subsidiaryId}:${row.cohortMonth}`));
     const seeds: CorrectionAuditSeed[] = [
       ...after.monthly.map((row): CorrectionAuditSeed => {
-        const prior = beforeMonthlyByKey.get(row.subscriptionId) ?? null;
+        const prior = requirePrior(beforeMonthlyByKey.get(row.subscriptionId), "saas_metrics_monthly", row.subscriptionId);
         return {
           table: "saas_metrics_monthly",
           rowId: row.id,
           naturalKey: { subscriptionId: row.subscriptionId, month: row.month },
-          change: prior ? "corrected" : "added",
+          change: "corrected",
           before: prior,
           after: row,
-          sourceV0Hash: prior?.inputsHash ?? null,
+          sourceV0Hash: prior.inputsHash,
         };
       }),
       ...after.facts.map((row): CorrectionAuditSeed => {
-        const prior = beforeFactsByKey.get(row.subsidiaryId) ?? null;
+        const prior = requirePrior(beforeFactsByKey.get(row.subsidiaryId), "saas_metrics_facts_monthly", row.subsidiaryId);
         return {
           table: "saas_metrics_facts_monthly",
           rowId: row.id,
           naturalKey: { subsidiaryId: row.subsidiaryId, month: row.month },
-          change: prior ? "corrected" : "added",
+          change: "corrected",
           before: prior,
           after: row,
-          sourceV0Hash: prior?.inputsHash ?? null,
+          sourceV0Hash: prior.inputsHash,
         };
       }),
       ...after.cohorts.map((row): CorrectionAuditSeed => {
-        const prior = beforeCohortsByKey.get(`${row.subsidiaryId}:${row.cohortMonth}`) ?? null;
+        const prior = requirePrior(
+          beforeCohortsByKey.get(`${row.subsidiaryId}:${row.cohortMonth}`),
+          "saas_metrics_cohort_monthly",
+          `${row.subsidiaryId}:${row.cohortMonth}`,
+        );
         return {
           table: "saas_metrics_cohort_monthly",
           rowId: row.id,
           naturalKey: { subsidiaryId: row.subsidiaryId, cohortMonth: row.cohortMonth, month: row.month },
-          change: prior ? "corrected" : "added",
+          change: "corrected",
           before: prior,
           after: row,
-          sourceV0Hash: prior?.inputsHash ?? null,
+          sourceV0Hash: prior.inputsHash,
         };
       }),
-      ...before.monthly
-        .filter((row) => !afterMonthlyKeys.has(row.subscriptionId))
-        .map((row): CorrectionAuditSeed => ({
-          table: "saas_metrics_monthly",
-          rowId: row.id,
-          naturalKey: { subscriptionId: row.subscriptionId, month: row.month },
-          change: "removed",
-          before: row,
-          after: null,
-          sourceV0Hash: row.inputsHash,
-        })),
-      ...before.facts
-        .filter((row) => !afterFactsKeys.has(row.subsidiaryId))
-        .map((row): CorrectionAuditSeed => ({
-          table: "saas_metrics_facts_monthly",
-          rowId: row.id,
-          naturalKey: { subsidiaryId: row.subsidiaryId, month: row.month },
-          change: "removed",
-          before: row,
-          after: null,
-          sourceV0Hash: row.inputsHash,
-        })),
-      ...before.cohorts
-        .filter((row) => !afterCohortKeys.has(`${row.subsidiaryId}:${row.cohortMonth}`))
-        .map((row): CorrectionAuditSeed => ({
-          table: "saas_metrics_cohort_monthly",
-          rowId: row.id,
-          naturalKey: { subsidiaryId: row.subsidiaryId, cohortMonth: row.cohortMonth, month: row.month },
-          change: "removed",
-          before: row,
-          after: null,
-          sourceV0Hash: row.inputsHash,
-        })),
     ];
     await writeCorrectionAudit(db, {
       orgId,
@@ -1256,7 +1465,7 @@ export async function executeNormalizationRequest(args: {
   if (!peek) throw missingRequest(requestId);
   if (peek.status === "succeeded" && peek.result) return peek.result;
   try {
-    return await runCorrectionAttempt(orgId, requestId, leaseToken, ttlMinutes);
+    return await runCorrectionAttempt(orgId, requestId, leaseToken, peek.month.slice(0, 10), ttlMinutes);
   } catch (error) {
     // Fence and state refusals fire before any metric work starts, so there
     // is no failed outcome to record; drift, source, rate, and write
@@ -1270,12 +1479,152 @@ export async function executeNormalizationRequest(args: {
         "saas_normalization_lease_mismatch",
         "saas_normalization_lease_state",
         "saas_normalization_lease_live",
+        "saas_normalization_month_mismatch",
         "feature_off",
       ].includes(error.code)
     ) {
       throw error;
     }
     const month = peek.month.slice(0, 10);
+    const { failure, remedy, error: original } = toFailure(error, month);
+    await recordExecutionFailure({ orgId, requestId, leaseToken, failure, remedy, original });
+  }
+}
+
+/**
+ * The one E-facing approval action: record the distinct approver and the
+ * first pending-to-running claim atomically in a single transaction, then
+ * execute the fenced correction with the lease token held server-side. No
+ * externally committed approved-but-unclaimed gap can exist through this
+ * entrypoint: either both guarded statements commit together or the
+ * concurrent loser refuses on zero rows. The raw token is never returned;
+ * callers receive the request record and the recorded result only.
+ * Lower-level approve, claim, and execute calls remain for recovery and
+ * tests, never for the E orchestration path.
+ */
+export async function approveAndExecuteNormalizationRequest(args: {
+  orgId: string;
+  requestId: string;
+  approverId: string;
+  leaseTtlMinutes?: number;
+}): Promise<{ request: NormalizationRequestRecord; result: NormalizationExecutionResult }> {
+  const orgId = requireUuid(args.orgId, "org_id");
+  const requestId = requireUuid(args.requestId, "request_id");
+  const approverId = requireUuid(args.approverId, "approved_by");
+  const ttlMinutes = args.leaseTtlMinutes ?? DEFAULT_LEASE_MINUTES;
+  if (!Number.isInteger(ttlMinutes) || ttlMinutes < 1 || ttlMinutes > 1440) {
+    throw refusal(
+      "saas_normalization_lease_ttl_invalid",
+      "The lease duration must be between 1 and 1440 minutes.",
+      "Request a lease of 1 to 1440 minutes when approving in Company Setup → SaaS Metrics.",
+      { field: "leaseTtlMinutes" },
+    );
+  }
+  const peek = await withOrgTransaction(orgId, async () => readRequest(db, orgId, requestId));
+  if (!peek) throw missingRequest(requestId);
+  if (peek.status === "succeeded" && peek.result) {
+    return { request: toRecord(peek), result: peek.result };
+  }
+  if (peek.status !== "pending") {
+    throw refusal(
+      "saas_normalization_approval_state",
+      `Request ${requestId} is ${peek.status} and no longer accepts an approval.`,
+      SETUP_LIST_REMEDY,
+      { status: 409 },
+    );
+  }
+  if (approverId === peek.requested_by) {
+    throw refusal(
+      "saas_normalization_self_approval",
+      `Request ${requestId} cannot be approved by its requester.`,
+      "Have a different authorized approver approve the request in Company Setup → SaaS Metrics.",
+      { field: "approved_by", status: 409 },
+    );
+  }
+  if (peek.approved_by !== null && peek.approved_by !== approverId) {
+    throw refusal(
+      "saas_normalization_approver_recorded",
+      `Request ${requestId} already records approver ${peek.approved_by}; the recorded approval stands.`,
+      SETUP_LIST_REMEDY,
+      { field: "approved_by", status: 409 },
+    );
+  }
+  const month = peek.month.slice(0, 10);
+  const leaseToken = randomUUID();
+  await withOrgTransaction(orgId, async () => {
+    if (peek.approved_by === null) {
+      const approved = (await db.execute<{ id: string }>(sql`
+        update saas_metrics_normalization_requests
+           set approved_by = ${approverId}, approved_at = now(), updated_by = ${approverId}
+         where org_id = ${orgId} and id = ${requestId} and status = 'pending' and approved_by is null
+        returning id
+      `)).rows;
+      if (approved.length !== 1) {
+        const current = await readRequest(db, orgId, requestId);
+        if (!current) throw missingRequest(requestId);
+        if (current.approved_by !== null && current.approved_by !== approverId) {
+          throw refusal(
+            "saas_normalization_approver_recorded",
+            `Request ${requestId} already records approver ${current.approved_by}; the recorded approval stands.`,
+            SETUP_LIST_REMEDY,
+            { field: "approved_by", status: 409 },
+          );
+        }
+        throw refusal(
+          "saas_normalization_approval_state",
+          `Request ${requestId} is ${current.status} and no longer accepts an approval.`,
+          current.status === "pending" ? SETUP_LIST_REMEDY : claimStateRemedy(toRecord(current)),
+          { status: 409 },
+        );
+      }
+    }
+    const claimed = (await db.execute<{ id: string }>(sql`
+      update saas_metrics_normalization_requests
+         set status = 'running', lease_token = ${leaseToken},
+             lease_expires_at = now() + make_interval(mins => ${ttlMinutes}),
+             attempt_count = attempt_count + 1,
+             progress = progress || '{"phase":"claimed"}'::jsonb,
+             updated_by = approved_by
+       where org_id = ${orgId} and id = ${requestId} and status = 'pending'
+      returning id
+    `)).rows;
+    if (claimed.length !== 1) {
+      const current = await readRequest(db, orgId, requestId);
+      throw refusal(
+        "saas_normalization_already_claimed",
+        `Request ${requestId} was claimed concurrently and is no longer pending.`,
+        current ? claimStateRemedy(toRecord(current)) : SETUP_LIST_REMEDY,
+        { status: 409 },
+      );
+    }
+  });
+  try {
+    const result = await runCorrectionAttempt(orgId, requestId, leaseToken, month, ttlMinutes);
+    const record = await withOrgTransaction(orgId, async () => {
+      const finished = await readRequest(db, orgId, requestId);
+      if (!finished) throw missingRequest(requestId);
+      return toRecord(finished);
+    });
+    return { request: record, result };
+  } catch (error) {
+    // Fence and state refusals fire before any metric work starts, so there
+    // is no failed outcome to record; drift, source, rate, and write
+    // refusals after the live claim record one under the live lease.
+    if (
+      error instanceof UsageBillingError
+      && [
+        "saas_normalization_request_missing",
+        "saas_normalization_execute_state",
+        "saas_normalization_execute_unapproved",
+        "saas_normalization_lease_mismatch",
+        "saas_normalization_lease_state",
+        "saas_normalization_lease_live",
+        "saas_normalization_month_mismatch",
+        "feature_off",
+      ].includes(error.code)
+    ) {
+      throw error;
+    }
     const { failure, remedy, error: original } = toFailure(error, month);
     await recordExecutionFailure({ orgId, requestId, leaseToken, failure, remedy, original });
   }
