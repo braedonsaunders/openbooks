@@ -15,6 +15,13 @@ import { AI_RAILS_SETTINGS_ENTITY } from '../hrm-ai-rails'
 import { PROJECT_GEOFENCES_ENTITY, TIME_KIOSKS_ENTITY } from '../field-time'
 
 /**
+ * Rate kinds a projects-only org may write: the historical project contract
+ * ($/labor hour, percent of labor). The machine-hour and per-unit kinds are
+ * manufacturing bases with no project meaning until Manufacturing is on.
+ */
+const OVERHEAD_PROJECT_RATE_KINDS = ['per_hour', 'percent']
+
+/**
  * Rate kinds a manufacturing-only org may write: the routing bases read
  * these three card kinds (labor hours → $/labor hour, machine hours →
  * $/machine hour, units → $/unit). Percent of labor is a Projects costing
@@ -29,17 +36,20 @@ const OVERHEAD_METHOD_NAMES: Record<string, string> = {
 
 const OVERHEAD_KIND_NAMES: Record<string, string> = {
   percent: 'Percent of labor',
+  per_machine_hour: '$/machine hour',
+  per_unit: '$/unit',
 }
 
 /**
- * Manufacturing-only writes stay inside the basis set routings can consume:
- * the Standard method with a per-hour, per-machine-hour, or per-unit kind.
- * Projects-gated cards refuse by name with the Features remedy, so the
- * operator knows the exact switch that admits them. Projects-on behavior is
- * untouched (early pass), and both-off is the shared any-of gate's refusal —
- * this hook never re-adjudicates the gate, and deletes never reach it (the
- * write path skips validation when there is no body, so preserved history
- * stays deletable while a feature is off).
+ * Each feature combination gets exactly the cards its consumers can read.
+ * Projects-only keeps the historical project kinds ($/labor hour, percent of
+ * labor) while the manufacturing kinds refuse by name with the remedy that
+ * admits them; manufacturing-only keeps the Standard method with the routing
+ * basis kinds while project cards refuse by name the same way; both on allow
+ * the union without reinterpretation. Both off is the shared any-of gate's
+ * refusal — this hook never re-adjudicates the gate — and deletes never
+ * reach it (the write path skips validation when there is no body, so
+ * preserved history stays deletable while a feature is off).
  */
 const validateOverheadRateWrite: SetupEntityValidationHook = async ({ orgId, body, rowId, executor }) => {
   // This module rides the client registry bundle, so the query builder stays
@@ -49,14 +59,25 @@ const validateOverheadRateWrite: SetupEntityValidationHook = async ({ orgId, bod
   const stored = (await executor.execute<{ f: Record<string, boolean> | null }>(
     sql`select settings->'features' as f from orgs where id = ${orgId}`,
   )).rows[0]?.f ?? {}
-  if (featureEnabled(stored, 'projects')) return null
-  if (!featureEnabled(stored, 'manufacturing')) return null
+  const projectsOn = featureEnabled(stored, 'projects')
+  const manufacturingOn = featureEnabled(stored, 'manufacturing')
+  if (!projectsOn && !manufacturingOn) return null
   const current = rowId
     ? (await executor.execute<{ method: string | null; rate_kind: string | null }>(
       sql`select method, rate_kind from overhead_rates where id = ${rowId} and org_id = ${orgId}`,
     )).rows[0]
     : null
   if (rowId && !current) return 'not found'
+  const kind = body.rateKind === undefined || body.rateKind === null
+    ? (current?.rate_kind ?? 'per_hour')
+    : String(body.rateKind)
+  if (projectsOn && manufacturingOn) return null
+  if (projectsOn) {
+    if (!OVERHEAD_PROJECT_RATE_KINDS.includes(kind)) {
+      return `The ${OVERHEAD_KIND_NAMES[kind] ?? kind} overhead kind needs Manufacturing: use $/labor hour or percent of labor, or turn on Manufacturing in Company Settings → Features.`
+    }
+    return null
+  }
   // An omitted method falls through to the storage default (live), which has
   // no manufacturing basis — fail closed rather than store a card the
   // requester never named.
@@ -66,9 +87,6 @@ const validateOverheadRateWrite: SetupEntityValidationHook = async ({ orgId, bod
   if (method !== 'standard') {
     return `The ${OVERHEAD_METHOD_NAMES[method] ?? method} overhead method needs Projects: use the Standard method, or turn on Projects in Company Settings → Features.`
   }
-  const kind = body.rateKind === undefined || body.rateKind === null
-    ? (current?.rate_kind ?? 'per_hour')
-    : String(body.rateKind)
   if (!OVERHEAD_MANUFACTURING_RATE_KINDS.includes(kind)) {
     return `The ${OVERHEAD_KIND_NAMES[kind] ?? kind} overhead kind needs Projects: use $/labor hour, $/machine hour, or $/unit, or turn on Projects in Company Settings → Features.`
   }
@@ -604,9 +622,9 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
     singularTitleKey: 'entities.overhead-rates.singular',
     actorCols: true,
     groupKey: 'projects',
-    // One shared card serves Projects or Manufacturing: the any-of gate (C7a)
-    // admits while either member is on, so the same rows cost jobs and absorb
-    // into work orders without reinterpretation. Never declare featureKey
+    // One shared card serves Projects or Manufacturing: the any-of gate admits
+    // while either member is on, so the same rows cost jobs and absorb into
+    // work orders without reinterpretation. Never declare featureKey
     // alongside it — a descriptor carrying both fails closed.
     featureKeysAny: ['projects', 'manufacturing'],
     iconKey: 'percent',

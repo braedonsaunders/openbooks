@@ -136,7 +136,7 @@ test('overhead rates carry their exact entity and unit labels', () => {
 
 test('every locale names every overhead kind and method', () => {
   // The drawer resolves each option through its labelKey: a locale missing a
-  // key renders the raw key, the exact prod-log class this suite guards.
+  // key renders the raw key, the missing-label failure this suite guards.
   for (const locale of LOCALES) {
     const options = optionsOf(locale)
     for (const key of ['per_hour', 'per_machine_hour', 'per_unit', 'percent']) {
@@ -174,9 +174,9 @@ test('the overhead descriptor options match the locale catalog', () => {
 })
 
 test('the keys that shipped without labels stay covered', () => {
-  // ai-rails-settings (follow-up), hrm-action-reasons and
-  // qualification-types/settings (same prod-log class): each rendered
-  // through a Setup surface with no locale copy. If any of them ever leaves
+  // ai-rails-settings, hrm-action-reasons and qualification-types/settings
+  // (the same missing-label failure): each rendered through a Setup surface
+  // with no locale copy. If any of them ever leaves
   // the mounted set, its surface stopped resolving admin.setup labels — say
   // so explicitly, never silently. (hrm-pipeline-templates/stages left the
   // set on purpose: the hiring-pipeline builder renders them with its own

@@ -4,12 +4,10 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-// Single overhead-rates card serving Projects or Manufacturing (MF-07 C7b).
-// Every assertion below goes through the real generic Setup route
-// (/api/admin/setup/[entity]) or the shared command layer it adapts —
-// never a helper in isolation — so a UI-only gate or a drifted copy cannot
-// pass. The generic any-of registry/route properties stay owned by C7a:
-// this suite proves only the overhead card's own contract.
+// Single overhead-rates card serving Projects or Manufacturing. Every
+// assertion goes through the real generic Setup route or the shared command
+// layer it adapts — never a helper in isolation. Generic any-of properties
+// stay with the registry/route suites: this proves the card's own contract.
 const stateKey = Symbol.for("openbooks.overhead-rates-integration-test");
 interface RouteState {
   authz: {
@@ -66,14 +64,9 @@ const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await i
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-const FEATURES_REMEDY = "Turn on Projects or Manufacturing in Company Settings → Features.";
 
 function authenticate(orgId: string, actorId: string) {
-  routeState.authz = {
-    user: { orgId, id: actorId },
-    permissions: new Set(["admin.setup.manage"]),
-    allowedSubsidiaryIds: null,
-  };
+  routeState.authz = { user: { orgId, id: actorId }, permissions: new Set(["admin.setup.manage"]), allowedSubsidiaryIds: null };
 }
 function directActor(orgId: string, actorId: string) {
   return { orgId, id: actorId, permissions: new Set(["admin.setup.manage"]), allowedSubsidiaryIds: null };
@@ -98,11 +91,7 @@ async function setFeatures(orgId: string, features: Record<string, boolean>) {
 }
 
 async function readRate(orgId: string, id: string): Promise<Record<string, unknown>> {
-  const rows = (await db.execute(sql`
-    select id, category, method, rate_kind as "rateKind", rate_percent::text as "ratePercent",
-           effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
-           created_by as "createdBy", updated_by as "updatedBy"
-      from overhead_rates where id = ${id} and org_id = ${orgId}`)).rows as Record<string, unknown>[];
+  const rows = (await db.execute(sql`select id, category, method, rate_kind as "rateKind", rate_percent::text as "ratePercent", effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo", created_by as "createdBy", updated_by as "updatedBy" from overhead_rates where id = ${id} and org_id = ${orgId}`)).rows as Record<string, unknown>[];
   assert.ok(rows[0], "the refused-or-created rate must be readable back from storage");
   return rows[0]!;
 }
@@ -129,31 +118,21 @@ test("manufacturing-only admits standard basis cards and refuses project cards b
       }), call());
       assert.equal(created.status, 200, `manufacturing basis ${rateKind} must store`);
     }
-    // Project-only methods refuse by name with the Features remedy.
-    for (const [method, name] of [["live", "Live"], ["three_year_average", "Three-year average"]] as const) {
-      const refused = await POST(postRequest({
-        method, rateKind: "per_hour", ratePercent: "10", effectiveFrom: "2026-02-01",
-      }), call());
+    // Project cards refuse by name with the Features remedy: both gated
+    // methods, the unnamed (default-live) method, and percent of labor.
+    for (const [candidate, name] of [
+      [{ method: "live", rateKind: "per_hour" }, "Live"],
+      [{ method: "three_year_average", rateKind: "per_hour" }, "Three-year average"],
+      [{ rateKind: "per_hour" }, "Standard"],
+      [{ method: "standard", rateKind: "percent" }, "Percent of labor"],
+    ] as const) {
+      const refused = await POST(postRequest({ ratePercent: "10", effectiveFrom: "2026-02-01", ...candidate }), call());
       assert.equal(refused.status, 400);
       const body = (await refused.json()) as { error: string; code: string };
       assert.equal(body.code, "invalid");
       assert.match(body.error, new RegExp(name));
-      assert.match(body.error, /Standard/);
       assert.match(body.error, /Company Settings → Features/);
     }
-    // An omitted method falls through to the storage default (live), which has
-    // no manufacturing basis — fail closed rather than store an unnamed card.
-    const omitted = await POST(postRequest({ rateKind: "per_hour", ratePercent: "10", effectiveFrom: "2026-02-01" }), call());
-    assert.equal(omitted.status, 400);
-    assert.match(((await omitted.json()) as { error: string }).error, /Standard/);
-    // Percent of labor has no routing basis and refuses by name.
-    const percent = await POST(postRequest({
-      method: "standard", rateKind: "percent", ratePercent: "15", effectiveFrom: "2026-02-01",
-    }), call());
-    assert.equal(percent.status, 400);
-    const percentBody = (await percent.json()) as { error: string };
-    assert.match(percentBody.error, /Percent of labor/);
-    assert.match(percentBody.error, /Company Settings → Features/);
     // The same refusals fire through the direct command layer (assistant/MCP).
     const actor = directActor(org.orgId, actorId);
     assert.equal((await createSetupRecord(actor, "overhead-rates", {
@@ -163,17 +142,16 @@ test("manufacturing-only admits standard basis cards and refuses project cards b
     const repurposed = await updateSetupRecord(actor, "overhead-rates", { id: storedId, rateKind: "percent" });
     assert.equal(repurposed.status, 400);
     assert.match((repurposed.body.error as string), /Percent of labor/);
-    // An allowed edit still stores through the same path.
-    const repriced = await PATCH(patchRequest({ id: storedId, ratePercent: "13.5" }), call());
-    assert.equal(repriced.status, 200);
-    assert.equal(Number((await readRate(org.orgId, storedId)).ratePercent), 13.5);
-    // Deletes never run the mode gate: preserved history stays manageable.
-    const deletable = await POST(postRequest({
+    // An allowed edit stores through the same path, and deletes never run the
+    // mode gate: preserved history stays manageable.
+    const extra = await POST(postRequest({
       method: "standard", rateKind: "per_unit", ratePercent: "3", effectiveFrom: "2027-01-01",
     }), call());
-    assert.equal(deletable.status, 200);
-    const deletableId = ((await deletable.json()) as { id: string }).id;
-    assert.equal((await DELETE(deleteRequest(deletableId), call())).status, 200);
+    assert.equal(extra.status, 200);
+    const extraId = ((await extra.json()) as { id: string }).id;
+    assert.equal((await PATCH(patchRequest({ id: extraId, ratePercent: "3.5" }), call())).status, 200);
+    assert.equal(Number((await readRate(org.orgId, extraId)).ratePercent), 3.5);
+    assert.equal((await DELETE(deleteRequest(extraId), call())).status, 200);
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(org.orgId);
@@ -190,7 +168,8 @@ test("projects-only preserves existing project behavior byte-for-byte", { skip: 
     // per-hour default, no category.
     const created = await POST(postRequest({ ratePercent: "12.5", effectiveFrom: "2026-01-01" }), call());
     assert.equal(created.status, 200);
-    const minimal = await readRate(org.orgId, ((await created.json()) as { id: string }).id);
+    const minimalId = ((await created.json()) as { id: string }).id;
+    const minimal = await readRate(org.orgId, minimalId);
     assert.equal(minimal.method, "live");
     assert.equal(minimal.rateKind, "per_hour");
     assert.equal(minimal.category, null);
@@ -203,6 +182,32 @@ test("projects-only preserves existing project behavior byte-for-byte", { skip: 
     assert.equal(stored.category, "Indirect Labour");
     assert.equal(stored.method, "live");
     assert.equal(stored.rateKind, "percent");
+    // Other project methods stay writable: the method column is new surface.
+    for (const method of ["standard", "three_year_average"]) {
+      const card = await POST(postRequest({ method, rateKind: "per_hour", ratePercent: "11", effectiveFrom: "2026-01-01" }), call());
+      assert.equal(card.status, 200, `project method ${method} must store`);
+    }
+    // The manufacturing-only kinds have no project meaning: both refuse by
+    // financial name with the admitting remedy, on the route and the direct
+    // command layer, and store nothing.
+    const before = await countRates(org.orgId);
+    for (const [rateKind, name] of [["per_machine_hour", /\$\/machine hour/], ["per_unit", /\$\/unit/]] as const) {
+      const refused = await POST(postRequest({ method: "standard", rateKind, ratePercent: "7", effectiveFrom: "2026-02-01" }), call());
+      assert.equal(refused.status, 400);
+      const body = (await refused.json()) as { error: string; code: string };
+      assert.equal(body.code, "invalid");
+      assert.match(body.error, name);
+      assert.match(body.error, /Manufacturing/);
+      assert.match(body.error, /Company Settings → Features/);
+    }
+    const actor = directActor(org.orgId, actorId);
+    assert.equal((await createSetupRecord(actor, "overhead-rates", {
+      method: "standard", rateKind: "per_unit", ratePercent: "7", effectiveFrom: "2026-02-01",
+    })).status, 400);
+    const repurposed = await updateSetupRecord(actor, "overhead-rates", { id: minimalId, rateKind: "per_machine_hour" });
+    assert.equal(repurposed.status, 400);
+    assert.match((repurposed.body.error as string), /\$\/machine hour/);
+    assert.equal(await countRates(org.orgId), before, "refused project-only writes store no rows");
   } finally {
     routeState.authz = null;
     await dropScratchOrgReporting(org.orgId);
@@ -249,10 +254,10 @@ test("neither-on fails closed with the exact remedy and preserves history", { sk
     assert.equal(created.status, 200);
     const id = ((await created.json()) as { id: string }).id;
     await setFeatures(org.orgId, { projects: false, manufacturing: false });
-    // The real descriptor's verdict is the exact C7a remedy, ending with a period.
+    // The real descriptor's verdict is the exact shared remedy, ending with a period.
     const verdict = resolveSetupEntityGate(SETUP_ENTITY_BY_KEY.get("overhead-rates")!, { projects: false, manufacturing: false, inventory: true });
     assert.deepEqual(verdict, { enabled: false, remedy: SETUP_PROJECTS_OR_MANUFACTURING_REMEDY });
-    assert.equal(verdict.remedy, FEATURES_REMEDY);
+    assert.equal(verdict.remedy, "Turn on Projects or Manufacturing in Company Settings → Features.");
     const actor = directActor(org.orgId, actorId);
     assert.deepEqual(await preflightSetupWrite(actor, "overhead-rates", "create"), {
       status: 404,
