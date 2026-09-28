@@ -7,8 +7,8 @@ import { db } from '@openbooks/engine/src/platform/db.ts'
 import { can, getAuthz } from '@/lib/authz'
 import { NAV_MODULES } from '@/lib/nav/registry'
 import { hiddenQuickActionIdsForOrg, resolveDashboardDefault } from './_load-layout'
-import { canSeeWidget, canSeeInsightCards } from './_widget-access'
-import { WIDGETS } from './_widget-registry'
+import { canSeeInsightCards } from './_widget-access'
+import { resolveAllowedWidgetIds } from './widget-features'
 import { featureEnabled, hiddenNavModules, resolvedFeatureState } from '@/lib/features'
 import {
   CURATED_QUICK_ACTIONS,
@@ -29,9 +29,9 @@ export async function saveDashboardLayout(input: unknown) {
   const parsed = DashboardLayoutInputSchema.safeParse(input)
   if (!parsed.success) return { ok: false as const, error: parsed.error.message }
 
-  const allowedWidgetIds = new Set(
-    Object.keys(WIDGETS).filter((id) => canSeeWidget(authz, id)),
-  )
+  // The same feature-aware set the slots enforce: a feature-off tile cannot
+  // be persisted, even when the caller holds its permission.
+  const allowedWidgetIds = await resolveAllowedWidgetIds(authz)
   const allowedAppWidgetIds = can(authz, 'apps.use')
     ? new Set(
         (await listApps(authz.user.orgId))
@@ -42,7 +42,7 @@ export async function saveDashboardLayout(input: unknown) {
   const widgets = filterPersistableDashboardWidgets(parsed.data.widgets, {
     allowedWidgetIds,
     allowedAppWidgetIds,
-    // Must match canSeeWidget's insight-card visibility (insights.read OR
+    // Must match the resolver's insight-card visibility (insights.read OR
     // reports.read), or saving would silently drop cards the user can see.
     allowAnyInsightCardUuid: canSeeInsightCards(authz),
   })
