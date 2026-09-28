@@ -103,6 +103,7 @@ import { migrateWithAConnector } from './articles/migrate-with-a-connector'
 import { companySettings, rolesAndPermissions, dataImports } from './articles/administration-basics'
 import { companySetupGroupArticles } from './articles/company-setup'
 import { switchingArticles } from './articles/switching'
+import { busySeasonCapacity } from './articles/resourcing-busy-season'
 
 export type { DocArticle, DocCategory, DocSection } from './types'
 
@@ -336,6 +337,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   bankingAndReconciliation,
   periodClose,
   projectTypes, overheadCosting, laborCosting, laborPricing, manufacturingOverview, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance, compensationAndTransparency,
+  busySeasonCapacity,
   // HR-13 begin
   certifiedPayrollPrevailingWagePerDiem,
   // HR-13 end
