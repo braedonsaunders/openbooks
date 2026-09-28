@@ -12,14 +12,23 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission } from '../../../lib/authz'
+import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
+import { isFeatureEnabled } from '../../../lib/features'
+import { ResourcingRefusal } from '@openbooks/engine/src/resourcing/errors.ts'
 import { addCalendarDays, businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { weekStartOf } from '@openbooks/engine/src/resourcing/weeks.ts'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import type { ModuleHomeTab } from '../../../components/module-home/ui'
 import { resourcingHome } from '../../../lib/module-home/resourcing'
 import { loadPlanVsActual, type PlanVsActualRow } from '../../../lib/resourcing/tie-out'
+import {
+  loadBusySeason,
+  type BusySeasonData,
+  type BusySeasonGap,
+  type BusySeasonProject,
+} from '../../../lib/resourcing/busy-season'
+import type { BusySeasonLabels } from './BusySeasonSection'
 import type { TieOutLabels } from './TieOutTable'
 
 /**
@@ -54,6 +63,14 @@ export interface ResourcingCockpitData {
   tieoutEmpty: string
   tieout: PlanVsActualRow[]
   tieoutLabels: TieOutLabels
+  busySeasonTitle: string
+  busySeasonHint: string
+  busySeason: {
+    gaps: BusySeasonGap[]
+    projects: BusySeasonProject[]
+    labels: BusySeasonLabels
+    canCreateDraft: boolean
+  }
 }
 
 export async function loadResourcing(
@@ -68,14 +85,44 @@ export async function loadResourcing(
   const today = await businessToday(orgId)
   const tieoutLast = weekStartOf(today)
   const tieoutFirst = addCalendarDays(tieoutLast, -21)
-  const [home, tieout, tabs] = await Promise.all([
+  const seasonYear = today.slice(0, 4)
+  const [home, tieout, tabs, busyResult] = await Promise.all([
     resourcingHome(orgId, authz.allowedSubsidiaryIds),
     loadPlanVsActual(orgId, authz.allowedSubsidiaryIds, {
       firstSunday: tieoutFirst,
       lastSunday: tieoutLast,
     }),
     groupTabs('resourcing', '/resourcing', { orgId }),
+    loadBusySeason(orgId, authz.allowedSubsidiaryIds, { seasonYear }).then(
+      (data): { ok: true; data: BusySeasonData } => ({ ok: true, data }),
+      (error: unknown): { ok: false; error: unknown } => ({ ok: false, error }),
+    ),
   ])
+  // A computed busy-season refusal is panel content, not a page error: the
+  // operator reads its exact message and remedy where the gaps would be.
+  const busyRefusal = !busyResult.ok && busyResult.error instanceof ResourcingRefusal
+    ? { message: busyResult.error.message, remedy: busyResult.error.remedy }
+    : null
+  if (!busyResult.ok && !busyRefusal) throw busyResult.error
+  const busySeason: BusySeasonData = busyResult.ok
+    ? busyResult.data
+    : { seasonYear, spans: [], gaps: [], projects: [] }
+  const bt = await getTranslations('resourcing.busySeason')
+  const requestsOn = await isFeatureEnabled(orgId, 'resourceRequests')
+  const canManage = can(authz, 'resourcing.manage')
+  const canCreateDraft = !busyRefusal && canManage && requestsOn
+  const refusalText = busyRefusal
+    ? `${busyRefusal.message}${busyRefusal.remedy ? ` ${busyRefusal.remedy}` : ''}`
+    : null
+  const spanText = busySeason.spans
+    .map((span) => span.firstSunday === span.lastSunday ? span.firstSunday : `${span.firstSunday}–${span.lastSunday}`)
+    .join(', ')
+  const busySeasonHint = refusalText
+    ?? (busySeason.spans.length === 0
+      ? bt('noMarkers')
+      : canManage && !requestsOn
+        ? `${bt('hint', { spans: spanText })} ${bt('featureRemedy')}`
+        : bt('hint', { spans: spanText }))
 
   // The capacity vital sums only known net-capacity rows: the subline says
   // so, naming the people with unknown capacity instead of presenting a
@@ -107,6 +154,35 @@ export async function loadResourcing(
     tieoutTitle: t('tieout.title'),
     tieoutHint: t('tieout.hint'),
     tieoutEmpty: t('tieout.empty'),
+    busySeasonTitle: bt('title', { year: seasonYear }),
+    busySeasonHint,
+    busySeason: {
+      gaps: busySeason.gaps,
+      projects: busySeason.projects,
+      labels: {
+        empty: refusalText ?? (busySeason.spans.length === 0 ? bt('noMarkers') : bt('empty')),
+        weekOf: bt('weekOf'),
+        gap: bt('gap'),
+        demand: bt('demand'),
+        capacity: bt('capacity'),
+        plan: bt('plan'),
+        evidence: bt('evidence'),
+        staff: bt('staff'),
+        assignments: t('tieout.assignments'),
+        opportunities: bt('opportunities'),
+        absences: t('tieout.absences'),
+        holidays: t('tieout.holidays'),
+        requestAction: bt('requestAction'),
+        noProjects: bt('noProjects'),
+        confirmTitle: bt('confirmTitle'),
+        projectLabel: bt('projectLabel'),
+        confirm: bt('confirm'),
+        created: bt('created'),
+        requestFailed: bt('requestFailed'),
+        reason: bt('reason'),
+      },
+      canCreateDraft,
+    },
     tieout,
     tieoutLabels: {
       person: t('tieout.person'),
@@ -172,6 +248,21 @@ export function resourcingSpec(data: ResourcingCockpitData): PageSpec {
               rows: data.tieout,
               labels: data.tieoutLabels,
               empty: data.tieoutEmpty,
+            }),
+          ],
+        }),
+        panel({
+          title: f('busySeasonTitle'),
+          iconKey: 'trending-up',
+          hint: f('busySeasonHint'),
+          bodyClassName: 'p-0',
+          className: 'shrink-0',
+          blocks: [
+            widgetBlock('resourcing-busy-season', {
+              canCreateDraft: data.busySeason.canCreateDraft,
+              gaps: data.busySeason.gaps,
+              labels: data.busySeason.labels,
+              projects: data.busySeason.projects,
             }),
           ],
         }),

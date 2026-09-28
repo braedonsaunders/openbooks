@@ -42,6 +42,29 @@
       "reports": "Previsão de utilização"
     }
   },
+  "busySeason": {
+    "title": "Alta temporada {year}",
+    "hint": "Períodos sazonais: {spans}.",
+    "empty": "Nenhum departamento supera a capacidade nos períodos sazonais.",
+    "noMarkers": "Sem marcadores de plano sazonais este ano: sem linhas de plano genéricas não há curva de alta temporada.",
+    "featureRemedy": "Para criar solicitações, ative Solicitações de recursos em Configurações da empresa → Recursos.",
+    "weekOf": "semana de",
+    "gap": "Lacuna",
+    "demand": "Demanda",
+    "capacity": "Capacidade",
+    "plan": "Planejado",
+    "evidence": "Evidências",
+    "staff": "Equipe",
+    "opportunities": "Oportunidades",
+    "requestAction": "Nova solicitação rascunho",
+    "noProjects": "Nenhum projeto ativo no escopo: crie ou ative um para solicitar pessoal.",
+    "confirmTitle": "Solicitar pessoal para {department}, {week}",
+    "projectLabel": "Projeto",
+    "confirm": "Criar rascunho",
+    "created": "Solicitação rascunho criada:",
+    "requestFailed": "Não foi possível criar a solicitação rascunho.",
+    "reason": "Lacuna de alta temporada em {department} para {week}: {gap} h acima da capacidade."
+  },
   "prefill": { "badge": "Planejado: {hours} h" },
   "requests": {
     "title": "Solicitações de recursos",

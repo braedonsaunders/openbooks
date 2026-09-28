@@ -42,6 +42,29 @@
       "reports": "Previsión de utilización"
     }
   },
+  "busySeason": {
+    "title": "Temporada alta {year}",
+    "hint": "Periodos estacionales: {spans}.",
+    "empty": "Ningún departamento supera la capacidad en los periodos estacionales.",
+    "noMarkers": "Sin marcadores de plan estacionales este año: sin líneas de plan genéricas no hay curva de temporada alta.",
+    "featureRemedy": "Para crear solicitudes, active Solicitudes de recursos en Configuración de la empresa → Funcionalidades.",
+    "weekOf": "semana del",
+    "gap": "Brecha",
+    "demand": "Demanda",
+    "capacity": "Capacidad",
+    "plan": "Planificado",
+    "evidence": "Evidencia",
+    "staff": "Personal",
+    "opportunities": "Oportunidades",
+    "requestAction": "Nueva solicitud borrador",
+    "noProjects": "Ningún proyecto activo en su ámbito: cree o active uno para solicitar personal.",
+    "confirmTitle": "Solicitar personal para {department}, {week}",
+    "projectLabel": "Proyecto",
+    "confirm": "Crear borrador",
+    "created": "Solicitud borrador creada:",
+    "requestFailed": "No se pudo crear la solicitud borrador.",
+    "reason": "Brecha de temporada alta en {department} para {week}: {gap} h sobre la capacidad."
+  },
   "prefill": { "badge": "Planificadas: {hours} h" },
   "requests": {
     "title": "Solicitudes de recursos",

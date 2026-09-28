@@ -42,6 +42,29 @@
       "reports": "Auslastungsprognose"
     }
   },
+  "busySeason": {
+    "title": "Hochsaison {year}",
+    "hint": "Saisonzeiträume: {spans}.",
+    "empty": "Keine Abteilung überschreitet die Kapazität in den Saisonzeiträumen.",
+    "noMarkers": "Keine saisonalen Planmarkierungen in diesem Jahr: ohne generelle Planzeilen gibt es keine Hochsaisonkurve.",
+    "featureRemedy": "Um Anfragen zu erstellen, aktivieren Sie Ressourcenanfragen unter Unternehmenseinstellungen → Funktionen.",
+    "weekOf": "Woche ab",
+    "gap": "Lücke",
+    "demand": "Bedarf",
+    "capacity": "Kapazität",
+    "plan": "Planstunden",
+    "evidence": "Nachweise",
+    "staff": "Mitarbeitende",
+    "opportunities": "Verkaufschancen",
+    "requestAction": "Neue Entwurfsanfrage",
+    "noProjects": "Kein aktives Projekt im Zugriff: legen Sie eines an oder aktivieren Sie eines, um Personal anzufordern.",
+    "confirmTitle": "Personal anfordern für {department}, {week}",
+    "projectLabel": "Projekt",
+    "confirm": "Entwurf erstellen",
+    "created": "Entwurfsanfrage erstellt:",
+    "requestFailed": "Die Entwurfsanfrage konnte nicht erstellt werden.",
+    "reason": "Hochsaisonlücke in {department} für {week}: {gap} Std. über Kapazität."
+  },
   "prefill": { "badge": "Geplant: {hours} Std." },
   "requests": {
     "title": "Personalbedarf",
