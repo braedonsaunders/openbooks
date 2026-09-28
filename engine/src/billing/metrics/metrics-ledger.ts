@@ -730,7 +730,7 @@ function mapHistory(history: HistoryRow[]) {
   return bySubscription;
 }
 
-type MonthlyNormalization = {
+export type MonthlyNormalization = {
   rows: MonthlySubscriptionFact[];
   monthlyEvidence: Record<string, Record<string, unknown>>;
   glBySubsidiary: Map<string, { functionalCurrency: string; revenue: string; cogs: string }>;
@@ -1074,7 +1074,7 @@ async function computeRows(
   };
 }
 
-type FactsRow = {
+export type FactsRow = {
   subsidiaryId: string;
   month: string;
   mrrStart: string;
@@ -1168,7 +1168,7 @@ function aggregateFacts(
   return facts;
 }
 
-type CohortFact = {
+export type CohortFact = {
   subsidiaryId: string;
   cohortMonth: string;
   month: string;
@@ -1437,6 +1437,282 @@ async function writeCohortRow(
   if (result.rows.length !== 1) throw refusal("saas_metrics_cohort_write_missing", `Cohort facts for subsidiary ${row.subsidiaryId} and cohort ${row.cohortMonth} were not stored.`, "Retry the recompute after confirming that the cohort remains in the organization.");
 }
 
+/**
+ * One shared normalization pipeline for the ordinary recompute and the
+ * approved correction path. Both callers run the same computation and the
+ * same writers over the same canonical versioned hash: the only difference
+ * is the fence around the write (open-month freeze versus an approved,
+ * leased, audited correction request). Nothing here decides open versus
+ * closed; the caller owns that policy.
+ */
+export interface NormalizedMetricsMonth {
+  subsidiaryIds: string[];
+  reportingCurrency: string;
+  computed: MonthlyNormalization;
+  facts: FactsRow[];
+  cohorts: CohortFact[];
+  factsEvidence: Record<string, Record<string, unknown>>;
+  cohortsEvidence: Record<string, unknown>[];
+  monthHash: string;
+}
+
+/** Run the v1 computation and evidence assembly for one org and month. */
+export async function computeNormalizedMetricsMonth(
+  executor: SqlExecutor,
+  orgId: string,
+  month: string,
+): Promise<NormalizedMetricsMonth> {
+  const sources = await readSources(executor, orgId, month);
+  const reportingCurrency = sources.baseCurrency;
+  const computed = await computeRows(executor, orgId, month, sources);
+  const basis: FactsRow["basis"] = sources.revenueRecognitionEnabled ? "recognised" : "billed";
+  const facts = aggregateFacts(
+    month,
+    sources.subsidiaries.map((row) => row.id),
+    computed.rows,
+    sources.history,
+    computed.glBySubsidiary,
+    computed.billingsBySubsidiary,
+    computed.deferredBalanceBySubscription,
+    basis,
+  );
+  const cohorts = await aggregateCohorts(executor, orgId, reportingCurrency, month, computed.rows, sources.history, sources.cohortStartRows);
+  // Per-row evidence bodies first (without their digest), then one
+  // canonical versioned hash over the exact inputs-plus-evidence payload.
+  // Every stored row carries the same digest in its evidence and its
+  // inputs_hash column, so any later recompute either reproduces it or
+  // reports changed inputs for the closed-month freeze to refuse.
+  const factsEvidence: Record<string, Record<string, unknown>> = {};
+  for (const fact of facts) {
+    factsEvidence[fact.subsidiaryId] = {
+      denomination_version: SAAS_METRICS_DENOMINATION_VERSION,
+      reporting_currency: reportingCurrency,
+      gl: computed.glEvidence[fact.subsidiaryId] ?? null,
+      billings: computed.billingsEvidence[fact.subsidiaryId] ?? null,
+      subscriptions: computed.rows
+        .filter((row) => row.subsidiaryId === fact.subsidiaryId)
+        .map((row) => computed.monthlyEvidence[row.subscriptionId]),
+    };
+  }
+  const cohortsEvidence = cohorts.map((cohort) => ({
+    denomination_version: SAAS_METRICS_DENOMINATION_VERSION,
+    reporting_currency: reportingCurrency,
+    subsidiary_id: cohort.subsidiaryId,
+    cohort_month: cohort.cohortMonth,
+    months_since_start: cohort.monthsSinceStart,
+    start_mrr: cohort.startMrr,
+    mrr: cohort.mrr,
+    opening: cohort.opening,
+    member_subscriptions: computed.rows
+      .filter((row) => row.subsidiaryId === cohort.subsidiaryId && row.cohortMonth === cohort.cohortMonth)
+      .map((row) => row.subscriptionId)
+      .sort(),
+  }));
+  const inputs = {
+    baseCurrency: reportingCurrency,
+    revenueRecognitionEnabled: sources.revenueRecognitionEnabled,
+    subscriptions: computed.rows,
+    history: sources.history,
+    cohortStarts: sources.cohortStartRows,
+    definitions: sources.definitions,
+    revenueBuckets: sources.revenueBuckets,
+    deferredBuckets: sources.deferredBuckets,
+    ledgerBuckets: sources.ledgerBuckets,
+    billingLegs: sources.billingLegs,
+    subsidiaries: sources.subsidiaries,
+  };
+  const evidence = {
+    monthly: computed.monthlyEvidence,
+    facts: factsEvidence,
+    cohorts: cohortsEvidence,
+  };
+  const monthHash = normalizationInputsHash({
+    denominationVersion: SAAS_METRICS_DENOMINATION_VERSION,
+    orgId,
+    month,
+    reportingCurrency,
+    inputs,
+    evidence,
+  });
+  return {
+    subsidiaryIds: sources.subsidiaries.map((row) => row.id),
+    reportingCurrency,
+    computed,
+    facts,
+    cohorts,
+    factsEvidence,
+    cohortsEvidence,
+    monthHash,
+  };
+}
+
+/**
+ * Store one computed month through the same writers, with the same
+ * affected-row refusal each writer raises when its row is not stored.
+ */
+export async function writeNormalizedMetricsMonth(
+  executor: SqlExecutor,
+  orgId: string,
+  normalized: NormalizedMetricsMonth,
+): Promise<{ subscriptionRows: number; subsidiaryRows: number }> {
+  for (const row of normalized.computed.rows) {
+    await writeMonthlyRow(executor, row, normalized.reportingCurrency, {
+      ...normalized.computed.monthlyEvidence[row.subscriptionId]!,
+      inputs_hash: normalized.monthHash,
+    }, normalized.monthHash);
+  }
+  for (const row of normalized.facts) {
+    await writeFactsRow(executor, orgId, row, normalized.reportingCurrency, {
+      ...normalized.factsEvidence[row.subsidiaryId]!,
+      inputs_hash: normalized.monthHash,
+    }, normalized.monthHash);
+  }
+  for (const [index, row] of normalized.cohorts.entries()) {
+    await writeCohortRow(executor, orgId, row, normalized.reportingCurrency, {
+      ...normalized.cohortsEvidence[index]!,
+      inputs_hash: normalized.monthHash,
+    }, normalized.monthHash);
+  }
+  return { subscriptionRows: normalized.computed.rows.length, subsidiaryRows: normalized.facts.length };
+}
+
+/**
+ * Byte-for-byte before-image of one stored metrics month for the audited
+ * correction proof. Numerics leave the database as text so the proof
+ * compares the exact recorded decimal strings, never a float or a
+ * reformatted value.
+ */
+export interface StoredMonthlyRow {
+  id: string;
+  subsidiaryId: string;
+  customerId: string;
+  subscriptionId: string;
+  month: string;
+  cohortMonth: string;
+  mrrStart: string;
+  mrrEnd: string;
+  newMrr: string;
+  expansionMrr: string;
+  contractionMrr: string;
+  churnedMrr: string;
+  reactivationMrr: string;
+  movement: string;
+  recognizedRevenue: string;
+  deferredDelta: string;
+  inputsHash: string;
+  reportingCurrency: string | null;
+  denominationVersion: string | null;
+  normalizationEvidence: unknown;
+}
+
+export interface StoredFactsRow {
+  id: string;
+  subsidiaryId: string;
+  month: string;
+  mrrStart: string;
+  mrrEnd: string;
+  newMrr: string;
+  expansionMrr: string;
+  contractionMrr: string;
+  churnedMrr: string;
+  reactivationMrr: string;
+  recognizedRevenue: string;
+  deferredDelta: string;
+  mrrAtRisk: string;
+  customersStart: number;
+  customersEnd: number;
+  customersNew: number;
+  customersChurned: number;
+  customersReactivated: number;
+  glRevenue: string;
+  glCogs: string;
+  bookings: string;
+  billings: string;
+  deferredBalance: string;
+  basis: string;
+  inputsHash: string;
+  reportingCurrency: string | null;
+  denominationVersion: string | null;
+  normalizationEvidence: unknown;
+}
+
+export interface StoredCohortRow {
+  id: string;
+  subsidiaryId: string;
+  cohortMonth: string;
+  month: string;
+  monthsSinceStart: number;
+  startMrr: string;
+  mrr: string;
+  startCustomers: number;
+  customers: number;
+  inputsHash: string;
+  reportingCurrency: string | null;
+  denominationVersion: string | null;
+  normalizationEvidence: unknown;
+}
+
+export interface StoredMetricsMonth {
+  monthly: StoredMonthlyRow[];
+  facts: StoredFactsRow[];
+  cohorts: StoredCohortRow[];
+}
+
+/** Read the currently stored row sets for one org and month, in stable order. */
+export async function readStoredMetricsMonth(
+  executor: SqlExecutor,
+  orgId: string,
+  month: string,
+): Promise<StoredMetricsMonth> {
+  const monthly = (await executor.execute<StoredMonthlyRow>(sql`
+    select id::text as id, subsidiary_id::text as "subsidiaryId", customer_id::text as "customerId",
+           subscription_id::text as "subscriptionId", month::text as month, cohort_month::text as "cohortMonth",
+           mrr_start::text as "mrrStart", mrr_end::text as "mrrEnd",
+           new_mrr::text as "newMrr", expansion_mrr::text as "expansionMrr",
+           contraction_mrr::text as "contractionMrr", churned_mrr::text as "churnedMrr",
+           reactivation_mrr::text as "reactivationMrr", movement,
+           recognized_revenue::text as "recognizedRevenue", deferred_delta::text as "deferredDelta",
+           inputs_hash as "inputsHash", reporting_currency as "reportingCurrency",
+           denomination_version as "denominationVersion", normalization_evidence as "normalizationEvidence"
+      from saas_metrics_monthly
+     where org_id = ${orgId} and month = ${month}::date
+     order by subscription_id
+  `)).rows;
+  const facts = (await executor.execute<StoredFactsRow>(sql`
+    select id::text as id, subsidiary_id::text as "subsidiaryId", month::text as month,
+           mrr_start::text as "mrrStart", mrr_end::text as "mrrEnd",
+           new_mrr::text as "newMrr", expansion_mrr::text as "expansionMrr",
+           contraction_mrr::text as "contractionMrr", churned_mrr::text as "churnedMrr",
+           reactivation_mrr::text as "reactivationMrr",
+           recognized_revenue::text as "recognizedRevenue", deferred_delta::text as "deferredDelta",
+           mrr_at_risk::text as "mrrAtRisk",
+           customers_start as "customersStart", customers_end as "customersEnd",
+           customers_new as "customersNew", customers_churned as "customersChurned",
+           customers_reactivated as "customersReactivated",
+           gl_revenue::text as "glRevenue", gl_cogs::text as "glCogs",
+           bookings::text as bookings, billings::text as billings,
+           deferred_balance::text as "deferredBalance", basis,
+           inputs_hash as "inputsHash", reporting_currency as "reportingCurrency",
+           denomination_version as "denominationVersion", normalization_evidence as "normalizationEvidence"
+      from saas_metrics_facts_monthly
+     where org_id = ${orgId} and month = ${month}::date
+     order by subsidiary_id
+  `)).rows;
+  const cohorts = (await executor.execute<StoredCohortRow>(sql`
+    select id::text as id, subsidiary_id::text as "subsidiaryId",
+           cohort_month::text as "cohortMonth", month::text as month,
+           months_since_start as "monthsSinceStart",
+           start_mrr::text as "startMrr", mrr::text as mrr,
+           start_customers as "startCustomers", customers,
+           inputs_hash as "inputsHash", reporting_currency as "reportingCurrency",
+           denomination_version as "denominationVersion", normalization_evidence as "normalizationEvidence"
+      from saas_metrics_cohort_monthly
+     where org_id = ${orgId} and month = ${month}::date
+     order by subsidiary_id, cohort_month
+  `)).rows;
+  return { monthly, facts, cohorts };
+}
+
 export async function recomputeSaasMetrics(
   orgId: string,
   month: string,
@@ -1449,81 +1725,10 @@ export async function recomputeSaasMetrics(
     if (!(await lockAndCheckOrgFeature(db, orgId, "saasMetrics"))) {
       throw refusal("feature_off", "SaaS metrics are disabled for this organization.", FEATURES_REMEDY);
     }
-    const sources = await readSources(db, orgId, month);
-    const reportingCurrency = sources.baseCurrency;
-    const computed = await computeRows(db, orgId, month, sources);
-    const basis: FactsRow["basis"] = sources.revenueRecognitionEnabled ? "recognised" : "billed";
-    const facts = aggregateFacts(
-      month,
-      sources.subsidiaries.map((row) => row.id),
-      computed.rows,
-      sources.history,
-      computed.glBySubsidiary,
-      computed.billingsBySubsidiary,
-      computed.deferredBalanceBySubscription,
-      basis,
-    );
-    const cohorts = await aggregateCohorts(db, orgId, reportingCurrency, month, computed.rows, sources.history, sources.cohortStartRows);
-    // Per-row evidence bodies first (without their digest), then one
-    // canonical versioned hash over the exact inputs-plus-evidence payload.
-    // Every stored row carries the same digest in its evidence and its
-    // inputs_hash column, so any later recompute either reproduces it or
-    // reports changed inputs for the closed-month freeze to refuse.
-    const factsEvidence: Record<string, Record<string, unknown>> = {};
-    for (const fact of facts) {
-      factsEvidence[fact.subsidiaryId] = {
-        denomination_version: SAAS_METRICS_DENOMINATION_VERSION,
-        reporting_currency: reportingCurrency,
-        gl: computed.glEvidence[fact.subsidiaryId] ?? null,
-        billings: computed.billingsEvidence[fact.subsidiaryId] ?? null,
-        subscriptions: computed.rows
-          .filter((row) => row.subsidiaryId === fact.subsidiaryId)
-          .map((row) => computed.monthlyEvidence[row.subscriptionId]),
-      };
-    }
-    const cohortsEvidence = cohorts.map((cohort) => ({
-      denomination_version: SAAS_METRICS_DENOMINATION_VERSION,
-      reporting_currency: reportingCurrency,
-      subsidiary_id: cohort.subsidiaryId,
-      cohort_month: cohort.cohortMonth,
-      months_since_start: cohort.monthsSinceStart,
-      start_mrr: cohort.startMrr,
-      mrr: cohort.mrr,
-      opening: cohort.opening,
-      member_subscriptions: computed.rows
-        .filter((row) => row.subsidiaryId === cohort.subsidiaryId && row.cohortMonth === cohort.cohortMonth)
-        .map((row) => row.subscriptionId)
-        .sort(),
-    }));
-    const inputs = {
-      baseCurrency: reportingCurrency,
-      revenueRecognitionEnabled: sources.revenueRecognitionEnabled,
-      subscriptions: computed.rows,
-      history: sources.history,
-      cohortStarts: sources.cohortStartRows,
-      definitions: sources.definitions,
-      revenueBuckets: sources.revenueBuckets,
-      deferredBuckets: sources.deferredBuckets,
-      ledgerBuckets: sources.ledgerBuckets,
-      billingLegs: sources.billingLegs,
-      subsidiaries: sources.subsidiaries,
-    };
-    const evidence = {
-      monthly: computed.monthlyEvidence,
-      facts: factsEvidence,
-      cohorts: cohortsEvidence,
-    };
-    const monthHash = normalizationInputsHash({
-      denominationVersion: SAAS_METRICS_DENOMINATION_VERSION,
-      orgId,
-      month,
-      reportingCurrency,
-      inputs,
-      evidence,
-    });
-    const closeState = await monthCloseState(db, orgId, month, sources.subsidiaries.map((row) => row.id));
+    const normalized = await computeNormalizedMetricsMonth(db, orgId, month);
+    const closeState = await monthCloseState(db, orgId, month, normalized.subsidiaryIds);
     const storedState = (await db.execute<{ row_count: number; changed: boolean }>(sql`
-      select count(*)::int as row_count, coalesce(bool_or(inputs_hash <> ${monthHash}), false) as changed
+      select count(*)::int as row_count, coalesce(bool_or(inputs_hash <> ${normalized.monthHash}), false) as changed
         from (
           select inputs_hash from saas_metrics_facts_monthly where org_id = ${orgId} and month = ${month}::date
           union all
@@ -1541,27 +1746,10 @@ export async function recomputeSaasMetrics(
       );
     }
     if (!closeState.open && storedState.row_count > 0) {
-      return { orgId, month, subscriptionRows: computed.rows.length, subsidiaryRows: facts.length, frozen: true };
+      return { orgId, month, subscriptionRows: normalized.computed.rows.length, subsidiaryRows: normalized.facts.length, frozen: true };
     }
-    for (const row of computed.rows) {
-      await writeMonthlyRow(db, row, reportingCurrency, {
-        ...computed.monthlyEvidence[row.subscriptionId]!,
-        inputs_hash: monthHash,
-      }, monthHash);
-    }
-    for (const row of facts) {
-      await writeFactsRow(db, orgId, row, reportingCurrency, {
-        ...factsEvidence[row.subsidiaryId]!,
-        inputs_hash: monthHash,
-      }, monthHash);
-    }
-    for (const [index, row] of cohorts.entries()) {
-      await writeCohortRow(db, orgId, row, reportingCurrency, {
-        ...cohortsEvidence[index]!,
-        inputs_hash: monthHash,
-      }, monthHash);
-    }
-    return { orgId, month, subscriptionRows: computed.rows.length, subsidiaryRows: facts.length, frozen: !closeState.open };
+    const written = await writeNormalizedMetricsMonth(db, orgId, normalized);
+    return { orgId, month, subscriptionRows: written.subscriptionRows, subsidiaryRows: written.subsidiaryRows, frozen: !closeState.open };
   });
 }
 
