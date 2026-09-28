@@ -69,6 +69,38 @@ describe('built-in report definitions', () => {
     }
   })
 
+  it('governed saas built-ins break out by reporting currency; deferred-waterfall stays transactional', () => {
+    const governed = [
+      'mrr-movements',
+      'arr-summary',
+      'revenue-churn',
+      'nrr-grr',
+      'cohort-retention',
+      'arpa-ltv',
+      'gross-margin',
+      'bookings-billings-revenue',
+    ] as const
+    for (const slug of governed) {
+      const def = BUILT_IN_REPORT_DEFINITION_MAP[slug]
+      assert.ok(def, `${slug} must exist`)
+      assert.ok(
+        (def.query.breakouts ?? []).some((b) => b.column === 'reporting_currency'),
+        `${slug} must partition SaaS money by the persisted reporting currency`,
+      )
+      assert.doesNotThrow(() => validateCustomQuery(def.query), `${slug} query must stay valid`)
+    }
+    const waterfall = BUILT_IN_REPORT_DEFINITION_MAP['deferred-waterfall']!
+    assert.ok(waterfall, 'deferred-waterfall must exist')
+    assert.ok(
+      (waterfall.query.breakouts ?? []).some((b) => b.column === 'currency'),
+      'deferred-waterfall stays transaction-currency partitioned',
+    )
+    assert.ok(
+      !(waterfall.query.breakouts ?? []).some((b) => b.column === 'reporting_currency'),
+      'deferred-waterfall reads no SaaS metric table',
+    )
+  })
+
   it('materialises every governed HRM source in the one built-in catalog', () => {
     const hrmEntityKeys = new Set(HRM_REPORT_ENTITIES.map((entity) => entity.key))
     const catalogEntityKeys = new Set(

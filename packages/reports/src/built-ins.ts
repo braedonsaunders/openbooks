@@ -70,7 +70,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
     description: 'Shows monthly MRR changes, opening and closing balances, and quick ratio.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
-      breakouts: [{ column: 'month', bin: 'month' }],
+      breakouts: [{ column: 'month', bin: 'month' }, { column: 'reporting_currency' }],
       measures: [
         { fn: 'sum', column: 'new_mrr', key: 'new_mrr', label: 'New MRR' },
         { fn: 'sum', column: 'expansion_mrr', key: 'expansion_mrr', label: 'Expansion MRR' },
@@ -102,7 +102,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
     description: 'Shows monthly ARR as twelve times closing MRR.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
-      breakouts: [{ column: 'month', bin: 'month' }],
+      breakouts: [{ column: 'month', bin: 'month' }, { column: 'reporting_currency' }],
       measures: [
         { fn: 'closing', column: 'mrr_end', key: 'closing_mrr', hidden: true },
         {
@@ -119,7 +119,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
     description: 'Compares monthly lost MRR and billing accounts with opening balances.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
-      breakouts: [{ column: 'month', bin: 'month' }],
+      breakouts: [{ column: 'month', bin: 'month' }, { column: 'reporting_currency' }],
       measures: [
         { fn: 'sum', column: 'churned_mrr', key: 'churned_mrr', hidden: true },
         { fn: 'opening', column: 'mrr_start', key: 'opening_mrr', hidden: true },
@@ -145,7 +145,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
     description: 'Shows monthly net and gross revenue retention against opening MRR.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
-      breakouts: [{ column: 'month', bin: 'month' }],
+      breakouts: [{ column: 'month', bin: 'month' }, { column: 'reporting_currency' }],
       measures: [
         { fn: 'opening', column: 'mrr_start', key: 'opening_mrr', hidden: true },
         { fn: 'sum', column: 'expansion_mrr', key: 'expansion_mrr', hidden: true },
@@ -187,7 +187,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
     description: 'Shows retained MRR and billing accounts by cohort and elapsed month.',
     query: {
       entity: 'saas_metrics_cohorts', mode: 'summarize', columns: [],
-      breakouts: [{ column: 'cohort_month', bin: 'month' }, { column: 'months_since_start' }],
+      breakouts: [{ column: 'cohort_month', bin: 'month' }, { column: 'months_since_start' }, { column: 'reporting_currency' }],
       measures: [
         { fn: 'closing', column: 'mrr', key: 'cohort_mrr', hidden: true },
         { fn: 'closing', column: 'start_mrr', key: 'start_mrr', hidden: true },
@@ -212,7 +212,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
     name: 'ARPA and lifetime value',
     description: 'Shows 12-month average revenue, churn, gross margin, and lifetime value per account.',
     query: {
-      entity: 'saas_metrics_facts', mode: 'summarize', columns: [], breakouts: [],
+      entity: 'saas_metrics_facts', mode: 'summarize', columns: [], breakouts: [{ column: 'reporting_currency' }],
       measures: [
         { fn: 'closing', column: 'mrr_end', key: 'closing_mrr', hidden: true },
         { fn: 'closing', column: 'customers_end', key: 'closing_customers', hidden: true },
@@ -264,7 +264,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
     description: 'Compares monthly revenue and cost of revenue to show gross margin.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
-      breakouts: [{ column: 'month', bin: 'month' }],
+      breakouts: [{ column: 'month', bin: 'month' }, { column: 'reporting_currency' }],
       measures: [
         { fn: 'sum', column: 'gl_revenue', key: 'gl_revenue', hidden: true },
         { fn: 'sum', column: 'gl_cogs', key: 'gl_cogs', hidden: true },
@@ -303,7 +303,7 @@ const SAAS_METRICS_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
     description: 'Shows monthly bookings, billings, and revenue.',
     query: {
       entity: 'saas_metrics_facts', mode: 'summarize', columns: [],
-      breakouts: [{ column: 'month', bin: 'month' }],
+      breakouts: [{ column: 'month', bin: 'month' }, { column: 'reporting_currency' }],
       measures: [
         { fn: 'sum', column: 'bookings', label: 'Bookings' },
         { fn: 'sum', column: 'billings', label: 'Billings' },
