@@ -13,8 +13,8 @@ import { ManufacturingError, ManufacturingPostingError } from "./errors.ts";
 import { assertManufacturingFeature } from "./gate.ts";
 
 type InventoryPostInput = Parameters<typeof postInventoryEntry>[1];
-export type ManufacturingPostInput = Omit<InventoryPostInput, "origin"> & {
-  custom?: Record<string, unknown>;
+export type ManufacturingPostInput = Omit<InventoryPostInput, "origin" | "custom"> & {
+  custom: ManufacturingEvidence & Record<string, unknown>;
 };
 
 const EVIDENCE_KEYS = ["workOrderNumber", "bomRevision", "routingVersion"] as const;
@@ -42,10 +42,14 @@ export interface ManufacturingWorkOrderEvidence {
  * Period-pool posting evidence for pool-level variance settlement. Carries
  * no work-order number, BOM, or routing: the pool is the entry's own
  * period, book, and subsidiary. Extra keys ride through untouched for the
- * future settlement caller; work-order keys are refused, never stored.
+ * future settlement caller; work-order keys are statically excluded and
+ * refused at runtime, never stored.
  */
 export interface ManufacturingPeriodPoolEvidence {
   scope: "period-pool";
+  workOrderNumber?: never;
+  bomRevision?: never;
+  routingVersion?: never;
 }
 
 export type ManufacturingEvidence =
