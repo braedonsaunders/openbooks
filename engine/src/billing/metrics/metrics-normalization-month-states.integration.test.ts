@@ -318,6 +318,40 @@ test("mixed legacy and normalized rows refuse by name instead of reading ready",
   });
 });
 
+test("an unsupported version outranks multiple currencies by name", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedLegacyMonth(ctx);
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      await db.execute(sql`
+        update saas_metrics_monthly
+           set reporting_currency = 'CAD', denomination_version = 'v9',
+               normalization_evidence = ${V1_EVIDENCE}::jsonb
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+      `);
+      await db.execute(sql`
+        update saas_metrics_facts_monthly
+           set reporting_currency = 'EUR', denomination_version = 'v1',
+               normalization_evidence = ${V1_EVIDENCE}::jsonb
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+      `);
+      await db.execute(sql`
+        update saas_metrics_cohort_monthly
+           set reporting_currency = 'CAD', denomination_version = 'v1',
+               normalization_evidence = ${V1_EVIDENCE}::jsonb
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+      `);
+    });
+    const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
+    assert.equal(state.state, "refused");
+    assert.ok(
+      state.failure && state.failure.includes("unsupported denomination version (v9)"),
+      `the version refusal must outrank the currency mix, got: ${state.failure}`,
+    );
+    assert.ok(state.remedy && state.remedy.includes("Company Setup → SaaS Metrics"));
+    assert.ok(state.remedy && state.remedy.includes("different authorized approver"));
+  });
+});
+
 test("multiple reporting currencies refuse by name", { skip: !DB }, async () => {
   await withFixture(async (ctx) => {
     await seedLegacyMonth(ctx);
