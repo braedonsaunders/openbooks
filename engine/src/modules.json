@@ -290,11 +290,13 @@
     "manufacturing": {
       "description": "Manufacturing masters, planning, execution and ledger postings.",
       "dependsOn": [
+        "allocations",
         "inventory",
         "journal",
         "money",
         "organization",
         "platform",
+        "projects",
         "records"
       ]
     },
