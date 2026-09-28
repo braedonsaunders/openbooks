@@ -57,7 +57,7 @@ test("fund releases route approval, post and reverse, and refuse unsafe class or
     });
     await setFramework({ orgId: org.orgId, framework: "us_asc958", actorId: drafter, reason: "Adopt US nonprofit reporting" });
     await setFundPair({ orgId: org.orgId, fromFundId: setup.defaultFundId, toFundId: restricted.id,
-      dueFromAccountId: org.accounts.ar, dueToAccountId: org.accounts.ap, actorId: drafter });
+      dueFromAccountId: org.accounts.ar, dueToAccountId: org.accounts.ap, actorId: drafter, reason: "Settle interfund balances for release fixtures" });
     await withOrgTransaction(org.orgId, () => postEntry(db, {
       orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
       entryNumber: `RELEASE-OPEN-${randomUUID()}`, postingDate: org.date, periodId: org.periodId,

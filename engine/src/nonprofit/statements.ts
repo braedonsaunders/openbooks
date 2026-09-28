@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { db, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { addMoney, negMoney, subMoney, sumMoney, ZERO_MONEY, type Money } from "../money/brands.ts";
+import { addMoney, cmpMoney, negMoney, subMoney, sumMoney, ZERO_MONEY, type Money } from "../money/brands.ts";
 import { NonprofitError, fundFeatureOff } from "./errors.ts";
 import {
   FUNCTIONAL_CATEGORIES,
@@ -235,8 +235,16 @@ function isLiability(type: string): boolean {
   return type.startsWith("liability");
 }
 
-function isCash(type: string): boolean {
+/**
+ * Posting account types holding cash. Every native cash reader keys on
+ * asset_bank; the fund tie-out reuses this predicate instead of its own.
+ */
+export function isCashAccountType(type: string): boolean {
   return type === "asset_bank";
+}
+
+function isCash(type: string): boolean {
+  return isCashAccountType(type);
 }
 
 async function resolveStatementBookId(orgId: string, requestedBookId?: string | null, runner: SqlExecutor = db): Promise<string> {
@@ -281,6 +289,156 @@ function mapMapping(row: MappingRow): FunctionalMapping {
   };
 }
 
+type PositionScopeInput = {
+  orgId: string;
+  asOf: string;
+  bookId?: string | null;
+  fundId?: string | null;
+};
+
+type PositionScope = {
+  bookId: string;
+  classLabel: (restrictionClass: string | null) => string | null;
+  rows: StatementLineRow[];
+  financialPosition: FinancialPositionStatement;
+};
+
+/**
+ * Single-book posted/reversed financial-position snapshot. Performs no
+ * feature-gate checks itself: the full four-statement loader keeps its
+ * nonprofit, fundAccounting, and functionalExpenses gates in order, while
+ * the fund-only cockpit projection gates nonprofit and fundAccounting only.
+ */
+async function loadPositionData(scope: PositionScopeInput, runner: SqlExecutor): Promise<PositionScope> {
+  const bookId = await resolveStatementBookId(scope.orgId, scope.bookId, runner);
+  const framework = await requireNonprofitFramework(scope.orgId, runner);
+  const classLabels = new Map(Object.entries(NONPROFIT_FRAMEWORKS[framework.framework].classes));
+  const classLabel = (restrictionClass: string | null): string | null => {
+    if (restrictionClass === null) return null;
+    const label = classLabels.get(restrictionClass);
+    if (!label) {
+      throw new NonprofitError({
+        message: `Fund restriction class ${restrictionClass} is not defined by ${framework.framework}.`,
+        status: 409,
+        code: "nonprofit_statement_class_invalid",
+        remedy: "Use a restriction class defined by the selected nonprofit framework when setting up funds.",
+      });
+    }
+    return label;
+  };
+
+  const accounts = (await runner.execute<AccountRow>(sql`
+    select id, number, name, type
+      from accounts
+     where org_id = ${scope.orgId}
+     order by number, id
+  `)).rows;
+  const lineRows = await runner.execute<StatementLineRow>(sql`
+    select jl.id::text as line_id, jl.account_id::text as account_id,
+           a.number as account_number, a.name as account_name, a.type as account_type,
+           jl.amount::text as amount, je.posting_date::text as posting_date,
+           je.origin, jl.extra_dims->>'fund' as fund_id,
+           sv.code as fund_code, sv.name as fund_name, f.restriction_class,
+           sub.base_currency, jl.department_id::text as department_id,
+           jl.project_id::text as project_id
+      from journal_lines jl
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+      join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
+      join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = jl.org_id
+      left join funds f on f.org_id = jl.org_id and f.id::text = jl.extra_dims->>'fund'
+      left join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
+     where jl.org_id = ${scope.orgId}
+       and je.book_id = ${bookId}
+       and je.status in ('posted', 'reversed')
+       and je.posting_date <= ${scope.asOf}::date
+       and (${scope.fundId ?? null}::uuid is null or jl.extra_dims->>'fund' = ${scope.fundId ?? null})
+     order by je.posting_date, jl.entry_id, jl.line_number, jl.id
+  `);
+  const rows = lineRows.rows;
+
+  const accountBalanceMap = new Map<string, Money>();
+  const accountSnapshotMeta = new Map<string, StatementLineRow>();
+  const byClassBalance = new Map<string, Money>();
+  const assetsByCurrency = new Map<string, Money>();
+  const liabilitiesByCurrency = new Map<string, Money>();
+  for (const row of rows) {
+    const accountFundKey = `${row.account_id}\u0000${row.fund_id ?? "∅"}\u0000${row.base_currency}`;
+    add(accountBalanceMap, accountFundKey, row.amount);
+    accountSnapshotMeta.set(accountFundKey, row);
+    if (isAsset(row.account_type)) add(assetsByCurrency, row.base_currency, row.amount);
+    if (isLiability(row.account_type)) add(liabilitiesByCurrency, row.base_currency, row.amount);
+    if (isAsset(row.account_type) || isLiability(row.account_type)) {
+      add(byClassBalance, `${row.restriction_class ?? "∅"}\u0000${row.base_currency}`, row.amount);
+    }
+  }
+  const observedAccounts = new Set([...accountSnapshotMeta.values()].map((row) => row.account_id));
+  for (const account of accounts) {
+    if (!observedAccounts.has(account.id)) {
+      const key = `${account.id}\u0000∅\u0000∅`;
+      accountBalanceMap.set(key, ZERO_MONEY);
+      accountSnapshotMeta.set(key, {
+        line_id: "",
+        account_id: account.id,
+        account_number: account.number,
+        account_name: account.name,
+        account_type: account.type,
+        amount: ZERO_MONEY,
+        posting_date: scope.asOf,
+        origin: "",
+        fund_id: null,
+        fund_code: null,
+        fund_name: null,
+        restriction_class: null,
+        base_currency: "",
+        department_id: null,
+        project_id: null,
+      });
+    }
+  }
+  const accountSnapshots: AccountSnapshot[] = [...accountBalanceMap.entries()].map(([key, balance]) => {
+    const row = accountSnapshotMeta.get(key)!;
+    return {
+      accountId: row.account_id,
+      accountNumber: row.account_number,
+      accountName: row.account_name,
+      accountType: row.account_type,
+      fundId: row.fund_id,
+      fundCode: row.fund_code,
+      restrictionClass: row.restriction_class,
+      restrictionClassLabel: classLabel(row.restriction_class),
+      baseCurrency: row.base_currency || null,
+      balance,
+    };
+  });
+
+  const totalCurrencies = new Set([...assetsByCurrency.keys(), ...liabilitiesByCurrency.keys()]);
+  const totalAssets = [...assetsByCurrency.entries()].map(([baseCurrency, amount]) => ({ baseCurrency, amount }));
+  const totalLiabilities = [...liabilitiesByCurrency.entries()].map(([baseCurrency, amount]) => ({ baseCurrency, amount: negMoney(amount) }));
+  const netAssets = [...totalCurrencies].map((baseCurrency) => ({
+    baseCurrency,
+    amount: addMoney(assetsByCurrency.get(baseCurrency) ?? ZERO_MONEY, liabilitiesByCurrency.get(baseCurrency) ?? ZERO_MONEY),
+  }));
+  const netAssetsByClass = [...byClassBalance.entries()].map(([key, amount]) => {
+    const [restrictionClass, baseCurrency] = key.split("\u0000");
+    const classKey = restrictionClass === "∅" ? null : restrictionClass!;
+    return { restrictionClass: classKey, restrictionClassLabel: classLabel(classKey), baseCurrency: baseCurrency!, amount };
+  });
+
+  return {
+    bookId,
+    classLabel,
+    rows,
+    financialPosition: {
+      asOf: scope.asOf,
+      accounts: accountSnapshots,
+      netAssetsByClass,
+      totalAssets,
+      totalLiabilities,
+      totalNetAssets: netAssets,
+    },
+  };
+}
+
 /** Read and reconcile all four statements from posted ledger lines. */
 export async function loadNonprofitStatements(input: NonprofitStatementInput): Promise<NonprofitStatements> {
   validateInput(input);
@@ -289,22 +447,13 @@ export async function loadNonprofitStatements(input: NonprofitStatementInput): P
     if (!(await orgFeatureEnabled(input.orgId, "nonprofit", runner))) throw featureOff("nonprofit", "Nonprofit Accounting");
     if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner))) throw fundFeatureOff();
     if (!(await orgFeatureEnabled(input.orgId, "functionalExpenses", runner))) throw functionalFeatureOff();
-    const bookId = await resolveStatementBookId(input.orgId, input.bookId, runner);
-    const framework = await requireNonprofitFramework(input.orgId, runner);
-    const classLabels = new Map(Object.entries(NONPROFIT_FRAMEWORKS[framework.framework].classes));
-    const classLabel = (restrictionClass: string | null): string | null => {
-      if (restrictionClass === null) return null;
-      const label = classLabels.get(restrictionClass);
-      if (!label) {
-        throw new NonprofitError({
-          message: `Fund restriction class ${restrictionClass} is not defined by ${framework.framework}.`,
-          status: 409,
-          code: "nonprofit_statement_class_invalid",
-          remedy: "Use a restriction class defined by the selected nonprofit framework when setting up funds.",
-        });
-      }
-      return label;
-    };
+    const scope = await loadPositionData(
+      { orgId: input.orgId, asOf: input.asOf, bookId: input.bookId, fundId: input.fundId },
+      runner,
+    );
+    const bookId = scope.bookId;
+    const classLabel = scope.classLabel;
+    const rows = scope.rows;
 
     const mappings = (await runner.execute<MappingRow>(sql`
       select id, org_id, department_id, project_id, function, program_key,
@@ -313,34 +462,6 @@ export async function loadNonprofitStatements(input: NonprofitStatementInput): P
        where org_id = ${input.orgId}
        order by effective_from, id
     `)).rows.map(mapMapping);
-    const accounts = (await runner.execute<AccountRow>(sql`
-      select id, number, name, type
-        from accounts
-       where org_id = ${input.orgId}
-       order by number, id
-    `)).rows;
-    const lineRows = await runner.execute<StatementLineRow>(sql`
-      select jl.id::text as line_id, jl.account_id::text as account_id,
-             a.number as account_number, a.name as account_name, a.type as account_type,
-             jl.amount::text as amount, je.posting_date::text as posting_date,
-             je.origin, jl.extra_dims->>'fund' as fund_id,
-             sv.code as fund_code, sv.name as fund_name, f.restriction_class,
-             sub.base_currency, jl.department_id::text as department_id,
-             jl.project_id::text as project_id
-        from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-        join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
-        join subsidiaries sub on sub.id = jl.subsidiary_id and sub.org_id = jl.org_id
-        left join funds f on f.org_id = jl.org_id and f.id::text = jl.extra_dims->>'fund'
-        left join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
-       where jl.org_id = ${input.orgId}
-         and je.book_id = ${bookId}
-         and je.status in ('posted', 'reversed')
-         and je.posting_date <= ${input.asOf}::date
-         and (${input.fundId ?? null}::uuid is null or jl.extra_dims->>'fund' = ${input.fundId ?? null})
-       order by je.posting_date, jl.entry_id, jl.line_number, jl.id
-    `);
-    const rows = lineRows.rows;
     const periodRows = rows.filter((row) => row.posting_date >= input.periodFrom && row.posting_date <= input.periodTo);
     const releaseRows = (await runner.execute<ReleaseRow>(sql`
       select source_fund.restriction_class as from_class,
@@ -358,74 +479,6 @@ export async function loadNonprofitStatements(input: NonprofitStatementInput): P
          and (${input.fundId ?? null}::uuid is null or release.from_fund_id = ${input.fundId ?? null}
               or release.to_fund_id = ${input.fundId ?? null})
     `));
-
-    const accountBalanceMap = new Map<string, Money>();
-    const accountSnapshotMeta = new Map<string, StatementLineRow>();
-    const byClassBalance = new Map<string, Money>();
-    const assetsByCurrency = new Map<string, Money>();
-    const liabilitiesByCurrency = new Map<string, Money>();
-    for (const row of rows) {
-      const accountFundKey = `${row.account_id}\u0000${row.fund_id ?? "∅"}\u0000${row.base_currency}`;
-      add(accountBalanceMap, accountFundKey, row.amount);
-      accountSnapshotMeta.set(accountFundKey, row);
-      if (isAsset(row.account_type)) add(assetsByCurrency, row.base_currency, row.amount);
-      if (isLiability(row.account_type)) add(liabilitiesByCurrency, row.base_currency, row.amount);
-      if (isAsset(row.account_type) || isLiability(row.account_type)) {
-        add(byClassBalance, `${row.restriction_class ?? "∅"}\u0000${row.base_currency}`, row.amount);
-      }
-    }
-    const observedAccounts = new Set([...accountSnapshotMeta.values()].map((row) => row.account_id));
-    for (const account of accounts) {
-      if (!observedAccounts.has(account.id)) {
-        const key = `${account.id}\u0000∅\u0000∅`;
-        accountBalanceMap.set(key, ZERO_MONEY);
-        accountSnapshotMeta.set(key, {
-          line_id: "",
-          account_id: account.id,
-          account_number: account.number,
-          account_name: account.name,
-          account_type: account.type,
-          amount: ZERO_MONEY,
-          posting_date: input.asOf,
-          origin: "",
-          fund_id: null,
-          fund_code: null,
-          fund_name: null,
-          restriction_class: null,
-          base_currency: "",
-          department_id: null,
-          project_id: null,
-        });
-      }
-    }
-    const accountSnapshots: AccountSnapshot[] = [...accountBalanceMap.entries()].map(([key, balance]) => {
-      const row = accountSnapshotMeta.get(key)!;
-      return {
-        accountId: row.account_id,
-        accountNumber: row.account_number,
-        accountName: row.account_name,
-        accountType: row.account_type,
-        fundId: row.fund_id,
-        fundCode: row.fund_code,
-        restrictionClass: row.restriction_class,
-        restrictionClassLabel: classLabel(row.restriction_class),
-        baseCurrency: row.base_currency || null,
-        balance,
-      };
-    });
-
-    const totalCurrencies = new Set([...assetsByCurrency.keys(), ...liabilitiesByCurrency.keys()]);
-    const totalAssets = [...assetsByCurrency.entries()].map(([baseCurrency, amount]) => ({ baseCurrency, amount }));
-    const totalLiabilities = [...liabilitiesByCurrency.entries()].map(([baseCurrency, amount]) => ({ baseCurrency, amount: negMoney(amount) }));
-    const netAssets = [...totalCurrencies].map((baseCurrency) => ({
-      baseCurrency,
-      amount: addMoney(assetsByCurrency.get(baseCurrency) ?? ZERO_MONEY, liabilitiesByCurrency.get(baseCurrency) ?? ZERO_MONEY),
-    }));
-    const netAssetsByClass = [...byClassBalance.entries()].map(([key, amount]) => {
-      const [restrictionClass, baseCurrency] = key.split("\u0000");
-      const classKey = restrictionClass === "∅" ? null : restrictionClass!;
-      return { restrictionClass: classKey, restrictionClassLabel: classLabel(classKey), baseCurrency: baseCurrency!, amount };
-    });
 
     const activityNet = new Map<string, Money>();
     const activitiesByClass = new Map<string, { revenue: Money; expenses: Money }>();
@@ -551,14 +604,7 @@ export async function loadNonprofitStatements(input: NonprofitStatementInput): P
     });
 
     return {
-      financialPosition: {
-        asOf: input.asOf,
-        accounts: accountSnapshots,
-        netAssetsByClass,
-        totalAssets,
-        totalLiabilities,
-        totalNetAssets: netAssets,
-      },
+      financialPosition: scope.financialPosition,
       activities: {
         from: input.periodFrom,
         to: input.periodTo,
@@ -574,6 +620,204 @@ export async function loadNonprofitStatements(input: NonprofitStatementInput): P
       },
       cashFlows: { from: input.periodFrom, to: input.periodTo, reconciliation },
     };
+  };
+  return input.runner ? load() : withOrgContext(input.orgId, load);
+}
+
+export type FundCoverageRow = {
+  fundId: string | null;
+  fundCode: string | null;
+  restrictionClass: string | null;
+  restrictionClassLabel: string | null;
+  baseCurrency: string;
+  /** Restricted cash held: asset_bank balances for this fund, class, and currency. */
+  cash: Money;
+  /** Restricted net assets: asset and liability balances for this fund, class, and currency. */
+  netAssets: Money;
+  /** The single coverage difference: restricted cash held MINUS restricted net assets. */
+  coverage: Money;
+  /** Negative coverage means undercoverage and is flagged. */
+  undercovered: boolean;
+  cashAccountIds: string[];
+  netAssetAccountIds: string[];
+};
+
+export type FundCoverageTieout = {
+  asOf: string;
+  bookId: string;
+  rows: FundCoverageRow[];
+  totals: Array<{ baseCurrency: string; cash: Money; netAssets: Money; coverage: Money }>;
+  netAssetsTie: Array<{ baseCurrency: string; matrixSum: Money; statementTotal: Money; tied: boolean }>;
+  interfund: Array<{ baseCurrency: string; amount: Money; zero: boolean }>;
+};
+
+/**
+ * Derive the cockpit live fund tie-out from a financial-position snapshot.
+ * Pure: partitioning, the cash-minus-net-assets difference, the
+ * matrix-to-statement tie, and the interfund zero proof all read the same
+ * posted/reversed lines, so no second accounting source exists. Nothing is stored.
+ */
+export function deriveFundCoverageTieout(
+  financialPosition: FinancialPositionStatement,
+  pairAccountIds: ReadonlySet<string>,
+): Omit<FundCoverageTieout, "asOf" | "bookId"> {
+  const meta = new Map<string, {
+    fundId: string | null;
+    fundCode: string | null;
+    restrictionClass: string | null;
+    restrictionClassLabel: string | null;
+    baseCurrency: string;
+  }>();
+  const cash = new Map<string, Money>();
+  const netAssets = new Map<string, Money>();
+  const cashAccounts = new Map<string, Set<string>>();
+  const netAssetAccounts = new Map<string, Set<string>>();
+  const interfund = new Map<string, Money>();
+  for (const snap of financialPosition.accounts) {
+    if (!snap.baseCurrency) continue;
+    const key = `${snap.fundId ?? ""}|${snap.restrictionClass ?? ""}|${snap.baseCurrency}`;
+    if (!meta.has(key)) {
+      meta.set(key, {
+        fundId: snap.fundId,
+        fundCode: snap.fundCode,
+        restrictionClass: snap.restrictionClass,
+        restrictionClassLabel: snap.restrictionClassLabel,
+        baseCurrency: snap.baseCurrency,
+      });
+    }
+    if (isCashAccountType(snap.accountType)) {
+      add(cash, key, snap.balance);
+      const ids = cashAccounts.get(key) ?? new Set<string>();
+      ids.add(snap.accountId);
+      cashAccounts.set(key, ids);
+    }
+    if (isAsset(snap.accountType) || isLiability(snap.accountType)) {
+      add(netAssets, key, snap.balance);
+      const ids = netAssetAccounts.get(key) ?? new Set<string>();
+      ids.add(snap.accountId);
+      netAssetAccounts.set(key, ids);
+    }
+    if (pairAccountIds.has(snap.accountId)) add(interfund, snap.baseCurrency, snap.balance);
+  }
+  const rows: FundCoverageRow[] = [...meta.entries()].map(([key, info]) => {
+    const cashAmount = cash.get(key) ?? ZERO_MONEY;
+    const netAmount = netAssets.get(key) ?? ZERO_MONEY;
+    const coverage = subMoney(cashAmount, netAmount);
+    return {
+      ...info,
+      cash: cashAmount,
+      netAssets: netAmount,
+      coverage,
+      undercovered: cmpMoney(coverage, ZERO_MONEY) < 0,
+      cashAccountIds: [...(cashAccounts.get(key) ?? [])].sort(),
+      netAssetAccountIds: [...(netAssetAccounts.get(key) ?? [])].sort(),
+    };
+  }).sort((a, b) =>
+    (a.fundCode ?? "").localeCompare(b.fundCode ?? "") ||
+    (a.restrictionClass ?? "").localeCompare(b.restrictionClass ?? "") ||
+    a.baseCurrency.localeCompare(b.baseCurrency),
+  );
+  const totals = new Map<string, { cash: Money; netAssets: Money }>();
+  for (const row of rows) {
+    const total = totals.get(row.baseCurrency) ?? { cash: ZERO_MONEY, netAssets: ZERO_MONEY };
+    total.cash = addMoney(total.cash, row.cash);
+    total.netAssets = addMoney(total.netAssets, row.netAssets);
+    totals.set(row.baseCurrency, total);
+  }
+  const statementTotals = new Map<string, Money>(
+    financialPosition.totalNetAssets.map((total) => [total.baseCurrency, total.amount]),
+  );
+  const currencies = [...new Set([...totals.keys(), ...statementTotals.keys(), ...interfund.keys()])].sort();
+  return {
+    rows,
+    totals: currencies
+      .filter((currency) => totals.has(currency))
+      .map((currency) => {
+        const total = totals.get(currency)!;
+        return { baseCurrency: currency, cash: total.cash, netAssets: total.netAssets, coverage: subMoney(total.cash, total.netAssets) };
+      }),
+    netAssetsTie: currencies.map((currency) => {
+      const matrixSum = totals.get(currency)?.netAssets ?? ZERO_MONEY;
+      const statementTotal = statementTotals.get(currency) ?? ZERO_MONEY;
+      return { baseCurrency: currency, matrixSum, statementTotal, tied: cmpMoney(matrixSum, statementTotal) === 0 };
+    }),
+    interfund: currencies.map((currency) => {
+      const amount = interfund.get(currency) ?? ZERO_MONEY;
+      return { baseCurrency: currency, amount, zero: cmpMoney(amount, ZERO_MONEY) === 0 };
+    }),
+  };
+}
+
+/**
+ * Exact native ledger-drill scope for one tie-out cell, as data. The cockpit
+ * encodes it with the shared report-drill codec unchanged: posting book,
+ * as-of date, balance mode, exact fund segment, and the cell's accounts, so a
+ * class total never drills broader than its fund components.
+ */
+export type FundLedgerDrillScope = {
+  kind: "ledger";
+  label: string;
+  bookId: string;
+  to: string;
+  mode: "balance";
+  accountIds?: string[];
+  accountTypes?: string[];
+  dims?: { segments?: Record<string, string> };
+};
+
+export function fundLedgerDrillScope(input: {
+  bookId: string;
+  asOf: string;
+  fundId: string | null;
+  label: string;
+  accountIds?: readonly string[];
+  accountTypes?: readonly string[];
+}): FundLedgerDrillScope {
+  return {
+    kind: "ledger",
+    label: input.label,
+    bookId: input.bookId,
+    to: input.asOf,
+    mode: "balance",
+    ...(input.accountIds ? { accountIds: [...input.accountIds] } : {}),
+    ...(input.accountTypes ? { accountTypes: [...input.accountTypes] } : {}),
+    ...(input.fundId ? { dims: { segments: { fund: input.fundId } } } : {}),
+  };
+}
+
+async function listInterfundPairAccountIds(orgId: string, runner: SqlExecutor): Promise<Set<string>> {
+  const rows = (await runner.execute<{ id: string }>(sql`
+    select due_from_account_id as id from fund_pairs where org_id = ${orgId} and is_active
+     union
+    select due_to_account_id as id from fund_pairs where org_id = ${orgId} and is_active
+  `)).rows;
+  return new Set(rows.map((row) => row.id));
+}
+
+export type FundCoverageInput = {
+  orgId: string;
+  asOf: string;
+  bookId?: string | null;
+  /** Reuse an existing read snapshot when another report owns the consistency boundary. */
+  runner?: SqlExecutor;
+};
+
+/**
+ * Load the cockpit live fund tie-out: one coverage difference per fund,
+ * restriction class, and currency, plus the statement tie and the interfund
+ * zero proof. Gates nonprofit and fundAccounting only — functionalExpenses
+ * never blocks the fund tie-out.
+ */
+export async function loadFundCoverageTieout(input: FundCoverageInput): Promise<FundCoverageTieout> {
+  requireDate(input.asOf, "asOf");
+  const runner = input.runner ?? db;
+  const load = async () => {
+    if (!(await orgFeatureEnabled(input.orgId, "nonprofit", runner))) throw featureOff("nonprofit", "Nonprofit Accounting");
+    if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner))) throw fundFeatureOff();
+    const scope = await loadPositionData({ orgId: input.orgId, asOf: input.asOf, bookId: input.bookId }, runner);
+    const pairAccountIds = await listInterfundPairAccountIds(input.orgId, runner);
+    const derived = deriveFundCoverageTieout(scope.financialPosition, pairAccountIds);
+    return { asOf: input.asOf, bookId: scope.bookId, ...derived };
   };
   return input.runner ? load() : withOrgContext(input.orgId, load);
 }

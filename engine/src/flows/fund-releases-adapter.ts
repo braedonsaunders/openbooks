@@ -118,10 +118,9 @@ export const fundReleasesFlowAdapter: FlowSubjectAdapter = {
     return `Fund release ${String(number ?? "")}: ${String(from ?? "")} → ${String(to ?? "")}`;
   },
 
-  deepLink(): string {
-    // Fund releases have no record page yet; the hub is the landing surface
-    // until one ships (party_bank_account precedent).
-    return "/inbox";
+  deepLink(subjectId: string): string {
+    // The releases register owns this record: approvals land on its drawer.
+    return `/nonprofit/releases?release=${subjectId}`;
   },
 
   async getStatus(subjectId: string): Promise<string | null> {
