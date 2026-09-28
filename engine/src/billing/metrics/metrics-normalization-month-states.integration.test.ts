@@ -527,6 +527,101 @@ test("a partial evidence triple cannot be stored, so the classifier never meets 
   });
 });
 
+const CANONICAL_HASH = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+
+async function normalizeRowsToV1(ctx: Fixture, month: string = MONTH): Promise<void> {
+  await withOrgTransaction(ctx.org.orgId, async () => {
+    const monthly = await db.execute<{ id: string }>(sql`
+      update saas_metrics_monthly
+         set reporting_currency = 'CAD', denomination_version = 'v1',
+             normalization_evidence = ${V1_EVIDENCE}::jsonb,
+             inputs_hash = ${CANONICAL_HASH}
+       where org_id = ${ctx.org.orgId} and month = ${month}::date
+      returning id
+    `);
+    assert.ok(monthly.rows.length >= 1, "the monthly rows must be normalized");
+    const facts = await db.execute<{ id: string }>(sql`
+      update saas_metrics_facts_monthly
+         set reporting_currency = 'CAD', denomination_version = 'v1',
+             normalization_evidence = ${V1_EVIDENCE}::jsonb,
+             inputs_hash = ${CANONICAL_HASH}
+       where org_id = ${ctx.org.orgId} and month = ${month}::date
+      returning id
+    `);
+    assert.ok(facts.rows.length >= 1, "the facts rows must be normalized");
+    const cohorts = await db.execute<{ id: string }>(sql`
+      update saas_metrics_cohort_monthly
+         set reporting_currency = 'CAD', denomination_version = 'v1',
+             normalization_evidence = ${V1_EVIDENCE}::jsonb,
+             inputs_hash = ${CANONICAL_HASH}
+       where org_id = ${ctx.org.orgId} and month = ${month}::date
+      returning id
+    `);
+    assert.ok(cohorts.rows.length >= 1, "the cohort rows must be normalized");
+  });
+}
+
+test("ordinary v1 rows with no request read ready when every row is bound", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedLegacyMonth(ctx);
+    await normalizeRowsToV1(ctx);
+    const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
+    assert.equal(state.state, "ready");
+    assert.equal(state.denominationVersion, "v1");
+    assert.equal(state.reportingCurrency, "CAD");
+    assert.equal(state.request, null, "no request selected this month");
+    assert.equal(state.failure, null);
+  });
+});
+
+test("ordinary v1 rows with a hand-edited row hash refuse with no request", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedLegacyMonth(ctx);
+    await normalizeRowsToV1(ctx);
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const updated = await db.execute<{ id: string }>(sql`
+        update saas_metrics_monthly
+           set inputs_hash = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+        returning id
+      `);
+      assert.equal(updated.rows.length, 1, "one stored row hash must be tampered with");
+    });
+    const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
+    assert.equal(state.state, "refused");
+    assert.ok(
+      state.failure && state.failure.includes("mixes stored row hashes"),
+      `the failure must name the hash disagreement, got: ${state.failure}`,
+    );
+    assert.ok(state.remedy && state.remedy.includes("Company Setup → SaaS Metrics"));
+    assert.ok(state.remedy && state.remedy.includes("different authorized approver"));
+    assert.equal(state.request, null);
+  });
+});
+
+test("ordinary v1 rows with a hand-edited evidence hash refuse with no request", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedLegacyMonth(ctx);
+    await normalizeRowsToV1(ctx);
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const updated = await db.execute<{ id: string }>(sql`
+        update saas_metrics_facts_monthly
+           set normalization_evidence = '{"inputs_hash":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}'::jsonb
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+        returning id
+      `);
+      assert.equal(updated.rows.length, 1, "one stored evidence hash must be tampered with");
+    });
+    const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
+    assert.equal(state.state, "refused");
+    assert.ok(
+      state.failure && state.failure.includes("evidence hashes do not agree"),
+      `the failure must name the evidence disagreement, got: ${state.failure}`,
+    );
+    assert.ok(state.remedy && state.remedy.includes("Company Setup → SaaS Metrics"));
+  });
+});
+
 test("one organization never reads another organization's months", { skip: !DB }, async () => {
   await withFixture(async (first) => {
     await seedLegacyMonth(first);
