@@ -2604,7 +2604,7 @@
         "description": "Components consumed to build each assembly item."
       },
       "overhead-rates": {
-        "title": "Overhead Rates",
+        "title": "Overhead rates",
         "description": "Effective-dated overhead rates applied to labor cost.",
         "singular": "Overhead Rate"
       },
@@ -3703,12 +3703,15 @@
       "manufacturingScrap": {"normal":"Normal scrap","abnormal":"Abnormal scrap"},
       "manufacturingSupplyMethod": {"make":"Make","buy":"Buy","transfer":"Transfer between locations"},
       "overheadMethod": {
-        "live": "Live",
-        "standard": "Standard"
+        "three_year_average": "Three-year average (historical)",
+        "live": "Live (recomputed from actuals)",
+        "standard": "Standard (effective-dated rate card)"
       },
       "overheadRateKind": {
-        "per_hour": "$/hour",
-        "percent": "% of labor"
+        "per_hour": "$/labor hour",
+        "per_machine_hour": "$/machine hour",
+        "per_unit": "$/unit",
+        "percent": "%"
       },
       "complianceCategory": {
         "insurance": "Insurance",

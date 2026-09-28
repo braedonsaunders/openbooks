@@ -3668,8 +3668,9 @@
         "retainBalance": "残高を保持"
       },
       "overheadMethod": {
-        "live": "ライブ",
-        "standard": "標準"
+        "three_year_average": "3年平均（履歴）",
+        "live": "ライブ（実績から再計算）",
+        "standard": "標準（発効日付きレートカード）"
       },
       "fxRateType": {
         "spot": "スポット",
@@ -3798,8 +3799,10 @@
         "proportionate": "純資産の持分割合"
       },
       "overheadRateKind": {
-        "per_hour": "ドル/時",
-        "percent": "労務費の％"
+        "per_hour": "ドル/労働時間",
+        "per_machine_hour": "ドル/機械時間",
+        "per_unit": "ドル/単位",
+        "percent": "％"
       },
       "payComponentBasis": {
         "fixedAmount": "固定額",

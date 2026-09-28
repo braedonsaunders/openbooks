@@ -3703,12 +3703,15 @@
       "manufacturingScrap": {"normal":"正常报废","abnormal":"异常报废"},
       "manufacturingSupplyMethod": {"make":"自制","buy":"采购","transfer":"地点间调拨"},
       "overheadMethod": {
-        "live": "实时",
-        "standard": "标准"
+        "three_year_average": "三年平均（历史）",
+        "live": "实时（按实际成本重算）",
+        "standard": "标准（按生效日期的费率卡）"
       },
       "overheadRateKind": {
-        "per_hour": "$/小时",
-        "percent": "占人工 %"
+        "per_hour": "$/人工小时",
+        "per_machine_hour": "$/机器小时",
+        "per_unit": "$/单位",
+        "percent": "%"
       },
       "complianceCategory": {
         "insurance": "保险",
