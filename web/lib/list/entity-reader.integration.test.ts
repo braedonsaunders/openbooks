@@ -96,7 +96,7 @@ test("null, empty, and many scopes deliver at runtime", enabled, async () => {
     const fresh = await allowedSubsidiaryIds(manyActor, org.orgId);
     const many = await readEntityListPage(query(org.orgId, manyActor, { allowedSubsidiaryIds: fresh }));
     assert.ok(many.ok, "exact fresh many-set executes");
-    const noperm = await scopedActor(org.orgId, "NoPerm", "reader-noperm", null, []);
+    const noperm = await scopedActor(org.orgId, "NoPerm", "reader-noperm", null, '[]');
     const denied = await readEntityListPage(query(org.orgId, noperm));
     assert.ok(!denied.ok && /forbidden/.test(denied.error), "grantless actor compiles nothing");
     const deniedSort = await readEntityListPage(query(org.orgId, noperm, { sort: "nope" }));

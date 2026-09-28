@@ -116,7 +116,7 @@ export async function loadProjects(
   // feature. Staffing additionally needs the reader grant.
   const [schedulingEnabled, resourcingEnabled, locale] = await Promise.all([
     isFeatureEnabled(orgId, 'projectScheduling'),
-    isFeatureEnabled(orgId, 'resourcing') && can(authz, 'resourcing.read'),
+    isFeatureEnabled(orgId, 'resourcing').then((enabled) => enabled && can(authz, 'resourcing.read')),
     getLocale(),
   ])
 

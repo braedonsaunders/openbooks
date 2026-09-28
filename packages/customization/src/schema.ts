@@ -746,11 +746,9 @@ export function defaultListView(recordType: RecordTypeKey): ListViewConfig {
 /* Parse helpers (parse + lint) — the API authoritative path            */
 /* ------------------------------------------------------------------ */
 
-export interface ParseResult<T> {
-  success: boolean
-  data?: T
-  issues: LintIssue[]
-}
+export type ParseResult<T> =
+  | { success: true; data: T; issues: LintIssue[] }
+  | { success: false; data?: undefined; issues: LintIssue[] }
 
 /** Cross-field checks for the tab list (called from lintFormLayout). */
 function lintFormTabs(config: FormLayoutConfig): LintIssue[] {

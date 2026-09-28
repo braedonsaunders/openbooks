@@ -19,12 +19,14 @@ import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { AmbiguousListViewDefaultError, resolveListView } from '../lib/customization/resolve'
 import { displayListViewName } from '../lib/customization/display'
-import { type ListColDesc } from '../lib/customization/list-query'
+import { columnDescriptors, type ListColDesc } from '../lib/customization/list-query'
 import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import {
   customerBaseJoins,
+  customerBuiltInExpr,
   customerStatusExpr,
   employeeBaseJoins,
+  employeeBuiltInExpr,
   EMPLOYEE_HRM_FILTER_KEYS,
 } from '../lib/customization/entity-list-query'
 import { entityListSource } from '../lib/list/entity-sources'
@@ -314,11 +316,12 @@ export async function EntityListView({
   const statusExpr = recordType === 'customer'
     ? customerStatusExpr(crmOn)
     : (source.statusExpr ?? sql`${aliasSql}.status`)
-  const baseJoins = recordType === 'customer'
-    ? customerBaseJoins(crmOn)
+  const builtInExpr = recordType === 'customer'
+    ? customerBuiltInExpr(crmOn)
     : recordType === 'employee'
-      ? employeeBaseJoins(hrmOn, today, allowedSubs)
-      : (typeof source.baseJoins === 'function' ? source.baseJoins(allowedSubs, today) : source.baseJoins)
+      ? employeeBuiltInExpr(hrmOn)
+      : source.builtInExpr
+  const cols = columnDescriptors(recordType, view, showInListDefs, builtInExpr, labels, source.customFieldAlias ?? source.alias)
   const countJoinsSource = source.countJoins ?? source.baseJoins
   const countJoins = recordType === 'customer'
     ? customerBaseJoins(crmOn)
