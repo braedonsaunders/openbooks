@@ -1,5 +1,8 @@
 import 'server-only'
+import type { Authz } from '@/lib/authz'
 import { isFeatureEnabled } from '@/lib/features'
+import { canSeeWidget } from './_widget-access'
+import { WIDGETS } from './_widget-registry'
 
 /**
  * The one map from dashboard widget id to the feature key that gates it.
@@ -34,4 +37,35 @@ export async function widgetFeatureOn(orgId: string, widgetId: string): Promise<
   const key = widgetFeatureKey(widgetId)
   if (key === null) return true
   return isFeatureEnabled(orgId, key)
+}
+
+/**
+ * The one feature-aware allowed-widget-id resolver for the dashboard.
+ *
+ * A registry id is allowed only when the caller may see it (the synchronous
+ * permission/persona/insight/app decision in canSeeWidget, unchanged) AND
+ * its feature gate from the single map above resolves on for the org. Every
+ * server boundary — view slot, edit slot, edit/view canvas, save filter —
+ * derives its registry ids from this set, so a tile the org switched off
+ * can never be rendered, offered, or persisted, whatever the caller's
+ * grants. Insight-card UUIDs and app tiles carry no single feature key and
+ * keep resolving through canSeeWidget at each call site.
+ *
+ * The feature check defaults to the live gate; tests pass a stub for that
+ * database-backed flag while permission checks stay real.
+ */
+/** Registry ids the caller may use, resolved once per server entry boundary. */
+export type AllowedWidgetIds = ReadonlySet<string>
+
+export async function resolveAllowedWidgetIds(
+  authz: Authz,
+  featureOn: (widgetId: string) => Promise<boolean> = (widgetId) =>
+    widgetFeatureOn(authz.user.orgId, widgetId),
+): Promise<AllowedWidgetIds> {
+  const visible = Object.keys(WIDGETS).filter((id) => canSeeWidget(authz, id))
+  const gated = visible.filter((id) => widgetFeatureKey(id) !== null)
+  const states = await Promise.all(gated.map((id) => featureOn(id)))
+  const off = new Set(gated.filter((_, index) => !states[index]))
+  if (off.size === 0) return new Set(visible)
+  return new Set(visible.filter((id) => !off.has(id)))
 }

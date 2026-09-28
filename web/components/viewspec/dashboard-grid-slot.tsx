@@ -3,6 +3,8 @@ import 'server-only'
 import { getAuthz } from '../../lib/authz'
 import { loadDashboardLayout } from '../../app/(app)/dashboard/_load-layout'
 import { canSeeWidget } from '../../app/(app)/dashboard/_widget-access'
+import { WIDGETS } from '../../app/(app)/dashboard/_widget-registry'
+import { resolveAllowedWidgetIds } from '../../app/(app)/dashboard/widget-features'
 import { loadDashboardView } from '../../app/(app)/dashboard/_edit-canvas'
 import { saveQuickActions } from '../../app/(app)/dashboard/actions'
 import { DashboardGrid } from '../../app/(app)/dashboard/_dashboard-grid'
@@ -23,22 +25,30 @@ import { DashboardGrid } from '../../app/(app)/dashboard/_dashboard-grid'
  * rule applies unchanged: the loader owns data, the HOST owns capabilities.
  *
  * The work below is copied verbatim from `page.tsx`: layout resolution (user
- * row → role row → tier default), the `canSeeWidget` visibility filter, and
+ * row → role row → tier default), the feature-aware allowed-id filter, and
  * the stale-node prune. That last one matters — removed or disabled apps and
  * unpublished insight cards leave no live node, and keeping their references
  * would render a count of things the reader cannot see. A count is a
  * disclosure. Customization can still surface and remove them on the next
  * save.
+ *
+ * The allowed set is resolved once here and handed to the canvas loader, so
+ * the pruned layout, the rendered nodes, and the metric queries all enforce
+ * the same ids. Registry ids resolve through that set; insight-card UUIDs
+ * and app tiles carry no single feature key and keep canSeeWidget.
  */
 export async function DashboardGridSlot() {
   const authz = await getAuthz()
   if (!authz) return null
 
   const { layout, role, hiddenQuickActionIds } = await loadDashboardLayout(authz)
-  const widgets = layout.widgets.filter((w) => canSeeWidget(authz, w.id))
+  const allowedWidgetIds = await resolveAllowedWidgetIds(authz)
+  const widgets = layout.widgets.filter((w) =>
+    w.id in WIDGETS ? allowedWidgetIds.has(w.id) : canSeeWidget(authz, w.id),
+  )
   const visibleLayout = { ...layout, widgets }
 
-  const { nodes } = await loadDashboardView(authz, visibleLayout)
+  const { nodes } = await loadDashboardView(authz, visibleLayout, allowedWidgetIds)
   const renderedLayout = {
     ...visibleLayout,
     widgets: visibleLayout.widgets.filter((widget) => nodes[widget.id] !== undefined),

@@ -8,8 +8,8 @@ import { insightVisibilitySql } from '@/lib/insight-access'
 import { getAuthz, can } from '@/lib/authz'
 import { isUuid } from '@/lib/list-params'
 import { WIDGETS } from './_widget-registry'
-import { canSeeWidget } from './_widget-access'
 import { WidgetCard } from './_widget-views'
+import type { AllowedWidgetIds } from './widget-features'
 import { loadDashboardMetrics, pruneDashboardMetrics } from './_metrics'
 import type { DashboardMetrics } from './_metrics'
 import { CardTile, type CardTileData } from '../insights/CardTile'
@@ -92,12 +92,20 @@ async function loadInsightCardNodes(
 export async function loadDashboardView(
   authz: Authz,
   layout: DashboardLayoutData,
+  /**
+   * REQUIRED: the entry boundary's resolved set (view slot), carrying both
+   * the permission decision and the feature gates. The canvas never resolves
+   * features itself, so layout prune, node selection, and metric selection
+   * below all enforce the same ids the slot filtered on. Non-registry
+   * insight-card UUIDs and app tiles keep resolving through canSeeWidget.
+   */
+  allowedWidgetIds: AllowedWidgetIds,
 ): Promise<{ nodes: Record<string, React.ReactNode> }> {
-  // The layout arriving here is already visibility-filtered by the slot, but
-  // the canSeeWidget check below is the enforcement point — derive the
-  // loader's query set from exactly the ids that survive it, so a denied
-  // widget's reader never runs.
-  const visibleIds = layout.widgets.map((w) => w.id).filter((id) => id in WIDGETS && canSeeWidget(authz, id))
+  // The layout arriving here is already filtered by the slot on this same
+  // set, but the allowedWidgetIds check below is the enforcement point —
+  // derive the loader's query set from exactly the ids that survive it, so
+  // a denied widget's reader never runs.
+  const visibleIds = layout.widgets.map((w) => w.id).filter((id) => id in WIDGETS && allowedWidgetIds.has(id))
   const [metrics, cardNodes, apps] = await Promise.all([
     loadDashboardMetrics(authz, visibleIds),
     loadInsightCardNodes(authz, layout.widgets.map((w) => w.id)),
@@ -106,7 +114,7 @@ export async function loadDashboardView(
 
   const nodes: Record<string, React.ReactNode> = {}
   for (const w of layout.widgets) {
-    if (w.id in WIDGETS && canSeeWidget(authz, w.id)) {
+    if (w.id in WIDGETS && allowedWidgetIds.has(w.id)) {
       // Each widget card is a client component: hand it only the metric
       // fields it renders, never the whole org-wide metrics object.
       nodes[w.id] = (
@@ -127,17 +135,24 @@ export async function loadDashboardEditCanvas(
   authz: Authz,
   layout: DashboardLayoutData,
   opts: {
-    allowedWidgetIds?: ReadonlySet<string>
-  } = {},
+    /**
+     * REQUIRED: the entry boundary's resolved set (edit slot), carrying both
+     * the permission decision and the feature gates. The canvas never
+     * resolves features itself and never falls back to permission-only for
+     * registry ids: an id absent from this set renders no preview node and
+     * feeds no metric reader.
+     */
+    allowedWidgetIds: AllowedWidgetIds
+  },
 ): Promise<{
   nodes: Record<string, React.ReactNode>
   libraryCards: LibraryCard[]
   apps: DashboardApp[]
 }> {
-  const widgetAllowed = (id: string) => !opts.allowedWidgetIds || opts.allowedWidgetIds.has(id)
+  const widgetAllowed = (id: string) => opts.allowedWidgetIds.has(id)
   const canUseInsights = can(authz, 'insights.read')
 
-  const previewIds = Object.keys(WIDGETS).filter((id) => widgetAllowed(id) && canSeeWidget(authz, id))
+  const previewIds = Object.keys(WIDGETS).filter((id) => widgetAllowed(id))
   const [data, libraryCards, placedCardNodes, apps] = await Promise.all([
     loadDashboardMetrics(authz, previewIds),
     canUseInsights ? loadPublishedInsightCards(authz.user.orgId) : Promise.resolve([] as LibraryCard[]),
@@ -150,7 +165,7 @@ export async function loadDashboardEditCanvas(
 
   const nodes: Record<string, React.ReactNode> = {}
   for (const id of Object.keys(WIDGETS)) {
-    if (!widgetAllowed(id) || !canSeeWidget(authz, id)) continue
+    if (!widgetAllowed(id)) continue
     nodes[id] = (
       <WidgetCard
         key={id}

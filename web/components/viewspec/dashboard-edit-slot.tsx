@@ -4,6 +4,7 @@ import { getAuthz } from '../../lib/authz'
 import { loadDashboardLayout } from '../../app/(app)/dashboard/_load-layout'
 import { WIDGETS } from '../../app/(app)/dashboard/_widget-registry'
 import { canSeeWidget } from '../../app/(app)/dashboard/_widget-access'
+import { resolveAllowedWidgetIds } from '../../app/(app)/dashboard/widget-features'
 import { loadDashboardEditCanvas } from '../../app/(app)/dashboard/_edit-canvas'
 import { saveQuickActions } from '../../app/(app)/dashboard/actions'
 import { DashboardGrid } from '../../app/(app)/dashboard/_dashboard-grid'
@@ -32,11 +33,17 @@ export async function DashboardEditSlot() {
   if (!authz) return null
 
   const { layout, role, hiddenQuickActionIds } = await loadDashboardLayout(authz)
+  // One resolved set drives the pruned layout, the palette/addability, and
+  // the canvas below: a feature-off tile is neither shown, offered, nor
+  // rendered. Registry ids resolve through the set; insight-card UUIDs and
+  // app tiles carry no single feature key and keep canSeeWidget.
+  const allowedWidgetIds = await resolveAllowedWidgetIds(authz)
   const visibleLayout = {
     ...layout,
-    widgets: layout.widgets.filter((w) => canSeeWidget(authz, w.id)),
+    widgets: layout.widgets.filter((w) =>
+      w.id in WIDGETS ? allowedWidgetIds.has(w.id) : canSeeWidget(authz, w.id),
+    ),
   }
-  const allowedWidgetIds = new Set(Object.keys(WIDGETS).filter((id) => canSeeWidget(authz, id)))
   const { nodes, libraryCards, apps } = await loadDashboardEditCanvas(authz, visibleLayout, {
     allowedWidgetIds,
   })
