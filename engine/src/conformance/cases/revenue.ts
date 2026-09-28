@@ -32,7 +32,11 @@ import {
 } from "../../billing/usage/rating-plans.ts";
 import { aggregateUsage, commitShortfall, rateUsage } from "../../billing/usage/rating.ts";
 import { commitWindowForRun } from "../../billing/usage/true-ups.ts";
-import { applyDropShipConfirmationInventory } from "../../sales/drop-ship.ts";
+import {
+  applyDropShipConfirmationInventory,
+  attachDropShipPurchaseOrder,
+  routeDropShipLine,
+} from "../../sales/drop-ship.ts";
 import { capture, deps, draftDocument, type DraftDocumentInput } from "../ledger-helpers.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
 
@@ -1173,12 +1177,83 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
     },
     run: async (ctx) => {
       const ledger = ctx.ledger!;
+      // One controlled item for every leg of this case: the customer invoice,
+      // the sales order, the purchase order, and the vendor receipt all derive
+      // from this single binding, so a future edit cannot silently split the
+      // principal and vendor legs across two different items again.
+      const standardItemId = ledger.items.standard;
+      await db.execute(sql`
+        update orgs set settings = jsonb_set(settings, '{features}',
+          coalesce(settings->'features', '{}'::jsonb) || '{"orders":true,"inventory":true,"dropShipping":true}'::jsonb)
+         where id = ${ledger.orgId}
+      `);
+      // The distributor controls one stocked unit before transfer: an approved
+      // sales order for the customer, routed to the vendor for direct shipment.
+      const salesOrderId = randomUUID();
+      const salesOrderLineId = randomUUID();
+      await db.execute(sql`
+        insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, currency, status)
+        values (${salesOrderId}, ${ledger.orgId}, 'sales_order', 'CONF-REV-DS-ORDER',
+         ${ledger.customerId}, ${ledger.subsidiaryId}, ${ledger.date}, 'CAD', 'draft')`);
+      await db.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, description, quantity, unit, unit_price, amount, tax_amount, stock_location_id)
+        values (${salesOrderLineId}, ${ledger.orgId}, ${salesOrderId}, 1, ${standardItemId},
+         'Drop-ship unit', '1', 'ea', '100', '100', '0', ${ledger.stockLocationId})`);
+      const salesOrderApproved = await db.execute<{ id: string }>(sql`
+        update documents set status = 'approved'
+         where id = ${salesOrderId} and org_id = ${ledger.orgId} and status = 'draft'
+        returning id`);
+      if (salesOrderApproved.rows.length !== 1) throw new Error("conformance drop-ship sales order was not approved");
+      await routeDropShipLine({
+        orgId: ledger.orgId,
+        actorId: ledger.actorId,
+        salesOrderId,
+        salesOrderLineId,
+        allowedSubsidiaryIds: null,
+      });
+      // The vendor's purchase order carries the same controlled item, so the
+      // confirmation pairs the receipt line to the routed sales demand.
+      const purchaseOrderId = randomUUID();
+      const purchaseOrderLineId = randomUUID();
+      await db.execute(sql`
+        insert into documents (id, org_id, kind, document_number, party_id, subsidiary_id, document_date, currency, status)
+        values (${purchaseOrderId}, ${ledger.orgId}, 'purchase_order', 'CONF-REV-DS-PO',
+         ${ledger.vendorId}, ${ledger.subsidiaryId}, ${ledger.date}, 'CAD', 'draft')`);
+      await db.execute(sql`
+        insert into document_lines
+          (id, org_id, document_id, line_number, item_id, description, quantity, unit, unit_price, amount, tax_amount)
+        values (${purchaseOrderLineId}, ${ledger.orgId}, ${purchaseOrderId}, 1, ${standardItemId},
+         'Drop-ship unit', '1', 'ea', '60', '60', '0')`);
+      await attachDropShipPurchaseOrder({
+        orgId: ledger.orgId,
+        actorId: ledger.actorId,
+        salesOrderId,
+        purchaseOrderId,
+        shipToAddress: { name: "Conformance customer" },
+        lines: [{ salesOrderLineId, purchaseOrderLineId }],
+        allowedSubsidiaryIds: null,
+      });
+      // A sales-order-backed invoice is fulfilment-governed: it records the
+      // gross customer consideration without issuing the vendor-shipped stock.
       const invoiceDraftId = await draftDocument(ledger, {
         kind: "customer_invoice",
         number: "CONF-REV-DS-PRINCIPAL",
         partyId: ledger.customerId,
-        lines: [{ itemId: ledger.items.service, accountId: ctx.roles.revenue, quantity: "1", unitPrice: "100", amount: "100" }],
+        lines: [
+          {
+            itemId: standardItemId,
+            accountId: ctx.roles.revenue,
+            quantity: "1",
+            unitPrice: "100",
+            amount: "100",
+            stockLocationId: ledger.stockLocationId,
+          },
+        ],
       });
+      await db.execute(sql`
+        insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)
+        values (${ledger.orgId}, ${salesOrderId}, ${invoiceDraftId}, 'bills', ${ledger.actorId}, ${ledger.actorId})`);
       const receiptId = randomUUID();
       const receiptLineId = randomUUID();
       await db.execute(sql`
@@ -1195,9 +1270,9 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
           (id, org_id, document_id, line_number, item_id, quantity, unit_price, amount, tax_amount,
            is_billable, quantity_fulfilled, quantity_billed, custom, extra_dims)
         values
-          (${receiptLineId}, ${ledger.orgId}, ${receiptId}, 1, ${ledger.items.standard},
+          (${receiptLineId}, ${ledger.orgId}, ${receiptId}, 1, ${standardItemId},
            '1', '60', '60', '0', false, '0', '0',
-           ${JSON.stringify({ receipt: { sourceLineId: randomUUID(), lotId: null, serialId: null } })}::jsonb,
+           ${JSON.stringify({ receipt: { sourceLineId: purchaseOrderLineId, lotId: null, serialId: null } })}::jsonb,
            '{}'::jsonb)
       `);
       const receiptApproved = await db.execute<{ id: string }>(sql`
@@ -1206,10 +1281,8 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
         returning id`);
       if (receiptApproved.rows.length !== 1) throw new Error("conformance drop-ship receipt was not approved");
       await db.execute(sql`
-        update orgs set settings = jsonb_set(settings, '{features}',
-          coalesce(settings->'features', '{}'::jsonb) || '{"orders":true,"inventory":true,"dropShipping":true}'::jsonb)
-         where id = ${ledger.orgId}
-      `);
+        insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)
+        values (${ledger.orgId}, ${purchaseOrderId}, ${receiptId}, 'fulfills', ${ledger.actorId}, ${ledger.actorId})`);
       const invoiceEntry = await capture(ctx, "customer invoice", async () => {
         const approved = await db.execute<{ id: string }>(sql`
           update documents set status = 'approved'
