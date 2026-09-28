@@ -10,7 +10,7 @@ import { createFund, setFundPair } from "./funds.ts";
 import { NonprofitError } from "./errors.ts";
 import { setFramework } from "./frameworks.ts";
 import { provisionFundAccounting } from "./provision.ts";
-import { createFundRelease, submitFundRelease, voidFundRelease } from "./releases.ts";
+import { createFundRelease, getFundRelease, listFundReleases, submitFundRelease, voidFundRelease } from "./releases.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -182,4 +182,23 @@ test("fund releases route approval, post and reverse, and refuse unsafe class or
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
+});
+
+test("fund release readers return the drawer projection with same-org isolation", { skip: !DB }, async (t) => {
+  const org = await withBypass(() => createScratchOrg());
+  t.after(() => dropScratchOrg(org.orgId));
+  const actor = await withBypass(() => createScratchUser(org.orgId, "Release Reader", "accountant"));
+  assert.equal((await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`))).rows.length, 1);
+  const setup = await provisionFundAccounting({ orgId: org.orgId, defaultFund: { code: "U", name: "U Fund" },
+    classifications: { U: { kind: "operating", restrictionClass: "without_donor_restrictions" } }, actorId: actor });
+  const restricted = await createFund({ orgId: org.orgId, code: "R", name: "R",
+    kind: "restricted", restrictionClass: "with_donor_restrictions", actorId: actor });
+  await setFramework({ orgId: org.orgId, framework: "us_asc958", actorId: actor, reason: "Reader fixtures" });
+  const release = await createFundRelease({ orgId: org.orgId, fromFundId: restricted.id, toFundId: setup.defaultFundId, actorId: actor,
+    releaseAccountId: org.accounts.revenue, releaseDate: org.date, amount: "50.0000", purpose: "Award", satisfactionRef: "Terms" });
+  const found = await withOrgContext(org.orgId, () => getFundRelease({ orgId: org.orgId, releaseId: release.id }));
+  assert.deepEqual(await withOrgContext(org.orgId, () => listFundReleases({ orgId: org.orgId })), { releases: [found], total: 1 });
+  assert.equal(await withOrgContext(org.orgId, () => getFundRelease({ orgId: randomUUID(), releaseId: release.id })), null);
+  assert.equal(await withOrgContext(org.orgId, () => getFundRelease({ orgId: org.orgId, releaseId: randomUUID() })), null);
 });

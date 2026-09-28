@@ -1,8 +1,10 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
+import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { getFund } from '@openbooks/engine/src/nonprofit/funds.ts'
 import {
   page,
   pageHeader,
@@ -24,7 +26,11 @@ import { groupTabs } from '../../../../components/module-home/group-tabs'
  * Authz server-side. The spec carries only the record type, the current
  * params, and a widget ref for the drawer — never an org id. The drawer
  * payload (fund classification, interfund pairs, recent releases) is ledger
- * truth read here, beside the list, exactly like the asset pickers.
+ * truth read here, beside the list, exactly like the asset pickers. The fund
+ * itself arrives through the canonical fund reader; the pairs and recent
+ * releases stay beside the list because they are drawer collections, not the
+ * record. A named record that the reader cannot see is a stale or foreign
+ * link, so it ends on the shared not-found boundary instead of an empty page.
  */
 
 export interface FundDetail {
@@ -73,15 +79,6 @@ export interface FundsData {
   drawer: FundDrawerData | null
 }
 
-type FundRow = {
-  id: string
-  code: string | null
-  name: string
-  kind: string
-  restriction_class: string
-  budgetary_control: string
-  is_active: boolean
-}
 type PairRow = {
   id: string
   from_fund_id: string
@@ -112,15 +109,8 @@ export async function loadFunds(
 
   const fundId = pickString(sp.fund)
   if (!fundId || !isUuid(fundId)) return base
-  const found = (
-    await db.execute<FundRow>(sql`
-      select f.id::text as id, sv.code, sv.name, f.kind,
-             f.restriction_class, f.budgetary_control, sv.is_active
-        from funds f
-        join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
-       where f.org_id = ${orgId} and f.id = ${fundId}`)
-  ).rows[0]
-  if (!found) return base
+  const found = await getFund({ orgId, fundId })
+  if (!found) notFound()
 
   const [pairs, releases] = await Promise.all([
     db.execute<PairRow>(sql`
@@ -154,9 +144,9 @@ export async function loadFunds(
         code: found.code ?? '',
         name: found.name,
         kind: found.kind,
-        restrictionClass: found.restriction_class,
-        budgetaryControl: found.budgetary_control,
-        isActive: found.is_active,
+        restrictionClass: found.restrictionClass,
+        budgetaryControl: found.budgetaryControl,
+        isActive: found.isActive,
       },
       pairs: pairs.rows.map((row) => ({
         id: row.id,

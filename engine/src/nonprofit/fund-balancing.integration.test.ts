@@ -7,7 +7,7 @@ import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/
 import { toUnits } from "../money/money.ts";
 import { clearBalancingLegProviders } from "../journal/balancing-hooks.ts";
 import { postEntry, type PostEntryInput } from "../journal/post-entry.ts";
-import { createFund, setFundPair } from "./funds.ts";
+import { createFund, getFund, listFunds, setFundPair } from "./funds.ts";
 import { NonprofitError, NonprofitPostingError } from "./errors.ts";
 import { provisionFundAccounting } from "./provision.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
@@ -277,4 +277,22 @@ test("fund balancing stays data-driven and fund postings use configured interfun
     clearBalancingLegProviders();
     await dropScratchOrg(org.orgId);
   }
+});
+
+test("fund readers return the drawer projection with same-org isolation", { skip: !DB }, async (t) => {
+  const org = await withBypass(() => createScratchOrg());
+  t.after(() => dropScratchOrg(org.orgId));
+  const enabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`));
+  assert.equal(enabled.rows.length, 1);
+  const setup = await provisionFundAccounting({ orgId: org.orgId, defaultFund: { code: "READER", name: "Reader Fund" },
+    classifications: { READER: { kind: "operating", restrictionClass: "without_donor_restrictions" } } });
+  const second = await createFund({ orgId: org.orgId, code: "ARCHIVE", name: "Archive Fund",
+    kind: "operating", restrictionClass: "without_donor_restrictions" });
+  const page = await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId, limit: 1 }));
+  assert.deepEqual([page.total, ...page.funds.map((fund) => fund.code)], [2, "ARCHIVE"]);
+  const found = await withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: second.id }));
+  assert.deepEqual(found, page.funds[0]);
+  assert.equal(await withOrgContext(org.orgId, () => getFund({ orgId: randomUUID(), fundId: setup.defaultFundId })), null);
+  assert.equal(await withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: randomUUID() })), null);
 });
