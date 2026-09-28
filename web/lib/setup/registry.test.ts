@@ -372,7 +372,7 @@ test('the projects/manufacturing any-of gate resolves the four-state truth table
   )
   assert.equal(
     verdicts[0]!.remedy,
-    'Turn on Projects or Manufacturing in Company Settings → Features',
+    'Turn on Projects or Manufacturing in Company Settings → Features.',
     'the both-off refusal names the exact operator remedy',
   )
   assert.equal(
