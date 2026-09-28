@@ -64,6 +64,10 @@ import { reportEntityPermission, STATEMENT_KIND_FEATURE } from './report-authz'
 import { reportBookSelection } from './report-books'
 import { AvailabilityRefusal } from '@openbooks/engine/src/inventory/availability.ts'
 import { availabilityExportData, availabilityRefusalText, replenishmentExportData } from './availability-report'
+import { weekStartOf } from '@openbooks/engine/src/resourcing/weeks.ts'
+import { reportRunLabels } from './report-labels'
+import { runResourcingReport, type ResourcingReportKey } from './resourcing/report-facts'
+import { getTranslations } from 'next-intl/server'
 
 /**
  * The single catalog of built-in report "kinds" and the one place that turns
@@ -92,6 +96,10 @@ export const REPORT_KINDS = [
   'true-cost',
   'availability',
   'replenishment',
+  'resourcing-utilization',
+  'resourcing-bench',
+  'resourcing-capacity-demand',
+  'resourcing-engagement',
 ] as const
 export type ReportKind = (typeof REPORT_KINDS)[number]
 
@@ -198,7 +206,7 @@ export type ResolveReportCtx = {
  */
 export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: ResolveReportCtx): Promise<ResolvedReport> {
   const { orgId, t, period, query: q } = ctx
-  const featureKey = STATEMENT_KIND_FEATURE[kind]
+  const featureKey = STATEMENT_KIND_FEATURE[kind] ?? (kind.startsWith('resourcing-') ? 'resourcing' : undefined)
   if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
     throw new ReportResolutionError(`${featureKey} feature is disabled`)
   }
@@ -217,6 +225,58 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     } catch (error) {
       if (error instanceof AvailabilityRefusal) throw new ReportResolutionError(availabilityRefusalText(error))
       throw error
+    }
+  }
+  const resourcingKind: Partial<Record<ReportKind, ResourcingReportKey>> = {
+    'resourcing-utilization': 'utilization',
+    'resourcing-bench': 'bench',
+    'resourcing-capacity-demand': 'capacity-demand',
+    'resourcing-engagement': 'engagement',
+  }
+  const resourcingKey = resourcingKind[kind]
+  if (resourcingKey) {
+    if (!can(authz, 'resourcing.read')) throw new ReportResolutionError('this report requires resourcing.read')
+    const tResourcing = await getTranslations(`resourcing.reports.${resourcingKey}`)
+    const labels = await reportRunLabels()
+    const result = await runResourcingReport(
+      resourcingKey,
+      orgId,
+      authz.allowedSubsidiaryIds,
+      { firstSunday: weekStartOf(period.from), lastSunday: weekStartOf(period.to) },
+      {
+        departmentId: p.get('dept') || undefined,
+        jobTitleSearch: p.get('q') || undefined,
+        breakout: (p.get('breakout') || undefined) as 'person' | 'department' | 'job_title' | 'project' | 'customer' | undefined,
+      },
+      {
+        report: labels,
+        formulas: {
+          utilization: tResourcing('measures.utilization'),
+          booked: tResourcing('measures.booked'),
+          gap: tResourcing('measures.gap'),
+          fill: tResourcing('measures.fill'),
+          margin: tResourcing('measures.margin'),
+          marginPercent: tResourcing('measures.marginPercent'),
+          personCount: tResourcing('measures.personCount'),
+          unknownCapacity: tResourcing('measures.unknownCapacity'),
+          unpricedCount: tResourcing('measures.unpricedCount'),
+          uncostedCount: tResourcing('measures.uncostedCount'),
+          pricedCount: tResourcing('measures.pricedCount'),
+          costedCount: tResourcing('measures.costedCount'),
+          noCapacity: tResourcing('guards.noCapacity'),
+          noRevenue: tResourcing('guards.noRevenue'),
+          noCost: tResourcing('guards.noCost'),
+          undefined: tResourcing('guards.undefined'),
+        },
+      },
+    )
+    return {
+      render: 'data',
+      data: runResultToExportData(result, {
+        title: tResourcing('title'),
+        dateRangeLabel: ctx.period.label,
+      }),
+      requiredPermissions: ['resourcing.read'],
     }
   }
   const subView = await resolveSubsidiaryView(q.subsidiaryId, period.to, authz.allowedSubsidiaryIds)

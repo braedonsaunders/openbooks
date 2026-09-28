@@ -28,6 +28,7 @@ import { isFeatureEnabled } from '../../../../../../lib/features'
 import { guardProjectsFeature } from '../../../../../../lib/projects-gate'
 import { renderGeneralLedgerPaperPdf } from '../../../../../../lib/general-ledger-pdf'
 import { notFound } from "@/lib/api/responses";
+import { can } from '../../../../../../lib/authz'
 
 
 export const runtime = 'nodejs'
@@ -51,6 +52,10 @@ export const GET = defineRoute({
   }
   if ((kind === 'availability' || kind === 'replenishment') && !(await isFeatureEnabled(gate.user.orgId, 'warehousing'))) {
     return notFound('record')
+  }
+  if (kind.startsWith('resourcing-')) {
+    if (!can(gate, 'resourcing.read')) return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
+    if (!(await isFeatureEnabled(gate.user.orgId, 'resourcing'))) return notFound('record')
   }
     const url = new URL(req.url)
     const p = url.searchParams

@@ -34,7 +34,15 @@
       "cashFlowIndirectDescription": "間接法 — 当期純利益を営業キャッシュ・フローに調整（運転資本明細付き）",
       "payrollDescription": "給与明細を対象とする組込み給与レポート — 賃金データには給与権限が必要です。",
       "hrmDescription": "雇用記録に基づく組み込みの人員レポート。HRM の雇用権限が必要です。",
-      "builtInDescription": "統合レポートカタログの組み込み業務レポートです。"
+      "builtInDescription": "統合レポートカタログの組み込み業務レポートです。",
+      "resourcingUtilizationTitle": "稼働率予測",
+      "resourcingUtilizationDescription": "週次の正味稼働可能時間に対する請求対象稼働率の予測です。",
+      "resourcingBenchTitle": "待機稼働能力",
+      "resourcingBenchDescription": "確定予約のない週次稼働可能時間です。",
+      "resourcingCapacityDemandTitle": "稼働能力と需要",
+      "resourcingCapacityDemandDescription": "正味稼働能力を担当者指定、一般、加重パイプラインの需要と比較します。",
+      "resourcingEngagementTitle": "案件予測",
+      "resourcingEngagementDescription": "月および通貨別に、予定時間、売上、労務費、利益を予測します。"
     },
     "groups": {
       "financial": "財務諸表",
@@ -50,7 +58,8 @@
       "inventory": "在庫",
       "allocations": "配賦",
       "aiGovernance": "AI ガバナンス",
-      "other": "その他のレポート"
+      "other": "その他のレポート",
+      "resourcing": "リソース計画"
     },
     "customStudio": {
       "title": "カスタムレポートビルダー",
@@ -937,6 +946,22 @@
       "usage_billing_lines": {
         "label": "従量課金明細",
         "description": "評価済みの従量課金請求明細を、評価実行・プラン版・メーター・元レコードのハッシュ・対象期間・コミット期間の追跡情報とともに表示します。"
+      },
+      "resourcing_utilization": {
+        "label": "稼働率予測",
+        "description": "週次の正味稼働可能時間に対する請求対象稼働率の予測です。"
+      },
+      "resourcing_bench": {
+        "label": "待機稼働能力",
+        "description": "確定予約のない週次稼働可能時間です。"
+      },
+      "resourcing_capacity_demand": {
+        "label": "稼働能力と需要",
+        "description": "正味稼働能力を担当者指定、一般、加重パイプラインの需要と比較します。"
+      },
+      "resourcing_engagement": {
+        "label": "案件予測",
+        "description": "月および通貨別に、予定時間、売上、労務費、利益を予測します。"
       }
     },
     "columns": {
@@ -2175,6 +2200,56 @@
         "commit_window_start": "コミット期間開始",
         "commit_window_end": "コミット期間終了",
         "rated_total": "コミット前の評価合計"
+      },
+      "resourcing_utilization": {
+        "week_start": "週の開始日",
+        "person": "担当者",
+        "person_id": "担当者キー",
+        "department": "部門",
+        "job_title": "職種",
+        "capacity": "稼働能力",
+        "net_capacity": "正味稼働能力",
+        "hard_billable": "確定請求時間",
+        "hard_non_billable": "確定非請求時間",
+        "soft_hours": "仮予約時間",
+        "unknown_capacity": "不明な稼働能力"
+      },
+      "resourcing_bench": {
+        "week_start": "週の開始日",
+        "department": "部門",
+        "job_title": "職種",
+        "person_id": "担当者キー",
+        "idle_net_capacity": "未使用正味稼働能力"
+      },
+      "resourcing_capacity_demand": {
+        "week_start": "週の開始日",
+        "department": "部門",
+        "job_title": "職種",
+        "person_id": "担当者キー",
+        "capacity": "稼働能力",
+        "named_hard": "担当者指定の確定時間",
+        "named_soft": "担当者指定の仮予約時間",
+        "generic_hard": "一般の確定時間",
+        "generic_soft": "一般の仮予約時間",
+        "pipeline_demand": "加重パイプライン時間",
+        "unknown_capacity": "不明な稼働能力"
+      },
+      "resourcing_engagement": {
+        "week_start": "週の開始日",
+        "project": "案件",
+        "customer": "顧客",
+        "currency": "通貨",
+        "department": "部門",
+        "job_title": "職種",
+        "hours": "時間",
+        "revenue": "予測売上",
+        "cost": "予測コスト",
+        "unpriced_hours": "未価格設定の請求時間",
+        "unpriced_count": "未価格設定の割当",
+        "uncosted_count": "未原価計算の割当",
+        "month": "月",
+        "bill_status": "請求価格の状態",
+        "cost_status": "労務費の状態"
       }
     },
     "enumValues": {
@@ -2262,7 +2337,14 @@
       "revoked": "取消済み",
       "pending_verification": "確認待ち",
       "inbox": "受信トレイ",
-      "email": "メール"
+      "email": "メール",
+      "priced": "価格設定済み",
+      "non_billable": "請求対象外",
+      "no_bill_item": "請求品目未設定",
+      "no_bill_rate": "請求単価なし",
+      "no_employee": "担当者未割当",
+      "no_cost_rate": "労務費単価なし",
+      "no_cost_fx": "労務費換算の為替レートなし"
     }
   },
   "operators": {

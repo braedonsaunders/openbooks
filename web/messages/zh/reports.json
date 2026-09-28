@@ -34,7 +34,15 @@
       "cashFlowIndirectDescription": "间接法 — 净利润调节至经营现金流，附营运资本明细",
       "payrollDescription": "基于工资条的内置工资报表——工资数据需要工资权限。",
       "hrmDescription": "基于雇佣记录的内置人力报表，需要 HRM 雇佣权限。",
-      "builtInDescription": "统一报表目录中的内置运营报表。"
+      "builtInDescription": "统一报表目录中的内置运营报表。",
+      "resourcingUtilizationTitle": "利用率预测",
+      "resourcingUtilizationDescription": "预测可计费利用率与每周净产能的关系。",
+      "resourcingBenchTitle": "闲置产能",
+      "resourcingBenchDescription": "没有硬性预订的每周产能。",
+      "resourcingCapacityDemandTitle": "产能与需求",
+      "resourcingCapacityDemandDescription": "比较净产能与指定人员、通用及加权销售管道需求。",
+      "resourcingEngagementTitle": "项目预测",
+      "resourcingEngagementDescription": "按月份和币种预测工时、收入、人工成本和利润。"
     },
     "groups": {
       "financial": "财务报表",
@@ -50,7 +58,8 @@
       "inventory": "库存",
       "allocations": "分配",
       "aiGovernance": "AI 治理",
-      "other": "其他报表"
+      "other": "其他报表",
+      "resourcing": "资源规划"
     },
     "customStudio": {
       "title": "自定义报表构建器",
@@ -937,6 +946,22 @@
       "usage_billing_lines": {
         "label": "用量计费明细",
         "description": "列出已计价的用量发票行，并提供计价运行、计划版本、计量器、源记录哈希、期间及承诺窗口的追踪信息。"
+      },
+      "resourcing_utilization": {
+        "label": "利用率预测",
+        "description": "预测可计费利用率与每周净产能的关系。"
+      },
+      "resourcing_bench": {
+        "label": "闲置产能",
+        "description": "没有硬性预订的每周产能。"
+      },
+      "resourcing_capacity_demand": {
+        "label": "产能与需求",
+        "description": "比较净产能与指定人员、通用及加权销售管道需求。"
+      },
+      "resourcing_engagement": {
+        "label": "项目预测",
+        "description": "按月份和币种预测工时、收入、人工成本和利润。"
       }
     },
     "columns": {
@@ -2175,6 +2200,56 @@
         "commit_window_start": "承诺窗口开始",
         "commit_window_end": "承诺窗口结束",
         "rated_total": "承诺前计价总额"
+      },
+      "resourcing_utilization": {
+        "week_start": "周开始日期",
+        "person": "人员",
+        "person_id": "人员键",
+        "department": "部门",
+        "job_title": "职务",
+        "capacity": "产能",
+        "net_capacity": "净产能",
+        "hard_billable": "硬性可计费工时",
+        "hard_non_billable": "硬性不可计费工时",
+        "soft_hours": "软性工时",
+        "unknown_capacity": "未知产能"
+      },
+      "resourcing_bench": {
+        "week_start": "周开始日期",
+        "department": "部门",
+        "job_title": "职务",
+        "person_id": "人员键",
+        "idle_net_capacity": "闲置净产能"
+      },
+      "resourcing_capacity_demand": {
+        "week_start": "周开始日期",
+        "department": "部门",
+        "job_title": "职务",
+        "person_id": "人员键",
+        "capacity": "产能",
+        "named_hard": "指定人员硬性工时",
+        "named_soft": "指定人员软性工时",
+        "generic_hard": "通用硬性工时",
+        "generic_soft": "通用软性工时",
+        "pipeline_demand": "加权销售管道工时",
+        "unknown_capacity": "未知产能"
+      },
+      "resourcing_engagement": {
+        "week_start": "周开始日期",
+        "project": "项目",
+        "customer": "客户",
+        "currency": "币种",
+        "department": "部门",
+        "job_title": "职务",
+        "hours": "工时",
+        "revenue": "预测收入",
+        "cost": "预测成本",
+        "unpriced_hours": "未定价可计费工时",
+        "unpriced_count": "未定价分配",
+        "uncosted_count": "未核算成本分配",
+        "month": "月份",
+        "bill_status": "计费状态",
+        "cost_status": "人工成本状态"
       }
     },
     "enumValues": {
@@ -2262,7 +2337,14 @@
       "revoked": "已撤销",
       "pending_verification": "待验证",
       "inbox": "收件箱",
-      "email": "电子邮件"
+      "email": "电子邮件",
+      "priced": "已定价",
+      "non_billable": "不可计费",
+      "no_bill_item": "未分配计费项目",
+      "no_bill_rate": "未找到计费费率",
+      "no_employee": "未分配人员",
+      "no_cost_rate": "未找到人工成本费率",
+      "no_cost_fx": "未找到成本换算即期汇率"
     }
   },
   "operators": {

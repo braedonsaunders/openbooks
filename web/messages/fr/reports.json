@@ -34,7 +34,15 @@
       "cashFlowIndirectDescription": "Méthode indirecte — résultat net rapproché des flux opérationnels avec le détail du fonds de roulement",
       "payrollDescription": "Rapport de paie intégré sur les bulletins — les données de salaire exigent la permission paie.",
       "hrmDescription": "Rapport intégré sur les effectifs à partir des dossiers d'emploi — nécessite l'autorisation emploi RH.",
-      "builtInDescription": "Rapport opérationnel intégré du catalogue unifié de rapports."
+      "builtInDescription": "Rapport opérationnel intégré du catalogue unifié de rapports.",
+      "resourcingUtilizationTitle": "Prévision d’utilisation",
+      "resourcingUtilizationDescription": "Utilisation facturable prévue par rapport à la capacité nette hebdomadaire.",
+      "resourcingBenchTitle": "Capacité disponible",
+      "resourcingBenchDescription": "Capacité hebdomadaire sans réservation ferme.",
+      "resourcingCapacityDemandTitle": "Capacité et demande",
+      "resourcingCapacityDemandDescription": "Compare la capacité nette à la demande nominative, générique et pondérée du pipeline.",
+      "resourcingEngagementTitle": "Prévision des missions",
+      "resourcingEngagementDescription": "Prévision des heures, revenus, coûts de main-d’œuvre et marges par mois et devise."
     },
     "groups": {
       "financial": "États financiers",
@@ -50,7 +58,8 @@
       "inventory": "Stocks",
       "allocations": "Répartitions",
       "aiGovernance": "Gouvernance de l’IA",
-      "other": "Autres rapports"
+      "other": "Autres rapports",
+      "resourcing": "Ressources"
     },
     "customStudio": {
       "title": "Constructeur de rapports",
@@ -937,6 +946,22 @@
       "usage_billing_lines": {
         "label": "Lignes de facturation à l’usage",
         "description": "Lignes de facture évaluées avec la traçabilité du calcul, de la version du plan, du compteur, du hachage des enregistrements sources, de la période et de la fenêtre d’engagement."
+      },
+      "resourcing_utilization": {
+        "label": "Prévision d’utilisation",
+        "description": "Utilisation facturable prévue par rapport à la capacité nette hebdomadaire."
+      },
+      "resourcing_bench": {
+        "label": "Capacité disponible",
+        "description": "Capacité hebdomadaire sans réservation ferme."
+      },
+      "resourcing_capacity_demand": {
+        "label": "Capacité et demande",
+        "description": "Compare la capacité nette à la demande nominative, générique et pondérée du pipeline."
+      },
+      "resourcing_engagement": {
+        "label": "Prévision des missions",
+        "description": "Prévision des heures, revenus, coûts de main-d’œuvre et marges par mois et devise."
       }
     },
     "columns": {
@@ -2175,6 +2200,56 @@
         "commit_window_start": "Début de fenêtre d’engagement",
         "commit_window_end": "Fin de fenêtre d’engagement",
         "rated_total": "Total évalué avant engagement"
+      },
+      "resourcing_utilization": {
+        "week_start": "Début de semaine",
+        "person": "Personne",
+        "person_id": "Identifiant personne",
+        "department": "Service",
+        "job_title": "Intitulé de poste",
+        "capacity": "Capacité",
+        "net_capacity": "Capacité nette",
+        "hard_billable": "Heures fermes facturables",
+        "hard_non_billable": "Heures fermes non facturables",
+        "soft_hours": "Heures provisoires",
+        "unknown_capacity": "Capacité inconnue"
+      },
+      "resourcing_bench": {
+        "week_start": "Début de semaine",
+        "department": "Service",
+        "job_title": "Intitulé de poste",
+        "person_id": "Identifiant personne",
+        "idle_net_capacity": "Capacité nette inactive"
+      },
+      "resourcing_capacity_demand": {
+        "week_start": "Début de semaine",
+        "department": "Service",
+        "job_title": "Intitulé de poste",
+        "person_id": "Identifiant personne",
+        "capacity": "Capacité",
+        "named_hard": "Heures fermes nominatives",
+        "named_soft": "Heures provisoires nominatives",
+        "generic_hard": "Heures fermes génériques",
+        "generic_soft": "Heures provisoires génériques",
+        "pipeline_demand": "Heures pondérées du pipeline",
+        "unknown_capacity": "Capacité inconnue"
+      },
+      "resourcing_engagement": {
+        "week_start": "Début de semaine",
+        "project": "Projet",
+        "customer": "Client",
+        "currency": "Devise",
+        "department": "Service",
+        "job_title": "Intitulé de poste",
+        "hours": "Heures",
+        "revenue": "Revenu prévisionnel",
+        "cost": "Coût prévisionnel",
+        "unpriced_hours": "Heures facturables sans prix",
+        "unpriced_count": "Missions sans prix",
+        "uncosted_count": "Missions sans coût",
+        "month": "Mois",
+        "bill_status": "État de facturation",
+        "cost_status": "État du coût de main-d’œuvre"
       }
     },
     "enumValues": {
@@ -2262,7 +2337,14 @@
       "revoked": "Révoquée",
       "pending_verification": "Vérification en attente",
       "inbox": "Boîte de réception",
-      "email": "E-mail"
+      "email": "E-mail",
+      "priced": "Tarif défini",
+      "non_billable": "Non facturable",
+      "no_bill_item": "Aucun article facturable affecté",
+      "no_bill_rate": "Aucun tarif de facturation trouvé",
+      "no_employee": "Aucune personne affectée",
+      "no_cost_rate": "Aucun taux de coût de main-d’œuvre trouvé",
+      "no_cost_fx": "Aucun cours pour convertir le coût"
     }
   },
   "operators": {

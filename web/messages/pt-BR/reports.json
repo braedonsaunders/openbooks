@@ -34,7 +34,15 @@
       "cashFlowIndirectDescription": "Método indireto — lucro líquido reconciliado ao caixa operacional com detalhe do capital de giro",
       "payrollDescription": "Relatório de folha integrado sobre contracheques — dados salariais exigem a permissão da folha.",
       "hrmDescription": "Relatório integrado de força de trabalho sobre registros de emprego — requer a permissão de emprego do RH.",
-      "builtInDescription": "Relatório operacional integrado do catálogo unificado de relatórios."
+      "builtInDescription": "Relatório operacional integrado do catálogo unificado de relatórios.",
+      "resourcingUtilizationTitle": "Previsão de utilização",
+      "resourcingUtilizationDescription": "Utilização faturável prevista em relação à capacidade líquida semanal.",
+      "resourcingBenchTitle": "Capacidade ociosa",
+      "resourcingBenchDescription": "Capacidade semanal sem alocações firmes.",
+      "resourcingCapacityDemandTitle": "Capacidade e demanda",
+      "resourcingCapacityDemandDescription": "Compara a capacidade líquida com a demanda nominal, genérica e ponderada do pipeline.",
+      "resourcingEngagementTitle": "Previsão de projetos",
+      "resourcingEngagementDescription": "Prevê horas, receita, custo de mão de obra e margem por mês e moeda."
     },
     "groups": {
       "financial": "Demonstrações Financeiras",
@@ -50,7 +58,8 @@
       "inventory": "Estoque",
       "allocations": "Alocações",
       "aiGovernance": "Governança de IA",
-      "other": "Outros relatórios"
+      "other": "Outros relatórios",
+      "resourcing": "Alocação de recursos"
     },
     "customStudio": {
       "title": "Construtor de relatórios personalizados",
@@ -937,6 +946,22 @@
       "usage_billing_lines": {
         "label": "Linhas de cobrança por uso",
         "description": "Linhas de fatura tarifadas com rastreabilidade da execução de tarifação, versão do plano, medidor, hash dos registros de origem, período e janela do compromisso."
+      },
+      "resourcing_utilization": {
+        "label": "Previsão de utilização",
+        "description": "Utilização faturável prevista em relação à capacidade líquida semanal."
+      },
+      "resourcing_bench": {
+        "label": "Capacidade ociosa",
+        "description": "Capacidade semanal sem alocações firmes."
+      },
+      "resourcing_capacity_demand": {
+        "label": "Capacidade e demanda",
+        "description": "Compara a capacidade líquida com a demanda nominal, genérica e ponderada do pipeline."
+      },
+      "resourcing_engagement": {
+        "label": "Previsão de projetos",
+        "description": "Prevê horas, receita, custo de mão de obra e margem por mês e moeda."
       }
     },
     "columns": {
@@ -2175,6 +2200,56 @@
         "commit_window_start": "Início da janela do compromisso",
         "commit_window_end": "Fim da janela do compromisso",
         "rated_total": "Total tarifado antes do compromisso"
+      },
+      "resourcing_utilization": {
+        "week_start": "Início da semana",
+        "person": "Pessoa",
+        "person_id": "Chave da pessoa",
+        "department": "Departamento",
+        "job_title": "Cargo",
+        "capacity": "Capacidade",
+        "net_capacity": "Capacidade líquida",
+        "hard_billable": "Horas firmes faturáveis",
+        "hard_non_billable": "Horas firmes não faturáveis",
+        "soft_hours": "Horas provisórias",
+        "unknown_capacity": "Capacidade desconhecida"
+      },
+      "resourcing_bench": {
+        "week_start": "Início da semana",
+        "department": "Departamento",
+        "job_title": "Cargo",
+        "person_id": "Chave da pessoa",
+        "idle_net_capacity": "Capacidade líquida ociosa"
+      },
+      "resourcing_capacity_demand": {
+        "week_start": "Início da semana",
+        "department": "Departamento",
+        "job_title": "Cargo",
+        "person_id": "Chave da pessoa",
+        "capacity": "Capacidade",
+        "named_hard": "Horas firmes nominais",
+        "named_soft": "Horas provisórias nominais",
+        "generic_hard": "Horas genéricas firmes",
+        "generic_soft": "Horas genéricas provisórias",
+        "pipeline_demand": "Horas ponderadas do pipeline",
+        "unknown_capacity": "Capacidade desconhecida"
+      },
+      "resourcing_engagement": {
+        "week_start": "Início da semana",
+        "project": "Projeto",
+        "customer": "Cliente",
+        "currency": "Moeda",
+        "department": "Departamento",
+        "job_title": "Cargo",
+        "hours": "Horas",
+        "revenue": "Receita prevista",
+        "cost": "Custo previsto",
+        "unpriced_hours": "Horas faturáveis sem preço",
+        "unpriced_count": "Alocações sem preço",
+        "uncosted_count": "Alocações sem custo",
+        "month": "Mês",
+        "bill_status": "Status de faturamento",
+        "cost_status": "Status do custo de mão de obra"
       }
     },
     "enumValues": {
@@ -2262,7 +2337,14 @@
       "revoked": "Revogada",
       "pending_verification": "Verificação pendente",
       "inbox": "Caixa de entrada",
-      "email": "E-mail"
+      "email": "E-mail",
+      "priced": "Com preço",
+      "non_billable": "Não faturável",
+      "no_bill_item": "Item de faturamento não definido",
+      "no_bill_rate": "Tarifa de faturamento não encontrada",
+      "no_employee": "Pessoa não atribuída",
+      "no_cost_rate": "Tarifa de custo de mão de obra não encontrada",
+      "no_cost_fx": "Cotação para conversão de custo não encontrada"
     }
   },
   "operators": {
