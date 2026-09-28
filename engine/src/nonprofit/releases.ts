@@ -1195,6 +1195,10 @@ export interface FundReleaseReadRecord {
   status: FundReleaseStatus;
   fromFundId: string;
   toFundId: string;
+  releaseAccountId: string;
+  submittedBy: string | null;
+  submittedAt: string | null;
+  flowRunId: string | null;
   fromCode: string | null;
   fromName: string;
   toCode: string | null;
@@ -1219,6 +1223,10 @@ interface FundReleaseReadRow extends Record<string, unknown> {
   status: FundReleaseStatus;
   from_fund_id: string;
   to_fund_id: string;
+  release_account_id: string;
+  submitted_by: string | null;
+  submitted_at: string | null;
+  flow_run_id: string | null;
   from_code: string | null;
   from_name: string;
   to_code: string | null;
@@ -1239,6 +1247,10 @@ function mapFundReleaseRead(row: FundReleaseReadRow): FundReleaseReadRecord {
     status: row.status,
     fromFundId: row.from_fund_id,
     toFundId: row.to_fund_id,
+    releaseAccountId: row.release_account_id,
+    submittedBy: row.submitted_by,
+    submittedAt: row.submitted_at,
+    flowRunId: row.flow_run_id,
     fromCode: row.from_code,
     fromName: row.from_name,
     toCode: row.to_code,
@@ -1253,15 +1265,15 @@ const RELEASE_STATUSES: readonly FundReleaseStatus[] = ["draft", "pending_approv
 
 function releaseReadLimit(limit: number | undefined): number {
   const value = limit ?? 25;
-  if (!Number.isInteger(value) || value < 1 || value > 100) {
+  if (!Number.isInteger(value) || value < 1) {
     throw refusal({
-      message: "The fund release list limit must be a whole number from 1 to 100.",
+      message: "The fund release list limit must be a whole number of at least 1.",
       code: "fund_release_list_limit_invalid",
-      remedy: "Request a fund release list limit from 1 to 100.",
+      remedy: "Request a fund release list limit of 1 or more; values above 100 read the first 100 releases.",
       field: "limit",
     });
   }
-  return value;
+  return Math.min(value, 100);
 }
 
 function releaseReadOffset(offset: number | undefined): number {
@@ -1289,6 +1301,7 @@ export async function listFundReleases(
   executor?: SqlExecutor,
 ): Promise<FundReleaseReadPage> {
   const runner = executor ?? db;
+  if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner))) throw fundFeatureOff();
   const limit = releaseReadLimit(input.limit);
   const offset = releaseReadOffset(input.offset);
   if (input.status !== undefined && !RELEASE_STATUSES.includes(input.status)) {
@@ -1310,6 +1323,9 @@ export async function listFundReleases(
     select r.id::text as id, r.release_number, r.release_date::text as release_date,
            r.amount::text as amount, r.purpose, r.satisfaction_ref, r.status,
            r.from_fund_id::text as from_fund_id, r.to_fund_id::text as to_fund_id,
+           r.release_account_id::text as release_account_id,
+           r.submitted_by::text as submitted_by, r.submitted_at::text as submitted_at,
+           r.flow_run_id::text as flow_run_id,
            ff.code as from_code, ff.name as from_name,
            tf.code as to_code, tf.name as to_name,
            r.posted_entry_id::text as posted_entry_id,
@@ -1336,12 +1352,16 @@ export async function getFundRelease(
   input: { orgId: string; releaseId: string },
   executor?: SqlExecutor,
 ): Promise<FundReleaseReadRecord | null> {
-  if (!isUuid(input.releaseId)) return null;
   const runner = executor ?? db;
+  if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner))) throw fundFeatureOff();
+  if (!isUuid(input.releaseId)) return null;
   const row = (await runner.execute<FundReleaseReadRow>(sql`
     select r.id::text as id, r.release_number, r.release_date::text as release_date,
            r.amount::text as amount, r.purpose, r.satisfaction_ref, r.status,
            r.from_fund_id::text as from_fund_id, r.to_fund_id::text as to_fund_id,
+           r.release_account_id::text as release_account_id,
+           r.submitted_by::text as submitted_by, r.submitted_at::text as submitted_at,
+           r.flow_run_id::text as flow_run_id,
            ff.code as from_code, ff.name as from_name,
            tf.code as to_code, tf.name as to_name,
            r.posted_entry_id::text as posted_entry_id,

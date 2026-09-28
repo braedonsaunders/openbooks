@@ -285,14 +285,32 @@ test("fund readers return the drawer projection with same-org isolation", { skip
   const enabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
     update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`));
   assert.equal(enabled.rows.length, 1);
-  const setup = await provisionFundAccounting({ orgId: org.orgId, defaultFund: { code: "READER", name: "Reader Fund" },
-    classifications: { READER: { kind: "operating", restrictionClass: "without_donor_restrictions" } } });
-  const second = await createFund({ orgId: org.orgId, code: "ARCHIVE", name: "Archive Fund",
+  await provisionFundAccounting({ orgId: org.orgId, defaultFund: { code: "ZZ", name: "Alpha" },
+    classifications: { ZZ: { kind: "operating", restrictionClass: "without_donor_restrictions" } } });
+  const parent = await createFund({ orgId: org.orgId, code: "MM", name: "Mike",
     kind: "operating", restrictionClass: "without_donor_restrictions" });
-  const page = await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId, limit: 1 }));
-  assert.deepEqual([page.total, ...page.funds.map((fund) => fund.code)], [2, "ARCHIVE"]);
+  const second = await createFund({ orgId: org.orgId, code: "AA", name: "Zulu", custom: { reader: "funds" },
+    kind: "operating", restrictionClass: "without_donor_restrictions", parentId: parent.id,
+    subsidiaryId: org.subsidiaryId, subsidiaryIncludeChildren: false });
+  const page = await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId }));
+  assert.deepEqual(page.funds.map((fund) => fund.code), ["ZZ", "MM", "AA"]);
+  assert.equal(page.total, 3);
   const found = await withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: second.id }));
-  assert.deepEqual(found, page.funds[0]);
-  assert.equal(await withOrgContext(org.orgId, () => getFund({ orgId: randomUUID(), fundId: setup.defaultFundId })), null);
+  assert.deepEqual(found, { id: second.id, code: "AA", name: "Zulu", kind: "operating",
+    restrictionClass: "without_donor_restrictions", budgetaryControl: "off", isActive: true, parentId: parent.id,
+    subsidiaryId: org.subsidiaryId, subsidiaryIncludeChildren: false, custom: { reader: "funds" } });
+  assert.equal(await withOrgContext(org.orgId, () => getFund({ orgId: randomUUID(), fundId: second.id })), null);
   assert.equal(await withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: randomUUID() })), null);
+  assert.equal((await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId, limit: 101 }))).funds.length, 3);
+  await assert.rejects(withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId, limit: 0 })), /at least 1/);
+  const reclassified = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+    update segment_definitions set source_kind='builtin', storage_column='subsidiary_id' where org_id=${org.orgId} and key='fund' returning id`));
+  assert.equal(reclassified.rows.length, 1);
+  assert.equal((await withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId }))).total, 0);
+  assert.equal(await withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: second.id })), null);
+  const disabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+    update orgs set settings = jsonb_set(settings, '{features,fundAccounting}', 'false'::jsonb, true) where id = ${org.orgId} returning id`));
+  assert.equal(disabled.rows.length, 1);
+  await assert.rejects(withOrgContext(org.orgId, () => listFunds({ orgId: org.orgId })), /fundAccounting/);
+  await assert.rejects(withOrgContext(org.orgId, () => getFund({ orgId: org.orgId, fundId: second.id })), /fundAccounting/);
 });
