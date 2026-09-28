@@ -2,9 +2,7 @@ import { sql } from "drizzle-orm";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { add, cmp, div, mul, normalizeMoney, toUnits, fromUnits } from "../money/money.ts";
 import type { SqlExecutor } from "../platform/db.ts";
-import { formatInZone } from "../platform/business-date.ts";
-import { now } from "../platform/clock.ts";
-import { canonicalTimeZone } from "../platform/time-zone.ts";
+import { businessTodayInTx } from "../platform/business-date.ts";
 import { loadSubsidiaryContext, SubsidiaryError, type SubsidiaryContext } from "../organization/subsidiaries.ts";
 import {
   computeCostRate,
@@ -22,7 +20,6 @@ import {
   type StandardOverheadBasis,
   type StandardOverheadCard,
 } from "../allocations/overhead-post.ts";
-import type { OverheadExecutor } from "../allocations/overhead-sync.ts";
 import { getAvailableToPromise } from "../inventory/availability.ts";
 import { bomRequiredQuantity } from "../inventory/bom-scrap.ts";
 import { resolveProfile, assertStockLocationAdmitsSubsidiary } from "../inventory/profile-policy.ts";
@@ -549,27 +546,6 @@ function checkCurrencyCode(value: unknown): string {
   return code;
 }
 
-// The organization's business release date, read through the release
-// transaction itself: the calendar day in the org's configured time zone,
-// never the UTC day and never an ambient read outside the release unit.
-// Uses the same zone key, validator, and formatter as the shared business
-// clock; an unknown stored zone refuses so the operator fixes the setting
-// instead of releasing on the wrong day.
-async function releaseBusinessDate(tx: SqlExecutor, orgId: string): Promise<string> {
-  const row = (await tx.execute<{ time_zone: string | null }>(sql`
-    select settings->>'timeZone' as time_zone from orgs where id=${orgId}`)).rows[0];
-  if (!row) {
-    refuse("The work order cannot be released because its organization is missing.", "org_not_found", "Contact an administrator; the organization record is missing.");
-  }
-  const stored = row.time_zone;
-  if (!stored || !stored.trim()) return formatInZone(now(), "UTC");
-  const canonical = canonicalTimeZone(stored);
-  if (!canonical) {
-    refuse(`Stored business time zone ${JSON.stringify(stored)} is not a known IANA time zone.`, "invalid_business_timezone", "Set Business time zone in Company Settings → Organization.");
-  }
-  return formatInZone(now(), canonical);
-}
-
 // The authoritative work-order legal entity and its functional currency,
 // re-read inside the release transaction. A subsidiary that left the
 // hierarchy, was deactivated, or lost its currency since creation refuses;
@@ -577,7 +553,7 @@ async function releaseBusinessDate(tx: SqlExecutor, orgId: string): Promise<stri
 async function releaseFunctionalCurrency(tx: SqlExecutor, orgId: string, order: WorkOrderRow): Promise<string> {
   let context: SubsidiaryContext;
   try {
-    context = await loadSubsidiaryContext(tx as Runner, orgId);
+    context = await loadSubsidiaryContext(tx, orgId);
   } catch (err) {
     if (err instanceof SubsidiaryError) {
       refuse(`Work order ${order.number} cannot be released because its subsidiary hierarchy is unavailable.`, "work_order_subsidiary_unavailable", "Restore the subsidiary hierarchy in Company Settings → Organization before releasing the work order.");
@@ -735,7 +711,7 @@ async function resolveOperationOverhead(
   let cards = caches.overhead.get(departmentId);
   if (cards === undefined) {
     try {
-      cards = await resolveStandardOverheadCardsInTx(tx as OverheadExecutor, orgId, {
+      cards = await resolveStandardOverheadCardsInTx(tx, orgId, {
         departmentId, basis, onDate: releaseDate,
       });
     } catch (err) {
@@ -805,10 +781,20 @@ async function resolveOperationReleaseSnapshots(
     refuse(kernelMessage(err, `The labor costing settings for work order ${order.number} cannot be resolved.`), "labor_costing_settings_invalid", laborRemedy);
   }
   const centerIds = [...new Set(operations.map((operation) => operation.work_center_id))].sort();
-  const centers = (await tx.execute<{ id: string; code: string | null; department_id: string | null }>(sql`
-    select id, code, department_id from mfg_work_centers
-     where org_id=${orgId}
-       and id in (select jsonb_array_elements_text(${JSON.stringify(centerIds)}::jsonb)::uuid)`)).rows;
+  // The stored department id carries no foreign key, so the department is
+  // never trusted by UUID alone: the join admits only a same-organization
+  // department row, and both activity flags are frozen per operation.
+  const centers = (await tx.execute<{
+    id: string; code: string | null; is_active: boolean;
+    department_id: string | null; department_active: boolean | null;
+  }>(sql`
+    select center.id, center.code, center.is_active,
+           center.department_id, department.is_active as department_active
+      from mfg_work_centers center
+      left join departments department
+        on department.org_id = center.org_id and department.id = center.department_id
+     where center.org_id=${orgId}
+       and center.id in (select jsonb_array_elements_text(${JSON.stringify(centerIds)}::jsonb)::uuid)`)).rows;
   const centerById = new Map(centers.map((center) => [center.id, center]));
   const caches: ReleaseSnapshotCaches = { rates: new Map(), fx: new Map(), overhead: new Map() };
   const snapshots: OperationReleaseSnapshot[] = [];
@@ -818,9 +804,18 @@ async function resolveOperationReleaseSnapshots(
     if (!center) {
       refuse(`Work center ${operation.work_center_id} for ${opLabel} is outside this organization.`, "work_center_not_found", `Point ${opLabel} at a work center from this organization.`);
     }
+    const centerCode = center.code?.trim() || center.id;
+    if (!center.is_active) {
+      refuse(`Work center ${centerCode} for ${opLabel} is inactive.`, "work_center_inactive", `Reactivate work center ${centerCode} or point ${opLabel} at an active work center.`);
+    }
     if (!center.department_id) {
-      const code = center.code?.trim() || center.id;
-      refuse(`Work center ${code} for ${opLabel} has no department.`, "work_center_department_required", `Choose an active department in Company Settings → Departments, then assign it to work center ${code}.`);
+      refuse(`Work center ${centerCode} for ${opLabel} has no department.`, "work_center_department_required", `Choose an active department in Company Settings → Departments, then assign it to work center ${centerCode}.`);
+    }
+    if (center.department_active === null) {
+      refuse(`Work center ${centerCode} for ${opLabel} names a department outside this organization.`, "work_center_department_invalid", `Assign an active department from this organization to work center ${centerCode} in Company Settings → Departments.`);
+    }
+    if (!center.department_active) {
+      refuse(`The department of work center ${centerCode} for ${opLabel} is inactive.`, "work_center_department_inactive", `Reactivate the department in Company Settings → Departments or assign an active department to work center ${centerCode}.`);
     }
     const departmentId = center.department_id;
     const labor = await resolveOperationLabor(tx, orgId, order, opLabel, departmentId, releaseDate, functionalCurrency, settings, caches);
@@ -904,7 +899,7 @@ async function releaseOne(
   // mutation below: any refusal throws here and rolls the whole release
   // back, so operations are only ever inserted with complete coherent
   // values. There is no draft/null insert-then-fill path.
-  const releaseDate = await releaseBusinessDate(tx, orgId);
+  const releaseDate = await businessTodayInTx(tx, orgId);
   const functionalCurrency = await releaseFunctionalCurrency(tx, orgId, order);
   const snapshots = await resolveOperationReleaseSnapshots(tx, orgId, order, operations.rows, routing, releaseDate, functionalCurrency);
   const before = order;
