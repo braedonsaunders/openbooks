@@ -1645,9 +1645,12 @@ export async function approveAndExecuteNormalizationRequest(args: {
  * payloads, source hashes, and raw results or audit rows never leave this
  * function.
  *
- * Classification fails closed. Ready needs every stored row on the v1
- * denomination with one reporting currency, plus full agreement with the
- * succeeded result when a request selected the month. Legacy needs every
+ * Classification fails closed. Ready needs every stored row on the complete
+ * v1 triple (reporting currency, denomination version, and evidence all
+ * present) with one reporting currency, plus full agreement with the
+ * succeeded result — same month, denomination, currency, month hash bound
+ * to every stored row hash, and matching monthly, subsidiary, facts, and
+ * cohorts counts — when a request selected the month. Legacy needs every
  * stored row on the all-null legacy triple. Empty months, mixed legacy/v1
  * sets, partial triples, unsupported versions, multiple currencies, and
  * malformed or mismatched results are refused by name with the request and
@@ -1691,6 +1694,8 @@ type MonthShapeRow = {
   v1: number;
   currencies: string[];
   versions: string[];
+  hashes: string[];
+  evidenceHashes: string[];
 };
 
 type MonthRequestRow = {
@@ -1753,17 +1758,44 @@ function monthRequestState(
   };
   if (terminal && terminal.status === "succeeded") {
     const result = terminal.result as Partial<NormalizationExecutionResult> | null;
-    const agrees =
-      coherentV1
-      && typeof result === "object" && result !== null
-      && result.month === month
-      && result.denominationVersion === SAAS_METRICS_DENOMINATION_VERSION
-      && result.reportingCurrency === shape.currencies[0]
-      && result.subscriptionRows === shape.monthly
-      && result.replacedMonthly === shape.monthly
-      && result.replacedFacts === shape.facts
-      && result.replacedCohorts === shape.cohorts;
-    if (agrees) {
+    const storedHash = shape.hashes.length === 1 ? shape.hashes[0] : undefined;
+    const evidenceHash = shape.evidenceHashes.length === 1 ? shape.evidenceHashes[0] : undefined;
+    const detail: string[] = [];
+    if (!coherentV1) {
+      detail.push(describeShape());
+    } else if (typeof result !== "object" || result === null) {
+      detail.push(`the recorded result for ${month} is missing or malformed`);
+    } else {
+      if (result.month !== month) {
+        detail.push(`the recorded result covers ${String(result.month)}, not ${month}`);
+      }
+      if (result.denominationVersion !== SAAS_METRICS_DENOMINATION_VERSION) {
+        detail.push(`the recorded denomination ${String(result.denominationVersion)} is not v1`);
+      }
+      if (result.reportingCurrency !== shape.currencies[0]) {
+        detail.push(
+          `the recorded currency ${String(result.reportingCurrency)} does not match the stored ${String(shape.currencies[0])}`,
+        );
+      }
+      if (storedHash === undefined || result.monthHash !== storedHash) {
+        detail.push("the stored row hashes do not match the recorded month hash");
+      }
+      if (evidenceHash === undefined || evidenceHash !== storedHash) {
+        detail.push("the stored evidence hashes do not agree on one canonical hash");
+      }
+      if (
+        result.subscriptionRows !== shape.monthly
+        || result.subsidiaryRows !== shape.facts
+        || result.replacedMonthly !== shape.monthly
+        || result.replacedFacts !== shape.facts
+        || result.replacedCohorts !== shape.cohorts
+      ) {
+        detail.push(
+          `the stored counts ${shape.monthly}/${shape.facts}/${shape.cohorts} do not match the recorded counts`,
+        );
+      }
+    }
+    if (detail.length === 0) {
       return {
         ...base,
         state: "ready",
@@ -1775,8 +1807,8 @@ function monthRequestState(
       ...base,
       state: "refused",
       failure:
-        `Request ${terminal.id} succeeded for ${month}, but the stored rows no longer match its recorded result. `
-        + describeShape(),
+        `Request ${terminal.id} succeeded for ${month}, but the stored rows no longer match its recorded result: `
+        + `${detail.join("; ")}.`,
       remedy: MONTH_REQUEST_REMEDY,
     };
   }
@@ -1832,9 +1864,13 @@ export async function listNormalizationMonthStates(orgId: string): Promise<Norma
                                 and r.normalization_evidence is null then 1 else 0 end), 0)::int as legacy,
              coalesce(sum(case when r.reporting_currency is not null
                                 and r.denomination_version = ${SAAS_METRICS_DENOMINATION_VERSION}
+                                and r.normalization_evidence is not null
                                 then 1 else 0 end), 0)::int as v1,
              coalesce(array_remove(array_agg(distinct r.reporting_currency), null), '{}') as currencies,
-             coalesce(array_remove(array_agg(distinct r.denomination_version), null), '{}') as versions
+             coalesce(array_remove(array_agg(distinct r.denomination_version), null), '{}') as versions,
+             coalesce(array_remove(array_agg(distinct r.inputs_hash), null), '{}') as hashes,
+             coalesce(array_remove(array_agg(distinct (r.normalization_evidence ->> 'inputs_hash')), null), '{}')
+               as "evidenceHashes"
         from months m left join rows r on r.month = m.month
        group by m.month order by m.month desc
     `)).rows;

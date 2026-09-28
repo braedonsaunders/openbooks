@@ -48,18 +48,29 @@ export function SaasMetricsNormalization() {
   const [month, setMonth] = useState('')
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
+  // One idempotency key per month+reason draft: an unchanged retry after a
+  // committed or lost response replays stably, while a changed body rotates.
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID())
+  const [keyFingerprint, setKeyFingerprint] = useState('')
 
   const load = useCallback(async () => {
-    const res = await fetch('/api/metrics/normalization')
+    let res: Response
+    try {
+      res = await fetch('/api/metrics/normalization')
+    } catch {
+      setProblem({ error: t('saasMetrics.normalization.loadFailed') })
+      setMonths([])
+      return
+    }
     if (!res.ok) {
       const body = await readError(res)
-      setProblem({ ...body, error: body.error ?? copy('loadFailed') })
+      setProblem({ ...body, error: body.error ?? t('saasMetrics.normalization.loadFailed') })
       setMonths([])
       return
     }
     setProblem(null)
     setMonths((await res.json()) as MonthState[])
-  }, [])
+  }, [t])
 
   useEffect(() => {
     void load()
@@ -68,17 +79,35 @@ export function SaasMetricsNormalization() {
   async function submitRequest() {
     setBusy(true)
     try {
-      const res = await fetch('/api/metrics/normalization/requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ month, reason, idempotencyKey: crypto.randomUUID() }),
-      })
+      const fingerprint = `${month}\n${reason}`
+      let key = idempotencyKey
+      if (fingerprint !== keyFingerprint) {
+        key = crypto.randomUUID()
+        setIdempotencyKey(key)
+        setKeyFingerprint(fingerprint)
+      }
+      let res: Response
+      try {
+        res = await fetch('/api/metrics/normalization/requests', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ month, reason, idempotencyKey: key }),
+        })
+      } catch {
+        setProblem({ error: copy('requestFailed') })
+        return
+      }
       if (!res.ok) {
-        setProblem(await readError(res))
+        const body = await readError(res)
+        setProblem({ ...body, error: body.error ?? copy('requestFailed') })
         return
       }
       setProblem(null)
       setReason('')
+      // A conclusively created request consumes its draft: the next
+      // submission starts from a fresh key.
+      setIdempotencyKey(crypto.randomUUID())
+      setKeyFingerprint('')
       await load()
     } finally {
       setBusy(false)
@@ -88,9 +117,16 @@ export function SaasMetricsNormalization() {
   async function approve(requestId: string) {
     setBusy(true)
     try {
-      const res = await fetch(`/api/metrics/normalization/requests/${requestId}/approve`, { method: 'POST' })
+      let res: Response
+      try {
+        res = await fetch(`/api/metrics/normalization/requests/${requestId}/approve`, { method: 'POST' })
+      } catch {
+        setProblem({ error: copy('approveFailed') })
+        return
+      }
       if (!res.ok) {
-        setProblem(await readError(res))
+        const body = await readError(res)
+        setProblem({ ...body, error: body.error ?? copy('approveFailed') })
         return
       }
       setProblem(null)
@@ -136,6 +172,11 @@ export function SaasMetricsNormalization() {
                   <span className="text-slate-700 dark:text-slate-300">
                     {copy(`states.${entry.state}`)}
                   </span>
+                  {entry.state === 'ready' && entry.denominationVersion && entry.reportingCurrency ? (
+                    <span className="block text-xs text-slate-500 dark:text-slate-400">
+                      {copy('resultDenomination')}: {entry.denominationVersion} · {copy('resultCurrency')}: {entry.reportingCurrency}
+                    </span>
+                  ) : null}
                   {entry.request ? (
                     <span className="block text-xs text-slate-500 dark:text-slate-400">{entry.request.id}</span>
                   ) : null}

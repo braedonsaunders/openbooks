@@ -814,7 +814,11 @@
         "failureLabel": "Failure",
         "remedyLabel": "Remedy",
         "empty": "No months recorded yet.",
-        "loadFailed": "Could not load normalization states."
+        "loadFailed": "Could not load normalization states.",
+        "requestFailed": "Could not submit the normalization request.",
+        "approveFailed": "Could not approve the normalization request.",
+        "resultDenomination": "Denomination",
+        "resultCurrency": "Reporting currency"
       }
     },
     "approvals": {

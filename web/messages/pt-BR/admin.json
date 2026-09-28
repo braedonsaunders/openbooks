@@ -814,7 +814,11 @@
         "failureLabel": "Falha",
         "remedyLabel": "Correção",
         "empty": "Nenhum mês registrado ainda.",
-        "loadFailed": "Não foi possível carregar os estados de normalização."
+        "loadFailed": "Não foi possível carregar os estados de normalização.",
+        "requestFailed": "Não foi possível enviar a solicitação de normalização.",
+        "approveFailed": "Não foi possível aprovar a solicitação de normalização.",
+        "resultDenomination": "Denominação",
+        "resultCurrency": "Moeda de reporte"
       }
     },
     "approvals": {

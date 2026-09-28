@@ -814,7 +814,11 @@
         "failureLabel": "Fehler",
         "remedyLabel": "Abhilfe",
         "empty": "Noch keine Monate erfasst.",
-        "loadFailed": "Normalisierungsstatus konnten nicht geladen werden."
+        "loadFailed": "Normalisierungsstatus konnten nicht geladen werden.",
+        "requestFailed": "Die Normalisierungsanfrage konnte nicht gesendet werden.",
+        "approveFailed": "Die Normalisierungsanfrage konnte nicht genehmigt werden.",
+        "resultDenomination": "Version",
+        "resultCurrency": "Berichtswährung"
       }
     },
     "approvals": {

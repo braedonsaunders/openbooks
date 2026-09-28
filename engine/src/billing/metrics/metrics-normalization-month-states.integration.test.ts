@@ -415,6 +415,118 @@ test("month states never carry lease, hash, reason, progress, or audit fields", 
   });
 });
 
+test("a hand-edited row hash refuses with the tamper named, not ready", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedLegacyMonth(ctx);
+    const filed = await fileRequest(ctx);
+    await approveAndExecuteNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filed.request.id,
+      approverId: ctx.approver,
+    });
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const updated = await db.execute<{ id: string }>(sql`
+        update saas_metrics_monthly
+           set inputs_hash = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+        returning id
+      `);
+      assert.equal(updated.rows.length, 1, "one stored row must be tampered with");
+    });
+    const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
+    assert.equal(state.state, "refused");
+    assert.ok(
+      state.failure && state.failure.includes("stored row hashes do not match the recorded month hash"),
+      `the failure must name the hash tamper, got: ${state.failure}`,
+    );
+    assert.ok(state.remedy && state.remedy.includes("Company Setup → SaaS Metrics"));
+    assert.equal(state.denominationVersion, null, "a refused month exposes no denomination");
+  });
+});
+
+test("a hand-edited evidence hash refuses with the evidence named", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedLegacyMonth(ctx);
+    const filed = await fileRequest(ctx);
+    await approveAndExecuteNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filed.request.id,
+      approverId: ctx.approver,
+    });
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const updated = await db.execute<{ id: string }>(sql`
+        update saas_metrics_monthly
+           set normalization_evidence = '{"inputs_hash":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}'::jsonb
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+        returning id
+      `);
+      assert.equal(updated.rows.length, 1, "one stored evidence must be tampered with");
+    });
+    const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
+    assert.equal(state.state, "refused");
+    assert.ok(
+      state.failure && state.failure.includes("evidence hashes do not agree on one canonical hash"),
+      `the failure must name the evidence tamper, got: ${state.failure}`,
+    );
+    assert.ok(state.remedy && state.remedy.includes("Company Setup → SaaS Metrics"));
+  });
+});
+
+test("rows removed after success refuse with the counts named", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedLegacyMonth(ctx);
+    const filed = await fileRequest(ctx);
+    await approveAndExecuteNormalizationRequest({
+      orgId: ctx.org.orgId,
+      requestId: filed.request.id,
+      approverId: ctx.approver,
+    });
+    await withOrgTransaction(ctx.org.orgId, async () => {
+      const removed = await db.execute<{ id: string }>(sql`
+        delete from saas_metrics_facts_monthly
+         where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+        returning id
+      `);
+      assert.equal(removed.rows.length, 1, "one stored facts row must be removed");
+    });
+    const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
+    assert.equal(state.state, "refused");
+    assert.ok(
+      state.failure && state.failure.includes("stored counts"),
+      `the failure must name the count drift, got: ${state.failure}`,
+    );
+    assert.ok(state.remedy && state.remedy.includes("Company Setup → SaaS Metrics"));
+  });
+});
+
+test("a partial evidence triple cannot be stored, so the classifier never meets one", { skip: !DB }, async () => {
+  await withFixture(async (ctx) => {
+    await seedLegacyMonth(ctx);
+    // The table's complete-triple check refuses a v1/currency row with
+    // missing evidence, which is why the classifier's v1 counter mirrors
+    // the full triple instead of trusting currency and version alone.
+    try {
+      await withOrgTransaction(ctx.org.orgId, () =>
+        db.execute(sql`
+          update saas_metrics_monthly
+             set reporting_currency = 'CAD', denomination_version = 'v1',
+                 normalization_evidence = null
+           where org_id = ${ctx.org.orgId} and month = ${MONTH}::date
+        `),
+      );
+      assert.fail("partial evidence must be refused by the table check");
+    } catch (error) {
+      assert.match(
+        String(error),
+        /saas_metrics_monthly_norm_complete/,
+        "the complete-triple check must name itself",
+      );
+    }
+    const state = onlyMonth(await listNormalizationMonthStates(ctx.org.orgId), MONTH);
+    assert.equal(state.state, "legacy", "the refused write stores nothing");
+  });
+});
+
 test("one organization never reads another organization's months", { skip: !DB }, async () => {
   await withFixture(async (first) => {
     await seedLegacyMonth(first);

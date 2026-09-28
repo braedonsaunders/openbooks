@@ -814,7 +814,11 @@
         "failureLabel": "失败原因",
         "remedyLabel": "补救措施",
         "empty": "尚无已记录的月份。",
-        "loadFailed": "无法加载规范化状态。"
+        "loadFailed": "无法加载规范化状态。",
+        "requestFailed": "无法提交规范化请求。",
+        "approveFailed": "无法批准规范化请求。",
+        "resultDenomination": "计价版本",
+        "resultCurrency": "报告货币"
       }
     },
     "approvals": {
