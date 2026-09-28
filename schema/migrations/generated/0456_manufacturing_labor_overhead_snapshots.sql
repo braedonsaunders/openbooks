@@ -64,7 +64,7 @@ ALTER TABLE ONLY public.mfg_wo_operations
   ADD CONSTRAINT mfg_wo_operations_standard_labor_wage_fk
     FOREIGN KEY (org_id, standard_labor_wage_id)
     REFERENCES public.labor_cost_rates(org_id, id) ON DELETE RESTRICT DEFERRABLE;
-CREATE INDEX mfg_wo_operations_org_std_labor_rate
+CREATE INDEX mfg_wo_operations_standard_labor_wage_idx
   ON public.mfg_wo_operations(org_id, standard_labor_wage_id);
 
 -- The stored job-costing bases: the two historical kinds plus the two
@@ -111,33 +111,34 @@ ALTER TABLE ONLY public.mfg_wo_operations
   ADD CONSTRAINT mfg_woop_ovhd_coherent CHECK (
     num_nonnulls(overhead_snapshot, overhead_snapshot_hash) IN (0, 2));
 
--- Immutability: the release writer moves each snapshot column null to value
--- exactly once as part of a coherent release transition. Any later change
--- to an already-written value — including back to null — is refused;
--- corrections go through reversal or adjusting entries, never by rewriting
--- frozen history.
+-- Immutability: release snapshots are written once by INSERT inside the
+-- release transaction; any refusal rolls the whole transaction back. No
+-- draft/null UPDATE path exists, so this guard refuses EVERY later change
+-- to any snapshot column on UPDATE — including null to value. Legacy
+-- all-null operations stay null and refuse by name downstream; they can
+-- never be backfilled from current configuration.
 CREATE FUNCTION public.mfg_wo_snapshot_immutable_guard() RETURNS trigger
 LANGUAGE plpgsql AS
 $fn$
 BEGIN
-  IF (OLD.standard_labor_wage_id IS NOT NULL AND NEW.standard_labor_wage_id IS DISTINCT FROM OLD.standard_labor_wage_id)
-    OR (OLD.standard_labor_effective_from IS NOT NULL AND NEW.standard_labor_effective_from IS DISTINCT FROM OLD.standard_labor_effective_from)
-    OR (OLD.standard_labor_rate IS NOT NULL AND NEW.standard_labor_rate IS DISTINCT FROM OLD.standard_labor_rate)
-    OR (OLD.standard_labor_currency IS NOT NULL AND NEW.standard_labor_currency IS DISTINCT FROM OLD.standard_labor_currency)
-    OR (OLD.standard_labor_basis IS NOT NULL AND NEW.standard_labor_basis IS DISTINCT FROM OLD.standard_labor_basis)
-    OR (OLD.standard_labor_annual_hours IS NOT NULL AND NEW.standard_labor_annual_hours IS DISTINCT FROM OLD.standard_labor_annual_hours)
-    OR (OLD.standard_labor_final_rate IS NOT NULL AND NEW.standard_labor_final_rate IS DISTINCT FROM OLD.standard_labor_final_rate)
-    OR (OLD.standard_labor_functional_currency IS NOT NULL AND NEW.standard_labor_functional_currency IS DISTINCT FROM OLD.standard_labor_functional_currency)
-    OR (OLD.standard_labor_burden IS NOT NULL AND NEW.standard_labor_burden IS DISTINCT FROM OLD.standard_labor_burden)
-    OR (OLD.standard_labor_burden_hash IS NOT NULL AND NEW.standard_labor_burden_hash IS DISTINCT FROM OLD.standard_labor_burden_hash)
-    OR (OLD.standard_labor_fx_class IS NOT NULL AND NEW.standard_labor_fx_class IS DISTINCT FROM OLD.standard_labor_fx_class)
-    OR (OLD.standard_labor_fx_rate IS NOT NULL AND NEW.standard_labor_fx_rate IS DISTINCT FROM OLD.standard_labor_fx_rate)
-    OR (OLD.standard_labor_fx_row_id IS NOT NULL AND NEW.standard_labor_fx_row_id IS DISTINCT FROM OLD.standard_labor_fx_row_id)
-    OR (OLD.standard_labor_fx_date IS NOT NULL AND NEW.standard_labor_fx_date IS DISTINCT FROM OLD.standard_labor_fx_date)
-    OR (OLD.standard_labor_fx_source IS NOT NULL AND NEW.standard_labor_fx_source IS DISTINCT FROM OLD.standard_labor_fx_source)
-    OR (OLD.standard_labor_fx_direction IS NOT NULL AND NEW.standard_labor_fx_direction IS DISTINCT FROM OLD.standard_labor_fx_direction)
-    OR (OLD.overhead_snapshot IS NOT NULL AND NEW.overhead_snapshot IS DISTINCT FROM OLD.overhead_snapshot)
-    OR (OLD.overhead_snapshot_hash IS NOT NULL AND NEW.overhead_snapshot_hash IS DISTINCT FROM OLD.overhead_snapshot_hash)
+  IF (NEW.standard_labor_wage_id IS DISTINCT FROM OLD.standard_labor_wage_id)
+    OR (NEW.standard_labor_effective_from IS DISTINCT FROM OLD.standard_labor_effective_from)
+    OR (NEW.standard_labor_rate IS DISTINCT FROM OLD.standard_labor_rate)
+    OR (NEW.standard_labor_currency IS DISTINCT FROM OLD.standard_labor_currency)
+    OR (NEW.standard_labor_basis IS DISTINCT FROM OLD.standard_labor_basis)
+    OR (NEW.standard_labor_annual_hours IS DISTINCT FROM OLD.standard_labor_annual_hours)
+    OR (NEW.standard_labor_final_rate IS DISTINCT FROM OLD.standard_labor_final_rate)
+    OR (NEW.standard_labor_functional_currency IS DISTINCT FROM OLD.standard_labor_functional_currency)
+    OR (NEW.standard_labor_burden IS DISTINCT FROM OLD.standard_labor_burden)
+    OR (NEW.standard_labor_burden_hash IS DISTINCT FROM OLD.standard_labor_burden_hash)
+    OR (NEW.standard_labor_fx_class IS DISTINCT FROM OLD.standard_labor_fx_class)
+    OR (NEW.standard_labor_fx_rate IS DISTINCT FROM OLD.standard_labor_fx_rate)
+    OR (NEW.standard_labor_fx_row_id IS DISTINCT FROM OLD.standard_labor_fx_row_id)
+    OR (NEW.standard_labor_fx_date IS DISTINCT FROM OLD.standard_labor_fx_date)
+    OR (NEW.standard_labor_fx_source IS DISTINCT FROM OLD.standard_labor_fx_source)
+    OR (NEW.standard_labor_fx_direction IS DISTINCT FROM OLD.standard_labor_fx_direction)
+    OR (NEW.overhead_snapshot IS DISTINCT FROM OLD.overhead_snapshot)
+    OR (NEW.overhead_snapshot_hash IS DISTINCT FROM OLD.overhead_snapshot_hash)
   THEN
     RAISE EXCEPTION 'operation % for work order % carries release-frozen snapshots that cannot be rewritten; correct through reversal or an adjusting entry', NEW.id, NEW.work_order_id
       USING ERRCODE = 'check_violation';
