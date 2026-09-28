@@ -189,7 +189,7 @@ const consolidatedRows = [
         // dimensions leaked in, while your own undimensioned lines were denied —
         // even though the report and the list right beside the drill showed them.
         stubModules({ intl: true, navigation: false, authz: false, features: false });
-        
+
         registerHooks({ resolve(specifier, context, next) {
           if (specifier === './money-server' || specifier.endsWith('/money-server')) {
             return { shortCircuit: true, url: `data:text/javascript,export async function getMoneyFormatter() { return { money: (value) => String(value) } }` };
@@ -201,9 +201,9 @@ const consolidatedRows = [
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
         const { loadReportDrillData } = await import('./report-drill-data.ts');
         type Authz = import('./authz.ts').Authz;
-        
+
         const DB = !!process.env.OPENBOOKS_DB_URL;
-        
+
         function authzFor(orgId: string, userId: string, allowed: string[]): Authz {
           return {
             user: {
@@ -216,7 +216,7 @@ const consolidatedRows = [
             allowedSubsidiaryIds: new Set(allowed),
           };
         }
-        
+
         test('budget drill keys lines on the line subsidiary, not dimension owners', { skip: !DB }, async () => {
           // Fixture seeds under explicit bypass: importing ./report-drill-data.ts
           // above pulls in the web request-org resolver, which denies every unscoped
@@ -242,7 +242,7 @@ const consolidatedRows = [
               await db.execute(sql`insert into budget_lines (org_id, scenario_id, account_id, period_id, subsidiary_id, department_id, amount)
                 values (${org.orgId}, ${scenarioId}, ${org.accounts.cogs}, ${org.periodId}, ${otherSub}, ${deptId}, 999)`);
             });
-        
+
             const authz = authzFor(org.orgId, randomUUID(), [org.subsidiaryId]);
             const drill = await withOrgContext(org.orgId, () => loadReportDrillData(
               { kind: 'budget', label: 'COGS budget', scenarioId, scope: 'budget' },
@@ -272,7 +272,7 @@ const consolidatedRows = [
         // currency. On a year-to-date, multi-currency book the drill's supporting
         // totals agreed with nothing.
         stubModules({ intl: true, navigation: false, authz: false, features: false });
-        
+
         registerHooks({ resolve(specifier, context, next) {
           if (specifier === './money-server' || specifier.endsWith('/money-server')) {
             return { shortCircuit: true, url: `data:text/javascript,export async function getMoneyFormatter() { return { money: (value) => String(value) } }` };
@@ -285,10 +285,10 @@ const consolidatedRows = [
         const { loadReportDrillData } = await import('./report-drill-data.ts');
         const { budgetVsActualView } = await import('./budget-report.ts');
         type Authz = import('./authz.ts').Authz;
-        
+
         const DB = !!process.env.OPENBOOKS_DB_URL;
         const JULY = { from: '2026-07-01', to: '2026-07-31' };
-        
+
         function authzFor(orgId: string, userId: string): Authz {
           return {
             user: {
@@ -301,15 +301,15 @@ const consolidatedRows = [
             allowedSubsidiaryIds: null,
           };
         }
-        
+
         const labels = {
           actual: 'Actual', budget: 'Budget', variance: 'Variance', variancePct: 'Variance %',
           revenue: 'Revenue', costOfGoodsSold: 'COGS', grossProfit: 'Gross profit',
           expenses: 'Expenses', netIncome: 'Net income', totalOf: (s: string) => `Total ${s}`,
         };
-        
+
         type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;
-        
+
         async function postExpense(org: ScratchOrg, subsidiaryId: string, currency: string, amount: string, postedOn: string) {
           const entryId = randomUUID();
           await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
@@ -319,7 +319,7 @@ const consolidatedRows = [
             (${randomUUID()},${org.orgId},${entryId},2,${org.accounts.bank},${subsidiaryId},null,false,-${amount}::numeric,${currency},-${amount}::numeric,1,${postedOn})`);
           await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entryId}`);
         }
-        
+
         test('budget drill ties to the report window and currency', { skip: !DB }, async () => {
           // Fixture seeds under explicit bypass: importing the drill reader pulls in
           // the web request-org resolver, which denies every unscoped query under
@@ -353,7 +353,7 @@ const consolidatedRows = [
               await postExpense(org, org.subsidiaryId, 'CAD', '10', '2026-08-15');
               await postExpense(org, usdSub, 'USD', '500', '2026-08-15');
             });
-        
+
             const authz = authzFor(org.orgId, randomUUID());
             const { reportActual, reportBudget, drillActual, drillBudget, drillListTotal } = await withOrgContext(org.orgId, async () => {
               const view = await budgetVsActualView(scenarioId, org.orgId, labels, {}, undefined, JULY);
@@ -401,20 +401,20 @@ const consolidatedRows = [
         // report-drill.test.ts; the scope routing is proved here against seeded
         // orders. next-intl has no request scope in plain node, so translations
         // resolve to the key (labels are never asserted).
-        
+
         stubModules({ intl: true, navigation: {}, authz: false, features: false });
-        
+
         const hooks = registerHooks({
           resolve(specifier, context, nextResolve) {
             return nextResolve(specifier, context)
           },
         })
-        
+
         const { loadReportDrillData } = await import('./report-drill-data.ts')
         hooks.deregister()
-        
+
         type Scope = 'open' | 'converted' | 'conversion' | 'voided'
-        
+
         async function seedOrder(
           orgId: string,
           subsidiaryId: string,
@@ -456,7 +456,7 @@ const consolidatedRows = [
           }
           return id
         }
-        
+
         async function scopedNumbers(
           orgId: string,
           userId: string,
@@ -487,7 +487,7 @@ const consolidatedRows = [
           assert.equal(response.total, response.rows.length)
           return response.rows.map((row) => String(row.cells[1])).sort()
         }
-        
+
         test('order drill routes open, converted, and voided scopes through the right predicates', async () => {
           const org = await withBypass(() => createScratchOrg())
           try {
@@ -504,7 +504,7 @@ const consolidatedRows = [
                 values (${org.orgId}, ${convertedId}, ${linkTarget}, 'fulfills', ${actorId})`)
               await seed('SO-VOID-1', 'voided', '5', '0')
             })
-        
+
             // Reads run under the org scope, proving the routing holds under
             // enforcement rather than under the seed bypass. The open scope needs
             // unconverted line quantity; the converted scope needs a document

@@ -258,7 +258,7 @@ const consolidatedRows = [
         const { db } = await import('@openbooks/engine/src/platform/db.ts')
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { projectUnbilled } = await import('./project-costing.ts')
-        
+
         test('project unbilled labor rounds fractional rate products to ledger precision', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await createScratchOrg()
           try {
@@ -272,7 +272,7 @@ const consolidatedRows = [
               cost_rate, bill_rate, status, billing_status)
               values (${randomUUID()}, ${org.orgId}, ${employee}, ${org.date}, '1.2345', ${project}, true,
                 '1.2345', '1.2345', 'approved', 'unbilled')`)
-        
+
             const unbilled = await projectUnbilled(org.orgId, project)
             assert.equal(unbilled.revenue, '1.5240')
             assert.equal(unbilled.cost, '1.5240')
@@ -357,7 +357,7 @@ const consolidatedRows = [
               import { resolveProjectFinancials } from "./web/lib/project-financials.ts";
               import { projectUnbilled } from "./web/lib/project-costing.ts";
               import { loadProjectType } from "./web/lib/project-type.ts";
-        
+
               // Web modules install the normal request resolver during evaluation.
               // Re-establish the explicit test-only trusted boundary afterwards.
               installTrustedTestDatabaseBypass();
@@ -376,7 +376,7 @@ const consolidatedRows = [
                     (\${projectB}, \${org.orgId}, \${org.subsidiaryId}, 'PROJECT-B',
                      'Line override project', \${org.customerId}, 'active', true, '{}'::jsonb)
                 \`);
-        
+
                 const chargeId = randomUUID();
                 const inheritedLineId = randomUUID();
                 const overrideLineId = randomUUID();
@@ -414,7 +414,7 @@ const consolidatedRows = [
                      set status = 'approved'
                    where id = \${chargeId} and org_id = \${org.orgId}
                 \`);
-        
+
                 await withOrg(org.orgId, async () => {
                   const typeA = await loadProjectType(org.orgId, projectA);
                   const typeB = await loadProjectType(org.orgId, projectB);
@@ -430,7 +430,7 @@ const consolidatedRows = [
                   );
                   const unbilledA = await projectUnbilled(org.orgId, projectA);
                   const unbilledB = await projectUnbilled(org.orgId, projectB);
-        
+
                   assert.equal(financialA.measures.billable_cost_value, "100.0000");
                   assert.equal(financialB.measures.billable_cost_value, "900.0000");
                   assert.equal(financialA.documents.length, 1);
@@ -453,7 +453,7 @@ const consolidatedRows = [
                     },
                     { revenue: "900.0000", cost: "800.0000", costLineCount: 1 },
                   );
-        
+
                   const actors = await seedFlowActors(org.orgId);
                   const request = await createBillingRequest(
                     org.orgId,
@@ -578,7 +578,7 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { createScheduleTask, ScheduleError } = await import('./project-schedule')
-        
+
         test('project schedule service refuses direct task creation when scheduling is disabled', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           await withBypassContext(async () => {
             const org = await createScratchOrg()
@@ -590,7 +590,7 @@ const consolidatedRows = [
                 insert into projects (id, org_id, subsidiary_id, name, code)
                 values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'Schedule gate project', ${projectId})
               `)
-        
+
               await assert.rejects(
                 createScheduleTask(org.orgId, projectId, { name: 'Should not persist' }, actor, null),
                 (error: unknown) => error instanceof ScheduleError && error.status === 404 && /project scheduling feature is disabled/i.test(error.message),
@@ -613,9 +613,9 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { updateScheduleTask, ScheduleError } = await import('./project-schedule')
-        
+
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
-        
+
         /**
          * The task outline is a project-bounded tree. A parent pin must name a task
          * in the SAME project, never the task itself, and never a descendant —
@@ -648,21 +648,21 @@ const consolidatedRows = [
               const parentOf = async (id: string) =>
                 (await db.execute<{ parent_id: string | null }>(sql`
                   select parent_id from project_tasks where id = ${id} and org_id = ${org.orgId}`)).rows[0]!.parent_id
-        
+
               // A task cannot parent to itself.
               await assert.rejects(
                 updateScheduleTask(org.orgId, projectA, taskA, { parentTaskId: taskA }, actor, null),
                 (error: unknown) => error instanceof ScheduleError && /parent/i.test(error.message),
               )
               assert.equal(await parentOf(taskA), null)
-        
+
               // A parent must live in the same project.
               await assert.rejects(
                 updateScheduleTask(org.orgId, projectA, taskA, { parentTaskId: foreign }, actor, null),
                 (error: unknown) => error instanceof ScheduleError && /parent/i.test(error.message),
               )
               assert.equal(await parentOf(taskA), null)
-        
+
               // A same-project parent applies, but closing the loop back must fail.
               await updateScheduleTask(org.orgId, projectA, taskA, { parentTaskId: taskB }, actor, null)
               assert.equal(await parentOf(taskA), taskB)
@@ -685,9 +685,9 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { updateScheduleTask, ScheduleError } = await import('./project-schedule')
-        
+
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
-        
+
         /**
          * Schedule patch values are interpolated into DATE and UUID columns. An
          * impossible calendar day or a malformed resource id must fail closed as a
@@ -709,7 +709,7 @@ const consolidatedRows = [
                 insert into project_tasks (id, org_id, project_id, name, schedule_order)
                 values (${taskId}, ${org.orgId}, ${projectId}, 'Patchable task', 1)
               `)
-        
+
               await assert.rejects(
                 updateScheduleTask(org.orgId, projectId, taskId, { startDate: '2026-02-30' }, actor, null),
                 (error: unknown) => error instanceof ScheduleError && /valid date/.test(error.message),
@@ -724,7 +724,7 @@ const consolidatedRows = [
                   from project_tasks where id=${taskId} and org_id=${org.orgId}`)).rows[0]!
               assert.equal(untouched.start, null)
               assert.equal(untouched.n, 0)
-        
+
               // Real values still apply.
               await updateScheduleTask(org.orgId, projectId, taskId, { startDate: '2026-02-27', endDate: '2026-02-28' }, actor, null)
               assert.equal((await db.execute<{ start: string }>(sql`

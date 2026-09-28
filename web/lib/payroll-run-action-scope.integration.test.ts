@@ -110,7 +110,7 @@ const consolidatedRows = [
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
         type Authz = import("./authz").Authz;
-        
+
         (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-run-holiday-eligibility")] = state;
         // The route imports the JSON boundary through the web `@/` alias, which tsx
         // resolves only under the web tsconfig. Map it to the real module so the
@@ -140,7 +140,7 @@ const consolidatedRows = [
         const { POST } = await import("../app/api/payroll/runs/[id]/route");
         const assertionsRoute = await import("../app/api/payroll/runs/[id]/holiday-assertions/route");
         const profilesRoute = await import("../app/api/payroll/profiles/route");
-        
+
         /**
          * A web-driven pay run spanning a paid statutory holiday must be calculable:
          * the engine demands explicit employer attestations (commission status /
@@ -149,7 +149,7 @@ const consolidatedRows = [
          * Without it, every December run in a declaring jurisdiction fails closed
          * with no remedy the UI or API can offer.
          */
-        
+
         function runGate(fx: { orgId: string; actorId: string }): Authz {
           return {
             user: { orgId: fx.orgId, id: fx.actorId },
@@ -157,7 +157,7 @@ const consolidatedRows = [
             allowedSubsidiaryIds: null,
           } as Authz;
         }
-        
+
         async function christmasRun(fx: Awaited<ReturnType<typeof seedAdoption>>) {
           return withBypassContext(async () => {
             // Mirror a pack-installed tenant: the first install-pack enables statutory
@@ -183,7 +183,7 @@ const consolidatedRows = [
             });
           });
         }
-        
+
         async function calculate(documentId: string, body: Record<string, unknown>) {
           // The route reads the run through ambient org scope (production supplies
           // it per request). Scope each call to the mocked gate's org: unscoped the
@@ -200,7 +200,7 @@ const consolidatedRows = [
             { params: Promise.resolve({ id: documentId }) },
           ));
         }
-        
+
         test("calculate without attestations reports the statutory-holiday demand", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await withBypassContext(() => seedAdoption());
           try {
@@ -215,7 +215,7 @@ const consolidatedRows = [
             );
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
-        
+
         test("calculate accepts holidayEligibility and clears the demand", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await withBypassContext(() => seedAdoption());
           try {
@@ -231,7 +231,7 @@ const consolidatedRows = [
             assert.deepEqual(body.errors, []);
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
-        
+
         test("calculate refuses malformed holidayEligibility", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await withBypassContext(() => seedAdoption());
           try {
@@ -248,7 +248,7 @@ const consolidatedRows = [
             }
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
-        
+
         /**
          * Migration 0181 proof. The absence assertion is per (run, employee,
          * holiday): filing every demanding occurrence clears the refusal, the answer
@@ -285,7 +285,7 @@ const consolidatedRows = [
             return id;
           });
         }
-        
+
         async function fileAbsence(
           fx: Awaited<ReturnType<typeof seedAdoption>>,
           documentId: string,
@@ -312,14 +312,14 @@ const consolidatedRows = [
             }
           });
         }
-        
+
         async function absenceRefusals(documentId: string): Promise<{ employee: string; message: string }[]> {
           const res = await calculate(documentId, { action: "calculate" });
           assert.equal(res.status, 200);
           const body = await res.json() as { errors: { employee: string; message: string }[] };
           return body.errors.filter((e) => e.message.includes("last-and-first-shift"));
         }
-        
+
         test("filed absence assertions persist across recalculations; the unfiled still refuse by name", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await withBypassContext(() => seedAdoption());
           try {
@@ -352,7 +352,7 @@ const consolidatedRows = [
             assert.ok(staleness.reasons.includes("adjustments"), JSON.stringify(staleness.reasons));
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
-        
+
         test("the per-request map overrides stored absence answers", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await withBypassContext(() => seedAdoption());
           try {
@@ -405,7 +405,7 @@ const consolidatedRows = [
             assert.ok(Number(paid) > 0, `expected the worked-holiday premium, got ${paid}`);
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
-        
+
         /**
          * The split's whole point: commission status is answered ONCE on the
          * employee. A Quebec employee refused for it in December must not re-refuse
@@ -466,7 +466,7 @@ const consolidatedRows = [
             );
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
-        
+
         test("the assertions surface files explicitly and refuses to guess", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await withBypassContext(() => seedAdoption());
           try {
@@ -528,7 +528,7 @@ const consolidatedRows = [
             assert.ok(terry && terry.assertions.length > 0, JSON.stringify(surface.employees));
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
-        
+
         test("commission status round-trips through profiles and omit keeps", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await withBypassContext(() => seedAdoption());
           try {
@@ -598,7 +598,7 @@ const consolidatedRows = [
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
         type Authz = import("./authz").Authz;
-        
+
         (globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for("openbooks.payroll-run-set-scope-diff")] = state;
         registerHooks({ resolve(specifier, context, next) {
           if (specifier === "../../../../../lib/feature-gates" && decodeURIComponent(context.parentURL ?? "").endsWith("/api/payroll/runs/[id]/route.ts")) {
@@ -612,7 +612,7 @@ const consolidatedRows = [
         const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts"), { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
         const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
         const { POST } = await import("../app/api/payroll/runs/[id]/route");
-        
+
         /**
          * set-scope against a roster holding a deactivated employee — the persona
          * replay for item 43 — plus the diff proof: members whose scope is not
@@ -620,7 +620,7 @@ const consolidatedRows = [
          *
          * Real route, real engine, real database; only the feature gate is stubbed.
          */
-        
+
         interface ScopeFixture {
           orgId: string;
           actorId: string;
@@ -628,7 +628,7 @@ const consolidatedRows = [
           activeId: string;
           deactivatedId: string;
         }
-        
+
         async function scopeFixture(): Promise<ScopeFixture> {
           const org = await createScratchOrg();
           const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -670,13 +670,13 @@ const consolidatedRows = [
           });
           return { orgId: org.orgId, actorId, documentId: run.documentId, activeId, deactivatedId };
         }
-        
+
         async function deactivate(orgId: string, employeeId: string): Promise<void> {
           // Actions → Deactivate, the product's own supported remedy.
           await withBypassContext(() => db.execute(sql`
             update parties set is_active = false where org_id = ${orgId} and id = ${employeeId}`));
         }
-        
+
         async function adjustmentSnapshot(orgId: string, documentId: string): Promise<unknown> {
           return (await withOrgContext(orgId, () => db.execute<{ state: unknown }>(sql`select jsonb_build_object(
             'run',(select to_jsonb(r) from pay_runs r where org_id=${orgId} and document_id=${documentId}),
@@ -684,13 +684,13 @@ const consolidatedRows = [
                              from pay_run_adjustments a where org_id=${orgId} and pay_run_document_id=${documentId})
             ) as state`))).rows[0]!.state;
         }
-        
+
         function send(fx: Pick<ScopeFixture, "orgId" | "documentId">, body: Record<string, unknown>): Promise<Response> {
           return withOrgContext(fx.orgId, () => POST(new Request("https://openbooks.test/api/payroll/runs/fixture", {
             method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
           }), { params: Promise.resolve({ id: fx.documentId }) }));
         }
-        
+
         async function setup(): Promise<ScopeFixture> {
           const fx = await withBypassContext(() => scopeFixture());
           state.gate = {
@@ -700,7 +700,7 @@ const consolidatedRows = [
           } as Authz;
           return fx;
         }
-        
+
         test("set-scope removes a deactivated roster member instead of rolling back 422", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await setup();
           try {
@@ -721,7 +721,7 @@ const consolidatedRows = [
             assert.deepEqual(excluded.rows, [{ employee_party_id: fx.deactivatedId }]);
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
-        
+
         test("set-scope still refuses to re-add a deactivated member, naming them", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await setup();
           try {
@@ -747,7 +747,7 @@ const consolidatedRows = [
             assert.deepEqual(await adjustmentSnapshot(fx.orgId, fx.documentId), before, "refusal must commit nothing");
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
-        
+
         test("set-scope replays nothing when the requested scope already holds", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await setup();
           try {
@@ -771,7 +771,7 @@ const consolidatedRows = [
             assert.deepEqual(await adjustmentSnapshot(fx.orgId, fx.documentId), before, "a no-change scope must write nothing");
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
-        
+
         test("set-scope on an empty roster is a no-op", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const fx = await setup();
           try {
@@ -780,7 +780,7 @@ const consolidatedRows = [
             assert.deepEqual(await response.json(), { ok: true, included: 0, excluded: 0 });
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });
-        
+
         test("set-scope reports true deltas, and an off-roster keep id is refused by name", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           // The input-echo defect: the response counted the request lists
           // ({included: keep.size}), so a roster of 10 with 3 already excluded and a
@@ -844,7 +844,7 @@ const consolidatedRows = [
             });
             assert.equal(response.status, 200);
             assert.deepEqual(await response.json(), { ok: true, included: 0, excluded: 2 });
-        
+
             // A keep id that is not on the roster is refused naming it — it used to
             // be counted as included while nothing was written for it.
             const stranger = randomUUID();

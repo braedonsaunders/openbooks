@@ -110,7 +110,7 @@ const consolidatedRows = [
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
         const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
         const { utilizationData } = (await import(root + 'web/lib/analytics/utilization-data.ts')) as typeof import('./analytics/utilization-data')
-        
+
         test('utilization counts approved time only', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
@@ -140,7 +140,7 @@ const consolidatedRows = [
         const state: { user: SessionUser | null } = { user: null };
         Object.assign(globalThis, { __utilExactness: state, React });
         stubModules({ intl: true, navigation: false, authz: false, features: false });
-        
+
         registerHooks({ resolve(specifier, context, next) {
           if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__utilExactness.user}' };
           if (specifier === '../money-server' && context.parentURL?.includes('/analytics/')) return { shortCircuit: true, url: 'data:text/javascript,export async function getMoneyFormatter(){return {money:String,moneyCompact:String}}' };
@@ -152,7 +152,7 @@ const consolidatedRows = [
         const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
         const { utilizationData } = await import('./analytics/utilization-data');
-        
+
         /**
          * Utilization money must stay exact until rendering. Three 0.1 legs — kept
          * as separate employee rows so they accumulate in JS, not in Postgres — sum

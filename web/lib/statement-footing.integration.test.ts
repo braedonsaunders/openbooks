@@ -124,9 +124,9 @@ const consolidatedRows = [
               import { MissingRatesError, resolveSubsidiaryView } from "./web/lib/consolidation.ts";
               import { balanceSheetView, profitAndLossView, statementMatrix }
                 from "./web/lib/statement-matrix.ts";
-        
+
               installTrustedTestDatabaseBypass();
-        
+
               const n = (value) => Number(value ?? 0);
               const findLine = (view, label) => {
                 const line = view.lines.find((l) => l.label === label);
@@ -154,7 +154,7 @@ const consolidatedRows = [
                 liabilitiesAndEquity: "Liabilities and equity",
                 totalOf: (section) => \`Total \${section}\`,
               };
-        
+
               const org = await createScratchOrg();
               try {
                 // A June 2026 comparative period on the scratch fiscal calendar, plus a
@@ -212,7 +212,7 @@ const consolidatedRows = [
                 await postRevenue("STMT-FX-PRIOR", "2026-06-20", priorPeriodId);
                 await postRevenue("STMT-FX-CURRENT", "2026-07-15", org.periodId);
                 const period = { from: "2026-07-01", to: "2026-07-31" };
-        
+
                 await withOrgContext(org.orgId, async () => {
                   const view = await resolveSubsidiaryView(org.subsidiaryId, period.to);
                   assert.ok(view.consolidated && view.subsidiary?.rates?.length);
@@ -229,7 +229,7 @@ const consolidatedRows = [
                   );
                   const subsidiary = view.subsidiary;
                   const opts = { orgId: org.orgId, subsidiary };
-        
+
                   // Comparative P&L: the PRIOR column translates at the PRIOR period's
                   // average rate (revenue credit -100 x 1.20 = 120 displayed), never at
                   // July's 1.40 (which would show 140).
@@ -238,7 +238,7 @@ const consolidatedRows = [
                   assert.deepEqual([pnl.columns[1].from, pnl.columns[1].to], ["2026-06-01", "2026-06-30"], "prior column is the preceding accounting period");
                   const netIncome = findLine(pnl, "Net income");
                   assert.deepEqual(netIncome.values.slice(0, 3).map(n), [140, 120, 20]);
-        
+
                   // Balance sheet: current-year earnings are FYTD P&L (all 2026 here),
                   // so each cumulative column mixes both periods' averages — 260 total
                   // (120 + 140), not 280. Assets translate at the current rate AS OF
@@ -252,7 +252,7 @@ const consolidatedRows = [
                   const liabAndEquity = findLine(bs, "Liabilities and equity").values.map(n);
                   assert.deepEqual(liabAndEquity.slice(0, 2), assets.slice(0, 2));
                   assert.deepEqual(assets.slice(0, 2), [290, 125]);
-        
+
                   // Month breakout over both periods: each month's column carries its
                   // own average rate within ONE render.
                   const monthly = await statementMatrix({
@@ -262,7 +262,7 @@ const consolidatedRows = [
                   const revenueRow = monthly.rows.find((r) => r.id === org.accounts.revenue);
                   assert.ok(revenueRow);
                   assert.deepEqual(revenueRow.values.map(n), [120, 140]);
-        
+
                   // A concurrent refresh of the CURRENT period's rates must move only
                   // the columns that period actually backs. A render already bound to
                   // its resolved context stays internally consistent (no tearing), and
@@ -281,7 +281,7 @@ const consolidatedRows = [
                   const refreshedBs = await balanceSheetView(period, "July 2026", bsLabels, { ...refreshedOpts, compare: "prior_period" });
                   assert.deepEqual(findLine(refreshedBs, "Current year earnings").values.slice(0, 2).map(n), [270, 120]);
                   assert.deepEqual(findLine(refreshedBs, "Translation adjustment").values.slice(0, 2).map(n), [20, 5]);
-        
+
                   // A missing HISTORICAL rate fails loudly and side-effect-free. Rate
                   // sets bind at context-resolution time (renders never tear), so the
                   // next resolved request is the one that must refuse to report.
@@ -309,7 +309,7 @@ const consolidatedRows = [
                       (select count(*)::int from audit_log where org_id = \${org.orgId}) as audits
                   \`)).rows[0];
                   assert.deepEqual(evidenceAfter, evidenceBefore, "failed renders leave no evidence behind");
-        
+
                   // And the pre-existing contract holds: a missing rate in the REPORT's
                   // own period is refused when the context resolves at all.
                   await db.execute(sql\`
@@ -364,7 +364,7 @@ const consolidatedRows = [
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
         const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
         const { statementMatrix, PNL_TYPES } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
-        
+
         test('quarter breakout follows the org fiscal start month, not January', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
@@ -435,9 +435,9 @@ const consolidatedRows = [
         const { generateAccountingPeriods } = (await import(root + "engine/src/close/calendar.ts")) as typeof import("@openbooks/engine/src/close/calendar.ts");
         const { statementMatrix, PNL_TYPES } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
         const { resolvePeriod } = (await import(root + 'web/lib/periods.ts')) as typeof import('./periods')
-        
+
         type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
-        
+
         /** Post revenue `amount` on `date` (bank debit / revenue credit, like the
          *  quarter-breakout fixture). Entries are uniquely numbered per call. */
         async function postRevenue(org: ScratchOrg, calendarId: string, date: string, amount: string): Promise<void> {
@@ -458,13 +458,13 @@ const consolidatedRows = [
                    (${org.orgId}, ${entry}, 2, ${org.accounts.revenue}, ${org.subsidiaryId}, ${'-' + amount}, 'CAD', ${'-' + amount}, '1')`)
           await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`)
         }
-        
+
         async function revenueValues(matrix: Awaited<ReturnType<typeof statementMatrix>>, width: number): Promise<string[]> {
           const revenue = matrix.rows.find((r) => r.type === 'income')
           assert.ok(revenue, 'expected a revenue row')
           return revenue.values.slice(0, width).map(String)
         }
-        
+
         /**
          * Scratch org converted to a 4-4-5 retail calendar: the monthly default is
          * retired and FY2026 is generated from a Monday 2026-02-02 anchor, giving
@@ -480,7 +480,7 @@ const consolidatedRows = [
           await withBypassContext(() => db.execute(sql`update fiscal_calendars set is_default = true where id = ${baselineCalendarId} and org_id = ${org.orgId}`))
           await withBypassContext(() => dropScratchOrg(org.orgId))
         }
-        
+
         async function make445Org(): Promise<{ org: ScratchOrg; calendarId: string; baselineCalendarId: string }> {
           const org = await withBypassContext(() => createScratchOrg())
           const baselineCalendarId = await withBypassContext(async () => {
@@ -511,7 +511,7 @@ const consolidatedRows = [
           })
           return { org, calendarId, baselineCalendarId }
         }
-        
+
         test('month breakout follows 4-4-5 fiscal periods; a 5-week period is one column', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const { org, calendarId, baselineCalendarId } = await make445Org()
           try {
@@ -547,7 +547,7 @@ const consolidatedRows = [
             await release445Org(org, calendarId, baselineCalendarId)
           }
         })
-        
+
         test('quarter breakout groups the 4-4-5 calendar declared periods', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const { org, calendarId, baselineCalendarId } = await make445Org()
           try {
@@ -581,7 +581,7 @@ const consolidatedRows = [
             await release445Org(org, calendarId, baselineCalendarId)
           }
         })
-        
+
         test('month breakout falls back to calendar math past generated periods', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           // Fail-safe gate: FY2027 was never generated for this calendar, so a
           // window reaching past FY2026 must keep the old calendar columns rather
@@ -609,7 +609,7 @@ const consolidatedRows = [
             await release445Org(org, calendarId, baselineCalendarId)
           }
         })
-        
+
         test('monthly January-start orgs keep calendar-month breakouts byte-identical', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
@@ -648,7 +648,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId))
           }
         })
-        
+
         test('monthly April-start orgs keep fiscal quarter breakouts byte-identical', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
@@ -684,7 +684,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId))
           }
         })
-        
+
         test('period presets agree with fiscal periods on a 4-4-5 org', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const { org, calendarId, baselineCalendarId } = await make445Org()
           try {
@@ -742,12 +742,12 @@ const consolidatedRows = [
         const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
         const { profitAndLoss } = (await import(root + 'web/lib/reports.ts')) as typeof import('./reports')
         const { priorAccountingWindow, profitAndLossView } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
-        
+
         const labels = {
           revenue: 'Revenue', costOfGoodsSold: 'Cost of goods sold', grossProfit: 'Gross profit', expenses: 'Expenses',
           netIncome: 'Net income', totalOf: (section: string) => `Total ${section}`,
         }
-        
+
         test('prior_period compares against the preceding accounting period(s), not an equal-day window', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await withBypassContext(() => createScratchOrg())
           try {
@@ -789,14 +789,14 @@ const consolidatedRows = [
               assert.equal(toUnits(netIncome[0]!), toUnits('50.0000'))
               assert.equal(toUnits(netIncome[1]!), toUnits(january.netIncome), 'prior column equals the January P&L')
               assert.equal(toUnits(netIncome[1]!), toUnits('400.0000'))
-        
+
               // A run of periods (a quarter) compares to the preceding run.
               const q2 = await priorAccountingWindow(org.orgId, { from: '2026-04-01', to: '2026-06-30' })
               assert.deepEqual(q2, { from: '2026-01-01', to: '2026-03-31', aligned: true })
               const quarter = await profitAndLossView({ from: '2026-04-01', to: '2026-06-30' }, 'Q2 2026', labels, { orgId: org.orgId, compare: 'prior_period' })
               const quarterNet = quarter.lines.find((l) => l.label === 'Net income')!.values!
               assert.deepEqual([toUnits(quarterNet[0]!), toUnits(quarterNet[1]!)], [toUnits('7.0000'), toUnits('470.0000')], 'Q2 compares to Q1 (300 + 100 + 50 + 20)')
-        
+
               // Not period-aligned: equal-length comparative, labelled as such.
               const partial = await priorAccountingWindow(org.orgId, { from: '2026-02-03', to: '2026-02-28' })
               assert.deepEqual(partial, { from: '2026-01-08', to: '2026-02-02', aligned: false })
@@ -837,9 +837,9 @@ const consolidatedRows = [
               import { createScratchOrg, dropScratchOrg, seedFlowActors } from "./engine/src/testing/fixtures.ts";
               import { resolveSubsidiaryView } from "./web/lib/consolidation.ts";
               import { balanceSheetView, profitAndLossView } from "./web/lib/statement-matrix.ts";
-        
+
               installTrustedTestDatabaseBypass();
-        
+
               const n = (value) => Number(value ?? 0);
               const findLine = (view, label) => {
                 const line = view.lines.find((l) => l.label === label);
@@ -867,7 +867,7 @@ const consolidatedRows = [
                 liabilitiesAndEquity: "Liabilities and equity",
                 totalOf: (section) => \`Total \${section}\`,
               };
-        
+
               const org = await createScratchOrg();
               try {
                 const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -890,7 +890,7 @@ const consolidatedRows = [
                 assert.ok(december && adjustment, "P12 and the adjustment period both exist");
                 assert.equal(adjustment.starts_on, december.ends_on);
                 assert.equal(adjustment.ends_on, december.ends_on);
-        
+
                 const usdId = randomUUID();
                 await db.execute(sql\`
                   insert into subsidiaries
@@ -907,7 +907,7 @@ const consolidatedRows = [
                 // period-close controller who consolidates both would leave them.
                 assert.equal(await deriveConsolidatedRates(org.orgId, december.id, actorId), 1);
                 assert.equal(await deriveConsolidatedRates(org.orgId, adjustment.id, actorId), 1);
-        
+
                 const entry = randomUUID();
                 await db.execute(sql\`
                   insert into journal_entries
@@ -922,7 +922,7 @@ const consolidatedRows = [
                     (\${org.orgId}, \${entry}, 2, \${org.accounts.revenue}, \${usdId}, '-100.0000', 'USD', '-100.0000', '1')
                 \`);
                 await db.execute(sql\`update journal_entries set status = 'posted', posted_at = now() where id = \${entry}\`);
-        
+
                 await withOrgContext(org.orgId, async () => {
                   const view = await resolveSubsidiaryView(org.subsidiaryId, "2026-12-31");
                   assert.ok(view.consolidated && view.subsidiary?.rates?.length);
@@ -934,7 +934,7 @@ const consolidatedRows = [
                   );
                   const opts = { orgId: org.orgId, subsidiary: view.subsidiary };
                   const period = { from: "2026-12-01", to: "2026-12-31" };
-        
+
                   // Year-end consolidated balance sheet and P&L render (no 21000) and
                   // translate at P12's rates: assets at current 1.30, revenue at the
                   // period average (1.25 + 1.30) / 2 = 1.275.
@@ -980,10 +980,10 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        
+
         const { resolveSubsidiaryView } = await import('./consolidation')
         const { statementMatrix } = await import('./statement-matrix')
-        
+
         async function postManual(org: ScratchOrg, tag: string, date: string, periodId: string, subId: string, lines: [string, string][]) {
           const entry = randomUUID()
           await db.execute(sql`insert into journal_entries
@@ -998,7 +998,7 @@ const consolidatedRows = [
           await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entry}`)
           return entry
         }
-        
+
         /**
          * Translated consolidated columns multiply each line by a 10dp rate and
          * cash-basis columns by a fractional settled share — both carry material
@@ -1037,7 +1037,7 @@ const consolidatedRows = [
             await withBypass(() => dropScratchOrg(scratch.orgId))
           }
         })
-        
+
         test('cash-basis matrix columns round fractional settled shares to 4dp', { skip: !env.OPENBOOKS_DB_URL }, async () => {
           const scratch = await withBypass(() => createScratchOrg())
           try {
@@ -1087,8 +1087,8 @@ const consolidatedRows = [
             await withBypass(() => dropScratchOrg(scratch.orgId))
           }
         })
-        
-        
+
+
         const consolidatedRows = [
           { label: "statement matrix control loss", register: async () => {
                 const assert = (await import("node:assert/strict")).default;
@@ -1101,8 +1101,8 @@ const consolidatedRows = [
                 const { createScratchOrg, dropScratchOrg } =
                   await import("@openbooks/engine/src/testing/fixtures.ts");
                 const { statementMatrix } = await import("./statement-matrix");
-                
-                
+
+
                 test(
                   "disposed foreign subsidiary retains pre-disposal income and frozen balances without future rates",
                   { skip: !env.OPENBOOKS_DB_URL },
@@ -1242,7 +1242,7 @@ const consolidatedRows = [
                 const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
                 const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
                 const { statementMatrix } = await import('./statement-matrix')
-                
+
                 /**
                  * Breakout columns must come from the same posted set the aggregation reads.
                  * A draft entry tagging an otherwise-inactive department must not mint a
@@ -1286,7 +1286,7 @@ const consolidatedRows = [
                     await withBypass(() => dropScratchOrg(scratch.orgId))
                   }
                 })
-                
+
                 test('department breakout ignores draft-only untagged lines for the Unassigned column', { skip: !env.OPENBOOKS_DB_URL }, async () => {
                   const scratch = await withBypass(() => createScratchOrg())
                   try {
@@ -1321,7 +1321,7 @@ const consolidatedRows = [
                 })
           } },
         ] as const;
-        
+
         for (const row of consolidatedRows) await row.register();
   } },
 ] as const;
@@ -1924,7 +1924,7 @@ const consolidatedRows = [
               import { db, withBypass, withOrg } from "./engine/src/platform/db.ts";
               import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
               import { createScratchOrg, dropScratchOrg } from "./engine/src/testing/fixtures.ts";
-        
+
               installTrustedTestDatabaseBypass();
               const scratch = await createScratchOrg();
               try {
@@ -1932,7 +1932,7 @@ const consolidatedRows = [
                 await db.execute(sql\`
                   insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
                   values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)\`);
-        
+
                 // A July fiscal year makes the June summary row prior-year P&L. The
                 // accounts list, the COA balance AND the GL opening must all exclude
                 // it: P&L resets at the fiscal-year boundary, so only balance-sheet
@@ -1956,7 +1956,7 @@ const consolidatedRows = [
                   values
                     (\${scratch.orgId}, \${scratch.accounts.revenue}, \${scratch.bookId}, '2026-06-01',
                      \${scratch.subsidiaryId}, '0.0000', '25.0000', 1)\`);
-        
+
                 const postEntry = async (bookId, tag) => {
                   const entryId = randomUUID();
                   await db.execute(sql\`
@@ -1980,7 +1980,7 @@ const consolidatedRows = [
                     update journal_entries set status = 'posted', posted_at = now()
                      where id = \${entryId}\`);
                 };
-        
+
                 const categoryId = randomUUID();
                 await db.execute(sql\`
                   insert into asset_categories
@@ -1997,7 +1997,7 @@ const consolidatedRows = [
                   values
                     (\${assetId}, \${scratch.orgId}, \${categoryId}, 'FA-001', 'Equipment',
                      '100.0000', \${scratch.subsidiaryId}, 'in_service', \${scratch.date})\`);
-        
+
                 const seedDepreciation = async (bookId, tag) => {
                   const scheduleId = randomUUID();
                   await db.execute(sql\`
@@ -2014,16 +2014,16 @@ const consolidatedRows = [
                        1, '10.0000', '10.0000', 'imported')\`);
                   return tag;
                 };
-        
+
                 await postEntry(scratch.bookId, 'PRIMARY');
                 await seedDepreciation(scratch.bookId, 'PRIMARY');
-        
+
                 await withOrg(scratch.orgId, async () => {
                   const { generalLedger, journalReport } = await import("./web/lib/reports/ledger-reports.ts");
                   const { accountsWithBalances } = await import("./web/lib/data.ts");
                   const { accountBaseJoins } = await import("./web/lib/customization/entity-list-query/accounts.ts");
                   const { FIXED_ASSET_BASE_JOINS } = await import("./web/lib/customization/entity-list-query/fixed-assets.ts");
-        
+
                   const readAll = async () => {
                     const ledger = await generalLedger(scratch.date, scratch.date, {
                       orgId: scratch.orgId,
@@ -2058,7 +2058,7 @@ const consolidatedRows = [
                       netBookValue: String(assets.rows[0]?.net_book_value),
                     };
                   };
-        
+
                   const before = await readAll();
                   assert.equal(before.ledger.length, 1);
                   assert.equal(before.ledger[0].lines, 1);
@@ -2069,7 +2069,7 @@ const consolidatedRows = [
                   assert.equal(before.revenueBalance, '100.0000');
                   assert.equal(before.accountListBalance, '100.0000');
                   assert.equal(before.netBookValue, '90.0000');
-        
+
                   await postEntry(taxBookId, 'TAX');
                   await seedDepreciation(taxBookId, 'TAX');
                   const after = await readAll();

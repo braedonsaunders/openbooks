@@ -114,9 +114,9 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { resolveItemRate } = await import('./item-rates')
-        
+
         const DB = !!process.env.OPENBOOKS_DB_URL
-        
+
         /**
          * A selected rate card without FX coverage must refuse — never fall through
          * to a lower-priority card. Project EUR card + default CAD card, no
@@ -146,7 +146,7 @@ const consolidatedRows = [
                 where id = any(${`{${eurVersion},${cadVersion}}`}::uuid[]) and org_id = ${org.orgId}`)
               await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, rate_version_id, project_id, date_basis, is_active)
                 values (${org.orgId}, ${eurBook}, ${eurVersion}, ${project}, 'usage_date', true)`)
-        
+
               await assert.rejects(
                 () => resolveItemRate({
                   orgId: org.orgId, projectId: project, itemId: org.items.service,
@@ -159,7 +159,7 @@ const consolidatedRows = [
             }
           })
         })
-        
+
         /**
          * Absence of an item/version still falls through: a project card that does
          * not cover the item bills the default card (same currency, no FX needed).
@@ -188,7 +188,7 @@ const consolidatedRows = [
                 where id = any(${`{${cadVersion},${defaultVersion}}`}::uuid[]) and org_id = ${org.orgId}`)
               await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, rate_version_id, project_id, date_basis, is_active)
                 values (${org.orgId}, ${cadBook}, ${cadVersion}, ${project}, 'usage_date', true)`)
-        
+
               const resolved = await resolveItemRate({
                 orgId: org.orgId, projectId: project, itemId: org.items.service,
                 baseQuantity: '1', rateUnitCode: 'hour', onDate: org.date,
@@ -208,9 +208,9 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { resolveItemRate } = await import('./item-rates')
-        
+
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
-        
+
         /**
          * U9: a January version priced under capped_ladder, whose profile changed to
          * lowest_cost in February before the upgrade, gets pinned lowest_cost by the
@@ -257,18 +257,18 @@ const consolidatedRows = [
               // profile, so its capped_ladder value is inferred, not recorded.
               await db.execute(sql`insert into upgrade_legacy_provenance (org_id, migration, table_name, row_id, note)
                 values (${org.orgId}, '0298_item_rate_version_profile_pins', 'item_rate_version_profiles', ${janPin}, 'test mark')`)
-        
+
               const base = { orgId: org.orgId, projectId: project, itemId: org.items.service, baseQuantity: '8' } as const
               const january = await resolveItemRate({ ...base, onDate: '2026-01-15' })
               assert.equal(january?.bill.amount, '70.0000')
               assert.equal(january?.policy, 'capped_ladder')
               assert.equal(january?.policyProvenance, 'inferred')
-        
+
               const february = await resolveItemRate({ ...base, onDate: '2026-02-15' })
               assert.equal(february?.bill.amount, '60.0000')
               assert.equal(february?.policy, 'lowest_cost')
               assert.equal(february?.policyProvenance, 'pinned')
-        
+
               const march = await resolveItemRate({ ...base, onDate: '2026-03-15' })
               assert.equal(march?.policy, 'lowest_cost')
               assert.equal(march?.policyProvenance, 'live')
@@ -288,7 +288,7 @@ const consolidatedRows = [
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { resolveItemRate } = await import('./item-rates.ts')
         const { resolveRateAdjustments, findLapsedRateCard } = await import('./rate-adjustments.ts')
-        
+
         test('item rates honor location-scoped version cards', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await createScratchOrg()
           try {
@@ -312,7 +312,7 @@ const consolidatedRows = [
             await db.execute(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId}`)
             await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, location_id, date_basis, is_active)
               values (${org.orgId}, ${book}, ${location}, 'usage_date', true)`)
-        
+
             const resolved = await resolveItemRate({
               orgId: org.orgId,
               projectId: project,
@@ -325,7 +325,7 @@ const consolidatedRows = [
             assert.equal(resolved?.bill.amount, '140.0000')
           } finally { await dropScratchOrg(org.orgId) }
         })
-        
+
         test('child locations inherit version-scoped rates and adjustments when enabled', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
           const org = await createScratchOrg()
           try {
@@ -350,7 +350,7 @@ const consolidatedRows = [
             await db.execute(sql`update item_rate_versions set status = 'active' where id = ${version} and org_id = ${org.orgId}`)
             await db.execute(sql`insert into item_rate_book_assignments (org_id, rate_book_id, date_basis, is_active)
               values (${org.orgId}, ${book}, 'usage_date', true)`)
-        
+
             const resolved = await resolveItemRate({
               orgId: org.orgId, projectId: project, itemId: org.items.service,
               locationId: child, onDate: org.date, baseQuantity: '1', rateUnitCode: 'hour',
@@ -370,9 +370,9 @@ const consolidatedRows = [
         const { sql } = await import('drizzle-orm')
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { resolveItemRate } = await import('./item-rates')
-        
+
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
-        
+
         /**
          * PRC1: the pricing policy is current state, but rate lines are
          * effective-dated. Switching the policy for next month must not reprice a
@@ -410,7 +410,7 @@ const consolidatedRows = [
                 values (${org.orgId}, ${v1}, ${org.items.service}, 'day', 'capped_ladder', 'summary'),
                        (${org.orgId}, ${v2}, ${org.items.service}, 'hour', 'lowest_cost', 'rate_components')`)
               await db.execute(sql`update item_rate_versions set status = 'active' where org_id = ${org.orgId} and rate_book_id = ${book}`)
-        
+
               const january = await resolveItemRate({
                 orgId: org.orgId, projectId: project, itemId: org.items.service,
                 onDate: '2026-01-15', baseQuantity: '8',
@@ -419,7 +419,7 @@ const consolidatedRows = [
               assert.equal(january?.policy, 'capped_ladder')
               assert.equal(january?.baseUnit, 'day')
               assert.equal(january?.invoicePresentation, 'summary')
-        
+
               const february = await resolveItemRate({
                 orgId: org.orgId, projectId: project, itemId: org.items.service,
                 onDate: '2026-02-15', baseQuantity: '8',
@@ -521,9 +521,9 @@ const itemPricingAsOfRows = [
         const { sql } = await import('drizzle-orm')
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { resolveItemPrice } = await import('./item-pricing')
-        
+
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
-        
+
         /**
          * PRC15: Gold is assigned January 1 with a January Gold price of $100; the
          * admin deactivates the Gold assignment in March. A legitimate late January
@@ -557,14 +557,14 @@ const itemPricingAsOfRows = [
                 await db.execute(sql`insert into item_price_breaks (org_id, schedule_id, minimum_quantity, unit_price)
                   values (${org.orgId}, ${schedule}, '1', ${price})`)
               }
-        
+
               const input = {
                 orgId: org.orgId, itemId: org.items.service, customerId, currency: 'CAD', lineQuantity: '1',
               } as const
               const january = await resolveItemPrice({ ...input, onDate: '2026-01-15' })
               assert.equal(january?.unitPrice, '100.0000')
               assert.equal(january?.source, 'customer_level')
-        
+
               // March: the admin deactivates the Gold assignment. End-dated
               // membership keeps January covered instead of flipping a flag.
               await db.execute(sql`update customer_price_level_assignments set is_active = false
@@ -575,11 +575,11 @@ const itemPricingAsOfRows = [
               assert.equal(membership.is_active, false)
               assert.ok(membership.effective_to !== null && membership.effective_to < '2026-01-15' === false,
                 `deactivation must end-date, not erase, the window (got ${membership.effective_to})`)
-        
+
               const late = await resolveItemPrice({ ...input, onDate: '2026-01-15' })
               assert.equal(late?.unitPrice, '100.0000')
               assert.equal(late?.source, 'customer_level')
-        
+
               // Current dates follow the live hierarchy: no Gold membership, so the
               // base price — never a resurrected assignment.
               const today = new Date().toISOString().slice(0, 10)
@@ -591,7 +591,7 @@ const itemPricingAsOfRows = [
             }
           })
         })
-        
+
         /**
          * PRC15b: the customer's assignment stays effective but the LEVEL is
          * deactivated, so no joined level row survives the activation predicate and
@@ -628,14 +628,14 @@ const itemPricingAsOfRows = [
                 await db.execute(sql`insert into item_price_breaks (org_id, schedule_id, minimum_quantity, unit_price)
                   values (${org.orgId}, ${schedule}, '1', ${price})`)
               }
-        
+
               const input = {
                 orgId: org.orgId, itemId: org.items.service, customerId, currency: 'CAD', lineQuantity: '1',
               } as const
               const january = await resolveItemPrice({ ...input, onDate: '2026-01-15' })
               assert.equal(january?.unitPrice, '100.0000')
               assert.equal(january?.source, 'customer_level')
-        
+
               // Legacy shape: the level dies while the assignment and its schedule
               // stay live. The guard is re-enabled immediately afterwards.
               await db.execute(sql`alter table price_levels disable trigger price_level_base_guard`)
@@ -649,13 +649,13 @@ const itemPricingAsOfRows = [
                  where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!
               assert.equal(assignment.is_active, true)
               assert.equal(assignment.effective_to, null)
-        
+
               // Today the level is dark: the base price, never the dead Gold price.
               const today = new Date().toISOString().slice(0, 10)
               const now = await resolveItemPrice({ ...input, onDate: today })
               assert.equal(now?.unitPrice, '80.0000')
               assert.equal(now?.source, 'base_level')
-        
+
               // History preserved: January was inside the level's active window.
               const late = await resolveItemPrice({ ...input, onDate: '2026-01-15' })
               assert.equal(late?.unitPrice, '100.0000')
@@ -665,7 +665,7 @@ const itemPricingAsOfRows = [
             }
           })
         })
-        
+
         /**
          * PRC15b historical window: the level died and was later reactivated, so a
          * past date in the dark gap prices base while dates on either side of the
@@ -697,7 +697,7 @@ const itemPricingAsOfRows = [
                 await db.execute(sql`insert into item_price_breaks (org_id, schedule_id, minimum_quantity, unit_price)
                   values (${org.orgId}, ${schedule}, '1', ${price})`)
               }
-        
+
               const input = {
                 orgId: org.orgId, itemId: org.items.service, customerId, currency: 'CAD', lineQuantity: '1',
               } as const
@@ -715,15 +715,15 @@ const itemPricingAsOfRows = [
                 where org_id = ${org.orgId} and price_level_id = ${goldId} and active_to is not null`)
               await db.execute(sql`update price_level_activation_history set active_from = '2026-06-01'
                 where org_id = ${org.orgId} and price_level_id = ${goldId} and active_to is null`)
-        
+
               const gap = await resolveItemPrice({ ...input, onDate: '2026-04-15' })
               assert.equal(gap?.unitPrice, '80.0000')
               assert.equal(gap?.source, 'base_level')
-        
+
               const before = await resolveItemPrice({ ...input, onDate: '2026-01-15' })
               assert.equal(before?.unitPrice, '100.0000')
               assert.equal(before?.source, 'customer_level')
-        
+
               const today = new Date().toISOString().slice(0, 10)
               const now = await resolveItemPrice({ ...input, onDate: today })
               assert.equal(now?.unitPrice, '100.0000')
@@ -733,7 +733,7 @@ const itemPricingAsOfRows = [
             }
           })
         })
-        
+
         /**
          * RESIDUAL (Sol): revoking an assignment that starts today KEEPS the row and
          * stamps the revoke instant instead of removing it — the assignment may
@@ -769,14 +769,14 @@ const itemPricingAsOfRows = [
                 await db.execute(sql`insert into item_price_breaks (org_id, schedule_id, minimum_quantity, unit_price)
                   values (${org.orgId}, ${schedule}, '1', ${price})`)
               }
-        
+
               const input = {
                 orgId: org.orgId, itemId: org.items.service, customerId, currency: 'CAD', lineQuantity: '1',
               } as const
               const before = await resolveItemPrice({ ...input, onDate: today })
               assert.equal(before?.unitPrice, '100.0000')
               assert.equal(before?.source, 'customer_level')
-        
+
               // The mistaken assignment is revoked the day it starts: no error, and
               // the row stays with its revoke instant stamped — priced lineage must
               // survive the revoke.
@@ -789,17 +789,17 @@ const itemPricingAsOfRows = [
               assert.ok(membership.revoked_epoch, 'the revoke instant must be stamped')
               const revokedAt = Math.round(membership.revoked_epoch! * 1000)
               assert.ok(Number.isFinite(revokedAt))
-        
+
               // Level and schedule were never touched.
               const level = (await db.execute<{ is_active: boolean }>(sql`
                 select is_active from price_levels where org_id = ${org.orgId} and id = ${goldId}`)).rows[0]!
               assert.equal(level.is_active, true)
-        
+
               // A lookup running now (at or after the revoke) falls to the base.
               const now = await resolveItemPrice({ ...input, onDate: today })
               assert.equal(now?.unitPrice, '80.0000')
               assert.equal(now?.source, 'base_level')
-        
+
               // A lookup as of an instant before the revoke still resolves the Gold
               // that was offered then; at or after it, the base.
               const beforeRevoke = new Date(revokedAt - 3600000).toISOString()
@@ -810,7 +810,7 @@ const itemPricingAsOfRows = [
               const dark = await resolveItemPrice({ ...input, onDate: today, asOf: afterRevoke })
               assert.equal(dark?.unitPrice, '80.0000')
               assert.equal(dark?.source, 'base_level')
-        
+
               // Re-offering clears the stamp: the row prices again.
               await db.execute(sql`update customer_price_level_assignments set is_active = true
                where org_id = ${org.orgId} and customer_id = ${customerId}`)
@@ -826,7 +826,7 @@ const itemPricingAsOfRows = [
             }
           })
         })
-        
+
         /**
          * PRC15c: revoking an older assignment still end-dates it to yesterday — the
          * row is kept, today prices base, and a late transaction inside the old
@@ -858,7 +858,7 @@ const itemPricingAsOfRows = [
                 await db.execute(sql`insert into item_price_breaks (org_id, schedule_id, minimum_quantity, unit_price)
                   values (${org.orgId}, ${schedule}, '1', ${price})`)
               }
-        
+
               const input = {
                 orgId: org.orgId, itemId: org.items.service, customerId, currency: 'CAD', lineQuantity: '1',
               } as const
@@ -871,11 +871,11 @@ const itemPricingAsOfRows = [
                  where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!
               assert.equal(membership.is_active, false)
               assert.equal(membership.effective_to, yesterday)
-        
+
               const now = await resolveItemPrice({ ...input, onDate: today })
               assert.equal(now?.unitPrice, '80.0000')
               assert.equal(now?.source, 'base_level')
-        
+
               const late = await resolveItemPrice({ ...input, onDate: '2026-06-15' })
               assert.equal(late?.unitPrice, '100.0000')
               assert.equal(late?.source, 'customer_level')
@@ -884,7 +884,7 @@ const itemPricingAsOfRows = [
             }
           })
         })
-        
+
         /**
          * PRC15d: revoking a future-effective assignment before it starts removes
          * the never-effective row, so neither today nor the dates it would have
@@ -919,7 +919,7 @@ const itemPricingAsOfRows = [
                 await db.execute(sql`insert into item_price_breaks (org_id, schedule_id, minimum_quantity, unit_price)
                   values (${org.orgId}, ${schedule}, '1', ${price})`)
               }
-        
+
               const input = {
                 orgId: org.orgId, itemId: org.items.service, customerId, currency: 'CAD', lineQuantity: '1',
               } as const
@@ -933,7 +933,7 @@ const itemPricingAsOfRows = [
                 select count(*)::int as n from customer_price_level_assignments
                  where org_id = ${org.orgId} and customer_id = ${customerId}`)).rows[0]!.n
               assert.equal(remaining, 0)
-        
+
               // The removal is audited with the row's before-image, never silent.
               const audits = (await db.execute<{ action: string; before_customer: string | null }>(sql`
                 select action, changes->'before'->>'customer_id' as before_customer from audit_log
@@ -942,11 +942,11 @@ const itemPricingAsOfRows = [
               assert.equal(audits.length, 1)
               assert.equal(audits[0]!.action, 'delete')
               assert.equal(audits[0]!.before_customer, customerId)
-        
+
               const now = await resolveItemPrice({ ...input, onDate: today })
               assert.equal(now?.unitPrice, '80.0000')
               assert.equal(now?.source, 'base_level')
-        
+
               const later = await resolveItemPrice({ ...input, onDate: inside })
               assert.equal(later?.unitPrice, '80.0000')
               assert.equal(later?.source, 'base_level')
@@ -955,7 +955,7 @@ const itemPricingAsOfRows = [
             }
           })
         })
-        
+
         /**
          * PRC15d backstop: an inactive row with a still-open window is a revocation
          * (or a draft that was never offered) and the resolver must not honour it —
@@ -989,7 +989,7 @@ const itemPricingAsOfRows = [
                 await db.execute(sql`insert into item_price_breaks (org_id, schedule_id, minimum_quantity, unit_price)
                   values (${org.orgId}, ${schedule}, '1', ${price})`)
               }
-        
+
               const input = {
                 orgId: org.orgId, itemId: org.items.service, customerId, currency: 'CAD', lineQuantity: '1',
               } as const
@@ -997,7 +997,7 @@ const itemPricingAsOfRows = [
               const dark = await resolveItemPrice({ ...input, onDate: today })
               assert.equal(dark?.unitPrice, '80.0000')
               assert.equal(dark?.source, 'base_level')
-        
+
               // Offering it for real restores Gold: the flag, not the window, was
               // the block.
               await db.execute(sql`update customer_price_level_assignments set is_active = true
@@ -1010,7 +1010,7 @@ const itemPricingAsOfRows = [
             }
           })
         })
-        
+
         /**
          * Level activation is versioned (0327): deactivating the level closes its
          * period, so past dates still read it as offered while today does not — and
@@ -1030,7 +1030,7 @@ const itemPricingAsOfRows = [
               // Standing offer: creation never ends coverage of backdated schedules.
               assert.equal(opened[0]!.active_from, '-infinity')
               assert.equal(opened[0]!.active_to, null)
-        
+
               await db.execute(sql`update price_levels set is_active = false where org_id = ${org.orgId} and id = ${goldId}`)
               const closed = (await db.execute<{ active_from: string; active_to: string | null }>(sql`
                 select active_from::text as active_from, active_to::text as active_to
@@ -1038,7 +1038,7 @@ const itemPricingAsOfRows = [
               assert.equal(closed.length, 1)
               const today = new Date().toISOString().slice(0, 10)
               assert.equal(closed[0]!.active_to, today)
-        
+
               // Reactivation opens a new period; the dark gap stays dark.
               await db.execute(sql`update price_levels set is_active = true where org_id = ${org.orgId} and id = ${goldId}`)
               const periods = (await db.execute<{ active_from: string; active_to: string | null }>(sql`

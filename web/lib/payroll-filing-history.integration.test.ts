@@ -180,7 +180,7 @@ const consolidatedRows = [
           guardPayrollFilingData,
           guardPayrollFilingRowIds,
         } = await import("../app/api/payroll/subsidiary-scope");
-        
+
         test(
           "annual filing and amendment access stays with the historical employer after a transfer",
           { skip: !process.env.OPENBOOKS_DB_URL },
@@ -266,7 +266,7 @@ const consolidatedRows = [
             }
           },
         );
-        
+
         test(
           "opening carry-in retains its additional entity boundary alongside historical payroll",
           { skip: !process.env.OPENBOOKS_DB_URL },
@@ -353,7 +353,7 @@ const consolidatedRows = [
           await import("@openbooks/engine/src/testing/fixtures.ts");
         const { guardPayrollFilingRowIds, guardPayrollFilingData, payrollRowScope } =
           await import("../app/api/payroll/subsidiary-scope");
-        
+
         test(
           "native UUIDv7 filing accounts retain their entity authorization and invalid suffixes fail closed",
           { skip: !process.env.OPENBOOKS_DB_URL },

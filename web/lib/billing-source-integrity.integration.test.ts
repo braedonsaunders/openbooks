@@ -108,7 +108,7 @@ const consolidatedRows = [
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { generateInvoiceFromBillingRequest } = await import('./billing')
         const { createBillingRequest } = await import('./billing-requests')
-        
+
         /**
          * A milestone invoice may claim only the schedule rows it actually billed.
          * Zero-amount (not yet priced) milestones are skipped as invoice lines, so
@@ -137,11 +137,11 @@ const consolidatedRows = [
                 values (${billed},${org.orgId},${project},'Mobilization','2500.0000',1),
                        (${unpricedA},${org.orgId},${project},'Framing','0',2),
                        (${unpricedB},${org.orgId},${project},'Closeout',null,3)`)
-        
+
               const first = await createBillingRequest(org.orgId, actor, {projectId: project, basis: 'milestone', cutoffDate: org.date, backupRequired: false})
               const invoice = await generateInvoiceFromBillingRequest(org.orgId, actor, first.id)
               assert.equal((await db.execute<{total:string}>(sql`select total::text from documents where org_id=${org.orgId} and id=${invoice.id}`)).rows[0]!.total, '2500.0000')
-        
+
               const rows = (await db.execute<{id:string; billing_request_id:string|null}>(sql`
                 select id, billing_request_id from billing_schedules where org_id=${org.orgId} and project_id=${project} order by sort_order`)).rows
               assert.deepEqual(rows, [
@@ -149,7 +149,7 @@ const consolidatedRows = [
                 {id: unpricedA, billing_request_id: null},
                 {id: unpricedB, billing_request_id: null},
               ])
-        
+
               // The skipped milestones are still open: once priced, the next request bills them.
               await db.execute(sql`update billing_schedules set amount_billed='4000.0000' where org_id=${org.orgId} and id=${unpricedA}`)
               const second = await createBillingRequest(org.orgId, actor, {projectId: project, basis: 'milestone', cutoffDate: org.date, backupRequired: false})
@@ -172,7 +172,7 @@ const consolidatedRows = [
         const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { createBillingRequest } = await import('./billing-requests')
         const DB = !!process.env.OPENBOOKS_DB_URL
-        
+
         async function setup() {
           const org = await withBypassContext(() => createScratchOrg())
           const actor = await withBypassContext(() => createScratchUser(org.orgId, 'Billing requester', 'reviewer'))
@@ -184,7 +184,7 @@ const consolidatedRows = [
             values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'BACKUP-TYPE', 'Backup type probe', ${org.customerId}, 'active', true)`))
           return { org, actor, project }
         }
-        
+
         test('createBillingRequest refuses an unknown backup type', { skip: !DB }, async () => {
           const { org, actor, project } = await setup()
           try {
@@ -202,7 +202,7 @@ const consolidatedRows = [
             await dropScratchOrg(org.orgId)
           }
         })
-        
+
         test('createBillingRequest persists a known backup type', { skip: !DB }, async () => {
           const { org, actor, project } = await setup()
           try {
@@ -228,10 +228,10 @@ const consolidatedRows = [
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { generateInvoiceFromBillingRequest } = await import('./billing')
         const { createBillingRequest } = await import('./billing-requests')
-        
+
         const total = async (orgId: string, id: string) =>
           (await db.execute<{total:string}>(sql`select total::text from documents where org_id=${orgId} and id=${id}`)).rows[0]!.total
-        
+
         /**
          * The not-to-exceed cap bounds the CUMULATIVE amount invoiced on the project.
          * A draft invoice already reserves the amount it will bill, so two open
@@ -254,14 +254,14 @@ const consolidatedRows = [
                 values (${project},${org.orgId},${org.subsidiaryId},'NTE','Not to exceed',${org.customerId},${typeId},'100000.0000','active',true,'{}'::jsonb)`)
               const request = (drawAmount: string) =>
                 createBillingRequest(org.orgId, actor, {projectId: project, basis: 'draw_amount', drawAmount, cutoffDate: org.date, backupRequired: false})
-        
+
               const first = await generateInvoiceFromBillingRequest(org.orgId, actor, (await request('90000')).id)
               assert.equal(await total(org.orgId, first.id), '90000.0000')
               // Second draft while the first is still a draft: only 10,000 of capacity remains.
               const second = await generateInvoiceFromBillingRequest(org.orgId, actor, (await request('90000')).id)
               assert.equal(await total(org.orgId, second.id), '10000.0000')
               await assert.rejects(generateInvoiceFromBillingRequest(org.orgId, actor, (await request('1')).id), /fully invoiced/)
-        
+
               // A credit on the project restores capacity.
               const credit = randomUUID()
               await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,project_id,document_date,currency,status,subtotal,tax_total,total)
@@ -271,7 +271,7 @@ const consolidatedRows = [
               await db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${credit}`)
               const third = await generateInvoiceFromBillingRequest(org.orgId, actor, (await request('50000')).id)
               assert.equal(await total(org.orgId, third.id), '30000.0000')
-        
+
               // A voided invoice releases its reservation; nothing else does.
               await db.execute(sql`update documents set status='voided', voided_at=now(), voided_by=${actor}, void_reason='regression: release reservation' where org_id=${org.orgId} and id=${second.id}`)
               const fourth = await generateInvoiceFromBillingRequest(org.orgId, actor, (await request('50000')).id)
@@ -286,7 +286,7 @@ const consolidatedRows = [
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { generateInvoiceFromBillingRequest } = await import('./billing')
         const { createBillingRequest } = await import('./billing-requests')
-        
+
         for (const [currency, amount, expected] of [['JPY','100.5000','101.0000'],['JPY','-100.5000','-101.0000'],['CAD','100.5550','100.5600']] as const) {
           test(`project billing rounds ${currency} ${amount} to payable precision`, {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
             await withBypassContext(async () => {
@@ -306,7 +306,7 @@ const consolidatedRows = [
             })
           })
         }
-        
+
         for (const [markupPercent, expected] of [['1.2345','101234.5000'],['-10','90000.0000'],['invalid',null]] as const) {
           test(`project billing preserves markup ${markupPercent} or refuses invalid configuration`, {skip:!process.env.OPENBOOKS_DB_URL}, async () => {
             await withBypassContext(async () => {
@@ -339,7 +339,7 @@ const consolidatedRows = [
         const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { generateInvoiceFromBillingRequest } = await import('./billing')
         const { createBillingRequest } = await import('./billing-requests')
-        
+
         // Per-item grouping merges every source cost line into one presented line
         // and stamps each source with its invoice line, so a retry (or a second
         // request over the same project) can never charge either source again.
@@ -354,14 +354,14 @@ const consolidatedRows = [
               await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,project_id,document_date,posting_date,currency,fx_rate,status,subtotal,tax_total,total) values (${cost},${org.orgId},'vendor_bill','PERITEM-COST',${org.vendorId},${org.subsidiaryId},${project},${org.date},${org.date},'CAD',1,'draft','20','0','20')`)
               await db.execute(sql`insert into document_lines(id,org_id,document_id,line_number,item_id,account_id,description,quantity,unit_price,amount,is_billable) values (${line1},${org.orgId},${cost},1,${org.items.service},${org.accounts.cogs},'First cost',1,'10','10',true),(${line2},${org.orgId},${cost},2,${org.items.service},${org.accounts.cogs},'Second cost',1,'10','10',true)`)
               await db.execute(sql`update documents set status='approved' where id=${cost} and org_id=${org.orgId}`)
-        
+
               const req1 = await createBillingRequest(org.orgId,actor,{projectId:project,basis:'date_range',cutoffDate:org.date,backupRequired:false})
               const invoice1 = await generateInvoiceFromBillingRequest(org.orgId,actor,req1.id)
               const lines1 = (await db.execute<{amount:string}>(sql`select amount::text from document_lines where org_id=${org.orgId} and document_id=${invoice1.id} order by line_number`)).rows
               assert.deepEqual(lines1.map((l) => l.amount), ['20.0000'], 'matching item costs combine into one invoice line with the full source amount')
               const stamped = (await db.execute<{count:string}>(sql`select count(*)::text as count from document_lines where org_id=${org.orgId} and id in (${line1},${line2}) and billed_by_line_id is not null`)).rows[0]!
               assert.equal(stamped.count, '2', 'both sources carry their invoice line')
-        
+
               const req2 = await createBillingRequest(org.orgId,actor,{projectId:project,basis:'date_range',cutoffDate:org.date,backupRequired:false})
               await assert.rejects(
                 generateInvoiceFromBillingRequest(org.orgId,actor,req2.id),

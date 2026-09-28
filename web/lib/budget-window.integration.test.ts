@@ -94,7 +94,7 @@ const consolidatedRows = [
         const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { entityListSource } = await import('./list/entity-sources.ts')
-        
+
         test('budget scenario rows and totals honor the caller subsidiary scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {
           const scratch = await withBypass(() => createScratchOrg())
           try {
@@ -137,7 +137,7 @@ const consolidatedRows = [
                   (${scratch.orgId}, ${hiddenYearScenario}, ${scratch.accounts.cogs}, ${period2027}, ${hiddenSubsidiary}, 10)
               `)
             })
-        
+
             const source = entityListSource('budget_scenario')
             assert.ok(source)
             const view = {
@@ -169,7 +169,7 @@ const consolidatedRows = [
             for (const absent of [mixedScenario, hiddenScenario, hiddenYearScenario]) {
               assert.ok(!listed.has(absent), `out-of-scope scenario listed: ${absent}`)
             }
-        
+
             const unrestrictedWhere = source.where(view, { filters: {}, showInactive: false }, scratch.orgId, null)
             const unrestrictedJoins = typeof source.baseJoins === 'function' ? source.baseJoins(null) : source.baseJoins
             const unrestrictedRows = await withOrgContext(scratch.orgId, () => db.execute<{ id: string }>(sql`
@@ -182,7 +182,7 @@ const consolidatedRows = [
             for (const id of [emptyScenario, hiddenScenario, hiddenYearScenario, mixedScenario, visibleScenario]) {
               assert.ok(unrestricted.has(id), `unrestricted list hides a scenario: ${id}`)
             }
-        
+
             const yearFilter = source.quickFilters.find((filter) => filter.filterKey === 'fiscal_year')
             const loadYearOptions = yearFilter?.loadOptions
             assert.ok(loadYearOptions)

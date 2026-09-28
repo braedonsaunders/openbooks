@@ -832,9 +832,9 @@ const consolidatedRows = [
         const { applyDocumentEdit } = await import("./documents.ts"), { DocumentEditError } = await import("../../engine/src/records/document-edit-policy.ts"), { loadDocument, loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
         const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
         const { submitAndReleaseIfUngated } = await import("@openbooks/engine/src/flows/submit.ts");
-        
+
         const DB = !!process.env.OPENBOOKS_DB_URL;
-        
+
         // The allocations/allocationsAtEntry switchboard keys are owned by the
         // platform slice (A10) and registered in the feature registry; the fixture
         // below only flips the org's own toggles on.
@@ -843,7 +843,7 @@ const consolidatedRows = [
             coalesce(settings->'features','{}'::jsonb)||'{"allocations":true,"allocationsAtEntry":true}'::jsonb)
             where id=${orgId}`);
         }
-        
+
         interface Fixture {
           org: Awaited<ReturnType<typeof createScratchOrg>>;
           actor: string;
@@ -854,7 +854,7 @@ const consolidatedRows = [
           ruleId: string;
           versionId: string;
         }
-        
+
         // Callers run fixture() under withBypassContext: importing ./documents.ts
         // pulls in the web request-org resolver, which denies every unscoped query
         // under pooled RLS (bare setup dies with 42501).
@@ -905,7 +905,7 @@ const consolidatedRows = [
             where id = ${ruleId} and org_id = ${org.orgId}`);
           return { org, actor, expenseAccount, deptSource, deptA, deptB, ruleId, versionId };
         }
-        
+
         // These helpers run in the scratch org's scope: the edit service and its
         // readers issue bare queries with explicit org predicates, which pooled RLS
         // denies outside an explicit scope (reads see zero rows).
@@ -917,7 +917,7 @@ const consolidatedRows = [
             return id;
           });
         }
-        
+
         async function edit(f: Fixture, id: string, patch: Parameters<typeof applyDocumentEdit>[2]): Promise<void> {
           await withOrgContext(f.org.orgId, async () => {
             const current = await loadDocumentEditCurrent(id, f.org.orgId);
@@ -930,7 +930,7 @@ const consolidatedRows = [
             );
           });
         }
-        
+
         async function storedLines(f: Fixture, id: string) {
           return withOrgContext(f.org.orgId, async () => (
             await db.execute<{
@@ -953,7 +953,7 @@ const consolidatedRows = [
             `)
           ).rows);
         }
-        
+
         function sumAmounts(amounts: string[]): bigint {
           let total = 0n;
           for (const amount of amounts) {
@@ -964,7 +964,7 @@ const consolidatedRows = [
           }
           return total;
         }
-        
+
         test("a bill line coded to a matching department explodes on save with exact children", { skip: !DB }, async () => {
           const f = await withBypassContext(() => fixture());
           try {
@@ -1028,7 +1028,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(f.org.orgId));
           }
         });
-        
+
         test("header-default dims drive the automatic match when the line leaves them blank", { skip: !DB }, async () => {
           const f = await withBypassContext(() => fixture());
           try {
@@ -1045,7 +1045,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(f.org.orgId));
           }
         });
-        
+
         test("re-save regenerates an unlocked group on sum change but keeps a locked one", { skip: !DB }, async () => {
           const f = await withBypassContext(() => fixture());
           try {
@@ -1056,7 +1056,7 @@ const consolidatedRows = [
             const first = await storedLines(f, id);
             const groupId = first[0]!.groupId;
             assert.ok(groupId);
-        
+
             // Changed sum, unlocked: regenerate from the group total, same group id.
             await edit(f, id, {
               lines: first.map((l, i) => ({
@@ -1070,7 +1070,7 @@ const consolidatedRows = [
             assert.equal(regen.length, 2);
             assert.ok(regen.every((l) => l.groupId === groupId));
             assert.equal(sumAmounts(regen.map((l) => l.amount)), sumAmounts(["120.0000"]));
-        
+
             // Lock, then change again: the submitted children stay exactly as sent.
             await edit(f, id, {
               lines: regen.map((l) => ({
@@ -1089,7 +1089,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(f.org.orgId));
           }
         });
-        
+
         test("un-split collapses a group to one line at the first child's coordinates", { skip: !DB }, async () => {
           const f = await withBypassContext(() => fixture());
           try {
@@ -1119,7 +1119,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(f.org.orgId));
           }
         });
-        
+
         test("an explicit distributionKey explodes a manual rule and bad keys fail closed", { skip: !DB }, async () => {
           const f = await withBypassContext(() => fixture());
           const manualRuleId = randomUUID();
@@ -1154,7 +1154,7 @@ const consolidatedRows = [
             assert.equal(lines.length, 1);
             assert.equal(lines[0]!.departmentId, f.deptA);
             assert.equal(lines[0]!.ruleId, manualRuleId);
-        
+
             const badId = await draftBill(f, "ENTRY-KEY-2");
             await assert.rejects(
               edit(f, badId, {
@@ -1167,7 +1167,7 @@ const consolidatedRows = [
             );
             // Nothing partial persists when the key is rejected.
             assert.equal((await storedLines(f, badId)).length, 0);
-        
+
             const inactiveRuleId = randomUUID();
             await withBypassContext(async () => {
               await db.execute(sql`insert into allocation_rules
@@ -1183,7 +1183,7 @@ const consolidatedRows = [
                 error.status === 422 &&
                 /not active with a published version/.test(error.message),
             );
-        
+
             const postRuleId = randomUUID();
             await withBypassContext(async () => {
               await db.execute(sql`insert into allocation_rules
@@ -1203,7 +1203,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(f.org.orgId));
           }
         });
-        
+
         test("posting a bill with exploded children writes journal lines per child", { skip: !DB }, async () => {
           const f = await withBypassContext(() => fixture());
           try {
@@ -1239,7 +1239,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(f.org.orgId));
           }
         });
-        
+
         test("feature off leaves distribution lines untouched", { skip: !DB }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
@@ -1311,15 +1311,15 @@ const consolidatedRows = [
         const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
           "@openbooks/engine/src/testing/fixtures.ts"
         );
-        
-        
+
+
         const DB = !!process.env.OPENBOOKS_DB_URL;
-        
+
         type Fixture = {
           org: Awaited<ReturnType<typeof createScratchOrg>>;
           userId: string;
         };
-        
+
         async function newFixture(): Promise<Fixture> {
           return withBypassContext(async () => {
             const org = await createScratchOrg();
@@ -1327,11 +1327,11 @@ const consolidatedRows = [
             return { org, userId };
           });
         }
-        
+
         const depsFor = (org: Fixture["org"]) => ({
           control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
         });
-        
+
         /** Post an invoice that ships stock, returning the issue movement it created. */
         async function shipOnInvoice(
           fx: Fixture,
@@ -1368,7 +1368,7 @@ const consolidatedRows = [
                where org_id = ${org.orgId} and document_line_id = ${lineId} and kind = 'issue'`)).rows[0]!.id,
           ));
         }
-        
+
         /** A draft customer credit with one inventory line and no return evidence. */
         async function draftCredit(fx: Fixture, quantity: string, unitPrice: string, amount: string): Promise<string> {
           const { org, userId } = fx;
@@ -1392,7 +1392,7 @@ const consolidatedRows = [
           });
           return documentId;
         }
-        
+
         /** Drawer-shaped line input: identity plus tenant custom only. */
         function drawerLine(
           line: Record<string, unknown>,
@@ -1412,13 +1412,13 @@ const consolidatedRows = [
             ...overrides,
           };
         }
-        
+
         async function linesOf(fx: Fixture, documentId: string): Promise<Record<string, unknown>[]> {
           const loaded = await withOrgContext(fx.org.orgId, () => loadDocument(documentId, fx.org.orgId));
           assert.ok(loaded);
           return loaded.lines;
         }
-        
+
         async function save(
           fx: Fixture,
           documentId: string,
@@ -1444,14 +1444,14 @@ const consolidatedRows = [
             return { status: e.status, message: e.message };
           }
         }
-        
+
         function storedReturn(line: Record<string, unknown>): Record<string, unknown> | null {
           const custom = line.custom;
           if (!custom || typeof custom !== "object") return null;
           const bag = (custom as Record<string, unknown>).inventoryReturn;
           return bag && typeof bag === "object" ? (bag as Record<string, unknown>) : null;
         }
-        
+
         test("the editor writes, preserves, and clears a chosen return source", { skip: !DB }, async () => {
           const fx = await newFixture();
           try {
@@ -1464,7 +1464,7 @@ const consolidatedRows = [
             );
             const issueMovementId = await shipOnInvoice(fx, "10", "25", "250");
             const creditId = await draftCredit(fx, "4", "25", "100");
-        
+
             // Selecting the shipment writes the trusted bag the return engine reads.
             assert.equal(
               await save(fx, creditId, (lines) => [
@@ -1475,7 +1475,7 @@ const consolidatedRows = [
             assert.deepEqual(storedReturn((await linesOf(fx, creditId))[0]!), {
               sourceIssueMovementId: issueMovementId,
             });
-        
+
             // A later description-only save must not strip it — the defect this whole
             // re-attachment mechanism exists to prevent.
             assert.equal(
@@ -1485,7 +1485,7 @@ const consolidatedRows = [
             const afterRename = (await linesOf(fx, creditId))[0]!;
             assert.equal(afterRename.description, "renamed");
             assert.deepEqual(storedReturn(afterRename), { sourceIssueMovementId: issueMovementId });
-        
+
             // Explicit null clears it, leaving an ordinary financial credit line.
             assert.equal(
               await save(fx, creditId, (lines) => [
@@ -1498,7 +1498,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(fx.org.orgId));
           }
         });
-        
+
         test("a forged return source in caller custom is ignored", { skip: !DB }, async () => {
           const fx = await newFixture();
           try {
@@ -1511,7 +1511,7 @@ const consolidatedRows = [
             );
             const issueMovementId = await shipOnInvoice(fx, "5", "20", "100");
             const creditId = await draftCredit(fx, "1", "20", "20");
-        
+
             // Sent through `custom` rather than the typed field: stripped, not stored.
             assert.equal(
               await save(fx, creditId, (lines) => [
@@ -1526,7 +1526,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(fx.org.orgId));
           }
         });
-        
+
         test("a shipment that is not returnable is refused and changes nothing", { skip: !DB }, async () => {
           const fx = await newFixture();
           try {
@@ -1539,7 +1539,7 @@ const consolidatedRows = [
             );
             await shipOnInvoice(fx, "5", "20", "100");
             const creditId = await draftCredit(fx, "1", "20", "20");
-        
+
             const refusal = await save(fx, creditId, (lines) => [
               drawerLine(lines[0]!, { inventoryReturnSource: { movementId: randomUUID() } }),
             ]);
@@ -1551,7 +1551,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(fx.org.orgId));
           }
         });
-        
+
         test("a return source on a kind that cannot return stock is refused", { skip: !DB }, async () => {
           const fx = await newFixture();
           try {
@@ -1563,7 +1563,7 @@ const consolidatedRows = [
               }),
             );
             const issueMovementId = await shipOnInvoice(fx, "5", "20", "100");
-        
+
             // A draft invoice, not a credit: it has nothing to return against.
             const invoiceId = randomUUID();
             await withBypassContext(async () => {
@@ -1582,7 +1582,7 @@ const consolidatedRows = [
                 values (${fx.org.orgId}, ${invoiceId}, 1, ${fx.org.items.fifo}, ${fx.org.accounts.revenue},
                         '1', '20', '20', '0', false, '0', '0', ${fx.org.stockLocationId}, '{}'::jsonb, false)`);
             });
-        
+
             const refusal = await save(fx, invoiceId, (lines) => [
               drawerLine(lines[0]!, { inventoryReturnSource: { movementId: issueMovementId } }),
             ]);
@@ -1592,7 +1592,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(fx.org.orgId));
           }
         });
-        
+
         test("a return source from another legal entity is refused at save", { skip: !DB }, async () => {
           const fx = await newFixture();
           try {
@@ -1661,7 +1661,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(fx.org.orgId));
           }
         });
-        
+
         test("an authored return posts and restores the stock end to end", { skip: !DB }, async () => {
           const fx = await newFixture();
           try {
@@ -1685,7 +1685,7 @@ const consolidatedRows = [
                 update documents set status = 'approved' where id = ${creditId} and org_id = ${fx.org.orgId}`);
               await postDocument(creditId, depsFor(fx.org));
             });
-        
+
             // Authored in the editor, restored by the engine, at the cost it left at.
             const onHand = await withBypassContext(() =>
               getOnHand(fx.org.orgId, fx.org.items.fifo, fx.org.stockLocationId),
@@ -1706,14 +1706,14 @@ const consolidatedRows = [
         // DocumentDrawer sends on every reload-then-save — failed with a 422
         // ('unit price is not a valid amount') instead of round-tripping. Input
         // validation must accept the column's own scale.
-        
+
         const { sql } = await import("drizzle-orm");
         const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
         const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
         const { applyDocumentEdit } = await import("./documents.ts"), { DocumentEditError } = await import("../../engine/src/records/document-edit-policy.ts"), { loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
-        
+
         const DB = !!process.env.OPENBOOKS_DB_URL;
-        
+
         test("applyDocumentEdit round-trips a stored 8dp unit price", { skip: !DB }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
@@ -1763,7 +1763,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("applyDocumentEdit refuses junk quantities with a named error, not a storage failure", { skip: !DB }, async () => {
           // A sloppy line-grid save used to carry quantity straight into the
           // numeric(28,8) column: "abc", a blank cell, or a 26-digit paste died in
@@ -1801,7 +1801,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("applyDocumentEdit refuses line money wider than its column with a named error", { skip: !DB }, async () => {
           // document_lines.amount is numeric(19,4) and unit_price numeric(28,8): a
           // pasted figure wider than the column cleared the format checks and died in
@@ -1855,9 +1855,9 @@ const consolidatedRows = [
         const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
         const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
         const { applyDocumentEdit } = await import("./documents.ts"), { DocumentEditError } = await import("../../engine/src/records/document-edit-policy.ts"), { loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
-        
+
         const DB = !!process.env.OPENBOOKS_DB_URL;
-        
+
         test("applyDocumentEdit refuses to clear a document's subsidiary", { skip: !DB }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
@@ -1889,7 +1889,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("applyDocumentEdit validates partial header custom fields against the stored bag", { skip: !DB }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
@@ -1930,7 +1930,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(org.orgId));
           }
         });
-        
+
         test("applyDocumentEdit refuses line accounts from another organization", { skip: !DB }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           const foreign = await withBypassContext(() => createScratchOrg());
@@ -1980,7 +1980,7 @@ const consolidatedRows = [
             await withBypassContext(() => dropScratchOrg(foreign.orgId));
           }
         });
-        
+
         test("applyDocumentEdit refuses to attach a project while Projects is disabled", { skip: !DB }, async () => {
           const org = await withBypassContext(() => createScratchOrg());
           try {
@@ -2468,7 +2468,7 @@ const consolidatedRows = [
           createScratchUser,
           dropScratchOrg,
         } = await import("@openbooks/engine/src/testing/fixtures.ts");
-        
+
         const { convertOrder } = await import("./order-cycle.ts");
         const { applyDocumentEdit } = await import("./documents.ts");
         const { DocumentEditError } = await import("../../engine/src/records/document-edit-policy.ts");
@@ -2487,9 +2487,9 @@ const consolidatedRows = [
         const { sameCurrencyAllocation } = await import(
           "@openbooks/engine/src/payments/settlement-policy.ts"
         );
-        
+
         const DB = !!process.env.OPENBOOKS_DB_URL;
-        
+
         async function enableSalesFx(orgId: string, date: string): Promise<void> {
           await withBypassContext(async () => {
             await db.execute(sql`
@@ -2506,7 +2506,7 @@ const consolidatedRows = [
               on conflict do nothing`);
           });
         }
-        
+
         async function seedCustomerRole(org: ScratchOrg, actorId: string): Promise<void> {
           await withBypassContext(async () => {
             await db.execute(sql`
@@ -2515,7 +2515,7 @@ const consolidatedRows = [
               values (${org.orgId}, ${org.customerId}, ${org.accounts.ar}, '10000', 'USD', false, ${actorId}, ${actorId})`);
           });
         }
-        
+
         async function seedOtherCustomer(org: ScratchOrg, actorId: string): Promise<string> {
           const otherParty = randomUUID();
           await withBypassContext(async () => {
@@ -2528,7 +2528,7 @@ const consolidatedRows = [
           });
           return otherParty;
         }
-        
+
         async function seedOrder(org: ScratchOrg, actorId: string, number: string, total: string): Promise<string> {
           const id = randomUUID();
           await withBypassContext(async () => {
@@ -2550,7 +2550,7 @@ const consolidatedRows = [
           });
           return id;
         }
-        
+
         async function revisionOf(orgId: string, id: string): Promise<string> {
           return withOrgContext(orgId, async () => {
             const r = await db.execute<{ updated_at: string }>(sql`
@@ -2559,7 +2559,7 @@ const consolidatedRows = [
             return r.rows[0]!.updated_at;
           });
         }
-        
+
         async function issue(orgId: string, orderId: string, actorId: string, creditOverrideReason?: string) {
           return issueSalesOrder({
             orgId,
@@ -2569,7 +2569,7 @@ const consolidatedRows = [
             ...(creditOverrideReason === undefined ? {} : { creditOverrideReason }),
           });
         }
-        
+
         async function approveAndPost(org: ScratchOrg, actorId: string, invoiceId: string): Promise<void> {
           await withBypassContext(async () => {
             await db.execute(sql`
@@ -2580,7 +2580,7 @@ const consolidatedRows = [
             });
           });
         }
-        
+
         async function payInFull(
           org: ScratchOrg,
           actorId: string,
@@ -2624,7 +2624,7 @@ const consolidatedRows = [
             await postPaymentWithApplications(receipt.id, undefined, actorId);
           });
         }
-        
+
         async function invoiceState(orgId: string, id: string) {
           return withOrgContext(orgId, async () => {
             const doc = (
@@ -2645,7 +2645,7 @@ const consolidatedRows = [
             return { ...doc, edgeCount: edge, lineCount: lines };
           });
         }
-        
+
         async function grantRolePermissions(orgId: string, roleKey: string, permissions: string[]): Promise<void> {
           await withBypassContext(async () => {
             await db.execute(sql`
@@ -2654,7 +2654,7 @@ const consolidatedRows = [
                where org_id = ${orgId} and key = ${roleKey}`);
           });
         }
-        
+
         async function expectIssueError(promise: Promise<unknown>, code: string, status = 422) {
           let captured: InstanceType<typeof SalesOrderIssueError> | undefined;
           await assert.rejects(promise, (error: unknown) => {
@@ -2664,7 +2664,7 @@ const consolidatedRows = [
           });
           return captured!;
         }
-        
+
         async function editParty(
           orgId: string,
           actorId: string,
@@ -2682,7 +2682,7 @@ const consolidatedRows = [
             );
           });
         }
-        
+
         test(
           "a converted draft invoice cannot be moved to another party",
           { skip: !DB },
@@ -2695,11 +2695,11 @@ const consolidatedRows = [
               await enableSalesFx(org.orgId, org.date);
               await seedCustomerRole(org, actorId);
               const otherParty = await seedOtherCustomer(org, actorId);
-        
+
               const so1 = await seedOrder(org, actorId, "SO-PTY-1", "10000");
               const first = await issue(org.orgId, so1, actorId);
               assert.equal(first.credit?.resultingExposure, "10000.0000");
-        
+
               const converted = await convertOrder(org.orgId, actorId, so1, "customer_invoice");
               const before = await invoiceState(org.orgId, converted.id);
               assert.equal(before.party, org.customerId);
@@ -2711,7 +2711,7 @@ const consolidatedRows = [
                    where id = ${so1} and org_id = ${org.orgId}`);
                 return r.rows[0]!;
               });
-        
+
               // The move is refused and names the source order plus the remedy.
               let refusal: InstanceType<typeof DocumentEditError> | undefined;
               await assert.rejects(editParty(org.orgId, actorId, converted.id, otherParty), (error: unknown) => {
@@ -2723,7 +2723,7 @@ const consolidatedRows = [
               assert.match(refusal!.message, /sales order/);
               assert.match(refusal!.message, /must keep the source order party/);
               assert.match(refusal!.message, /Delete this draft and reconvert/);
-        
+
               // The refused edit leaves source, invoice, links, and totals unchanged.
               const after = await invoiceState(org.orgId, converted.id);
               assert.deepEqual(after, before);
@@ -2734,7 +2734,7 @@ const consolidatedRows = [
                 return r.rows[0]!;
               });
               assert.deepEqual(sourceAfter, sourceBefore);
-        
+
               // Same-party header edits still work: a memo-only save and an explicit
               // no-op party save both succeed.
               await withOrgContext(org.orgId, async () => {
@@ -2752,7 +2752,7 @@ const consolidatedRows = [
               assert.equal(settled.party, org.customerId);
               assert.equal(settled.total, "10000.0000");
               assert.equal(settled.edgeCount, 1);
-        
+
               // Drafts without an order-conversion source stay freely reassignable:
               // the guard binds only conversion children to their source party.
               const standalone = await withBypassContext(async () => {
@@ -2781,7 +2781,7 @@ const consolidatedRows = [
             }
           },
         );
-        
+
         test(
           "delete-and-reconvert remedy restores the source party billing end to end",
           { skip: !DB },
@@ -2798,11 +2798,11 @@ const consolidatedRows = [
               await enableSalesFx(org.orgId, org.date);
               await seedCustomerRole(org, actorId);
               const otherParty = await seedOtherCustomer(org, actorId);
-        
+
               const so1 = await seedOrder(org, actorId, "SO-PTY-REM-1", "10000");
               await issue(org.orgId, so1, actorId);
               const converted = await convertOrder(org.orgId, actorId, so1, "customer_invoice");
-        
+
               // The drift is refused, so the operator deletes the draft (restoring
               // the source billed cover) and reconverts in the source party.
               await assert.rejects(editParty(org.orgId, actorId, converted.id, otherParty), (error: unknown) => {
@@ -2823,7 +2823,7 @@ const consolidatedRows = [
               const rebilled = await invoiceState(org.orgId, reconverted.id);
               assert.equal(rebilled.party, org.customerId);
               assert.equal(rebilled.edgeCount, 1);
-        
+
               // Same-party billing still relieves exposure once posted and paid.
               await approveAndPost(org, actorId, reconverted.id);
               await payInFull(org, actorId, reconverted.id, "USD", "10000");
@@ -2831,7 +2831,7 @@ const consolidatedRows = [
               const second = await issue(org.orgId, so2, actorId);
               assert.equal(second.credit?.openOrderExposure, "0.0000");
               assert.equal(second.credit?.resultingExposure, "5000.0000");
-        
+
               // The limit still engages past the threshold, and an authorized
               // override with a reason still issues.
               const so3 = await seedOrder(org, actorId, "SO-PTY-REM-3", "6000");
@@ -2853,7 +2853,7 @@ const consolidatedRows = [
             }
           },
         );
-        
+
         test(
           "legacy mismatched-party billing does not release the source order exposure",
           { skip: !DB },
@@ -2866,11 +2866,11 @@ const consolidatedRows = [
               await enableSalesFx(org.orgId, org.date);
               await seedCustomerRole(org, actorId);
               const otherParty = await seedOtherCustomer(org, actorId);
-        
+
               const so1 = await seedOrder(org, actorId, "SO-PTY-LEG-1", "10000");
               await issue(org.orgId, so1, actorId);
               const converted = await convertOrder(org.orgId, actorId, so1, "customer_invoice");
-        
+
               // Legacy simulation: rows relabelled through the pre-fix unguarded path
               // bypass the edit guard, so raw SQL stands in for those inconsistent
               // rows. The credit math must still fail closed on them.
@@ -2880,7 +2880,7 @@ const consolidatedRows = [
                    where id = ${converted.id} and org_id = ${org.orgId}`);
               });
               await approveAndPost(org, actorId, converted.id);
-        
+
               // No same-party billing ever relieved SO-PTY-LEG-1, so the second order
               // must refuse even though the stray invoice is still open against B.
               const so2 = await seedOrder(org, actorId, "SO-PTY-LEG-2", "5000");

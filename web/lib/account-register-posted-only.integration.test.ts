@@ -72,7 +72,7 @@ const consolidatedRows = [
         // and both exporters are real; only the access boundary (auth gate,
         // translations) is seammed.
         stubModules({ intl: true, navigation: false, authz: false, features: false });
-        
+
         registerHooks({
           resolve(specifier, context, nextResolve) {
             if (specifier.endsWith("/lib/authz")) {
@@ -94,7 +94,7 @@ const consolidatedRows = [
             return nextLoad(url, context);
           },
         });
-        
+
         const gateKey = Symbol.for("openbooks.register-export-gate");
         const enginePermissionsUrl = new URL(
           "../../engine/src/organization/permissions.ts",
@@ -108,7 +108,7 @@ const consolidatedRows = [
         );
         const { businessToday } = await import("@openbooks/engine/src/platform/business-date.ts");
         const { GET } = await import("../app/api/accounts/[id]/register/route.ts");
-        
+
         function pdfContentText(pdf: Buffer): string {
           const text = [pdf.toString("latin1")];
           let cursor = 0;
@@ -144,7 +144,7 @@ const consolidatedRows = [
           }
           return text.join("\n");
         }
-        
+
         async function seedRegister(scratch: { orgId: string; bookId: string; subsidiaryId: string; date: string; periodId: string }): Promise<string> {
           const accountId = randomUUID();
           const offsetAccountId = randomUUID();
@@ -177,7 +177,7 @@ const consolidatedRows = [
           });
           return accountId;
         }
-        
+
         function gateFor(orgId: string): void {
           (globalThis as typeof globalThis & Record<symbol, unknown>)[gateKey] = {
             user: { id: "register-export-test", orgId },
@@ -185,14 +185,14 @@ const consolidatedRows = [
             allowedSubsidiaryIds: null,
           };
         }
-        
+
         test("the register xlsx stamps the workbook and filename from the org business day", async () => {
           const scratch = await withBypass(() => createScratchOrg());
           try {
             gateFor(scratch.orgId);
             const accountId = await seedRegister(scratch);
             const stamp = await withBypass(() => businessToday(scratch.orgId));
-        
+
             const response = await GET(
               new Request(`http://openbooks.test/api/accounts/${accountId}/register?format=xlsx`),
               { params: Promise.resolve({ id: accountId }) },
@@ -200,7 +200,7 @@ const consolidatedRows = [
             assert.equal(response.status, 200);
             const disposition = response.headers.get("content-disposition") ?? "";
             assert.ok(disposition.includes(stamp), "the download filename names the business day");
-        
+
             const workbook = new ExcelJS.Workbook();
             await workbook.xlsx.load(Buffer.from(await response.arrayBuffer()) as unknown as ArrayBuffer);
             for (const property of [workbook.created, workbook.modified] as const) {
@@ -211,14 +211,14 @@ const consolidatedRows = [
             await withBypass(() => dropScratchOrg(scratch.orgId));
           }
         });
-        
+
         test("the register PDF branch serves the stamped download", async () => {
           const scratch = await withBypass(() => createScratchOrg());
           try {
             gateFor(scratch.orgId);
             const accountId = await seedRegister(scratch);
             const stamp = await withBypass(() => businessToday(scratch.orgId));
-        
+
             const response = await GET(
               new Request(`http://openbooks.test/api/accounts/${accountId}/register?format=pdf`),
               { params: Promise.resolve({ id: accountId }) },
@@ -234,7 +234,7 @@ const consolidatedRows = [
             await withBypass(() => dropScratchOrg(scratch.orgId));
           }
         });
-        
+
         test("the PDF document input carries the business-day stamp into the footer", async () => {
           const { exportDataToPdfInput } = await import("./report-pdf.ts");
           const generatedAt = new Date("2024-02-29T00:00:00Z");
@@ -252,7 +252,7 @@ const consolidatedRows = [
         const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
         const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
         const { accountRegister, partyRegister } = await import('./reports/registers')
-        
+
         test('account registers scope both lines and totals within a visible intercompany header', { skip: !env.OPENBOOKS_DB_URL }, async () => {
           const scratch = await withBypass(() => createScratchOrg())
           try {
@@ -296,7 +296,7 @@ const consolidatedRows = [
             assert.deepEqual(scopedAr.parties.flatMap((section) => section.lines.map((line) => line.docId)), [null])
           } finally { await withBypass(() => dropScratchOrg(scratch.orgId)) }
         })
-        
+
         test('account registers hide the header of an out-of-scope account even with no visible lines', { skip: !env.OPENBOOKS_DB_URL }, async () => {
           const scratch = await withBypass(() => createScratchOrg())
           try {
