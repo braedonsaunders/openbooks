@@ -58,9 +58,10 @@ export interface OverheadDriverColumns {
 
 /**
  * THE overhead-card selection kernel, source-independent: given the rate
- * row's alias and the driver's column expressions, one SQL fragment both
- * the postings below and the statistical measures share, so a reported
- * number can never differ from the pair the ledger carries.
+ * row's alias and the driver's column expressions, one SQL fragment every
+ * posting, measure, and resolver shares, so a reported number can never
+ * differ from the pair the ledger carries — and release-time selection can
+ * never drift from application-time selection.
  *
  * It never names a source table — coupling it to time_entries (or any
  * driver table) would fork selection the moment a second source posts.
@@ -72,13 +73,26 @@ export interface OverheadDriverColumns {
  *     the same rate kind in force that day, org-wide rows of that kind
  *     step aside;
  *   - rows of one scope may stack (category rows) — each match is one term.
+ *
+ * The optional scope pins the method identity on the candidate AND on the
+ * specificity check alike, so a department card of another method can never
+ * suppress a candidate of the pinned method. Omitted (the time-entry
+ * binding) keeps the long-standing method-agnostic match, row for row.
  */
-export function overheadRateAppliesToDriver(rateAlias: string, driver: OverheadDriverColumns): SQL {
+export function overheadRateAppliesToDriver(
+  rateAlias: string,
+  driver: OverheadDriverColumns,
+  scope: { method?: string } = {},
+): SQL {
   const r = sql.raw(rateAlias);
+  const method = scope.method ?? null;
+  const methodMatch = (alias: SQL): SQL =>
+    method == null ? sql`true` : sql`${alias}.method = ${method}`;
   return sql`${r}.org_id = ${driver.orgId}
          and (${r}.department_id is null or ${r}.department_id = ${driver.departmentId})
          and ${r}.effective_from <= ${driver.workedOn}
          and (${r}.effective_to is null or ${r}.effective_to >= ${driver.workedOn})
+         and ${methodMatch(r)}
          and not exists (
            select 1 from overhead_rates specific_rate
             where specific_rate.org_id = ${driver.orgId}
@@ -87,6 +101,7 @@ export function overheadRateAppliesToDriver(rateAlias: string, driver: OverheadD
               and ${r}.department_id is null
               and specific_rate.effective_from <= ${driver.workedOn}
               and (specific_rate.effective_to is null or specific_rate.effective_to >= ${driver.workedOn})
+              and ${methodMatch(sql.raw("specific_rate"))}
          )`;
 }
 
@@ -422,15 +437,19 @@ export interface StandardOverheadCard {
 
 /**
  * Resolve the standard overhead cards covering a driver day — the
- * executor-bound selection kernel behind release freezing. Reads
- * overhead_rates through the passed executor (never ambiently):
- * method='standard', the basis-mapped kind, same org, effective window
- * covering the day, department-specific rows before the org fallback for
- * the mapped kind, category stacks retained. Rows return in a deterministic
+ * executor-bound selection behind release freezing. The mapped kind and
+ * method='standard' flow through the one shared selection kernel above
+ * (read through the passed executor, never ambiently): same org, covering
+ * window, department-specific rows before the org fallback for the mapped
+ * kind and method, category stacks retained — so a department card of
+ * another method can never suppress an org-wide standard card, and
+ * release-time selection can never drift from the shared rule. No second
+ * scope/window/fallback algorithm lives here: only the deterministic
  * frozen order (department-specific first, then effective_from, category,
- * row id) so the release snapshot hash is stable. An unknown basis or a
- * malformed date refuses by name; no covering card resolves to an empty
- * set (inert), never to another kind's card.
+ * row id, so the release snapshot hash is stable) and the evidence
+ * mapping. An unknown basis or a malformed date refuses by name; no
+ * covering card resolves to an empty set (inert), never to another kind's
+ * card.
  */
 export async function resolveStandardOverheadCardsInTx(
   executor: OverheadExecutor,
@@ -450,10 +469,9 @@ export async function resolveStandardOverheadCardsInTx(
     );
   }
   const rateKind = standardOverheadRateKind(args.basis);
-  const departmentId = args.departmentId ?? null;
-  // A null department binds nothing: `= null` never matches, so only
-  // org-wide rows survive — the same department-less rule the live kernel
-  // applies, without a null-matching branch.
+  // Driver coordinates bind as literals: a null department binds nothing
+  // (`= null` never matches), so only org-wide rows survive for
+  // department-less drivers — the shared kernel's own rule.
   const rows = (await executor.execute<{
       id: string;
       department_id: string | null;
@@ -462,18 +480,18 @@ export async function resolveStandardOverheadCardsInTx(
       effective_from: string;
       effective_to: string | null;
     }>(sql`
-    select id, department_id, category, rate_percent::text as rate_percent,
-           effective_from::text as effective_from, effective_to::text as effective_to
-      from overhead_rates
-     where org_id = ${orgId}
-       and rate_kind = ${rateKind}
-       and method = 'standard'
-       and effective_from <= ${args.onDate}
-       and (effective_to is null or effective_to >= ${args.onDate})
-       and (department_id is null or department_id = ${departmentId})
-     order by case when department_id is null then 1 else 0 end,
-              effective_from, category asc nulls first, id asc`)).rows;
-  const cards = rows.map((row) => ({
+    select r.id, r.department_id, r.category, r.rate_percent::text as rate_percent,
+           r.effective_from::text as effective_from, r.effective_to::text as effective_to
+      from overhead_rates r
+     where r.rate_kind = ${rateKind}
+       and ${overheadRateAppliesToDriver("r", {
+         orgId: sql`${orgId}`,
+         workedOn: sql`${args.onDate}`,
+         departmentId: sql`${args.departmentId ?? null}`,
+       }, { method: "standard" })}
+     order by case when r.department_id is null then 1 else 0 end,
+              r.effective_from, r.category asc nulls first, r.id asc`)).rows;
+  return rows.map((row) => ({
     id: row.id,
     orgId,
     departmentId: row.department_id ?? null,
@@ -484,13 +502,6 @@ export async function resolveStandardOverheadCardsInTx(
     effectiveFrom: String(row.effective_from).slice(0, 10),
     effectiveTo: row.effective_to == null ? null : String(row.effective_to).slice(0, 10),
   }));
-  // Department-before-org for the mapped kind: when the driver's department
-  // has its own standard card covering the day, org-wide cards step aside.
-  // Category rows stack: every survivor is one term, in frozen order.
-  if (departmentId !== null && cards.some((card) => card.departmentId === departmentId)) {
-    return cards.filter((card) => card.departmentId !== null);
-  }
-  return cards;
 }
 
 export interface StandardOverheadTerm {
