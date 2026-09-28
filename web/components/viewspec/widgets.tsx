@@ -32,6 +32,7 @@ import { RESOURCING_BOARD_WIDGETS } from './widgets-resourcing-board'
 import { RESOURCING_DEMAND_WIDGETS } from './widgets-resourcing-demand'
 import { RESOURCING_REQUEST_WIDGETS } from './widgets-resourcing-requests'
 import { RESOURCING_RETAINER_WIDGETS } from './widgets-resourcing-retainers'
+import { RESOURCING_COCKPIT_WIDGETS } from './widgets-resourcing-cockpit'
 import { str, type WidgetRenderer } from './widget-props'
 
 /**
@@ -203,6 +204,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ...RESOURCING_DEMAND_WIDGETS,
   ...RESOURCING_REQUEST_WIDGETS,
   ...RESOURCING_RETAINER_WIDGETS,
+  ...RESOURCING_COCKPIT_WIDGETS,
 }
 
 export class UnknownWidgetError extends Error {

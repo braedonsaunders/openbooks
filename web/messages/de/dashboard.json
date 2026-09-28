@@ -29,6 +29,7 @@
     "overduePayables": "Überfällige Verbindlichkeiten",
     "itemsToReconcile": "Abzustimmende Posten",
     "expensesAwaitingApproval": "Spesenabrechnungen zur Genehmigung",
+    "resourcingPulse": "Einsatz-Puls",
     "closeReadiness": "Abschlussstatus",
     "closeReadinessEmpty": "Noch keine Abschlussläufe",
     "agentFindings": "Agentenfeststellungen",
@@ -79,7 +80,8 @@
     "weekOf": "Woche vom {date}",
     "noBurn": "Kein Nettoabfluss",
     "cashShortfall": "Liquiditätsengpass",
-    "runwayWeeks": "{weeks, plural, one {# Woche Liquiditätsreichweite} other {# Wochen Liquiditätsreichweite}}"
+    "runwayWeeks": "{weeks, plural, one {# Woche Liquiditätsreichweite} other {# Wochen Liquiditätsreichweite}}",
+    "resourcingPulse": "Verfügbar {bench} · Einsatz endet {rolloffs} · {overallocated} überbuchte Wochen"
   },
   "categories": {
     "kpi": "Kennzahlen",
@@ -107,6 +109,7 @@
     "overduePayables": "Eingangsrechnungen nach ihrem Fälligkeitsdatum in Basiswährung.",
     "itemsToReconcile": "Nicht zugeordnete Kontoauszugspositionen, die auf die Abstimmung warten.",
     "expensesAwaitingApproval": "Spesenabrechnungen, die auf Genehmigung warten.",
+    "resourcingPulse": "Auslastung, verfügbare Kräfte und auslaufende Einsätze.",
     "closeReadiness": "Aktuelle Periodenabschlussläufe und ihre Phase.",
     "agentFindings": "Feststellungen der Hintergrundagenten öffnen — zur Workbench springen.",
     "revenue": "Seit Monatsbeginn erfasster Umsatz, in Basiswährung.",

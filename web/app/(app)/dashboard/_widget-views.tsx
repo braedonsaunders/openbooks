@@ -179,6 +179,24 @@ export function WidgetCard({
           hint={data.pendingExpenses > 0 ? t('metricContext.awaitingDecision') : t('metricContext.nonePending')}
         />
       )
+    case 'resourcing-pulse': {
+      const pulse = data.resourcingPulse
+      if (pulse === null) return <PersonaEmpty title={t('widgets.resourcingPulse')} icon={<Users size={14} />} />
+      return (
+        <MetricTile
+          icon={<Users size={15} />}
+          label={t('widgets.resourcingPulse')}
+          value={pulse.utilization ?? '—'}
+          href="/resourcing"
+          tone={pulse.overallocatedWeeks > 0 ? 'amber' : 'teal'}
+          hint={t('metricContext.resourcingPulse', {
+            bench: pulse.benchPeople,
+            rolloffs: pulse.rolloffs,
+            overallocated: pulse.overallocatedWeeks,
+          })}
+        />
+      )
+    }
     case 'list-recent-entries':
       return <RecentEntriesList entries={data.recentEntries} />
     case 'list-pending-approvals':

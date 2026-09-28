@@ -111,10 +111,12 @@ export async function loadProjects(
     : [null, [], null]
   const projectTypes = projectTypesRes?.rows ?? []
 
-  // The Schedule tab is a Projects sub-capability: resolved on the server so a
-  // client-side layout choice can never surface a gated feature.
-  const [schedulingEnabled, locale] = await Promise.all([
+  // The Schedule and Staffing tabs are Projects sub-capabilities: resolved on
+  // the server so a client-side layout choice can never surface a gated
+  // feature. Staffing additionally needs the reader grant.
+  const [schedulingEnabled, resourcingEnabled, locale] = await Promise.all([
     isFeatureEnabled(orgId, 'projectScheduling'),
+    isFeatureEnabled(orgId, 'resourcing') && can(authz, 'resourcing.read'),
     getLocale(),
   ])
 
@@ -191,6 +193,7 @@ export async function loadProjects(
             cockpit: openProject ? openCockpit : null,
             projectTypes,
             schedulingEnabled,
+            resourcingEnabled,
             locale,
             initialTab: creating ? 'overview' : (pickString(sp.projectTab) ?? 'overview'),
             createMode: creating,

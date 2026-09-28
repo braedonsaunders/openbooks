@@ -29,6 +29,7 @@
     "overduePayables": "Dettes en retard",
     "itemsToReconcile": "Éléments à rapprocher",
     "expensesAwaitingApproval": "Notes de frais à approuver",
+    "resourcingPulse": "Pouls des missions",
     "closeReadiness": "État de la clôture",
     "closeReadinessEmpty": "Aucune clôture pour l'instant",
     "agentFindings": "Constats des agents",
@@ -79,7 +80,8 @@
     "weekOf": "semaine du {date}",
     "noBurn": "Aucune consommation nette",
     "cashShortfall": "Manque de trésorerie",
-    "runwayWeeks": "{weeks, plural, one {# semaine d'autonomie} other {# semaines d'autonomie}}"
+    "runwayWeeks": "{weeks, plural, one {# semaine d'autonomie} other {# semaines d'autonomie}}",
+    "resourcingPulse": "Disponibles {bench} · fin de mission {rolloffs} · {overallocated} semaines en surcharge"
   },
   "categories": {
     "kpi": "Indicateurs clés",
@@ -107,6 +109,7 @@
     "overduePayables": "Factures fournisseurs échues en devise de base.",
     "itemsToReconcile": "Lignes de relevé bancaire non rapprochées en attente de rapprochement.",
     "expensesAwaitingApproval": "Notes de frais en attente d'approbation.",
+    "resourcingPulse": "Utilisation, disponibilités et fins de mission.",
     "closeReadiness": "Dernières clôtures et leur étape en cours.",
     "agentFindings": "Constats ouverts des agents en arrière-plan — ouvrir le poste de travail.",
     "revenue": "Chiffre d'affaires comptabilisé depuis le début du mois, en devise de référence.",

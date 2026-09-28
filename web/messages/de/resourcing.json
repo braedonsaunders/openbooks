@@ -1,4 +1,47 @@
 {
+  "cockpit": {
+    "title": "Ressourcen",
+    "description": "Personaleinsatz, Kapazität und Plan gegen Ist.",
+    "vitals": {
+      "capacity": "Nettokapazität · 4 Wochen",
+      "capacityUnknown": "{count} ohne ermittelte Kapazität ausgenommen",
+      "capacityResolved": "Alle Kapazitäten ermittelt",
+      "bench": "Verfügbar",
+      "rolloffs": "Einsatz endet",
+      "overallocated": "Überbuchte Wochen",
+      "utilization": "Auslastung",
+      "utilizationUndefined": "Keine Kapazität erfasst",
+      "utilizationSub": "{from} – {to}"
+    },
+    "tieout": {
+      "title": "Plan gegen Ist",
+      "hint": "Geplante Stunden gegen genehmigte Zeit und Nettokapazität.",
+      "empty": "Keine geplanten oder genehmigten Stunden in diesen Wochen.",
+      "person": "Mitarbeiter",
+      "week": "Woche",
+      "planned": "Geplant",
+      "approved": "Genehmigt",
+      "variance": "Abweichung",
+      "capacity": "Kapazität",
+      "evidence": "Nachweise",
+      "noCapacity": "Keine Kapazität",
+      "overallocated": "Über",
+      "assignments": "Buchung",
+      "absences": "Abwesenheit",
+      "leaveRequest": "Urlaubsantrag",
+      "holidays": "Feiertage",
+      "scheduleTier": "Arbeitszeitmodell"
+    },
+    "tabs": {
+      "overview": "Übersicht",
+      "board": "Besetzungsplanung",
+      "assignments": "Zuweisungen",
+      "requests": "Personalbedarf",
+      "demand": "Personalbedarf",
+      "retainers": "Retainer",
+      "reports": "Auslastungsprognose"
+    }
+  },
   "prefill": { "badge": "Geplant: {hours} Std." },
   "requests": {
     "title": "Personalbedarf",

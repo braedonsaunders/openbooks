@@ -1,4 +1,47 @@
 {
+  "cockpit": {
+    "title": "资源",
+    "description": "人员配置、产能以及计划与实际对比。",
+    "vitals": {
+      "capacity": "净产能·4周",
+      "capacityUnknown": "不含{count}名产能未知人员",
+      "capacityResolved": "已核算全部产能",
+      "bench": "待命",
+      "rolloffs": "即将结束",
+      "overallocated": "超配周",
+      "utilization": "利用率",
+      "utilizationUndefined": "未记录产能",
+      "utilizationSub": "{from} – {to}"
+    },
+    "tieout": {
+      "title": "计划与实际",
+      "hint": "计划工时与已审批工时及净产能对比。",
+      "empty": "这些周没有计划或已审批工时。",
+      "person": "人员",
+      "week": "周",
+      "planned": "计划",
+      "approved": "已审批",
+      "variance": "差异",
+      "capacity": "产能",
+      "evidence": "依据",
+      "noCapacity": "无产能",
+      "overallocated": "超配",
+      "assignments": "预订",
+      "absences": "休假",
+      "leaveRequest": "休假申请",
+      "holidays": "节假日",
+      "scheduleTier": "排班"
+    },
+    "tabs": {
+      "overview": "概览",
+      "board": "人员配置看板",
+      "assignments": "分配",
+      "requests": "资源申请",
+      "demand": "人员需求",
+      "retainers": "预付费",
+      "reports": "利用率预测"
+    }
+  },
   "prefill": { "badge": "计划 {hours} 小时" },
   "requests": {
     "title": "资源申请",

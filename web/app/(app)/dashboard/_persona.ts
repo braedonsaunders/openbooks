@@ -17,6 +17,7 @@ import { inboxContext } from '@/lib/inbox-context'
 import { can, type Authz } from '@/lib/authz'
 import { isFeatureEnabled } from '@/lib/features'
 import { hasAdminPersona } from './_widget-access'
+import { widgetFeatureOn } from './widget-features'
 import { permissionSetCovers } from '@/lib/permissions'
 import type { Persona } from './_persona-layout'
 
@@ -179,7 +180,7 @@ export async function loadPersonaMetrics(
     ? await loadApprovalPerson(db, orgId, userId).then((person) => person.partyId).catch(() => null)
     : null
 
-  if (need('payTile') && (await isFeatureEnabled(orgId, 'payroll')) && partyId) {
+  if (need('payTile') && (await widgetFeatureOn(orgId, 'pay-tile')) && partyId) {
     const [stub, schedule] = await Promise.all([
       db.execute<{ pay_date: string }>(sql`
         select pay_date::text as pay_date from pay_stubs
@@ -233,7 +234,7 @@ export async function loadPersonaMetrics(
     out.payTile = lastPayDate === null && nextPayDate === null ? null : { nextPayDate, lastPayDate, slipHref: '/payroll' }
   }
 
-  if (need('balances') && partyId && (await isFeatureEnabled(orgId, 'hrm'))) {
+  if (need('balances') && partyId && (await widgetFeatureOn(orgId, 'balance-tile'))) {
     const employmentIds = await findEmploymentsByParty({ orgId, actorId: userId, workerPartyId: partyId }).catch(() => [] as readonly string[])
     // Null policy (no coverage) reads as a null balance — uncovered types
     // are skipped, and a tile with no computable balance stays absent
@@ -330,7 +331,7 @@ export async function loadPersonaMetrics(
     out.upcoming = upcoming.slice(0, 5)
   }
 
-  if (need('celebrations') && (await isFeatureEnabled(orgId, 'hrm'))) {
+  if (need('celebrations') && (await widgetFeatureOn(orgId, 'celebrations-list'))) {
     const teamScope = isManager ? teamIds : null
     const rows = (await db.execute<{ name: string; service_start: string }>(sql`
       select p.display_name as name, min(v.effective_from)::text as service_start
@@ -352,7 +353,7 @@ export async function loadPersonaMetrics(
     }))
   }
 
-  if (need('announcements') && (await isFeatureEnabled(orgId, 'homeAnnouncements'))) {
+  if (need('announcements') && (await widgetFeatureOn(orgId, 'announcements-card'))) {
     const persona = isManager ? 'manager' : hasAdminPersona(authz) ? 'admin' : 'employee'
     out.announcements = (await liveHomeAnnouncements(orgId, persona, today)).map((row) => ({ title: row.title, body: row.body }))
   }
@@ -370,7 +371,7 @@ export async function loadPersonaMetrics(
     out.teamSteps = rows.map((row) => ({ title: row.title, owner: row.owner, due: row.due_on }))
   }
 
-  if (need('teamNudges') && isManager && (await isFeatureEnabled(orgId, 'hrm'))) {
+  if (need('teamNudges') && isManager && (await widgetFeatureOn(orgId, 'team-nudges'))) {
     const overdue = (await db.execute<{ n: number }>(sql`
       select count(*)::int as n from hrm_process_steps s
         join hrm_processes p on p.org_id = s.org_id and p.id = s.process_id
@@ -384,7 +385,7 @@ export async function loadPersonaMetrics(
     out.teamNudges = teamNudgeTexts(overdue, joiners, (key, params) => tp(key, params))
   }
 
-  if (need('teamHeadcount') && isManager && (await isFeatureEnabled(orgId, 'hrm'))) {
+  if (need('teamHeadcount') && isManager && (await widgetFeatureOn(orgId, 'team-headcount'))) {
     const rows = (await db.execute<{ n: number }>(sql`
       select count(distinct e.id)::int as n from worker_employments e
         join worker_employment_versions v on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null

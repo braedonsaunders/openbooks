@@ -1,4 +1,47 @@
 {
+  "cockpit": {
+    "title": "Ressources",
+    "description": "Affectations, capacité et plan par rapport au réalisé.",
+    "vitals": {
+      "capacity": "Capacité nette · 4 semaines",
+      "capacityUnknown": "Hors {count} à capacité inconnue",
+      "capacityResolved": "Capacité entièrement calculée",
+      "bench": "Disponibles",
+      "rolloffs": "En fin de mission",
+      "overallocated": "Semaines en surcharge",
+      "utilization": "Utilisation",
+      "utilizationUndefined": "Capacité non renseignée",
+      "utilizationSub": "{from} – {to}"
+    },
+    "tieout": {
+      "title": "Plan par rapport au réalisé",
+      "hint": "Heures planifiées face au temps approuvé et à la capacité nette.",
+      "empty": "Aucune heure planifiée ni approuvée sur ces semaines.",
+      "person": "Personne",
+      "week": "Semaine",
+      "planned": "Planifiées",
+      "approved": "Approuvées",
+      "variance": "Écart",
+      "capacity": "Capacité",
+      "evidence": "Justificatifs",
+      "noCapacity": "Sans capacité",
+      "overallocated": "Surcharge",
+      "assignments": "Réservation",
+      "absences": "Absences",
+      "leaveRequest": "Demande de congé",
+      "holidays": "Jours fériés",
+      "scheduleTier": "Horaire"
+    },
+    "tabs": {
+      "overview": "Aperçu",
+      "board": "Planification des équipes",
+      "assignments": "Affectations",
+      "requests": "Demandes de ressources",
+      "demand": "Besoin en personnel",
+      "retainers": "Forfaits",
+      "reports": "Prévision d’utilisation"
+    }
+  },
   "prefill": { "badge": "Prévu : {hours} h" },
   "requests": {
     "title": "Demandes de ressources",

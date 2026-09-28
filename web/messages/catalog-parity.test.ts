@@ -250,6 +250,14 @@ const COGNATES = new Set<string>([
   'de:resourcing.board.person|Person',
   'de:resourcing.assignments.details|Details',
   'de:resourcing.assignments.person|Person',
+  // The cockpit utilization window is an ICU-only template ({from} – {to})
+  // with no translatable words, identical in every locale.
+  'de:resourcing.cockpit.vitals.utilizationSub|{from} – {to}',
+  'es:resourcing.cockpit.vitals.utilizationSub|{from} – {to}',
+  'fr:resourcing.cockpit.vitals.utilizationSub|{from} – {to}',
+  'ja:resourcing.cockpit.vitals.utilizationSub|{from} – {to}',
+  'pt-BR:resourcing.cockpit.vitals.utilizationSub|{from} – {to}',
+  'zh:resourcing.cockpit.vitals.utilizationSub|{from} – {to}',
   'es:admin.features.scripts.title|Scripts',
   'es:admin.sandboxes.changeSets.tables.user_scripts|Scripts',
   'es:banking.bankFeeds.operational.providers.manual|Manual',

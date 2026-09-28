@@ -29,6 +29,7 @@
     "overduePayables": "Cuentas por pagar vencidas",
     "itemsToReconcile": "Partidas por conciliar",
     "expensesAwaitingApproval": "Informes de gastos por aprobar",
+    "resourcingPulse": "Pulso de dotación",
     "closeReadiness": "Cierre del período",
     "closeReadinessEmpty": "Aún no hay cierres",
     "agentFindings": "Hallazgos de agentes",
@@ -79,7 +80,8 @@
     "weekOf": "semana del {date}",
     "noBurn": "Sin consumo neto",
     "cashShortfall": "Déficit de caja",
-    "runwayWeeks": "{weeks, plural, one {# semana de autonomía} other {# semanas de autonomía}}"
+    "runwayWeeks": "{weeks, plural, one {# semana de autonomía} other {# semanas de autonomía}}",
+    "resourcingPulse": "Disponibles {bench} · finalizan {rolloffs} · {overallocated} semanas sobreasignadas"
   },
   "categories": {
     "kpi": "Indicadores clave",
@@ -107,6 +109,7 @@
     "overduePayables": "Facturas de proveedores vencidas en moneda base.",
     "itemsToReconcile": "Movimientos bancarios sin conciliar pendientes de conciliación.",
     "expensesAwaitingApproval": "Informes de gastos en espera de aprobación.",
+    "resourcingPulse": "Utilización, disponibilidad y asignaciones que finalizan.",
     "closeReadiness": "Últimos cierres contables y su etapa actual.",
     "agentFindings": "Hallazgos abiertos de agentes en segundo plano: ir al panel.",
     "revenue": "Ingresos registrados en el mes hasta la fecha, en moneda base.",

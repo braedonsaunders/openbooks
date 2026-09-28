@@ -1,4 +1,47 @@
 {
+  "cockpit": {
+    "title": "リソース",
+    "description": "人員配置、キャパシティ、計画対実績。",
+    "vitals": {
+      "capacity": "正味キャパシティ・4週間",
+      "capacityUnknown": "キャパシティ不明の{count}人を除く",
+      "capacityResolved": "全員のキャパシティを算出済み",
+      "bench": "待機中",
+      "rolloffs": "終了予定",
+      "overallocated": "過剰割当の週",
+      "utilization": "稼働率",
+      "utilizationUndefined": "キャパシティ未登録",
+      "utilizationSub": "{from} – {to}"
+    },
+    "tieout": {
+      "title": "計画対実績",
+      "hint": "計画工数と承認済み工数・正味キャパシティの照合。",
+      "empty": "これらの週に計画・承認済み工数はありません。",
+      "person": "要員",
+      "week": "週",
+      "planned": "計画",
+      "approved": "承認済み",
+      "variance": "差異",
+      "capacity": "キャパシティ",
+      "evidence": "根拠",
+      "noCapacity": "キャパシティなし",
+      "overallocated": "超過",
+      "assignments": "割当",
+      "absences": "休暇",
+      "leaveRequest": "休暇申請",
+      "holidays": "祝日",
+      "scheduleTier": "勤務体系"
+    },
+    "tabs": {
+      "overview": "概要",
+      "board": "要員配置ボード",
+      "assignments": "割り当て",
+      "requests": "リソース依頼",
+      "demand": "要員需要",
+      "retainers": "リテイナー",
+      "reports": "稼働率予測"
+    }
+  },
   "prefill": { "badge": "予定 {hours} 時間" },
   "requests": {
     "title": "リソース依頼",

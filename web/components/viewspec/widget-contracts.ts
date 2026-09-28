@@ -448,6 +448,8 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'resourcing-demand-rail': { props: [], open: true },
   'resourcing-request-drawer': { props: ['drawer'] },
   'resourcing-retainer-drawer': { props: ['drawer'] },
+  'resourcing-tieout': { props: ['empty', 'labels', 'rows'] },
+  'resourcing-utilization-tile': { props: ['href', 'label', 'sub', 'value'] },
   'result-view': { props: ['company', 'description', 'drillTarget', 'result', 'title'] },
   'retro-workspace': { props: ['canRun', 'schedules'] },
   'review-template-builder': { props: [], open: true },

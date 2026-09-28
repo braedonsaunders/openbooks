@@ -469,6 +469,8 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'resourcing-demand-rail',
   'resourcing-request-drawer',
   'resourcing-retainer-drawer',
+  'resourcing-tieout',
+  'resourcing-utilization-tile',
   'result-view',
   'retro-workspace',
   'row-counts-cell',

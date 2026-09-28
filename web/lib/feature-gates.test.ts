@@ -135,7 +135,6 @@ const UNGATED_BY_DESIGN: Record<string, string> = {
 }
 
 const NAV_ARM_PENDING: Record<string, { pack: string; since: string }> = {
-  resourcing: { pack: 'PS-09', since: '2026-09-27' },
   manufacturing: { pack: 'MF-09', since: '2026-09-27' },
 }
 

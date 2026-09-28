@@ -13,7 +13,7 @@ import type { ModuleHomeTab } from './ui'
  * (nav-module names for cockpits — never a context-dependent "Overview").
  */
 
-export type TabGroup = 'customers' | 'purchasing' | 'banking' | 'accounting' | 'payroll' | 'hrm' | 'warehouse' | 'nonprofit'
+export type TabGroup = 'customers' | 'purchasing' | 'banking' | 'accounting' | 'payroll' | 'hrm' | 'warehouse' | 'nonprofit' | 'resourcing'
 
 // DASHBOARDS AND WORKING SURFACES — a tab lands on a cockpit, or on the ONE
 // canonical list for a thing the group works on daily (accounts, pay runs,
@@ -38,6 +38,18 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     { href: '/purchasing', ns: 'purchasing', key: 'home.title' },
     { href: '/ap', ns: 'nav', key: 'modules.ap' },
     { href: '/expenses', ns: 'nav', key: 'modules.expenses' },
+  ],
+  // The staffing workspace: the cockpit beside the board, the plan lists,
+  // and the utilization report. Requests and Retainers sit behind their
+  // own switches (TAB_FEATURE below) and disappear with the parent.
+  resourcing: [
+    { href: '/resourcing', ns: 'resourcing', key: 'cockpit.tabs.overview' },
+    { href: '/resourcing/board', ns: 'resourcing', key: 'cockpit.tabs.board' },
+    { href: '/resourcing/assignments', ns: 'resourcing', key: 'cockpit.tabs.assignments' },
+    { href: '/resourcing/requests', ns: 'resourcing', key: 'cockpit.tabs.requests' },
+    { href: '/resourcing/demand', ns: 'resourcing', key: 'cockpit.tabs.demand' },
+    { href: '/resourcing/retainers', ns: 'resourcing', key: 'cockpit.tabs.retainers' },
+    { href: '/reports/resourcing/utilization', ns: 'resourcing', key: 'cockpit.tabs.reports' },
   ],
   // The warehouse cockpit beside the inventory workspace it moves stock for,
   // then the pick lists and shipments that take stock out of its bins.
@@ -157,6 +169,8 @@ const TAB_FEATURE: Record<string, string> = {
   '/picks': 'fulfillment',
   '/shipments': 'fulfillment',
   '/returns': 'returnAuthorizations',
+  '/resourcing/requests': 'resourceRequests',
+  '/resourcing/retainers': 'retainerBilling',
 }
 
 /**

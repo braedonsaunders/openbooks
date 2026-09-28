@@ -390,6 +390,15 @@ export const WIDGETS: Record<string, WidgetMeta> = {
     minSize: { w: 2, h: 2 },
     maxSize: { w: 6, h: 4 },
   },
+  'resourcing-pulse': {
+    id: 'resourcing-pulse',
+    category: 'kpi',
+    labelKey: 'widgets.resourcingPulse',
+    descriptionKey: 'catalog.resourcingPulse',
+    defaultSize: { w: 3, h: 2 },
+    minSize: { w: 2, h: 2 },
+    maxSize: { w: 6, h: 4 },
+  },
   'list-close-readiness': {
     id: 'list-close-readiness',
     category: 'kpi',
