@@ -40,3 +40,40 @@ test("manufacturing posts require evidence and appear in the Journal list", { sk
     assert.equal(after, before);
   } finally { await dropScratchOrg(org.orgId); }
 });
+
+test("manufacturing period-pool posts persist only the settlement marker", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Shop lead", "admin"));
+    await withBypassContext(async () => {
+      const rows = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true}'::jsonb) where id=${org.orgId} returning id`);
+      assert.equal(rows.rows.length, 1, "feature update must match its scratch organization");
+    });
+    const before = await withBypassContext(async () => (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`)).rows[0]!.n);
+    const id = await post(org, actorId, { scope: "period-pool" });
+    const entry = (await withBypassContext(async () => await db.execute(sql`select origin,status,custom from journal_entries where org_id=${org.orgId} and id=${id}`))).rows[0]!;
+    assert.equal(entry.origin, "manufacturing"); assert.equal(entry.status, "posted");
+    assert.deepEqual(entry.custom, { settlement_scope: "period-pool" });
+    const after = await withBypassContext(async () => (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`)).rows[0]!.n);
+    assert.equal(after, before + 1);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("manufacturing period-pool refuses extra keys without writing", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Shop lead", "admin"));
+    await withBypassContext(async () => {
+      const rows = await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"manufacturing":true}'::jsonb) where id=${org.orgId} returning id`);
+      assert.equal(rows.rows.length, 1, "feature update must match its scratch organization");
+    });
+    const before = await withBypassContext(async () => (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`)).rows[0]!.n);
+    await assert.rejects(post(org, actorId, { scope: "period-pool", poolNote: "overtime" }), (error: unknown) =>
+      error instanceof ManufacturingPostingError &&
+      error.message.includes("poolNote") &&
+      error.message.includes("remove") &&
+      error.message.includes('"work-order"'));
+    const after = await withBypassContext(async () => (await db.execute(sql`select count(*)::int as n from journal_entries where org_id=${org.orgId} and origin='manufacturing'`)).rows[0]!.n);
+    assert.equal(after, before);
+  } finally { await dropScratchOrg(org.orgId); }
+});

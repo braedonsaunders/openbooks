@@ -14,7 +14,7 @@ import { assertManufacturingFeature } from "./gate.ts";
 
 type InventoryPostInput = Parameters<typeof postInventoryEntry>[1];
 export type ManufacturingPostInput = Omit<InventoryPostInput, "origin" | "custom"> & {
-  custom: ManufacturingEvidence & Record<string, unknown>;
+  custom: ManufacturingEvidence;
 };
 
 const EVIDENCE_KEYS = ["workOrderNumber", "bomRevision", "routingVersion"] as const;
@@ -29,21 +29,27 @@ const EVIDENCE_KEYS = ["workOrderNumber", "bomRevision", "routingVersion"] as co
  */
 export type ManufacturingEvidenceScope = "work-order" | "period-pool";
 
-/** Work-order posting evidence: one released work order, frozen BOM + routing. */
+/**
+ * Work-order posting evidence: one released work order, frozen BOM + routing.
+ * Callers may attach additional source-specific extension keys, which ride
+ * through to storage alongside the mapped snake-case evidence.
+ */
 export interface ManufacturingWorkOrderEvidence {
   /** Defaults to "work-order" when omitted, preserving existing callers. */
   scope?: "work-order";
   workOrderNumber: string;
   bomRevision: string;
   routingVersion: string;
+  /** Extension capability lives only on the work-order branch. */
+  [key: string]: unknown;
 }
 
 /**
- * Period-pool posting evidence for pool-level variance settlement. Carries
- * no work-order number, BOM, or routing: the pool is the entry's own
- * period, book, and subsidiary. Extra keys ride through untouched for the
- * future settlement caller; work-order keys are statically excluded and
- * refused at runtime, never stored.
+ * Period-pool posting evidence for pool-level variance settlement. Admits
+ * only its scope: the pool is the entry's own period, book, and
+ * subsidiary, so no work-order number, BOM, routing, or any other key is
+ * carried. Work-order keys are statically excluded and every extra
+ * supplied key is refused at runtime, never stored.
  */
 export interface ManufacturingPeriodPoolEvidence {
   scope: "period-pool";
@@ -170,20 +176,17 @@ export async function postManufacturingEntry(
   const inputEvidence = p.custom ?? {};
   const scope: unknown = inputEvidence.scope ?? "work-order";
   if (scope === "period-pool") {
-    for (const key of EVIDENCE_KEYS) {
-      if (inputEvidence[key] !== undefined) {
+    for (const key of Object.keys(inputEvidence)) {
+      if (key !== "scope") {
         throw new ManufacturingPostingError(
-          `manufacturing period-pool settlement must not carry work-order evidence key ${key}; post work-order costs under scope "work-order" instead`,
+          `manufacturing period-pool settlement must not carry evidence key "${key}"; remove it because period, book, and subsidiary are the journal's governed fields — post work-order evidence under scope "work-order" instead`,
         );
       }
     }
-    const { scope: _declaredScope, ...otherEvidence } = inputEvidence;
-    void _declaredScope;
     return postInventoryEntry(tx, {
       ...p,
       origin: "manufacturing",
       custom: {
-        ...otherEvidence,
         [PERIOD_POOL_SCOPE_KEY]: PERIOD_POOL_SCOPE_VALUE,
       },
     });
