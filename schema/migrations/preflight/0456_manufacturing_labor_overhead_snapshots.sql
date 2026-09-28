@@ -9,4 +9,4 @@ SELECT '0456.unknown_overhead_rate_kind' AS code,
        'the overhead rate kind is not a recognized job-costing basis' AS detail,
        'Remap the rate to per_hour, percent, per_unit, or per_machine_hour before retrying the upgrade.' AS remedy
   FROM public.overhead_rates
- WHERE rate_kind NOT IN ('per_hour', 'percent');
+ WHERE rate_kind NOT IN ('per_hour', 'percent', 'per_unit', 'per_machine_hour');
