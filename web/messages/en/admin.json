@@ -720,6 +720,18 @@
           "label": "Material Usage Variance account",
           "hint": "Production material usage differences are posted here."
         },
+        "mfgLaborEfficiencyVariance": {
+          "label": "Labor Efficiency Variance",
+          "hint": "Differences between actual shop-floor minutes and the frozen standard are posted here."
+        },
+        "mfgOverheadVariance": {
+          "label": "Overhead Variance",
+          "hint": "Under- and over-applied manufacturing overhead settles here each period."
+        },
+        "mfgOverheadApplied": {
+          "label": "Manufacturing Overhead Applied",
+          "hint": "Applied manufacturing overhead is credited here when work-order costs absorb it."
+        },
         "laborClearing": {
           "label": "Labor clearing",
           "hint": "Credited when labor is charged to a project; cleared by payroll"
@@ -4087,6 +4099,9 @@
         "laborWip": "Labor WIP / job cost account",
         "mfgWip": "Manufacturing WIP account",
         "mfgMaterialUsageVariance": "Material Usage Variance account",
+        "mfgLaborEfficiencyVariance": "Labor Efficiency Variance account",
+        "mfgOverheadVariance": "Overhead Variance account",
+        "mfgOverheadApplied": "Manufacturing Overhead Applied account",
         "laborClearing": "Labor clearing account",
         "overheadNote": "Overhead is not part of this rate — it is applied by the Overhead Model as its own layer.",
         "payrollVariance": "Payroll variance account",

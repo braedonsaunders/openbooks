@@ -711,6 +711,18 @@
           "label": "Cuenta de variación por consumo de materiales",
           "hint": "Aquí se contabilizan las variaciones del consumo de materiales de producción."
         },
+        "mfgLaborEfficiencyVariance": {
+          "label": "Cuenta de variación por eficiencia de mano de obra",
+          "hint": "Aquí se contabilizan las variaciones entre los minutos reales de planta y el estándar fijado."
+        },
+        "mfgOverheadVariance": {
+          "label": "Cuenta de variación de costos indirectos",
+          "hint": "Los costos indirectos de fabricación aplicados en exceso o en defecto se liquidan aquí cada período."
+        },
+        "mfgOverheadApplied": {
+          "label": "Cuenta de costos indirectos aplicados",
+          "hint": "Los costos indirectos de fabricación aplicados se acreditan aquí cuando las órdenes los absorben."
+        },
         "laborClearing": {
           "label": "Compensación de mano de obra",
           "hint": "Se acredita cuando la mano de obra se carga a un proyecto; se liquida por nómina"
@@ -4039,6 +4051,9 @@
         "laborWip": "Cuenta de obra en curso / costo de proyecto",
         "mfgWip": "Cuenta de producción en curso",
         "mfgMaterialUsageVariance": "Cuenta de variación por consumo de materiales",
+        "mfgLaborEfficiencyVariance": "Cuenta de variación por eficiencia de mano de obra",
+        "mfgOverheadVariance": "Cuenta de variación de costos indirectos",
+        "mfgOverheadApplied": "Cuenta de costos indirectos aplicados",
         "laborClearing": "Cuenta puente de mano de obra",
         "overheadNote": "Los gastos generales no forman parte de esta tarifa — los aplica el Modelo de gastos generales como su propia capa.",
         "payrollVariance": "Cuenta de variación de nómina",
