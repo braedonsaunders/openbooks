@@ -190,6 +190,25 @@ export interface SetupFilter {
   nullMatchesAll?: boolean
 }
 
+/**
+ * A setup entity whose writes go through a domain command instead of generic
+ * CRUD. The name, permission, and feature are declaration-owned, never
+ * request-controlled: the command route dispatches on the literal name, gates
+ * the declared permission and feature server-side, and parses the body with
+ * the command's own strict schema. Generic CRUD refuses command-owned
+ * entities before body parsing with a remedy naming the command endpoint.
+ */
+export type SetupCommandName = 'setFramework' | 'setFundPair' | 'setFunctionalMapping'
+
+export interface SetupCommandDescriptor {
+  /** Exhaustive dispatch key — exactly one of the three nonprofit commands. */
+  name: SetupCommandName
+  /** Mutation grant the command endpoint enforces (least-privilege funds pair). */
+  permission: 'funds.manage'
+  /** Authoritative Company Settings → Features key enforced server-side. */
+  feature: 'fundAccounting' | 'functionalExpenses'
+}
+
 export interface SetupEntity {
   /** URL slug, e.g. 'tax-codes'. */
   key: string
@@ -246,6 +265,9 @@ export interface SetupEntity {
   /** Optional-feature gate (web/lib/features.ts key). When the feature is off,
    *  this entity is hidden from the setup rail and 404s as a standalone page. */
   featureKey?: string
+  /** Command ownership: when present, generic CRUD refuses this entity and
+   *  writes go through the entity-addressed command endpoint instead. */
+  command?: SetupCommandDescriptor
   /** Additional permission required to create, edit, or delete this entity. */
   writePermission?: string
   /** Server-side validation for invariants that belong to one entity. */

@@ -136,8 +136,18 @@ export async function SetupEntitySection({
       : gated,
   )
   const drawerEntity = setupEntityClientDescriptor(entity)
-  const currentAuthz = entity.writePermission ? await getAuthz() : null
-  const canWriteEntity = canManage && (!entity.writePermission || Boolean(currentAuthz && can(currentAuthz, entity.writePermission)))
+  // Command-owned entities mutate through their domain command: the marker's
+  // permission (funds.manage) gates the mutation UI, derived from the same
+  // discriminant the drawer, the CRUD refusal, and the command route honor.
+  // Read gates are untouched — pages require funds.read, never manage.
+  const commandPermission = entity.command?.permission
+  const currentAuthz = entity.writePermission || commandPermission ? await getAuthz() : null
+  // Command-owned mutation authority comes from the marker alone — never
+  // stacked with canManage/admin.setup.manage. Generic entities keep their
+  // existing authority path; reader visibility is unchanged.
+  const canWriteEntity = commandPermission
+    ? Boolean(currentAuthz && can(currentAuthz, commandPermission))
+    : canManage && (!entity.writePermission || Boolean(currentAuthz && can(currentAuthz, entity.writePermission)))
   const t = await getTranslations('admin.setup')
   const locale = await getLocale()
   const rawRow = sp[rowParam]

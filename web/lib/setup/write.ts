@@ -1688,6 +1688,21 @@ function bomCommandOnly(entity: SetupEntity): SetupWriteResult | null {
   }
 }
 
+/**
+ * Command-owned setup entities never reach generic INSERT/UPDATE/DELETE. A
+ * framework, fund pair, or functional mapping written as a plain row would
+ * skip the reason, the exactly-one-subject check, and the audit the domain
+ * command records — so every generic verb refuses here, in the preflight and
+ * in each command, before body parsing. The remedy names the real endpoint.
+ */
+function commandOwnedOnly(entity: SetupEntity): SetupWriteResult | null {
+  if (!entity.command) return null
+  return {
+    status: 405,
+    body: { error: `This configuration changes only through its setup command (POST /api/admin/setup/${entity.key}/command), which records the reason and audit. Open Nonprofit Setup to make this change.` },
+  }
+}
+
 /** Shipments keep the carrier they named, so a carrier is retired by
  *  clearing Active (an inactive carrier cannot be chosen on a shipment). */
 const CARRIER_DELETE_REFUSAL: SetupWriteResult = {
@@ -1716,6 +1731,8 @@ export async function preflightSetupWrite(
   if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
   if (owned) return owned
+  const commanded = commandOwnedOnly(entity)
+  if (commanded) return commanded
   if (method === 'create' && entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (method === 'delete' && entity.key === 'carriers') return CARRIER_DELETE_REFUSAL
   if (method === 'delete' && entity.allowDelete === false) return { status: 405, body: { error: 'Module setting history is preserved' } }
@@ -1782,6 +1799,8 @@ export async function createSetupRecord(
   if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
   if (owned) return owned
+  const commanded = commandOwnedOnly(entity)
+  if (commanded) return commanded
   if (entity.allowCreate === false) return { status: 405, body: { error: 'This configuration is declared by its module' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
   const requestId = options.requestId ?? randomUUID()
@@ -2196,6 +2215,8 @@ export async function updateSetupRecord(
   if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
   if (owned) return owned
+  const commanded = commandOwnedOnly(entity)
+  if (commanded) return commanded
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
 
   let reviewFolded: Record<string, unknown>
@@ -2813,6 +2834,8 @@ export async function deleteSetupRecord(
   if (scopeRefusal) return scopeRefusal
   const owned = bomCommandOnly(entity)
   if (owned) return owned
+  const commanded = commandOwnedOnly(entity)
+  if (commanded) return commanded
   if (entity.key === 'carriers') return CARRIER_DELETE_REFUSAL
   if (entity.allowDelete === false) return { status: 405, body: { error: 'Module setting history is preserved' } }
   if (entity.readOnly) return { status: 405, body: { error: 'read-only' } }
