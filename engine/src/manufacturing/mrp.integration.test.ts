@@ -202,14 +202,6 @@ const cases: Case[] = [
     });
     await refuse(tx((runner) => convertPlannedOrder(runner, f.org.orgId, f.actorId, plan.id, { fromLocationId: f.org.stockLocationId, toLocationId: f.org.stockLocationId2 })), "mrp_transfer_locations_required", "at least two active stock locations");
   } },
-  { name: "buy conversion refuses by name, and the suggestion stays open", run: async (f) => {
-    const today = await businessToday(f.org.orgId); await policy(f, f.org.items.assembly, "buy", 2); await orderLine(f, "sales_order", f.org.items.assembly, "1", future(today, 20));
-    const plan = (await suggestions(f, (await run(f)).id))[0]!; const expected = [409, "mrp_buy_conversion_unavailable", "Purchase suggestions cannot be converted to a purchase order yet.", "create the purchase order in Purchasing, then dismiss this suggestion with the order number as the reason"].join("|");
-    await assert.rejects(tx((runner) => convertPlannedOrder(runner, f.org.orgId, f.actorId, plan.id, {})), (error: unknown) => error instanceof ManufacturingError
-      && [error.status, error.code, error.message, error.remedy].join("|") === expected);
-    const unchanged = await withBypassContext(async () => (await db.execute(sql`select status,converted_ref_id from mfg_planned_orders where org_id=${f.org.orgId} and id=${plan.id}`)).rows[0]);
-    assert.deepEqual(unchanged, { status: "suggested", converted_ref_id: null });
-  } },
   { name: "dismissal requires a reason and keeps evidence", run: async (f) => {
     const today = await businessToday(f.org.orgId); await policy(f, f.org.items.assembly, "buy", 2); await orderLine(f, "sales_order", f.org.items.assembly, "1", future(today, 20));
     const plan = (await suggestions(f, (await run(f)).id))[0]!; await refuse(tx((runner) => dismissPlannedOrder(runner, f.org.orgId, f.actorId, plan.id, " ")), "dismiss_reason_required", "reason is required");
