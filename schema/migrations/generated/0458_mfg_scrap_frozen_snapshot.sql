@@ -237,9 +237,9 @@ BEGIN
     RAISE EXCEPTION 'financial change subsidiary must belong to the organization';
   END IF;
   IF TG_OP='INSERT' THEN
-    -- OM-13c clone replay: the sandbox/sample-company clone replays
-    -- immutable terminal history verbatim under the clone authority (0316:
-    -- openbooks.clone with openbooks.migration and openbooks.amend asserted
+    -- Clone replay admission: the sandbox/sample-company clone replays
+    -- immutable terminal history verbatim under the clone authority
+    -- (openbooks.clone with openbooks.migration and openbooks.amend asserted
     -- together inside runClone's own RLS-bypass maintenance transaction).
     -- Admit that replayed INSERT while every ordinary session keeps the
     -- born-draft refusal below. UPDATE and DELETE of this history stay
@@ -247,7 +247,7 @@ BEGIN
     IF public.openbooks_clone_authority() THEN RETURN NEW; END IF;
     IF NEW.status <> 'draft' THEN RAISE EXCEPTION 'financial changes must start as draft'; END IF;
   END IF;
-  -- MF-06c frozen scrap snapshots: one shared manufacturing binding block. A
+  -- Manufacturing restatement binding: one shared block. A
   -- manufacturing change is admitted only for the controlled scrap
   -- restatement, bound by value to the staged event, its work order, and
   -- the booking subsidiary. This block executes on the ordinary INSERT path
@@ -320,7 +320,7 @@ BEGIN
        WHERE journal_entry.org_id = NEW.org_id
          AND journal_entry.id = scrap_posted_entry_id;
       IF NOT FOUND THEN
-        RAISE EXCEPTION 'manufacturing scrap restatement for event % references posted entry % which has no same-organization journal entry; post the entry first', NEW.subject_id, scrap_posted_entry_id;
+        RAISE EXCEPTION 'manufacturing scrap restatement for event % references posted entry % which has no same-organization journal entry; reconcile the posted entry through the controlled accounting evidence correction workflow before retrying the restatement, without posting a duplicate entry, reversing the entry, rewriting the event, or fabricating journal evidence', NEW.subject_id, scrap_posted_entry_id;
       END IF;
       IF scrap_posted_journal_subsidiary_id IS DISTINCT FROM NEW.subsidiary_id THEN
         RAISE EXCEPTION 'manufacturing scrap restatement for event % posted entry % books subsidiary %, not the bound booking subsidiary %', NEW.subject_id, scrap_posted_entry_id, scrap_posted_journal_subsidiary_id, NEW.subsidiary_id;

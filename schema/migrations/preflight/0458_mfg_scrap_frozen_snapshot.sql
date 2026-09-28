@@ -69,7 +69,8 @@ SELECT '0458.snapshot_object_present' AS code,
             FROM pg_proc p
             JOIN pg_namespace n ON n.oid = p.pronamespace
            WHERE n.nspname = 'public'
-             AND p.proname = wanted.name))
+             AND p.proname = wanted.name
+             AND p.pronargs = 0))
 UNION ALL
 SELECT '0458.snapshot_type_missing' AS code,
        'refuse' AS severity,
