@@ -119,7 +119,7 @@ export async function loadPlanVsActual(
   }
 
   const keys = new Set<string>([...facts.keys(), ...approved.keys()]);
-  const absenceIds = [...new Set([...facts.values()].flatMap((fact) => fact.timeOff.absenceRowIds))];
+  const absenceIds = [...new Set([...facts.values()].flatMap((fact) => fact.timeOff?.absenceRowIds ?? []))];
   const leaveRequests = new Map<string, string | null>();
   if (absenceIds.length > 0) {
     const absenceRows = await db.execute<{ id: string; leave_request_id: string | null }>(sql`
@@ -155,10 +155,10 @@ export async function loadPlanVsActual(
       overallocated: fact?.overallocated ?? null,
       capacityTier: fact?.capacity?.tier.tier ?? "unknown",
       scheduleIds,
-      holidayDates: (fact?.holidays.dates ?? []).map((holiday) => holiday.date).sort(),
-      holidayJurisdiction: fact?.holidays.jurisdiction ?? null,
-      holidaysApplied: fact?.holidays.applied ?? false,
-      absences: [...(fact?.timeOff.absenceRowIds ?? [])].sort().map((absenceId) => ({
+      holidayDates: (fact?.holidays?.dates ?? []).map((holiday) => holiday.date).sort(),
+      holidayJurisdiction: fact?.holidays?.jurisdiction ?? null,
+      holidaysApplied: fact?.holidays?.applied ?? false,
+      absences: [...(fact?.timeOff?.absenceRowIds ?? [])].sort().map((absenceId) => ({
         absenceId,
         leaveRequestId: leaveRequests.get(absenceId) ?? null,
       })),

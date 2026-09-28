@@ -13,14 +13,19 @@ const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
 type Seed = {
   org: Awaited<ReturnType<typeof createScratchOrg>>
   actorId: string
-  ids: Record<string, string>
+  ids: ReturnType<typeof seedIds>
+}
+
+function seedIds() {
+  return {
+    taxDept: randomUUID(), advisoryDept: randomUUID(), alice: randomUUID(), bob: randomUUID(),
+    carol: randomUUID(), project: randomUUID(), openStatus: randomUUID(), openOpp: randomUUID(),
+  }
 }
 
 async function seedOrg(): Promise<Seed> {
   const org = await withBypassContext(() => createScratchOrg())
-  const ids = Object.fromEntries([
-    'taxDept', 'advisoryDept', 'alice', 'bob', 'carol', 'project', 'openStatus', 'openOpp',
-  ].map((name) => [name, randomUUID()])) as Record<string, string>
+  const ids = seedIds()
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, 'Busy-season operator', 'admin'))
   await withBypassContext(async () => {
     await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true}'::jsonb, true) where id = ${org.orgId}`)
@@ -93,8 +98,12 @@ test('busy-season gaps, spans, evidence, and fail-closed refusals', enabled, asy
   const main = await seedOrg()
   orgs.push(main)
   const { ids } = main
-  const extra = Object.fromEntries(['hiddenSub', 'hiddenDept', 'hiddenProject', 'inactiveProject', 'closedProject', 'cancelledProject', 'wonStatus', 'wonOpp', 'manualLine', 'pipelineLine', 'advisoryLine', 'hiddenLine', 'wonLine']
-    .map((name) => [name, randomUUID()])) as Record<string, string>
+  const extra = {
+    hiddenSub: randomUUID(), hiddenDept: randomUUID(), hiddenProject: randomUUID(),
+    inactiveProject: randomUUID(), closedProject: randomUUID(), cancelledProject: randomUUID(),
+    wonStatus: randomUUID(), wonOpp: randomUUID(), manualLine: randomUUID(), pipelineLine: randomUUID(),
+    advisoryLine: randomUUID(), hiddenLine: randomUUID(), wonLine: randomUUID(),
+  }
   await withBypassContext(async () => {
     await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${extra.hiddenSub},${main.org.orgId},${main.org.subsidiaryId},'Hidden resourcing entity','CAD','CA')`)
     await db.execute(sql`insert into departments(id,org_id,name,subsidiary_id) values (${extra.hiddenDept},${main.org.orgId},'Hidden practice',${extra.hiddenSub})`)

@@ -6,7 +6,7 @@ import type { AssistantToolDef, ToolResult } from "./types";
 import { compactRows, uuidInput } from "./tools-shared";
 import { ResourcingRefusal } from "@openbooks/engine/src/resourcing/errors.ts";
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { defaultListView, type FilterClause } from "@openbooks/customization";
+import { type FilterClause } from "@openbooks/customization";
 import { loadAssignmentDrawerData } from "../resourcing/assignment-drawer.ts";
 import { loadDemandWeeks } from "../resourcing/demand.ts";
 import { loadRetainerKpis } from "../resourcing/retainer-kpis.ts";

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { and, eq, sql } from 'drizzle-orm'
+import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { grid, page, pageHeader, ref, statTile, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
@@ -101,7 +101,7 @@ export type RetainerKpiTile = {
   label: string
   value: string
   sub?: string
-  tone?: string
+  tone?: 'default' | 'positive' | 'warning' | 'negative'
 }
 
 export type RetainersData = {
@@ -224,8 +224,8 @@ export async function loadRetainersPage(
     let obligationId = loaded?.obligationId ?? null
     if (loaded) {
       try {
-        const synced = await withOrgTransaction(authz.user.orgId, (tx) =>
-          syncRetainerActivation(tx, authz.user.orgId, loaded.id, authz.user.id))
+        const synced = await withOrgTransaction(authz.user.orgId, () =>
+          syncRetainerActivation(db, authz.user.orgId, loaded.id, authz.user.id))
         if (synced) {
           state = synced.state
           obligationId = synced.obligationId
