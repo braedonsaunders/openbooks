@@ -217,12 +217,20 @@ export function SetupDrawer({
         body.expectedValue = row!.value
         body.expectedExtensionVersionId = row!.extension_version_id
       }
-      if (creating && !createRequestIdRef.current) createRequestIdRef.current = crypto.randomUUID()
-      const res = await fetch(`/api/admin/setup/${entity.key}`, {
-        method: creating ? 'POST' : 'PATCH',
+      // Command-owned entities save through their domain command, never the
+      // generic endpoint (which refuses them with the same remedy): the
+      // command records the reason and audit the row write cannot. Every
+      // command is an upsert, so creates and edits both POST the payload —
+      // and both mint the stable session key, because the command endpoint
+      // fences on it: without a key the save is refused, never silently
+      // unguarded.
+      const commanded = entity.command
+      if ((creating || commanded) && !createRequestIdRef.current) createRequestIdRef.current = crypto.randomUUID()
+      const res = await fetch(commanded ? `/api/admin/setup/${entity.key}/command` : `/api/admin/setup/${entity.key}`, {
+        method: commanded ? 'POST' : creating ? 'POST' : 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          ...(creating ? { 'Idempotency-Key': createRequestIdRef.current! } : {}),
+          ...((creating || commanded) ? { 'Idempotency-Key': createRequestIdRef.current! } : {}),
         },
         body: JSON.stringify(body),
         signal: controller.signal,
