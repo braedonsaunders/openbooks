@@ -1275,7 +1275,7 @@ const SOURCES: Record<string, EntityListSource> = {
       assertUnrestrictedScope(allowedSubsidiaryIds)
       const parts = [sql`g.org_id = ${orgId}`]
       if (adhoc.q) parts.push(sql`and (g.code ilike ${`%${adhoc.q}%`} or g.name ilike ${`%${adhoc.q}%`} or p.display_name ilike ${`%${adhoc.q}%`})`)
-      if (adhoc.filters.status) parts.push(sql`and g.status = ${adhoc.filters.status}`)
+      if (adhoc.filters?.status) parts.push(sql`and g.status = ${adhoc.filters.status}`)
       for (const filter of view.filters) {
         if (pushCustomFieldFilter(parts, filter, 'g') || pushNonprofitStatusFilter(parts, filter, sql`g.status`, ['draft', 'awarded', 'active', 'closed_out', 'closed', 'void'])) continue
         parts.push(sql`and false`)
@@ -1307,7 +1307,7 @@ const SOURCES: Record<string, EntityListSource> = {
     where: (view, adhoc, orgId, allowedSubsidiaryIds) => {
       const resolvedScope = allowedSubsidiaryIds === undefined ? new Set<string>() : allowedSubsidiaryIds, parts = [sql`e.org_id = ${orgId}`, subsidiaryVisibleFilter(sql`e.subsidiary_id`, resolvedScope)]
       if (adhoc.q) parts.push(sql`and (e.encumbrance_number ilike ${`%${adhoc.q}%`} or a.number ilike ${`%${adhoc.q}%`} or a.name ilike ${`%${adhoc.q}%`})`)
-      if (adhoc.filters.status) parts.push(sql`and e.status = ${adhoc.filters.status}`)
+      if (adhoc.filters?.status) parts.push(sql`and e.status = ${adhoc.filters.status}`)
       for (const filter of view.filters) {
         if (pushCustomFieldFilter(parts, filter, 'e') || pushNonprofitStatusFilter(parts, filter, sql`e.status`, ['open', 'closed', 'void'])) continue
         parts.push(sql`and false`)

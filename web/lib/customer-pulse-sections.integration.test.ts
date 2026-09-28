@@ -9,6 +9,7 @@ const { postDocument } = await import('@openbooks/engine/src/ledger/posting-docu
 const { loadCustomerPulse } = await import('./customer-pulse.ts')
 
 const FULL: CustomerPulseSections = { ar: true, crm: true, projects: true }
+const AR_ONLY: CustomerPulseSections = { ar: true, crm: false, projects: false }
 
 /**
  * The pulse is a combined payload: each section needs its own read. A

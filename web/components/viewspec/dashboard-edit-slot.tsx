@@ -57,7 +57,7 @@ export async function DashboardEditSlot() {
       mode="edit"
       libraryCards={libraryCards}
       apps={apps}
-      allowedWidgetIds={allowedWidgetIds}
+      allowedWidgetIds={[...allowedWidgetIds]}
       quickActionsSaveAction={saveQuickActions}
       hiddenQuickActionIds={hiddenQuickActionIds}
     />
