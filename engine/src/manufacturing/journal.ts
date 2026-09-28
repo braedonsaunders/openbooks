@@ -19,7 +19,101 @@ export type ManufacturingPostInput = Omit<InventoryPostInput, "origin"> & {
 
 const EVIDENCE_KEYS = ["workOrderNumber", "bomRevision", "routingVersion"] as const;
 
-export type ManufacturingControlAccountRole = "mfgWip" | "mfgMaterialUsageVariance";
+/**
+ * Posting evidence scope for a manufacturing journal. Work-order postings
+ * carry one released work order with its frozen BOM and routing; period-pool
+ * postings settle a whole period pool (future pool-level labor/overhead
+ * variance settlement) and are identified by the entry's own
+ * period/book/subsidiary — never by a work order. The two shapes are
+ * mutually exclusive: a caller passes exactly one scope.
+ */
+export type ManufacturingEvidenceScope = "work-order" | "period-pool";
+
+/** Work-order posting evidence: one released work order, frozen BOM + routing. */
+export interface ManufacturingWorkOrderEvidence {
+  /** Defaults to "work-order" when omitted, preserving existing callers. */
+  scope?: "work-order";
+  workOrderNumber: string;
+  bomRevision: string;
+  routingVersion: string;
+}
+
+/**
+ * Period-pool posting evidence for pool-level variance settlement. Carries
+ * no work-order number, BOM, or routing: the pool is the entry's own
+ * period, book, and subsidiary. Extra keys ride through untouched for the
+ * future settlement caller; work-order keys are refused, never stored.
+ */
+export interface ManufacturingPeriodPoolEvidence {
+  scope: "period-pool";
+}
+
+export type ManufacturingEvidence =
+  | ManufacturingWorkOrderEvidence
+  | ManufacturingPeriodPoolEvidence;
+
+/** Stored scope marker for period-pool settlement postings. */
+const PERIOD_POOL_SCOPE_KEY = "settlement_scope";
+const PERIOD_POOL_SCOPE_VALUE = "period-pool";
+
+export type ManufacturingControlAccountRole =
+  | "mfgWip"
+  | "mfgMaterialUsageVariance"
+  | "mfgLaborEfficiencyVariance"
+  | "mfgOverheadVariance"
+  | "mfgOverheadApplied"
+  | "laborClearing";
+
+interface ManufacturingControlAccountMeta {
+  /** Operator-facing account label used in the mapping remedy. */
+  label: string;
+  /** Refusal code when the role has no mapping. */
+  missingCode: string;
+  /** Refusal code when the mapping is invalid or unusable. */
+  invalidCode: string;
+}
+
+/**
+ * One authoritative mapping owns every manufacturing control-account role's
+ * operator label and refusal codes. The allowed account-type policy stays
+ * owned by CONTROL_ACCOUNT_TYPE_POLICY and loadControlAccounts remains the
+ * only control reader: no account ids are hardcoded here.
+ */
+const MANUFACTURING_CONTROL_ACCOUNT_META: Record<
+  ManufacturingControlAccountRole,
+  ManufacturingControlAccountMeta
+> = {
+  mfgWip: {
+    label: "Manufacturing WIP",
+    missingCode: "mfg_wip_account_missing",
+    invalidCode: "mfgWip_account_invalid",
+  },
+  mfgMaterialUsageVariance: {
+    label: "Material Usage Variance",
+    missingCode: "mfgMaterialUsageVariance_account_missing",
+    invalidCode: "mfgMaterialUsageVariance_account_invalid",
+  },
+  mfgLaborEfficiencyVariance: {
+    label: "Labor Efficiency Variance",
+    missingCode: "mfgLaborEfficiencyVariance_account_missing",
+    invalidCode: "mfgLaborEfficiencyVariance_account_invalid",
+  },
+  mfgOverheadVariance: {
+    label: "Manufacturing Overhead Variance",
+    missingCode: "mfgOverheadVariance_account_missing",
+    invalidCode: "mfgOverheadVariance_account_invalid",
+  },
+  mfgOverheadApplied: {
+    label: "Manufacturing Overhead Applied",
+    missingCode: "mfgOverheadApplied_account_missing",
+    invalidCode: "mfgOverheadApplied_account_invalid",
+  },
+  laborClearing: {
+    label: "Labor Clearing",
+    missingCode: "laborClearing_account_missing",
+    invalidCode: "laborClearing_account_invalid",
+  },
+};
 
 export async function manufacturingControlAccount(
   tx: SqlExecutor,
@@ -28,26 +122,24 @@ export async function manufacturingControlAccount(
   role: ManufacturingControlAccountRole,
 ): Promise<string> {
   void subsidiaryId;
+  const meta = MANUFACTURING_CONTROL_ACCOUNT_META[role];
+  const remedy = `Map ${meta.label} under Setup → Company & Accounting → Control accounts.`;
   let mappings: Partial<Record<ControlAccountRole, string>>;
   try {
     mappings = await loadControlAccounts(orgId);
   } catch (error) {
     if (error instanceof ControlAccountsIncompleteError && error.message.startsWith(`${role} control account`)) {
-      const label = role === "mfgWip" ? "Manufacturing WIP" : "Material Usage Variance";
-      const remedy = `Map ${label} under Setup → Company & Accounting → Control accounts.`;
       throw new ManufacturingError(`The Manufacturing control account role ${role} is not mapped to a valid account.`, {
-        code: `${role}_account_invalid`, remedy,
+        code: meta.invalidCode, remedy,
       });
     }
     throw error;
   }
 
   const accountId = mappings[role];
-  const label = role === "mfgWip" ? "Manufacturing WIP" : "Material Usage Variance";
-  const remedy = `Map ${label} under Setup → Company & Accounting → Control accounts.`;
   if (!accountId) {
     throw new ManufacturingError(`The Manufacturing control account role ${role} is not mapped.`, {
-      code: role === "mfgWip" ? "mfg_wip_account_missing" : `${role}_account_missing`, remedy,
+      code: meta.missingCode, remedy,
     });
   }
 
@@ -59,7 +151,7 @@ export async function manufacturingControlAccount(
   const allowedTypes: readonly string[] = CONTROL_ACCOUNT_TYPE_POLICY[role];
   if (!account || !account.is_active || account.is_summary || !allowedTypes.includes(account.type)) {
     throw new ManufacturingError(`The Manufacturing control account role ${role} is not mapped to an active posting account.`, {
-      code: `${role}_account_invalid`, remedy,
+      code: meta.invalidCode, remedy,
     });
   }
   await assertInventoryAccountsPostable(tx as Runner, orgId, [account.id]);
@@ -72,6 +164,31 @@ export async function postManufacturingEntry(
 ): Promise<string> {
   await assertManufacturingFeature(tx, p.orgId, "manufacturing");
   const inputEvidence = p.custom ?? {};
+  const scope: unknown = inputEvidence.scope ?? "work-order";
+  if (scope === "period-pool") {
+    for (const key of EVIDENCE_KEYS) {
+      if (inputEvidence[key] !== undefined) {
+        throw new ManufacturingPostingError(
+          `manufacturing period-pool settlement must not carry work-order evidence key ${key}; post work-order costs under scope "work-order" instead`,
+        );
+      }
+    }
+    const { scope: _declaredScope, ...otherEvidence } = inputEvidence;
+    void _declaredScope;
+    return postInventoryEntry(tx, {
+      ...p,
+      origin: "manufacturing",
+      custom: {
+        ...otherEvidence,
+        [PERIOD_POOL_SCOPE_KEY]: PERIOD_POOL_SCOPE_VALUE,
+      },
+    });
+  }
+  if (scope !== "work-order") {
+    throw new ManufacturingPostingError(
+      `manufacturing posting scope must be "work-order" or "period-pool"`,
+    );
+  }
   for (const key of EVIDENCE_KEYS) {
     if (typeof inputEvidence[key] !== "string" || inputEvidence[key].trim() === "") {
       throw new ManufacturingPostingError(
@@ -79,7 +196,8 @@ export async function postManufacturingEntry(
       );
     }
   }
-  const { workOrderNumber, bomRevision, routingVersion, ...otherEvidence } = inputEvidence;
+  const { workOrderNumber, bomRevision, routingVersion, scope: _declaredScope, ...otherEvidence } = inputEvidence;
+  void _declaredScope;
   return postInventoryEntry(tx, {
     ...p,
     origin: "manufacturing",
