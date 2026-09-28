@@ -70,11 +70,13 @@ async function seedPriorMetric(args: {
     insert into saas_metrics_monthly
       (org_id, subsidiary_id, customer_id, subscription_id, month, cohort_month,
        mrr_start, mrr_end, new_mrr, expansion_mrr, contraction_mrr, churned_mrr,
-       reactivation_mrr, movement, recognized_revenue, deferred_delta, inputs_hash)
+       reactivation_mrr, movement, recognized_revenue, deferred_delta, inputs_hash,
+       reporting_currency, denomination_version, normalization_evidence)
     values (${args.orgId}, ${args.subsidiaryId}, ${args.customerId}, ${args.subscriptionId},
             ${args.month}::date, ${args.month}::date, '0', ${args.mrrEnd},
             ${args.movement === "new" ? args.mrrEnd : "0"}, '0', '0', '0', '0',
-            ${args.movement}, '0', '0', 'history-seed')
+            ${args.movement}, '0', '0', 'history-seed',
+            'CAD', 'v1', '{"inputs_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}')
     returning id
   `);
   assert.equal(result.rows.length, 1, "the prior-month metric must be stored");
@@ -124,9 +126,11 @@ test("SaaS metrics movements reconcile by subsidiary and a bad movement identity
         insert into saas_metrics_monthly
           (org_id, subsidiary_id, customer_id, subscription_id, month, cohort_month,
            mrr_start, mrr_end, new_mrr, expansion_mrr, contraction_mrr, churned_mrr,
-           reactivation_mrr, movement, recognized_revenue, deferred_delta, inputs_hash)
+           reactivation_mrr, movement, recognized_revenue, deferred_delta, inputs_hash,
+           reporting_currency, denomination_version, normalization_evidence)
         values (${org.orgId}, ${secondSubsidiaryId}, ${secondCustomerId}, ${ids.reactivation},
-                '2026-06-01', '2026-05-01', '50', '0', '0', '0', '0', '50', '0', 'churn', '0', '0', 'history-seed')
+                '2026-06-01', '2026-05-01', '50', '0', '0', '0', '0', '50', '0', 'churn', '0', '0', 'history-seed',
+                'CAD', 'v1', '{"inputs_hash":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}')
         returning id
       `);
       assert.equal(reactivation.rows.length, 1, "the churned month before reactivation must be stored");
@@ -544,6 +548,130 @@ test("normalized SaaS metrics refuse an uncovered currency by named measure", { 
         && /JPY→CAD/.test(error.message)
         && /Company Settings → Setup → FX rates/.test(error.remedy),
       "an uncovered plan currency refuses with measure, pair and the FX rates remedy instead of accruing zero",
+    );
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("prior-month opening MRR converts to the current org base with prior-month-end evidence", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = randomUUID();
+  try {
+    const subscriptionId = randomUUID(), planId = randomUUID();
+    await withOrgTransaction(org.orgId, async () => {
+      await enableMetrics(org.orgId);
+      await seedSubscription({ orgId: org.orgId, customerId: org.customerId, actorId, subscriptionId, planId, amount: "100", startOn: "2026-07-01" });
+    });
+    await recomputeSaasMetrics(org.orgId, MONTH);
+    await withOrgTransaction(org.orgId, async () => {
+      const base = await db.execute(sql`update orgs set base_currency = 'USD' where id = ${org.orgId} returning id`);
+      assert.equal(base.rows.length, 1, "the organization must now report in USD");
+      for (const [asOf, rate] of [["2026-07-31", "0.7500000000"], ["2026-08-15", "0.8000000000"]] as const) {
+        const seeded = await db.execute(sql`
+          insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+          values (${org.orgId}, 'CAD', 'USD', ${asOf}::date, 'spot', ${rate}, 'manual')
+          returning id
+        `);
+        assert.equal(seeded.rows.length, 1, `the CAD→USD observation for ${asOf} must be stored`);
+      }
+    });
+    await recomputeSaasMetrics(org.orgId, "2026-08-01");
+    const august = (await db.execute<{ mrrStart: string; mrrEnd: string; expansion: string; evidence: string }>(sql`
+      select mrr_start::text as "mrrStart", mrr_end::text as "mrrEnd",
+             expansion_mrr::text as expansion, normalization_evidence::text as evidence
+        from saas_metrics_monthly where org_id = ${org.orgId} and subscription_id = ${subscriptionId} and month = '2026-08-01'::date
+    `)).rows[0]!;
+    assert.equal(august.mrrStart, "75.0000", "August opens from July closing translated at the July month end");
+    assert.equal(august.mrrEnd, "80.0000");
+    assert.equal(august.expansion, "5.0000", "movement classifies after conversion");
+    assert.ok(august.evidence.includes('"prior_reporting_currency":"CAD"'), "the opening records its source currency");
+    assert.ok(august.evidence.includes('"prior_mrr_end":"100.0000"'), "the opening records its raw source amount");
+    assert.ok(august.evidence.includes("2026-07-31"), "the opening conversion is evidenced at the prior month end");
+    const cohort = (await db.execute<{ startMrr: string; evidence: string }>(sql`
+      select start_mrr::text as "startMrr", normalization_evidence::text as evidence
+        from saas_metrics_cohort_monthly
+       where org_id = ${org.orgId} and subsidiary_id = ${org.subsidiaryId}
+         and cohort_month = '2026-07-01'::date and month = '2026-08-01'::date
+    `)).rows[0]!;
+    assert.equal(cohort.startMrr, "75.0000", "the cohort opening stays continuous across the base change");
+    assert.ok(cohort.evidence.includes('"source":"stored"'), "the cohort opening names its raw source");
+    assert.ok(cohort.evidence.includes("2026-07-31"), "the cohort conversion is evidenced at the cohort month end");
+    const factsHash = (await db.execute<{ inputs_hash: string }>(sql`
+      select inputs_hash from saas_metrics_facts_monthly where org_id = ${org.orgId} and month = '2026-08-01'::date
+    `)).rows[0]!.inputs_hash;
+    await withOrgTransaction(org.orgId, async () => {
+      const changed = await db.execute(sql`
+        update fx_rates set rate = '0.50', updated_at = now()
+         where org_id = ${org.orgId} and from_currency = 'CAD' and to_currency = 'USD' and as_of = '2026-07-31'::date and rate_type = 'spot'
+        returning id
+      `);
+      assert.equal(changed.rows.length, 1, "the historical observation must change");
+    });
+    await recomputeSaasMetrics(org.orgId, "2026-08-01");
+    const repriced = (await db.execute<{ mrrStart: string; inputs_hash: string; evidence: string }>(sql`
+      select mrr_start::text as "mrrStart", inputs_hash, normalization_evidence::text as evidence
+        from saas_metrics_monthly where org_id = ${org.orgId} and subscription_id = ${subscriptionId} and month = '2026-08-01'::date
+    `)).rows[0]!;
+    assert.equal(repriced.mrrStart, "50.0000", "the opening reprices when its historical observation changes");
+    assert.notEqual(repriced.inputs_hash, factsHash, "the historical source change alters the reproducible hash");
+    assert.ok(repriced.evidence.includes("0.5000000000"), "the new observation is evidenced");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("legacy and unsupported history denominations refuse with the normalization remedy", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  const actorId = randomUUID();
+  try {
+    const legacyId = randomUUID(), legacyPlan = randomUUID();
+    const modernId = randomUUID(), modernPlan = randomUUID();
+    await withOrgTransaction(org.orgId, async () => {
+      await enableMetrics(org.orgId);
+      await seedSubscription({ orgId: org.orgId, customerId: org.customerId, actorId, subscriptionId: legacyId, planId: legacyPlan, amount: "100", startOn: "2026-07-01" });
+      await seedSubscription({ orgId: org.orgId, customerId: org.customerId, actorId, subscriptionId: modernId, planId: modernPlan, amount: "100", startOn: "2026-07-01" });
+      const legacy = await db.execute(sql`
+        insert into saas_metrics_monthly
+          (org_id, subsidiary_id, customer_id, subscription_id, month, cohort_month,
+           mrr_start, mrr_end, new_mrr, expansion_mrr, contraction_mrr, churned_mrr,
+           reactivation_mrr, movement, recognized_revenue, deferred_delta, inputs_hash)
+        values (${org.orgId}, ${org.subsidiaryId}, ${org.customerId}, ${legacyId},
+                '2026-07-01', '2026-07-01', '0', '100', '100', '0', '0', '0', '0', 'new', '0', '0', 'legacy-row')
+        returning id
+      `);
+      assert.equal(legacy.rows.length, 1, "the pre-normalization row must be stored");
+    });
+    await assert.rejects(
+      recomputeSaasMetrics(org.orgId, "2026-08-01"),
+      (error: unknown) => error instanceof UsageBillingError
+        && error.code === "saas_metrics_history_denomination_unknown"
+        && (error.message as string).includes(legacyId)
+        && /Recompute 2026-07-01 through SaaS metrics recompute/.test(error.remedy),
+      "a legacy row without denomination evidence refuses with the real normalization remedy",
+    );
+    // The remedy is real: normalizing July first lets August open.
+    await recomputeSaasMetrics(org.orgId, MONTH);
+    await recomputeSaasMetrics(org.orgId, "2026-08-01");
+    const opened = (await db.execute<{ mrr_start: string }>(sql`
+      select mrr_start::text as mrr_start from saas_metrics_monthly
+       where org_id = ${org.orgId} and subscription_id = ${legacyId} and month = '2026-08-01'::date
+    `)).rows[0]!;
+    assert.equal(opened.mrr_start, "100.0000", "the normalized prior month opens at par");
+    await withOrgTransaction(org.orgId, async () => {
+      const relabeled = await db.execute(sql`
+        update saas_metrics_monthly set denomination_version = 'v99'
+         where org_id = ${org.orgId} and subscription_id = ${modernId} and month = '2026-07-01'::date
+        returning id
+      `);
+      assert.equal(relabeled.rows.length, 1, "the modern row must be relabeled to an unsupported version");
+    });
+    await assert.rejects(
+      recomputeSaasMetrics(org.orgId, "2026-08-01"),
+      (error: unknown) => error instanceof UsageBillingError
+        && error.code === "saas_metrics_history_denomination_unknown"
+        && (error.message as string).includes("v99"),
+      "an unsupported denomination version refuses instead of inheriting the org base",
     );
   } finally {
     await dropScratchOrg(org.orgId);
