@@ -1819,7 +1819,10 @@ export interface ProvenanceEvent {
   change: unknown;
   actor: unknown;
   requestId: unknown;
-  requestKey: unknown;
+  /** Canonical audit_log.request_id column: the idempotency key, never JSON. */
+  columnRequestKey: unknown;
+  /** Canonical audit_log.actor_id column as text, never JSON. */
+  columnActorId: unknown;
   attempt: unknown;
   sourceV0Hash: unknown;
   v1Hash: unknown;
@@ -1881,27 +1884,34 @@ export function validateProvenanceCounts(
   };
   for (const [table, want] of Object.entries(expected)) {
     const got = counts[table] ?? 0;
+    if (!Number.isInteger(want) || want < 0 || !Number.isInteger(got) || got < 0) {
+      throw provenanceRefusal("tampered", `${table} for ${month}`, month);
+    }
     if (got < want) throw provenanceRefusal("incomplete", `${table} for ${month}`, month);
     if (got > want) throw provenanceRefusal("tampered", `${table} for ${month}`, month);
   }
 }
 
 /**
- * One correction event joined to its request: table, event, change, month,
- * natural key, idempotency key, actor, attempt, source hash against the
- * recorded before hash, and v1/result hashes against the rewritten row
- * identity must all agree. Returns the validated legacy before-image.
+ * One correction event joined to its request and its canonical audit
+ * columns: table, event, change, month, complete natural key, idempotency
+ * key and actor from the audit row itself (never JSON), JSON actor
+ * consistency, attempt, source hash against the recorded before hash, and
+ * v1/result hashes against the rewritten row identity including its full
+ * natural key must all agree. Returns the validated legacy before-image.
  */
 export function validateProvenanceEvent(
   event: ProvenanceEvent,
   request: ProvenanceRequest,
-  expectedTable: "saas_metrics_monthly" | "saas_metrics_cohort_monthly",
+  expectedTable: "saas_metrics_monthly" | "saas_metrics_facts_monthly" | "saas_metrics_cohort_monthly",
   expectedMonth: string,
 ): Record<string, unknown> {
   const keySummary =
     expectedTable === "saas_metrics_monthly"
       ? String(event.naturalKey.subscriptionId ?? "?")
-      : `${String(event.naturalKey.subsidiaryId ?? "?")}:${String(event.naturalKey.cohortMonth ?? "?")}`;
+      : expectedTable === "saas_metrics_facts_monthly"
+        ? String(event.naturalKey.subsidiaryId ?? "?")
+        : `${String(event.naturalKey.subsidiaryId ?? "?")}:${String(event.naturalKey.cohortMonth ?? "?")}`;
   const label = `${expectedTable}:${keySummary}:${expectedMonth}`;
   const fail = (): never => {
     throw provenanceRefusal("tampered", label, expectedMonth);
@@ -1911,8 +1921,10 @@ export function validateProvenanceEvent(
   if (event.month !== expectedMonth) fail();
   if (request.status !== "succeeded" || !request.result) fail();
   if (request.month !== expectedMonth || request.result.month !== expectedMonth) fail();
-  if (event.requestId !== request.id || event.requestKey !== request.idempotencyKey) fail();
-  if (event.actor !== request.approvedBy) fail();
+  if (event.requestId !== request.id) fail();
+  if (event.columnRequestKey !== request.idempotencyKey) fail();
+  if (event.columnActorId !== request.approvedBy) fail();
+  if (event.actor !== event.columnActorId) fail();
   if (event.attempt !== request.attemptCount) fail();
   const before =
     event.before !== null && typeof event.before === "object" && !Array.isArray(event.before)
@@ -1925,11 +1937,26 @@ export function validateProvenanceEvent(
   if (!before || !after) fail();
   if (typeof event.sourceV0Hash !== "string" || event.sourceV0Hash !== before!.inputsHash) fail();
   if (!/^[0-9a-f]{64}$/.test(event.sourceV0Hash as string)) fail();
+  if (!Array.isArray(request.result!.sourceV0Hashes)) fail();
   if (!request.result!.sourceV0Hashes.includes(event.sourceV0Hash as string)) fail();
   if (event.v1Hash !== request.result!.monthHash || !/^[0-9a-f]{64}$/.test(request.result!.monthHash)) fail();
   if (typeof after!.inputsHash !== "string" || after!.inputsHash !== request.result!.monthHash) fail();
   if (typeof after!.id !== "string" || after!.id !== event.rowId) fail();
   if (event.naturalKey.month !== expectedMonth) fail();
+  if (expectedTable === "saas_metrics_monthly") {
+    if (typeof event.naturalKey.subscriptionId !== "string") fail();
+    if (after!.subscriptionId !== event.naturalKey.subscriptionId) fail();
+    if (after!.month !== expectedMonth) fail();
+  } else if (expectedTable === "saas_metrics_facts_monthly") {
+    if (typeof event.naturalKey.subsidiaryId !== "string") fail();
+    if (after!.subsidiaryId !== event.naturalKey.subsidiaryId) fail();
+    if (after!.month !== expectedMonth) fail();
+  } else {
+    if (typeof event.naturalKey.subsidiaryId !== "string" || typeof event.naturalKey.cohortMonth !== "string") fail();
+    if (after!.subsidiaryId !== event.naturalKey.subsidiaryId) fail();
+    if (after!.cohortMonth !== event.naturalKey.cohortMonth) fail();
+    if (after!.month !== expectedMonth) fail();
+  }
   return before!;
 }
 
@@ -2015,8 +2042,15 @@ async function legacyPriorProvenance(
   priorMonth: string,
   month: string,
 ): Promise<ValidatedPriorMonth> {
-  const rows = (await executor.execute<{ table: string; row_id: string; changes: Record<string, unknown> }>(sql`
-    select table_name as table, row_id::text as row_id, changes
+  const rows = (await executor.execute<{
+    table: string;
+    row_id: string;
+    request_key: string | null;
+    actor_id: string | null;
+    changes: Record<string, unknown>;
+  }>(sql`
+    select table_name as table, row_id::text as row_id,
+           request_id as request_key, actor_id::text as actor_id, changes
       from audit_log
      where org_id = ${orgId} and action = 'saas_normalization_corrected'
        and table_name in ('saas_metrics_monthly', 'saas_metrics_facts_monthly', 'saas_metrics_cohort_monthly')
@@ -2057,58 +2091,67 @@ async function legacyPriorProvenance(
   if (request.status !== "succeeded" || !request.result || request.month !== priorMonth) {
     throw provenanceRefusal("tampered", `${label} request ${request.id}`, month);
   }
+  // Malformed recorded results fail closed here, never as an undefined
+  // read or a skipped check downstream.
+  const recorded = request.result;
+  const resultOk =
+    typeof recorded.month === "string"
+    && typeof recorded.monthHash === "string"
+    && Number.isInteger(recorded.replacedMonthly)
+    && recorded.replacedMonthly >= 0
+    && Number.isInteger(recorded.replacedFacts)
+    && recorded.replacedFacts >= 0
+    && Number.isInteger(recorded.replacedCohorts)
+    && recorded.replacedCohorts >= 0
+    && Array.isArray(recorded.sourceV0Hashes)
+    && recorded.sourceV0Hashes.every((hash) => typeof hash === "string");
+  if (!resultOk) {
+    throw provenanceRefusal("tampered", `${label} request ${request.id}`, month);
+  }
   const counts: Record<string, number> = {};
   for (const row of rows) counts[row.table] = (counts[row.table] ?? 0) + 1;
   validateProvenanceCounts(counts, request.result, priorMonth);
   const monthly = new Map<string, LegacyHistoryRow>();
   const starts = new Map<string, LegacyCohortStartRow>();
+  const toEvent = (
+    row: (typeof rows)[number],
+    naturalKey: Record<string, unknown>,
+  ): ProvenanceEvent => ({
+    table: row.table,
+    rowId: row.row_id,
+    month: row.changes.month as string,
+    naturalKey,
+    event: row.changes.event,
+    change: row.changes.change,
+    actor: row.changes.actor,
+    requestId: row.changes.requestId,
+    columnRequestKey: row.request_key,
+    columnActorId: row.actor_id,
+    attempt: row.changes.attempt,
+    sourceV0Hash: row.changes.sourceV0Hash,
+    v1Hash: row.changes.v1Hash,
+    before: row.changes.before,
+    after: row.changes.after,
+  });
+  const naturalKeyOf = (changes: Record<string, unknown>): Record<string, unknown> =>
+    changes.naturalKey !== null && typeof changes.naturalKey === "object" && !Array.isArray(changes.naturalKey)
+      ? (changes.naturalKey as Record<string, unknown>)
+      : {};
   for (const row of rows) {
-    const changes = row.changes;
-    const naturalKey =
-      changes.naturalKey !== null && typeof changes.naturalKey === "object" && !Array.isArray(changes.naturalKey)
-        ? (changes.naturalKey as Record<string, unknown>)
-        : {};
+    const naturalKey = naturalKeyOf(row.changes);
     if (row.table === "saas_metrics_monthly") {
-      const event: ProvenanceEvent = {
-        table: row.table,
-        rowId: row.row_id,
-        month: changes.month as string,
-        naturalKey,
-        event: changes.event,
-        change: changes.change,
-        actor: changes.actor,
-        requestId: changes.requestId,
-        requestKey: changes.request_id,
-        attempt: changes.attempt,
-        sourceV0Hash: changes.sourceV0Hash,
-        v1Hash: changes.v1Hash,
-        before: changes.before,
-        after: changes.after,
-      };
-      const before = validateProvenanceEvent(event, request, "saas_metrics_monthly", priorMonth);
+      const before = validateProvenanceEvent(toEvent(row, naturalKey), request, "saas_metrics_monthly", priorMonth);
       const sub = naturalKey.subscriptionId;
       if (typeof sub !== "string" || monthly.has(sub)) {
         throw provenanceRefusal("tampered", `saas_metrics_monthly:${String(sub)}:${priorMonth}`, month);
       }
       monthly.set(sub, historyRowFromProvenance(before, sub, priorMonth, month));
+    } else if (row.table === "saas_metrics_facts_monthly") {
+      // Facts rows are not v0 inputs, but their events are authenticated
+      // with the same contract before counts can establish a complete set.
+      validateProvenanceEvent(toEvent(row, naturalKey), request, "saas_metrics_facts_monthly", priorMonth);
     } else if (row.table === "saas_metrics_cohort_monthly") {
-      const event: ProvenanceEvent = {
-        table: row.table,
-        rowId: row.row_id,
-        month: changes.month as string,
-        naturalKey,
-        event: changes.event,
-        change: changes.change,
-        actor: changes.actor,
-        requestId: changes.requestId,
-        requestKey: changes.request_id,
-        attempt: changes.attempt,
-        sourceV0Hash: changes.sourceV0Hash,
-        v1Hash: changes.v1Hash,
-        before: changes.before,
-        after: changes.after,
-      };
-      const before = validateProvenanceEvent(event, request, "saas_metrics_cohort_monthly", priorMonth);
+      const before = validateProvenanceEvent(toEvent(row, naturalKey), request, "saas_metrics_cohort_monthly", priorMonth);
       const sub = naturalKey.subsidiaryId;
       const cmon = naturalKey.cohortMonth;
       if (typeof sub !== "string" || typeof cmon !== "string") {
