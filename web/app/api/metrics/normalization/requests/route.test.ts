@@ -155,6 +155,21 @@ test("POST answers 422 for a malformed body behind the permission", async () => 
   assert.deepEqual(routeState.calls, []);
 });
 
+test("POST checks the feature gate before parsing a malformed body", async () => {
+  reset({ features: [] });
+  const response = await post({ month: "not-a-month" });
+  assert.equal(response.status, 404);
+  assert.deepEqual(await response.json(), { error: "not_found" });
+  assert.deepEqual(routeState.calls, [], "a feature-off caller never reaches the service");
+});
+
+test("POST checks unrestricted scope before parsing a malformed body", async () => {
+  reset({ scopeDenied: true });
+  const response = await post({ month: "not-a-month" });
+  assert.equal(response.status, 403);
+  assert.deepEqual(routeState.calls, [], "a restricted caller never reaches the service");
+});
+
 test("POST hides behind 404 when the feature is off", async () => {
   reset({ features: [] });
   const response = await post(VALID);
