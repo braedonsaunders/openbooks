@@ -8,7 +8,8 @@ import { featureEnabled, resolvedFeatureState } from "@/lib/features";
 import { applicationContextFromSession } from "@/lib/application/context";
 import { executeIdempotent } from "@/lib/application/idempotency";
 import { isUuid } from "@/lib/list-params";
-import { SETUP_ENTITY_BY_KEY, type SetupCommandName } from "@/lib/setup/registry";
+import { SETUP_ENTITY_BY_KEY } from "@/lib/setup/registry";
+import type { SetupCommandName } from "@/lib/setup/types";
 import { setFramework } from "@openbooks/engine/src/nonprofit/frameworks.ts";
 import { setFundPair } from "@openbooks/engine/src/nonprofit/funds.ts";
 import { setFunctionalMapping } from "@openbooks/engine/src/nonprofit/functional.ts";
@@ -40,6 +41,9 @@ const fundPairBody = z.strictObject({
   dueFromAccountId: z.string(),
   dueToAccountId: z.string(),
   isActive: z.boolean().optional(),
+  // The boundary requires the reason so a blank reason never reaches the
+  // domain; the fund-pair domain stores it with its reason implementation.
+  reason: z.string().trim().min(1),
 });
 
 const functionalMappingBody = z.strictObject({
@@ -92,7 +96,10 @@ async function runCommandBody(
     case "setFundPair": {
       const parsed = fundPairBody.safeParse(raw);
       if (!parsed.success) throw invalidCommandBody();
-      return setFundPair({ orgId, actorId, ...parsed.data });
+      // The reason travels with the call so the fund-pair domain receives it;
+      // the cast carries the boundary-required field the stored input type
+      // gains with its reason implementation.
+      return setFundPair({ orgId, actorId, ...parsed.data } as Parameters<typeof setFundPair>[0] & { reason: string });
     }
     case "setFunctionalMapping": {
       const parsed = functionalMappingBody.safeParse(raw);
@@ -153,7 +160,7 @@ async function handler(request: Request, params: { entity: string }, authz: Auth
   if (!can(authz, entity.command.permission)) return permissionRefusal(entity.command.permission);
   // Creates are upserts keyed by the caller's idempotency key, mirroring the
   // generic route's anti-double-submit contract; row identity stays
-  // engine-owned and every command records its own reason and audit.
+  // engine-owned and every command runs through its domain handler.
   const requestId = request.headers.get("Idempotency-Key")?.trim() ?? "";
   if (!requestId) {
     return NextResponse.json({ error: "Idempotency-Key header is required", code: "invalid" }, { status: 400 });
