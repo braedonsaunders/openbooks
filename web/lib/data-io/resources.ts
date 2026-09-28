@@ -37,6 +37,14 @@ import {
   FIXED_ASSETS_KEY,
   fixedAssetsResource,
 } from './fixed-asset-resources'
+import {
+  ASSIGNMENTS_DESCRIPTOR,
+  ASSIGNMENTS_KEY,
+  RETAINER_BALANCES_DESCRIPTOR,
+  RETAINER_BALANCES_KEY,
+  assignmentPlanResource,
+  retainerBalancesResource,
+} from './resourcing-resources'
 import { MASTER_ENTITIES, MASTER_BY_KEY, masterDescriptor, masterResource } from './master-data-resources'
 import { PROPERTY_DESCRIPTORS, PROPERTY_DESCRIPTOR_BY_KEY, propertyDataResource, propertyManagementEnabled } from './property-resources'
 import { recordSections, recordResource } from './record-resources'
@@ -178,7 +186,12 @@ function bindReadScope(resource: DataResource, orgId: string, scope?: Subsidiary
     ...resource,
     async read(readCtx?: ReadCtx) {
       const effectiveScope = readCtx ? readCtx.allowedSubsidiaryIds : scope
-      const result = await resource.read({ allowedSubsidiaryIds: effectiveScope })
+      const forwardedActor = readCtx && Object.hasOwn(readCtx, 'actorId') ? readCtx.actorId : undefined
+      const result = await resource.read(
+        forwardedActor === undefined
+          ? { allowedSubsidiaryIds: effectiveScope }
+          : { allowedSubsidiaryIds: effectiveScope, actorId: forwardedActor },
+      )
       if (effectiveScope === null) return result
 
       // Master and payroll resources enforce the scope in their source
@@ -241,7 +254,9 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
     : []
   const usage = featureEnabled(features, 'usageBilling') ? [USAGE_RECORDS_DESCRIPTOR] : []
   const saasMetrics = featureEnabled(features, 'saasMetrics') ? [SAAS_METRICS_FACTS_DESCRIPTOR] : []
-  return [...setup, ...master, ...fixedAssets, ...records, ...propertyManagement, ...payroll, ...usage, ...saasMetrics, ...transactions]
+  const assignments = featureEnabled(features, 'resourcing') ? [ASSIGNMENTS_DESCRIPTOR] : []
+  const retainerBalances = featureEnabled(features, 'retainerBilling') ? [RETAINER_BALANCES_DESCRIPTOR] : []
+  return [...setup, ...master, ...fixedAssets, ...records, ...propertyManagement, ...payroll, ...usage, ...saasMetrics, ...transactions, ...assignments, ...retainerBalances]
 }
 
 /** Resolve one resource bound to the org and (for export reads) its visibility scope. */
@@ -282,6 +297,14 @@ export async function getResource(
   if (key === SAAS_METRICS_FACTS_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'saasMetrics'))) return null
     return bindReadScope(saasMetricsFactsResource(orgId), orgId, allowedSubsidiaryIds)
+  }
+  if (key === ASSIGNMENTS_KEY) {
+    if (!(await orgFeatureEnabled(orgId, 'resourcing'))) return null
+    return bindReadScope(assignmentPlanResource(orgId), orgId, allowedSubsidiaryIds)
+  }
+  if (key === RETAINER_BALANCES_KEY) {
+    if (!(await orgFeatureEnabled(orgId, 'retainerBilling'))) return null
+    return bindReadScope(retainerBalancesResource(orgId), orgId, allowedSubsidiaryIds)
   }
   const setup = SETUP_ENTITY_BY_KEY.get(key)
   if (setup) {

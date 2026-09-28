@@ -104,6 +104,9 @@ import { companySettings, rolesAndPermissions, dataImports } from './articles/ad
 import { companySetupGroupArticles } from './articles/company-setup'
 import { switchingArticles } from './articles/switching'
 import { busySeasonCapacity } from './articles/resourcing-busy-season'
+import { staffingBoardEvidence } from './articles/resourcing-staffing-board-evidence'
+import { softHardBookings } from './articles/resourcing-soft-vs-hard-bookings'
+import { retainersDrawdownsRecognition } from './articles/resourcing-retainers-drawdowns-recognition'
 
 export type { DocArticle, DocCategory, DocSection } from './types'
 
@@ -338,6 +341,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   periodClose,
   projectTypes, overheadCosting, laborCosting, laborPricing, manufacturingOverview, payroll, employmentMigration, positionsAndHeadcount, hrmProcesses, inboxAndHome, automations, correctingAndRescinding, performanceAndRetention, continuousPerformance, selfService, leaveTimeVersusValue, recruitingFunnel, benefitsEnrollment, fieldTickets, subcontractorCompliance, compensationAndTransparency,
   busySeasonCapacity,
+  staffingBoardEvidence, softHardBookings, retainersDrawdownsRecognition,
   // HR-13 begin
   certifiedPayrollPrevailingWagePerDiem,
   // HR-13 end

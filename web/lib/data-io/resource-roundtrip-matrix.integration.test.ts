@@ -352,3 +352,33 @@ test(
     }
   },
 )
+
+test('resourcing resources are discoverable and resolvable under effective features', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  const keys = ['resourcing-assignments', 'retainer-balances']
+  try {
+    await withOrgContext(org.orgId, async () => {
+      for (const disabled of [null, 'projects', 'resourcing', 'retainerBilling', 'revenueRecognition']) {
+        const flags = { projects: true, resourcing: true, retainerBilling: true, revenueRecognition: true,
+          ...(disabled === null ? {} : { [disabled]: false }) }
+        const updated = await db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', ${JSON.stringify(flags)}::jsonb, true) where id = ${org.orgId} returning id`)
+        assert.equal(updated.rows.length, 1, 'feature configuration must update the scratch organization')
+        const expected = disabled === 'projects' || disabled === 'resourcing' ? [] : disabled === null ? keys : [keys[0]]
+        const listed = (await listResources(org.orgId)).filter((descriptor) => keys.includes(descriptor.key))
+        assert.deepEqual(listed.map((descriptor) => descriptor.key), expected, disabled ?? 'all enabled')
+        for (const key of keys) {
+          const resource = await getResource(org.orgId, key, new Set([org.subsidiaryId]))
+          if (!expected.includes(key)) {
+            assert.equal(resource, null, key)
+            continue
+          }
+          assert.ok(resource, key)
+          assert.deepEqual(resource.descriptor, listed.find((descriptor) => descriptor.key === key), key)
+          assert.equal(resource.descriptor.supportsImport, key === 'resourcing-assignments', key)
+        }
+      }
+    })
+  } finally {
+    await dropScratchOrgReporting(org.orgId)
+  }
+})

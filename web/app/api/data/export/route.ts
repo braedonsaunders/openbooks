@@ -63,6 +63,7 @@ export const POST = defineRoute({
   try {
     const result = await resource.read({
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+      actorId: authz.user.id,
     })
     columns = result.columns
     rows = result.rows
