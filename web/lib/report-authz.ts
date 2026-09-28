@@ -52,6 +52,17 @@ export const STATEMENT_KIND_FEATURE: Partial<Record<string, string>> = {
   budget: 'budgets',
   availability: 'warehousing',
   replenishment: 'warehousing',
+  'resourcing-utilization': 'resourcing',
+  'resourcing-bench': 'resourcing',
+  'resourcing-capacity-demand': 'resourcing',
+  'resourcing-engagement': 'resourcing',
+}
+
+const STATEMENT_KIND_PERMISSION: Partial<Record<string, string>> = {
+  'resourcing-utilization': 'resourcing.read',
+  'resourcing-bench': 'resourcing.read',
+  'resourcing-capacity-demand': 'resourcing.read',
+  'resourcing-engagement': 'resourcing.read',
 }
 
 export function reportStatementFeatureKey(kind: string | null | undefined): string | null {
@@ -74,6 +85,8 @@ export async function canRunReportEntity(authz: Authz, query: unknown): Promise<
 
 /** True when `authz` may list or run a seeded statement kind. */
 export async function canRunReportStatement(authz: Authz, kind: string | null | undefined): Promise<boolean> {
+  const permission = kind ? STATEMENT_KIND_PERMISSION[kind] : undefined
+  if (permission && !can(authz, permission)) return false
   const featureKey = reportStatementFeatureKey(kind)
   if (!featureKey) return true
   return isFeatureEnabled(authz.user.orgId, featureKey)

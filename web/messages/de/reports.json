@@ -34,7 +34,15 @@
       "cashFlowIndirectDescription": "Indirekte Methode — Jahresüberschuss zum operativen Cashflow mit Working-Capital-Details",
       "payrollDescription": "Integrierter Lohnbericht über Abrechnungen — Lohndaten erfordern die Lohnabrechnungs-Berechtigung.",
       "hrmDescription": "Integrierter Personalbericht über Beschäftigungsdatensätze – erfordert die HRM-Beschäftigungsberechtigung.",
-      "builtInDescription": "Integrierter operativer Bericht aus dem einheitlichen Berichtskatalog."
+      "builtInDescription": "Integrierter operativer Bericht aus dem einheitlichen Berichtskatalog.",
+      "resourcingUtilizationTitle": "Auslastungsprognose",
+      "resourcingUtilizationDescription": "Prognostizierte abrechenbare Auslastung im Verhältnis zur wöchentlichen Nettokapazität.",
+      "resourcingBenchTitle": "Leerlaufkapazität",
+      "resourcingBenchDescription": "Wöchentliche Kapazität ohne feste Buchungen.",
+      "resourcingCapacityDemandTitle": "Kapazität und Bedarf",
+      "resourcingCapacityDemandDescription": "Nettokapazität mit namentlichen, allgemeinen und gewichteten Pipeline-Bedarfen vergleichen.",
+      "resourcingEngagementTitle": "Auftragsprognose",
+      "resourcingEngagementDescription": "Prognostizierte Stunden, Umsätze, Arbeitskosten und Margen nach Monat und Währung."
     },
     "groups": {
       "financial": "Finanzberichte",
@@ -50,7 +58,8 @@
       "inventory": "Bestand",
       "allocations": "Zuordnungen",
       "aiGovernance": "KI-Governance",
-      "other": "Weitere Berichte"
+      "other": "Weitere Berichte",
+      "resourcing": "Ressourcenplanung"
     },
     "customStudio": {
       "title": "Benutzerdefinierter Berichtsgenerator",
@@ -937,6 +946,22 @@
       "usage_billing_lines": {
         "label": "Nutzungsabrechnungspositionen",
         "description": "Bewertete Rechnungspositionen mit Nachverfolgung von Bewertungslauf, Tarifversion, Messgröße, Quellbeleg-Hash, Zeitraum und Mindestumsatzzeitraum."
+      },
+      "resourcing_utilization": {
+        "label": "Auslastungsprognose",
+        "description": "Prognostizierte abrechenbare Auslastung im Verhältnis zur wöchentlichen Nettokapazität."
+      },
+      "resourcing_bench": {
+        "label": "Leerlaufkapazität",
+        "description": "Wöchentliche Kapazität ohne feste Buchungen."
+      },
+      "resourcing_capacity_demand": {
+        "label": "Kapazität und Bedarf",
+        "description": "Nettokapazität mit namentlichen, allgemeinen und gewichteten Pipeline-Bedarfen vergleichen."
+      },
+      "resourcing_engagement": {
+        "label": "Auftragsprognose",
+        "description": "Prognostizierte Stunden, Umsätze, Arbeitskosten und Margen nach Monat und Währung."
       }
     },
     "columns": {
@@ -2175,6 +2200,56 @@
         "commit_window_start": "Mindestumsatzzeitraum Beginn",
         "commit_window_end": "Mindestumsatzzeitraum Ende",
         "rated_total": "Bewerteter Gesamtbetrag vor Mindestumsatz"
+      },
+      "resourcing_utilization": {
+        "week_start": "Wochenbeginn",
+        "person": "Person",
+        "person_id": "Personenschlüssel",
+        "department": "Abteilung",
+        "job_title": "Stellentitel",
+        "capacity": "Kapazität",
+        "net_capacity": "Nettokapazität",
+        "hard_billable": "Feste abrechenbare Stunden",
+        "hard_non_billable": "Feste nicht abrechenbare Stunden",
+        "soft_hours": "Vorläufige Stunden",
+        "unknown_capacity": "Unbekannte Kapazität"
+      },
+      "resourcing_bench": {
+        "week_start": "Wochenbeginn",
+        "department": "Abteilung",
+        "job_title": "Stellentitel",
+        "person_id": "Personenschlüssel",
+        "idle_net_capacity": "Leerlauf-Nettokapazität"
+      },
+      "resourcing_capacity_demand": {
+        "week_start": "Wochenbeginn",
+        "department": "Abteilung",
+        "job_title": "Stellentitel",
+        "person_id": "Personenschlüssel",
+        "capacity": "Kapazität",
+        "named_hard": "Namentliche feste Stunden",
+        "named_soft": "Namentliche vorläufige Stunden",
+        "generic_hard": "Allgemeine feste Stunden",
+        "generic_soft": "Allgemeine vorläufige Stunden",
+        "pipeline_demand": "Gewichtete Pipeline-Stunden",
+        "unknown_capacity": "Unbekannte Kapazität"
+      },
+      "resourcing_engagement": {
+        "week_start": "Wochenbeginn",
+        "project": "Projekt",
+        "customer": "Kunde",
+        "currency": "Währung",
+        "department": "Abteilung",
+        "job_title": "Stellentitel",
+        "hours": "Stunden",
+        "revenue": "Prognostizierter Umsatz",
+        "cost": "Prognostizierte Kosten",
+        "unpriced_hours": "Nicht bepreiste abrechenbare Stunden",
+        "unpriced_count": "Nicht bepreiste Aufträge",
+        "uncosted_count": "Nicht kalkulierte Aufträge",
+        "month": "Monat",
+        "bill_status": "Abrechnungsstatus",
+        "cost_status": "Arbeitskostenstatus"
       }
     },
     "enumValues": {
@@ -2262,7 +2337,14 @@
       "revoked": "Widerrufen",
       "pending_verification": "Prüfung ausstehend",
       "inbox": "Posteingang",
-      "email": "E-Mail"
+      "email": "E-Mail",
+      "priced": "Bepreist",
+      "non_billable": "Nicht abrechenbar",
+      "no_bill_item": "Kein Abrechnungsartikel zugeordnet",
+      "no_bill_rate": "Kein Abrechnungssatz gefunden",
+      "no_employee": "Keine Person zugeordnet",
+      "no_cost_rate": "Kein Arbeitskostensatz gefunden",
+      "no_cost_fx": "Kein Kassakurs für die Kostenumrechnung"
     }
   },
   "operators": {

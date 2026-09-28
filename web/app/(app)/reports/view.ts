@@ -10,6 +10,7 @@ import { getAuthz, can } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { hiddenReportEntityKeys } from '../../../lib/report-authz'
 import { savedReportPathVisible } from '../../../lib/report-feature-gates'
+import '../../../lib/resourcing/report-facts'
 
 /**
  * The reports hub, split into a loader and a spec.
@@ -61,7 +62,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
   if (orgId) await ensureReportDefinitions(orgId)
   const emptySaved = Promise.resolve({ rows: [] as { id: string; name: string; path: string; params: Record<string, string> }[] })
   const emptyDefs = Promise.resolve({ rows: [] as { id: string; slug: string; name: string; description: string | null; kind: string; entity: string | null }[] })
-  const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, inventoryEnabled, hiddenEntities, hrmEnabled, warehousingEnabled] = await Promise.all([
+  const [saved, custom, projectsEnabled, payrollEnabled, budgetsEnabled, ordersEnabled, inventoryEnabled, hiddenEntities, hrmEnabled, warehousingEnabled, resourcingEnabled] = await Promise.all([
     orgId
       ? db.execute(sql`select id, name, path, params from saved_reports where org_id = ${orgId} order by created_at desc limit 12`) as Promise<{
           rows: { id: string; name: string; path: string; params: Record<string, string> }[]
@@ -87,6 +88,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
     authz ? hiddenReportEntityKeys(authz) : Promise.resolve<string[]>([]),
     authz ? isFeatureEnabled(authz.user.orgId, 'hrm') : Promise.resolve(false),
     authz ? isFeatureEnabled(authz.user.orgId, 'warehousing') : Promise.resolve(false),
+    authz && can(authz, 'resourcing.read') ? isFeatureEnabled(authz.user.orgId, 'resourcing') : Promise.resolve(false),
   ])
 
   // Hide definitions over permission-gated or feature-off entities from
@@ -271,6 +273,17 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
       cards: [card('projectProfitability', '/reports/project-profitability', 'Coins'),
         { href: '/reports/true-cost', title: tc('title'), desc: tc('summary.compositeRate'), icon: 'Calculator' }],
     } satisfies HubGroup] : []),
+    ...(resourcingEnabled ? [{
+      key: 'resourcing',
+      label: t('hub.groups.resourcing'),
+      accent: 'teal',
+      cards: [
+        card('resourcingUtilization', '/reports/resourcing/utilization', 'Gauge'),
+        card('resourcingBench', '/reports/resourcing/bench', 'Users'),
+        card('resourcingCapacityDemand', '/reports/resourcing/capacity-demand', 'Scale'),
+        card('resourcingEngagement', '/reports/resourcing/engagement', 'BriefcaseBusiness'),
+      ],
+    } satisfies HubGroup] : []),
     ...(payrollDefinitions.length > 0 ? [{
       key: 'payroll',
       label: t('hub.groups.payroll'),
@@ -311,6 +324,7 @@ export async function loadReportsHub(): Promise<ReportsHubData> {
             orders: ordersEnabled,
             inventory: inventoryEnabled,
             warehousing: warehousingEnabled,
+            resourcing: resourcingEnabled,
           }),
         ).map((s) => {
           const qs = new URLSearchParams(s.params ?? {}).toString()

@@ -34,7 +34,15 @@
       "cashFlowIndirectDescription": "GAAP indirect method — net income reconciled to operating cash with working-capital detail",
       "payrollDescription": "Built-in payroll report over pay stubs — wage data needs the payroll permission.",
       "hrmDescription": "Built-in workforce report over employment records — needs the HRM employment permission.",
-      "builtInDescription": "Built-in operational report from the unified report catalog."
+      "builtInDescription": "Built-in operational report from the unified report catalog.",
+      "resourcingUtilizationTitle": "Utilization forecast",
+      "resourcingUtilizationDescription": "Forecast billable utilization against net weekly capacity.",
+      "resourcingBenchTitle": "Bench",
+      "resourcingBenchDescription": "Weekly capacity with no hard bookings.",
+      "resourcingCapacityDemandTitle": "Capacity versus demand",
+      "resourcingCapacityDemandDescription": "Compare net capacity with named, generic, and weighted pipeline demand.",
+      "resourcingEngagementTitle": "Engagement forecast",
+      "resourcingEngagementDescription": "Forecast assignment hours, revenue, labor cost, and margin by month and currency."
     },
     "groups": {
       "financial": "Financial Statements",
@@ -50,7 +58,8 @@
       "inventory": "Inventory",
       "allocations": "Allocations",
       "aiGovernance": "AI governance",
-      "other": "Other reports"
+      "other": "Other reports",
+      "resourcing": "Resourcing"
     },
     "customStudio": {
       "title": "Custom report builder",
@@ -937,6 +946,22 @@
       "usage_billing_lines": {
         "label": "Usage billing lines",
         "description": "Rated invoice lines with their rating run, plan version, meter, source-record hash, period and commit-window trace."
+      },
+      "resourcing_utilization": {
+        "label": "Utilization forecast",
+        "description": "Forecast billable utilization against net weekly capacity."
+      },
+      "resourcing_bench": {
+        "label": "Bench",
+        "description": "Weekly capacity with no hard bookings."
+      },
+      "resourcing_capacity_demand": {
+        "label": "Capacity versus demand",
+        "description": "Compare net capacity with named, generic, and weighted pipeline demand."
+      },
+      "resourcing_engagement": {
+        "label": "Engagement forecast",
+        "description": "Forecast assignment hours, revenue, labor cost, and margin by month and currency."
       }
     },
     "columns": {
@@ -2175,6 +2200,56 @@
         "commit_window_start": "Commit window start",
         "commit_window_end": "Commit window end",
         "rated_total": "Rated total before commit"
+      },
+      "resourcing_utilization": {
+        "week_start": "Week start",
+        "person": "Person",
+        "person_id": "Person key",
+        "department": "Department",
+        "job_title": "Job title",
+        "capacity": "Capacity",
+        "net_capacity": "Net capacity",
+        "hard_billable": "Hard billable hours",
+        "hard_non_billable": "Hard non-billable hours",
+        "soft_hours": "Soft hours",
+        "unknown_capacity": "Unknown capacity"
+      },
+      "resourcing_bench": {
+        "week_start": "Week start",
+        "department": "Department",
+        "job_title": "Job title",
+        "person_id": "Person key",
+        "idle_net_capacity": "Idle net capacity"
+      },
+      "resourcing_capacity_demand": {
+        "week_start": "Week start",
+        "department": "Department",
+        "job_title": "Job title",
+        "person_id": "Person key",
+        "capacity": "Capacity",
+        "named_hard": "Named hard hours",
+        "named_soft": "Named soft hours",
+        "generic_hard": "Generic hard hours",
+        "generic_soft": "Generic soft hours",
+        "pipeline_demand": "Weighted pipeline hours",
+        "unknown_capacity": "Unknown capacity"
+      },
+      "resourcing_engagement": {
+        "week_start": "Week start",
+        "project": "Project",
+        "customer": "Customer",
+        "currency": "Currency",
+        "department": "Department",
+        "job_title": "Job title",
+        "hours": "Hours",
+        "revenue": "Forecast revenue",
+        "cost": "Forecast cost",
+        "unpriced_hours": "Unpriced billable hours",
+        "unpriced_count": "Unpriced assignments",
+        "uncosted_count": "Uncosted assignments",
+        "month": "Month",
+        "bill_status": "Billing status",
+        "cost_status": "Labor cost status"
       }
     },
     "enumValues": {
@@ -2262,7 +2337,14 @@
       "revoked": "Revoked",
       "pending_verification": "Pending verification",
       "inbox": "Inbox",
-      "email": "Email"
+      "email": "Email",
+      "priced": "Priced",
+      "non_billable": "Not billable",
+      "no_bill_item": "No bill item assigned",
+      "no_bill_rate": "No bill rate found",
+      "no_employee": "No employee assigned",
+      "no_cost_rate": "No labor cost rate found",
+      "no_cost_fx": "No spot rate for cost conversion"
     }
   },
   "operators": {

@@ -34,7 +34,15 @@
       "cashFlowIndirectDescription": "Método indirecto — resultado neto conciliado con el efectivo operativo con detalle de capital de trabajo",
       "payrollDescription": "Informe de nómina integrado sobre recibos: los datos salariales requieren el permiso de nómina.",
       "hrmDescription": "Informe integrado de plantilla sobre los registros de empleo; requiere el permiso de empleo de RR. HH.",
-      "builtInDescription": "Informe operativo integrado del catálogo unificado de informes."
+      "builtInDescription": "Informe operativo integrado del catálogo unificado de informes.",
+      "resourcingUtilizationTitle": "Previsión de utilización",
+      "resourcingUtilizationDescription": "Utilización facturable prevista frente a la capacidad neta semanal.",
+      "resourcingBenchTitle": "Capacidad disponible",
+      "resourcingBenchDescription": "Capacidad semanal sin reservas firmes.",
+      "resourcingCapacityDemandTitle": "Capacidad y demanda",
+      "resourcingCapacityDemandDescription": "Compara la capacidad neta con la demanda asignada, genérica y ponderada del embudo.",
+      "resourcingEngagementTitle": "Previsión de proyectos",
+      "resourcingEngagementDescription": "Horas, ingresos, costes laborales y margen previstos por mes y moneda."
     },
     "groups": {
       "financial": "Estados financieros",
@@ -50,7 +58,8 @@
       "inventory": "Inventario",
       "allocations": "Asignaciones",
       "aiGovernance": "Gobernanza de IA",
-      "other": "Otros informes"
+      "other": "Otros informes",
+      "resourcing": "Recursos"
     },
     "customStudio": {
       "title": "Constructor de informes",
@@ -937,6 +946,22 @@
       "usage_billing_lines": {
         "label": "Líneas de facturación por uso",
         "description": "Líneas de factura con cargos calculados y trazabilidad del ciclo de cálculo, versión del plan, medidor, hash de registros de origen, período y ventana del compromiso."
+      },
+      "resourcing_utilization": {
+        "label": "Previsión de utilización",
+        "description": "Utilización facturable prevista frente a la capacidad neta semanal."
+      },
+      "resourcing_bench": {
+        "label": "Capacidad disponible",
+        "description": "Capacidad semanal sin reservas firmes."
+      },
+      "resourcing_capacity_demand": {
+        "label": "Capacidad y demanda",
+        "description": "Compara la capacidad neta con la demanda asignada, genérica y ponderada del embudo."
+      },
+      "resourcing_engagement": {
+        "label": "Previsión de proyectos",
+        "description": "Horas, ingresos, costes laborales y margen previstos por mes y moneda."
       }
     },
     "columns": {
@@ -2175,6 +2200,56 @@
         "commit_window_start": "Inicio de ventana del compromiso",
         "commit_window_end": "Fin de ventana del compromiso",
         "rated_total": "Total calculado antes del compromiso"
+      },
+      "resourcing_utilization": {
+        "week_start": "Inicio de semana",
+        "person": "Persona",
+        "person_id": "Clave de persona",
+        "department": "Departamento",
+        "job_title": "Puesto",
+        "capacity": "Capacidad",
+        "net_capacity": "Capacidad neta",
+        "hard_billable": "Horas firmes facturables",
+        "hard_non_billable": "Horas firmes no facturables",
+        "soft_hours": "Horas provisionales",
+        "unknown_capacity": "Capacidad desconocida"
+      },
+      "resourcing_bench": {
+        "week_start": "Inicio de semana",
+        "department": "Departamento",
+        "job_title": "Puesto",
+        "person_id": "Clave de persona",
+        "idle_net_capacity": "Capacidad neta ociosa"
+      },
+      "resourcing_capacity_demand": {
+        "week_start": "Inicio de semana",
+        "department": "Departamento",
+        "job_title": "Puesto",
+        "person_id": "Clave de persona",
+        "capacity": "Capacidad",
+        "named_hard": "Horas firmes asignadas",
+        "named_soft": "Horas provisionales asignadas",
+        "generic_hard": "Horas genéricas firmes",
+        "generic_soft": "Horas genéricas provisionales",
+        "pipeline_demand": "Horas ponderadas del embudo",
+        "unknown_capacity": "Capacidad desconocida"
+      },
+      "resourcing_engagement": {
+        "week_start": "Inicio de semana",
+        "project": "Proyecto",
+        "customer": "Cliente",
+        "currency": "Moneda",
+        "department": "Departamento",
+        "job_title": "Puesto",
+        "hours": "Horas",
+        "revenue": "Ingresos previstos",
+        "cost": "Coste previsto",
+        "unpriced_hours": "Horas facturables sin precio",
+        "unpriced_count": "Asignaciones sin precio",
+        "uncosted_count": "Asignaciones sin coste",
+        "month": "Mes",
+        "bill_status": "Estado de facturación",
+        "cost_status": "Estado del coste laboral"
       }
     },
     "enumValues": {
@@ -2262,7 +2337,14 @@
       "revoked": "Revocada",
       "pending_verification": "Verificación pendiente",
       "inbox": "Bandeja de entrada",
-      "email": "Correo electrónico"
+      "email": "Correo electrónico",
+      "priced": "Con precio",
+      "non_billable": "No facturable",
+      "no_bill_item": "Sin artículo de facturación",
+      "no_bill_rate": "Sin tarifa de facturación",
+      "no_employee": "Sin persona asignada",
+      "no_cost_rate": "Sin tarifa de coste laboral",
+      "no_cost_fx": "Sin tipo de cambio para convertir el coste"
     }
   },
   "operators": {

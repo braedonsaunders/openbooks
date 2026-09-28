@@ -149,6 +149,57 @@ function totalComponents(
   })
 }
 
+/** True when a sum/opening/closing summary card over this measure would blend
+ *  money dishonestly: the denomination is observably mixed, or the caller
+ *  flagged the contributing scope incomplete. Counts never blend. */
+function isMoneySummaryOmitted(
+  entity: ReportEntity,
+  measure: ReportMeasure,
+  singles: DenominationSingles,
+  suppressMoney: boolean,
+): boolean {
+  if (measure.fn !== 'sum' && measure.fn !== 'opening' && measure.fn !== 'closing') return false
+  if (suppressMoney && isMoneyBlendingMeasure(entity, measure)) return true
+  if (isTxnCurrencyMeasure(entity, measure) && !singles.txn) return true
+  if (isBaseMoneyMeasure(entity, measure) && !singles.base) return true
+  if (isMoneyBlendingMeasure(entity, measure) && entity.bookScope && !singles.book) return true
+  return false
+}
+
+/** True when a formula summary card is transitively derived from an omitted
+ *  money total. A ratio over blended or partial money is no safer than the
+ *  blended total itself, so the card is omitted with it. Formulas over safe
+ *  inputs (counts, hours) are unaffected. */
+function isMoneyDerivedFormulaOmitted(
+  entity: ReportEntity,
+  measures: readonly ReportMeasure[],
+  index: number,
+  singles: DenominationSingles,
+  suppressMoney: boolean,
+): boolean {
+  const keyToIndex = new Map(measures.flatMap((measure, candidate) => measure.key ? [[measure.key, candidate] as const] : []))
+  const visiting = new Set<number>()
+  const dependsOnOmittedMoney = (candidate: number): boolean => {
+    const measure = measures[candidate]!
+    if (measure.fn !== 'formula') return isMoneySummaryOmitted(entity, measure, singles, suppressMoney)
+    if (visiting.has(candidate)) return false
+    visiting.add(candidate)
+    const refs: string[] = []
+    const walk = (expr: NonNullable<ReportMeasure['expr']>): void => {
+      if ('ref' in expr) refs.push(expr.ref)
+      else if ('op' in expr) { walk(expr.left); walk(expr.right) }
+    }
+    if (measure.expr) walk(measure.expr)
+    const result = refs.some((key) => {
+      const target = keyToIndex.get(key)
+      return target !== undefined && dependsOnOmittedMoney(target)
+    })
+    visiting.delete(candidate)
+    return result
+  }
+  return dependsOnOmittedMoney(index)
+}
+
 function writeFormulaTotals(
   entity: ReportEntity,
   row: (string | number | null)[],
@@ -398,7 +449,9 @@ export function shapeSummarizeRows(
   totals: ReportCustomQuery['totals'] = null,
   singles: DenominationSingles = { txn: true, base: true, book: true },
   fiscalStartMonth = 1,
+  summaryOpts: { suppressMoneySummaries?: boolean } = {},
 ): ReportRunResult {
+  const suppressMoney = summaryOpts.suppressMoneySummaries === true
   const visibleMeasureIndices = measures.flatMap((measure, index) => measure.hidden ? [] : [index])
   const visibleMeasureIndex = new Map(visibleMeasureIndices.map((index, visibleIndex) => [index, visibleIndex]))
   const visibleMeasures = visibleMeasureIndices.map((index) => measures[index]!)
@@ -764,9 +817,7 @@ export function shapeSummarizeRows(
   ]
   measures.forEach((m, i) => {
     if (m.hidden) return
-    if ((m.fn === 'sum' || m.fn === 'opening' || m.fn === 'closing') && isTxnCurrencyMeasure(entity, m) && !singles.txn) return
-    if ((m.fn === 'sum' || m.fn === 'opening' || m.fn === 'closing') && isBaseMoneyMeasure(entity, m) && !singles.base) return
-    if ((m.fn === 'sum' || m.fn === 'opening' || m.fn === 'closing') && isMoneyBlendingMeasure(entity, m) && entity.bookScope && !singles.book) return
+    if (isMoneySummaryOmitted(entity, m, singles, suppressMoney)) return
     // A snapshot card never sums: the compiler refuses sum-of-snapshot plans,
     // and a total here would multiply every movement by its stub count.
     if (m.fn === 'count' || m.fn === 'sum' || m.fn === 'opening' || m.fn === 'closing') {
@@ -789,6 +840,10 @@ export function shapeSummarizeRows(
   const summaryFormulaValues = formulaTotalValues(measures, summaryComponents, formulaTotalable, labels)
   summaryFormulaValues.forEach((result, index) => {
     if (measures[index]?.fn !== 'formula' || measures[index]?.hidden) return
+    // A computed refusal still speaks: a guard that fires (nothing priced, no
+    // capacity) publishes its named label even while unsafe totals stay
+    // omitted. Only a would-be VALUE over omitted money is suppressed.
+    if (result.undefinedLabel == null && isMoneyDerivedFormulaOmitted(entity, measures, index, singles, suppressMoney)) return
     const measure = measures[index]!
     summary.push({
       label: labels.summaryTotal?.(measureHeading(measure)) ?? `Total ${measureHeading(measure).toLowerCase()}`,
@@ -807,6 +862,16 @@ export type InMemoryReportMeasure = Omit<ReportMeasure, 'filter'> & {
   filter?: (row: Readonly<Record<string, unknown>>) => boolean
 }
 
+/** Reusable completeness contract for an in-memory report plan. A plan whose
+ *  combined monetary summary is honest only when every contributing row is
+ *  fully resolved declares that row test here; the shared shaper omits
+ *  monetary and money-derived formula summary cards while any contributor is
+ *  incomplete. Counts, hours, group rows, and computed refusals are kept. */
+export type InMemorySummaryPolicy = {
+  /** True for a contributing input row whose pricing or costing is unresolved. */
+  incompleteRow?: (row: Readonly<Record<string, unknown>>) => boolean
+}
+
 export type SummarizeRowsPlan = {
   entity: ReportEntity
   breakouts: ReportBreakout[]
@@ -817,6 +882,8 @@ export type SummarizeRowsPlan = {
   totals?: ReportCustomQuery['totals']
   fiscalStartMonth?: number
   labels?: ReportRunLabels
+  /** Optional completeness contract for the summary band. */
+  summaryPolicy?: InMemorySummaryPolicy
 }
 
 /** Pure producer for trusted, engine-computed facts. The returned dN/mN rows
@@ -900,13 +967,68 @@ export function summarizeRows(
   })
 }
 
-/** Produce the complete shared result shape for in-memory facts. */
+/** Per-denomination singularity observed across the contributing in-memory
+ *  input rows. Each declared currency dimension (transaction, functional
+ *  base, accounting book) is judged independently from the actual row values
+ *  the caller contributes — never from group keys and never assumed. An
+ *  undeclared dimension is single by construction; a declared dimension with
+ *  no contributors is vacuously single. With contributors, any missing,
+ *  null, undefined, or blank value fails closed, one shared nonblank value
+ *  stays single, and two values are mixed. */
+export function resolveInMemorySingles(
+  entity: ReportEntity,
+  inputRows: readonly Readonly<Record<string, unknown>>[],
+): DenominationSingles {
+  const observed = (column: string | null | undefined): boolean => {
+    if (column === undefined) return true
+    if (inputRows.length === 0) return true
+    if (column === null) return false
+    const values = new Set<string>()
+    for (const row of inputRows) {
+      const value = row[column]
+      if (value === null || value === undefined) return false
+      const text = typeof value === 'string' ? value : String(value)
+      if (text.trim() === '') return false
+      values.add(text)
+      if (values.size > 1) return false
+    }
+    return true
+  }
+  // The accounting book is observed through the canonical public row key,
+  // never through bookScope.column: that is a SQL expression over table
+  // aliases (je.book_id), not a record key. A catalog invariant pins that
+  // every book-scoped entity exposes book_id; a scoped entity without it
+  // cannot prove one book and fails closed.
+  const bookColumn = !entity.bookScope
+    ? undefined
+    : (entity.columns ?? []).some((column) => column.key === 'book_id')
+      ? 'book_id'
+      : null
+  return {
+    txn: observed(entity.currencyColumn),
+    base: observed(entity.baseCurrencyColumn),
+    book: observed(bookColumn),
+  }
+}
+
+/** Produce the complete shared result shape for in-memory facts. The caller
+ *  contributes the input rows its aggregates were built from so denomination
+ *  singularity and the plan's completeness policy are observed from real
+ *  values. Aggregates without contributors are vacuous and stay single;
+ *  aggregates WITHHELD from observation fail closed and omit money cards. */
 export function shapeSummarizedRows(
   rows: Record<string, unknown>[],
   plan: SummarizeRowsPlan,
+  inputRows: readonly Readonly<Record<string, unknown>>[] = [],
 ): ReportRunResult {
   const entity = { ...plan.entity, timeKey: plan.timeKey ?? plan.entity.timeKey }
   const measures = plan.measures.map(({ filter: _predicate, ...measure }) => measure)
+  const singles = inputRows.length > 0 || rows.length === 0
+    ? resolveInMemorySingles(entity, inputRows)
+    : { txn: false, base: false, book: false }
+  const incomplete = plan.summaryPolicy?.incompleteRow
+    ? inputRows.some((row) => plan.summaryPolicy!.incompleteRow!(row))
+    : false
   return shapeSummarizeRows(
     entity,
     plan.breakouts,
@@ -915,8 +1037,9 @@ export function shapeSummarizedRows(
     plan.labels ?? {},
     plan.groupBy ?? null,
     plan.totals ?? null,
-    { txn: true, base: true, book: true },
+    singles,
     plan.fiscalStartMonth ?? 1,
+    { suppressMoneySummaries: incomplete },
   )
 }
 

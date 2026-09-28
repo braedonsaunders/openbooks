@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { ReportEntity } from './entities'
+import { REPORT_ENTITIES, type ReportEntity } from './entities'
 import type { ReportMeasure } from './types'
 import { compileCustomQuery } from './custom-query'
 import { evaluateFormulaMeasures } from './formula'
@@ -195,6 +195,133 @@ test('in-memory weekly aggregates filter components and shape a ratio of totals'
   assert.equal(shaped.summary.find((item) => item.label === 'Total utilization')?.value, '37.50%')
 })
 
+test('in-memory summaries omit mixed-denomination money and keep exact single-currency totals', () => {
+  const moneyEntity: ReportEntity = {
+    key: 'money_facts', label: 'Money facts', category: 'test', description: 'Test money facts',
+    from: 'money_rows m', orgColumn: 'm.org_id', timeKey: 'period', currencyColumn: 'currency',
+    columns: [
+      { key: 'period', label: 'Period', kind: 'date', expr: 'm.period' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'm.currency' },
+      { key: 'revenue', label: 'Revenue', kind: 'money', expr: 'm.revenue', txnCurrency: true },
+      { key: 'cost', label: 'Cost', kind: 'money', expr: 'm.cost', txnCurrency: true },
+    ],
+  }
+  const measures = [
+    { fn: 'sum', key: 'revenue', column: 'revenue' },
+    { fn: 'sum', key: 'cost', column: 'cost' },
+    { fn: 'count', key: 'rows', label: 'Rows' },
+    formula('margin', { op: '-', left: { ref: 'revenue' }, right: { ref: 'cost' } }, 'money', { label: 'Margin' }),
+    formula('margin_percent', { op: '/', left: { ref: 'margin' }, right: { ref: 'revenue' } }, 'percent', { label: 'Margin percent' }),
+  ] satisfies InMemoryReportMeasure[]
+  const shape = (rows: Record<string, unknown>[]) => {
+    const plan = { entity: moneyEntity, breakouts: [{ column: 'currency' }], measures }
+    return shapeSummarizedRows(summarizeRows(rows, plan), plan, rows)
+  }
+  const labels = (result: ReturnType<typeof shape>) => result.summary.map((item) => item.label)
+
+  const mixed = shape([
+    { period: '2026-01-05', currency: 'USD', revenue: '10.0000', cost: '6.0000' },
+    { period: '2026-01-05', currency: 'CAD', revenue: '20.0000', cost: '12.0000' },
+  ])
+  assert.equal(mixed.groups[0]?.rows.length, 2, 'per-currency group rows stay partitioned')
+  assert.deepEqual(labels(mixed), ['Groups', 'Total rows'], 'no blended money or margin card')
+  assert.equal(mixed.summary.find((item) => item.label === 'Total rows')?.value, 2)
+
+  const single = shape([
+    { period: '2026-01-05', currency: 'USD', revenue: '10.0000', cost: '6.0000' },
+    { period: '2026-01-06', currency: 'USD', revenue: '20.0000', cost: '12.0000' },
+  ])
+  const values = new Map(single.summary.map((item) => [item.label, item.value]))
+  assert.equal(values.get('Total sum of revenue'), '30.00')
+  assert.equal(values.get('Total sum of cost'), '18.00')
+  assert.equal(values.get('Total margin'), '12.0000')
+  assert.equal(values.get('Total margin percent'), '40.00%')
+})
+
+test('in-memory book singularity uses the canonical row key and missing evidence fails closed', () => {
+  const bookEntity: ReportEntity = {
+    key: 'book_facts', label: 'Book facts', category: 'test', description: 'Test book facts',
+    from: 'book_rows b', orgColumn: 'b.org_id', timeKey: 'period',
+    currencyColumn: 'currency', bookScope: { column: 'b.book_id' },
+    columns: [
+      { key: 'period', label: 'Period', kind: 'date', expr: 'b.period' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'b.currency' },
+      { key: 'book_id', label: 'Book (id)', kind: 'uuid', expr: 'b.id' },
+      { key: 'revenue', label: 'Revenue', kind: 'money', expr: 'b.revenue', txnCurrency: true },
+      { key: 'cost', label: 'Cost', kind: 'money', expr: 'b.cost', txnCurrency: true },
+    ],
+  }
+  const measures = [
+    { fn: 'sum', key: 'revenue', column: 'revenue' },
+    { fn: 'sum', key: 'cost', column: 'cost' },
+    { fn: 'count', key: 'rows', label: 'Rows' },
+    formula('margin', { op: '-', left: { ref: 'revenue' }, right: { ref: 'cost' } }, 'money', { label: 'Margin' }),
+  ] satisfies InMemoryReportMeasure[]
+  const shape = (
+    rows: Record<string, unknown>[],
+    entity: ReportEntity = bookEntity,
+    breakouts: { column: string }[] = [{ column: 'currency' }, { column: 'book_id' }],
+  ) => {
+    const plan = { entity, breakouts, measures }
+    return shapeSummarizedRows(summarizeRows(rows, plan), plan, rows)
+  }
+  const labels = (result: ReturnType<typeof shape>) => result.summary.map((item) => item.label)
+
+  // One shared book on every row stays exact. The SQL scope 'b.book_id' never
+  // matches a row key, so exact totals prove observation used row.book_id.
+  const oneBook = shape([
+    { period: '2026-01-05', currency: 'USD', book_id: 'book-one', revenue: '10.0000', cost: '6.0000' },
+    { period: '2026-01-06', currency: 'USD', book_id: 'book-one', revenue: '20.0000', cost: '12.0000' },
+  ])
+  assert.equal(oneBook.summary.find((item) => item.label === 'Total sum of revenue')?.value, '30.00')
+  assert.equal(oneBook.summary.find((item) => item.label === 'Total margin')?.value, '12.0000')
+
+  // Two books under one currency: partitioned groups stay, combined cards go.
+  const twoBooks = shape([
+    { period: '2026-01-05', currency: 'USD', book_id: 'book-one', revenue: '10.0000', cost: '6.0000' },
+    { period: '2026-01-05', currency: 'USD', book_id: 'book-two', revenue: '20.0000', cost: '12.0000' },
+  ])
+  assert.equal(twoBooks.groups[0]?.rows.length, 2)
+  assert.deepEqual(labels(twoBooks), ['Groups', 'Total rows'])
+
+  // A scoped entity whose catalog row cannot expose the book fails closed.
+  const unkeyedEntity: ReportEntity = {
+    ...bookEntity,
+    columns: (bookEntity.columns ?? []).filter((column) => column.key !== 'book_id'),
+  }
+  const missingBook = shape(
+    [{ period: '2026-01-05', currency: 'USD', revenue: '10.0000', cost: '6.0000' }],
+    unkeyedEntity,
+    [{ column: 'currency' }],
+  )
+  assert.deepEqual(labels(missingBook), ['Groups', 'Total rows'])
+
+  // A declared currency with no observable value fails closed: all missing,
+  // null, and partially missing evidence alike.
+  const row = (overrides: Record<string, unknown>): Record<string, unknown> => ({
+    period: '2026-01-05', currency: 'USD', book_id: 'book-one',
+    revenue: '10.0000', cost: '6.0000', ...overrides,
+  })
+  for (const rows of [
+    [row({ currency: undefined })],
+    [row({ currency: null })],
+    [row({ currency: '' })],
+    [row({}), row({ currency: undefined })],
+  ]) {
+    assert.deepEqual(labels(shape(rows, bookEntity, [{ column: 'book_id' }])), ['Groups', 'Total rows'])
+  }
+
+  // Zero contributors are vacuously single: the empty money cards publish.
+  const empty = shape([], bookEntity, [{ column: 'currency' }])
+  assert.ok(labels(empty).includes('Total sum of revenue'))
+})
+
+test('every book-scoped catalog entity exposes the canonical in-memory book key', () => {
+  const missing = REPORT_ENTITIES.filter((entity) => entity.bookScope
+    && !(entity.columns ?? []).some((column) => column.key === 'book_id'))
+  assert.deepEqual(missing.map((entity) => entity.key), [])
+})
+
 test('opening and closing add across subsidiaries by month and use first/last time sections', () => {
   const rows = [
     ['2026-01-02', 'A', '10'], ['2026-01-30', 'A', '15'], ['2026-01-03', 'B', '20'], ['2026-01-30', 'B', '25'],
@@ -230,4 +357,122 @@ test('opening and closing add across subsidiaries by month and use first/last ti
   ]
   const timeResult = shapeSummarizedRows(summarizeRows(timeRows, timePlan), timePlan)
   assert.deepEqual(timeResult.groups.find((group) => group.title === 'Grand totals')?.rows, [['30', '40']])
+})
+
+test('book contributor book_id evidence fails closed unless one exact book', () => {
+  const bookEntity: ReportEntity = {
+    key: 'book_facts', label: 'Book facts', category: 'test', description: 'Test book facts',
+    from: 'book_rows b', orgColumn: 'b.org_id', timeKey: 'period',
+    currencyColumn: 'currency', bookScope: { column: 'b.book_id' },
+    columns: [
+      { key: 'period', label: 'Period', kind: 'date', expr: 'b.period' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'b.currency' },
+      { key: 'book_id', label: 'Book (id)', kind: 'uuid', expr: 'b.id' },
+      { key: 'revenue', label: 'Revenue', kind: 'money', expr: 'b.revenue', txnCurrency: true },
+      { key: 'cost', label: 'Cost', kind: 'money', expr: 'b.cost', txnCurrency: true },
+    ],
+  }
+  const measures = [
+    { fn: 'sum', key: 'revenue', column: 'revenue' },
+    { fn: 'sum', key: 'cost', column: 'cost' },
+    { fn: 'count', key: 'rows', label: 'Rows' },
+    formula('margin', { op: '-', left: { ref: 'revenue' }, right: { ref: 'cost' } }, 'money', { label: 'Margin' }),
+  ] satisfies InMemoryReportMeasure[]
+  const shape = (rows: Record<string, unknown>[]) => {
+    const plan = { entity: bookEntity, breakouts: [{ column: 'book_id' }], measures }
+    return shapeSummarizedRows(summarizeRows(rows, plan), plan, rows)
+  }
+  const labels = (result: ReturnType<typeof shape>) => result.summary.map((item) => item.label)
+  const row = (overrides: Record<string, unknown>): Record<string, unknown> => ({
+    period: '2026-01-05', currency: 'USD', book_id: 'book-one',
+    revenue: '10.0000', cost: '6.0000', ...overrides,
+  })
+
+  // Every shape of missing book evidence fails closed on a valid book-scoped
+  // entity: absent key, null, undefined, and blank all omit money cards.
+  for (const rows of [
+    [{ period: '2026-01-05', currency: 'USD', revenue: '10.0000', cost: '6.0000' }],
+    [row({ book_id: undefined })],
+    [row({ book_id: null })],
+    [row({ book_id: '' })],
+    [row({ book_id: '   ' })],
+    [row({}), row({ book_id: undefined })],
+  ]) {
+    assert.deepEqual(labels(shape(rows)), ['Groups', 'Total rows'])
+  }
+
+  // Two books under one scope: partitioned groups stay, combined cards go.
+  const mixed = shape([row({}), row({ book_id: 'book-two' })])
+  assert.equal(mixed.groups[0]?.rows.length, 2)
+  assert.deepEqual(labels(mixed), ['Groups', 'Total rows'])
+
+  // One shared book on every contributor stays exact.
+  const exact = shape([row({}), row({ period: '2026-01-06', revenue: '20.0000', cost: '12.0000' })])
+  assert.equal(exact.summary.find((item) => item.label === 'Total sum of revenue')?.value, '30.00')
+  assert.equal(exact.summary.find((item) => item.label === 'Total margin')?.value, '12.0000')
+})
+
+test('aggregate rows without contributors omit money cards but keep counts', () => {
+  const moneyEntity: ReportEntity = {
+    key: 'money_facts', label: 'Money facts', category: 'test', description: 'Test money facts',
+    from: 'money_rows m', orgColumn: 'm.org_id', timeKey: 'period', currencyColumn: 'currency',
+    columns: [
+      { key: 'period', label: 'Period', kind: 'date', expr: 'm.period' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'm.currency' },
+      { key: 'revenue', label: 'Revenue', kind: 'money', expr: 'm.revenue', txnCurrency: true },
+      { key: 'cost', label: 'Cost', kind: 'money', expr: 'm.cost', txnCurrency: true },
+    ],
+  }
+  const measures = [
+    { fn: 'sum', key: 'revenue', column: 'revenue' },
+    { fn: 'sum', key: 'cost', column: 'cost' },
+    { fn: 'count', key: 'rows', label: 'Rows' },
+    formula('margin', { op: '-', left: { ref: 'revenue' }, right: { ref: 'cost' } }, 'money', { label: 'Margin' }),
+    formula('margin_percent', { op: '/', left: { ref: 'margin' }, right: { ref: 'revenue' } }, 'percent', { label: 'Margin percent' }),
+  ] satisfies InMemoryReportMeasure[]
+  const plan = { entity: moneyEntity, breakouts: [{ column: 'currency' }], measures }
+  const inputs = [
+    { period: '2026-01-05', currency: 'USD', revenue: '10.0000', cost: '6.0000' },
+    { period: '2026-01-06', currency: 'USD', revenue: '20.0000', cost: '12.0000' },
+  ]
+  // The same aggregate rows shaped WITH contributors publish money cards, so
+  // the omission below proves withheld observation — not the inputs.
+  const observed = shapeSummarizedRows(summarizeRows(inputs, plan), plan, inputs)
+  assert.ok(observed.summary.some((item) => item.label === 'Total sum of revenue'))
+
+  // Aggregates passed with no contributing rows fail closed: monetary and
+  // money-derived cards are omitted while partitioned groups and the safe
+  // count card survive.
+  const withheld = shapeSummarizedRows(summarizeRows(inputs, plan), plan)
+  assert.equal(withheld.groups[0]?.rows.length, 1)
+  assert.deepEqual(withheld.summary.map((item) => item.label), ['Groups', 'Total rows'])
+  assert.equal(withheld.summary.find((item) => item.label === 'Total rows')?.value, 2)
+})
+
+test('single-currency zero revenue publishes the divide-by-zero refusal, never a ratio', () => {
+  const moneyEntity: ReportEntity = {
+    key: 'money_facts', label: 'Money facts', category: 'test', description: 'Test money facts',
+    from: 'money_rows m', orgColumn: 'm.org_id', timeKey: 'period', currencyColumn: 'currency',
+    columns: [
+      { key: 'period', label: 'Period', kind: 'date', expr: 'm.period' },
+      { key: 'currency', label: 'Currency', kind: 'text', expr: 'm.currency' },
+      { key: 'revenue', label: 'Revenue', kind: 'money', expr: 'm.revenue', txnCurrency: true },
+      { key: 'cost', label: 'Cost', kind: 'money', expr: 'm.cost', txnCurrency: true },
+    ],
+  }
+  const measures = [
+    { fn: 'sum', key: 'revenue', column: 'revenue' },
+    { fn: 'sum', key: 'cost', column: 'cost' },
+    { fn: 'count', key: 'rows', label: 'Rows' },
+    formula('margin', { op: '-', left: { ref: 'revenue' }, right: { ref: 'cost' } }, 'money', { label: 'Margin' }),
+    formula('margin_percent', { op: '/', left: { ref: 'margin' }, right: { ref: 'revenue' } }, 'percent', { label: 'Margin percent' }),
+  ] satisfies InMemoryReportMeasure[]
+  // Fully priced (cost present) yet revenue-free: margin is exact zero and the
+  // margin ratio has no denominator.
+  const inputs = [{ period: '2026-01-05', currency: 'USD', revenue: '0.0000', cost: '0.0000' }]
+  const plan = { entity: moneyEntity, breakouts: [], measures }
+  const result = shapeSummarizedRows(summarizeRows(inputs, plan), plan, inputs)
+  const card = result.summary.find((item) => item.label === 'Total margin percent')
+  assert.equal(card?.value, 'Undefined — divides by zero')
+  assert.ok(!/^-?\d/.test(String(card?.value ?? '')), 'refusal must not read as a numeric ratio')
 })
