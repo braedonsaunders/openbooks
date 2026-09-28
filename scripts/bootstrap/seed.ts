@@ -2,6 +2,7 @@
 import { randomBytes, scryptSync } from "node:crypto"
 import { sql } from "drizzle-orm"
 import { db, env } from "../../engine/src/platform/db.ts"
+import { upsertBuiltInRolesForOrg } from "../../engine/src/provisioning/built-in-role-seed.ts"
 import { ensureCloseDefaults } from "../../engine/src/close/defaults.ts"
 import { SUPPORTED_CURRENCIES } from "../../engine/src/fx/currencies.ts"
 import { BUILT_IN_ROLES } from "../../web/lib/permissions.ts"
@@ -110,16 +111,10 @@ export async function ensureRootSubsidiary(orgId: string): Promise<void> {
 }
 
 export async function seedRoles(orgId: string): Promise<void> {
-  for (const [key, def] of Object.entries(BUILT_IN_ROLES)) {
-    await db.execute(sql`
-      insert into app_roles (org_id, key, name, description, is_built_in, permissions)
-      values (${orgId}, ${key}, ${def.name}, ${def.description}, true, ${JSON.stringify(def.permissions)})
-      on conflict (org_id, key) do update
-        set name = excluded.name, description = excluded.description,
-            is_built_in = true, permissions = excluded.permissions, updated_at = now()
-    `);
-  }
-  console.log("[bootstrap] built-in roles ensured");
+  // New-org defaults only: re-running refreshes built-in name/description
+  // metadata and leaves stored permissions exactly as configured.
+  await upsertBuiltInRolesForOrg(db, orgId, BUILT_IN_ROLES);
+  console.log("[bootstrap] built-in roles ensured (new-org defaults; existing grants unchanged)");
 }
 
 export async function seedAdmin(orgId: string): Promise<void> {
