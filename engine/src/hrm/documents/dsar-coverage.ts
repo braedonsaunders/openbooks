@@ -147,6 +147,19 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   // Remit exclusions: another module owns the data, the link is
   // actor-side or counterparty, or the payload is credential material.
   {
+    table: "saas_metrics_fx_evidence",
+    reason:
+      "market-data FX observations for SaaS normalization under the finance " +
+      "remit; rows carry no person link and are never HR file data.",
+  },
+  {
+    table: "saas_metrics_normalization_requests",
+    reason:
+      "operator workflow rows under the finance control remit; requester and " +
+      "approver are actor-side user identities, not subject records, and " +
+      "attempt history lives in audit_log outside HR file data.",
+  },
+  {
     table: "party_bank_accounts",
     reason:
       "financial credential material (account_number_encrypted) under the " +
