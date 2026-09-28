@@ -1,49 +1,64 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { BUILT_IN_ROLES } from "../organization/permissions.ts";
+import { upsertBuiltInRolesForOrg } from "./built-in-role-seed.ts";
 import { seedDashboardDefaultsForOrg } from "./dashboard-defaults.ts";
 
 /**
  * Seed the RBAC foundation:
  *   npx tsx engine/src/provisioning/seed-roles.ts
  *
- * For every org: upsert the built-in roles into app_roles.
+ * For every org: ensure the built-in roles exist in app_roles.
  *
- * Idempotent — built-in role definitions are refreshed on re-run (name,
- * description, permissions), existing assignments are left untouched, and
- * custom roles are never modified.
+ * New-org defaults only — a re-run refreshes built-in name/description
+ * metadata and leaves stored permissions exactly as configured, so
+ * customized or reduced grants survive re-seeding. Existing assignments are
+ * left untouched, and custom roles are never modified.
  */
 
-const orgs = (await db.execute<{ id: string; name: string }>(sql`select id, name from orgs order by created_at`));
-if (orgs.rows.length === 0) {
-  console.error("no orgs found — seed an org before seeding roles");
-  process.exit(1);
-}
+export type SeedRolesForOrgResult = {
+  roles: number;
+  dashboardDefaults: number;
+};
 
-for (const org of orgs.rows) {
-  for (const [key, def] of Object.entries(BUILT_IN_ROLES)) {
-    await db.execute(sql`
-      insert into app_roles (org_id, key, name, description, is_built_in, permissions)
-      values (${org.id}, ${key}, ${def.name}, ${def.description}, true,
-              ${JSON.stringify(def.permissions)})
-      on conflict (org_id, key) do update
-        set name = excluded.name,
-            description = excluded.description,
-            is_built_in = true,
-            permissions = excluded.permissions,
-            updated_at = now()
-        where app_roles.org_id = ${org.id}
-    `);
-  }
-
-  const dashboardCount = await seedDashboardDefaultsForOrg(
-    org.id,
+/** Thin per-org entry: built-in roles plus dashboard defaults for one org. */
+export async function seedRolesForOrg(orgId: string): Promise<SeedRolesForOrgResult> {
+  await upsertBuiltInRolesForOrg(db, orgId, BUILT_IN_ROLES);
+  const dashboardDefaults = await seedDashboardDefaultsForOrg(
+    orgId,
     Object.keys(BUILT_IN_ROLES),
   );
-
-  console.log(
-    `org "${org.name}": ${Object.keys(BUILT_IN_ROLES).length} built-in roles upserted, ` +
-      `${dashboardCount} dashboard default(s) upserted`,
-  );
+  return { roles: Object.keys(BUILT_IN_ROLES).length, dashboardDefaults };
 }
-process.exit(0);
+
+async function main(): Promise<void> {
+  const orgs = (await db.execute<{ id: string; name: string }>(sql`select id, name from orgs order by created_at`));
+  if (orgs.rows.length === 0) {
+    console.error("no orgs found — seed an org before seeding roles");
+    process.exit(1);
+  }
+
+  for (const org of orgs.rows) {
+    const done = await seedRolesForOrg(org.id);
+    console.log(
+      `org "${org.name}": ${done.roles} built-in roles ensured ` +
+        `(new-org defaults; existing grants unchanged), ` +
+        `${done.dashboardDefaults} dashboard default(s) upserted`,
+    );
+  }
+}
+
+/**
+ * Run directly (`tsx seed-roles.ts`) but never merely because this module
+ * was imported — the integration test drives the exported per-org entry.
+ */
+export function isSeedRolesCli(entrypoint: string | undefined): boolean {
+  return /(^|[/\\])seed-roles\.(?:[cm]?[jt]s)$/.test(entrypoint ?? "");
+}
+
+if (isSeedRolesCli(process.argv[1])) {
+  void main().then(() => process.exit(0)).catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}
