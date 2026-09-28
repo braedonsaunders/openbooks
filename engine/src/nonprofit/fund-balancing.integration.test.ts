@@ -177,6 +177,7 @@ test("fund balancing stays data-driven and fund postings use configured interfun
       dueFromAccountId: dueFromAccount,
       dueToAccountId: dueToAccount,
       actorId: actors,
+      reason: "Pair restricted and operating funds for balancing-leg assertions",
     });
     const gift = await postDirect(org, { ...unmatched, entryNumber: `GIFT-${randomUUID()}` });
     await assertBalancedByFund(org.orgId, gift.entryId);

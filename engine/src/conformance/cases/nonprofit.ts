@@ -61,6 +61,7 @@ async function runRelease(ctx: CaseContext, scenario: ReleaseScenario) {
     await setFundPair({
       orgId: ledger.orgId, fromFundId: setup.defaultFundId, toFundId: source.id,
       dueFromAccountId: ctx.roles.ar, dueToAccountId: ctx.roles.ap, actorId: ledger.actorId,
+      reason: "Settle opening-balance postings between the operating and source funds",
     });
     const opening = await withOrgTransaction(ledger.orgId, () => postEntry(db, {
       orgId: ledger.orgId, bookId: ledger.bookId, subsidiaryId: ledger.subsidiaryId,

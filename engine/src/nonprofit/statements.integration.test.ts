@@ -6,7 +6,7 @@ import { installEngineSeams } from "../composition/install.ts";
 import { toUnits } from "../money/money.ts";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
-import { postEntry } from "../journal/post-entry.ts";
+import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { NonprofitError } from "./errors.ts";
 import { createFund, setFundPair } from "./funds.ts";
 import { splitSharedCost, setFunctionalMapping } from "./functional.ts";
@@ -14,7 +14,7 @@ import { setFramework } from "./frameworks.ts";
 import { provisionFundAccounting } from "./provision.ts";
 import { awardGrant, createGrant, type GrantPostingAccounts } from "./grants.ts";
 import { createFundRelease, submitFundRelease, voidFundRelease } from "./releases.ts";
-import { loadNonprofitStatements } from "./statements.ts";
+import { loadFundCoverageTieout, loadNonprofitStatements } from "./statements.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -65,7 +65,19 @@ test("nonprofit statements observe posted balances, gross releases, and tied fun
     await setFundPair({
       orgId: org.orgId, fromFundId: operating.defaultFundId, toFundId: restricted.id,
       dueFromAccountId: org.accounts.ar, dueToAccountId: org.accounts.ap, actorId,
+      reason: "Settle interfund balances for statement fixtures",
     });
+    await assert.rejects(
+      setFundPair({ orgId: org.orgId, fromFundId: operating.defaultFundId, toFundId: restricted.id, dueFromAccountId: org.accounts.ar, dueToAccountId: org.accounts.ap, actorId, reason: "   " }),
+      (error: unknown) => (error as { code?: string }).code === "fund_pair_reason_required",
+    );
+    await setFundPair({ orgId: org.orgId, fromFundId: operating.defaultFundId, toFundId: restricted.id, dueFromAccountId: org.accounts.ar, dueToAccountId: org.accounts.bank, actorId, reason: "Rotate the settlement account" });
+    const pairAudit = await withOrgContext(org.orgId, () => db.execute<{ action: string; changes: string }>(sql`
+      select action, changes::text as changes from audit_log where org_id = ${org.orgId} and table_name = 'fund_pairs' order by id desc limit 1`));
+    const pairChanges = JSON.parse(pairAudit.rows[0]!.changes) as { before: { due_to_account_id: string } | null; after: { due_to_account_id: string }; reason: string };
+    assert.equal(pairAudit.rows[0]?.action, "update");
+    assert.equal(pairChanges.reason, "Rotate the settlement account");
+    assert.ok(pairChanges.before && pairChanges.before.due_to_account_id !== pairChanges.after.due_to_account_id);
     for (const [departmentId, functionKey] of [
       [departmentIds[0]!, "program"], [departmentIds[1]!, "fundraising"],
     ] as const) {
@@ -200,6 +212,24 @@ test("nonprofit statements observe posted balances, gross releases, and tied fun
       beforeRelease.financialPosition.netAssetsByClass.map(({ restrictionClass, amount }) => ({ restrictionClass, amount })),
     );
     assert.ok(afterVoid.cashFlows.reconciliation.every((row) => row.reconciliationDifference === "0.0000"));
+    const gift = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+      select id from journal_entries where org_id = ${org.orgId} and entry_number like 'GIFT-%'`));
+    await withOrgContext(org.orgId, () => markEntryReversed(db, { orgId: org.orgId, entryId: gift.rows[0]!.id, actorId }));
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"functionalExpenses":false}'::jsonb, true)
+       where id = ${org.orgId}`));
+    const tieout = await loadFundCoverageTieout({ orgId: org.orgId, asOf: org.date });
+    const community = tieout.rows.find((row) => row.fundCode === "COMMUNITY");
+    assert.equal(community?.cash, "100.0000");
+    assert.equal(community?.undercovered, true);
+    assert.ok(tieout.netAssetsTie.every((tie) => tie.tied));
+    assert.ok(tieout.interfund.every((line) => line.zero));
+    assert.equal(tieout.bookId, org.bookId);
+    const cutoff = await loadFundCoverageTieout({ orgId: org.orgId, asOf: "2026-01-01" });
+    assert.equal(cutoff.rows.length, 0);
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"functionalExpenses":true}'::jsonb, true)
+       where id = ${org.orgId}`));
     const movement = await withOrgContext(org.orgId, () => db.execute<{ amount: string }>(sql`
       select coalesce(sum(jl.amount), 0)::text as amount
         from journal_lines jl join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id

@@ -37,7 +37,7 @@ test("nonprofit feature switches preserve saved records and statements", { skip:
     });
     const funds = await provisionFundAccounting({ orgId: org.orgId, defaultFund: { code: "OPERATING", name: "Operating" }, classifications: { OPERATING: { kind: "operating", restrictionClass: "without_donor_restrictions" } }, actorId });
     const restricted = await createFund({ orgId: org.orgId, code: "RESTRICTED", name: "Restricted", kind: "restricted", restrictionClass: "with_donor_restrictions", actorId });
-    await setFundPair({ orgId: org.orgId, fromFundId: funds.defaultFundId, toFundId: restricted.id, dueFromAccountId: org.accounts.ar, dueToAccountId: org.accounts.ap, actorId });
+    await setFundPair({ orgId: org.orgId, fromFundId: funds.defaultFundId, toFundId: restricted.id, dueFromAccountId: org.accounts.ar, dueToAccountId: org.accounts.ap, actorId, reason: "Settle interfund balances for feature-fence postings" });
     await setFramework({ orgId: org.orgId, framework: "us_asc958", actorId, reason: "Prepare nonprofit statements" });
     const departmentId = randomUUID();
     await withOrgContext(org.orgId, () => db.execute(sql`insert into departments (id,org_id,name,is_active,custom) values (${departmentId},${org.orgId},'Programs',true,'{}'::jsonb)`));
@@ -77,7 +77,10 @@ test("nonprofit feature switches preserve saved records and statements", { skip:
         'encumbrances',(select coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb) from (select * from encumbrances where org_id=${org.orgId}) x),
         'entries',(select coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb) from (select * from journal_entries where org_id=${org.orgId}) x),
         'lines',(select coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb) from (select * from journal_lines where org_id=${org.orgId}) x),
-        'reports',(select coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb) from (select * from report_definitions where org_id=${org.orgId} and slug in ('statement-of-financial-position','statement-of-activities','functional-expense-matrix','cash-flow-reconciliation','grant-pipeline')) x)
+        'reports',(select coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb) from (select * from report_definitions where org_id=${org.orgId} and slug in ('statement-of-financial-position','statement-of-activities','functional-expense-matrix','cash-flow-reconciliation','grant-pipeline')) x),
+        'frameworks',(select coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb) from (select * from nonprofit_frameworks where org_id=${org.orgId}) x),
+        'pairs',(select coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb) from (select * from fund_pairs where org_id=${org.orgId}) x),
+        'mappings',(select coalesce(jsonb_agg(to_jsonb(x) order by x.id),'[]'::jsonb) from (select * from functional_mappings where org_id=${org.orgId}) x)
       ) as data`)).rows[0]?.data);
     const before = await snapshot();
     const beforeStatements = await statements();
@@ -86,10 +89,13 @@ test("nonprofit feature switches preserve saved records and statements", { skip:
       error.message.includes(key) && Boolean((error as Error & { remedy?: string }).remedy?.includes("Company Settings → Features"));
     const cases = [
       ["fundAccounting", () => createFund({ orgId: org.orgId, code: "OFF", name: "Off", kind: "operating", restrictionClass: "without_donor_restrictions", actorId })],
+      ["fundAccounting", () => setFramework({ orgId: org.orgId, framework: "us_asc958", actorId, reason: "Confirm restriction framework" })],
+      ["fundAccounting", () => setFundPair({ orgId: org.orgId, fromFundId: funds.defaultFundId, toFundId: restricted.id, dueFromAccountId: org.accounts.ar, dueToAccountId: org.accounts.ap, actorId })],
       ["grantManagement", () => createGrant({ orgId: org.orgId, code: "OFF", name: "Off", sponsorPartyId: org.customerId, sponsorKind: "foundation", determination: "contribution_unconditional", awardAmount: "1.0000", periodFrom: "2026-01-01", periodTo: "2026-12-31", fundId: restricted.id, allowableAccountGroupId: group, actorId })],
       ["pledges", () => createPledge({ orgId: org.orgId, subsidiaryId: org.subsidiaryId, donorPartyId: org.customerId, fundId: restricted.id, totalAmount: "1.0000", discountRate: "0", installments: [{ dueOn: "2027-01-01", amount: "1.0000" }], reason: "Record promised support", actorId })],
       ["encumbrances", () => createEncumbrance({ orgId: org.orgId, accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, sourceKind: "manual", amount: "1.0000", actorId })],
       ["functionalExpenses", async () => loadNonprofitStatements({ orgId: org.orgId, asOf: org.date, periodFrom: "2026-01-01", periodTo: org.date })],
+      ["functionalExpenses", () => setFunctionalMapping({ orgId: org.orgId, departmentId, functionKey: "program", effectiveFrom: org.date, actorId, reason: "Classify program expense" })],
       ["form990", () => computeForm990Workpaper(org.orgId, org.date, org.date)],
     ] as const;
     for (const [key, attempt] of cases) {

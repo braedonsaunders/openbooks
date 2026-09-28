@@ -217,6 +217,8 @@ export interface SetFundPairInput {
   dueToAccountId: string;
   isActive?: boolean;
   actorId?: string | null;
+  /** Business reason for creating or changing the pair; stored on the audit record, never defaulted. */
+  reason: string;
 }
 
 export interface FundPairRecord extends SetFundPairInput {
@@ -224,12 +226,27 @@ export interface FundPairRecord extends SetFundPairInput {
   isActive: boolean;
 }
 
-/** Insert or update the directed due-from/due-to accounts for two funds. */
+/**
+ * Insert or update the directed due-from/due-to accounts for two funds.
+ * The reason is required and nonblank at every call, and the same
+ * transaction writes one audit_log row carrying before/after evidence with
+ * actor and reason before reporting success.
+ */
 export async function setFundPair(input: SetFundPairInput): Promise<FundPairRecord> {
   requireUuid(input.fromFundId, "fromFundId");
   requireUuid(input.toFundId, "toFundId");
   requireUuid(input.dueFromAccountId, "dueFromAccountId");
   requireUuid(input.dueToAccountId, "dueToAccountId");
+  const reason = typeof input.reason === "string" ? input.reason.trim() : "";
+  if (!reason) {
+    throw new NonprofitError({
+      message: "A reason is required when saving an interfund pair.",
+      status: 422,
+      code: "fund_pair_reason_required",
+      remedy: "Enter the reason for creating or changing the pair.",
+      field: "reason",
+    });
+  }
   if (input.fromFundId === input.toFundId) {
     throw new NonprofitError({
       message: "An interfund pair must name two different funds.",
@@ -273,6 +290,12 @@ export async function setFundPair(input: SetFundPairInput): Promise<FundPairReco
       });
     }
 
+    const before = (await db.execute<{ id: string; due_from_account_id: string; due_to_account_id: string; is_active: boolean }>(sql`
+      select id, due_from_account_id, due_to_account_id, is_active from fund_pairs
+       where org_id = ${input.orgId} and from_fund_id = ${input.fromFundId} and to_fund_id = ${input.toFundId}
+       for update
+    `)).rows[0] ?? null;
+
     // A directed pair is intentionally upserted; RETURNING proves that the
     // configuration write produced an observable row.
     const result = await db.execute<{ id: string }>(sql`
@@ -300,10 +323,36 @@ export async function setFundPair(input: SetFundPairInput): Promise<FundPairReco
         remedy: "Retry saving the pair after checking the fund and account records.",
       });
     }
+    const audit = (await db.execute<{ id: string }>(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${input.orgId}, 'fund_pairs', ${result.rows[0].id}, ${before ? "update" : "insert"},
+        ${JSON.stringify({
+          before,
+          after: {
+            dueFromAccountId: input.dueFromAccountId,
+            dueToAccountId: input.dueToAccountId,
+            isActive: input.isActive ?? true,
+          },
+          reason,
+        })}::jsonb,
+        ${input.actorId ?? null}
+      )
+      returning id
+    `));
+    if (audit.rows.length !== 1 || !audit.rows[0]?.id) {
+      throw new NonprofitError({
+        message: "The interfund pair audit record was not saved.",
+        status: 409,
+        code: "fund_pair_audit_missing",
+        remedy: "Retry saving the pair after checking the fund and account records.",
+      });
+    }
     return {
       id: result.rows[0].id,
       ...input,
       isActive: input.isActive ?? true,
+      reason,
     };
   });
 }

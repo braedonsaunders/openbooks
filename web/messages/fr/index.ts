@@ -46,6 +46,7 @@ import knowledge from './knowledge.json'
 import laborPricing from './labor-pricing.json'
 import login from './login.json'
 import nav from './nav.json'
+import nonprofit from './nonprofit.json'
 import parties from './parties.json'
 import payments from './payments.json'
 import payroll from './payroll.json'
@@ -115,6 +116,7 @@ export default {
   laborPricing,
   login,
   nav,
+  nonprofit,
   parties,
   payments,
   payroll,
