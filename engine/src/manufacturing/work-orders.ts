@@ -1,8 +1,28 @@
 import { sql } from "drizzle-orm";
 import { allocateDocumentNumber } from "../records/numbering.ts";
-import { add, cmp, mul, normalizeMoney, toUnits, fromUnits } from "../money/money.ts";
+import { add, cmp, div, mul, normalizeMoney, toUnits, fromUnits } from "../money/money.ts";
 import type { SqlExecutor } from "../platform/db.ts";
-import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
+import { formatInZone } from "../platform/business-date.ts";
+import { now } from "../platform/clock.ts";
+import { canonicalTimeZone } from "../platform/time-zone.ts";
+import { loadSubsidiaryContext, SubsidiaryError, type SubsidiaryContext } from "../organization/subsidiaries.ts";
+import {
+  computeCostRate,
+  convertFixedLaborComponents,
+  convertLaborWage,
+  laborCostingSettingsInTx,
+  laborFxQuoteInTx,
+  resolveStandardLaborRateInTx,
+  type LaborCostingSettings,
+  type LaborFxQuoteEvidence,
+  type StandardLaborRate,
+} from "../projects/labor-costing.ts";
+import {
+  resolveStandardOverheadCardsInTx,
+  type StandardOverheadBasis,
+  type StandardOverheadCard,
+} from "../allocations/overhead-post.ts";
+import type { OverheadExecutor } from "../allocations/overhead-sync.ts";
 import { getAvailableToPromise } from "../inventory/availability.ts";
 import { bomRequiredQuantity } from "../inventory/bom-scrap.ts";
 import { resolveProfile, assertStockLocationAdmitsSubsidiary } from "../inventory/profile-policy.ts";
@@ -338,6 +358,7 @@ export async function updateDraftWorkOrder(
 type ActiveRouting = {
   id: string; version: number; effective_from: string; effective_to: string | null;
   default_issue_location_id: string | null; default_receipt_location_id: string | null;
+  overheadBasis: string;
 };
 
 async function activeRouting(
@@ -350,7 +371,8 @@ async function activeRouting(
 ): Promise<ActiveRouting> {
   const matches = await tx.execute<ActiveRouting>(sql`
     select id, version, effective_from::text, effective_to::text,
-           default_issue_location_id, default_receipt_location_id
+           default_issue_location_id, default_receipt_location_id,
+           overhead_basis as "overheadBasis"
       from mfg_routings
      where org_id=${orgId} and produced_item_id=${itemId} and status='active'
        and effective_from <= ${asOf}::date and (effective_to is null or ${asOf}::date < effective_to)
@@ -464,6 +486,355 @@ async function releaseMaterials(
   return result;
 }
 
+type CanonicalBurdenComponent = {
+  key: string; kind: string; name: string; value: string; scaleWithOvertime: boolean;
+};
+
+type ReleaseBurdenDocument = {
+  hoursPerDay: number;
+  annualHours: number;
+  components: CanonicalBurdenComponent[];
+  source: {
+    wageRowId: string; effectiveFrom: string; rate: string;
+    currency: string; basis: string; annualHours: string;
+  };
+};
+
+type ReleaseOverheadCardEvidence = {
+  id: string; effectiveFrom: string; effectiveTo: string | null;
+  kind: string; category: string | null; rate: string; method: string;
+};
+
+type ReleaseOverheadDocument = {
+  format: "openbooks.manufacturing-overhead-snapshot.v1";
+  basis: StandardOverheadBasis;
+  departmentId: string | null;
+  releaseDate: string;
+  cards: ReleaseOverheadCardEvidence[];
+};
+
+type OperationReleaseSnapshot = {
+  sequence: number;
+  workCenterId: string;
+  wageId: string;
+  wageEffectiveFrom: string;
+  wageRate: string;
+  wageCurrency: string;
+  wageBasis: string;
+  wageAnnualHours: string;
+  finalRate: string;
+  functionalCurrency: string;
+  burden: ReleaseBurdenDocument;
+  burdenHash: string;
+  fxClass: "par" | "quoted";
+  fxRate: string;
+  fxRowId: string | null;
+  fxDate: string | null;
+  fxSource: string | null;
+  fxDirection: "direct" | "inverse" | null;
+  overhead: ReleaseOverheadDocument;
+  overheadHash: string;
+  overheadCardIds: string[];
+};
+
+function kernelMessage(err: unknown, fallback: string): string {
+  return err instanceof Error && err.message.trim() ? err.message : fallback;
+}
+
+function checkCurrencyCode(value: unknown): string {
+  const code = typeof value === "string" ? value.trim() : "";
+  if (!/^[A-Za-z]{3}$/.test(code)) {
+    return "";
+  }
+  return code;
+}
+
+// The organization's business release date, read through the release
+// transaction itself: the calendar day in the org's configured time zone,
+// never the UTC day and never an ambient read outside the release unit.
+// Uses the same zone key, validator, and formatter as the shared business
+// clock; an unknown stored zone refuses so the operator fixes the setting
+// instead of releasing on the wrong day.
+async function releaseBusinessDate(tx: SqlExecutor, orgId: string): Promise<string> {
+  const row = (await tx.execute<{ time_zone: string | null }>(sql`
+    select settings->>'timeZone' as time_zone from orgs where id=${orgId}`)).rows[0];
+  if (!row) {
+    refuse("The work order cannot be released because its organization is missing.", "org_not_found", "Contact an administrator; the organization record is missing.");
+  }
+  const stored = row.time_zone;
+  if (!stored || !stored.trim()) return formatInZone(now(), "UTC");
+  const canonical = canonicalTimeZone(stored);
+  if (!canonical) {
+    refuse(`Stored business time zone ${JSON.stringify(stored)} is not a known IANA time zone.`, "invalid_business_timezone", "Set Business time zone in Company Settings → Organization.");
+  }
+  return formatInZone(now(), canonical);
+}
+
+// The authoritative work-order legal entity and its functional currency,
+// re-read inside the release transaction. A subsidiary that left the
+// hierarchy, was deactivated, or lost its currency since creation refuses;
+// there is no fallback to an org default.
+async function releaseFunctionalCurrency(tx: SqlExecutor, orgId: string, order: WorkOrderRow): Promise<string> {
+  let context: SubsidiaryContext;
+  try {
+    context = await loadSubsidiaryContext(tx as Runner, orgId);
+  } catch (err) {
+    if (err instanceof SubsidiaryError) {
+      refuse(`Work order ${order.number} cannot be released because its subsidiary hierarchy is unavailable.`, "work_order_subsidiary_unavailable", "Restore the subsidiary hierarchy in Company Settings → Organization before releasing the work order.");
+    }
+    throw err;
+  }
+  const subsidiary = context.byId.get(order.subsidiaryId!);
+  if (!subsidiary) {
+    refuse(`Work order ${order.number} names a subsidiary outside this organization.`, "invalid_work_order_subsidiary", "Choose an active, non-elimination subsidiary in Company setup.");
+  }
+  if (!subsidiary.isActive || subsidiary.isElimination) {
+    refuse("Choose an active operating subsidiary for the work order.", "invalid_work_order_subsidiary", "Choose an active, non-elimination subsidiary in Company setup.");
+  }
+  const currency = checkCurrencyCode(subsidiary.baseCurrency);
+  if (!currency) {
+    refuse(`Subsidiary ${subsidiary.name} has no usable functional currency.`, "subsidiary_currency_missing", "Set the subsidiary's base currency in Company Settings → Organization before releasing the work order.");
+  }
+  return currency;
+}
+
+function compareBurdenComponents(
+  left: Pick<CanonicalBurdenComponent, "kind" | "key" | "name">,
+  right: Pick<CanonicalBurdenComponent, "kind" | "key" | "name">,
+): number {
+  if (left.kind !== right.kind) return left.kind < right.kind ? -1 : 1;
+  if (left.key !== right.key) return left.key < right.key ? -1 : 1;
+  if (left.name !== right.name) return left.name < right.name ? -1 : 1;
+  return 0;
+}
+
+type ReleaseSnapshotCaches = {
+  rates: Map<string, StandardLaborRate | null>;
+  fx: Map<string, LaborFxQuoteEvidence | null>;
+  overhead: Map<string, StandardOverheadCard[]>;
+};
+
+async function resolveOperationLabor(
+  tx: SqlExecutor,
+  orgId: string,
+  order: WorkOrderRow,
+  opLabel: string,
+  departmentId: string,
+  releaseDate: string,
+  functionalCurrency: string,
+  settings: LaborCostingSettings,
+  caches: ReleaseSnapshotCaches,
+): Promise<Pick<OperationReleaseSnapshot,
+  "wageId" | "wageEffectiveFrom" | "wageRate" | "wageCurrency" | "wageBasis" | "wageAnnualHours" |
+  "finalRate" | "functionalCurrency" | "burden" | "burdenHash" |
+  "fxClass" | "fxRate" | "fxRowId" | "fxDate" | "fxSource" | "fxDirection">> {
+  const laborRemedy = "Review labor costing rates and settings in Company Settings → Labor costing.";
+  let rate = caches.rates.get(departmentId);
+  if (rate === undefined) {
+    try {
+      rate = await resolveStandardLaborRateInTx(tx, orgId, {
+        departmentId, subsidiaryId: order.subsidiaryId, releaseDate,
+      });
+    } catch (err) {
+      refuse(kernelMessage(err, `The standard labor rate for ${opLabel} cannot be resolved.`), "standard_labor_rate_unresolved", laborRemedy);
+    }
+    caches.rates.set(departmentId, rate);
+  }
+  if (!rate) {
+    refuse(`No standard labor rate covers ${opLabel} on ${releaseDate}.`, "standard_labor_rate_missing", `Add a department, subsidiary, or org-wide standard labor rate effective on or before ${releaseDate} in Company Settings → Labor costing.`);
+  }
+  const wageCurrency = checkCurrencyCode(rate.currency);
+  if (!wageCurrency) {
+    refuse(`Standard labor rate ${rate.rateId} carries an unusable currency.`, "standard_labor_currency_invalid", "Fix the rate's currency in Company Settings → Labor costing.");
+  }
+  // Annual source rates stay annual in the frozen evidence; the hourly wage
+  // divides once by the row's own annual-hours evidence.
+  const hourlyWage = rate.basis === "year" ? div(rate.rate, rate.annualHours) : rate.rate;
+  const fxKey = `${wageCurrency}|${functionalCurrency}`;
+  let quote = caches.fx.get(fxKey);
+  if (quote === undefined) {
+    quote = null;
+    if (wageCurrency !== functionalCurrency) {
+      try {
+        quote = await laborFxQuoteInTx(tx, orgId, wageCurrency, functionalCurrency, releaseDate);
+      } catch (err) {
+        refuse(kernelMessage(err, `The FX conversion for ${opLabel} cannot be resolved.`), "standard_labor_fx_unresolved", "Review FX spot rates in Company Settings → FX provider.");
+      }
+    }
+    caches.fx.set(fxKey, quote);
+  }
+  if (wageCurrency !== functionalCurrency && !quote) {
+    refuse(`No FX spot rate converts standard labor ${wageCurrency} to ${functionalCurrency} on or before ${releaseDate} for ${opLabel}.`, "standard_labor_fx_missing", `Add an FX spot rate for ${wageCurrency} to ${functionalCurrency} covering ${releaseDate} in Company Settings → FX provider.`);
+  }
+  // One frozen conversion factor prices both the wage and the fixed burden
+  // components; same-currency operations convert at an explicit par of 1.
+  // No employee, trade, or actual-time context enters the standard: burden
+  // components priced by worker-comp use their configured fallback value.
+  const fxRate = quote ? quote.rate : "1";
+  const functionalWage = convertLaborWage(hourlyWage, fxRate);
+  const functionalComponents = convertFixedLaborComponents(settings.components, fxRate);
+  let finalRate: string;
+  try {
+    finalRate = computeCostRate(functionalWage, "1", {
+      hoursPerDay: settings.hoursPerDay, components: functionalComponents,
+    });
+  } catch (err) {
+    refuse(kernelMessage(err, `The standard labor burden for ${opLabel} cannot be priced.`), "standard_labor_burden_invalid", laborRemedy);
+  }
+  const burden: ReleaseBurdenDocument = {
+    hoursPerDay: settings.hoursPerDay,
+    annualHours: settings.annualHours,
+    components: [...settings.components]
+      .map((component) => ({
+        key: component.key,
+        kind: component.kind,
+        name: component.name,
+        value: String(component.value),
+        scaleWithOvertime: component.scaleWithOvertime === true,
+      }))
+      .sort(compareBurdenComponents),
+    source: {
+      wageRowId: rate.rateId,
+      effectiveFrom: rate.effectiveFrom,
+      rate: rate.rate,
+      currency: rate.currency,
+      basis: rate.basis,
+      annualHours: rate.annualHours,
+    },
+  };
+  return {
+    wageId: rate.rateId,
+    wageEffectiveFrom: rate.effectiveFrom,
+    wageRate: rate.rate,
+    wageCurrency: rate.currency,
+    wageBasis: rate.basis,
+    wageAnnualHours: rate.annualHours,
+    finalRate,
+    functionalCurrency,
+    burden,
+    burdenHash: `sha256:${inventoryRequestHash(burden)}`,
+    fxClass: quote ? "quoted" : "par",
+    fxRate,
+    fxRowId: quote ? quote.id : null,
+    fxDate: quote ? quote.asOf : null,
+    fxSource: quote ? quote.source : null,
+    fxDirection: quote ? (quote.inverse ? "inverse" : "direct") : null,
+  };
+}
+
+async function resolveOperationOverhead(
+  tx: SqlExecutor,
+  orgId: string,
+  opLabel: string,
+  departmentId: string,
+  basis: StandardOverheadBasis,
+  releaseDate: string,
+  caches: ReleaseSnapshotCaches,
+): Promise<Pick<OperationReleaseSnapshot, "overhead" | "overheadHash" | "overheadCardIds">> {
+  const overheadRemedy = "Review standard overhead rates in Company Settings → Overhead.";
+  let cards = caches.overhead.get(departmentId);
+  if (cards === undefined) {
+    try {
+      cards = await resolveStandardOverheadCardsInTx(tx as OverheadExecutor, orgId, {
+        departmentId, basis, onDate: releaseDate,
+      });
+    } catch (err) {
+      refuse(kernelMessage(err, `The standard overhead cards for ${opLabel} cannot be resolved.`), "standard_overhead_unresolved", overheadRemedy);
+    }
+    caches.overhead.set(departmentId, cards);
+  }
+  // The shared kernel returns only method='standard' cards of the mapped
+  // kind, so percent, live, and average cards can never enter the frozen
+  // set. An empty set is the kernel's defined uncovered outcome (inert):
+  // it freezes as a canonical empty snapshot, never as another kind's
+  // card and never as a live re-read at application time.
+  const evidence: ReleaseOverheadCardEvidence[] = [];
+  for (const card of cards) {
+    let canonicalRate: string;
+    try {
+      canonicalRate = normalizeMoney(card.ratePercent);
+    } catch {
+      refuse(`Frozen standard overhead card ${card.id} carries an unusable rate.`, "standard_overhead_card_invalid", overheadRemedy);
+    }
+    evidence.push({
+      id: card.id,
+      effectiveFrom: card.effectiveFrom,
+      effectiveTo: card.effectiveTo,
+      kind: card.rateKind,
+      category: card.category,
+      rate: canonicalRate,
+      method: card.method,
+    });
+  }
+  const overhead: ReleaseOverheadDocument = {
+    format: "openbooks.manufacturing-overhead-snapshot.v1",
+    basis,
+    departmentId,
+    releaseDate,
+    cards: evidence,
+  };
+  return {
+    overhead,
+    overheadHash: `sha256:${inventoryRequestHash(overhead)}`,
+    overheadCardIds: evidence.map((card) => card.id),
+  };
+}
+
+// Freeze every operation's complete labor/FX/overhead snapshot before the
+// release status mutation. Any refusal throws before the status write, so
+// the whole release transaction rolls back and no operation is ever
+// inserted with a partial group.
+async function resolveOperationReleaseSnapshots(
+  tx: SqlExecutor,
+  orgId: string,
+  order: WorkOrderRow,
+  operations: Array<{ sequence: number; work_center_id: string }>,
+  routing: ActiveRouting,
+  releaseDate: string,
+  functionalCurrency: string,
+): Promise<OperationReleaseSnapshot[]> {
+  const laborRemedy = "Review labor costing rates and settings in Company Settings → Labor costing.";
+  if (!["labor_hours", "machine_hours", "units"].includes(routing.overheadBasis)) {
+    refuse(`Routing version ${routing.version} carries an unknown overhead basis.`, "invalid_overhead_basis", "Choose labor hours, machine hours, or units on the routing.");
+  }
+  const basis = routing.overheadBasis as StandardOverheadBasis;
+  let settings: LaborCostingSettings;
+  try {
+    settings = await laborCostingSettingsInTx(tx, orgId);
+  } catch (err) {
+    refuse(kernelMessage(err, `The labor costing settings for work order ${order.number} cannot be resolved.`), "labor_costing_settings_invalid", laborRemedy);
+  }
+  const centerIds = [...new Set(operations.map((operation) => operation.work_center_id))].sort();
+  const centers = (await tx.execute<{ id: string; code: string | null; department_id: string | null }>(sql`
+    select id, code, department_id from mfg_work_centers
+     where org_id=${orgId}
+       and id in (select jsonb_array_elements_text(${JSON.stringify(centerIds)}::jsonb)::uuid)`)).rows;
+  const centerById = new Map(centers.map((center) => [center.id, center]));
+  const caches: ReleaseSnapshotCaches = { rates: new Map(), fx: new Map(), overhead: new Map() };
+  const snapshots: OperationReleaseSnapshot[] = [];
+  for (const operation of operations) {
+    const opLabel = `operation ${operation.sequence} of work order ${order.number}`;
+    const center = centerById.get(operation.work_center_id);
+    if (!center) {
+      refuse(`Work center ${operation.work_center_id} for ${opLabel} is outside this organization.`, "work_center_not_found", `Point ${opLabel} at a work center from this organization.`);
+    }
+    if (!center.department_id) {
+      const code = center.code?.trim() || center.id;
+      refuse(`Work center ${code} for ${opLabel} has no department.`, "work_center_department_required", `Choose an active department in Company Settings → Departments, then assign it to work center ${code}.`);
+    }
+    const departmentId = center.department_id;
+    const labor = await resolveOperationLabor(tx, orgId, order, opLabel, departmentId, releaseDate, functionalCurrency, settings, caches);
+    const overhead = await resolveOperationOverhead(tx, orgId, opLabel, departmentId, basis, releaseDate, caches);
+    snapshots.push({
+      sequence: operation.sequence,
+      workCenterId: operation.work_center_id,
+      ...labor,
+      ...overhead,
+    });
+  }
+  return snapshots;
+}
+
 async function releaseOne(
   tx: SqlExecutor,
   orgId: string,
@@ -529,6 +900,13 @@ async function releaseOne(
     select costing_method, standard_cost::text from item_inventory_profiles
      where org_id=${orgId} and item_id=${order.producedItemId} for share`)).rows[0];
   const standardCost = producedProfile?.costing_method === "standard" ? producedProfile.standard_cost : null;
+  // Every operation snapshot resolves and freezes BEFORE the release status
+  // mutation below: any refusal throws here and rolls the whole release
+  // back, so operations are only ever inserted with complete coherent
+  // values. There is no draft/null insert-then-fill path.
+  const releaseDate = await releaseBusinessDate(tx, orgId);
+  const functionalCurrency = await releaseFunctionalCurrency(tx, orgId, order);
+  const snapshots = await resolveOperationReleaseSnapshots(tx, orgId, order, operations.rows, routing, releaseDate, functionalCurrency);
   const before = order;
   const released = await tx.execute<WorkOrderRow>(sql`
     update mfg_work_orders set routing_id=${routing.id}, routing_version=${routing.version}, bom_revision=${revision},
@@ -539,18 +917,52 @@ async function releaseOne(
   await auditChange(tx, {
     orgId, actorId, table: "mfg_work_orders", rowId: id, action: "update",
     before: options.fromApproval ? { ...before, status: "pending_approval" } : before,
-    after: { ...after, reason: options.reason?.trim() || (options.fromApproval ? "Approved through the work-order flow." : "Released.") },
+    after: {
+      ...after,
+      reason: options.reason?.trim() || (options.fromApproval ? "Approved through the work-order flow." : "Released."),
+      release: {
+        releaseDate,
+        subsidiaryId: order.subsidiaryId,
+        functionalCurrency,
+        operations: snapshots.map((snapshot) => ({
+          sequence: snapshot.sequence,
+          workCenterId: snapshot.workCenterId,
+          wageRowId: snapshot.wageId,
+          wageEffectiveFrom: snapshot.wageEffectiveFrom,
+          fxClass: snapshot.fxClass,
+          fxRowId: snapshot.fxRowId,
+          overheadCardIds: snapshot.overheadCardIds,
+          burdenHash: snapshot.burdenHash,
+          overheadHash: snapshot.overheadHash,
+        })),
+      },
+    },
   });
 
-  for (const operation of operations.rows) {
+  for (const [index, operation] of operations.rows.entries()) {
+    const snapshot = snapshots[index]!;
     const plannedRunMinutes = decimalValue(mul(operation.run_minutes_per_unit, order.quantityOrdered), "plannedRunMinutes", "Reduce the order quantity or revise the routing run time so the planned minutes fit the supported range.");
     const inserted = await tx.execute(sql`
       insert into mfg_wo_operations (org_id, work_order_id, sequence, name, work_center_id,
         planned_setup_minutes, planned_run_minutes, quantity_planned, quality_gate, backflush_at,
+        standard_labor_wage_id, standard_labor_effective_from, standard_labor_rate, standard_labor_currency,
+        standard_labor_basis, standard_labor_annual_hours, standard_labor_final_rate,
+        standard_labor_functional_currency, standard_labor_burden, standard_labor_burden_hash,
+        standard_labor_fx_class, standard_labor_fx_rate, standard_labor_fx_row_id, standard_labor_fx_date,
+        standard_labor_fx_source, standard_labor_fx_direction,
+        overhead_snapshot, overhead_snapshot_hash,
         created_by, updated_by)
       values (${orgId}, ${id}, ${operation.sequence}, ${operation.name}, ${operation.work_center_id},
         ${operation.setup_minutes}, ${plannedRunMinutes},
-        ${order.quantityOrdered}, ${operation.quality_gate}, ${operation.backflush_at}, ${actorId}, ${actorId}) returning id`);
+        ${order.quantityOrdered}, ${operation.quality_gate}, ${operation.backflush_at},
+        ${snapshot.wageId}, ${snapshot.wageEffectiveFrom}, ${snapshot.wageRate}, ${snapshot.wageCurrency},
+        ${snapshot.wageBasis}, ${snapshot.wageAnnualHours}, ${snapshot.finalRate},
+        ${snapshot.functionalCurrency},
+        ${JSON.stringify(snapshot.burden)}::jsonb, ${snapshot.burdenHash},
+        ${snapshot.fxClass}, ${snapshot.fxRate}, ${snapshot.fxRowId}, ${snapshot.fxDate},
+        ${snapshot.fxSource}, ${snapshot.fxDirection},
+        ${JSON.stringify(snapshot.overhead)}::jsonb, ${snapshot.overheadHash},
+        ${actorId}, ${actorId}) returning id`);
     const operationId = inserted.rows[0]?.id;
     if (!operationId) refuse("A work-order operation snapshot was not saved.", "write_failed", "Retry the release; contact an administrator if it continues.");
     await auditChange(tx, {
@@ -558,6 +970,7 @@ async function releaseOne(
       after: {
         status: "pending", sequence: operation.sequence, name: operation.name, workCenterId: operation.work_center_id,
         quantityPlanned: order.quantityOrdered, backflushAt: operation.backflush_at, qualityGate: operation.quality_gate,
+        standardLaborBurdenHash: snapshot.burdenHash, overheadSnapshotHash: snapshot.overheadHash,
       },
     });
   }
