@@ -558,7 +558,9 @@ const consolidatedRows = [
               holidayKey: demandingHoliday.key,
               holidayDate: demandingHoliday.date,
             }));
-            assert.equal(res.status, 400);
+            const incomplete = await res.clone().json() as { error: string; issues?: { path: string; message: string }[] };
+            assert.equal(res.status, 422, JSON.stringify(incomplete));
+            assert.ok(incomplete.issues?.length, 'an incomplete holiday assertion reports validation issues');
             // Filed rows are visible on the surface's GET.
             const gate = state.gate;
             assert.ok(gate);
@@ -962,15 +964,18 @@ const payrollRunRouteCases = [
          */
         async function opaqueFixture() {
           const fx = await withBypassContext(() => seedAdoption());
-          await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
-            where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
+          const restored = await withBypassContext(() => db.execute<{ id: string }>(sql`update parties set subsidiary_id = ${fx.subsidiaryId}
+            where org_id = ${fx.orgId} and id = ${fx.employeeId} returning id`));
+          assert.deepEqual(restored.rows.map(row => row.id), [fx.employeeId], 'bank-file fixture restores one employee owner');
           const { input } = await withBypassContext(() => calculatedRun(fx));
           await withOrgContext(fx.orgId, () => commitPayRun(input));
           const hidden = randomUUID();
-          await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
-            values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden payroll employer', 'CAD', 'CA')`));
-          await withBypassContext(() => db.execute(sql`update parties set subsidiary_id = ${hidden}
-            where org_id = ${fx.orgId} and id = ${fx.employeeId}`));
+          const employer = await withBypassContext(() => db.execute<{ id: string }>(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+            values (${hidden}, ${fx.orgId}, ${fx.subsidiaryId}, 'Hidden payroll employer', 'CAD', 'CA') returning id`));
+          assert.deepEqual(employer.rows.map(row => row.id), [hidden], 'bank-file fixture stores one hidden employer');
+          const moved = await withBypassContext(() => db.execute<{ id: string }>(sql`update parties set subsidiary_id = ${hidden}
+            where org_id = ${fx.orgId} and id = ${fx.employeeId} returning id`));
+          assert.deepEqual(moved.rows.map(row => row.id), [fx.employeeId], 'bank-file fixture moves one employee to the hidden employer');
           return { fx, documentId: input.documentId };
         }
 
@@ -1085,19 +1090,26 @@ const payrollRunRouteCases = [
               const childId = randomUUID();
               const childScheduleId = randomUUID();
               await withBypassContext(async () => {
-                await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
-                  values(${childId},${fx.orgId},${fx.subsidiaryId},'Hidden picker owner','CAD','CA')`);
-                await db.execute(sql`update parties set subsidiary_id=${childId} where org_id=${fx.orgId} and id=${fx.employeeId}`);
-                await db.execute(sql`update employee_roles set terminated_on='2026-07-18' where org_id=${fx.orgId} and party_id=${fx.employeeId}`);
-                await db.execute(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,subsidiary_id,is_active)
+                const employer = await db.execute<{ id: string }>(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+                  values(${childId},${fx.orgId},${fx.subsidiaryId},'Hidden picker owner','CAD','CA') returning id`);
+                assert.deepEqual(employer.rows.map(row => row.id), [childId], 'picker fixture stores one hidden employer');
+                const moved = await db.execute<{ id: string }>(sql`update parties set subsidiary_id=${childId} where org_id=${fx.orgId} and id=${fx.employeeId} returning id`);
+                assert.deepEqual(moved.rows.map(row => row.id), [fx.employeeId], 'picker fixture moves one employee');
+                const terminated = await db.execute<{ party_id: string }>(sql`update employee_roles set terminated_on='2026-07-18' where org_id=${fx.orgId} and party_id=${fx.employeeId} returning party_id`);
+                assert.deepEqual(terminated.rows.map(row => row.party_id), [fx.employeeId], 'picker fixture records one employment termination');
+                const schedule = await db.execute<{ id: string }>(sql`insert into pay_schedules(id,org_id,name,frequency,periods_per_year,anchor_period_end,pay_date_offset_days,subsidiary_id,is_active)
                   select ${childScheduleId},org_id,'Hidden schedule',frequency,periods_per_year,anchor_period_end,pay_date_offset_days,${childId},true
-                  from pay_schedules where org_id=${fx.orgId} and id=${fx.scheduleId}`);
-                await db.execute(sql`update employee_payroll_profiles set pay_schedule_id=${childScheduleId} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
-                await db.execute(sql`update employee_payroll_profiles
+                  from pay_schedules where org_id=${fx.orgId} and id=${fx.scheduleId} returning id`);
+                assert.deepEqual(schedule.rows.map(row => row.id), [childScheduleId], 'picker fixture creates one hidden schedule');
+                const assigned = await db.execute<{ employee_party_id: string }>(sql`update employee_payroll_profiles set pay_schedule_id=${childScheduleId} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`);
+                assert.deepEqual(assigned.rows.map(row => row.employee_party_id), [fx.employeeId], 'picker fixture assigns one employee to the hidden schedule');
+                const sealed = await db.execute<{ employee_party_id: string }>(sql`update employee_payroll_profiles
                   set sin_encrypted='SEALED-PAYROLL-SIN-TEST-SENTINEL', sin_last3='789',
                       federal_claim_amount='123456789012345.6789', additional_tax_per_period='9876.5432'
-                  where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
-                await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${fx.orgId}`);
+                  where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`);
+                assert.deepEqual(sealed.rows.map(row => row.employee_party_id), [fx.employeeId], 'picker fixture seals one employee profile');
+                const enabled = await db.execute<{ id: string }>(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"payroll":true}'::jsonb) where id=${fx.orgId} returning id`);
+                assert.deepEqual(enabled.rows.map(row => row.id), [fx.orgId], 'picker fixture enables payroll for one organization');
               });
               const gate = { user: { orgId: fx.orgId, id: fx.actorId }, permissions: new Set(["payroll.read", "payroll.run"]) } as Authz;
               const read = async (scope: Set<string> | null, scheduleIds: string[], employeeVisible: boolean) => {
@@ -1141,10 +1153,11 @@ const payrollRunRouteCases = [
         test("application payroll employee reads name the Features-page remedy when payroll is off", async () => {
           const fx = await withBypassContext(() => seedAdoption());
           try {
-            await withBypassContext(() => db.execute(sql`
+            const disabled = await withBypassContext(() => db.execute<{ id: string }>(sql`
               update orgs set settings=jsonb_set(settings,'{features}',
                 coalesce(settings->'features','{}'::jsonb)||'{"payroll":false}'::jsonb,true)
-               where id=${fx.orgId}`));
+               where id=${fx.orgId} returning id`));
+            assert.deepEqual(disabled.rows.map(row => row.id), [fx.orgId], 'feature-off refusal fixture updates one organization');
             const context: ApplicationContext = {
               authz: {
                 user: { orgId: fx.orgId, id: fx.actorId } as ApplicationContext["authz"]["user"],
@@ -1248,9 +1261,10 @@ const payrollRunRouteCases = [
             ];
             for (const { body, expectedMessage } of malformedRequests) {
               const res = await propose(body);
-              const refusal = await res.clone().json() as { issues?: { message: string }[] };
-              assert.equal(res.status, 400, JSON.stringify(refusal).slice(0, 200));
+              const refusal = await res.clone().json() as { error?: string; issues?: { path: string; message: string }[] };
+              assert.equal(res.status, 422, JSON.stringify(refusal).slice(0, 200));
               assert.ok(refusal.issues?.some((issue) => expectedMessage.test(issue.message)), JSON.stringify(refusal));
+              assert.ok(refusal.error, 'malformed retro lists return a readable refusal');
             }
           } finally { state.gate = null; await dropScratchOrgReporting(fx.orgId); }
         });

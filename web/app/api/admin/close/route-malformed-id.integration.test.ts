@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { stubModules, withAuthzTestSurface } from "../../../../testing/stub-modules";
 import test from "node:test";
 import { sql } from "drizzle-orm";
@@ -22,14 +23,44 @@ const request = (body: unknown) =>
     body: JSON.stringify(body),
   });
 
-test("close configuration saves reject malformed ids instead of creating new rows", async () => {
-  const org = await createScratchOrg();
+async function enableAdvancedClose(orgId: string) {
+  const enabled = await withBypassContext(() => db.execute<{ id: string }>(sql`
+    update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb
+     where id = ${orgId} returning id`));
+  assert.equal(enabled.rows.length, 1, "close audit setup updates exactly one organization");
+  assert.equal(enabled.rows[0]?.id, orgId, "close audit setup updates its own organization");
+}
+
+async function setupCloseActor(name: string, role: string, enableFeature = true) {
+  const org = await withBypassContext(() => createScratchOrg());
   try {
-    const actorId = await createScratchUser(org.orgId, "Close Admin", "close-admin");
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, name, role));
     state.user = { orgId: org.orgId, id: actorId };
-    await withBypassContext(() =>
-      db.execute(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId}`),
-    );
+    if (enableFeature) await enableAdvancedClose(org.orgId);
+    return org;
+  } catch (error) {
+    await dropScratchOrg(org.orgId);
+    throw error;
+  }
+}
+
+test("close fixture setup remains observable after the route import and refuses a zero-row update", async () => {
+  const org = await setupCloseActor("Scoped Close Admin", "close-admin");
+  try {
+    const settings = await withOrgContext(org.orgId, () => db.execute<{ enabled: boolean }>(sql`
+      select settings #>> '{features,advancedClose}' = 'true' as enabled
+        from orgs where id = ${org.orgId}`));
+    assert.equal(settings.rows[0]?.enabled, true, "the constrained tenant read sees the fixture feature update");
+    await assert.rejects(enableAdvancedClose(randomUUID()), /close audit setup updates exactly one organization/);
+  } finally {
+    state.user = { orgId: "", id: "" };
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("close configuration saves reject malformed ids instead of creating new rows", async () => {
+  const org = await setupCloseActor("Close Admin", "close-admin");
+  try {
     const cases = [
       {
         action: "save-calendar",
@@ -73,14 +104,8 @@ test("close configuration saves reject malformed ids instead of creating new row
 });
 
 test("close policy saves emit one audit event for each mutation", async () => {
-  const org = await createScratchOrg();
+  const org = await setupCloseActor("Close Policy Admin", "close-policy-admin");
   try {
-    const actorId = await createScratchUser(org.orgId, "Close Policy Admin", "close-policy-admin");
-    state.user = { orgId: org.orgId, id: actorId };
-    await withBypassContext(() =>
-      db.execute(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId}`),
-    );
-
     const create = await withOrgContext(org.orgId, () => POST(request({
       action: "save-policy",
       code: "materiality-policy",
@@ -117,14 +142,8 @@ test("close policy saves emit one audit event for each mutation", async () => {
 });
 
 test("close automation saves emit one audit event for each mutation", async () => {
-  const org = await createScratchOrg();
+  const org = await setupCloseActor("Close Automation Admin", "close-automation-admin");
   try {
-    const actorId = await createScratchUser(org.orgId, "Close Automation Admin", "close-automation-admin");
-    state.user = { orgId: org.orgId, id: actorId };
-    await withBypassContext(() =>
-      db.execute(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId}`),
-    );
-
     const create = await withOrgContext(org.orgId, () => POST(request({
       action: "save-automation",
       name: "Notify on close run",
@@ -164,11 +183,8 @@ test("close automation saves emit one audit event for each mutation", async () =
 });
 
 test("close calendar saves emit one audit event for each mutation", async () => {
-  const org = await createScratchOrg();
+  const org = await setupCloseActor("Close Calendar Admin", "close-calendar-admin", false);
   try {
-    const actorId = await createScratchUser(org.orgId, "Close Calendar Admin", "close-calendar-admin");
-    state.user = { orgId: org.orgId, id: actorId };
-
     const create = await withOrgContext(org.orgId, () => POST(request({
       action: "save-calendar",
       name: "Audit calendar",
@@ -208,14 +224,8 @@ test("close calendar saves emit one audit event for each mutation", async () => 
 });
 
 test("close blueprint saves emit audit evidence for versioned mutations", async () => {
-  const org = await createScratchOrg();
+  const org = await setupCloseActor("Close Blueprint Admin", "close-blueprint-admin");
   try {
-    const actorId = await createScratchUser(org.orgId, "Close Blueprint Admin", "close-blueprint-admin");
-    state.user = { orgId: org.orgId, id: actorId };
-    await withBypassContext(() =>
-      db.execute(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId}`),
-    );
-
     const create = await withOrgContext(org.orgId, () => POST(request({
       action: "save-blueprint",
       name: "Audit blueprint",
@@ -249,14 +259,8 @@ test("close blueprint saves emit audit evidence for versioned mutations", async 
 });
 
 test("close reporting-package saves emit one audit event for each mutation", async () => {
-  const org = await createScratchOrg();
+  const org = await setupCloseActor("Close Package Admin", "close-package-admin");
   try {
-    const actorId = await createScratchUser(org.orgId, "Close Package Admin", "close-package-admin");
-    state.user = { orgId: org.orgId, id: actorId };
-    await withBypassContext(() =>
-      db.execute(sql`update orgs set settings = settings || '{"features":{"advancedClose":true}}'::jsonb where id = ${org.orgId}`),
-    );
-
     const create = await withOrgContext(org.orgId, () => POST(request({
       action: "save-package",
       name: "Audit package",

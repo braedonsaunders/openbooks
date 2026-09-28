@@ -101,6 +101,29 @@ test("setup", async () => {
   }
 });
 
+test("an apostrophe in a regex cannot hide a later unscoped fixture write", () => {
+  const root = tree({
+    "web/lib/regex.integration.test.ts": `import test from "node:test";
+const { reader } = await import("./reader.ts");
+test("regex before fixture writes", async () => {
+  assert.match(message, /not on this run's roster/);
+  await withBypassContext(async () => {
+    await db.execute(sql\`insert into safely_seeded(id) values (1)\`);
+  });
+  await db.execute(sql\`insert into unscoped_seed(id) values (2)\`);
+  await reader();
+});
+`,
+  });
+  try {
+    const findings = scanFile(join(root, "web/lib/regex.integration.test.ts"), root);
+    assert.deepEqual(findings.map(finding => finding.call), ["db.execute(insert ...)"]);
+    assert.equal(findings[0].name, "regex before fixture writes");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("a top-level bypass reinstall neutralizes eager reader imports", () => {
   const root = tree({
     "web/lib/reinstalled.integration.test.ts": `import test from "node:test";

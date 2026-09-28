@@ -1544,7 +1544,7 @@ test(
       import { randomUUID } from "node:crypto";
       import { readFileSync } from "node:fs";
       import { sql } from "drizzle-orm";
-      import { db, pool, withBypass, withBypassContext, withOrg } from "./engine/src/platform/db.ts";
+      import { db, withBypass, withBypassContext, withOrg } from "./engine/src/platform/db.ts";
       import { installTrustedTestDatabaseBypass } from "./engine/src/testing/database-bypass.ts";
       import {
         createScratchOrg,
@@ -1847,21 +1847,31 @@ test(
                 const before = await db.execute(sql\`
                   select book_id, account_id, month, subsidiary_id, debit_total, credit_total, line_count
                     from gl_month_activity where org_id = \${scratch.orgId} order by account_id, book_id\`);
-                const client = await pool.connect();
-                try {
-                  await client.query("begin");
-                  await client.query(migration);
-                  // Force a failure against the NEW constraint mid-flight.
-                  await client.query(
-                    "insert into gl_month_activity (org_id, account_id, book_id, month, subsidiary_id) " +
-                    "select org_id, account_id, book_id, month, subsidiary_id from gl_month_activity limit 1");
-                  assert.fail("forced duplicate-key failure did not raise");
-                } catch (error) {
-                  await client.query("rollback");
-                  assert.match(String((error && error.message) || error), /duplicate key|unique constraint/);
-                } finally {
-                  client.release();
-                }
+                await assert.rejects(
+                  withBypass(async () => {
+                    await db.execute(sql.raw(migration));
+                    // The trusted maintenance transaction must see the seeded
+                    // summary row; a constrained raw pool could see zero rows.
+                    const visible = await db.execute(sql\`
+                      select account_id from gl_month_activity where org_id = \${scratch.orgId} limit 1\`);
+                    assert.equal(visible.rows.length, 1, "migration rollback probe sees seeded summary evidence");
+                    // Force a duplicate against the NEW constraint mid-flight.
+                    await db.execute(sql\`
+                      insert into gl_month_activity (org_id, account_id, book_id, month, subsidiary_id)
+                      select org_id, account_id, book_id, month, subsidiary_id
+                        from gl_month_activity where org_id = \${scratch.orgId} limit 1\`);
+                    assert.fail("forced duplicate-key failure did not raise");
+                  }),
+                  (error) => {
+                    let current = error;
+                    while (current && typeof current === "object") {
+                      if (current.code === "23505" && current.constraint === "gl_month_activity_pkey") return true;
+                      current = current.cause;
+                    }
+                    return false;
+                  },
+                  "duplicate summary evidence rolls back the whole migration replay",
+                );
                 const after = await db.execute(sql\`
                   select book_id, account_id, month, subsidiary_id, debit_total, credit_total, line_count
                     from gl_month_activity where org_id = \${scratch.orgId} order by account_id, book_id\`);

@@ -482,8 +482,9 @@ const consolidatedRows = [
         }
 
         async function seedOrder(org: ScratchOrg, actorId: string, number: string): Promise<string> {
-          const id = randomUUID();
-          await db.execute(sql`
+          return withBypassContext(async () => {
+           const id = randomUUID();
+           const document = await db.execute<{ id: string }>(sql`
             insert into documents
               (id, org_id, kind, document_number, party_id, subsidiary_id,
                document_date, currency, status, subtotal, tax_total, total,
@@ -492,9 +493,10 @@ const consolidatedRows = [
               ${id}, ${org.orgId}, 'sales_order', ${number}, ${org.customerId},
               ${org.subsidiaryId}, ${org.date}, 'CAD', 'draft', '1000', '0', '1000',
               ${actorId}, ${actorId}
-            )
+            ) returning id
           `);
-          await db.execute(sql`
+          assert.deepEqual(document.rows.map(row => row.id), [id], "concurrent conversion source order is stored");
+          const line = await db.execute<{ document_id: string }>(sql`
             insert into document_lines
               (org_id, document_id, line_number, account_id, quantity,
                quantity_billed, quantity_fulfilled, unit_price, amount,
@@ -502,13 +504,17 @@ const consolidatedRows = [
             values (
               ${org.orgId}, ${id}, 1, ${org.accounts.revenue}, '10',
               '0', '0', '100', '1000', '1000', '0', ${actorId}, ${actorId}
-            )
+            ) returning document_id
           `);
-          await db.execute(sql`
+          assert.deepEqual(line.rows.map(row => row.document_id), [id], "concurrent conversion source line is stored");
+          const approved = await db.execute<{ id: string }>(sql`
             update documents set status = 'approved', updated_at = now(), updated_by = ${actorId}
              where id = ${id} and org_id = ${org.orgId}
+            returning id
           `);
-          return id;
+          assert.deepEqual(approved.rows.map(row => row.id), [id], "concurrent conversion source order is approved");
+           return id;
+          });
         }
 
         async function billedOf(orgId: string, documentId: string): Promise<string> {

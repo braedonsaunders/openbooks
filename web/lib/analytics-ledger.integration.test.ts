@@ -94,16 +94,19 @@ const commitmentCases = [{ label: "analytics-commitment", register: async () => 
 
 for (const scenario of ['empty', 'balanced', 'excess purchases'] as const) {
   test(`Single-month commitment summary: ${scenario}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-    const org = await createScratchOrg();
+    const org = await withBypassContext(() => createScratchOrg());
     try {
-      if (scenario !== 'empty') {
+      await withBypassContext(async () => {
+       if (scenario !== 'empty') {
         for (const kind of ['purchase_order', 'sales_order']) {
           const id = randomUUID();
-          const total = scenario === 'excess purchases' && kind === 'purchase_order' ? '250' : '100';
-          await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,posting_date,party_id,subsidiary_id,currency,subtotal,tax_total,total)
-            values (${id},${org.orgId},${kind},${id},${org.date},${org.date},${kind === 'purchase_order' ? org.vendorId : org.customerId},${org.subsidiaryId},'CAD',${total},0,${total})`);
+          const total: '250' | '100' = scenario === 'excess purchases' && kind === 'purchase_order' ? '250' : '100';
+          const inserted: { rows: { id: string }[] } = await db.execute<{ id: string }>(sql`insert into documents(id,org_id,kind,document_number,document_date,posting_date,party_id,subsidiary_id,currency,subtotal,tax_total,total)
+            values (${id},${org.orgId},${kind},${id},${org.date},${org.date},${kind === 'purchase_order' ? org.vendorId : org.customerId},${org.subsidiaryId},'CAD',${total},0,${total}) returning id`);
+          assert.deepEqual(inserted.rows.map(row => row.id), [id], `${scenario}: ${kind} commitment fixture is stored`);
         }
-      }
+       }
+      });
       await withOrgContext(org.orgId, async () => {
         const data = await spendVelocityData(org.orgId, { from: '2026-07-01', to: '2026-07-31', label: 'Commitment review' }, null);
         const { summary } = data.commitmentCliff;
@@ -171,12 +174,13 @@ const {spendVelocityData}=await import('./analytics/spend-velocity-data');
 
 for(const scenario of ['posted control','draft report','foreign currency','secondary projection'] as const){
   test(`Employee spend reconciles to the ledger: ${scenario}`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-    const org=await createScratchOrg();
+    const org=await withBypassContext(()=>createScratchOrg());
     try{
       const employee=randomUUID(),document=randomUUID(),taxBook=randomUUID();
       const currency=scenario === 'foreign currency' ? 'USD' : 'CAD';
       const base=scenario === 'foreign currency' ? '200' : '100';
       const fx=scenario === 'foreign currency' ? '2' : '1';
+      await withBypassContext(async()=>{
       await db.execute(sql`insert into parties(id,org_id,kind,display_name,subsidiary_id) values (${employee},${org.orgId},'person','Employee',${org.subsidiaryId})`);
       await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,posting_date,party_id,subsidiary_id,currency,fx_rate,subtotal,tax_total,total)
         values (${document},${org.orgId},'expense_report',${document},${org.date},${org.date},${employee},${org.subsidiaryId},${currency},${fx},100,0,100)`);
@@ -187,11 +191,13 @@ for(const scenario of ['posted control','draft report','foreign currency','secon
         await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,party_id,amount,currency,txn_amount,fx_rate)
           values (${org.orgId},${entry},1,${org.accounts.cogs},${org.subsidiaryId},${employee},${amount},${currency},100,${rate}),
           (${org.orgId},${entry},2,${org.accounts.bank},${org.subsidiaryId},${employee},-${amount}::numeric,${currency},-100,${rate})`);
-        await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${entry}`);
+        const posted=await db.execute<{id:string}>(sql`update journal_entries set status='posted',posted_at=now() where id=${entry} returning id`);
+        assert.deepEqual(posted.rows.map(row=>row.id),[entry],`${scenario}: employee spend journal is posted`);
         return entry;
       }
       const entry=await post(org.bookId,base,fx);
-      await db.execute(sql`update documents set status='posted',posted_entry_id=${entry},posting_period_id=${org.periodId} where id=${document}`);
+      const postedDocument=await db.execute<{id:string}>(sql`update documents set status='posted',posted_entry_id=${entry},posting_period_id=${org.periodId} where id=${document} returning id`);
+      assert.deepEqual(postedDocument.rows.map(row=>row.id),[document],`${scenario}: employee expense document is posted`);
       if(scenario === 'draft report'){
         const draft=randomUUID();
         await db.execute(sql`insert into documents(id,org_id,kind,document_number,document_date,posting_date,party_id,subsidiary_id,currency,subtotal,tax_total,total)
@@ -201,6 +207,7 @@ for(const scenario of ['posted control','draft report','foreign currency','secon
         await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values (${taxBook},${org.orgId},'TAX','Tax',false,true,true)`);
         await post(taxBook,'700','7');
       }
+      });
       await withOrgContext(org.orgId,async()=>{
         const data=await spendVelocityData(org.orgId,{from:'2026-07-01',to:'2026-07-31',label:'Spend review'},null);
         assert.equal(data.summary.expensesTotal,Number(base),'primary ledger control');
@@ -218,8 +225,9 @@ const {sql}=await import('drizzle-orm');
 const {vendorData}=await import('./analytics/vendor-data');
 for(const scenario of ['in-period payment','early payment','partial payment','future payment','future application','secondary-book payment'] as const){
   test(`Vendor settlement metrics: ${scenario}`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-    const org=await createScratchOrg();
+    const org=await withBypassContext(()=>createScratchOrg());
     try{
+      await withBypassContext(async()=>{
       const actor=await createScratchUser(org.orgId,'Payment writer','admin');
       const invoice=randomUUID(),taxBook=randomUUID();
       await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values (${taxBook},${org.orgId},'TAX','Tax',false,true,true)`);
@@ -233,11 +241,13 @@ for(const scenario of ['in-period payment','early payment','partial payment','fu
         await db.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,party_id,is_open_item,due_date,amount,currency,txn_amount,fx_rate)
           values (${line},${org.orgId},${id},1,${org.accounts.ap},${org.subsidiaryId},${org.vendorId},true,'2026-07-10',${amount},'CAD',${amount},1),
           (${randomUUID()},${org.orgId},${id},2,${payment ? org.accounts.bank : org.accounts.cogs},${org.subsidiaryId},${org.vendorId},false,null,-${amount}::numeric,'CAD',-${amount}::numeric,1)`);
-        await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${id}`);
+        const posted=await db.execute<{id:string}>(sql`update journal_entries set status='posted',posted_at=now() where id=${id} returning id`);
+        assert.deepEqual(posted.rows.map(row=>row.id),[id],`${scenario}: vendor settlement journal is posted`);
         return {id,line};
       }
       const original=await entry(org.bookId,false,'2026-07-01');
-      await db.execute(sql`update documents set status='posted',posted_entry_id=${original.id},posting_period_id=${org.periodId} where id=${invoice}`);
+      const postedInvoice=await db.execute<{id:string}>(sql`update documents set status='posted',posted_entry_id=${original.id},posting_period_id=${org.periodId} where id=${invoice} returning id`);
+      assert.deepEqual(postedInvoice.rows.map(row=>row.id),[invoice],`${scenario}: vendor bill is posted`);
       const book=scenario === 'secondary-book payment' ? taxBook : org.bookId;
       const target=scenario === 'secondary-book payment' ? await entry(book,false,'2026-07-01') : original;
       const paidOn=scenario === 'future payment' ? '2026-07-21' : scenario === 'early payment' ? '2026-07-06' : '2026-07-12';
@@ -245,6 +255,7 @@ for(const scenario of ['in-period payment','early payment','partial payment','fu
       const payment=await entry(book,true,paidOn);
       await db.execute(sql`insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by,updated_by)
         values (${org.orgId},${payment.line},${target.line},${scenario === 'partial payment' ? '40' : '100'},${scenario === 'partial payment' ? '40' : '100'},${scenario === 'partial payment' ? '40' : '100'},'CAD',${scenario === 'partial payment' ? '40' : '100'},'CAD',1,'same_currency','Payment cutoff review',${appliedOn},${actor},${actor})`);
+      });
       await withOrgContext(org.orgId,async()=>{
         const data=await vendorData({from:'2026-07-01',to:'2026-07-15',label:'Cutoff review'},org.orgId,null);
         const row=data.rows.find(row=>row.id === org.vendorId);assert.ok(row);
@@ -416,8 +427,9 @@ const {trueCostData}=await import('./analytics/true-cost-data');
 for(const view of ['overhead','prior rate','monthly','applied burden','revenue base','cost base','labor base'] as const){
   for(const scenario of ['posted control','extra books and drafts'] as const){
     test(`True Cost primary ledger ${view}: ${scenario}`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
-      const org=await createScratchOrg();
+      const org=await withBypassContext(()=>createScratchOrg());
       try{
+        await withBypassContext(async()=>{
         // A dedicated COGS account: retyping the shared baseline cogs
         // account is unrestorable — the accounts-type guard (correctly)
         // refuses the teardown revert while this test's own journal lines
@@ -440,7 +452,10 @@ for(const view of ['overhead','prior rate','monthly','applied burden','revenue b
           await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,department_id,amount,currency,txn_amount,fx_rate) values
             (${org.orgId},${id},1,${account},${org.subsidiaryId},${department},${amount},'CAD',${amount},1),
             (${org.orgId},${id},2,${org.accounts.bank},${org.subsidiaryId},${department},-${amount}::numeric,'CAD',-${amount}::numeric,1)`);
-          if(status === 'posted')await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id=${id}`);
+          if(status === 'posted'){
+            const posted=await db.execute<{id:string}>(sql`update journal_entries set status='posted',posted_at=now() where id=${id} returning id`);
+            assert.deepEqual(posted.rows.map(row=>row.id),[id],`${scenario}: true-cost journal is posted`);
+          }
         }
         for(const [account,amount] of [[rent,'100'],[wages,'40'],[cogs,'30'],[org.accounts.revenue,'-200'],[applied,'-10']])await entry(org.bookId,'posted',org.date,account!,amount!);
         await entry(org.bookId,'posted','2026-06-15',rent,'50');
@@ -450,6 +465,7 @@ for(const view of ['overhead','prior rate','monthly','applied burden','revenue b
             await entry(book,status,'2026-06-15',rent,amount);
           }
         }
+        });
         await withOrgContext(org.orgId,async()=>{
           const data=await trueCostData(org.orgId,{from:'2026-07-01',to:'2026-07-31',label:'Ledger review'},null);
           if(view === 'overhead')assert.equal(data.kpis.totalOverhead,100);
