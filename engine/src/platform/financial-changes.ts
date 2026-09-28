@@ -39,7 +39,7 @@ export interface ManufacturingScrapRestatementPayload {
   work_order_id: string;
   org_id?: string;
   subsidiary_id: string;
-  requiredSubsidiaryIds: string[];
+  requiredSubsidiaryIds: [string];
   approval_required: boolean;
   source_evidence_digest?: string | null;
   posted_entry_id?: string | null;
