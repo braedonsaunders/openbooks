@@ -56,6 +56,16 @@ in sealed columns, changes no schema).
   (`@openbooks/engine/src/<file>.ts`) changed; `scripts/engine-modules/moves.json`
   records every move.
 
+### Permissions
+
+- **Operator action: existing organizations must grant the new fund permissions
+  explicitly.** Existing organizations retain their built-in role permissions
+  byte-for-byte and receive no automatic `funds.read`/`funds.manage` grant, so
+  the new nonprofit funds surfaces stay hidden until access is granted. An
+  administrator must explicitly grant the needed permissions in
+  Admin → Users & Roles before users can open the nonprofit module home,
+  funds, releases, or setup. New organizations receive the current defaults.
+
 ### Sealed secrets
 
 - **Operator action: no key change is required, but read this before rotating
