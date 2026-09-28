@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "../platform/db.ts";
 import { ManufacturingPostingError } from "./errors.ts";
-import { postManufacturingEntry } from "./journal.ts";
+import { postManufacturingEntry, type ManufacturingPostInput } from "./journal.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { JOURNAL_ENTRY_TABLE } from "../../../web/lib/customization/entity-list-query/journal-entries.ts";
 
@@ -15,7 +15,7 @@ async function post(org: ScratchOrg, actorId: string, custom: Record<string, unk
   return withBypassContext(async () => await db.transaction((tx) => postManufacturingEntry(tx, {
     orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId, actorId, currency: "CAD",
     periodId: org.periodId, date: org.date, entryNumber: `MFG-${randomUUID()}`, memo: "Production cost",
-    lines: [{ accountId: org.accounts.invAsset, amount: "10.00" }, { accountId: org.accounts.cogs, amount: "-10.00" }], custom,
+    lines: [{ accountId: org.accounts.invAsset, amount: "10.00" }, { accountId: org.accounts.cogs, amount: "-10.00" }], custom: custom as ManufacturingPostInput["custom"],
   })));
 }
 
