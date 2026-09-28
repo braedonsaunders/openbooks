@@ -36,6 +36,7 @@ const { POST: postAssignment } = await import("./assignments/route.ts");
 const { GET: getBoard } = await import("./board/route.ts");
 const { POST: postRequest } = await import("./requests/route.ts");
 const { POST: postRetainer } = await import("./retainers/route.ts");
+const { PATCH: patchRetainer } = await import("./retainers/[id]/route.ts");
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 function written(result: { rowCount: number | null }, label: string): void {
@@ -182,7 +183,7 @@ test("resourcing routes enforce access, idempotency, scope, and board availabili
         'Required scope', 'text', '{}'::jsonb, true, true, 0, ${actorId}, ${actorId})
     `), "required retainer custom-field setup"));
     state.authz = authz(["retainers.manage"]);
-    const missingCustom = await call(postRetainer, "/api/resourcing/retainers", {
+    const missingRetainerCustom = await call(postRetainer, "/api/resourcing/retainers", {
       projectId,
       customerPartyId: org.customerId,
       kind: "hours",
@@ -193,9 +194,56 @@ test("resourcing routes enforce access, idempotency, scope, and board availabili
       retainerItemId: org.items.service,
       custom: {},
     }, { "Idempotency-Key": randomUUID() });
-    assert.equal(missingCustom.status, 422);
-    assert.equal(missingCustom.json.error, "invalid_custom_fields");
-    assert.deepEqual(missingCustom.json.fieldErrors, { required_scope: ["Required scope is required"] });
+    assert.equal(missingRetainerCustom.status, 422);
+    assert.equal(missingRetainerCustom.json.error, "invalid_custom_fields");
+    assert.deepEqual(missingRetainerCustom.json.fieldErrors, { required_scope: ["Required scope is required"] });
+
+    const retainerBody = {
+      projectId,
+      customerPartyId: org.customerId,
+      kind: "hours",
+      totalHours: "1.0000",
+      unitRate: "10.0000",
+      startsOn: "2026-10-01",
+      endsOn: "2026-10-31",
+      retainerItemId: org.items.service,
+    };
+    const unknownCreate = await call(postRetainer, "/api/resourcing/retainers", {
+      ...retainerBody,
+      custom: { required_scope: "Defined", no_such_field: "dropped" },
+    }, { "Idempotency-Key": randomUUID() });
+    assert.equal(unknownCreate.status, 422);
+    assert.equal(unknownCreate.json.error, "invalid_custom_fields");
+    assert.deepEqual(unknownCreate.json.fieldErrors, { no_such_field: ["unknown custom field: no_such_field"] });
+
+    const createdRetainer = await call(postRetainer, "/api/resourcing/retainers", {
+      ...retainerBody,
+      custom: { required_scope: "Defined" },
+    }, { "Idempotency-Key": randomUUID() });
+    assert.equal(createdRetainer.status, 201);
+    const retainerId = (createdRetainer.json as { id: string }).id;
+    const callPatch = async (body: unknown) => {
+      const request = new Request(`http://resourcing.test/api/resourcing/retainers/${retainerId}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const response = await withOrgContext(org.orgId, () => patchRetainer(request, { params: Promise.resolve({ id: retainerId }) }));
+      const text = await response.text();
+      return { status: response.status, json: JSON.parse(text) as Record<string, unknown> };
+    };
+    const unknownPatch = await callPatch({ custom: { no_such_field: "dropped" } });
+    assert.equal(unknownPatch.status, 422);
+    assert.equal(unknownPatch.json.error, "invalid_custom_fields");
+    assert.deepEqual(unknownPatch.json.fieldErrors, { no_such_field: ["unknown custom field: no_such_field"] });
+
+    await withBypassContext(async () => written(await db.execute(sql`
+      update res_retainers set custom = '{"required_scope":"Defined","retired_note":"keep me"}'::jsonb
+       where org_id = ${org.orgId} and id = ${retainerId}
+    `), "retired custom key setup"));
+    const preserved = await callPatch({ custom: { required_scope: "Revised" } });
+    assert.equal(preserved.status, 200);
+    assert.deepEqual((preserved.json as { custom: unknown }).custom, { required_scope: "Revised", retired_note: "keep me" });
   } finally {
     state.authz = null;
     await dropScratchOrgReporting(org.orgId);

@@ -4,7 +4,7 @@ import { ResourcingRefusal } from "@openbooks/engine/src/resourcing/errors.ts";
 import { withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
 import { defineRoute } from "@/lib/api/route";
 import { unprocessable } from "@/lib/api/responses";
-import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "@/lib/custom-fields";
+import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";
 
 const Params = z.object({ id: z.string().uuid() });
 const Body = z.object({
@@ -43,6 +43,13 @@ export const PATCH = defineRoute({
     const defs = await loadFieldDefs("res_retainers");
     const existingCustom = isRecord(current.custom) ? current.custom : {};
     const suppliedCustom = body.custom ?? {};
+    const unknownKey = unknownCustomFieldKey(defs, suppliedCustom);
+    if (unknownKey !== null) {
+      return unprocessable("invalid_custom_fields", {
+        field: "custom",
+        fieldErrors: { [unknownKey]: [`unknown custom field: ${unknownKey}`] },
+      });
+    }
     const validation = validateCustomValues(defs, { ...existingCustom, ...suppliedCustom });
     if (!validation.ok) {
       return unprocessable("invalid_custom_fields", {
