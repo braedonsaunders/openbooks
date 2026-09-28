@@ -29,10 +29,15 @@ import {
 import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { fiscalStartMonth } from "@/lib/fiscal";
 import { normalizeQuery } from "../_lib";
+// Legacy callers still send allowedSubsidiaryIds in the body. It is accepted
+// here so old clients keep working, then deliberately ignored: execution is
+// scoped by the server-owned gate alone, and a caller value can never widen
+// or narrow that scope.
 const postBodySchema0 = z.strictObject({
   query: z.json().refine((value) => {
     try { validateInsightQuery(value); return true; } catch { return false; }
   }, "query must follow the insight query schema"),
+  allowedSubsidiaryIds: z.unknown().optional(),
 });
 
 export { runtime } from "@/lib/api/route";
