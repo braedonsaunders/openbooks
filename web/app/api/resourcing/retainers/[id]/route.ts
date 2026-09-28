@@ -18,8 +18,9 @@ const Body = z.object({
   startsOn: z.string().optional(),
   endsOn: z.string().optional(),
   retainerItemId: z.string().uuid().optional(),
-  custom: z.record(z.string(), z.unknown()).optional(),
-}).strict().refine((value) => Object.values(value).some((field) => field !== undefined));
+  custom: z.record(z.string(), z.json()).optional(),
+}).strict().refine((value) => Object.keys(value).length > 0 && Object.values(value).some((field) => field !== undefined),
+  "Supply at least one retainer field to update.");
 
 export const PATCH = defineRoute({
   permission: "retainers.manage",

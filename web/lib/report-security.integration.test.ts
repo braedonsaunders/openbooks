@@ -166,6 +166,14 @@ test(
           [{ document_number: 'VISIBLE-ENTITY-A', count: '1' }],
           'request body cannot widen the server-owned subsidiary scope',
         )
+        const legacyScopedInsight = await insight(
+          request({ query: insightQuery, allowedSubsidiaryIds: [otherFixture.subsidiaryId] }),
+        )
+        assert.equal(legacyScopedInsight.status, 200)
+        assert.deepEqual((await legacyScopedInsight.json()).rows, insightRows.rows)
+        const invalidQuery = await insight(request({ query: { source: 'documents', dimensions: 'document_number' } }))
+        assert.equal(invalidQuery.status, 422)
+        assert.match((await invalidQuery.json()).error, /query must follow the insight query schema/i)
         await db.execute(
           sql`update app_roles set subsidiary_restriction='{"mode":"list","subsidiaryIds":[]}'::jsonb where org_id=${oid} and key='review_reader'`,
         )
@@ -249,7 +257,7 @@ test(
           404,
         )
         assert.equal(
-          (await pinDashboard(request({}), ctx(privateBoard))).status,
+          (await pinDashboard(request({ pin: true }), ctx(privateBoard))).status,
           404,
         )
         const embed = await loadDashboardEmbed(board, oid)

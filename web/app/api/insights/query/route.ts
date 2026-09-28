@@ -37,7 +37,7 @@ const postBodySchema0 = z.strictObject({
   query: z.json().refine((value) => {
     try { validateInsightQuery(value); return true; } catch { return false; }
   }, "query must follow the insight query schema"),
-  allowedSubsidiaryIds: z.unknown().optional(),
+  allowedSubsidiaryIds: z.json().optional(),
 });
 
 export { runtime } from "@/lib/api/route";

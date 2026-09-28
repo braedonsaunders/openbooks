@@ -16,7 +16,7 @@ const Body = z.object({
   hoursPerWeek: z.string(),
   note: z.string().nullable().optional(),
   opportunityId: z.string().uuid().nullable().optional(),
-  custom: z.record(z.string(), z.unknown()).optional(),
+  custom: z.record(z.string(), z.json()).optional(),
 }).strict();
 
 export const PATCH = defineRoute({

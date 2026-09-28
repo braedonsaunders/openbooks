@@ -48,6 +48,9 @@ test("buy suggestions create one vendor purchase draft and preserve conversion r
     const missingVendor = await call(plans[0]!.id, {});
     assert.equal(missingVendor.status, 400);
     assert.equal((await missingVendor.json() as { code: string }).code, "mrp_vendor_required");
+    const invalidVendor = await call(plans[0]!.id, { vendorId: "not-a-vendor-id" });
+    assert.equal(invalidVendor.status, 422);
+    assert.match(String((await invalidVendor.json() as { error: string }).error), /valid|uuid|identifier/i);
     const converted = await call(plans[0]!.id, { vendorId: org.vendorId });
     assert.equal(converted.status, 201, JSON.stringify(await converted.clone().json()));
     const result = await converted.json() as { id: string };

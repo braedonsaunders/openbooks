@@ -8,7 +8,7 @@ const realAuthz = new URL("../../../lib/authz.ts", import.meta.url).href;
 const authzSource = "import { can } from '" + realAuthz + "'; export * from '" + realAuthz + "'; export async function getAuthz(){return globalThis.__usageRouteState.authz} export async function guardPermission(p){const a=globalThis.__usageRouteState.authz;if(!a)return globalThis.__usageNextResponse.json({error:'unauthorized'},{status:401});return can(a,p)?a:globalThis.__usageNextResponse.json({error:'missing permission: '+p},{status:403})}"; const authzStub = { shortCircuit: true as const, url: "data:text/javascript," + encodeURIComponent(authzSource) };
 registerHooks({ resolve(s, c, next) { return s === "@/lib/authz" || (s === "./authz" && c.parentURL?.includes("/web/lib/feature-gates")) ? authzStub : next(s, c); } });
 const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts"), { sql } = await import("drizzle-orm"), { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts"), { isFeatureEnabled, orgFeatureState } = await import("../../../lib/features.ts");
-const { GET: metersGet, POST: metersPost } = await import("./meters/route.ts"), { GET: recordsGet, POST: recordsPost } = await import("./records/route.ts"), { POST: reverseRecord } = await import("./records/[id]/reverse/route.ts"), { POST: plansPost, GET: plansGet } = await import("./plans/route.ts"), { POST: versionsPost } = await import("./plans/[id]/versions/route.ts"), { PUT: bandsPut } = await import("./versions/[id]/bands/route.ts"), { POST: publishPost } = await import("./versions/[id]/publish/route.ts");
+const { GET: metersGet, POST: metersPost } = await import("./meters/route.ts"), { PATCH: metersPatch } = await import("./meters/[id]/route.ts"), { GET: recordsGet, POST: recordsPost } = await import("./records/route.ts"), { POST: reverseRecord } = await import("./records/[id]/reverse/route.ts"), { POST: plansPost, GET: plansGet } = await import("./plans/route.ts"), { POST: versionsPost } = await import("./plans/[id]/versions/route.ts"), { PUT: bandsPut } = await import("./versions/[id]/bands/route.ts"), { POST: publishPost } = await import("./versions/[id]/publish/route.ts");
 const { GET: linksGet, POST: linksPost } = await import("./links/route.ts"), { GET: prepaidGet } = await import("./prepaid/route.ts"), { GET: runsGet, POST: runsPost } = await import("./runs/route.ts"), { POST: previewPost } = await import("./runs/preview/route.ts"), { POST: voidPost } = await import("./runs/[id]/void-and-rebill/route.ts"), { GET: metricsGet } = await import("../metrics/months/route.ts"), { PUT: pricingPut } = await import("../revenue/contracts/[id]/pricing/route.ts");
 type Handler = (request?: Request, context?: { params?: Promise<unknown> }) => Promise<Response>; const DB = { skip: !process.env.OPENBOOKS_DB_URL };
 async function setFeatures(orgId: string, features: Record<string, boolean>) {
@@ -53,6 +53,12 @@ test("usage routes enforce gates, actor idempotency, subsidiary scope, and billi
     assert.equal(meter.status, 201); assert.equal(replay.status, 201); assert.equal(meter.json.id, replay.json.id);
     assert.equal(conflict.status, 409); assert.equal(conflict.json.code, "idempotency_key_conflict"); assert.ok(conflict.json.remedy);
     const usageMeterId = String(meter.json.id), meterName = String(meter.json.key);
+    const emptyMeterEdit = await call(metersPatch, `/api/usage/meters/${usageMeterId}`, "PATCH", {}, undefined, { id: usageMeterId });
+    assert.equal(emptyMeterEdit.status, 422);
+    assert.match(String(emptyMeterEdit.json.error), /Supply at least one meter field/);
+    const renamedMeter = await call(metersPatch, `/api/usage/meters/${usageMeterId}`, "PATCH", { name: "Metered API requests" }, undefined, { id: usageMeterId });
+    assert.equal(renamedMeter.status, 200);
+    assert.equal(renamedMeter.json.name, "Metered API requests");
     const badRecord = await call(recordsPost, "/api/usage/records", "POST", { records: [{ meterKey: "missing-meter", customerId: org.customerId, occurredOn: org.date, quantity: "1", source: "api", idempotencyKey: randomUUID() }] });
     assert.equal(badRecord.status, 422); assert.equal(badRecord.json.code, "usage_meter_unknown"); assert.ok(badRecord.json.remedy);
     const plan = await call(plansPost, "/api/usage/plans", "POST", { name: `Route plan ${randomUUID().slice(0, 8)}`, currency: "CAD" }, randomUUID()), version = await call(versionsPost, `/api/usage/plans/${plan.json.id}/versions`, "POST", { effectiveFrom: org.date }, randomUUID(), { id: plan.json.id }), versionId = String(version.json.id);
@@ -68,6 +74,9 @@ test("usage routes enforce gates, actor idempotency, subsidiary scope, and billi
     setAuthz();
     const preview = await call(previewPost, "/api/usage/runs/preview", "POST", { linkId: link.json.id, periodStart: org.date, periodEnd: org.date }); assert.equal(preview.status, 200);
     const committed = await call(runsPost, "/api/usage/runs", "POST", { linkId: link.json.id, periodStart: org.date, periodEnd: org.date }); assert.equal(committed.status, 200); const runId = String((committed.json as { run: { id: string } }).run.id);
+    const invalidReason = await call(voidPost, `/api/usage/runs/${runId}/void-and-rebill`, "POST", { reason: " " }, undefined, { id: runId });
+    assert.equal(invalidReason.status, 422);
+    assert.match(String(invalidReason.json.error), /reason|nonblank/i);
     const replacement = await call(voidPost, `/api/usage/runs/${runId}/void-and-rebill`, "POST", { reason: "Corrected usage" }, undefined, { id: runId });
     assert.equal(replacement.status, 200);
     const typedPricing = await call(pricingPut, `/api/revenue/contracts/${contractId}/pricing`, "PUT", { fixedConsideration: "-1" }, undefined, { id: contractId }); assert.equal(typedPricing.status, 422); assert.equal(typedPricing.json.code, "revenue_transaction_price_invalid"); assert.ok(typedPricing.json.remedy);

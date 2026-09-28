@@ -86,10 +86,16 @@ test("demand creation fences, validates custom fields, replays idempotently, and
     const first = await call(body, key), replay = await call(body, key);
     assert.equal(first.response.status, 201);
     assert.equal(replay.response.status, 201);
+    const invalidJsonValue = await call({ ...body, custom: { staffing_owner: "Practice lead", malformed: { nested: [null, true] } } }, randomUUID());
+    assert.equal(invalidJsonValue.response.status, 422);
+    assert.match(JSON.parse(invalidJsonValue.text).error, /unknown custom field: malformed/);
     const id = JSON.parse(first.text).id;
     assert.equal(JSON.parse(replay.text).id, id);
     const unknownPatch = await patchCall(id, { ...body, custom: { unknown_custom_key: true } });
     assert.deepEqual([unknownPatch.status, (await unknownPatch.json()).error], [422, "unknown custom field: unknown_custom_key"]);
+    const malformedPatch = await patchCall(id, { ...body, custom: ["Practice lead"] });
+    assert.equal(malformedPatch.status, 422);
+    assert.match((await malformedPatch.json() as { error: string }).error, /object|record/i);
     const stored = await withBypassContext(() => db.execute<{ lines: string; audits: string }>(sql`
       select (select count(*)::text from res_demand_lines where org_id = ${org.orgId} and id = ${key}) as lines,
              (select count(*)::text from audit_log where org_id = ${org.orgId} and table_name = 'res_demand_lines' and row_id = ${key} and request_id = ${key}) as audits

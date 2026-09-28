@@ -9,7 +9,8 @@ const Body = z.object({
   unit: z.string().trim().min(1).optional(),
   aggregation: z.enum(["sum", "count", "max", "last", "unique_count"]).optional(),
   itemId: z.string().uuid().nullable().optional(),
-}).strict();
+}).strict().refine((value) => Object.keys(value).length > 0 && Object.values(value).some((field) => field !== undefined),
+  "Supply at least one meter field to update.");
 
 export const PATCH = defineRoute({
   permission: "usage.manage",

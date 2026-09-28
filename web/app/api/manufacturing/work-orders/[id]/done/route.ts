@@ -7,7 +7,12 @@ import { manufacturingTransaction } from "../../../_transaction";
 import { loadScopedWorkOrder } from "../../_scope";
 
 const Params = z.object({ id: z.string().uuid() });
-const Body = z.object({ shortCloseReason: z.string().trim().min(5).max(500).nullable().optional() }).strict();
+// Ordinary completion needs no override; short completion requires a reason
+// under the service's quantity/tolerance checks.
+const Body = z.union([
+  z.object({}).strict().transform(() => ({ shortCloseReason: undefined })),
+  z.object({ shortCloseReason: z.string().trim().min(5).max(500).nullable() }).strict(),
+], { error: "Send an empty object for ordinary completion, or a shortCloseReason of 5–500 characters." });
 
 export const POST = defineRoute({
   permission: "items.post", feature: "manufacturing", params: Params, body: Body,
