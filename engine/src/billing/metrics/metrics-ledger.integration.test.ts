@@ -641,24 +641,48 @@ test("legacy and unsupported history denominations refuse with the normalization
         returning id
       `);
       assert.equal(legacy.rows.length, 1, "the pre-normalization row must be stored");
+      const modern = await db.execute(sql`
+        insert into saas_metrics_monthly
+          (org_id, subsidiary_id, customer_id, subscription_id, month, cohort_month,
+           mrr_start, mrr_end, new_mrr, expansion_mrr, contraction_mrr, churned_mrr,
+           reactivation_mrr, movement, recognized_revenue, deferred_delta, inputs_hash,
+           reporting_currency, denomination_version, normalization_evidence)
+        values (${org.orgId}, ${org.subsidiaryId}, ${org.customerId}, ${modernId},
+                '2026-07-01', '2026-07-01', '0', '100', '100', '0', '0', '0', '0', 'new', '0', '0', 'history-seed',
+                'CAD', 'v1', '{"inputs_hash":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}')
+        returning id
+      `);
+      assert.equal(modern.rows.length, 1, "the normalized row must be stored");
     });
     await assert.rejects(
       recomputeSaasMetrics(org.orgId, "2026-08-01"),
       (error: unknown) => error instanceof UsageBillingError
         && error.code === "saas_metrics_history_denomination_unknown"
         && (error.message as string).includes(legacyId)
-        && /Recompute 2026-07-01 through SaaS metrics recompute/.test(error.remedy),
-      "a legacy row without denomination evidence refuses with the real normalization remedy",
+        && /submit a normalization request for 2026-07-01/.test(error.remedy)
+        && /different authorized approver/.test(error.remedy)
+        && /never reversed or rewritten/.test(error.remedy),
+      "a legacy row without denomination evidence refuses with the controlled request/approval remedy",
     );
-    // The remedy is real: normalizing July first lets August open.
-    await recomputeSaasMetrics(org.orgId, MONTH);
-    await recomputeSaasMetrics(org.orgId, "2026-08-01");
-    const opened = (await db.execute<{ mrr_start: string }>(sql`
-      select mrr_start::text as mrr_start from saas_metrics_monthly
-       where org_id = ${org.orgId} and subscription_id = ${legacyId} and month = '2026-08-01'::date
+    // The refusal writes nothing: the legacy row stays exactly as stored.
+    const untouched = (await db.execute<{ mrr_end: string; reporting_currency: string | null; denomination_version: string | null }>(sql`
+      select mrr_end::text as mrr_end, reporting_currency, denomination_version
+        from saas_metrics_monthly
+       where org_id = ${org.orgId} and subscription_id = ${legacyId} and month = '2026-07-01'::date
     `)).rows[0]!;
-    assert.equal(opened.mrr_start, "100.0000", "the normalized prior month opens at par");
+    assert.equal(untouched.mrr_end, "100.0000");
+    assert.equal(untouched.reporting_currency, null, "the refusal never backfills a denomination");
+    assert.equal(untouched.denomination_version, null);
+    // Isolate the fixture to reach the unsupported-version case: the legacy
+    // row is fixture-owned seed data, removed here so only v99 remains. This
+    // exercises no approval workflow; it only pins the refusal.
     await withOrgTransaction(org.orgId, async () => {
+      const removed = await db.execute(sql`
+        delete from saas_metrics_monthly
+         where org_id = ${org.orgId} and subscription_id = ${legacyId} and month = '2026-07-01'::date
+        returning id
+      `);
+      assert.equal(removed.rows.length, 1, "the legacy seed must be isolated away");
       const relabeled = await db.execute(sql`
         update saas_metrics_monthly set denomination_version = 'v99'
          where org_id = ${org.orgId} and subscription_id = ${modernId} and month = '2026-07-01'::date
@@ -670,7 +694,8 @@ test("legacy and unsupported history denominations refuse with the normalization
       recomputeSaasMetrics(org.orgId, "2026-08-01"),
       (error: unknown) => error instanceof UsageBillingError
         && error.code === "saas_metrics_history_denomination_unknown"
-        && (error.message as string).includes("v99"),
+        && (error.message as string).includes("v99")
+        && /submit a normalization request for 2026-07-01/.test(error.remedy),
       "an unsupported denomination version refuses instead of inheriting the org base",
     );
   } finally {
