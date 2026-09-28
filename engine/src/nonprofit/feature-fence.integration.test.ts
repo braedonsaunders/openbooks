@@ -90,7 +90,7 @@ test("nonprofit feature switches preserve saved records and statements", { skip:
     const cases = [
       ["fundAccounting", () => createFund({ orgId: org.orgId, code: "OFF", name: "Off", kind: "operating", restrictionClass: "without_donor_restrictions", actorId })],
       ["fundAccounting", () => setFramework({ orgId: org.orgId, framework: "us_asc958", actorId, reason: "Confirm restriction framework" })],
-      ["fundAccounting", () => setFundPair({ orgId: org.orgId, fromFundId: funds.defaultFundId, toFundId: restricted.id, dueFromAccountId: org.accounts.ar, dueToAccountId: org.accounts.ap, actorId })],
+      ["fundAccounting", () => setFundPair({ orgId: org.orgId, fromFundId: funds.defaultFundId, toFundId: restricted.id, dueFromAccountId: org.accounts.ar, dueToAccountId: org.accounts.ap, actorId, reason: "Configure interfund settlement accounts" })],
       ["grantManagement", () => createGrant({ orgId: org.orgId, code: "OFF", name: "Off", sponsorPartyId: org.customerId, sponsorKind: "foundation", determination: "contribution_unconditional", awardAmount: "1.0000", periodFrom: "2026-01-01", periodTo: "2026-12-31", fundId: restricted.id, allowableAccountGroupId: group, actorId })],
       ["pledges", () => createPledge({ orgId: org.orgId, subsidiaryId: org.subsidiaryId, donorPartyId: org.customerId, fundId: restricted.id, totalAmount: "1.0000", discountRate: "0", installments: [{ dueOn: "2027-01-01", amount: "1.0000" }], reason: "Record promised support", actorId })],
       ["encumbrances", () => createEncumbrance({ orgId: org.orgId, accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, sourceKind: "manual", amount: "1.0000", actorId })],

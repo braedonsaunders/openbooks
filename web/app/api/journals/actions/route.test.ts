@@ -171,7 +171,7 @@ test('grant and encumbrance boundaries share one provisioned org', { skip: !DB }
     const { adminId } = await withBypassContext(() => seedFlowActors(org.orgId))
     await enableNpFeatures(org.orgId, orgB.orgId)
     const { defaultFundId: fundId } = await provisionFundAccounting({ orgId: org.orgId, actorId: adminId,
-      defaultFund: { code: '25NP', name: '-' }, classifications: { '25NP': { kind: 'own_source', restrictionClass: 'unrestricted' } } })
+      defaultFund: { code: '25NP', name: '-' }, classifications: { '25NP': { kind: 'operating', restrictionClass: 'unrestricted' } } })
     const seeded = await withOrgContext(org.orgId, async () => {
       await db.execute(sql`update funds set budgetary_control = 'advisory' where org_id = ${org.orgId} and id = ${fundId}`)
       const scenario = (await db.execute<{ id: string }>(sql`
@@ -199,11 +199,11 @@ test('grant and encumbrance boundaries share one provisioned org', { skip: !DB }
       sponsorPartyId: org.customerId, sponsorKind: 'foundation', determination: 'contribution_unconditional',
       awardAmount: '1000.00', periodFrom: '2026-01-01', periodTo: '2026-12-31',
       fundId, allowableAccountGroupId: seeded.group, actorId: adminId })
-    const enc = await createEncumbrance({ orgId: org.orgId, amount: '75.00',
+    const enc = await createEncumbrance({ orgId: org.orgId, sourceKind: 'manual', amount: '75.00',
       accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, extraDims: { fund: fundId } })
-    const encDP = await createEncumbrance({ orgId: org.orgId, amount: '25.00',
+    const encDP = await createEncumbrance({ orgId: org.orgId, sourceKind: 'manual', amount: '25.00',
       accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, departmentId: seeded.dept, projectId: seeded.proj, extraDims: { fund: fundId } })
-    const encLC = await createEncumbrance({ orgId: org.orgId, amount: '10.00',
+    const encLC = await createEncumbrance({ orgId: org.orgId, sourceKind: 'manual', amount: '10.00',
       accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, locationId: org.locationId, classId: seeded.classId, extraDims: { fund: fundId } })
     routeState.authz = { user: { orgId: org.orgId, id: userId }, permissions: new Set(['encumbrances.manage', 'gl.post', 'grants.manage']), allowedSubsidiaryIds: [outside] }
     ;(globalThis as Record<string, unknown>).__journalActionsSession = { id: userId, orgId: org.orgId, isSuperAdmin: false }

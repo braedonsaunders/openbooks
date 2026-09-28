@@ -940,7 +940,7 @@ export async function getEncumbranceDetail(orgId: string, id: string, asOf: stri
       extraDims: row.extra_dims,
       amount: row.amount, appliedActuals: balance.appliedActuals, openBalance: balance.openBalance,
       status: row.status,
-      links: links.rows.map((link) => ({
+      links: links.map((link) => ({
         documentLineId: link.document_line_id, documentId: link.document_id,
         documentNumber: link.document_number, documentStatus: link.document_status, amount: link.amount,
       })),

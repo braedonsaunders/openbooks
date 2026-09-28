@@ -29,13 +29,13 @@ registerHooks({
 // Translations are request-scoped framework output: stub only next-intl while
 // authz, feature flags, and the database stay real.
 stubModules({ intl: true })
-const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { createEncumbrance } = await import(root + 'engine/src/nonprofit/encumbrances.ts')
-const { getAuthz } = await import(root + 'web/lib/authz.ts')
-const { nonprofitGroupTabs } = await import(root + 'web/components/module-home/group-tabs.ts')
-const { loadGrants, grantsSpec } = await import(root + 'web/app/(app)/nonprofit/grants/view.ts')
-const { loadEncumbrances, encumbrancesSpec } = await import(root + 'web/app/(app)/nonprofit/encumbrances/view.ts')
+const { createEncumbrance } = await import('@openbooks/engine/src/nonprofit/encumbrances.ts')
+const { getAuthz } = await import('../../../lib/authz.ts')
+const { nonprofitGroupTabs } = await import('../../../components/module-home/group-tabs.ts')
+const { loadGrants, grantsSpec } = await import('./grants/view.ts')
+const { loadEncumbrances } = await import('./encumbrances/view.ts')
 // One shared restricted reader: Uptown is the only subsidiary outside Main Co,
 // the single named subsidiary the fixtures provision.
 async function withScopedReader(permission: string, fn: (ctx: { org: ScratchOrg; outside: string; encId: string }) => Promise<void>): Promise<void> {
@@ -49,9 +49,9 @@ async function withScopedReader(permission: string, fn: (ctx: { org: ScratchOrg;
   assert.equal((await withBypassContext(() => db.execute(sql`update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
     coalesce(settings->'features', '{}'::jsonb) || '{"nonprofit":true,"fundAccounting":true,"budgets":true,"grantManagement":true,"encumbrances":true}'::jsonb, true)
     where id = ${org.orgId} returning id`))).rows.length, 1, 'register scope fixture feature setup updates one organization')
-  const encId = await withOrgContext(org.orgId, async () => (await createEncumbrance({ orgId: org.orgId, amount: '40.00',
+  const encId = await withOrgContext(org.orgId, async () => (await createEncumbrance({ orgId: org.orgId, sourceKind: 'manual', amount: '40.00',
     accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, extraDims: {} })).id)
-  state.user = { id: actor, orgId: org.orgId, isSuperAdmin: false, name: 'Scope reader', email: 'scope-reader@scratch.test', roles: ['scope-reader'], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
+  state.user = { id: actor, orgId: org.orgId, isSuperAdmin: false, name: 'Scope reader', email: 'scope-reader@scratch.test', roles: [{ key: 'scope-reader', name: 'Scope reader' }], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
   try {
     await fn({ org, outside, encId })
   } finally {

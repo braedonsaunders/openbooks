@@ -110,10 +110,11 @@ export async function loadEncumbrances(
     // Creation offers only subsidiaries in the caller's scope: an
     // unrestricted caller sees every active subsidiary, a restricted caller
     // sees their allowlist, and hidden subsidiary names never reach the page.
+    const allowedSubsidiaryIds = authz.allowedSubsidiaryIds
     const inScope =
-      authz.allowedSubsidiaryIds === null
+      allowedSubsidiaryIds === null
         ? subsidiaries.rows
-        : subsidiaries.rows.filter((row) => authz.allowedSubsidiaryIds.has(row.id))
+        : subsidiaries.rows.filter((row) => allowedSubsidiaryIds.has(row.id))
     return {
       ...base,
       drawer: {
