@@ -1647,10 +1647,11 @@ export async function approveAndExecuteNormalizationRequest(args: {
  *
  * Classification fails closed. Ready needs every stored row on the complete
  * v1 triple (reporting currency, denomination version, and evidence all
- * present) with one reporting currency, plus full agreement with the
- * succeeded result — same month, denomination, currency, month hash bound
- * to every stored row hash, and matching monthly, subsidiary, facts, and
- * cohorts counts — when a request selected the month. Legacy needs every
+ * present) with one reporting currency, one canonical stored hash, and
+ * every row's evidence hash equal to its own row hash, plus full agreement
+ * with the succeeded result — same month, denomination, currency, recorded
+ * month hash, and matching monthly, subsidiary, facts, and cohorts counts
+ * — when a request selected the month. Legacy needs every
  * stored row on the all-null legacy triple. Empty months, mixed legacy/v1
  * sets, partial triples, unsupported versions, multiple currencies, and
  * malformed or mismatched results are refused by name with the request and
@@ -1696,6 +1697,7 @@ type MonthShapeRow = {
   versions: string[];
   hashes: string[];
   evidenceHashes: string[];
+  evidenceMismatch: number;
 };
 
 type MonthRequestRow = {
@@ -1737,15 +1739,32 @@ function monthRequestState(
     return { ...base, state: "failed", failure: terminal.failure, remedy: terminal.remedy };
   }
   const coherentLegacy = shape.total > 0 && shape.legacy === shape.total;
+  const singleHash = shape.hashes.length === 1 ? shape.hashes[0] : undefined;
+  const singleEvidence = shape.evidenceHashes.length === 1 ? shape.evidenceHashes[0] : undefined;
+  // A distinct aggregate cannot prove per-row agreement: one row with
+  // missing evidence contributes nothing to the distinct set, so a good
+  // hash from the other rows would authenticate the set. The mismatch
+  // counter requires every stored row's evidence hash to equal its own
+  // row hash instead.
+  const coherentHashes =
+    singleHash !== undefined && singleEvidence !== undefined && singleEvidence === singleHash
+    && shape.evidenceMismatch === 0;
   const coherentV1 =
     shape.total > 0
     && shape.v1 === shape.total
     && shape.currencies.length === 1
-    && shape.currencies[0] !== undefined;
+    && shape.currencies[0] !== undefined
+    && coherentHashes;
   const describeShape = (): string => {
     if (shape.total === 0) return `Month ${month} has no stored metric rows.`;
     if (shape.currencies.length > 1) {
       return `Month ${month} mixes reporting currencies (${shape.currencies.join(", ")}).`;
+    }
+    if (shape.hashes.length !== 1) {
+      return `Month ${month} mixes stored row hashes, so no canonical month hash exists.`;
+    }
+    if (!coherentHashes) {
+      return `Month ${month} carries evidence hashes that do not agree on the stored canonical hash.`;
     }
     const unsupported = shape.versions.filter((version) => version !== "v1");
     if (unsupported.length > 0) {
@@ -1838,15 +1857,15 @@ export async function listNormalizationMonthStates(orgId: string): Promise<Norma
     const shapes = (await db.execute<MonthShapeRow>(sql`
       with rows as (
         select month::text as month, reporting_currency, denomination_version, normalization_evidence,
-               'monthly' as source
+               inputs_hash, 'monthly' as source
           from saas_metrics_monthly where org_id = ${resolvedOrgId}
         union all
         select month::text as month, reporting_currency, denomination_version, normalization_evidence,
-               'facts' as source
+               inputs_hash, 'facts' as source
           from saas_metrics_facts_monthly where org_id = ${resolvedOrgId}
         union all
         select month::text as month, reporting_currency, denomination_version, normalization_evidence,
-               'cohorts' as source
+               inputs_hash, 'cohorts' as source
           from saas_metrics_cohort_monthly where org_id = ${resolvedOrgId}
       ),
       months as (
@@ -1870,7 +1889,9 @@ export async function listNormalizationMonthStates(orgId: string): Promise<Norma
              coalesce(array_remove(array_agg(distinct r.denomination_version), null), '{}') as versions,
              coalesce(array_remove(array_agg(distinct r.inputs_hash), null), '{}') as hashes,
              coalesce(array_remove(array_agg(distinct (r.normalization_evidence ->> 'inputs_hash')), null), '{}')
-               as "evidenceHashes"
+               as "evidenceHashes",
+             coalesce(sum(case when (r.normalization_evidence ->> 'inputs_hash') is distinct from r.inputs_hash
+                                then 1 else 0 end), 0)::int as "evidenceMismatch"
         from months m left join rows r on r.month = m.month
        group by m.month order by m.month desc
     `)).rows;
