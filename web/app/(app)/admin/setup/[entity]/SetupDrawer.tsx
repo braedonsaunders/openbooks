@@ -218,12 +218,12 @@ export function SetupDrawer({
         body.expectedExtensionVersionId = row!.extension_version_id
       }
       // Command-owned entities save through their domain command, never the
-      // generic endpoint (which refuses them with the same remedy): the
-      // command records the reason and audit the row write cannot. Every
-      // command is an upsert, so creates and edits both POST the payload —
-      // and both mint the stable session key, because the command endpoint
-      // fences on it: without a key the save is refused, never silently
-      // unguarded.
+      // generic endpoint (which refuses them with a remedy naming the command
+      // endpoint): the domain owns the write the row endpoint cannot make.
+      // Every command is an upsert, so creates and edits both POST the
+      // payload — and both mint the stable session key, because the command
+      // endpoint fences on it: without a key the save is refused, never
+      // silently unguarded.
       const commanded = entity.command
       if ((creating || commanded) && !createRequestIdRef.current) createRequestIdRef.current = crypto.randomUUID()
       const res = await fetch(commanded ? `/api/admin/setup/${entity.key}/command` : `/api/admin/setup/${entity.key}`, {

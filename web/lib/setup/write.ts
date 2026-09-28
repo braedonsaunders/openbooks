@@ -1691,15 +1691,15 @@ function bomCommandOnly(entity: SetupEntity): SetupWriteResult | null {
 /**
  * Command-owned setup entities never reach generic INSERT/UPDATE/DELETE. A
  * framework, fund pair, or functional mapping written as a plain row would
- * skip the reason, the exactly-one-subject check, and the audit the domain
- * command records — so every generic verb refuses here, in the preflight and
- * in each command, before body parsing. The remedy names the real endpoint.
+ * bypass the domain command that owns the write — so every generic verb
+ * refuses here, in the preflight and in each command, before body parsing.
+ * The remedy names the real endpoint.
  */
 function commandOwnedOnly(entity: SetupEntity): SetupWriteResult | null {
   if (!entity.command) return null
   return {
     status: 405,
-    body: { error: `This configuration changes only through its setup command (POST /api/admin/setup/${entity.key}/command), which records the reason and audit. Open Nonprofit Setup to make this change.` },
+    body: { error: `This configuration changes only through its setup command (POST /api/admin/setup/${entity.key}/command). Open Nonprofit Setup to make this change.` },
   }
 }
 
