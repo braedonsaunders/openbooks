@@ -535,3 +535,210 @@ test('the SaaS Metrics card hosts the workflow only while the feature is on', as
     await on.unmount()
   }
 })
+
+test('a non-JSON request error renders the request fallback, never a parse error', async () => {
+  const { unmount } = await mountWorkflow((record) => {
+    if (record.method === 'POST') return new Response('Internal Server Error', { status: 500 })
+    return Response.json([])
+  })
+  try {
+    await act(async () => {
+      setWorkflowInput('normalization-month', '2026-07-01')
+      await tick()
+    })
+    await act(async () => {
+      setWorkflowInput('normalization-reason', 'Correct the July legacy denomination.')
+      await tick()
+    })
+    await act(async () => {
+      clickWorkflowButton(String(normalizationCopy.requestSubmit)).click()
+      await tick()
+      await tick()
+    })
+    await tick()
+    assert.ok(
+      document.body.textContent?.includes(String(normalizationCopy.requestFailed)),
+      'the request fallback must render when the error body cannot be parsed',
+    )
+    assert.ok(
+      !document.body.textContent?.includes('Unexpected token'),
+      'a JSON parse error must never reach the operator',
+    )
+  } finally {
+    await unmount()
+  }
+})
+
+test('a non-JSON approval error renders the approval fallback', async () => {
+  const pending = [
+    {
+      month: '2026-07-01',
+      state: 'pending',
+      counts: { monthly: 1, facts: 1, cohorts: 1 },
+      denominationVersion: null,
+      reportingCurrency: null,
+      request: { id: 'request-1', status: 'pending' },
+      failure: null,
+      remedy: null,
+    },
+  ]
+  const { unmount } = await mountWorkflow((record) => {
+    if (record.method === 'POST') return new Response('Internal Server Error', { status: 500 })
+    return Response.json(pending)
+  })
+  try {
+    await act(async () => {
+      clickWorkflowButton(String(normalizationCopy.approveSubmit)).click()
+      await tick()
+      await tick()
+    })
+    await tick()
+    assert.ok(
+      document.body.textContent?.includes(String(normalizationCopy.approveFailed)),
+      'the approval fallback must render when the error body cannot be parsed',
+    )
+  } finally {
+    await unmount()
+  }
+})
+
+test('a rejected load renders the load fallback instead of rejecting', async () => {
+  const { unmount } = await mountWorkflow(() => {
+    throw new Error('connection lost')
+  })
+  try {
+    assert.ok(
+      document.body.textContent?.includes(String(normalizationCopy.loadFailed)),
+      'a fetch rejection must surface the load fallback',
+    )
+  } finally {
+    await unmount()
+  }
+})
+
+test('an unchanged retry reuses its key while a changed body rotates', async () => {
+  let sequence = 0
+  const nextKey = () => `00000000-0000-4000-8000-${String((sequence += 1)).padStart(12, '0')}`
+  const cryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
+  Object.defineProperty(globalThis, 'crypto', { value: { randomUUID: nextKey }, configurable: true })
+  const { seen, unmount } = await mountWorkflow((record) => {
+    if (record.method === 'POST') return new Response('Internal Server Error', { status: 500 })
+    return Response.json([])
+  })
+  try {
+    await act(async () => {
+      setWorkflowInput('normalization-month', '2026-07-01')
+      await tick()
+    })
+    await act(async () => {
+      setWorkflowInput('normalization-reason', 'Correct the July legacy denomination.')
+      await tick()
+    })
+    const submit = async () => {
+      await act(async () => {
+        clickWorkflowButton(String(normalizationCopy.requestSubmit)).click()
+        await tick()
+        await tick()
+      })
+      await tick()
+    }
+    await submit()
+    await submit()
+    const posts = seen.filter((entry) => entry.method === 'POST')
+    assert.equal(posts.length, 2, 'both retries must post')
+    assert.equal(
+      (posts[0]!.body as Record<string, unknown>).idempotencyKey,
+      (posts[1]!.body as Record<string, unknown>).idempotencyKey,
+      'an unchanged retry after a lost response must reuse the same key',
+    )
+    await act(async () => {
+      setWorkflowInput('normalization-reason', 'Correct the July legacy denomination twice.')
+      await tick()
+    })
+    await submit()
+    const rotated = seen.filter((entry) => entry.method === 'POST')
+    assert.equal(rotated.length, 3, 'the changed draft must post again')
+    assert.notEqual(
+      (rotated[2]!.body as Record<string, unknown>).idempotencyKey,
+      (rotated[0]!.body as Record<string, unknown>).idempotencyKey,
+      'a changed body must rotate to a fresh key',
+    )
+  } finally {
+    if (cryptoDescriptor) Object.defineProperty(globalThis, 'crypto', cryptoDescriptor)
+    await unmount()
+  }
+})
+
+test('a conclusive success consumes its draft key', async () => {
+  let sequence = 100
+  const nextKey = () => `00000000-0000-4000-8000-${String((sequence += 1)).padStart(12, '0')}`
+  const cryptoDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
+  Object.defineProperty(globalThis, 'crypto', { value: { randomUUID: nextKey }, configurable: true })
+  const { seen, unmount } = await mountWorkflow((record) => {
+    if (record.method === 'POST') {
+      return Response.json({ request: { id: 'request-1', status: 'pending' }, created: true }, { status: 201 })
+    }
+    return Response.json([])
+  })
+  const fillSameDraft = async () => {
+    await act(async () => {
+      setWorkflowInput('normalization-month', '2026-07-01')
+      await tick()
+    })
+    await act(async () => {
+      setWorkflowInput('normalization-reason', 'Correct the July legacy denomination.')
+      await tick()
+    })
+    await act(async () => {
+      clickWorkflowButton(String(normalizationCopy.requestSubmit)).click()
+      await tick()
+      await tick()
+    })
+    await tick()
+  }
+  try {
+    await fillSameDraft()
+    await fillSameDraft()
+    const posts = seen.filter((entry) => entry.method === 'POST')
+    assert.equal(posts.length, 2, 'both submissions must post')
+    assert.notEqual(
+      (posts[0]!.body as Record<string, unknown>).idempotencyKey,
+      (posts[1]!.body as Record<string, unknown>).idempotencyKey,
+      'a conclusive success must rotate the draft key even for the same body',
+    )
+  } finally {
+    if (cryptoDescriptor) Object.defineProperty(globalThis, 'crypto', cryptoDescriptor)
+    await unmount()
+  }
+})
+
+test('a ready month renders its recorded denomination and currency', async () => {
+  const { unmount } = await mountWorkflow(() =>
+    Response.json([
+      {
+        month: '2026-07-01',
+        state: 'ready',
+        counts: { monthly: 1, facts: 1, cohorts: 1 },
+        denominationVersion: 'v1',
+        reportingCurrency: 'CAD',
+        request: { id: 'request-1', status: 'succeeded' },
+        failure: null,
+        remedy: null,
+      },
+    ]),
+  )
+  try {
+    assert.ok(
+      document.body.textContent?.includes(String(normalizationCopy.resultDenomination)),
+      'the recorded denomination label must render',
+    )
+    assert.ok(document.body.textContent?.includes('v1'), 'the recorded denomination must render')
+    assert.ok(
+      document.body.textContent?.includes(String(normalizationCopy.resultCurrency)),
+      'the recorded currency label must render',
+    )
+    assert.ok(document.body.textContent?.includes('CAD'), 'the recorded currency must render')
+  } finally {
+    await unmount()
+  }
+})

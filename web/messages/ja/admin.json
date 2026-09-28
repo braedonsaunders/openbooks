@@ -814,7 +814,11 @@
         "failureLabel": "失敗内容",
         "remedyLabel": "対処方法",
         "empty": "記録された月はまだありません。",
-        "loadFailed": "正規化の状態を読み込めませんでした。"
+        "loadFailed": "正規化の状態を読み込めませんでした。",
+        "requestFailed": "正規化リクエストを送信できませんでした。",
+        "approveFailed": "正規化リクエストを承認できませんでした。",
+        "resultDenomination": "デノミネーション",
+        "resultCurrency": "報告通貨"
       }
     },
     "approvals": {

@@ -814,7 +814,11 @@
         "failureLabel": "Échec",
         "remedyLabel": "Correctif",
         "empty": "Aucun mois enregistré pour le moment.",
-        "loadFailed": "Impossible de charger les états de normalisation."
+        "loadFailed": "Impossible de charger les états de normalisation.",
+        "requestFailed": "Envoi de la demande de normalisation impossible.",
+        "approveFailed": "Approbation de la demande de normalisation impossible.",
+        "resultDenomination": "Dénomination",
+        "resultCurrency": "Devise de reporting"
       }
     },
     "approvals": {
