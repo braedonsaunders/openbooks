@@ -53,6 +53,7 @@ import { SETUP_TOOLS } from "./tools-setup";
 import { META_TOOLS } from "./tools-meta";
 import { WRITE_TOOLS } from "./tools-write";
 import { ALLOCATIONS_TOOLS } from "./tools-allocations";
+import { RESOURCING_TOOLS } from "./tools-resourcing";
 import type { AssistantToolDef, ToolResult, ToolTier } from "./types";
 import { safeApplicationToolError } from "./tool-errors";
 
@@ -95,6 +96,7 @@ export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
   ...SETUP_TOOLS,
   ...META_TOOLS,
   ...ALLOCATIONS_TOOLS,
+  ...RESOURCING_TOOLS,
   ...WRITE_TOOLS,
 ];
 
