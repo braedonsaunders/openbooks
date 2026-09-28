@@ -95,6 +95,7 @@ export async function findMixedCurrencyExposure(
                      on billed.id = link.to_document_id
                     and billed.org_id = link.org_id
                     and billed.kind = 'customer_invoice'
+                    -- Live entries only: a voided invoice no longer bills down the order, so its remainder is exposure again.
                     and billed.status = 'posted'
                    and billed.currency = exposure.currency
                    and billed.party_id = exposure.party_id
@@ -106,6 +107,7 @@ export async function findMixedCurrencyExposure(
            )
            or (
              exposure.kind = 'customer_invoice'
+             -- Live entries only: a voided invoice is not owed, so it carries no exposure in another currency.
              and exposure.status = 'posted'
              and coalesce(exposure.open_balance, 0) > 0
            )
@@ -145,6 +147,7 @@ export async function measureCustomerExposure(
                     on billed.id = link.to_document_id
                    and billed.org_id = link.org_id
                    and billed.kind = 'customer_invoice'
+                   -- Live entries only: a voided invoice stops relieving the order, so the unbilled remainder counts again.
                    and billed.status = 'posted'
                    and billed.currency = ${roleCurrency}
                    and billed.party_id = issued.party_id
@@ -167,6 +170,7 @@ export async function measureCustomerExposure(
            where invoice.org_id = ${orgId}
              and invoice.party_id = ${partyId}
              and invoice.kind = 'customer_invoice'
+             -- Live entries only: a voided invoice is not owed, so it is not unpaid exposure.
              and invoice.status = 'posted'
              and invoice.currency = ${roleCurrency}
              and coalesce(invoice.open_balance, 0) > 0
@@ -206,6 +210,7 @@ export async function measureLinkedOrderRelief(
                 on billed.id = link.to_document_id
                and billed.org_id = link.org_id
                and billed.kind = 'customer_invoice'
+               -- Live entries only: only a standing invoice has already billed down the order it relieves.
                and billed.status = 'posted'
                and billed.currency = ${roleCurrency}
                and billed.party_id = issued.party_id

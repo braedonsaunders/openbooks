@@ -184,7 +184,7 @@ async function loadCandidateAccounts(orgId: string, today: string, windowDays: n
       db.execute<{ journal_line_id: string; posting_date: string; amount: string; currency: string }>(sql`
         select jl.id as journal_line_id, je.posting_date::text, jl.txn_amount::text as amount, jl.currency
           from journal_lines jl
-          -- Live entries only, like manual matching: a reversed original is never a match suggestion.
+          -- Live entries only: like manual matching, a reversed original is never a match suggestion.
           join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
           join accounting_books b on b.id = je.book_id and b.org_id = je.org_id and b.is_primary and b.is_active and b.posts_gl
          where jl.account_id = ${account.account_id} and jl.org_id = ${orgId}

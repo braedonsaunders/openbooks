@@ -142,6 +142,7 @@ export async function billFixedPrice(
   if (cmp(amount, "0") <= 0) throw new Error("fixed-price billing amount must be greater than zero");
   const priorRow = (await db.execute<{ billed: string }>(sql`
     select coalesce(sum(total), 0)::text as billed from documents
+     -- Live entries only: a voided invoice no longer consumes contract value, so it does not block billing.
      where org_id = ${world.orgId} and kind = 'customer_invoice' and status = 'posted'
        and custom->'sim'->>'projectId' = ${projectId}`));
   const priorBilled = priorRow.rows[0]?.billed ?? "0";

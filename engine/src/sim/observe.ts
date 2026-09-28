@@ -108,6 +108,7 @@ export async function projects(world: SimOrg) {
            p.contract_value::text as contract_value,
            coalesce((select sum(s.scheduled_value) from sov_lines s where s.project_id = p.id), 0)::text as sov_total,
            coalesce((select sum(d.total) from documents d
+                      -- Live entries only: a voided invoice no longer counts toward billed-to-date.
                       where d.org_id = p.org_id and d.kind = 'customer_invoice' and d.status = 'posted'
                         and (d.custom->'sim'->>'projectId' = p.id::text
                              or exists (select 1 from document_lines dl where dl.document_id = d.id and dl.project_id = p.id))), 0)::text as billed_to_date

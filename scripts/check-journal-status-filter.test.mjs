@@ -10,8 +10,14 @@ test("journal status filters retain reversed originals and exact live intent", (
     "select je.id from journal_entries je where je.status in ('posted', 'reversed')",
     "select id from journal_entries where status = 'posted' or status = 'reversed'",
     "select je.id from journal_entries je where je.status = 'posted' -- Live entries only: current candidates exclude reversed entries",
+    "select je.id from journal_entries je\n-- Live entries only: an entry already reversed cannot be reversed again\nwhere je.status = 'posted'",
   ]) assert.deepEqual(scan(query), []);
-  assert.equal(scan("select je.id from journal_entries je\n-- Live entries only: current candidates exclude reversed entries\nwhere je.status = 'posted'").length, 1);
+  assert.deepEqual(scanSource("fixture.ts", "// Live entries only: a reversed entry authorizes nothing\nconst q = sql`select je.id from journal_entries je where je.status = 'posted'`;"), []);
+  for (const query of [
+    "select je.id from journal_entries je\n-- Live entries only: reversed entries are excluded\n\nwhere je.status = 'posted'",
+    "select je.id from journal_entries je\n-- Keep this posted-only: reversed entries are excluded\nwhere je.status = 'posted'",
+    "select je.id from journal_entries je\nwhere je.kind = 'manual' -- Live entries only: reversed entries are excluded\nand je.status = 'posted'",
+  ]) assert.equal(scan(query).length, 1, query);
 });
 
 test("document aggregates distinguish voided history from reversed status", () => {
@@ -19,6 +25,7 @@ test("document aggregates distinguish voided history from reversed status", () =
   for (const query of [
     "select sum(d.total) from documents d where d.status = 'posted' or (d.voided_at is not null and d.voided_at::date > ${asOf}::date)",
     "select sum(d.total) from documents d where d.status = 'posted' -- Live entries only: voided records are excluded from the live queue",
+    "select sum(d.total) from documents d\n-- Live entries only: voided records are excluded from the live queue\nwhere d.status = 'posted'",
     "select sum(d.total) from documents d where d.status = 'posted' or d.status = 'voided'",
     "select sum(d.total) from documents d where d.status in ('posted') or d.status in ('voided')",
   ]) assert.deepEqual(scan(query), []);

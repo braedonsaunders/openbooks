@@ -652,6 +652,7 @@ export async function t4Summary(
   // reconciliation figure and never appears in the transmitted XML.
   const remitted = (await db.execute<{ amount: string }>(sql`
     select coalesce(sum(total), 0) as amount from documents
+     -- Live entries only: a voided remittance bill was never remitted to the agency.
      where org_id = ${orgId} and kind = 'vendor_bill' and status = 'posted'
        and custom ? 'payrollRemittance'
        and custom->'payrollRemittance'->>'to' like ${`${taxYear}-%`}

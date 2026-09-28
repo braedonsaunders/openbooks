@@ -587,8 +587,8 @@ export async function buildScheduleWithRunner(
     // subsequent explicit rebuild cannot rewrite earlier projections.
     const remeasurement = (
       await tx.execute<{ delta: string; cutoff: string | null }>(sql`
-      -- Live entries only: the delta counts standing remeasurements; the cutoff still reads reversed history.
       select coalesce(sum(event.amount) filter (
+               -- Live entries only: the delta counts standing remeasurements; the cutoff still reads reversed history.
                where entry.status = 'posted' and reversal.id is null
              ), 0)::text as delta,
              max(greatest(event.occurred_on, reversal.occurred_on))::text as cutoff

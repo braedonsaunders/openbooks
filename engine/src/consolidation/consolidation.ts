@@ -430,6 +430,7 @@ export async function runOwnershipConsolidationIn(
      where oce.org_id=${orgId} and je.book_id=${bookId} and oce.kind<>'reversal'
        ${options.interestIds ? sql`and oce.interest_id in(select jsonb_array_elements_text(${JSON.stringify(options.interestIds)}::jsonb)::uuid)` : sql``}
        and not exists(select 1 from consolidation_control_losses loss where loss.org_id=${orgId} and loss.reversed_by_change_id is null and (loss.interest_id=oce.interest_id or loss.measurement->'ownershipInterestIds' ? oce.interest_id::text)) and je.reverses_entry_id is null
+       -- Live entries only: a standing reversal means this generation was already undone.
        and not exists(select 1 from journal_entries rev where rev.reverses_entry_id=je.id and rev.org_id=${orgId} and rev.status='posted')
   `);
   for (const old of prior.rows) {
@@ -1253,12 +1254,12 @@ async function runAutoEliminationIn(
   // Prior effective elimination entries are reversed on a re-run. Posted
   // ledger rows are never deleted or rewritten.
   const prior = await tx.execute<{ id: string; entryNumber: string }>(sql`
-    -- Live entries only: an elimination already reversed must not be reversed again.
     select original.id, original.entry_number as "entryNumber"
       from journal_entries original
      where original.org_id = ${orgId} and original.period_id = ${periodId}
        and original.book_id = ${book.id}
        and original.subsidiary_id = ${elim.id}
+       -- Live entries only: an elimination already reversed must not be reversed again.
        and original.origin = 'intercompany' and original.status = 'posted'
        and not exists(select 1 from consolidation_control_losses loss where loss.org_id=original.org_id and loss.reversed_by_change_id is null and exists(select 1 from jsonb_array_elements(loss.measurement->'manualEvidence') evidence where evidence->>'entryId'=original.id::text))
        and original.reverses_entry_id is null
@@ -1266,6 +1267,7 @@ async function runAutoEliminationIn(
          select 1 from journal_entries reversal
           where reversal.org_id = original.org_id
             and reversal.reverses_entry_id = original.id
+            -- Live entries only: a standing reversal means this elimination was already undone.
             and reversal.status = 'posted'
        )`);
 

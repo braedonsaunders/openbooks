@@ -72,6 +72,7 @@ export async function cheapInvariants(orgId: string): Promise<InvariantResult> {
              coalesce(sum(l.amount) filter (where l.account_id = (select ap from ctrl)), 0) as ap_amt
         from documents d
         join journal_lines l on l.entry_id = d.posted_entry_id
+       -- Live entries only: the tie is asserted on documents that stand posted today.
        where d.org_id = ${orgId} and d.status = 'posted'
          and d.kind in ('vendor_bill','customer_invoice','vendor_credit','customer_credit')
        group by d.id, d.kind, d.total
