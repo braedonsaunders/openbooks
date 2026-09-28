@@ -1047,6 +1047,8 @@
     "admin_sandboxes_manage": "Crear y administrar entornos sandbox",
     "allocations_approve": "Aprobar las distribuciones pendientes de aprobación",
     "nonprofit_report": "Ejecutar informes de entidades sin fines de lucro",
+    "funds_read": "Ver la contabilidad de fondos",
+    "funds_manage": "Gestionar fondos y asignaciones funcionales",
     "allocations_manage": "Crear y editar reglas y claves de distribución",
     "allocations_read": "Ver reglas, ejecuciones y trazabilidad de distribuciones",
     "allocations_run": "Obtener vista previa, contabilizar, revertir y repetir distribuciones",

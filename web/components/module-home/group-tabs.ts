@@ -13,7 +13,7 @@ import type { ModuleHomeTab } from './ui'
  * (nav-module names for cockpits — never a context-dependent "Overview").
  */
 
-export type TabGroup = 'customers' | 'purchasing' | 'banking' | 'accounting' | 'payroll' | 'hrm' | 'warehouse'
+export type TabGroup = 'customers' | 'purchasing' | 'banking' | 'accounting' | 'payroll' | 'hrm' | 'warehouse' | 'nonprofit'
 
 // DASHBOARDS AND WORKING SURFACES — a tab lands on a cockpit, or on the ONE
 // canonical list for a thing the group works on daily (accounts, pay runs,
@@ -52,6 +52,16 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     { href: '/banking', ns: 'banking', key: 'home.title' },
     { href: '/banking/cash', ns: 'nav', key: 'modules.banking-cash' },
     { href: '/banking/psp-settlements', ns: 'nav', key: 'modules.banking-psp-settlements' },
+  ],
+  // The nonprofit cockpit beside the fund and release registers it watches,
+  // then the restriction setup the cockpit links onward to. Every tab keeps
+  // its own page-level permission and feature gate; the strip only hides
+  // tabs whose governing feature is off.
+  nonprofit: [
+    { href: '/nonprofit', ns: 'nonprofit', key: 'home.title' },
+    { href: '/nonprofit/funds', ns: 'nonprofit', key: 'funds.title' },
+    { href: '/nonprofit/releases', ns: 'nonprofit', key: 'releases.title' },
+    { href: '/nonprofit/setup', ns: 'nonprofit', key: 'setup.title' },
   ],
   accounting: [
     { href: '/accounting', ns: 'accounting', key: 'home.title' },
@@ -138,6 +148,10 @@ const TAB_FEATURE: Record<string, string> = {
   // hrmCompensation at the page gate.
   '/hrm/compliance': 'hrmConstructionCompliance',
   '/close': 'continuousClose',
+  '/nonprofit': 'nonprofit',
+  '/nonprofit/funds': 'fundAccounting',
+  '/nonprofit/releases': 'fundAccounting',
+  '/nonprofit/setup': 'nonprofit',
   '/warehouse': 'warehousing',
   '/inventory': 'inventory',
   '/picks': 'fulfillment',

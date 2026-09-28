@@ -46,7 +46,9 @@
     "pay_run": "Cycle de paie",
     "pick_list": "Liste de prélèvement",
     "shipment": "Expédition",
-    "rma": "Autorisation de retour"
+    "rma": "Autorisation de retour",
+    "fund": "Fonds",
+    "fund_release": "Versement du fonds"
   },
   "resourcing": {
     "fields": {

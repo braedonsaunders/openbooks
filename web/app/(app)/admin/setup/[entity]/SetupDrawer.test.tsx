@@ -387,3 +387,10 @@ test('the idempotency key travels only on create POSTs, never on PATCH', async (
     await unmount()
   }
 })
+
+test('command-owned entities save through their setup command', async () => {
+  const { seen, unmount } = await mountDrawer(null, () => Response.json({ ok: true }), 'fund-pairs', { fromFundId: '1', toFundId: '2', dueFromAccountId: '3', dueToAccountId: '4', reason: 'r' })
+  await clickSave(true)
+  assert.deepEqual([seen[0]?.method, seen[0]?.url], ['POST', '/api/admin/setup/fund-pairs/command'])
+  await unmount()
+})

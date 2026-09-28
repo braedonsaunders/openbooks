@@ -46,7 +46,9 @@
     "property": "Property",
     "pick_list": "Pick list",
     "shipment": "Shipment",
-    "rma": "Return authorization"
+    "rma": "Return authorization",
+    "fund": "Fund",
+    "fund_release": "Fund release"
   },
   "resourcing": {
     "fields": {

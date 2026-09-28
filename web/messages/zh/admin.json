@@ -974,6 +974,8 @@
     "allocations_run": "预览、过账、冲销并重新运行分摊",
     "allocations_approve": "审批待批准的分摊运行",
     "nonprofit_report": "运行非营利组织报告",
+    "funds_read": "查看资金会计",
+    "funds_manage": "管理资金和功能映射",
     "insights_read": "查看洞察和库",
     "insights_create": "构建卡片和仪表板",
     "insights_publish": "发布到共享库",

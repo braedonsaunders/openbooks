@@ -46,7 +46,9 @@
     "field_ticket": "Außendienstbeleg",
     "pick_list": "Kommissionierliste",
     "shipment": "Sendung",
-    "rma": "Rückgabegenehmigung"
+    "rma": "Rückgabegenehmigung",
+    "fund": "Fonds",
+    "fund_release": "Fondsfreigabe"
   },
   "resourcing": {
     "fields": {

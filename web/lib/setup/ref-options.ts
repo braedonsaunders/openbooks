@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { featureEnabled, resolvedFeatureState } from '../features'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { SETUP_ENTITY_BY_KEY, refTargetPicker, toSnake, type SetupEntity, type SetupRefSource } from './registry'
 import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
@@ -121,6 +122,22 @@ export async function loadEntityOptions(
       select id as value, case when coalesce(code,'') <> '' then code || ' · ' || name else name end as label
         from projects where org_id = ${orgId} and is_active order by code nulls last, name`))
     return projects.rows as RefOption[]
+  }
+  if (source === 'funds') {
+    // The org's fund segment values — never the generic setup tables, which
+    // cannot carry a fund classification. While Fund Accounting is off the
+    // picker offers nothing: the owning setup pages 404 behind the same
+    // switch, so an option here could never be saved anywhere honest.
+    if (!featureEnabled(await resolvedFeatureState(orgId), 'fundAccounting')) return []
+    const funds = (await db.execute(sql`
+      select sv.id as value,
+             case when coalesce(sv.code, '') <> '' then sv.code || ' · ' || sv.name else sv.name end as label
+        from segment_values sv
+        join segment_definitions sd on sd.org_id = sv.org_id and sd.id = sv.segment_id
+       where sv.org_id = ${orgId} and sd.key = 'fund' and sd.source_kind = 'custom'
+         and sv.is_active
+       order by sv.code nulls last, sv.name`))
+    return funds.rows as RefOption[]
   }
   const target = SETUP_ENTITY_BY_KEY.get(source)
   if (!target) return []

@@ -46,7 +46,9 @@
     "field_ticket": "现场工单",
     "pick_list": "拣货单",
     "shipment": "发运单",
-    "rma": "退货授权"
+    "rma": "退货授权",
+    "fund": "资金",
+    "fund_release": "资金发放"
   },
   "resourcing": {
     "fields": {
