@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, type SqlExecutor } from "./db.ts";
 import { now } from "./clock.ts";
 import { canonicalTimeZone } from "./time-zone.ts";
 export { isIsoCalendarDate } from "./iso-date.ts";
@@ -95,8 +95,11 @@ export function formatTimestampInZone(date: Date, timeZone: string): string {
  * no runtime accepts is a misconfigured org, not a UTC org — it refuses by
  * name so the operator fixes the setting instead of posting on the wrong day.
  */
-export async function businessTimeZone(orgId: string): Promise<string> {
-  const r = (await db.execute<{ time_zone: string | null }>(sql`
+export async function businessTimeZoneInTx(
+  executor: SqlExecutor,
+  orgId: string,
+): Promise<string> {
+  const r = (await executor.execute<{ time_zone: string | null }>(sql`
     select settings->>'timeZone' as time_zone from orgs where id = ${orgId}
   `));
   const row = r.rows[0];
@@ -116,7 +119,19 @@ export async function businessTimeZone(orgId: string): Promise<string> {
   return canonical;
 }
 
+export async function businessTimeZone(orgId: string): Promise<string> {
+  return businessTimeZoneInTx(db, orgId);
+}
+
+/** The org's business day (YYYY-MM-DD) bound to a supplied executor. */
+export async function businessTodayInTx(
+  executor: SqlExecutor,
+  orgId: string,
+): Promise<string> {
+  return formatInZone(now(), await businessTimeZoneInTx(executor, orgId));
+}
+
 /** The org's business day (YYYY-MM-DD); UTC day when no valid zone is set. */
 export async function businessToday(orgId: string): Promise<string> {
-  return formatInZone(now(), await businessTimeZone(orgId));
+  return businessTodayInTx(db, orgId);
 }
