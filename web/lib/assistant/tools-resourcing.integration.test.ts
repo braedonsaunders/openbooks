@@ -16,8 +16,8 @@ async function fixture() {
   const org = await withBypassContext(() => createScratchOrg());
   const ids = await withBypassContext(async () => {
     const actorId = await createScratchUser(org.orgId, "Bench operator", "bench-operator");
-    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true,"retainerBilling":true,"revenueRecognition":true}'::jsonb) where id = ${org.orgId}`);
-    await db.execute(sql`update app_roles set permissions = '["assistant.use","resourcing.read","retainers.read"]' where org_id = ${org.orgId} and key = 'bench-operator'`);
+    assert.equal((await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}', coalesce(settings->'features', '{}'::jsonb) || '{"projects":true,"resourcing":true,"retainerBilling":true,"revenueRecognition":true}'::jsonb) where id = ${org.orgId} returning id`)).rows.length, 1, "resourcing tool fixture feature setup updates one organization");
+    assert.equal((await db.execute(sql`update app_roles set permissions = '["assistant.use","resourcing.read","retainers.read"]' where org_id = ${org.orgId} and key = 'bench-operator' returning key`)).rows.length, 1, "resourcing tool fixture permission setup updates bench-operator role");
     const employee = randomUUID(), project = randomUUID();
     await db.execute(sql`insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom) values (${employee}, ${org.orgId}, 'person', 'Bench', ${org.subsidiaryId}, true, '{}'::jsonb)`);
     await db.execute(sql`insert into employee_roles (org_id, party_id, job_title, hired_on, is_active) values (${org.orgId}, ${employee}, 'Consultant', '2026-01-01', true)`);
