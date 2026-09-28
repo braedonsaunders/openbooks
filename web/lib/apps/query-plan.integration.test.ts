@@ -118,7 +118,7 @@ test('filtered formula totals, undefined labels and CSV match the in-memory prod
         { fn: 'formula', key: 'collection_rate', label: 'Collection rate', format: 'percent', expr: { op: '/', left: { ref: 'collected' }, right: { ref: 'billed' } } },
       ],
     }
-    const shapedInMemory = shapeSummarizedRows(summarizeRows(documents, inMemoryPlan), inMemoryPlan)
+    const shapedInMemory = shapeSummarizedRows(summarizeRows(documents, inMemoryPlan), inMemoryPlan, documents)
     assert.deepEqual(shapedInMemory, sqlResult)
     assert.equal(reportResultToCsv(sqlResult), reportResultToCsv(shapedInMemory))
     assert.match(reportResultToCsv(sqlResult), /Undefined — divides by zero/)

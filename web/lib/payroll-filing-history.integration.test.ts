@@ -73,7 +73,7 @@ async function establishFilingSession(
 // This file lives in web/lib; route aliases resolve against web/.
 const webRoot = new URL("../", import.meta.url);
 
-registerHooks({
+const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // Keep workspace imports inside the checkout under test. node_modules
     // symlinks resolve @openbooks/* to the main checkout, so without this a
@@ -119,9 +119,34 @@ registerHooks({
 });
 
 const routeUrl = "../app/api/payroll/remittances/route.ts?filing-history";
-const { GET } = (await import(
+const { GET, POST } = (await import(
   routeUrl
 )) as typeof import("../app/api/payroll/remittances/route.ts");
+// The session seam above has served every module load it will ever serve:
+// the route handlers are imported and the real authorization chain is
+// cached. Deregister now so the fixture cannot leak into the later
+// consolidated rival route fixtures below.
+hooks.deregister();
+// Later consolidated blocks import engine modules dynamically; keep the
+// workspace and server-only mapping live for them without any gate logic.
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "@openbooks/schema" || specifier.startsWith("@openbooks/")) {
+      const rest =
+        specifier === "@openbooks/schema"
+          ? "schema/src/index.ts"
+          : specifier.slice("@openbooks/".length);
+      const workspacePath = rest.includes("/")
+        ? rest
+        : `packages/${rest}/src/index.ts`;
+      return nextResolve(new URL(`../${workspacePath}`, webRoot).href, context);
+    }
+    if (specifier === "server-only") {
+      return { url: "data:text/javascript,export default {}", shortCircuit: true };
+    }
+    return nextResolve(specifier, context);
+  },
+});
 const get = (orgId: string) =>
   withOrgContext(orgId, () =>
     GET(
@@ -742,30 +767,12 @@ const payrollFilingScopeCases = [
   { label: "payroll remittance history scope", register: async () => {
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
-        const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
         type Authz = import("./authz").Authz;
-        const routeState: { gate: Authz | null } = { gate: null };
-        (globalThis as typeof globalThis & Record<symbol, unknown>)[
-          Symbol.for("openbooks.remittance-history-route")
-        ] = routeState;
-        registerHooks({
-          resolve(specifier, context, next) {
-            if (
-              specifier === "../../../../lib/feature-gates" &&
-              context.parentURL?.endsWith("/api/payroll/remittances/route.ts")
-            )
-              return {
-                shortCircuit: true,
-                url:
-                  "data:text/javascript," +
-                  encodeURIComponent(
-                    "export async function guardFeaturePermission(){return globalThis[Symbol.for('openbooks.remittance-history-route')].gate}",
-                  ),
-              };
-            return next(specifier, context);
-          },
-        });
+        // Route handlers come from the top-level import above, already loaded
+        // under the single session-boundary seam; only cookie→identity is
+        // scripted via establishFilingSession, and the gate below shapes just
+        // the direct scopedRemittanceSummary calls.
         const { sql } = await import("drizzle-orm");
         const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
         const { seedAdoption, calculatedRun } =
@@ -779,8 +786,6 @@ const payrollFilingScopeCases = [
           await import("@openbooks/engine/src/payroll/remittance.ts");
 
         const { scopedRemittanceSummary } = await import("./payroll-scoped-views");
-        const { GET: remittanceGet, POST: remittancePost } =
-          await import("../app/api/payroll/remittances/route");
 
         test(
           "remittance history remains scoped to the original pay-run entity after employee transfer",
@@ -978,14 +983,14 @@ const payrollFilingScopeCases = [
                 permissions: new Set(["payroll.read"]),
                 allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
               } as Authz;
-              routeState.gate = gate;
               // Both transports below run the real authorization chain under
               // the file's session seam: read/run grants, the payroll flag,
-              // and the visible-entity restriction are production rows.
+              // and the visible-entity restriction are production rows. The
+              // gate object above shapes only the direct loader call.
               await establishFilingSession(fx, ["payroll.read", "payroll.run"], [fx.subsidiaryId]);
               const loaded = await withOrgContext(fx.orgId, () => scopedRemittanceSummary(gate, range));
               const response = await withOrgContext(fx.orgId, () =>
-                remittanceGet(
+                GET(
                   new Request(
                     `http://localhost/api/payroll/remittances?from=${range.from}&to=${range.to}`,
                   ),
@@ -1019,7 +1024,7 @@ const payrollFilingScopeCases = [
                 "duplicate prevention must not reveal a hidden bill number",
               );
               const refused = await withOrgContext(fx.orgId, () =>
-                remittancePost(
+                POST(
                   new Request("http://localhost/api/payroll/remittances", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -1048,13 +1053,12 @@ const payrollFilingScopeCases = [
                 1,
                 "a hidden overlap still prevents another liability bill",
               );
-              routeState.gate = { ...gate, allowedSubsidiaryIds: null };
               await withBypassContext(() =>
                 db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb
                   where org_id=${fx.orgId} and key='admin'`),
               );
               const unrestricted = await withOrgContext(fx.orgId, () =>
-                remittanceGet(
+                GET(
                   new Request(
                     `http://localhost/api/payroll/remittances?from=${range.from}&to=${range.to}`,
                   ),
