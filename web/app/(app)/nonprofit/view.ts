@@ -126,6 +126,15 @@ const FRAMEWORK_LABEL: Record<string, string> = {
   ew_sorp_frs102: 'EW SORP FRS 102',
 }
 
+/**
+ * Where a refused tie-out sends the operator. Codes route to the existing
+ * surface their remedy names — the accounting-books workspace for a missing
+ * book, the module setup for everything else — never a new page.
+ */
+const TIEOUT_REFUSAL_HREF: Record<string, string> = {
+  nonprofit_statement_book_missing: '/admin/setup/accounting-books',
+}
+
 export async function loadNonprofit(): Promise<NonprofitData> {
   const authz = await requirePermission('funds.read')
   const orgId = authz.user.orgId
@@ -276,6 +285,15 @@ export async function loadNonprofit(): Promise<NonprofitData> {
         : t('home.tieoutHint', { asOf }) + ' ' + t('home.tieoutBroken')
     } catch (error) {
       if (!(error instanceof NonprofitError)) throw error
+      // A computed tie-out refusal is cockpit evidence, not an empty panel:
+      // the attention list carries its exact message and remedy, routed to
+      // the surface that resolves it, so a missing tie-out never reads as
+      // healthy and the operator always sees why.
+      attention.push({
+        tone: 'negative',
+        text: `${error.message} ${error.remedy}`,
+        href: TIEOUT_REFUSAL_HREF[error.code] ?? '/nonprofit/setup',
+      })
     }
   }
   for (const row of pendingRows.slice(0, 6)) {
