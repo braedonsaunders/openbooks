@@ -281,7 +281,8 @@ export async function loadBusySeason(
             `give ${name} exactly one active department on their employee record (Entities → Employees)`,
           )
         }
-        if (!holder || holder.titles.size !== 1) {
+        const title = holder?.titles.entries().next().value
+        if (!holder || holder.titles.size !== 1 || !title) {
           throw new ResourcingRefusal(
             422,
             'busy_season_person_title_missing',
@@ -290,8 +291,8 @@ export async function loadBusySeason(
           )
         }
         departmentId = depts[0]!
-        const [[key, display]] = [...holder.titles]
-        cellFor(departmentId, row.week_start).titles.push({ key: key!, display: display!, hours: row.planned_hours })
+        const [key, display] = title
+        cellFor(departmentId, row.week_start).titles.push({ key, display, hours: row.planned_hours })
       } else {
         const stored = row.job_title ?? ''
         const key = normalizeTitle(stored)

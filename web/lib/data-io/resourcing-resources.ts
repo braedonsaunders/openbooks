@@ -262,7 +262,7 @@ export function assignmentPlanResource(orgId: string): DataResource {
             weekStart,
             plannedHours,
             booking,
-            isBillable: billableRaw === '' ? true : billableRaw === true || String(billableRaw).toLowerCase() === 'true',
+            isBillable: billableRaw === '' ? true : billableRaw.toLowerCase() === 'true',
             custom: validatedCustom.cleaned,
             ...(employeePartyId ? { employeePartyId } : { jobTitle: jobTitle! }),
           }
