@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import type { FlowSubjectProfile } from "@openbooks/forms-core";
 import { db, withOrg, withTransactionSavepoint } from "../platform/db.ts";
 import {
+  MANUFACTURING_SCRAP_RESTATEMENT_OPERATION,
   financialChangeInboxLabel,
   loadFinancialChange,
   loadFinancialChangeSubjectLabel,
@@ -140,10 +141,17 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
     if (row.status !== "pending") return;
     if (!ctx.userId || row.submitted_by === ctx.userId)
       throw new Error("an independent signed-in approver is required");
-    if (row.domain === "manufacturing") {
+    // Manufacturing authority applies only when recording an approval. A
+    // rejection must stay reachable for malformed or obsolete proposals, or
+    // the live-proposal guard would strand the correction it exists to allow.
+    if (row.domain === "manufacturing" && outcome === "approved") {
       // Defense in depth: the restatement service rechecks actor, feature,
       // and legal-entity scope in the same transaction that applies the
       // change. The approval gate independently refuses here first.
+      if (row.operation !== MANUFACTURING_SCRAP_RESTATEMENT_OPERATION)
+        throw new Error(
+          "manufacturing financial changes admit only the scrap snapshot restatement; reject the malformed proposal, then submit a corrected proposal",
+        );
       if (
         !(await actorHasPermission(
           db,
@@ -159,14 +167,16 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
         throw new Error(
           "turn on Manufacturing in Company Settings → Features before approving this change",
         );
-      const bound = row.payload.requiredSubsidiaryIds;
+      const bound: unknown = row.payload.requiredSubsidiaryIds;
       if (
         !Array.isArray(bound) ||
-        bound.length === 0 ||
-        bound.some((entry) => typeof entry !== "string")
+        bound.length !== 1 ||
+        typeof bound[0] !== "string" ||
+        bound[0].trim().length === 0 ||
+        bound[0] !== row.subsidiary_id
       )
         throw new Error(
-          "this manufacturing restatement carries no legal-entity binding; submit a new proposal",
+          "this manufacturing restatement must bind exactly the booking subsidiary; reject the malformed proposal, then submit a corrected proposal",
         );
     }
     const allowed = await actorAllowedSubsidiaryIds(db, ctx.orgId, ctx.userId);
