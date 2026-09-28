@@ -301,5 +301,102 @@
         "noCost": "Nenhum custo de mão de obra registrado"
       }
     }
+  },
+  "retainers": {
+    "title": "Adiantamentos",
+    "description": "Horas ou honorários pré-pagos aplicados ao trabalho do projeto.",
+    "newRetainer": "Novo adiantamento",
+    "kpi": {
+      "balance": "Saldo ({currency})",
+      "drawn": "Consumido ({currency})",
+      "expiring": "Vence em breve",
+      "expiringSub": "Ativo, termina em 30 dias"
+    },
+    "drawer": {
+      "title": "Adiantamento",
+      "newTitle": "Novo adiantamento",
+      "description": "Condições, baixas, evidências e reconhecimento.",
+      "saveFailed": "Não foi possível salvar o adiantamento. Revise os dados e tente novamente.",
+      "unsaved": "Alterações não salvas",
+      "balance": "Saldo restante",
+      "noInvoiceHint": "Ainda não há fatura de adiantamento. Crie uma para começar a faturar.",
+      "activatesOnPost": "Ativa quando esta fatura for lançada:",
+      "activatesHint": "Um adiantamento em rascunho. As baixas abrem após o lançamento da fatura.",
+      "noEligibleItem": "Nenhum item de serviço tem regra de reconhecimento compatível. Dê ao item uma regra de uso (horas) ou de marco (honorários).",
+      "extendTitle": "Prorrogar adiantamento",
+      "extendLabel": "Nova data de término",
+      "closeConfirm": "Encerrar este adiantamento? O saldo restante deve ser zero.",
+      "tabs": {
+        "label": "Seções do adiantamento",
+        "terms": "Condições",
+        "drawdowns": "Baixas",
+        "evidence": "Evidências",
+        "recognition": "Reconhecimento"
+      },
+      "status": {
+        "draft": "Rascunho",
+        "active": "Ativo",
+        "exhausted": "Esgotado",
+        "expired": "Vencido",
+        "closed": "Encerrado"
+      },
+      "fields": {
+        "project": "Projeto",
+        "customer": "Cliente",
+        "kind": "Tipo",
+        "totalAmount": "Valor total",
+        "totalHours": "Horas totais",
+        "unitRate": "Valor por hora",
+        "startsOn": "Início",
+        "endsOn": "Término",
+        "retainerItem": "Item do adiantamento",
+        "choose": "Escolha uma opção"
+      },
+      "kind": {
+        "hours": "Horas",
+        "fees": "Honorários"
+      },
+      "actions": {
+        "save": "Salvar",
+        "saving": "Salvando…",
+        "createInvoice": "Criar fatura de adiantamento",
+        "draftDrawdown": "Semana de baixa…",
+        "post": "Lançar",
+        "extend": "Prorrogar",
+        "close": "Encerrar"
+      },
+      "drawdowns": {
+        "week": "Semana de",
+        "hours": "Horas",
+        "amount": "Valor",
+        "state": "Situação",
+        "empty": "Ainda não há baixas.",
+        "weekTitle": "Semana da baixa",
+        "weekLabel": "Domingo de início",
+        "amountTitle": "Valor da baixa",
+        "amountLabel": "Valor a baixar"
+      },
+      "drawdownState": {
+        "draft": "Rascunho",
+        "posted": "Lançado"
+      },
+      "evidence": {
+        "date": "Dia trabalhado",
+        "person": "Pessoa",
+        "hours": "Horas",
+        "empty": "Ainda não há horas baixadas."
+      },
+      "recognition": {
+        "month": "Mês",
+        "amount": "Valor",
+        "posted": "Lançado",
+        "hint": "Eventos de reconhecimento do processamento de receita para esta obrigação.",
+        "runLink": "Abrir reconhecimento de receita",
+        "empty": "Ainda não há eventos.",
+        "isPosted": "Lançado",
+        "pending": "Pendente",
+        "reversed": "Estornado"
+      }
+    }
   }
 }

@@ -301,5 +301,102 @@
         "noCost": "No labor cost recorded"
       }
     }
+  },
+  "retainers": {
+    "title": "Retainers",
+    "description": "Prepaid hours or fees drawn down against project work.",
+    "newRetainer": "New retainer",
+    "kpi": {
+      "balance": "Balance ({currency})",
+      "drawn": "Drawn ({currency})",
+      "expiring": "Expiring soon",
+      "expiringSub": "Active, ends within 30 days"
+    },
+    "drawer": {
+      "title": "Retainer",
+      "newTitle": "New retainer",
+      "description": "Prepaid terms, drawdowns, evidence and recognition.",
+      "saveFailed": "The retainer could not be saved. Review the details and try again.",
+      "unsaved": "Unsaved changes",
+      "balance": "Remaining balance",
+      "noInvoiceHint": "No retainer invoice yet. Create one to start billing.",
+      "activatesOnPost": "Activates when this invoice posts:",
+      "activatesHint": "A draft retainer. Drawdowns open once its retainer invoice posts.",
+      "noEligibleItem": "No service item has a matching recognition rule. Give the service item a usage (hours) or milestone (fees) recognition rule.",
+      "extendTitle": "Extend retainer",
+      "extendLabel": "New end date",
+      "closeConfirm": "Close this retainer? Its remaining balance must be zero.",
+      "tabs": {
+        "label": "Retainer sections",
+        "terms": "Terms",
+        "drawdowns": "Drawdowns",
+        "evidence": "Evidence",
+        "recognition": "Recognition"
+      },
+      "status": {
+        "draft": "Draft",
+        "active": "Active",
+        "exhausted": "Exhausted",
+        "expired": "Expired",
+        "closed": "Closed"
+      },
+      "fields": {
+        "project": "Project",
+        "customer": "Customer",
+        "kind": "Kind",
+        "totalAmount": "Total amount",
+        "totalHours": "Total hours",
+        "unitRate": "Unit rate",
+        "startsOn": "Starts on",
+        "endsOn": "Ends on",
+        "retainerItem": "Retainer item",
+        "choose": "Choose an option"
+      },
+      "kind": {
+        "hours": "Hours",
+        "fees": "Fees"
+      },
+      "actions": {
+        "save": "Save",
+        "saving": "Saving…",
+        "createInvoice": "Create retainer invoice",
+        "draftDrawdown": "Draft week…",
+        "post": "Post",
+        "extend": "Extend",
+        "close": "Close"
+      },
+      "drawdowns": {
+        "week": "Week starting",
+        "hours": "Hours",
+        "amount": "Amount",
+        "state": "State",
+        "empty": "No drawdowns yet.",
+        "weekTitle": "Draft drawdown week",
+        "weekLabel": "Sunday starting the week",
+        "amountTitle": "Drawdown amount",
+        "amountLabel": "Amount to draw"
+      },
+      "drawdownState": {
+        "draft": "Draft",
+        "posted": "Posted"
+      },
+      "evidence": {
+        "date": "Worked on",
+        "person": "Person",
+        "hours": "Hours",
+        "empty": "No time entries drawn yet."
+      },
+      "recognition": {
+        "month": "Month",
+        "amount": "Amount",
+        "posted": "Posted",
+        "hint": "Recognition events posted by the revenue run for this retainer's obligation.",
+        "runLink": "Open revenue recognition",
+        "empty": "No recognition events yet.",
+        "isPosted": "Posted",
+        "pending": "Pending",
+        "reversed": "Reversed"
+      }
+    }
   }
 }
