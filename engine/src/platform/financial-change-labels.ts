@@ -12,6 +12,7 @@ export const FINANCIAL_CHANGE_OPERATION_LABELS: Record<string, string> = {
   group_valuation: "Group valuation",
   loss_of_control: "Loss of control",
   reversal: "Reversal",
+  scrap_snapshot_restatement: "Scrap snapshot restatement",
 };
 
 export const FINANCIAL_CHANGE_DOMAIN_LABELS: Record<string, string> = {
@@ -19,6 +20,7 @@ export const FINANCIAL_CHANGE_DOMAIN_LABELS: Record<string, string> = {
   asset: "Fixed asset",
   revenue: "Revenue contract",
   consolidation: "Consolidation",
+  manufacturing: "Manufacturing",
 };
 
 export const FINANCIAL_CHANGE_STATUS_LABELS: Record<string, string> = {

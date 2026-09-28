@@ -17,7 +17,35 @@ export {
 /** Workflow evidence only. Financial calculations and subject authorization
  * stay in their owning modules; the existing Flows engine owns decisions. */
 export type FinancialChangeDomain =
-  "lease" | "revenue" | "asset" | "consolidation";
+  "lease" | "revenue" | "asset" | "consolidation" | "manufacturing";
+
+/** The sole manufacturing operation admitted to the governed ledger. */
+export const MANUFACTURING_SCRAP_RESTATEMENT_OPERATION =
+  "scrap_snapshot_restatement";
+
+/** Typed binding for a manufacturing scrap-snapshot restatement proposal.
+ *
+ * The core carries the exact candidate/evidence binding the database guard
+ * requires: the staged event, its work order, the booking subsidiary, the
+ * sole `requiredSubsidiaryIds` element, and the engine-derived
+ * `approval_required` flag. Client input is never authoritative for
+ * `approval_required`; the restatement service constructs and rechecks it.
+ * The optional evidence travels with the proposal where applicable:
+ * source-evidence references for a posted event, the concurrency token
+ * alongside `before_state`, and bound reopen evidence when a closed period
+ * was reopened for the restatement. */
+export interface ManufacturingScrapRestatementPayload {
+  event_id: string;
+  work_order_id: string;
+  org_id?: string;
+  subsidiary_id: string;
+  requiredSubsidiaryIds: string[];
+  approval_required: boolean;
+  source_evidence_digest?: string | null;
+  posted_entry_id?: string | null;
+  concurrency_token?: string | null;
+  reopen_evidence?: Record<string, unknown> | null;
+}
 export type FinancialChange = {
   id: string;
   org_id: string;
@@ -177,6 +205,11 @@ export async function loadFinancialChangeSubjectLabel(
       `)
     ).rows[0];
     return row?.label ?? null;
+  }
+  if (domain === "manufacturing") {
+    // Scrap subjects resolve through the manufacturing record views owned
+    // downstream; they must never match the consolidation ownership table.
+    return null;
   }
   const row = (
     await tx.execute<{ label: string }>(sql`
