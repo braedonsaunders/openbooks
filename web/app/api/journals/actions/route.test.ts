@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
@@ -9,12 +8,14 @@ import test from 'node:test'
 // warning query all use the real local test database.
 const stateKey = Symbol.for('openbooks.journal-actions-warning-test')
 interface RouteState {
-  authz: { user: { orgId: string; id: string }; permissions: Set<string>; allowedSubsidiaryIds: string[] | null } | null
+  authz: { user: { orgId: string; id: string }; permissions: Set<string>; allowedSubsidiaryIds: Set<string> | null } | null
+  warningReads: string[]
 }
-const routeState: RouteState = { authz: null }
+const routeState: RouteState = { authz: null, warningReads: [] }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState
 
 const mockAuthz = `
+  export { guardSubsidiaryScope, subsidiariesInScope } from ${JSON.stringify(new URL('../../../../lib/authz.ts', import.meta.url).href)}
   const state = globalThis[Symbol.for('openbooks.journal-actions-warning-test')]
   export async function guardPermission(perm) {
     if (!state.authz) return new Response(JSON.stringify({ error: 'authentication required' }), { status: 401 })
@@ -23,22 +24,24 @@ const mockAuthz = `
     }
     return state.authz
   }
-  export function guardSubsidiaryScope(authz, subsidiaryId) {
-    if (!authz) return new Response(JSON.stringify({ error: 'not found', code: 'not_found' }), { status: 404 })
-    if (authz.allowedSubsidiaryIds && subsidiaryId && !authz.allowedSubsidiaryIds.includes(subsidiaryId)) {
-      return new Response(JSON.stringify({ error: 'not found', code: 'not_found' }), { status: 404 })
-    }
-    return null
-  }
-  export function subsidiariesInScope(authz, ids) {
-    if (!authz || authz.allowedSubsidiaryIds === undefined) return false
-    if (authz.allowedSubsidiaryIds === null) return true
-    return ids.every((id) => id && authz.allowedSubsidiaryIds.includes(id))
-  }
 `
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    if (specifier === '../../../../lib/journal-warnings' && context.parentURL?.endsWith('/journals/actions/route.ts')) {
+      const real = new URL('../../../../lib/journal-warnings.ts', context.parentURL).href
+      return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`
+        import { partylessControlLines as partyless, budgetaryControlAdvisories as budgetary } from ${JSON.stringify(real)};
+        const state = globalThis[Symbol.for('openbooks.journal-actions-warning-test')];
+        async function observe(name, reader, args) {
+          state.warningReads.push(name + ':start');
+          try { return await reader(...args); }
+          finally { state.warningReads.push(name + ':end'); }
+        }
+        export const partylessControlLines = (...args) => observe('partyless', partyless, args);
+        export const budgetaryControlAdvisories = (...args) => observe('budgetary', budgetary, args);
+      `) }
+    }
     if (specifier === '../../../../lib/authz' || specifier === '../../../lib/authz') {
       return { url: 'mock:journal-actions-authz', shortCircuit: true }
     }
@@ -127,14 +130,20 @@ const ledgerRequest = (body: unknown) => new Request('http://localhost/api/ledge
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify(body),
 })
-const grantRole = (orgId: string, key: string, permissions: unknown, restriction: unknown = { mode: 'all' }) =>
-  withBypassContext(() => db.execute(sql`update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb,
-    subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb where org_id = ${orgId} and key = ${key}`))
-const enableNpFeatures = (orgId: string, extraId?: string) =>
-  withOrgContext(orgId, () => db.execute(sql`update orgs set settings = jsonb_set(
-    coalesce(settings, '{}'::jsonb), '{features}',
-    coalesce(settings->'features', '{}'::jsonb) || '{"nonprofit":true,"fundAccounting":true,"grantManagement":true,"budgets":true,"encumbrances":true}'::jsonb, true)
-    where id = ${orgId} or id = ${extraId ?? null}`))
+const grantRole = async (orgId: string, key: string, permissions: unknown, restriction: unknown = { mode: 'all' }) => {
+  const rows = await withBypassContext(() => db.execute(sql`update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb,
+    subsidiary_restriction = ${JSON.stringify(restriction)}::jsonb where org_id = ${orgId} and key = ${key} returning key`))
+  assert.equal(rows.rows.length, 1, `posting permission fixture updates the ${key} role`)
+}
+const enableNpFeatures = async (orgId: string, extraId?: string) => {
+  for (const id of extraId ? [orgId, extraId] : [orgId]) {
+    const rows = await withOrgContext(id, () => db.execute(sql`update orgs set settings = jsonb_set(
+      coalesce(settings, '{}'::jsonb), '{features}',
+      coalesce(settings->'features', '{}'::jsonb) || '{"nonprofit":true,"fundAccounting":true,"grantManagement":true,"budgets":true,"encumbrances":true}'::jsonb, true)
+      where id = ${id} returning id`))
+    assert.equal(rows.rows.length, 1, 'nonprofit boundary fixture enables features in its own organization')
+  }
+}
 
 test('posting routes require both manage and posting rights before parsing the body', { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
@@ -146,8 +155,8 @@ test('posting routes require both manage and posting rights before parsing the b
     ;(globalThis as Record<string, unknown>).__journalActionsSession = { id: userId, orgId: org.orgId, isSuperAdmin: false }
     assert.equal((await postGrantPostings(ledgerRequest({}))).status, 403)
     assert.equal((await postLiquidations(ledgerRequest({}))).status, 403)
-    assert.equal((await postGrantCommands(ledgerRequest({}))).status, 400)
-    assert.equal((await postEncumbranceCommands(ledgerRequest({}))).status, 400)
+    assert.equal((await postGrantCommands(ledgerRequest({}))).status, 422)
+    assert.equal((await postEncumbranceCommands(ledgerRequest({}))).status, 422)
     const posterId = await withBypassContext(() => createScratchUser(org.orgId, 'Posting User', 'posting-user'))
     await grantRole(org.orgId, 'posting-user', ['gl.post'])
     routeState.authz = { user: { orgId: org.orgId, id: posterId }, permissions: new Set(['gl.post']), allowedSubsidiaryIds: null }
@@ -173,10 +182,11 @@ test('grant and encumbrance boundaries share one provisioned org', { skip: !DB }
     const { defaultFundId: fundId } = await provisionFundAccounting({ orgId: org.orgId, actorId: adminId,
       defaultFund: { code: '25NP', name: '-' }, classifications: { '25NP': { kind: 'operating', restrictionClass: 'unrestricted' } } })
     const seeded = await withOrgContext(org.orgId, async () => {
-      await db.execute(sql`update funds set budgetary_control = 'advisory' where org_id = ${org.orgId} and id = ${fundId}`)
+      const fund = await db.execute(sql`update funds set budgetary_control = 'advisory' where org_id = ${org.orgId} and id = ${fundId} returning id`)
+      assert.equal(fund.rows.length, 1, 'advisory budget fixture updates its provisioned fund')
       const scenario = (await db.execute<{ id: string }>(sql`
-        insert into budget_scenarios (org_id, book_id, name, period_from, period_to, status, submitted_by, submitted_at, approved_by, approved_at, created_by, updated_by)
-        values (${org.orgId}, ${org.bookId}, 'Primary 2026', '2026-01-01', '2026-12-31', 'approved', ${adminId}, now(), ${adminId}, now(), ${adminId}, ${adminId})
+        insert into budget_scenarios (org_id, book_id, name, fiscal_year, status, created_by, updated_by)
+        values (${org.orgId}, ${org.bookId}, 'Primary 2026', 2026, 'draft', ${adminId}, ${adminId})
         returning id`)).rows[0]!.id
       const dept = (await db.execute<{ id: string }>(sql`
         insert into departments (id, org_id, name, is_active, custom) values (${randomUUID()}, ${org.orgId}, 'Programs', true, '{}'::jsonb) returning id`)).rows[0]!.id
@@ -189,6 +199,14 @@ test('grant and encumbrance boundaries share one provisioned org', { skip: !DB }
         values (${org.orgId}, ${scenario}, ${org.periodId}, ${org.accounts.cogs}, ${org.subsidiaryId}, null, null, null, null, ${JSON.stringify({ fund: fundId })}::jsonb, '100.00', ${adminId}, ${adminId}),
           (${org.orgId}, ${scenario}, ${org.periodId}, ${org.accounts.cogs}, ${org.subsidiaryId}, ${dept}, ${proj}, null, null, ${JSON.stringify({ fund: fundId })}::jsonb, '100.00', ${adminId}, ${adminId}),
           (${org.orgId}, ${scenario}, ${org.periodId}, ${org.accounts.cogs}, ${org.subsidiaryId}, null, null, ${org.locationId}, ${classId}, ${JSON.stringify({ fund: fundId })}::jsonb, '100.00', ${adminId}, ${adminId})`)
+      const submitted = await db.execute(sql`update budget_scenarios
+        set status = 'pending_approval', revision = revision + 1, submitted_by = ${adminId}, submitted_at = now(), updated_by = ${adminId}
+        where id = ${scenario} and org_id = ${org.orgId} and status = 'draft' returning id`)
+      assert.equal(submitted.rows.length, 1, 'populated advisory budget enters approval')
+      const approved = await db.execute(sql`update budget_scenarios
+        set status = 'approved', revision = revision + 1, approved_by = ${userId}, approved_at = now(), updated_by = ${userId}
+        where id = ${scenario} and org_id = ${org.orgId} and status = 'pending_approval' returning id`)
+      assert.equal(approved.rows.length, 1, 'submitted advisory budget is approved by a distinct actor')
       const group = (await db.execute<{ id: string }>(sql`
         insert into account_groups (org_id, dimension, key, name, match, is_catch_all, is_active, created_by, updated_by)
         values (${org.orgId}, 'grant_allowable_costs', 'allowable', 'Allowable Costs', '{}'::jsonb, false, true, ${adminId}, ${adminId})
@@ -205,7 +223,7 @@ test('grant and encumbrance boundaries share one provisioned org', { skip: !DB }
       accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, departmentId: seeded.dept, projectId: seeded.proj, extraDims: { fund: fundId } })
     const encLC = await createEncumbrance({ orgId: org.orgId, sourceKind: 'manual', amount: '10.00',
       accountId: org.accounts.cogs, subsidiaryId: org.subsidiaryId, locationId: org.locationId, classId: seeded.classId, extraDims: { fund: fundId } })
-    routeState.authz = { user: { orgId: org.orgId, id: userId }, permissions: new Set(['encumbrances.manage', 'gl.post', 'grants.manage']), allowedSubsidiaryIds: [outside] }
+    routeState.authz = { user: { orgId: org.orgId, id: userId }, permissions: new Set(['encumbrances.manage', 'gl.post', 'grants.manage']), allowedSubsidiaryIds: new Set([outside]) }
     ;(globalThis as Record<string, unknown>).__journalActionsSession = { id: userId, orgId: org.orgId, isSuperAdmin: false }
     assert.equal((await postEncumbranceCommands(ledgerRequest({ action: 'close', encumbranceId: enc.id, reason: 'scope probe' }))).status, 404)
     assert.equal((await postLiquidations(ledgerRequest({ action: 'link', encumbranceId: enc.id, documentLineId: randomUUID() }))).status, 404)
@@ -235,8 +253,9 @@ test('grant and encumbrance boundaries share one provisioned org', { skip: !DB }
     assert.equal(posted.warnings.length, 2, 'both collectors report through one posting')
     assert.equal(posted.warnings[0].code, 'partyless_control_lines')
     assert.equal(posted.warnings[1].code, 'budgetary_control_advisory')
-    const seam = await readFile(new URL('./route.ts', import.meta.url), 'utf8')
-    assert.ok(seam.indexOf('await partylessControlLines(') !== -1 && seam.indexOf('await partylessControlLines(') < seam.indexOf('await budgetaryControlAdvisories(') && !seam.includes('Promise.all'), 'warning collectors run sequentially on the pinned handle with no concurrent tuple')
+    assert.deepEqual(routeState.warningReads.slice(-4), [
+      'partyless:start', 'partyless:end', 'budgetary:start', 'budgetary:end',
+    ], 'the real warning collectors complete sequentially on the posting path')
     const overage = posted.warnings[1].overages[0]
     assert.equal(overage.scenarioId, seeded.scenario)
     assert.equal(overage.accountId, org.accounts.cogs)
