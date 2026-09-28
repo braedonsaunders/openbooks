@@ -1741,37 +1741,45 @@ function monthRequestState(
   const coherentLegacy = shape.total > 0 && shape.legacy === shape.total;
   const singleHash = shape.hashes.length === 1 ? shape.hashes[0] : undefined;
   const singleEvidence = shape.evidenceHashes.length === 1 ? shape.evidenceHashes[0] : undefined;
-  // A distinct aggregate cannot prove per-row agreement: one row with
-  // missing evidence contributes nothing to the distinct set, so a good
-  // hash from the other rows would authenticate the set. The mismatch
-  // counter requires every stored row's evidence hash to equal its own
-  // row hash instead.
+  // A distinct aggregate cannot prove per-row agreement, and the mismatch
+  // counter stays scoped to evidence-bearing rows: intentional all-null
+  // legacy rows carry no evidence by design and must never read as
+  // evidence tamper. Only rows that purport to carry normalization
+  // evidence can disagree with their own row hash.
   const coherentHashes =
     singleHash !== undefined && singleEvidence !== undefined && singleEvidence === singleHash
     && shape.evidenceMismatch === 0;
-  const coherentV1 =
+  // Shape first, coherence second: completeV1Shape says every stored row
+  // is a complete v1 row under one currency (version and evidence
+  // presence ride along with the v1 counter), while coherentHashes adds
+  // the single canonical hash with per-row evidence binding. Ready needs
+  // both; diagnosis names shape failures before hash failures.
+  const completeV1Shape =
     shape.total > 0
     && shape.v1 === shape.total
     && shape.currencies.length === 1
-    && shape.currencies[0] !== undefined
-    && coherentHashes;
+    && shape.currencies[0] !== undefined;
+  const coherentV1 = completeV1Shape && coherentHashes;
   const describeShape = (): string => {
     if (shape.total === 0) return `Month ${month} has no stored metric rows.`;
     if (shape.currencies.length > 1) {
       return `Month ${month} mixes reporting currencies (${shape.currencies.join(", ")}).`;
+    }
+    // An unsupported version outranks shape and hash disagreement: the
+    // operator must fix the version first, and a versioned row can never
+    // authenticate the set no matter what its hashes say.
+    const unsupported = shape.versions.filter((version) => version !== "v1");
+    if (unsupported.length > 0) {
+      return `Month ${month} carries an unsupported denomination version (${unsupported.join(", ")}).`;
+    }
+    if (!coherentLegacy && !completeV1Shape) {
+      return `Month ${month} mixes legacy and normalized rows or carries an incomplete denomination.`;
     }
     if (shape.hashes.length !== 1) {
       return `Month ${month} mixes stored row hashes, so no canonical month hash exists.`;
     }
     if (!coherentHashes) {
       return `Month ${month} carries evidence hashes that do not agree on the stored canonical hash.`;
-    }
-    const unsupported = shape.versions.filter((version) => version !== "v1");
-    if (unsupported.length > 0) {
-      return `Month ${month} carries an unsupported denomination version (${unsupported.join(", ")}).`;
-    }
-    if (!coherentLegacy && !coherentV1) {
-      return `Month ${month} mixes legacy and normalized rows or carries an incomplete denomination.`;
     }
     return `Month ${month} cannot be classified from its stored rows.`;
   };
@@ -1780,7 +1788,7 @@ function monthRequestState(
     const storedHash = shape.hashes.length === 1 ? shape.hashes[0] : undefined;
     const evidenceHash = shape.evidenceHashes.length === 1 ? shape.evidenceHashes[0] : undefined;
     const detail: string[] = [];
-    if (!coherentV1) {
+    if (!completeV1Shape) {
       detail.push(describeShape());
     } else if (typeof result !== "object" || result === null) {
       detail.push(`the recorded result for ${month} is missing or malformed`);
@@ -1890,7 +1898,8 @@ export async function listNormalizationMonthStates(orgId: string): Promise<Norma
              coalesce(array_remove(array_agg(distinct r.inputs_hash), null), '{}') as hashes,
              coalesce(array_remove(array_agg(distinct (r.normalization_evidence ->> 'inputs_hash')), null), '{}')
                as "evidenceHashes",
-             coalesce(sum(case when (r.normalization_evidence ->> 'inputs_hash') is distinct from r.inputs_hash
+             coalesce(sum(case when r.normalization_evidence is not null
+                                and (r.normalization_evidence ->> 'inputs_hash') is distinct from r.inputs_hash
                                 then 1 else 0 end), 0)::int as "evidenceMismatch"
         from months m left join rows r on r.month = m.month
        group by m.month order by m.month desc
