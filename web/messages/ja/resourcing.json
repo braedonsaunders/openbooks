@@ -42,6 +42,29 @@
       "reports": "稼働率予測"
     }
   },
+  "busySeason": {
+    "title": "繁忙期 {year}",
+    "hint": "繁忙期間: {spans}。",
+    "empty": "繁忙期間中にキャパシティを超える部門はありません。",
+    "noMarkers": "今年は季節プランのマーカーがありません。汎用プラン行がなければ繁忙期カーブはありません。",
+    "featureRemedy": "リクエストを作成するには、会社設定 → 機能でリソースリクエストをオンにしてください。",
+    "weekOf": "週",
+    "gap": "不足",
+    "demand": "需要",
+    "capacity": "キャパシティ",
+    "plan": "計画",
+    "evidence": "根拠",
+    "staff": "要員",
+    "opportunities": "商談",
+    "requestAction": "新規ドラフト依頼",
+    "noProjects": "対象範囲に有効なプロジェクトがありません。要員を依頼するには作成または有効化してください。",
+    "confirmTitle": "{department}、{week} の要員を依頼",
+    "projectLabel": "案件",
+    "confirm": "ドラフトを作成",
+    "created": "ドラフト依頼を作成しました:",
+    "requestFailed": "ドラフト依頼を作成できませんでした。",
+    "reason": "{department} の {week} の繁忙期不足: キャパシティを {gap} 時間超過。"
+  },
   "prefill": { "badge": "予定 {hours} 時間" },
   "requests": {
     "title": "リソース依頼",

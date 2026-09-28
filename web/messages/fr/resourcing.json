@@ -42,6 +42,29 @@
       "reports": "Prévision d’utilisation"
     }
   },
+  "busySeason": {
+    "title": "Haute saison {year}",
+    "hint": "Périodes saisonnières : {spans}.",
+    "empty": "Aucun département ne dépasse la capacité sur les périodes saisonnières.",
+    "noMarkers": "Aucun repère de plan saisonnier cette année : sans lignes de plan génériques, il n'y a pas de courbe de haute saison.",
+    "featureRemedy": "Pour créer des demandes, activez Demandes de ressources dans Paramètres de la société → Fonctionnalités.",
+    "weekOf": "semaine du",
+    "gap": "Écart",
+    "demand": "Demande",
+    "capacity": "Capacité",
+    "plan": "Planifié",
+    "evidence": "Justificatifs",
+    "staff": "Effectif",
+    "opportunities": "Occasions",
+    "requestAction": "Nouvelle demande brouillon",
+    "noProjects": "Aucun projet actif dans votre périmètre : créez-en un ou activez-en un pour demander du personnel.",
+    "confirmTitle": "Demander du personnel pour {department}, {week}",
+    "projectLabel": "Projet",
+    "confirm": "Créer le brouillon",
+    "created": "Demande brouillon créée :",
+    "requestFailed": "La demande brouillon n'a pas pu être créée.",
+    "reason": "Écart de haute saison dans {department} pour {week} : {gap} h au-delà de la capacité."
+  },
   "prefill": { "badge": "Prévu : {hours} h" },
   "requests": {
     "title": "Demandes de ressources",

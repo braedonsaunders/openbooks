@@ -42,6 +42,29 @@
       "reports": "利用率预测"
     }
   },
+  "busySeason": {
+    "title": "旺季 {year}",
+    "hint": "旺季区间:{spans}。",
+    "empty": "在旺季区间内没有部门超出产能。",
+    "noMarkers": "本年度没有季节性计划标记:没有通用计划行就没有旺季曲线。",
+    "featureRemedy": "要创建申请,请在公司设置 → 功能中开启资源申请。",
+    "weekOf": "当周",
+    "gap": "缺口",
+    "demand": "需求",
+    "capacity": "产能",
+    "plan": "计划",
+    "evidence": "依据",
+    "staff": "人员",
+    "opportunities": "商机",
+    "requestAction": "新建草稿申请",
+    "noProjects": "范围内没有活动项目:请创建或激活一个项目以申请人员。",
+    "confirmTitle": "为 {department} {week} 申请人员",
+    "projectLabel": "项目",
+    "confirm": "创建草稿",
+    "created": "已创建草稿申请:",
+    "requestFailed": "无法创建草稿申请。",
+    "reason": "{department} {week} 旺季缺口:超出产能 {gap} 小时。"
+  },
   "prefill": { "badge": "计划 {hours} 小时" },
   "requests": {
     "title": "资源申请",

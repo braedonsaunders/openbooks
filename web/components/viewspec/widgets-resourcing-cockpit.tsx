@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { ComponentProps } from 'react'
 import { HomeStatTile } from '../module-home/client'
 import { TieOutSection } from '../../app/(app)/resourcing/sections'
+import { BusySeasonSection } from '../../app/(app)/resourcing/BusySeasonSection'
 import { type WidgetRenderer } from './widget-props'
 
 /**
@@ -16,6 +17,10 @@ export const RESOURCING_COCKPIT_WIDGETS = {
   'resourcing-tieout': (props) => {
     const section = props as unknown as ComponentProps<typeof TieOutSection>
     return <TieOutSection {...section} />
+  },
+  'resourcing-busy-season': (props) => {
+    const section = props as unknown as ComponentProps<typeof BusySeasonSection>
+    return <BusySeasonSection {...section} />
   },
   'resourcing-utilization-tile': (props) => {
     const tile = props as unknown as { label: string; value: string; sub: string; href: string }
