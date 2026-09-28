@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { uuidArray } from "../organization/subsidiaries.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { fundFeatureOff, NonprofitError } from "./errors.ts";
@@ -366,6 +366,9 @@ export interface FundReadRecord {
   restrictionClass: string;
   budgetaryControl: BudgetaryControl;
   isActive: boolean;
+  parentId: string | null;
+  subsidiaryId: string | null;
+  subsidiaryIncludeChildren: boolean;
   custom: Record<string, unknown>;
 }
 
@@ -382,6 +385,9 @@ interface FundReadRow extends Record<string, unknown> {
   restriction_class: string;
   budgetary_control: string;
   is_active: boolean;
+  parent_id: string | null;
+  subsidiary_id: string | null;
+  subsidiary_include_children: boolean;
   custom: Record<string, unknown> | null;
 }
 
@@ -394,22 +400,25 @@ function mapFundRead(row: FundReadRow): FundReadRecord {
     restrictionClass: row.restriction_class,
     budgetaryControl: row.budgetary_control as BudgetaryControl,
     isActive: row.is_active,
+    parentId: row.parent_id,
+    subsidiaryId: row.subsidiary_id,
+    subsidiaryIncludeChildren: row.subsidiary_include_children,
     custom: row.custom ?? {},
   };
 }
 
 function readLimit(limit: number | undefined): number {
   const value = limit ?? 25;
-  if (!Number.isInteger(value) || value < 1 || value > 100) {
+  if (!Number.isInteger(value) || value < 1) {
     throw new NonprofitError({
-      message: "The fund list limit must be a whole number from 1 to 100.",
+      message: "The fund list limit must be a whole number of at least 1.",
       status: 422,
       code: "fund_list_limit_invalid",
-      remedy: "Request a fund list limit from 1 to 100.",
+      remedy: "Request a fund list limit of 1 or more; values above 100 read the first 100 funds.",
       field: "limit",
     });
   }
-  return value;
+  return Math.min(value, 100);
 }
 
 function readOffset(offset: number | undefined): number {
@@ -438,6 +447,7 @@ export async function listFunds(
   executor?: SqlExecutor,
 ): Promise<FundReadPage> {
   const runner = executor ?? db;
+  if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner))) throw fundFeatureOff();
   const limit = readLimit(input.limit);
   const offset = readOffset(input.offset);
   const conds: ReturnType<typeof sql>[] = [sql`f.org_id = ${input.orgId}`];
@@ -447,17 +457,23 @@ export async function listFunds(
   const where = sql.join(conds, sql` and `);
   const rows = await runner.execute<FundReadRow>(sql`
     select f.id::text as id, sv.code, sv.name, f.kind,
-           f.restriction_class, f.budgetary_control, sv.is_active, f.custom
+           f.restriction_class, f.budgetary_control, sv.is_active, f.custom,
+           sv.parent_id::text as parent_id, sv.subsidiary_id::text as subsidiary_id,
+           sv.subsidiary_include_children
       from funds f
       join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
+      join segment_definitions sd on sd.org_id = f.org_id and sd.id = sv.segment_id
+       and sd.key = 'fund' and sd.source_kind = 'custom'
      where ${where}
-     order by sv.code, sv.id
+     order by sv.name, sv.code, sv.id
      limit ${limit} offset ${offset}
   `);
   const counted = await runner.execute<{ n: string }>(sql`
     select count(*) as n
       from funds f
       join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
+      join segment_definitions sd on sd.org_id = f.org_id and sd.id = sv.segment_id
+       and sd.key = 'fund' and sd.source_kind = 'custom'
      where ${where}
   `);
   return { funds: rows.rows.map(mapFundRead), total: Number(counted.rows[0]?.n ?? 0) };
@@ -472,13 +488,18 @@ export async function getFund(
   input: { orgId: string; fundId: string },
   executor?: SqlExecutor,
 ): Promise<FundReadRecord | null> {
-  if (!UUID_RE.test(input.fundId)) return null;
   const runner = executor ?? db;
+  if (!(await orgFeatureEnabled(input.orgId, "fundAccounting", runner))) throw fundFeatureOff();
+  if (!UUID_RE.test(input.fundId)) return null;
   const row = (await runner.execute<FundReadRow>(sql`
     select f.id::text as id, sv.code, sv.name, f.kind,
-           f.restriction_class, f.budgetary_control, sv.is_active, f.custom
+           f.restriction_class, f.budgetary_control, sv.is_active, f.custom,
+           sv.parent_id::text as parent_id, sv.subsidiary_id::text as subsidiary_id,
+           sv.subsidiary_include_children
       from funds f
       join segment_values sv on sv.org_id = f.org_id and sv.id = f.id
+      join segment_definitions sd on sd.org_id = f.org_id and sd.id = sv.segment_id
+       and sd.key = 'fund' and sd.source_kind = 'custom'
      where f.org_id = ${input.orgId} and f.id = ${input.fundId}
   `)).rows[0];
   return row ? mapFundRead(row) : null;
