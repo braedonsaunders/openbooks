@@ -720,6 +720,18 @@
           "label": "材料用量差异科目",
           "hint": "生产材料用量差异记入此处。"
         },
+        "mfgLaborEfficiencyVariance": {
+          "label": "人工效率差异科目",
+          "hint": "实际生产工时与冻结标准之间的差异记入此处。"
+        },
+        "mfgOverheadVariance": {
+          "label": "制造费用差异科目",
+          "hint": "多提或少提的制造费用在每期此处结算。"
+        },
+        "mfgOverheadApplied": {
+          "label": "已分配制造费用科目",
+          "hint": "工单成本吸收制造费用时，在此处贷记已分配金额。"
+        },
         "laborClearing": {
           "label": "人工清算",
           "hint": "人工计入项目时贷记；由工资核算清算"
@@ -4087,6 +4099,9 @@
         "laborWip": "人工在产 / 项目成本科目",
         "mfgWip": "制造在制品科目",
         "mfgMaterialUsageVariance": "材料用量差异科目",
+        "mfgLaborEfficiencyVariance": "人工效率差异科目",
+        "mfgOverheadVariance": "制造费用差异科目",
+        "mfgOverheadApplied": "已分配制造费用科目",
         "laborClearing": "人工清算科目",
         "overheadNote": "间接费用不属此费率——由间接费用模型作为独立层应用。",
         "payrollVariance": "工资差异科目",

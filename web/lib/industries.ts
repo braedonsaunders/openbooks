@@ -90,6 +90,9 @@ const PAYROLL_DEDUCTIONS = 'payrollDeductions'
 const LABOR_WIP = 'laborWip'
 const MFG_WIP = 'mfgWip'
 const MFG_MATERIAL_USAGE_VARIANCE = 'mfgMaterialUsageVariance'
+const MFG_LABOR_EFFICIENCY_VARIANCE = 'mfgLaborEfficiencyVariance'
+const MFG_OVERHEAD_VARIANCE = 'mfgOverheadVariance'
+const MFG_OVERHEAD_APPLIED = 'mfgOverheadApplied'
 const LABOR_CLR = 'laborClearing'
 const UNBILLED_AR = 'unbilledReceivable'
 const PROJECT_REV = 'projectRevenue'
@@ -723,7 +726,10 @@ export const INDUSTRIES: IndustryDef[] = [
       { number: '5100', name: 'Direct Materials', type: 'cogs' },
       { number: '5200', name: 'Direct Labor', type: 'cogs' },
       { number: '5300', name: 'Manufacturing Overhead', type: 'cogs' },
+      { number: '5310', name: 'Manufacturing Overhead Applied', type: 'cogs' },
       { number: '5400', name: 'Material Usage Variance', type: 'cogs' },
+      { number: '5410', name: 'Labor Efficiency Variance', type: 'cogs' },
+      { number: '5420', name: 'Overhead Variance', type: 'cogs' },
       { number: '6000', name: 'Salaries & Wages', type: 'expense' },
       { number: '6100', name: 'Rent', type: 'expense' },
       { number: '6200', name: 'Utilities', type: 'expense' },
@@ -744,6 +750,10 @@ export const INDUSTRIES: IndustryDef[] = [
       [PAYROLL_DEDUCTIONS]: '2300',
       [MFG_WIP]: '1210',
       [MFG_MATERIAL_USAGE_VARIANCE]: '5400',
+      [MFG_LABOR_EFFICIENCY_VARIANCE]: '5410',
+      [MFG_OVERHEAD_VARIANCE]: '5420',
+      [MFG_OVERHEAD_APPLIED]: '5310',
+      [LABOR_CLR]: '2400',
     },
   },
 

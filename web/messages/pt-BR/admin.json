@@ -720,6 +720,18 @@
           "label": "Conta de variação de consumo de material",
           "hint": "As variações de consumo de materiais da produção são contabilizadas aqui."
         },
+        "mfgLaborEfficiencyVariance": {
+          "label": "Conta de variação de eficiência de mão de obra",
+          "hint": "As variações entre os minutos reais da fábrica e o padrão fixado são contabilizadas aqui."
+        },
+        "mfgOverheadVariance": {
+          "label": "Conta de variação de custos indiretos",
+          "hint": "Os custos indiretos de fabricação aplicados a maior ou a menor são liquidados aqui a cada período."
+        },
+        "mfgOverheadApplied": {
+          "label": "Conta de custos indiretos aplicados",
+          "hint": "Os custos indiretos de fabricação aplicados são creditados aqui quando as ordens os absorvem."
+        },
         "laborClearing": {
           "label": "Compensação de mão de obra",
           "hint": "Creditada quando a mão de obra é apropriada a um projeto; compensada pela folha de pagamento"
@@ -4087,6 +4099,9 @@
         "laborWip": "Conta de mão de obra em WIP / custo da obra",
         "mfgWip": "Conta de WIP de manufatura",
         "mfgMaterialUsageVariance": "Conta de variação de consumo de material",
+        "mfgLaborEfficiencyVariance": "Conta de variação de eficiência de mão de obra",
+        "mfgOverheadVariance": "Conta de variação de custos indiretos",
+        "mfgOverheadApplied": "Conta de custos indiretos aplicados",
         "laborClearing": "Conta de compensação de mão de obra",
         "overheadNote": "Indireto não faz parte desta taxa — é aplicado pelo Modelo de indiretos como camada própria.",
         "payrollVariance": "Conta de variação de folha",

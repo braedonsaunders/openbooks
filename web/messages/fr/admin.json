@@ -711,6 +711,18 @@
           "label": "Compte d’écart de consommation des matières",
           "hint": "Les écarts de consommation des matières de production sont comptabilisés ici."
         },
+        "mfgLaborEfficiencyVariance": {
+          "label": "Compte d’écart d’efficacité de la main-d’œuvre",
+          "hint": "Les écarts entre les minutes réelles d’atelier et le standard figé sont comptabilisés ici."
+        },
+        "mfgOverheadVariance": {
+          "label": "Compte d’écart de frais généraux",
+          "hint": "Les frais généraux de fabrication sous- et sur-appliqués sont soldés ici chaque période."
+        },
+        "mfgOverheadApplied": {
+          "label": "Compte de frais généraux appliqués",
+          "hint": "Les frais généraux de fabrication appliqués sont crédités ici lorsque les ordres les absorbent."
+        },
         "laborClearing": {
           "label": "Compensation de main-d'œuvre",
           "hint": "Crédité lorsque la main-d'œuvre est imputée à un projet; soldé par la paie"
@@ -4039,6 +4051,9 @@
         "laborWip": "Compte travaux en cours / coût projet",
         "mfgWip": "Compte d'en-cours de fabrication",
         "mfgMaterialUsageVariance": "Compte d’écart de consommation des matières",
+        "mfgLaborEfficiencyVariance": "Compte d’écart d’efficacité de la main-d’œuvre",
+        "mfgOverheadVariance": "Compte d’écart de frais généraux",
+        "mfgOverheadApplied": "Compte de frais généraux appliqués",
         "laborClearing": "Compte d'attente main-d'œuvre",
         "overheadNote": "Les frais généraux ne font pas partie de ce taux — ils sont appliqués par le Modèle de frais généraux comme couche distincte.",
         "payrollVariance": "Compte d'écart de paie",

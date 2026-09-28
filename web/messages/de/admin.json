@@ -711,6 +711,18 @@
           "label": "Materialverbrauchsabweichungskonto",
           "hint": "Abweichungen beim Materialverbrauch in der Fertigung werden hier gebucht."
         },
+        "mfgLaborEfficiencyVariance": {
+          "label": "Arbeitszeiteffizienzabweichungskonto",
+          "hint": "Abweichungen zwischen tatsächlichen Fertigungsminuten und dem eingefrorenen Standard werden hier gebucht."
+        },
+        "mfgOverheadVariance": {
+          "label": "Gemeinkostenabweichungskonto",
+          "hint": "Unter- und überverrechnete Fertigungsgemeinkosten werden hier je Periode ausgeglichen."
+        },
+        "mfgOverheadApplied": {
+          "label": "Verrechnete Fertigungsgemeinkosten",
+          "hint": "Verrechnete Fertigungsgemeinkosten werden hier gutgeschrieben, wenn Fertigungsaufträge sie absorbieren."
+        },
         "laborClearing": {
           "label": "Arbeitsverrechnung",
           "hint": "Wird gutgeschrieben, wenn Arbeit einem Projekt belastet wird; wird durch die Lohnabrechnung ausgeglichen"
@@ -1947,6 +1959,9 @@
         "laborWip": "Lohn-WIP- / Auftragskostenkonto",
         "mfgWip": "Fertigungs-WIP-Konto",
         "mfgMaterialUsageVariance": "Materialverbrauchsabweichungskonto",
+        "mfgLaborEfficiencyVariance": "Arbeitszeiteffizienzabweichungskonto",
+        "mfgOverheadVariance": "Gemeinkostenabweichungskonto",
+        "mfgOverheadApplied": "Verrechnete Fertigungsgemeinkosten",
         "modeOff": "Aus – nur Satzschnappschuss",
         "modePost": "Standardkosten auf Aufträge buchen",
         "overheadNote": "Gemeinkosten sind nicht Teil dieses Satzes – sie werden vom Gemeinkostenmodell als eigene Schicht angewandt.",

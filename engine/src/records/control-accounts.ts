@@ -55,6 +55,16 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
   ],
   mfgWip: ["asset_current_other", "asset_other"],
   mfgMaterialUsageVariance: ["cogs", "expense", "expense_other"],
+  // Labor efficiency: actual shop-floor minutes against the frozen standard,
+  // settled in-period. A P&L variance like material usage, never WIP.
+  mfgLaborEfficiencyVariance: ["cogs", "expense", "expense_other"],
+  // Period under/over-applied manufacturing overhead. Idle capacity stays
+  // here and hits the period, never inflates inventory.
+  mfgOverheadVariance: ["cogs", "expense", "expense_other"],
+  // The contra credited when work-order costs absorb overhead. COGS-group
+  // only: it must sit beside the overhead it offsets, never in income or
+  // on the balance sheet.
+  mfgOverheadApplied: ["cogs"],
   laborClearing: ["asset_current_other", "liability_current_other"],
   payrollVariance: ["cogs", "expense", "expense_other"],
   unbilledReceivable: ["asset_receivable", "asset_current_other"],

@@ -711,6 +711,18 @@
           "label": "材料使用差異勘定",
           "hint": "製造における材料使用差異はここに計上されます。"
         },
+        "mfgLaborEfficiencyVariance": {
+          "label": "労能率差異勘定",
+          "hint": "実際の作業時間と凍結標準との差異はここに計上されます。"
+        },
+        "mfgOverheadVariance": {
+          "label": "製造間接費差異勘定",
+          "hint": "過不足の製造間接費は毎期ここで精算されます。"
+        },
+        "mfgOverheadApplied": {
+          "label": "製造間接費配賦勘定",
+          "hint": "作業原価が吸収した製造間接費の配賦額はここに貸記されます。"
+        },
         "laborClearing": {
           "label": "労務清算",
           "hint": "労務がプロジェクトに賦課されると貸方計上され、給与計算で清算されます"
@@ -1947,6 +1959,9 @@
         "laborWip": "労務仕掛品・案件原価口座",
         "mfgWip": "製造仕掛品勘定",
         "mfgMaterialUsageVariance": "材料使用差異勘定",
+        "mfgLaborEfficiencyVariance": "労能率差異勘定",
+        "mfgOverheadVariance": "製造間接費差異勘定",
+        "mfgOverheadApplied": "製造間接費配賦勘定",
         "modeOff": "オフ — レートのスナップショットのみ",
         "modePost": "標準原価を案件に記帳",
         "overheadNote": "間接費はこのレートに含まれません。間接費モデルが独自の層として適用します。",
