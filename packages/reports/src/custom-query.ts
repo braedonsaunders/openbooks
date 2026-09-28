@@ -210,8 +210,11 @@ export function isMoneyBlendingMeasure(entity: ReportEntity, m: ReportMeasure): 
   return entityColumn(entity, m.column)?.kind === 'money'
 }
 
-/** True when the measure aggregates functional-base money (GL base amounts
- *  stamped per line in the owning subsidiary's base_currency). */
+/** True when the measure aggregates base-denominated money — values in the
+ *  row's persisted base-like currency named by the entity's
+ *  `baseCurrencyColumn`. That is GL functional base (amounts stamped per line
+ *  in the owning subsidiary's base_currency) on ledger entities, and the
+ *  normalized reporting currency persisted per row on SaaS metric entities. */
 export function isBaseMoneyMeasure(entity: ReportEntity, m: ReportMeasure): boolean {
   if (m.fn !== 'sum' && m.fn !== 'avg' && m.fn !== 'min' && m.fn !== 'max' && m.fn !== 'opening' && m.fn !== 'closing') return false
   if (!m.column) return false
