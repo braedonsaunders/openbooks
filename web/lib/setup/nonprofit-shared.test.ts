@@ -18,7 +18,7 @@ test("fund, grant, and encumbrance permissions are catalogued, grouped, granted 
   const dir = join(import.meta.dirname, "..", "..", "messages");
   const missing = readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).filter((l) => ["funds_read", "funds_manage", "grants_read", "grants_manage", "encumbrances_read", "encumbrances_manage"].some((k) => typeof (JSON.parse(readFileSync(join(dir, l, "admin.json"), "utf8")) as { permissions?: Record<string, string> }).permissions?.[k] !== "string"));
   assert.deepEqual(missing, []);
-  for (const [key, feature, table] of [["fund", "fundAccounting", "funds"], ["fund_release", "fundAccounting", "fund_releases"], ["grant", "grantManagement", "grants"], ["encumbrance", "encumbrances", "encumbrances"]]) {
+  for (const [key, feature, table] of [["fund", "fundAccounting", "funds"], ["fund_release", "fundAccounting", "fund_releases"], ["grant", "grantManagement", "grants"], ["encumbrance", "encumbrances", "encumbrances"]] as const) {
     const meta = getRecordType(key), source = entityListSource(key);
     assert.deepEqual([meta?.featureKey, meta?.customFieldTable, source?.customFieldTable], [feature, table, table]);
   }

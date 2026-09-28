@@ -146,7 +146,7 @@ export async function loadGrants(
   }
   if (!isUuid(grantId)) return base
   const asOf = await businessToday(orgId)
-  const [terms, budget, drawdowns, reports, activity, accounts] = await Promise.all([
+  const detail = await Promise.all([
     getGrantTerms(orgId, grantId),
     getGrantBudget(orgId, grantId),
     listGrantDrawdowns(orgId, grantId),
@@ -164,7 +164,8 @@ export async function loadGrants(
     if (error?.code === 'grant_not_found' || error?.code === 'grant_version_missing') return null
     throw error
   })
-  if (!terms || !budget || !drawdowns || !reports || !activity || !accounts) return base
+  if (!detail) return base
+  const [terms, budget, drawdowns, reports, activity, accounts] = detail
 
   return {
     ...base,

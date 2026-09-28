@@ -1,5 +1,5 @@
 import { registerHooks } from 'node:module'
-import { resolveAppModule } from '../../../../lib/test-module-hooks'
+import { resolveAppModule } from '../../../lib/test-module-hooks'
 import { stubModules } from '../../../testing/stub-modules'
 import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm'
 import test from 'node:test'
 import type { ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
 const root = pathToFileURL(process.cwd() + '/').href
-const state: { user: import('../../../../lib/auth').SessionUser | null } = { user: null }
+const state: { user: import('../../../lib/auth').SessionUser | null } = { user: null }
 Object.assign(globalThis, { __nonprofitSetupGate: state })
 registerHooks({
   resolve(s, c, next) {
@@ -22,10 +22,10 @@ registerHooks({
 // Translations are request-scoped framework output, not the refusal under test:
 // stub only next-intl while authz, feature flags, and the database stay real.
 stubModules({ intl: true })
-const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/testing/fixtures.ts')
-const { loadNonprofitSetup } = await import(root + 'web/app/(app)/nonprofit/setup/view.ts')
-const { loadNonprofit } = await import(root + 'web/app/(app)/nonprofit/view.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { loadNonprofitSetup } = await import('./setup/view.ts')
+const { loadNonprofit } = await import('./view.ts')
 // Shared scratch reader: each scenario gets a fresh org, actor, and cleanup.
 async function withCockpitReader(displayName: string, email: string, superAdmin: boolean, fn: (org: ScratchOrg) => Promise<void>): Promise<void> {
   const org: ScratchOrg = await withBypassContext(() => createScratchOrg())

@@ -259,7 +259,8 @@ test("posting with a budgetary advisory pins every dimension with its remedy", a
   await tick();
   const alerts = [...document.querySelectorAll('[role="alert"]')].map((p) => p.textContent ?? "");
   assert.equal(alerts.length, 1, "one pinned advisory per overage");
+  assert.ok(alerts[0], "the pinned advisory has text");
   assert.ok(alerts[0].includes("Primary 2026") && alerts[0].includes("HQ") && alerts[0].includes("25.0000"), "the advisory keeps scenario, dimensions, and overage");
   assert.ok(alerts[0].includes("Programs") && alerts[0].includes("Harbor Outreach") && alerts[0].includes("Weekend Kitchen") && alerts[0].includes("awardYear: 2026") && !alerts[0].includes("fund-extra-id"), "every named dimension renders a recognizable label");
-  assert.ok(alerts[0].includes("budget scenario approval flow"), "the advisory names the remedy");
+  assert.ok(alerts[0].includes("Revise the budget through its approval flow, or link this actual to the named encumbrance."), "the advisory names the complete budget revision or encumbrance remedy");
 });

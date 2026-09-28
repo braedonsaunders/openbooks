@@ -104,7 +104,7 @@ export function GrantDrawer({ drawer }: { drawer: GrantDrawerData }) {
     )
   }
 
-  const { terms, budget, drawdowns, reports, activity } = drawer
+  const { terms, budget, activity } = drawer
   const canManage = drawer.canManage
 
   return (
